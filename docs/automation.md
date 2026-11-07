@@ -156,6 +156,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `peek-open`, `peek-expand`, `peek-close`, `peek-state` | `tab`, `url` for open | Production Peek entry, promotion, dismissal and host identity |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `credentials` | optional `profile`: UUID, name, or data directory | Counts only: `logins`, `blockedSites`, local `cards` and `addresses`, `cookies`, saving preferences, `canEnable*`, `supportsSecretsImport`, and `usesMockKeychain`. Uses the existing lazy profile-context factory; no credential values. |
+| `credentials-prefs` | optional `profile`: UUID, name, or data directory; optional `passwordSaving`, `cardsSaving`, `addressesSaving` booleans | Reads or changes that profile's real `OEBrowserContext` preferences. Returns the three preferences and `canEnablePasswordSaving`, `canEnableCardsSaving`, `canEnableAddressesSaving`. The address capability means a persistent context; the engine exposes no separate address-policy capability. Rejects unknown arguments or profiles. No Open Settings switches are added; users change these preferences on Chromium's pages. |
 | `spaces` | — | Spaces with focus and counts |
 | `space` | `space` | Focus a Space |
 | `space-create` | `title`, `profile` | New Space; a new `profile` name creates an Open profile (`BrowserModel.createProfile`) with its own engine context in `Engine/<dir>` |
@@ -187,7 +188,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |
 | `ext-move` | `extension`, `index`, optional `engine` | Move only a currently pinned action. Negative automation indices return an error. Clamp to the normalized pinned list and skip a no-op, as a native drag does. `engine=true` directly probes the engine's invalid-index refusal instead. |
 | `ext-prompt` | `answer` (`accept`/`cancel`), `hold`, `handler`, `clear`, `twice` | Pending consent: type, extension/name, Open title/buttons (§3.11), `chromiumTitle`/`chromiumButtons`, permissions/details/lines, retained files/devices and weak page/browser ids. Holds by default; `hold=false` releases without answering. `handler=false` preserves Chromium's dialogs. `clear` cancels the queue; `twice` checks duplicate-answer safety. Also returns registry events. |
-| `save-prompt` | One of `mock: {kind, host}`, `answer: save\|never\|dismiss`, `state: true`, `withdraw: true` | Automation builds only. `mock` enqueues synthetic metadata for the focused page in the front browser window. Kinds: `password`, `passwordUpdate` (alias `update`), `card`, `address`, `addressUpdate`. State and events use the canonical names. Host limit: 4096 UTF-8 bytes, no control characters; unknown fields/kinds are refused. `answer` clicks the visible sheet's real NSButton; `withdraw` releases it unanswered. State: `visible`, `kind`, `title`, `body`, left-to-right `buttons`, `defaultButton`, `cancelButton`, native sheet `window`, `queueLength` (waiting requests, excludes visible sheet). The `key` command accepts this window number and `.` for Cmd-.. `events` drains `savePrompt` events `{kind, displayHost, answer}` with answer `save`, `never`, `dismiss`, or `ignored` on unanswered release, even after the final window closes. No credentials or storage are involved. |
+| `save-prompt` | One of `mock: {kind, host}`, `answer: save\|never\|dismiss`, `state: true`, `withdraw: true` | Automation builds only. `mock` enqueues synthetic metadata for the focused page in the front browser window. Kinds: `password`, `passwordUpdate` (alias `update`), `card`, `address`, `addressUpdate`. State and events use the canonical names. Host limit: 4096 UTF-8 bytes, no control characters; unknown fields/kinds are refused. `answer` clicks the visible real or synthetic sheet's NSButton, including a Little Open sheet; `withdraw` releases it unanswered. State: `visible`, `kind`, `title`, `body`, left-to-right `buttons`, `defaultButton`, `cancelButton`, native sheet `window`, `queueLength` (waiting requests, excludes visible sheet). The `key` command accepts this window number and `.` for Cmd-.. `events` drains `savePrompt` events `{kind, displayHost, answer}` even after the final window closes. Real prompts first report `pending`, then `save`, `never`, `dismiss`, or `ignored` on unanswered release. Real-prompt events accept only example.com, its subdomains, localhost or 127.0.0.1; they never contain a username or field value. Synthetic prompts keep their existing answer-only events. `events` also reports dropdown-footer `autofillPage` events `{page: passwords\|paymentMethods\|addresses}`. |
 | `ext-manage` | `extension`, `action` (`enable`, `disable`, `uninstall`, `reload`, `install-webstore`, `install-crx`), `path` | Live per-profile management. Remove always prompts. Web Store completion is recorded in `ext-prompt.events`, leaving the socket free to answer consent. Local CRX is guarded by `--open-automation` and uses the real installer/prompt. |
 | `ext-commands` | optional `surface: little` | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags, normalized shortcut, `dropped` and conflicting `openCommandID`. Uppercase letters encode Shift in Cocoa's pair. |
 | `ext-shortcuts` | `action`: `state` (default), `menu` (+ optional `select` title), `record` (+ `id`, one ASCII `key`, `modifiers`), `reset` (+ `id`), `reset-all`, `close` | X-27 real Settings pane. First show `settings-pane pane=shortcuts`. Finds the visible native More shortcut actions menu and performs its actual enabled item; records/resets through `ShortcutsViewModel` → `KeyBindingStore` save → App callback. Returns rendered native `notices`, menu, status, binding count, real command title and window number. `close` closes that window. Suite must restore the binding file and shared defaults in `finally`. |
@@ -226,7 +227,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `archive` | — | Recent real archive rows for the focused profile |
 | `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
-| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen |
+| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen`, `savePrompt` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen. `savePrompt=record\|save\|never\|dismiss\|hold` controls real engine sheets: `record` records and presses the cancel button; `hold` (default) waits; other values press the matching real NSButton after presentation. `never` leaves a sheet held if that kind has no Never button. Synthetic `mock` sheets keep their manual behavior. |
 | `dialog` | `accept`, `text` | Complete a held dialog; when visible, click its real OK/Cancel button |
 | `dialog-state` | — | Pending count, real sheet title/body/buttons, prompt text, suppression visibility, held/queued flags, and sheet window number |
 | `dialog-button` | `accept`, `text`, `suppress` | Click the visible sheet's real OK/Cancel button, optionally edit its prompt and suppression checkbox |
@@ -283,7 +284,7 @@ neither hook. See [the deferred Browser report](little-open/deferred-browser.md)
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
-/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only passwords --style chrome    # M-* save sheets (mock metadata only)
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only passwords --style chrome    # M/MP/P/C and preference/crash rows
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions-p3 --style chrome --config Release # local signed CRX3, no network dependency
@@ -1070,3 +1071,29 @@ mock Keychain. It records PR-1 through PR-9 as observations, with per-row App
 liveness and new-crash-report checks. It saves no screenshots or secret values.
 The reusable fixture server and URL/switch dictionary are documented in
 [the fixtures README](../tools/e2e/fixtures/passwords/README.md).
+
+## Passwords acceptance
+
+`--only passwords --style chrome` runs M rows (synthetic sheets), MP rows
+(manage pages), P-1 through P-23, C-1 through C-3, PW-SW1 through PW-SW3
+(saving preferences), the real-sheet policy rows, PW-HF1 (HTTPS-First) and
+PW-KC1 (Keychain failure). The harness starts the fixture server, maps
+`*.example.com` to its loopback port, and passes `--use-mock-keychain` plus
+`--open-allow-mock-keychain-secrets`. P-22 relaunches without the latter switch.
+Each row records its load averages and checks App liveness and new Open crash
+reports. App death stops the suite. Foreground interruption permits one retry.
+The harness restores all shared defaults it changes in `finally`.
+
+PW-HF1 checks the engine's runtime `supportsSecretsImport` capability before
+it exercises the 08xx HTTPS-First fix. The distribution SHA-256 stays in the
+receipt as evidence. A rebuild does not require a hash allowlist. PW-KC1 stays
+BLOCKED until the engine provides a synthetic failure path; this suite never
+accesses the real Keychain. Missing WebAuthn dialog support is reported as
+BLOCKED with its reason. A blocked row is never reported as PASS.
+
+Other fixture suites can load `tools/e2e/passwords.py` with `runpy.run_path`.
+`show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5)`
+clicks a real field and returns metadata for newly visible child windows.
+`fill_from_dropdown(app, tab, wait_until, selector='#username', down=1)` selects
+a suggestion with real App Down/Return keys. The caller compares field values
+in the page and reports only equality, never the values.

@@ -28,8 +28,9 @@ names only and abort outstanding requests after five seconds.
 `docs/engine-spike/results-passwords-probe.json`. A feature can be absent while
 its crash-safety check passes. Missing saved data makes refill and re-auth
 observations inconclusive. Process death, lost automation or a new Open crash
-report stops the suite without retry. No acceptance `passwords` or
-`secrets-import` suite is added here.
+report stops the suite without retry. The separate acceptance suite
+`--only passwords --style chrome` reuses this server and its helper; see
+`docs/automation.md` for its real-sheet, fill, preference and cookie rows.
 
 For the real-dialog cleanup proof, set
 `OPEN_E2E_PASSWORDS_PROBE_ABORT_DIALOG=1` on the same locked command. It exits

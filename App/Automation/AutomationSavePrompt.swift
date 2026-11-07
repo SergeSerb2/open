@@ -2,6 +2,7 @@
 import AppKit
 import OpenFeatures
 import OpenWeb
+import OpenEngine
 
 /// Synthetic metadata only. No credentials, Keychain, or engine storage access.
 @MainActor final class MockSavePrompt: SavePromptRequest {
@@ -38,10 +39,45 @@ extension SavePromptKind {
 }
 
 extension AutomationController {
+  private var savePromptFactory: EngineWebContentHostFactory? {
+    let owners = Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner)
+    return owners.first { $0.window === NSApp.keyWindow || $0.window?.attachedSheet === NSApp.keyWindow }
+      ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+  }
+
+  func recordRealSavePrompt(_ prompt: OESavePrompt, answer: String) {
+    guard let host = URL(string: prompt.origin)?.host()?.lowercased(),
+          host == "example.com" || host.hasSuffix(".example.com") || host == "localhost" || host == "127.0.0.1" else { return }
+    let previous = realSavePromptAnswers.object(forKey: prompt) as String?
+    guard previous == nil || previous == "pending", previous != answer else { return }
+    realSavePromptAnswers.setObject(answer as NSString, forKey: prompt)
+    savePromptEvents.append(["type": "savePrompt", "kind": prompt.openSavePromptKind.automationName,
+      "displayHost": prompt.displayHost, "answer": answer])
+    if savePromptEvents.count > 2000 { savePromptEvents.removeFirst(savePromptEvents.count - 2000) }
+  }
+
+  func recordAutofillPage(_ page: AutofillPage) {
+    savePromptEvents.append(["type": "autofillPage", "page": page == .passwords ? "passwords" : page == .paymentMethods ? "paymentMethods" : "addresses"])
+    if savePromptEvents.count > 2000 { savePromptEvents.removeFirst(savePromptEvents.count - 2000) }
+  }
+
+  func savePromptDidPresent(_ sheet: SavePromptSheet) {
+    guard sheet.request is OESavePrompt, savePromptPolicy != "hold" else { return }
+    let policy = savePromptPolicy
+    DispatchQueue.main.async { [weak self, weak sheet] in
+      guard self?.savePromptPolicy == policy, let sheet, sheet.isVisible, sheet.request != nil else { return }
+      // These are the same target/actions as a user's choice. Never answer
+      // the request directly from an automation policy.
+      let button = policy == "save" ? sheet.dialogView.primaryButton
+        : policy == "never" ? sheet.dialogView.button(for: .leading) : sheet.dialogView.cancelButton
+      if let button, button.isEnabled { button.performClick(nil) }
+    }
+  }
+
   func savePrompt(_ args: [String: Any]) async throws -> Any {
     guard args.keys.allSatisfy({ ["mock", "answer", "state", "withdraw"].contains($0) }),
           args.count == 1 else { throw Failure(message: "expected one of mock, answer, state, withdraw") }
-    guard let factory = app.frontWindowController.flatMap({ app.hostFactories[$0.windowID] }), let presenter = factory.savePrompts else {
+    guard let factory = savePromptFactory, let presenter = factory.savePrompts else {
       if args["state"] as? Bool == true { return ["visible": false, "queueLength": 0] as [String: Any] }
       throw Failure(message: "no browser window")
     }

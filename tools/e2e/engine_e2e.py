@@ -11825,15 +11825,15 @@ def main():
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
     if opts.only in ('window', 'sidebar'):
         startup_peek['open.sidebar.hideHintShown'] = domain_before.get('open.sidebar.hideHintShown')
-    if opts.only == 'passwords-probe':
-        for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed'):
+    if opts.only in ('passwords-probe', 'passwords'):
+        for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed', 'open.sidebar.hideHintShown'):
             startup_peek[key] = domain_before.get(key)
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
         ap.error("--only is required unless --engine-fingerprint-only is set")
-    if opts.only == 'passwords-probe' and opts.style != 'chrome':
-        ap.error('passwords-probe requires --style chrome')
+    if opts.only in ('passwords-probe', 'passwords') and opts.style != 'chrome':
+        ap.error('passwords suites require --style chrome')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
@@ -12129,7 +12129,8 @@ def main():
                 factory, results["profiles"], tmp, globals(), domain_before)
         elif opts.only == "passwords":
             results["passwords"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](factory, results["passwords"], tmp, globals())
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](
+                factory, results["passwords"], tmp, globals(), results['engine']['distributionSHA256'])
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
@@ -12162,15 +12163,17 @@ def main():
 
     interrupted_attempts = []
     # Never replay a potentially crashing probe row after foreground loss.
-    for attempt in range(1, 2 if opts.only == 'passwords-probe' else 4):
+    max_attempts = 1 if opts.only == 'passwords-probe' else 2 if opts.only == 'passwords' else 3
+    for attempt in range(1, max_attempts + 1):
         tracker = FocusTracker()
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
-            if opts.only == 'passwords-probe':
+            if opts.only in ('passwords-probe', 'passwords'):
                 _restore_defaults(None, {'open.links.littleOpenNUXSeen': True,
-                                         'open.general.searchSuggestNoticeDismissed': True})
+                                         'open.general.searchSuggestNoticeDismissed': True,
+                                         'open.sidebar.hideHintShown': True})
             if opts.only in ('window', 'sidebar'):
                 # Deterministic chrome captures; restore the user's value in finally.
                 _restore_defaults(None, {'open.sidebar.hideHintShown': True})
@@ -12179,7 +12182,7 @@ def main():
             interruption = {"reason": str(error), "focus": error.evidence}
         except Exception as error:
             try:
-                loss = tracker.loss()
+                loss = [] if getattr(error, 'fatal_app_death', False) else tracker.loss()
             except Exception:
                 loss = []  # A crashed owned app cannot answer a focus query.
             if loss:
@@ -12196,7 +12199,7 @@ def main():
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
                                          checks=dict(results.get(opts.only, {}))))
         print("%s attempt %d INTERRUPTED: %s" % (opts.only, attempt, interruption["reason"]), flush=True)
-        if attempt == 3 or opts.only == 'passwords-probe':
+        if attempt == max_attempts:
             dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
                 "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": attempt})
         elif opts.focus_retry_delay_seconds:

@@ -34,10 +34,13 @@
     var firstRunActionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
     var savePromptEvents: [[String: Any]] = []
+    static weak var savePromptOwner: AutomationController?
+    var savePromptPolicy = "hold"
+    var realSavePromptAnswers = NSMapTable<OESavePrompt, NSString>.weakToStrongObjects()
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
 
-    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
+    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -98,6 +101,7 @@
         let events = savePromptEvents; savePromptEvents.removeAll()
         return pageEvents + events
       case "credentials": return try await credentialCounts(a)
+      case "credentials-prefs": return try credentialPreferences(a)
       case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
@@ -1165,6 +1169,13 @@
 
       // Dialogs, permissions, scripts, filters, downloads.
       case "policy":
+        if let value = a["savePrompt"] {
+          guard let policy = value as? String, ["record", "save", "never", "dismiss", "hold"].contains(policy) else {
+            throw Failure(message: "invalid savePrompt policy")
+          }
+          savePromptPolicy = policy
+          if let sheet = w.savePrompts?.active { savePromptDidPresent(sheet) }
+        }
         if let v = a["contextMenu"] { w.contextMenuPolicy = v as? String }
         if let v = a["fullscreen"] { w.fullscreenPolicy = v as? String }
         if let v = a["dialogs"] { w.dialogPolicy = v as? String }
