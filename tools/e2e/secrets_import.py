@@ -13,7 +13,6 @@ import signal
 import ssl
 import subprocess
 import threading
-import time
 
 
 @contextlib.contextmanager
@@ -41,13 +40,31 @@ def fixture_server(h, tmp):
 
 
 def run(factory, results, tmp, h):
+    try:
+        _run(factory, results, tmp, h)
+    except h.FocusInterruption:
+        raise
+    except Exception as error:
+        # The harness prints tracebacks. Do not let an eval failure expose a
+        # fixture field literal from a source line or an engine description.
+        raise RuntimeError('synthetic secrets suite stopped: ' + type(error).__name__) from None
+
+
+def _run(factory, results, tmp, h):
+    # Use F's real popup helpers. run_path works with the harness's -I mode.
+    dropdown = runpy.run_path(os.path.join(h.ROOT, 'tools/e2e/passwords.py'))
+    show_autofill_dropdown = dropdown['show_autofill_dropdown']
+    fill_from_dropdown = dropdown['fill_from_dropdown']
     app = None
+    crashes_before = h._open_crash_reports()
     expected = dict(logins=3, blockedSites=1, addresses=1, cards=1, cookies=4)
     saved = {}
     source = Path(tmp) / 'wizard-arc-synthetic'
     runpy.run_path(os.path.join(h.ROOT, 'tools/e2e/firstrun.py'))['fixture'](source)
 
     def row(name, ok, **counts):
+        if h._open_crash_reports() - crashes_before:
+            raise RuntimeError('new Open crash report; stopped before the next flow')
         results[name] = dict(ok=bool(ok), load=os.getloadavg(), **counts)
 
     def credentials(profile):
@@ -87,20 +104,24 @@ def run(factory, results, tmp, h):
         assert app.eval(tab, 'location.hostname === "login.example.com"'), 'fixture origin mismatch'
         return tab
 
-    def fill(profile, newer=False):
+    def fill(profile):
         tab = load(profile, 'login.html')
         empty = app.eval(tab, '!document.querySelector("#username").value && !document.querySelector("#password").value')
-        app.call('focus', tab=tab)
-        app.call('click', tab=tab, selector='#username')
-        app.call('key', key='down', route='app')
-        app.call('key', key='return', route='app')
         index = 0 if profile == 'Default' else 1
-        password = 'fixture-open-newer' if newer else 'fixture-password'
+        popup = show_autofill_dropdown(app, tab, h.wait_until)
+        assert popup, 'autofill dropdown missing'
+        popup_ids = {value['number'] for value in popup}
+        labels = [label for window in app.call('windows', accessibility=True)
+                  if window['number'] in popup_ids for label in window.get('text', [])]
+        own = sum(any('fixture-%d-%d' % (index, n) in label for label in labels) for n in (1, 2))
+        foreign = sum('fixture-%d-' % (1 - index) in label for label in labels)
+        app.call('key', key='escape', route='app')
+        fill_from_dropdown(app, tab, h.wait_until)
         matched = h.wait_until(lambda: app.eval(tab, '''(() => {
           const u = document.querySelector('#username').value, p = document.querySelector('#password').value;
-          return u.startsWith(%s) && p === %s;
-        })()''' % (json.dumps('fixture-%d-' % index), json.dumps(password))), timeout=5, step=.1)
-        return bool(empty and matched), tab
+          return %s.includes(u) && p === 'fixture-password';
+        })()''' % json.dumps(['fixture-%d-%d' % (index, n) for n in (1, 2)])), timeout=5, step=.1)
+        return bool(empty and matched and own == 2 and foreign == 0), tab
 
     def ledger():
         return json.loads((Path(app.user_data) / 'State/secrets-import.json').read_text())
@@ -168,23 +189,25 @@ def run(factory, results, tmp, h):
             tab = load('Default', 'login.html')
             app.call('click', tab=tab, selector='#username')
             app.call('key', text='fixture-0-1', route='app')
-            app.call('key', key='down', route='app'); app.call('key', key='return', route='app')
-            newer = h.wait_until(lambda: app.eval(tab, 'document.querySelector("#password").value === "fixture-open-newer"'), timeout=5, step=.1)
+            app.call('key', key='escape', route='app')
+            fill_from_dropdown(app, tab, h.wait_until)
+            newer = h.wait_until(lambda: app.eval(tab, 'document.querySelector("#username").value === "fixture-0-1" && document.querySelector("#password").value === "fixture-open-newer"'), timeout=5, step=.1)
             row('I-4', updated and newer and report_correct(existing, 0, 1), updated=int(bool(updated)), newerFilled=int(bool(newer)))
 
-            # Relaunch before checking the HTTP Cookie header. Session/partition
-            # cookie policies stay Chromium's. The two unpartitioned persistent
-            # cookies must arrive; no other Profile's cookie may arrive.
+            # Relaunch before checking the HTTP Cookie header. The session and
+            # two persistent unpartitioned cookies must arrive. The partitioned
+            # cookie is stored but does not match this top-level request.
             app.call('save'); app.quit(); launch()
             echo = []
             for index, profile in enumerate(('Default', 'Work')):
                 tab = load(profile, 'echo-cookies')
                 names = app.eval(tab, 'JSON.parse(document.body.textContent)')
                 allowed = {'fixture-%d-%d' % (index, n) for n in range(1, 5)}
-                persistent = {'fixture-%d-1' % index, 'fixture-%d-3' % index}
+                required = {'fixture-%d-%d' % (index, n) for n in (1, 2, 3)}
                 echo.append(dict(received=len(names), foreign=len(set(names) - allowed),
-                                 requiredPersistent=len(persistent & set(names))))
-            row('I-7', all(value['foreign'] == 0 and value['requiredPersistent'] == 2 for value in echo), profiles=echo)
+                                 requiredUnpartitioned=len(required & set(names))))
+            row('I-7', all(value['foreign'] == 0 and value['received'] == 3
+                          and value['requiredUnpartitioned'] == 3 for value in echo), profiles=echo)
             app.quit()
 
             for identifier, pause in [('I-5', 'after-logins'), ('I-6', 'during-cookies')]:
@@ -225,11 +248,14 @@ def run(factory, results, tmp, h):
                 app.call('first-run', action='settings-allow-passwords')
                 state = app.call('first-run', action='settings-inspect')
                 text = state.get('secretsTitle', '')
+                body = state.get('secretsBody', '')
                 app.call('first-run', action='settings-skip-passwords')
                 skipped_without_consent = zero_consent()
+                app.call('first-run', action='settings-passwords')
                 app.call('first-run', action='settings-cancel-passwords')
                 row('I-8-' + ('allow-switch' if allow else 'no-switch'),
                     not state['secretsEnabled'] and "can't be imported yet" in text
+                    and 'Passkeys saved only in Arc' not in body
                     and 'Import Passwords and Cookies' not in state['secretsButtons']
                     and not state['secretsAllowVisible'] and not state['secretsAllowEnabled']
                     and not state['secretsConsented'] and skipped_without_consent and zero_consent(),

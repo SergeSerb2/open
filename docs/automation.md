@@ -50,6 +50,7 @@ the App's real `AppSecretsImportSink` and Profile context factory. Its source
 is generated inside OpenImport. It accepts no source path, key, ciphertext,
 records, or consent argument. It requires Debug or the process switch
 `--open-e2e` in a build that includes automation.
+The engine must be ready and use the mock Keychain.
 
 The reply contains `stage`, `report.profiles`, and `report.total`. Each record
 kind (`logins`, `addresses`, `cards`, `cookies`) contains only counts: `added`,
@@ -101,6 +102,11 @@ SIGKILL recovery, wizard state, and cookie request isolation after relaunch. It 
 `OEErrorMockKeychain` (code 8) and zero writes without
 `--open-allow-mock-keychain-secrets`. Result rows contain counts and booleans
 only. It preserves shared defaults in `finally`.
+I-2 and I-4 use the native dropdown helpers from `tools/e2e/passwords.py`
+(copied from `s15/prompt-wiring` at `e9618bfd`). I-2 checks both local
+suggestions and rejects foreign Profile suggestions through accessibility;
+no field text enters the result. I-8 reads the shared wizard model's text and
+button state through `first-run settings-inspect`; it does not use OCR.
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.

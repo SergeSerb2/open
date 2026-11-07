@@ -13,6 +13,9 @@ extension AutomationController {
       throw Failure(message: "synthetic secrets import requires Debug or --open-e2e")
     }
     #endif
+    guard app.engineReady, OEEngine.shared.usesMockKeychain else {
+      throw Failure(message: "synthetic secrets import requires a ready mock-key engine")
+    }
     guard secretsFixtureStage != "running", !secretsFixtureStage.hasPrefix("paused-"),
       !app.importInProgress, !app.importRunner.historyInProgress, !app.importRunner.secretsFixtureInProgress else { throw Failure(message: "an import is already running") }
     guard Set(args.keys).isSubset(of: ["map", "pause"]) else { throw Failure(message: "unsupported synthetic import argument") }

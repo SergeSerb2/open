@@ -38,7 +38,7 @@ import OpenImport
         return (path as NSString).abbreviatingWithTildeInPath
     }
     public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
-    public func choose(directory: URL) async { plan.directory = directory; await refreshCounts() }
+    public func choose(directory: URL) async { guard !busy else { return }; clearConsent(); plan.directory = directory; await refreshCounts() }
     public func refreshCounts() async {
         let request=UUID();countRequest=request
         readable=false;counting=true;errorText="";probe=nil
@@ -88,6 +88,7 @@ import OpenImport
     public func review() { guard canContinue else { return }; step = .review }
     public func beginImport() async {
         guard step == .review, canContinue else { return }
+        clearConsent()
         await requestImport()
     }
     /// First run can start while its estimate is still pending; the shared action reports read errors.
@@ -109,8 +110,13 @@ import OpenImport
         unfinishedSecretsImport = importActions.hasUnfinishedSecretsImport
         root.profiles.refresh(); root.refreshLinks()
     }
-    public func retry() { guard !busy else { return }; outcome = nil; step = .choose }
-    public func finish(openLibrary: Bool = false) { guard !busy else { return }; if outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
+    private func clearConsent() {
+        let requested = plan.secretsRequested
+        plan.skipSecrets(); plan.secretsRequested = requested
+        consentWasDecided = false
+    }
+    public func retry() { guard !busy else { return }; clearConsent(); outcome = nil; step = .choose }
+    public func finish(openLibrary: Bool = false) { guard !busy else { return }; if outcome?.errorText == nil && outcome != nil { root.set(plan.directory.path, for: "open.import.lastArcDir") }; clearConsent(); root.showsImport = false; if openLibrary { root.actions.openLibrary() } }
 }
 public struct ImportWizard: View {
     @State private var model: ImportWizardViewModel
