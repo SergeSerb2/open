@@ -37,6 +37,8 @@
     var savePromptEvents: [[String: Any]] = []
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
+    var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
+    var profileProofContexts: [String: OEBrowserContext] = [:]
     var recordedOpenWorldCallbacks: [[String: Any]] = []
 
     init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
@@ -94,6 +96,7 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
         let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []

@@ -131,6 +131,18 @@ typedef NS_ENUM(NSInteger, OEColorSchemePreference) {
 
 #pragma mark - Browser context
 
+typedef NS_ENUM(NSInteger, OEBrowserContextState) {
+  OEBrowserContextStateLive = 0,
+  OEBrowserContextStateClosed,
+};
+
+typedef NS_OPTIONS(uint32_t, OEBrowsingDataKinds) {
+  OEBrowsingDataKindsHistory = 1u << 0,
+  OEBrowsingDataKindsCookiesAndSiteData = 1u << 1,
+  OEBrowsingDataKindsCachedFiles = 1u << 2,
+  OEBrowsingDataKindsDownloads = 1u << 3,
+};
+
 NS_SWIFT_UI_ACTOR
 @protocol OEBrowserContextDelegate <NSObject>
 @optional
@@ -167,6 +179,11 @@ OE_EXPORT @interface OEBrowserContext : NSObject
 /// The profile folder. nil for ephemeral (in-memory) contexts.
 @property(nonatomic, readonly, copy, nullable) NSURL* directory;
 @property(nonatomic, readonly, getter=isEphemeral) BOOL ephemeral;
+/// The regular parent of a private session; nil for a regular context.
+@property(nonatomic, readonly, strong, nullable) OEBrowserContext* originalContext
+    NS_SWIFT_NAME(originalContext);
+/// A closed context remains inert even when retained by the shell.
+@property(nonatomic, readonly) OEBrowserContextState state;
 @property(nonatomic, weak, nullable) id<OEBrowserContextDelegate> delegate;
 
 /// Extensions installed in this context.
@@ -212,6 +229,17 @@ OE_EXPORT @interface OEBrowserContext : NSObject
                         completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(void))
                                        completion
     NS_SWIFT_NAME(clearBrowsingData(origin:completion:));
+
+/// Clears Chromium records from begin through end, inclusive (Chromium
+/// semantics), in this context. Requires begin < end. Site data
+/// includes cookies, localStorage, IndexedDB, service workers and cache storage.
+/// Downloads clears records, not downloaded files. Completion follows the real
+/// backend completion. Open's separate HistoryStore stays the shell's task.
+- (void)clearBrowsingData:(OEBrowsingDataKinds)kinds
+                     from:(NSDate*)begin
+                       to:(NSDate*)end
+               completion:(void (^NS_SWIFT_UI_ACTOR)(NSError* _Nullable error))completion
+    NS_SWIFT_NAME(clearBrowsingData(_:from:to:completion:));
 
 /// Every download of this context since launch.
 @property(nonatomic, readonly, copy) NSArray<OEDownload*>* downloads;
