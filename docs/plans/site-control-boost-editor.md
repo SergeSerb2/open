@@ -1474,69 +1474,74 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-06; PR pending): source head
-`06489af7` has merged main `94c7561c`. Fresh M5 Debug, automation Release and
-all release CLIs build successfully against main's engine. The automation key
-map has 43 unique entries, including one left and one right entry. The embedded
-engine code matches the `af4b3cc3` distribution. Offscreen sidebar comparison
-passes 13/13 states with byte-identical tables; CU5 passes both exact divider
-checks. Older acceptance receipts do not qualify this head; M1 receipts do not
-count.
+Step 3 verification (child A, 2026-11-07; PR pending): source head
+`04e9425f` has merged main `5a2cdec3`. Fresh M5 Debug, automation Release
+and all release CLIs build against main's engine. The automation dictionary
+has 43 unique keys, including one left and one right. The embedded engine
+code matches distribution `af4b3cc3`. Older and M1 receipts do not qualify
+this source.
 
-Three compiled real-App negative controls are rejected: eager AdBlockStore
-creation before engine startup, routing an unavailable row through toggle, and
-a false private-window snapshot flag. Focus and cleanup pass. An intentional
-failure after the specific Advanced Settings window opens closes both owned
-windows and all owned processes. A later explicit preference read-back attempt
-is INTERRUPTED in all three focus attempts by another build's crash dialog;
-none of its rows count. Preferences were restored and every owned App cleaned
-up. Rerun that case once after M5 screen clearance.
+SCC records 23 PASS, S2/S4 BLOCKED, and S11/S12 FAIL. S1 verifies the actual
+“Block Ads & Trackers” unavailable row; its tap calls `openAdBlockSettings`
+once and `toggle` zero times. This differs from the initial On state in the
+plan (lead ruling 2026-11-06 14:41). S2 remains `blocked: section 13 ad-block
+adapter`; its real exclusion, persistence, reload and request-blocking flow
+must pass when Section 13 binds the existing `AdBlockStore` hooks. S4 waits
+for the shared Boost provider. No second store or engine adapter was added.
+Both Section 12 suites share `fixture_server(tmp)` in
+`tools/e2e/sitecontrol_fixtures.py`.
 
-S1 verifies main's actual row, “Block Ads & Trackers”, `unavailable`, rather
-than the plan's initial On state (lead ruling 14:41). The real tap must call
-`openAdBlockSettings` once and `toggle` zero times. Opening Settings does not
-supply an engine adapter. S2 remains `blocked: section 13 ad-block adapter`;
-its real exclusion, persistence, reload and request-blocking flow must pass
-when Section 13 binds the existing store. S4 remains blocked on the shared
-Boost provider. Both Section 12 suites use one `fixture_server(tmp)` in
-`tools/e2e/sitecontrol_fixtures.py`; the 2000-card heavy page stays suite-local.
+The source reads `EngineWebContentHostFactory.isIncognito`. S10 passes with
+a real private window and ephemeral page context. Private windows omit Boost
+matches and the boosted glyph, disable New Boost, and refuse edit/toggle.
+Three fresh compiled real-App negatives reject eager pre-engine store
+creation, a wrong unavailable-row action, and a false private-window flag.
+The required cleanup read-back rerun passes after the M5 clear: specific
+Advanced Settings visible at the intentional failure, identical saved and
+restored persistent defaults, two owned windows reduced to zero, no owned
+process left and no focus interruption. Earlier interrupted attempts remain
+excluded.
 
-The source now fills `SiteControlContext.isIncognito` from Section 10's
-`EngineWebContentHostFactory.isIncognito`. Private windows omit matching
-Boosts, never show the boosted glyph, disable New Boost, and refuse editing
-and toggle actions. S10 now exercises a real private window and ephemeral
-page context; its positive receipt remains pending.
+R1-1 keeps signposts and gates forced layout/display/`CATransaction.flush()`
+on `onFirstDraw`, which only automation installs. P1 passes at 6.141 ms p95
+(6.290 ms including cold; first cold sample 17.552 ms). Separate native 12 ms
+layout/display/flush controls measure 54.073/29.389/28.079 ms and are rejected;
+each callback samples native call counts 3/1/1. This is native submission
+timing, not physical display scanout. Shipping presentation keeps normal
+AppKit scheduling.
 
-Review R1-1 keeps signposts in every build and gates forced layout/display/
-`CATransaction.flush()` on the automation-only `onFirstDraw` callback. Fresh
-P1 and three separate native 12 ms layout/display/flush controls remain pending.
-Their counters are sampled inside the callback. R1-2 uses light button queries,
-filtered source changes and main-queue coalescing. Its closed/open 2000-card
-page-load snapshot counts and 250 title changes remain pending, together with
-window Cmd+T and commandbar keystroke rows. R1-3 follows §3.6.1: with no
-extensions, Cmd+E focuses the + tile and Return runs Add Extension.
+R1-2 uses a light button query, filtered source notifications and coalesced
+window refreshes. The 2000-card page builds zero full snapshots closed and
+one open (four light reads and one source delivery for each load). A burst
+of 250 title changes builds zero snapshots, with five light reads and zero
+source deliveries. Full snapshot cost is O(1) per commit. R1-3 follows
+§3.6.1: empty Cmd+E focuses + and Return runs Add Extension. S1's empty case
+and X-13 pass; `extensions-ui` is 72/72 on the M5.
 
-S11/S12 retain FAIL gates at unchanged limits: **open: material, R-7 follow-up
-(lead ruling)**. `.hudWindow` and dark #686881 at 0.32 remain **interim (lead
-2026-11-06)**. S11's INFO-only diagnostic probes (300,140) and (260,250) over
-white and black page backgrounds. ΔE00 <3 at both points indicates that the
-within-window material does not sample the engine's remote layer; a larger
-response does not establish parity. Fresh numbers remain pending. Plan §11.1
-sets the fallback: a borderless child window with `.behindWindow` blending,
-owned by a separate lead follow-up after this integration merges. These are
-new-suite rows, not regressions; the lead permits the interim merge.
+S11/S12 remain **open: material, R-7 follow-up (lead ruling)**. The shipped
+`.hudWindow` and dark #686881 at 0.32 are **interim (lead 2026-11-06)**.
+S11's four probe ΔE00 values are 2.176/4.142/3.363/7.092; S12 is 22/40 with
+18 FAIL elements at unchanged limits. R-7 is INFO: white→black RGB at
+(300,140) is (123,122,129)→(51,50,57), ΔE00 25.430; at (260,250) it is
+(138,137,145)→(89,88,94), ΔE00 19.392. The page itself changes white→black.
+These responses do not establish parity. The separate lead follow-up uses
+a borderless child window with `.behindWindow` blending (§11.1); it is not
+implemented here. These new-suite visual FAIL rows are not regressions and
+do not block the interim merge under the lead ruling.
 
-P2 idle observation, S13 scroll, X-13, all App regressions, native F24/F25,
-startup comparison and the full gate remain pending the M5 screen hold.
-The offscreen commandbar comparison meets TANDEM §4c after a 30-minute
-quiet wait: main/branch CPU p95 medians are 10.88/9.39 ms and inline overhead
-medians are 0.509/0.223 ms. The six start load1 values are 21.35, 19.25,
-18.91, 31.98, 31.17 and 23.99; run 4 ends at 44.58. All 149 functional/render
-rows pass in each run. Absolute timing failures remain recorded; the PR draft
-contains all six runs and start/end load averages.
-The lead's 20:15 load rule permits builds and functional suites at any load;
-load-driven timing misses are reported with their loads. Add the final
-receipts and actual PR link after validation. No interrupted receipt counts.
+P2 observes zero native SCC activity across all ten counters, and detects
+then clears its timer canary. S13 closed/open scroll p95 is 4.600/4.400 ms,
+with zero dropped frames in either case; the slow-frame negative is rejected.
+Native F24/F25, remaining App regressions, startup comparison and the final
+full gate remain pending. The PR records every final count and load.
+
+The retained offscreen commandbar comparison meets TANDEM §4c after a
+30-minute quiet wait: main/branch CPU p95 medians 10.88/9.39 ms and inline
+medians 0.509/0.223 ms. All 149 non-timing rows pass in all six runs. The PR
+includes all six runs, their raw timing failures and start/end loads. The
+lead's load ruling permits builds and functional suites at any load; timing
+misses keep their loads and are not waived as strict PASS. Add final receipts
+and the actual PR link after validation.
 
 
 ## 11. Risks and open questions
