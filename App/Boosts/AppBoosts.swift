@@ -124,19 +124,23 @@ final class AppBoosts: BoostsProvider {
     let editor = controller.boostEditor ?? BoostEditorController(host: editorHost)
     controller.boostEditor = editor
     let context = SiteControlContext(tabID: tabID, profileID: host.profileID, url: url, displayHost: url.host ?? "")
-    // new-legacy-boost uses simple mode until Step 7 supplies Code mode.
     if editor.present(parent: window, contentRect: controller.container.bounds, context: context, boostID: boostID), editor.session?.isNew == true {
       // present creates the draft in the shared store before any control edit.
       refresh(profile: host.profileID)
+    }
+    if case let .code(tab) = mode {
+      editor.setCodeMode(true, animated: false)
+      editor.view?.codeView?.select(tab == .js ? .js : .css)
     }
   }
   func editCurrent(tabID: ItemID) {
     guard let factory = factory(for: tabID), let host = factory.hosts[tabID], let url = host.content.url else { return }
     openEditor(boostID: matchingBoosts(url: url, profileID: host.profileID).first?.id, tabID: tabID, mode: .simple)
   }
-  func pageCommitted(_ host: EngineWebContentHost, url: URL) {
-    adapter.committed(host, url: url)
+  func pageCommitted(_ host: EngineWebContentHost, url: URL, newDocument: Bool = false) {
+    adapter.committed(host, url: url, newDocument: newDocument)
     host.owner?.controller?.boostEditor?.pageDidNavigate(tabID: host.tabID, url: url)
+    if newDocument { host.owner?.controller?.boostEditor?.boundPageDidCommit(tabID: host.tabID) }
     if let id = pendingEditors.removeValue(forKey: host.tabID) { openEditor(boostID: id, tabID: host.tabID, mode: .simple) }
   }
   func hostClosed(_ host: EngineWebContentHost) {

@@ -4,7 +4,7 @@ Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileUR
 
 `OpenBoosts` is a Swift 6, macOS 26+ library in OpenKit. It depends only on
 `OpenModel` for `ProfileID`. It provides the data, persistence, matching, injection
-plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing, imports, Zap transport and Code mode remain future work.
+plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing, imports and Zap transport remain future work.
 
 ## API
 
@@ -113,7 +113,7 @@ only. Snapshots, reload and DevTools use OpenEngine. Cmd+Z/Shift+Cmd+Z enter via
 OEApplication before page edit routing and use the editor's own undo stack.
 
 `new-boost`, `edit-boost`, `new-legacy-boost`, Customize Page and `view-boosts`
-are wired. Legacy opens simple mode until Code mode lands. Gallery is disabled.
+are wired. Legacy opens Code mode. Gallery is disabled.
 Library Boosts uses the same stores and a Profile picker, with Edit, Rename,
 Delete, enable switches, the empty state and global Turn On action. Library Rename
 and enable changes update an open editor immediately without adding an undo step.
@@ -123,7 +123,12 @@ closes matching editors before deleting the stored Boost.
 
 **Limits:** managed scripts currently run in the main world. Overlay secrecy is
 not proven. P7 isolated-world/native message support blocks Zap; `enterZap`
-returns false. Code mode is not implemented. Color uses the documented interim
+returns false. Code mode uses the native CSS/JS text views from #203. CSS saves
+refresh live pages; JS saves replace future document-start scripts without live
+execution. The runtime retains the installed JS snapshot for each current
+document, independently of store changes and same-document navigation. Real
+document commits update that snapshot and notify the editor, so Refresh to Run
+clears after reload. Color uses the documented interim
 filter math until the paint-time remap lands. The existing isolated-world harness
 receipts below do not prove the App's current world isolation.
 
@@ -131,7 +136,8 @@ The PR records redacted real-App counts, timings and load averages. The e2e
 runner writes local receipts under `docs/engine-spike/`; do not commit their
 process identifiers or temporary paths.
 Run `python3 tools/e2e/engine_e2e.py --style chrome --only boosteditor` under the
-on-screen lock. B4 and B5 report BLOCKED; they do not count as accepted behavior.
+on-screen lock. B4 reports BLOCKED. B5 checks live CSS, deferred JS and Refresh to Run against
+the bound document, including a second edit and same-document navigation.
 
 ## Verification (2026-10-25, America/Vancouver)
 

@@ -3,6 +3,7 @@ import ImageIO
 import OpenModel
 import OpenBoosts
 import OpenAdBlock
+import OpenDesign
 
 public struct BoostScopeChoice: Sendable, Equatable {
     public let title: String
@@ -39,6 +40,56 @@ public final class BoostEditorSession {
     private var sampleTask: Task<Double?, Never>?
     private var sampleGeneration = 0
     private var deleted = false
+    /// The exact configured delays of pending native edits; cleared when flushed.
+    public private(set) var pendingCodeSaveDelays: [BoostCodeLanguage: TimeInterval] = [:]
+    private var codeWork: [BoostCodeLanguage: DispatchWorkItem] = [:]
+    private var codeBefore: [BoostCodeLanguage: Boost] = [:]
+    private var codeDrafts: [BoostCodeLanguage: String] = [:]
+    public private(set) var devToolsVisible = false
+    public var showsJSNotice: Bool { !(codeDrafts[.js] ?? boost.js).isEmpty && !defaults.bool(forKey: "open.boosts.hasDismissedJSNotice") }
+    public var needsJSReload: Bool { boost.js != (host.loadedJS(boostID: boost.id,tabID: context.tabID) ?? "") }
+    public func code(_ language: BoostCodeLanguage) -> String { codeDrafts[language] ?? (language == .css ? boost.css : boost.js) }
+    public func editCode(_ text: String,language: BoostCodeLanguage) {
+        guard isEditable else { return }
+        if codeBefore[language] == nil { codeBefore[language] = boost }
+        let noticeBefore = showsJSNotice
+        codeDrafts[language] = text;codeWork[language]?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.flushCode(language) } }
+        codeWork[language] = work
+        let delay = language == .css ? BoostEditorMetrics.cssSaveDelay : BoostEditorMetrics.jsSaveDelay
+        pendingCodeSaveDelays[language] = delay
+        DispatchQueue.main.asyncAfter(deadline: .now()+delay,execute: work)
+        if noticeBefore != showsJSNotice { onChange?() }
+    }
+    public func flushCode(_ language: BoostCodeLanguage? = nil) {
+        for kind in language.map({ [$0] }) ?? [.css,.js] {
+            codeWork.removeValue(forKey: kind)?.cancel();pendingCodeSaveDelays.removeValue(forKey: kind)
+            guard let text = codeDrafts.removeValue(forKey: kind),isEditable else { continue }
+            if kind == .css { boost.css = text } else { boost.js = text }
+            boost = store.upsert(boost)
+            host.refresh(profile: context.profileID)
+        }
+        onChange?()
+    }
+    /// Text undo stays native while focused. Leaving the field records one
+    /// whole-Boost checkpoint, as the simple editor's Undo button expects.
+    public func endCodeEditing(_ language: BoostCodeLanguage? = nil) {
+        flushCode(language)
+        for kind in language.map({ [$0] }) ?? [.css,.js] {
+            guard let before = codeBefore.removeValue(forKey: kind),isEditable else { continue }
+            let changed = kind == .css ? before.css != boost.css : before.js != boost.js
+            if changed { registerRestore(before,name: kind == .css ? "Edit CSS" : "Edit JavaScript", restoresName: false) }
+        }
+        onChange?()
+    }
+    public func boundPageDidCommit() { guard !isClosed else { return };onChange?() }
+    public func refreshToRun() {
+        guard isEditable else { return }
+        flushCode();host.reload(tabID: context.tabID)
+    }
+    public func toggleDevTools() { guard isEditable else { return };devToolsVisible.toggle();host.setDevToolsVisible(devToolsVisible,tabID: context.tabID);onChange?() }
+    public func dismissJSNotice() { defaults.set(true,forKey: "open.boosts.hasDismissedJSNotice");onChange?() }
+
     public private(set) var isZapActive = false
     public private(set) var isSelecting = false
     public var zapAvailable: Bool { host.zapAvailability(tabID: context.tabID) }
@@ -60,7 +111,7 @@ public final class BoostEditorSession {
             self.handlePickerEvent(event)
         }
     }
-    isolated deinit { previewWork?.cancel(); sampleTask?.cancel() }
+    isolated deinit { previewWork?.cancel(); sampleTask?.cancel();codeWork.values.forEach { $0.cancel() } }
     public var isEditable: Bool { !context.isIncognito && !isClosed }
     public var globallyEnabled: Bool { defaults.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true }
     public var showsInterstitial: Bool { !defaults.bool(forKey: "open.boosts.hasDismissedInterstitial") }
@@ -165,6 +216,7 @@ public final class BoostEditorSession {
         }
     }
     public func resetAll() {
+        flushCode()
         change("Reset all edits") { b in
             b.colorWheel = nil; b.colorAdjustment = nil; b.fontFamily = nil
             b.textZoom = nil; b.textTransform = nil; b.zaps = []; b.css = ""; b.js = ""
@@ -214,6 +266,7 @@ public final class BoostEditorSession {
     public func showAllBoosts() { host.showBoostsLibrary(profileID: context.profileID) }
     public func delete() {
         guard isEditable else { return }
+        codeWork.values.forEach { $0.cancel() };codeWork.removeAll();pendingCodeSaveDelays.removeAll();codeDrafts.removeAll();codeBefore.removeAll()
         previewWork?.cancel(); sampleTask?.cancel(); deleted = true
         previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
         _ = store.delete(id: boost.id); store.saveNow(); host.refresh(profile: context.profileID)
@@ -222,6 +275,7 @@ public final class BoostEditorSession {
     public func finish() {
         guard !isClosed else { return }
         if interactiveBefore != nil { endInteractive() }
+        flushCode()
         previewWork?.cancel(); previewWork = nil; sampleTask?.cancel()
         host.exitZap(tabID: context.tabID)
         isZapActive = false; isSelecting = false
@@ -264,6 +318,7 @@ public final class BoostEditorSession {
         guard isEditable else { return }
         if interactiveBefore != nil { endInteractive() }
         reconcileStoreMetadata()
+        endCodeEditing()
         let before = boost; var candidate = boost; edit(&candidate); boost = BoostStore.normalizedForPreview(candidate)
         commit(before: before, name: name, restoresName: restoresName)
     }

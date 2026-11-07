@@ -15,10 +15,14 @@ final class BoostEngineAdapter {
     weak var context: OEBrowserContext?
     let profile: ProfileID
     var scripts: [UserScript] = []
+    var documentStartMatcher = BoostMatcher(boosts: [])
   }
   private var registrations: [ObjectIdentifier: Registration] = [:]
   private var livePlans: [ObjectIdentifier: String] = [:]
   private var deliveries: [ObjectIdentifier: Task<Void, Never>] = [:]
+  /// The installed script snapshot for the current document. Live refresh and
+  /// same-document URL changes must never replace what already ran at load.
+  private var documentJS: [ObjectIdentifier: [BoostID: String]] = [:]
   private(set) var refreshCount = 0
   private(set) var completedRefreshCount = 0
   private(set) var lastRefreshMilliseconds = 0.0
@@ -34,10 +38,22 @@ final class BoostEngineAdapter {
     registrations[key] = Registration(context: context, profile: profile)
     replaceScripts(context, profile: profile)
   }
-  func committed(_ host: EngineWebContentHost, url: URL) {
+  func committed(_ host: EngineWebContentHost, url: URL, newDocument: Bool) {
     prepare(host.content.context, profile: host.profileID)
+    if newDocument {
+      let matcher = registrations[ObjectIdentifier(host.content.context)]?.documentStartMatcher ?? BoostMatcher(boosts: [])
+      let installed = BoostInjectionPlanner.plan(url: url, profileID: host.profileID, matcher: matcher,
+        boostsGloballyEnabled: true, context: host.content.context.isEphemeral ? .incognito : .normal)
+      documentJS[ObjectIdentifier(host)] = Dictionary(uniqueKeysWithValues: installed.boosts.compactMap {
+        $0.js.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : ($0.boostID, $0.js)
+      })
+    }
     let plan = plan(url: url, profile: host.profileID, ephemeral: host.content.context.isEphemeral)
     deliver(plan, to: host, url: url)
+  }
+  func loadedJS(boostID: BoostID, host: EngineWebContentHost) -> String? {
+    guard canDeliver(to: host) else { return nil }
+    return documentJS[ObjectIdentifier(host)]?[boostID]
   }
   func refresh(profile: ProfileID, startedAt start: TimeInterval) {
     for registration in Array(registrations.values) where registration.profile == profile {
@@ -102,6 +118,8 @@ final class BoostEngineAdapter {
     // Blocked on P7: isolated world
     for script in scripts { web.addUserScript(script) }
     registrations[key]?.scripts = scripts
+    registrations[key]?.documentStartMatcher = boosts.boostsGloballyEnabled && boosts.app.model.profile(id: profile) != nil
+      ? boosts.matcher(for: profile) : BoostMatcher(boosts: [])
   }
   private func makeScripts(profile: ProfileID, ephemeral: Bool) -> [UserScript] {
     guard boosts.boostsGloballyEnabled, boosts.app.model.profile(id: profile) != nil else { return [] }
@@ -189,10 +207,10 @@ final class BoostEngineAdapter {
     return String(decoding: data, as: UTF8.self)
   }
   func closed(_ host: EngineWebContentHost) {
-    let key = ObjectIdentifier(host); deliveries.removeValue(forKey: key)?.cancel(); livePlans[key] = nil
+    let key = ObjectIdentifier(host); deliveries.removeValue(forKey: key)?.cancel(); livePlans[key] = nil; documentJS[key] = nil
   }
   func stop() {
-    for task in deliveries.values { task.cancel() }; deliveries = [:]; livePlans = [:]
+    for task in deliveries.values { task.cancel() }; deliveries = [:]; livePlans = [:]; documentJS = [:]
     for registration in registrations.values { if let context = registration.context { let web = EngineWebProfile(context); for script in registration.scripts { web.removeUserScript(id: script.id) } } }
     registrations = [:]
   }

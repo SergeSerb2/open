@@ -44,7 +44,7 @@ extension AutomationController {
     let action = args["action"] as? String ?? "state"
     switch action {
     case "open":
-      guard args["mode"] == nil || args["mode"] as? String == "simple" else { throw Failure(message: "blocked: code mode") }
+      guard args["mode"] == nil || ["simple", "code"].contains(args["mode"] as? String ?? "") else { throw Failure(message: "unknown editor mode") }
       if let raw = args["tab"] as? String, UUID(uuidString: raw) == nil { throw Failure(message: "invalid tab ID") }
       let tab = (args["tab"] as? String).flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? factory.selectedTab?.id
       guard let tab, boosts.canEdit(tabID: tab) else { throw Failure(message: "Boost editing requires a non-private http(s) tab") }
@@ -54,7 +54,7 @@ extension AutomationController {
       }
       guard let owner = boosts.factory(for: tab), let host = owner.hosts[tab], let target = owner.controller else { throw Failure(message: "no Boost editor window") }
       if let id, boosts.store(for: host.profileID).boost(id: id) == nil { throw Failure(message: "unknown Boost") }
-      boosts.openEditor(boostID: id, tabID: tab, mode: .simple)
+      boosts.openEditor(boostID: id, tabID: tab, mode: args["mode"] as? String == "code" ? .code(.css) : .simple)
       guard target.boostEditor?.session != nil else { throw Failure(message: "could not open Boost editor") }
       return try boostEditorState(target.boostEditor)
     case "close": controller.boostEditor?.close()
@@ -78,16 +78,22 @@ extension AutomationController {
       var input = args; input["window"] = panel.windowNumber; input["route"] = "app"
       _ = try await sendKey(input, factory)
     case "type":
-      guard let editor = controller.boostEditor, let alert = editor.activeAlert, let field = alert.accessoryView as? NSTextField, let text = args["text"] as? String, text.utf8.count <= 16_384 else {
-        throw Failure(message: "blocked: code mode; type supports the active rename field only (16 KiB)")
+      guard let editor = controller.boostEditor, let text = args["text"] as? String, text.utf8.count <= 16_384 else {
+        throw Failure(message: "type requires an editor and at most 16 KiB")
       }
-      alert.window.makeKeyAndOrderFront(nil); alert.window.makeFirstResponder(field); field.selectText(nil)
-      try await activateForInput(alert.window)
+      let target: NSWindow
+      if let alert = editor.activeAlert, let field = alert.accessoryView as? NSTextField {
+        target = alert.window; target.makeKeyAndOrderFront(nil); target.makeFirstResponder(field); field.selectText(nil)
+      } else if editor.view?.isCodeMode == true, let code = editor.view?.codeView?.editor, let panel = editor.panel {
+        target = panel; target.makeKeyAndOrderFront(nil); target.makeFirstResponder(code); code.selectAll(nil)
+      } else { throw Failure(message: "type requires a rename field or visible code editor") }
+      try await activateForInput(target)
       // One native text event also represents composed input. Sending 16K
       // separate key pairs makes AppKit re-layout the growing field each time.
       for type in [NSEvent.EventType.keyDown, .keyUp] {
         if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-          windowNumber: alert.window.windowNumber, context: nil, characters: text, charactersIgnoringModifiers: text, isARepeat: false, keyCode: 0) { NSApp.sendEvent(event) }
+          windowNumber: target.windowNumber, context: nil, characters: text.isEmpty ? "\u{7f}" : text,
+          charactersIgnoringModifiers: text.isEmpty ? "\u{7f}" : text, isARepeat: false, keyCode: text.isEmpty ? 51 : 0) { NSApp.sendEvent(event) }
       }
       try? await Task.sleep(for: .milliseconds(20))
     case "tap":
@@ -127,14 +133,16 @@ extension AutomationController {
     }
     let rect = view.pad.frame
     return ["open": true, "boost": try boostJSON(session.boost), "profile": session.context.profileID.description,
-      "tab": session.context.tabID.description, "mode": "simple", "zap": false, "zapCount": session.boost.zaps.count,
+      "tab": session.context.tabID.description, "mode": view.isCodeMode ? "code" : "simple", "zap": false, "zapCount": session.boost.zaps.count,
+      "loadedJS": app.stores.boosts.editorHost.loadedJS(boostID: session.boost.id, tabID: session.context.tabID).map { $0 as Any } ?? NSNull(),
+      "refreshToRun": view.codeView?.showsRefreshToRun ?? false,
       "canUndo": session.undoManager.canUndo, "undoCount": session.undoManager.groupingLevel + (session.undoManager.canUndo ? 1 : 0),
       "interstitial": session.showsInterstitial, "colorsReady": session.colorsReady, "globallyEnabled": session.globallyEnabled,
       "active": session.isActiveOnPage, "window": panel.windowNumber, "key": panel.isKeyWindow,
       "frame": [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height],
       "pad": [rect.minX, rect.minY, rect.width, rect.height],
       "alert": editor.activeAlert.map { ["title": $0.messageText, "message": $0.informativeText, "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? [:],
-      "controls": view.controls.map { ["id": $0.controlID, "enabled": $0.isEnabled, "visible": !$0.isHiddenOrHasHiddenAncestor] },
+      "controls": (view.controls + (view.codeView?.controls ?? [])).map { ["id": $0.controlID, "enabled": $0.isEnabled, "visible": !$0.isHiddenOrHasHiddenAncestor] },
       "refreshMs": runtime.lastRefreshMilliseconds, "refreshPages": runtime.lastRefreshPageCount,
       "refreshSkippedPages": runtime.lastRefreshSkippedPageCount, "deliveryCount": runtime.javaScriptDeliveryCount,
       "applyFailures": runtime.applyFailureCount,

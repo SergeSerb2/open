@@ -95,7 +95,46 @@ def run(factory, results, tmp, env):
                 return dict(positive=bool(ok),negative=not (before["font"].startswith("Avenir") and str(before["zoom"]) == "1.1" and before["transform"] == "capitalize"),before=before,live=probe(tab))
             row("B3_font_text", b3)
             results["B4_zap"]={"status":"BLOCKED","reason":"P7: isolated world and native page-message channel"}
-            results["B5_code"]={"status":"BLOCKED","reason":"code mode (Step 7)"}
+            def b5():
+                originalCSS=call()["boost"]["css"]
+                first="window.boostEditorJSRuns=(window.boostEditorJSRuns||0)+1;window.boostEditorJSVersion='one';"
+                second=first.replace("'one'","'two'")
+                tap("code")
+                assert wait_until(lambda: call()["mode"] == "code",timeout=5,step=.02)
+                try:
+                    call("type",text="h1 { text-decoration: underline !important; }")
+                    assert wait_until(lambda: "underline" in app.eval(tab,"getComputedStyle(document.querySelector('h1')).textDecorationLine"),timeout=5,step=.02)
+                    tap("editor.code.js")
+                    assert call()["loadedJS"] is None and not call()["refreshToRun"]
+                    call("type",text=first)
+                    assert wait_until(lambda: call()["boost"]["js"] == first and call()["refreshToRun"],timeout=5,step=.02)
+                    negative=app.eval(tab,"typeof window.boostEditorJSVersion") == "undefined"
+                    assert negative
+                    tap("editor.code.run");app.call("wait",tab=tab)
+                    assert wait_until(lambda: call()["loadedJS"] == first and not call()["refreshToRun"],timeout=5,step=.02)
+                    assert app.eval(tab,"window.boostEditorJSVersion") == "one" and app.eval(tab,"window.boostEditorJSRuns") == 1
+                    call("type",text=second)
+                    assert wait_until(lambda: call()["boost"]["js"] == second and call()["refreshToRun"],timeout=5,step=.02)
+                    # A store/script refresh must not claim that the current
+                    # document ran the newly saved JS or replay either version.
+                    assert call()["loadedJS"] == first and app.eval(tab,"window.boostEditorJSVersion") == "one" and app.eval(tab,"window.boostEditorJSRuns") == 1
+                    tap("editor.code.run");app.call("wait",tab=tab)
+                    assert wait_until(lambda: call()["loadedJS"] == second and not call()["refreshToRun"],timeout=5,step=.02)
+                    assert app.eval(tab,"window.boostEditorJSVersion") == "two" and app.eval(tab,"window.boostEditorJSRuns") == 1
+                    app.eval(tab,"history.pushState({},'',location.pathname+'#code')")
+                    assert call()["loadedJS"] == second and not call()["refreshToRun"]
+                    return dict(positive=True,negative=negative,cssApplied=True,refreshAppearedAfterEdit=True,refreshDisappearedAfterReload=True,jsRunsPerDocument=1,sameDocumentKeptLoadedJS=True)
+                finally:
+                    if call().get("mode") == "code":
+                        tap("editor.code.js");call("type",text="")
+                        assert wait_until(lambda: call()["boost"]["js"] == "",timeout=5,step=.02)
+                        app.call("command",id="reload");app.call("wait",tab=tab)
+                        assert wait_until(lambda: call()["loadedJS"] is None and not call()["refreshToRun"],timeout=5,step=.02)
+                        tap("editor.code.css");call("type",text=originalCSS)
+                        assert wait_until(lambda: call()["boost"]["css"] == originalCSS,timeout=5,step=.02)
+                        tap("editor.code.back")
+                        assert wait_until(lambda: call()["mode"] == "simple",timeout=5,step=.02)
+            row("B5_code",b5)
             def b6():
                 negative=items()[0].get("textTransform") != None
                 call("key", key="z", modifiers=["cmd"])

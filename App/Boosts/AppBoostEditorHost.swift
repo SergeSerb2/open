@@ -36,6 +36,10 @@ final class AppBoostEditorHost: BoostEditorHost {
     let token = SiteControlObservationToken(); pickerObservers[token] = observer; return token
   }
   func removePickerObserver(_ token: SiteControlObservationToken) { pickerObservers[token] = nil }
+  func loadedJS(boostID: BoostID, tabID: ItemID) -> String? {
+    guard let host = boosts.factory(for: tabID)?.hosts[tabID] else { return nil }
+    return boosts.adapter.loadedJS(boostID: boostID, host: host)
+  }
   func setDevToolsVisible(_ visible: Bool, tabID: ItemID) {
     guard let page = boosts.factory(for: tabID)?.hosts[tabID]?.content else { return }
     if visible { page.showDevTools() } else { page.closeDevTools() }

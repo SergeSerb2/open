@@ -363,7 +363,11 @@ Additional socket commands:
 | `commandbar-state` | Read actual bar mode, text, rows, selection, and monotonic first-result timings. Also `footer` (the (i) privacy footer shows), `hidden`, `panelOpacity` (the panel's presentation opacity), `animationKeys` (bar layers, the self-blinking caret excluded) and `allAnimationKeys`, `panelFrame` (window points, top-left origin), `fieldWidth`, `allowsRemote`. Does not create the bar. |
 | `settings-pane` | `pane`: a Settings pane id (`general`, `profiles`, `links`, `shortcuts`, `appIcon`, `advanced`). Shows Settings on that pane through the App's presenter (a fixture step before a check that must switch panes). |
 | `commandbar-press` | `control`: `info`, `dismiss`, `searchSettings`, or `privacyLink`. Performs that bar control's AX press action (the control's real action). Returns `pressed` and the new `commandbar-state`. |
-| `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
+| `menu-state`, `menu-perform id=…` | Read native menu validation (including `key`, raw `modifierMask`, nil-target/action and hidden state), or invoke an enabled native menu item. |
+| `key observeCommands=true` | Scope a dispatch trace to this real in-process key event. Returns the actual `charactersIgnoringModifiers`, window command entries in `commands`, and native menu dispatches in `menuActions`. It changes no route or target and installs no observer at rest. |
+| `menu-key-render path=…` | Copy the real Shift+letter items into an AppKit menu, capture this App's native popup, then cancel it without an action. Run under the on-screen lock. |
+| `editor-open kind=create`, `creation-state` | Open or focus the New Space sidebar page; page fullscreen exits before presentation. Read its draft, Profile, native Name focus, actual visibility, theme preview and undo state. The Profile popup stays visible during inline creation; selecting an existing Profile preserves the draft. `themeKey`, `windowActive` and `backgroundActive` report the draft panel and its owning window material. When the form is closed, state includes `modelUndoName` and `modelRedoName` for the actual model step. |
+| `editor-act`, `editor-close` | Use the creation form's controls (`click control=theme/icon/create/cancel`, `profile name=…`) or a draft theme preset (`preset index=0…8`). Close the theme editor first, else cancel creation. |
 | `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
@@ -992,7 +996,7 @@ Frame preferences are restored after quit through the shared defaults fallback.
 |---|---|---|
 | `boosts` | `action: list\|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
 | `boost-library` | `action: rename\|enabled\|delete`, `boost` UUID, `name` or `enabled` | Requires a visible Boosts Library row; calls its real LibraryActions boundary after confirmation. It does not prove native button or confirmation input. |
-| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type`, optional `boost`, `tab` for open | Real simple editor and session. Private or non-http(s) tabs refuse open. |
+| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type`, optional `boost`, `tab` for open | Real simple/Code editor and session (`mode: simple|code`). Private or non-http(s) tabs refuse open. |
 
 `drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
 coordinates. It sends mouse down, drag through the final point, then mouse up.
@@ -1000,18 +1004,20 @@ coordinates. It sends mouse down, drag through the final point, then mouse up.
 `tap` takes a native control ID (`editor.color.invert`, `editor.undo`), a plan alias
 (`font.Avenir`, `size`, `case`, `firstRun.makeABoost`), `menu.<native title>`, or
 `alert.Done|Cancel|Delete`. Menus and alerts use their real native actions.
-`type text=...` edits the active rename sheet through App key events (16 KiB
-limit). CSS/JS typing reports blocked until Code mode exists.
+`type text=...` edits the active rename sheet or visible CSS/JS text view through
+App key events (16 KiB limit). Empty text clears the selected field through Delete.
 
 State includes the Boost value, bound tab/Profile, interstitial, global and scope
 state, undo state, controls, panel frame/key state, specific active alert, and
 refresh generation/completion, timing, delivered/skipped page counts, JavaScript
-delivery count and apply-failure count. The `boosteditor` suite exercises
-B1–B3 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
+delivery count and apply-failure count. Code state adds `loadedJS` (the current
+document's installed script, or null) and `refreshToRun`. The `boosteditor` suite exercises
+B1–B3, B5 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
 Edit Boost for a disabled saved Boost, discard/wake refresh, Library metadata
 reconciliation, Undo/Redo preservation, and Library Delete. The ten-page timing
-row requires ten live matching pages with nine hidden pages. B4 is blocked by P7; B5 is blocked by
-Code mode. Every row includes a real negative control. The suite restores all
+row requires ten live matching pages with nine hidden pages. B4 is blocked by P7.
+B5 proves that CSS applies live, JS waits for reload, and Refresh to Run follows
+the loaded document rather than the latest stored text. Every row includes a real negative control. The suite restores all
 preference keys in `finally` and uses
 an ephemeral local fixture server plus the runner's isolated roots/cleanup.
 ## Space editors (Section 4)
