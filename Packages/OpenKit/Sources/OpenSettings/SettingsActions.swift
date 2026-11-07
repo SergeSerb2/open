@@ -16,6 +16,7 @@ public struct ImportPlan: Sendable {
     public var directory: URL
     public var spaces = true, tabs = true, favorites = true, folders = true, archive = true, history = false, searchSettings = true
     public var secretsRequested = false
+    public var boosts = true
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
     /// Only the explicit consent button should call this method.
@@ -40,7 +41,7 @@ public struct ImportOutcome: Sendable {
 /// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
 public enum ImportOutcomeKeys {
     public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
-    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Passwords and cookies"]
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Boosts","Passwords and cookies"]
 }
 public extension ImportOutcome {
     func importedCount(_ category:String)->Int {

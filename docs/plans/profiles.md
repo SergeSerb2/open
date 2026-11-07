@@ -1236,16 +1236,17 @@ from `Secure Preferences`, not copied. Open Profiles whose Arc directory
 is missing (`chromiumDirsMissing`) import as empty engine Profiles; their
 sidebar Spaces/tabs still import fully.
 
-### 8.5 Verification limit (state it, do not hide it)
+### 8.5 Verification limit (updated 2026-11-06)
 
-No multi-Profile Arc install exists on this Mac, and Arc must not be
-launched by agents (AGENTS.md rule 4). §8.1–§8.2 are therefore verified
-against a **synthetic copied fixture** (two Spaces on two refs, two
-`topApps` pairs, hand-built `Local State`) plus the live single-Profile
-regression (§9.1). The real multi-Profile capture is data-model.md §5
-item 3 (user creates a second Arc Profile, quits Arc, agent reads the
-files). Until then the importer ships with the lenient parser above and
-the report lines make any mismatch visible instead of silent.
+The read-only two-Profile capture confirms
+`{custom:{_0:{directoryBasename:"Profile 1",machineID:…}}}` in both
+`Space.profile` and `topAppsContainerIDs`. Local State names both source
+directories. The source has 6 Spaces split 4/2 and 11 Favorites split 6/5.
+`StorableProfiles.json` and `StorableProfileContainers.json` are absent; their
+optional metadata shapes remain guesses. Arc was not launched by an agent.
+App and CLI receipts are in [import-multiprofile.md](../import-multiprofile.md).
+Named Open destination directories now come from the normal Profile allocator,
+not Arc's source basename. `sourceProfileDirectories` retains the source map.
 
 ---
 
@@ -1548,7 +1549,7 @@ PRs. Steps 6–7 are engine/App PRs. Branch names follow the repo pattern
 
 | # | Item | Handling |
 |---|---|---|
-| Q1 | Named Arc Profile ref shape and `StorableProfiles.json` fields are unverified (no multi-Profile install; Arc must not be launched by agents) | Lenient parser + report lines (§8); real capture is a user action (data-model.md §5 item 3). Does not block Steps 1–3 |
+| Q1 | Named Arc Profile ref confirmed on disk; optional `StorableProfiles.json` fields remain unverified | Observed custom directory reference + Local State names (§8.5); keep the optional Storable metadata parser marked as a guess |
 | Q2 | `ProfileSettings` has no download-location field, though Arc scopes it per Profile | Out of scope (§0.2); add with the downloads milestone as a whole-settings replace (no DTO break: `ProfileDTO.settings` gains a keyed field with a decode-default, planned there, not here) |
 | Q3 | Idle request-context eviction could cut memory but risks destroying extension/session state | v1 keeps contexts until quit (D-P7); follow-up after sleep history capture exists (§6.4) |
 | Q4 | Global favicon cache leaks "some Profile visited this origin" | Accepted and documented (D-P6, §5.3); revisit only if a privacy review flags it — the fix is a `profile` column + per-Profile files, contained in `OpenStore` |

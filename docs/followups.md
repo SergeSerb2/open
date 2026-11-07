@@ -1,5 +1,13 @@
 # Follow-ups
 
+- Import Arc Boosts — C2 adds the bounded Firestore cache reader, synthetic CLI
+  flow and locked CLI persistence. App persistence, live apply, re-import and
+  shared Undo remain BLOCKED (Section 12 AppBoosts). Wire only through
+  `app.stores.boosts.store(for:)` and `refresh(profile:)`; never create another
+  App BoostStore. Confirm color/zoom conversion, absent local enablement policy,
+  account-to-Default Profile assignment and a populated real cache sample.
+  See [storage evidence](re/boosts-store.md). — Section 14 C2, 2026-11-06
+
 Small items found during review and verification. Each line: area — issue — where found.
 
 - Boost code mode (Step 7 package, [Code mode #203](https://github.com/SergeSerb2/open/pull/203)) — App Step 5 must implement `BoostEditorHost.loadedJS(boostID:tabID:)` from the bound document, call `BoostEditorController.boundPageDidCommit(tabID:)` after commit, and prove real-page B5 (CSS live, JS only after reload). Native code flows (including available CSS selector insertion and one-step undo) and bar comparison cover the package; real-App rest/hover snapshots await host integration. The JS notice uses the lead’s 2026-11-06 ruling recorded in plan §4.10. Package evidence and negative-proof logs are in the PR body. — Section 12 child C, 2026-11-06.
@@ -31,6 +39,7 @@ Small items found during review and verification. Each line: area — issue — 
 - Media fork patch `chromium/0401` (Section 3 Step 7, 2026-11-02): `MediaSessionControllersManager::OpenIsPictureInPictureAvailable` reads the controller's player id through `get_player_id_for_testing()`. It compiles and works, but Chromium's presubmit flags `_for_testing` calls in production code. Add a plain accessor the next time the patch changes (needs an engine rebuild).
 - Media real-window leftovers (Section 3, 2026-11-02): (a) no mini-player tooltip appeared within 3 s of a synthetic hover on Volume; a real-pointer check or a tooltip read-back command is needed before calling it a defect. (b) After three tabs got new titles, the whole sidebar gradient read up to 1 count darker in a real-window snapshot; cause not found, not in the mini player. (c) The title-row "Back to Tab" state stuck after one synthetic enter on a collapsed card (fixed: the card lays out before it reads the pointer); confirm with a real pointer together with #110 C5.
 
+- Verification (extensions UI) — extensions_ui.py:332 popup page KeyError, one-off, harness should wait for page. #204 records the failed attempt and passing main/head controls; lead ruling, 2026-11-07.
 - Verification (portability) — four verify-all gates were recorded on the M5 (macOS 27.2 beta, 1x display, M5 Pro CPU) and fail on the M1 Pro (macOS 27.0.1, 2x display, slower CPU) with no app change: `space-legacy` and `space-editor` P1 compare PNGs byte for byte with fixtures (0.17 % of pixels differ, all in sidebar text and symbols); `sidebar-compare` misses its color gates on 3 of 13 states (static-inactive ΔE00 1.31 > 1.17, selected-pinned 2.71 > 1.73, yellow 2.25; positions identical); `suggest-check` #31 ends the slow-server stream after ~620 ms against 600 ms (+240 ms past debounce + timeout on the M1, +122 ms on the M5). Make them machine-independent: fixtures and gates keyed by OS build and backing scale (or a stated tolerance), and the real-time budget measured against a same-run local baseline. Until then, the full gate that counts for merge runs on the M5. — lead, M1 setup run 2026-10-26
 - Verification (command bar capture) — `commandbar-render check` intermittently returns all-black 2x frames on the M1. Untouched main `4c40ebd965cc8e0ce4895bf3e94c5d85a4fffb59` failed 75/78: #69 empty, #70 typing-git and #76 actions had panel and page RGB `[0, 0, 0]` after the existing render retries. Its binary SHA-256 was `5b64015bcef7485a16997d27cdb060047b484a568d2cae91100315d268dd4e2b`. Other states rendered correctly; later Manager verification passed this target, so the failure is intermittent. M1 evidence: `.re/m1-commandbar-capture/{evidence.json,main-commandbar.log,commandbar-main-proof.py,main-commandbar-receipt.json}` in the main checkout; the receipt records the isolated command and successful process cleanup. Diagnose the offscreen capture path before changing it. No cause is proven, no tolerance was changed, and this is not one of the four accepted M1 baseline failures. Fix deferred by the user’s closeout-and-pause order; no fix PR opened. — M1 lead, 2026-10-26 (moved here from checkpoint `t3/commandbar-capture-followup` 3da15fa by Section 2, which reports the M5 result under its item 13) **Closed in Section 2 item 13 (2026-11-02): cause found and fixed.** `commandbar-render`'s `OffscreenRenderer` read the texture back through a fence on a new Metal queue while `CARenderer` drew on its own queue, so the read could finish before the draw: the unwritten part of the texture came out black (alpha 0). sidebar-render, sitecontrol-render and space-editor-render already shared one queue (`kCARendererMetalCommandQueue`); commandbar-render kept an older copy. Now it shares the queue too, and `Stage.render` also checks the bottom page corners. Measured on the M5: `main` 1 band in 60 renders at 2x; with the fix 0 bands and 0 retries in 100; the old queue plus the new check: 6 retries in 100, 0 bands written. Evidence: `.re/s2cb/item13/`.
 - Space Manager visual verification — no Arc frame of the Manager exists. #124 checks the real Library page against plan §3.2 and the S4 R1 header (0 pt). Compare the real-window rest/hovered PNGs with capture C2 when the user records it. — section 1, 2026-10-27
@@ -282,3 +291,34 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 ## Section 10: Air Traffic Control capture gaps
 
 User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps.
+
+
+## Section 14: multi-profile import boundaries
+
+- Import Undo removes created Profiles and sidebar/routing changes from the
+  model. Main's Profile deletion path needs typed confirmation and defers loaded
+  context data until restart. Undo does not erase Archive/History stores or
+  engine directories. Complete this through Section 10's in-session deletion
+  path (0702); do not bypass its teardown boundary.
+- Session Favorite keys contain a Profile and window but no Space. When a source
+  window focuses another Profile, import uses the Favorite owner's first Space.
+  This is an accepted, marked guess. Settings keeps its current windows and selections and
+  imports selections only for newly added Spaces; it does not recreate Arc
+  window layout. User-operated Arc evidence is needed for exact inactive-Profile
+  session behavior. See [multi-profile import](import-multiprofile.md).
+
+- C1c review-fix App validation (2026-11-07): 12 `MP_*` positives, all 11
+  fixture-negative proofs, the Default-role code-break proof, forced dialog
+  cleanup, full `firstrun` (64/64), counts-only real-App audit, `routing`,
+  `sidebar`, and `settings-preview` passed. The existing sidebar durable-cookie
+  row remains SKIP because `profiles` owns it. The final full verifier table
+  is recorded in draft PR #221 on its final head. See [current receipts](import-multiprofile.md).
+
+- Directory-limit boundary flows (255-byte acceptance and 256-byte refusal)
+  and general decoded-memory bounds for the inherited JSON parser remain
+  follow-ups. They are outside PR #221's review fix. No boundary-flow or
+  worst-allocation acceptance is claimed.
+
+The lead decided against provenance migration for earlier Settings imports:
+only pre-release development builds made them. Arc Default maps by role to the
+live Open Default; named Profiles still match stable import IDs only.
