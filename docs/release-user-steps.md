@@ -277,9 +277,24 @@ export OPEN_RELEASE_DOWNLOAD_PREFIX='https://github.com/SergeSerb2/open/releases
 Also fill `Public MPL source location:` and the exact source-offer links in
 `docs/release/licenses.md`. Do not use a private repository as a public source offer.
 
-Agent verification uses anonymous requests to the selected source file, feed and
-DMG. It checks file content, not just a 200 status. After approval for the next
-production preflight, run:
+Agent verification compares each published MPL source file with the exact shipped
+source. Fill the two paths below from the U-8 source inventory. Run this command
+for each file in that inventory. It sends no GitHub token:
+
+```bash
+(
+  set -e
+  open_release_source_url='<anonymous URL for this shipped MPL source file>'
+  open_release_source_path='<matching local shipped source file>'
+  open_release_source_check=$(mktemp "${TMPDIR:-/tmp}/open-source-check.XXXXXX")
+  trap 'rm -f "$open_release_source_check"' EXIT
+  curl --fail --silent --show-error --location --max-time 30 --max-filesize 67108864 "$open_release_source_url" --output "$open_release_source_check"
+  cmp "$open_release_source_path" "$open_release_source_check"
+)
+```
+
+U-5 and U-7 verify the anonymous feed and DMG content. After approval for the next
+production preflight, the agent also runs:
 
 ```bash
 tools/release.sh --preflight-only
