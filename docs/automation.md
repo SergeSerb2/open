@@ -90,8 +90,9 @@ the private JSON receipt (default `.re/updater/results.json`). Install and relau
 are not tested; ad-hoc library validation does not qualify a shipped update.
 For a launch receipt, build main and branch Release with `OPEN_AUTOMATION=1`, then
 use `--config Release --main-bundle /path/to/main/Open.app`. Wait for load1 ≤ 12,
-then take the quiet and screen locks; this pairing needs no heavy slot. Timing
-reruns of `verify-all.sh` take the heavy slot outside the quiet lock. The pairing alternates main/branch five times and
+then take the quiet and screen locks; this pairing needs no heavy slot. Build
+under `heavy.sh` first, without the quiet lock. Time an already built CLI under
+the quiet lock, then a heavy slot. The pairing alternates main/branch five times and
 requires branch median `sidebarDrawn` ≤ main median. Every sample records load.
 
 ## Enable automation
