@@ -523,6 +523,41 @@ remove a replacement offer. The window also provides the hosted page's
 parent NSView, size, and resize notifications for web-modal dialogs. Its
 top-center placement follows Chrome and remains a guess for Arc.
 
+Navigation does not withdraw an Open save prompt. Chromium 156 keeps the
+password state while the bubble is open (`chrome/browser/ui/passwords/
+manage_passwords_ui_controller.cc:1368-1383`); the adapter constructor calls
+`OnBubbleShown()` (`bubble_controllers/password_bubble_controller_base.cc:13-24`
+under that directory). If Chromium resets that state instead, `DestroyPopups()`
+calls `HideBubble()` (`manage_passwords_ui_controller.cc:1446-1451,1542-1546`),
+which reaches the 0801 hide hook in `chrome/browser/ui/views/
+tab_dialogs_views.cc:77-79`, then `OpenPasswordPromptRouter::Hide` and the prompt
+registry. A replacement offer and WebContents destruction also withdraw it.
+
+Card and address controllers have no navigation reset in this version. Both
+inherit `chrome/browser/ui/autofill/autofill_bubble_controller_base.h:36-61`,
+whose observer callbacks handle visibility and destruction. Its hide and
+destruction paths call the returned view's `Hide()` (`autofill_bubble_controller_base.cc:
+28-44,77-81,149-155` in that directory); H-2's `PromptBubble::Hide()` withdraws
+the Open offer. `BubbleManagerImpl` handles tab backgrounding and preemption
+through those same controller hide methods (`bubble_manager_impl.cc:236-243,
+416-427`). Save/update address actions already check their weak delegate
+(`save_address_bubble_controller.cc:234-253`,
+`update_address_bubble_controller.cc:114-133`).
+
+Stale password answers become ignored before any action: the bubble caches its
+initial state (`chrome/browser/ui/passwords/bubble_controllers/
+common_saved_account_manager_bubble_controller.cc:45-50`), while Save/Never/No
+do not validate the live delegate's form manager (`save_update_bubble_controller.cc:
+140-166`, `common_saved_account_manager_bubble_controller.cc:56-63`, and
+`manage_passwords_ui_controller.cc:915-935,961-975`). Ignored close is safe:
+`OnNoInteraction()` checks the live pending state (`manage_passwords_ui_controller.cc:
+900-913`). Card answers also require a live controller, the same bubble view,
+and the original bubble type before calling `OnSaveButton`, which CHECKs its
+callback (`chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc:
+450-455,500-514`). Its close callback uses a weak pointer (`:421-424`). These
+are source checks; navigation and stale-answer runtime acceptance remain for
+the lead's on-screen run.
+
 The Step 0 crash is in `AskBeforeHttpDialogController::ShowDialog` calling
 `TabDialogManager::CreateTabScopedDialog`, which CHECKs its absent Views
 host. See the [probe receipt](engine-spike/results-passwords-probe.json),

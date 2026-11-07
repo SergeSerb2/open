@@ -25,7 +25,6 @@ class OpenSavePrompt final : public CefSavePrompt,
   bool IsAnswered() override;
   void Answer(int answer) override;
   void Withdraw();
-  void DidFinishNavigation(content::NavigationHandle* navigation) override;
   void WebContentsDestroyed() override;
   base::WeakPtr<OpenSavePrompt> GetWeakPtr();
   void SetLabels(std::u16string username, std::u16string card,
