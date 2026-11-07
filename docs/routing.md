@@ -1,6 +1,6 @@
-# Link routing core (Phase A)
+# Link routing and Air Traffic Control
 
-Implements the routing core and App intake in [routing-little-open.md](plans/routing-little-open.md), including its Lead decisions appendix. Profile destinations shipped in [#214](https://github.com/SergeSerb2/open/pull/214). Little Open hosting, hotkeys and sweepers are documented in [little-open.md](little-open/verification.md). The dated Phase A and Step 5 receipts below describe their original revisions.
+Implements the routing core and App intake in [routing-little-open.md](plans/routing-little-open.md), including its Lead decisions appendix. Profile destinations shipped in [#214](https://github.com/SergeSerb2/open/pull/214). Little Open hosting, hotkeys and sweepers are documented in [Little Open acceptance](little-open/verification.md). The dated Phase A and Step 5 receipts below describe their original revisions.
 
 ## API
 
@@ -179,7 +179,7 @@ bootstrap once, then open Little Open with a nil hint.
 Little Open execution calls `AppDelegate.openLittleOpen(url:profileHint:)`
 in `App/LittleOpen/AppLittleOpen.swift`. It now hosts a real Chrome-style
 page on the resolved Profile. The dated Step 5 receipt below predates page
-hosting; current lifecycle evidence is in [little-open.md](little-open/verification.md).
+hosting; current lifecycle evidence is in [Little Open acceptance](little-open/verification.md).
 
 `DefaultBrowserService` is the single App API for default-browser state. It
 compares bundle ids for both schemes, observes activation for state changes,

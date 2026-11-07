@@ -1,0 +1,138 @@
+{
+  "date": "2026-11-07",
+  "machine": "M5 Pro",
+  "positiveHead": "81639e876a248494d16aebdbd7293b234eacc11f",
+  "positiveRows": {
+    "shell_manager_profile_alert": {
+      "ok": true,
+      "profileUnchanged": true,
+      "text": [
+        "Cancel",
+        "Change Profile",
+        "Change Profile?",
+        "Don't show again",
+        "Each Profile has different browser data, so you might get logged out or lose your progress in Space. Its tabs will reopen with Manager Work data.",
+        "Open alert",
+        "alert",
+        "application icon"
+      ],
+      "parentMatchesLibrary": true
+    },
+    "shell_manager_profile_cancel": {
+      "ok": true
+    },
+    "shell_manager_profile_cancel_suppression": {
+      "ok": true
+    },
+    "shell_manager_profile_confirm_undo": {
+      "changed": true,
+      "ok": true,
+      "undoName": "Change Profile",
+      "undone": true
+    },
+    "shell_manager_profile_suppressed": {
+      "ok": true
+    }
+  },
+  "positiveCleanup": true,
+  "positiveInterruptedAttempts": 0,
+  "negativeProof": {
+    "restoredFrom": "f85bfc5ef303bf184541241fe586750f551b0d49",
+    "restoredFiles": [
+      "App/Settings/AppSettingsActions.swift",
+      "App/SidebarMenuActions.swift",
+      "Packages/OpenKit/Sources/OpenSidebar/ModelSidebarActions.swift"
+    ],
+    "binarySHA256": "6ab605884cb05bd4380686d716fe64bc1434c1e955b0a8e82bb3cd38d940d701",
+    "row": "shell_manager_profile_alert",
+    "expected": "FAIL",
+    "profileUnchanged": false,
+    "sheetObserved": false,
+    "cleanup": true,
+    "interruptedAttempts": 0,
+    "observedOk": false,
+    "observed": "FAIL"
+  },
+  "forcedDialogFailure": {
+    "reason": "intentional early Manager sheet failure for cleanup proof",
+    "expectedExit": 1,
+    "alertObserved": true,
+    "cleanup": true,
+    "ownedWindowCleanup": true,
+    "remainingProcesses": 0,
+    "remainingWindows": 0,
+    "interruptedAttempts": 0
+  },
+  "regressions": {
+    "sidebar": {
+      "machine": "M5 Pro",
+      "head": "81639e876a248494d16aebdbd7293b234eacc11f",
+      "passed": 20,
+      "failed": 0,
+      "other": {
+        "durable_profile_storage": {
+          "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)",
+          "status": "SKIP"
+        }
+      },
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "load": [
+        9.6533203125,
+        12.15869140625,
+        14.84326171875
+      ]
+    },
+    "littleopen": {
+      "machine": "M5 Pro",
+      "head": "81639e876a248494d16aebdbd7293b234eacc11f",
+      "passed": 39,
+      "failed": 0,
+      "other": {},
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "load": [
+        11.587890625,
+        12.7529296875,
+        15.17041015625
+      ]
+    },
+    "incognito": {
+      "machine": "M5 Pro",
+      "head": "81639e876a248494d16aebdbd7293b234eacc11f",
+      "passed": 30,
+      "failed": 0,
+      "other": {
+        "boosts_disabled": {
+          "reason": "Lead ruling 16:12: Section 12 consumes factory.isIncognito when its App presenter lands.",
+          "status": "DEFERRED"
+        },
+        "native_2x_captures": {
+          "reason": "This run uses 1x. Run OPEN_INCOGNITO_CAPTURE_SCALE=2 on a native 2x display; no upscaling.",
+          "status": "DEFERRED"
+        }
+      },
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "load": [
+        9.71875,
+        12.08740234375,
+        14.7861328125
+      ]
+    },
+    "profiles": {
+      "machine": "M5 Pro",
+      "head": "81639e876a248494d16aebdbd7293b234eacc11f",
+      "passed": 69,
+      "failed": 0,
+      "other": {},
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "load": [
+        6.728515625,
+        9.591796875,
+        13.068359375
+      ]
+    }
+  }
+}
