@@ -2179,6 +2179,7 @@ def shutdown_order_checks(factory, results, tmp):
 
 
 def window_checks(app_factory, results, tmp, config, chrome_only=False):
+    sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     if chrome_only: return
     # Local deterministic text paints without DNS, TLS, or external requests.
@@ -3200,6 +3201,95 @@ def scheduled_spring(a, response, damping, path=None, relative_to_group=False):
             and abs(a.get("duration", 0) - a["settlingDuration"]) < 1e-6
             and 0 <= delay <= 1/60
             and (path is None or a.get("keyPath") == path))
+
+
+def sidebar_resize_gesture_checks(factory, results, tmp):
+    """Held native resize events, native interruption, and the App's Cmd+Z route."""
+    app = factory(urls=(white_fixture("Resize interruption and undo"),), fresh=True)
+    def state(): return app.call("window-state")
+    def pointer(action, x):
+        app.call("mouse", action=action, x=x, y=400)
+        return state()
+    def settled():
+        wait_until(lambda: not app.call("window-motion")["active"]["sidebar"], timeout=3, step=.01)
+    def focus(): app.call("window-focus", id=state()["id"], activate=True)
+    def toggle():
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        settled()
+    def undo():
+        app.call("sidebar-key", key="z", modifiers=["cmd"])
+        settled()
+        return state()
+    def reset():
+        if state()["sidebarMode"] == "hidden": toggle()
+        settled()
+        pointer("down", state()["sidebarWidth"])
+        pointer("drag", 228); pointer("up", 228); settled()
+        return app.call("undo-state", clear=True)
+    def restored(st, before):
+        return (not st["sidebarResizeActive"] and not st["sidebarResizeHandleDragging"]
+            and not st["sidebarResizeHasStart"] and st["sidebarWidthOverride"] is None
+            and st["sidebarResizeHandleVisible"] and st["sidebarMode"] == before["sidebarMode"]
+            and st["sidebarWidth"] == st["sidebarLiveWidth"] == st["panel"][0] == before["sidebarWidth"]
+            and st["sidebarWidthCommits"] == before["sidebarWidthCommits"]
+            and st["sidebarGestureHides"] == before["sidebarGestureHides"])
+    hint_key = "open.sidebar.hideHintShown"
+    saved_hint = app.call("defaults", key=hint_key)
+    try:
+        app.call("defaults", key=hint_key, value=True)
+        focus()
+        app.call("window-frame", frame=[40, 40, 1280, 800])
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        for kind, name, x in (("key", "resize_lost_up_key", 450), ("sheet", "resize_lost_up_sheet_hides", 60)):
+            generation = reset()["generation"]; before = state()
+            pointer("down", 228); held = pointer("drag", x)
+            app.call("window-interrupt", kind=kind)
+            cancelled = state()
+            no_undo = app.call("undo-state")["generation"] == generation
+            if kind == "sheet": app.call("window-interrupt", kind="end-sheet")
+            focus()
+            # Hover must work before a later mouse-up can clean a broken resize.
+            if state()["sidebarMode"] == "anchored": toggle()
+            card = reveal_card_and_wait(app)
+            app.call("mouse", action="move", x=700, y=400)
+            if state()["sidebarMode"] == "hidden": toggle()
+            pointer("drag", 500); late = pointer("up", 500); settled()
+            later = state()
+            # A fresh mouse-down must still start a usable handle after cancellation.
+            pointer("down", later["sidebarWidth"])
+            restarted = pointer("drag", 300)
+            pointer("up", 300); settled()
+            results[name] = {"ok": held["sidebarResizeActive"] and restored(cancelled, before) and no_undo
+                and bool(card) and restored(late, before) and restarted["sidebarResizeActive"]
+                and restarted["sidebarLiveWidth"] == 300,
+                "held_mode": held["sidebarMode"], "cancelled": cancelled, "late": late,
+                "no_undo": no_undo, "hover_revealed": bool(card), "load_average": list(os.getloadavg())}
+        generation = reset()["generation"]; before = state()
+        pointer("down", 228)
+        crossings = [pointer("drag", x) for x in (60, 228, 60)]
+        ended = pointer("up", 60); settled()
+        recorded = app.call("undo-state")
+        first = undo(); after_first = app.call("undo-state")
+        second = undo()
+        results["drag_undo_single"] = {"ok": [s["sidebarMode"] for s in crossings] == ["hidden", "anchored", "hidden"]
+            and ended["sidebarMode"] == "hidden" and recorded["generation"] - generation == 1
+            and ended["sidebarWidthCommits"] == before["sidebarWidthCommits"]
+            and ended["sidebarGestureHides"] == before["sidebarGestureHides"] + 1
+            and first["sidebarMode"] == second["sidebarMode"] == "anchored"
+            and first["sidebarWidth"] == second["sidebarWidth"] == first["panel"][0] == before["sidebarWidth"]
+            and not after_first["canUndo"], "registered": recorded["generation"] - generation,
+            "first_mode": first["sidebarMode"], "second_mode": second["sidebarMode"],
+            "remaining_undo": after_first["canUndo"], "load_average": list(os.getloadavg())}
+        generation = reset()["generation"]
+        pointer("down", 228); pointer("drag", 60); pointer("drag", 228); same = pointer("up", 228)
+        recorded = app.call("undo-state")
+        results["drag_undo_same_mode"] = {"ok": same["sidebarMode"] == "anchored"
+            and recorded["generation"] == generation and not recorded["canUndo"],
+            "registered": recorded["generation"] - generation, "canUndo": recorded["canUndo"],
+            "load_average": list(os.getloadavg())}
+    finally:
+        _restore_defaults(app, {hint_key: saved_hint})
+        app.quit()
 
 
 def window_chrome_followup_checks(factory, results, tmp):
@@ -11156,6 +11246,8 @@ def main():
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     startup_peek = {key: domain_before.get(key) for key in
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
+    if opts.only in ('window', 'sidebar'):
+        startup_peek['open.sidebar.hideHintShown'] = domain_before.get('open.sidebar.hideHintShown')
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
@@ -11469,6 +11561,9 @@ def main():
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
+            if opts.only in ('window', 'sidebar'):
+                # Deterministic chrome captures; restore the user's value in finally.
+                _restore_defaults(None, {'open.sidebar.hideHintShown': True})
             execute()
         except FocusInterruption as error:
             interruption = {"reason": str(error), "focus": error.evidence}
