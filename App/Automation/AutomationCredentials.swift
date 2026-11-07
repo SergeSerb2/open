@@ -1,8 +1,33 @@
 #if OPEN_AUTOMATION
 import OpenEngine
 import OpenModel
+import CoreFoundation
 
 extension AutomationController {
+  func credentialPreferences(_ args: [String: Any]) throws -> [String: Any] {
+    let keys = ["passwordSaving", "cardsSaving", "addressesSaving"]
+    guard args.keys.allSatisfy({ keys.contains($0) || $0 == "profile" }),
+          keys.allSatisfy({ key in
+            guard let value = args[key] else { return true }
+            guard let number = value as? NSNumber else { return false }
+            return CFGetTypeID(number) == CFBooleanGetTypeID()
+          }),
+          args["profile"] == nil || (args["profile"] as? String).map({ $0.utf8.count <= 4096 }) == true else {
+      throw Failure(message: "expected profile and optional passwordSaving, cardsSaving, addressesSaving booleans")
+    }
+    let factory = try window
+    let profile = (args["profile"] as? String).flatMap { requested in
+      factory.model.profiles.first { $0.id.description == requested || $0.name == requested || $0.dataDirectoryName == requested }
+    } ?? (args["profile"] == nil ? factory.focusedProfile : nil)
+    guard let profile, let context = factory.context(for: profile.id) else { throw Failure(message: "no profile context") }
+    if let value = args["passwordSaving"] as? Bool { context.passwordSavingEnabled = value }
+    if let value = args["cardsSaving"] as? Bool { context.creditCardsSavingEnabled = value }
+    if let value = args["addressesSaving"] as? Bool { context.addressesSavingEnabled = value }
+    return ["passwordSaving": context.passwordSavingEnabled, "cardsSaving": context.creditCardsSavingEnabled,
+      "addressesSaving": context.addressesSavingEnabled, "canEnablePasswordSaving": context.canEnablePasswordSaving,
+      "canEnableCardsSaving": context.canEnableCreditCardsSaving, "canEnableCreditCardsSaving": context.canEnableCreditCardsSaving]
+  }
+
   /// Counts and capability flags only. The existing factory creates profile
   /// contexts lazily, including a profile with no live page yet.
   func credentialCounts(_ args: [String: Any]) async throws -> [String: Any] {

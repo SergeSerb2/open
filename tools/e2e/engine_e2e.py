@@ -11805,7 +11805,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords-probe", "secrets-import"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "passwords-probe", "secrets-import"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
@@ -11825,15 +11825,15 @@ def main():
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
     if opts.only in ('window', 'sidebar'):
         startup_peek['open.sidebar.hideHintShown'] = domain_before.get('open.sidebar.hideHintShown')
-    if opts.only == 'passwords-probe':
-        for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed'):
+    if opts.only in ('passwords-probe', 'passwords'):
+        for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed', 'open.sidebar.hideHintShown'):
             startup_peek[key] = domain_before.get(key)
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
         ap.error("--only is required unless --engine-fingerprint-only is set")
-    if opts.only in ('passwords-probe', 'secrets-import') and opts.style != 'chrome':
-        ap.error('passwords-probe and secrets-import require --style chrome')
+    if opts.only in ('passwords-probe', 'passwords', 'secrets-import') and opts.style != 'chrome':
+        ap.error('passwords suites and secrets-import require --style chrome')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
@@ -12133,6 +12133,10 @@ def main():
                 profiles_checks(factory, results["profiles"], tmp, opts.config)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
                 factory, results["profiles"], tmp, globals(), domain_before)
+        elif opts.only == "passwords":
+            results["passwords"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](
+                factory, results["passwords"], tmp, globals(), results['engine']['distributionSHA256'])
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
@@ -12165,15 +12169,17 @@ def main():
 
     interrupted_attempts = []
     # Never replay a potentially crashing probe row after foreground loss.
-    for attempt in range(1, 2 if opts.only == 'passwords-probe' else 4):
+    max_attempts = 1 if opts.only == 'passwords-probe' else 2 if opts.only == 'passwords' else 3
+    for attempt in range(1, max_attempts + 1):
         tracker = FocusTracker()
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
-            if opts.only == 'passwords-probe':
+            if opts.only in ('passwords-probe', 'passwords'):
                 _restore_defaults(None, {'open.links.littleOpenNUXSeen': True,
-                                         'open.general.searchSuggestNoticeDismissed': True})
+                                         'open.general.searchSuggestNoticeDismissed': True,
+                                         'open.sidebar.hideHintShown': True})
             if opts.only in ('window', 'sidebar'):
                 # Deterministic chrome captures; restore the user's value in finally.
                 _restore_defaults(None, {'open.sidebar.hideHintShown': True})
@@ -12182,7 +12188,7 @@ def main():
             interruption = {"reason": str(error), "focus": error.evidence}
         except Exception as error:
             try:
-                loss = tracker.loss()
+                loss = [] if getattr(error, 'fatal_app_death', False) else tracker.loss()
             except Exception:
                 loss = []  # A crashed owned app cannot answer a focus query.
             if loss:
@@ -12199,7 +12205,7 @@ def main():
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
                                          checks=dict(results.get(opts.only, {}))))
         print("%s attempt %d INTERRUPTED: %s" % (opts.only, attempt, interruption["reason"]), flush=True)
-        if attempt == 3 or opts.only == 'passwords-probe':
+        if attempt == max_attempts:
             dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
                 "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": attempt})
         elif opts.focus_retry_delay_seconds:
@@ -12218,14 +12224,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "secrets-import"):
+    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "secrets-import")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
