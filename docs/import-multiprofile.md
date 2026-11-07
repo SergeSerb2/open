@@ -74,6 +74,18 @@ rebuilt afterward. It will be used only for the negative proof.
 | Restored fixed Debug build | PASS | 18.36/20.23/22.54 → 17.88/20.03/22.43 |
 | Archive checker negative proof | expected FAIL, 20 stored ≠ 21 expected | 16.53/19.57/22.21 → 16.53/19.57/22.21 |
 
+Child C1c resumed the same source head (`1189743a`) on 2026-11-07 in its own
+worktree. GitHub reports the draft PR mergeable, so main was not merged again.
+The fresh off-screen receipts are:
+
+| C1c check | Result | Load 1/5/15, start → finish |
+|---|---|---|
+| Debug build | PASS | 12.48/6.54/4.49 → 41.01/20.95/10.72 |
+| Engine fingerprint, no App launch | PASS, required distribution `af4b3cc3…` | 62.70/32.60/16.28 at receipt |
+| Focused verifier, `roundtrip,import-arc --with-arc-data` | build/roundtrip/import-arc: 3/3 PASS | 41.89/21.47/10.96 → 53.37/37.80/19.80 |
+| Fresh copied-data CLI audit, twice + roundtrip | PASS; 46/46 nodes owned; 6 Spaces split 4/2; Favorites 6/5; Archive 9/12; stable IDs/directories; repeat 0 inserted/21 duplicates | 45.52/37.19/20.10 → 45.52/37.19/20.10 |
+| Archive checker negative proof | expected FAIL, 20 stored ≠ 21 expected | 44.34/37.20/20.31 → 44.34/37.20/20.31 |
+
 The positive App suite waits for the foreground check to stop reporting
 UserNotificationCenter. The wait polls once per minute with no section,
 heavy, or screen lock held. No latest App acceptance is claimed yet.
