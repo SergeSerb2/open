@@ -83,7 +83,20 @@ def summarize(runs):
             pageBlur=[s['endState']['reveal'].get('pageBlur','not exposed') for _,s in segments])
     changes=[c for r in runs for c in r['activation']['probe']['changes']]
     switches=[c for r in runs for c in r['activation']['switches']]
+    callback_gaps=[]; lower_bounds=[]; widths=[]
+    for run in runs:
+        frames=run['activation']['probe']['frames']
+        callback_gaps.extend((b['time']-a['time'])*1000 for a,b in zip(frames,frames[1:]))
+        by_time={f['time']:i for i,f in enumerate(frames)}
+        for change in run['activation']['probe']['changes']:
+            if 'observed' not in change: continue
+            index=by_time[change['observed']]
+            previous=frames[index-1] if index else None
+            lower=max(0,previous['time']-change['time'])*1000 if previous and previous['fields']==change['before'] else 0
+            upper=(change['observed']-change['time'])*1000
+            lower_bounds.append(lower); widths.append(upper-lower)
     answer['activation']=dict(keyToObservedRebuildMs=stats([(c['observed']-c['time'])*1000 for c in changes if 'observed' in c]),
+        callbackGapMs=stats(callback_gaps),fieldCommitLowerBoundMs=stats(lower_bounds),fieldCommitObservationWidthMs=stats(widths),
         missingObservations=sum('observed' not in c for c in changes),
         focusRoundTripMs=stats([c['roundTripMs'] for c in switches]),
         settledSnapshotMs=stats([c['settledSnapshotMs'] for c in switches if 'settledSnapshotMs' in c]),load=loads([c['start'] for c in switches]))

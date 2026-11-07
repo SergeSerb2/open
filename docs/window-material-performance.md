@@ -43,7 +43,12 @@ The sampler measures callback pacing and presentation-layer values, not actual
 GPU-presented frames. It has overhead, as do socket polling and idle observers;
 use the same instrumentation on both builds. A field rebuild is first observed
 on a sampler callback, so key-to-rebuild timing is an upper bound with about
-one callback interval of observation uncertainty. A snapshot is taken only after
+one actual callback interval of observation uncertainty. Callback gaps can grow
+during key changes, even with a fixed preferred frame rate. The summary reports
+the observed gap and the width of each commit observation interval: the previous
+callback with unchanged field counts is its lower bound, and the first changed
+count is its upper bound. This does not directly time the theme's commit call.
+A snapshot is taken only after
 that observation, because snapshot preparation can force a pending rebuild.
 No timing hook was added to the theme implementation itself.
 
