@@ -246,6 +246,25 @@ class OEDefaultClient : public CefClient,
     }
   }
 
+  void CloseForContext(CefRefPtr<CefRequestContext> context) {
+    if (!context) return;
+    auto copy = browsers_;
+    for (auto& browser : copy) {
+      if (browser->GetHost()->GetRequestContext()->IsSharingWith(context))
+        browser->GetHost()->CloseBrowser(true);
+    }
+  }
+
+  bool HasBrowsersForContext(CefRefPtr<CefRequestContext> context) const {
+    if (!context) return false;
+    for (const auto& browser : browsers_) {
+      if (browser->GetHost()->GetRequestContext()->IsSharingWith(context)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   size_t Count() const { return browsers_.size(); }
   const std::vector<CefRefPtr<CefBrowser>>& Browsers() const {
     return browsers_;
@@ -666,6 +685,7 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
       [webContent close];
     }
   }
+  if (_defaultClient) _defaultClient->CloseForContext(context.oe_requestContext);
   // Done when no live web content uses the context any more; re-checked
   // after every browser close (-oe_browserDidClose).
   __weak OEBrowserContext* weakContext = context;
@@ -680,6 +700,10 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
       if (w.context == weakContext && w.live) {
         return;
       }
+    }
+    if (self->_defaultClient &&
+        self->_defaultClient->HasBrowsersForContext(weakContext.oe_requestContext)) {
+      return;
     }
     finished = YES;
     [self->_pendingReleases removeObjectForKey:token];
@@ -759,12 +783,25 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
     for (OEWebContent* content in self.allWebContents) {
       if ([doomed containsObject:content.context]) [content close];
     }
+    // Chromium can restore/create pages handled by the default client before
+    // the shell adopts them. They hold the native context too, even though no
+    // OEBrowser/OEWebContent wrapper owns them.
+    if (self->_defaultClient) {
+      for (OEBrowserContext* item in doomed)
+        self->_defaultClient->CloseForContext(item.oe_requestContext);
+    }
     __block BOOL started = NO;
     NSUUID* token = NSUUID.UUID;
     dispatch_block_t check = ^{
       if (started) return;
       for (OEWebContent* content in self.allWebContents) {
         if ([doomed containsObject:content.context] && content.live) return;
+      }
+      if (self->_defaultClient) {
+        for (OEBrowserContext* item in doomed)
+          if (self->_defaultClient->HasBrowsersForContext(item.oe_requestContext)) {
+            return;
+          }
       }
       started = YES;
       [self->_pendingReleases removeObjectForKey:token];

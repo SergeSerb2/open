@@ -11665,7 +11665,7 @@ def main():
                     profiles_checks(factory, results[opts.only], tmp, opts.config)
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
                     factory, results[opts.only], tmp, globals(), domain_before)
-            if opts.only == "profiles-engine" or not opts.profiles_shell_only:
+            else:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_engine.py"))["run"](
                     factory, results[opts.only], tmp, opts.config, new_tab, wait_until)
         elif opts.only == "measure":

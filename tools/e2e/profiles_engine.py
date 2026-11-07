@@ -245,9 +245,14 @@ def run(factory, results, tmp, config, new_tab, wait_until):
         # The App's Settings adapter supplies real Last hour / All time ranges.
         app.call('space', space=work); app.call('select', tab=disk); app.call('wait', tab=disk)
         for label, interval in [('last_hour', 'Last hour'), ('all_time', 'All time')]:
+            settings_url = 'http://settings-%s.localhost:%d/' % (label.replace('_', '-'), port)
+            app.call('navigate', tab=disk, url=settings_url); app.call('wait', tab=disk)
             app.eval(disk, 'document.cookie="s10_settings=1;max-age=86400";localStorage.setItem("s10","settings");1')
+            # Chromium batches localStorage metadata commits for five seconds.
+            # Capture Settings' end=now only after the real write commits.
+            time.sleep(6)
             app.call('profile-engine', action='settings-clear', profile='Engine Work', kinds=2, range=interval)
-            app.call('navigate', tab=disk, url=base + '?settings=' + label); app.call('wait', tab=disk)
+            app.call('navigate', tab=disk, url=settings_url + '?cleared=1'); app.call('wait', tab=disk)
             after = data(disk)
             results['s10_settings_' + label] = {
                 'ok': after == {'cookie': '', 'storage': None}

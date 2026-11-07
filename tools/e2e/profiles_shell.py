@@ -249,6 +249,14 @@ def run(factory, results, tmp, api, defaults_before):
         assert old_directory in before_cache, before_cache
 
         launch()
+        # A named Profile was Chromium's last-used Profile at quit. Default
+        # must still use its own native storage after CEF initializes again.
+        default_page = api['new_tab'](app, origin + '/default-after-relaunch')
+        default_cookie = app.eval(default_page, 'document.cookie')
+        results['shell_default_after_named_profile_relaunch'] = {
+            'ok': app.page(default_page)['context'] == 'Default' and 'shell_delete' not in default_cookie,
+            'context': app.page(default_page)['context'], 'isolated': 'shell_delete' not in default_cookie}
+        app.call('close', tab=default_page)
         state(profile='Shell Loaded', action='open-url', url=url)
         session = page_ready(url)
         old_cookie = app.call('little-open-eval', id=session['id'], js='document.cookie')

@@ -8,13 +8,13 @@ context, wipes Open-owned files, then calls `saveNow`. It clears older Undo
 actions so create/redo cannot restore the deleted identity. The model/CLI
 command remains undoable when used outside that irreversible App flow.
 
-`releaseContext` proves page closure only. An engine directory loaded during
-this launch stays on disk until the next launch. A bounded, atomic, synced
-`Profiles/.pending-wipe.json` journal records cleanup. Before engine startup,
-the App removes those engine/cache directories and their `Local State`
-`profile.info_cache`, `last_used`, and `last_active_profiles` references.
-Never-loaded engine/cache directories are removed in-session; their Local
-State cleanup still waits for launch. No restart prompt is shown.
+Section 10 engine erratum: `releaseContext` proves page closure only;
+`deleteContext` now waits for native destruction and committed Local State
+cleanup. Successful deletion removes loaded engine/cache directories in the
+same session. A bounded, atomic, synced `Profiles/.pending-wipe.json` journal
+covers crashes and errors only. Recovery runs before engine startup and also
+cleans `profile.info_cache`, `last_used`, and `last_active_profiles` references.
+Normal successful deletion needs no App-side Local State JSON edit.
 
 App bootstrap and every `installModel` path repair missing Profile refs and
 save repairs. The first standard window shows one informational sheet with
@@ -765,7 +765,7 @@ say both things.
 
 ---
 
-## 6. Engine contract — scope item 3 **[NEEDS ENGINE]**
+## 6. Engine contract — scope item 3
 
 Nothing in this section is OpenKit code. OpenKit (Steps 1–5) must compile
 and pass §9.1–§9.2 with no engine present. This section is the contract the

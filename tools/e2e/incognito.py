@@ -223,13 +223,14 @@ def checks(factory, results, tmp, harness):
         # These rows use real parent Profiles and Chrome's extension opt-in.
         app = factory(urls=(base + '/parent-default',), fresh=True)
         normal = windows(False)[0]
+        home_space = next(s['id'] for s in app.call('spaces') if s['focused'])
         default_tab = app.call('tabs')[0]['id']; app.call('wait', tab=default_tab)
         app.eval(default_tab, "document.cookie='parentDefault=1;path=/';true")
         default_private = private_window('menu'); default_private_tab = open_page('/parent-default-private')
         default_state = state()
         app.eval(default_private_tab, "document.cookie='privateDefault=1;path=/';true")
         focus(normal)
-        app.call('space-create', title='Private Work', profile='Private Work')
+        work_space = app.call('space-create', title='Private Work', profile='Private Work')
         work_tab = open_page('/parent-work')
         work_directory = app.page(work_tab)['context']
         app.eval(work_tab, "document.cookie='parentWork=1;path=/';true")
@@ -242,6 +243,7 @@ def checks(factory, results, tmp, harness):
         app.eval(work_private_tab, "document.cookie='privateWork=1;path=/';true")
         focus(normal)
         work_cookie = app.eval(work_tab, 'document.cookie')
+        app.call('space', space=home_space); app.call('select', tab=default_tab); app.call('wait', tab=default_tab)
         default_cookie = app.eval(default_tab, 'document.cookie')
         focus(default_private)
         default_private_cookie = app.eval(default_private_tab, 'document.cookie')
@@ -250,6 +252,7 @@ def checks(factory, results, tmp, harness):
               and 'privateDefault=1' in default_private_cookie,
               work=work_cookie, default=default_cookie, default_private=default_private_cookie)
         focus(normal)
+        app.call('space', space=work_space); app.call('select', tab=work_tab); app.call('wait', tab=work_tab)
         extension = wait(lambda: next((e['id'] for e in app.call('extensions')['installed']
                     if e['name'] == 'Section 10 profile probe'), None), timeout=30)
         assert extension, 'parent extension fixture did not load'
