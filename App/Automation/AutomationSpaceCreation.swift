@@ -37,6 +37,10 @@ extension AutomationController {
         "themeUndoMatches": creation.themeEditor?.panel.undoManager === creation.localUndoManager,
         "themeCommits": creation.themeEditor?.commitCount ?? 0,
         "themeOpen": creation.themeEditor != nil,
+        "themeKey": creation.themeEditor?.panel.isKeyWindow ?? false,
+        "windowActive": browser.context.isWindowActive, "backgroundActive": browser.background.isWindowActive,
+        "visible": browser.window?.isVisible == true && !form.isHiddenOrHasHiddenAncestor
+          && form.convert(form.bounds, to: browser.contentView).intersection(browser.contentView.bounds).width > 0,
         "previewMatches": browser.background.targetStyle == form.style,
         "otherWindowsMatchModel": app.windowControllers.filter { $0 !== browser }.allSatisfy { controller in
           controller.context.focusedSpace.map { controller.background.targetStyle == controller.context.style(for: $0) } ?? true

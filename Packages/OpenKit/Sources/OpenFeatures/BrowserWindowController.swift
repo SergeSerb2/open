@@ -16,6 +16,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public let background = ThemeBackgroundView(frame: .zero)
     public private(set) var spaceCreationController: SpaceCreationController?
     public var onSpaceCreationIcon: (@MainActor (SpaceIcon?, CGRect, @escaping @MainActor (SpaceIcon?) -> Void) -> Void)?
+    /// The App requests the real engine exit. Present only after its callback
+    /// and any native fullscreen transition, outside the engine delegate call.
+    public var onExitPageFullscreen: (@MainActor () -> Bool)?
+    private var pendingSpaceCreationOptions: SpaceCreationOptions?
     public private(set) var themeEditor: ThemeEditorController?
     public let sidebar: SidebarView
     public let context: SidebarContext
@@ -80,7 +84,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var isChangingFullScreen: Bool { fullscreenTransition }
     /// Page fullscreen is transient and never changes the saved sidebar mode.
     public var isPageFullscreen = false {
-        didSet { if isPageFullscreen { dismissSidebarReveal() }; layoutContent() }
+        didSet {
+            if isPageFullscreen { dismissSidebarReveal() }
+            layoutContent()
+            if !isPageFullscreen, pendingSpaceCreationOptions != nil {
+                DispatchQueue.main.async { [weak self] in self?.resumePendingSpaceCreation() }
+            }
+        }
     }
     /// The hover-reveal card shows (or is sliding out).
     public var isSidebarRevealed: Bool { reveal.isShown }
@@ -1103,6 +1113,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
+        pendingSpaceCreationOptions = nil
         cancelSidebarResize()
         spaceCreationController?.onFinish = nil
         spaceCreationController?.cancel(); spaceCreationController = nil
@@ -1125,11 +1136,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
     public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true; applyTrafficLightDim(animated: false) }
-    public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?() }
+    public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?(); resumePendingSpaceCreation() }
     public func windowDidExitFullScreen(_ notification: Notification) {
         fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?()
         // The window is back at its frame; the pointer may or may not be over the buttons.
         dimmedLights.syncWithPointer()
+        resumePendingSpaceCreation()
     }
     public func windowDidBecomeKey(_ notification: Notification) {
         context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?()
@@ -1377,9 +1389,14 @@ extension BrowserWindowController {
 extension BrowserWindowController {
     @discardableResult
     public func beginSpaceCreation(options: SpaceCreationOptions = SpaceCreationOptions()) -> Bool {
-        if let creation = spaceCreationController { creation.focus(); return true }
+        if !isPageFullscreen, let creation = spaceCreationController { creation.focus(); return true }
         guard let window, model.canCreateSpace(at: options.insertionIndex, moving: options.moving,
                                                removingEmptyFolder: options.removingEmptyFolder) else { return false }
+        if isPageFullscreen {
+            pendingSpaceCreationOptions = options
+            guard onExitPageFullscreen?() == true else { pendingSpaceCreationOptions = nil; return false }
+            return true
+        }
         closeThemeEditor()
         dismissSidebarReveal()
         let previousSpaceID = context.focusedSpace?.id
@@ -1404,5 +1421,11 @@ extension BrowserWindowController {
         spaceCreationController = creation; layoutContent(animated: true)
         sidebar.beginSpaceCreation(page: creation.view); creation.updatePreview(); creation.focus()
         return true
+    }
+    private func resumePendingSpaceCreation() {
+        guard !isPageFullscreen, !fullscreenTransition, window?.isVisible == true,
+              let options = pendingSpaceCreationOptions else { return }
+        pendingSpaceCreationOptions = nil
+        _ = beginSpaceCreation(options: options)
     }
 }

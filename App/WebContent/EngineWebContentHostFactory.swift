@@ -222,6 +222,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onSpaceCreationIcon = { [weak self] current, anchor, onPick in
       self?.openDraftSpaceIconPicker(current: current, anchor: anchor, onPick: onPick)
     }
+    controller.onExitPageFullscreen = { [weak self] in
+      guard let page = self?.selectedContent else { return false }
+      do { try page.exitFullscreen(); return true }
+      catch { return false }
+    }
     controller.keyBindingOverrides = app.keyBindings
     let previousLinkPolicy = controller.container.onLinkClicked
     controller.container.onLinkClicked = { [weak self] id, url, flags in

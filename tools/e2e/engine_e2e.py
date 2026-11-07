@@ -2178,7 +2178,10 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config, chrome_only=False):
+def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False):
+    if material_only:
+        window_material_checks(app_factory, results, tmp)
+        return
     sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     window_material_checks(app_factory, results, tmp)
@@ -10498,6 +10501,27 @@ def space_editor_creation_checks(factory, results, tmp):
         app.call('menu-perform', id='blank-window')
         app.call('space', space=source)
         app.call('window-focus', id=original_window, activate=True)
+        full_tab = app.call('open', url=white_fixture('Space creation page fullscreen'))['id']
+        app.call('wait', tab=full_tab)
+        request = app.eval(full_tab, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+        entered = wait_until(lambda: app.call('window-state')['pageFullscreen']
+                             and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        full_before = spaces()
+        full_generation = state()['modelUndoGeneration']
+        app.call('menu-perform', id='new-space')
+        visible = wait_until(lambda: state().get('open') and state().get('visible') and state().get('nameFocused')
+                             and not app.call('window-state')['pageFullscreen']
+                             and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        presented_form, presented_window = state(), app.call('window-state')
+        key('escape')
+        cancelled = not state()['open'] and spaces() == full_before and state()['modelUndoGeneration'] == full_generation
+        # Restore the fixture even on old code, where Escape only cancels the invisible form.
+        if app.call('window-state')['pageFullscreen']: app.call('fullscreen-exit', tab=full_tab)
+        wait_until(lambda: not app.call('window-state')['pageFullscreen']
+                   and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        results['A5_page_fullscreen_new_space_visible_focused'] = dict(ok=request == 'ok' and bool(entered)
+            and bool(visible) and presented_window['sidebarVisible'] and cancelled,
+            entered=bool(entered), form=presented_form, window=presented_window, cancelled=cancelled)
         before = spaces()
         app.call('menu-perform', id='new-space')
         require('A5_form_focused_default_profile_no_theme', state()['open'] and state()['nameFocused']
@@ -10535,6 +10559,29 @@ def space_editor_creation_checks(factory, results, tmp):
         require('A5_theme_is_local_draft', draft is not None and spaces() == before and state()['previewMatches'] and state()['otherWindowsMatchModel'], state=state())
         app.call('editor-close')
         app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        # The draft panel takes key, but its owning window must keep the active
+        # material just like Edit Theme. Compare the actual right-margin pixels.
+        owner_state = app.call('window-state')
+        active_png, panel_png = (os.path.join(tmp, 'creation-theme-' + name + '.png') for name in ('active', 'panel'))
+        time.sleep(.3)
+        app.call('snapshot', path=active_png, window=owner_state['number'])
+        app.call('editor-open', kind='theme')
+        panel_key = wait_until(lambda: state().get('themeKey'), timeout=3)
+        panel_state = state()
+        time.sleep(.3)
+        app.call('snapshot', path=panel_png, window=owner_state['number'])
+        def margin_rgb(path):
+            width, height, pixel = read_image(path)
+            sx, sy = width / owner_state['frame'][2], height / owner_state['frame'][3]
+            return [statistics.mean(pixel(int(x * sx), int(y * sy))[c]
+                    for x in range(int(owner_state['frame'][2]) - 8, int(owner_state['frame'][2]) - 2)
+                    for y in range(400, 440, 4)) for c in range(3)]
+        active_rgb, panel_rgb = margin_rgb(active_png), margin_rgb(panel_png)
+        app.call('editor-close')
+        app.call('window-focus', id=original_window, activate=True)
+        require('A5_draft_theme_panel_keeps_active_material', bool(panel_key) and panel_state['windowActive']
+                and panel_state['backgroundActive'] and max(abs(a - b) for a, b in zip(active_rgb, panel_rgb)) <= 2,
+                state=panel_state, activeRGB=active_rgb, panelRGB=panel_rgb)
         app.call('editor-open', kind='create')
         key('z', ['cmd'])
         require('A5_form_local_theme_undo', state()['style'] is None and spaces() == before, state=state())
@@ -11708,6 +11755,7 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -11990,7 +12038,8 @@ def main():
             routing_checks(factory, results["routing"], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
-            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
+            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
+                          material_only=opts.window_material_only)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
