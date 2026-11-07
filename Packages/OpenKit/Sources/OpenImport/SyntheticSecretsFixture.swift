@@ -15,8 +15,39 @@ final class SyntheticSecretsFixture {
 
     deinit { try? FileManager.default.removeItem(at: directory) }
 
-    func createDatabase(_ name: String, sql: String) throws {
-        let file = directory.appendingPathComponent(name)
+    func apply(_ scenario: SyntheticSecretsScenario) throws {
+        for profile in ["Default", "Profile 1"] {
+            func modify(_ file: String, _ sql: String) throws {
+                var db: OpaquePointer?
+                guard sqlite3_open(directory.appendingPathComponent(profile).appendingPathComponent(file).path, &db) == SQLITE_OK else {
+                    sqlite3_close(db); throw ArcHistoryImportError.openFailed
+                }
+                defer { sqlite3_close(db) }
+                guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw ArcHistoryImportError.schemaMismatch }
+            }
+            switch scenario {
+            case .standard: break
+            case .batchBoundary:
+                for index in 1...253 {
+                    try modify("Login Data", "INSERT INTO logins SELECT id + \(index + 5), origin_url, action_url, username_value || '-extra\(index)', password_value, signon_realm, date_created, blacklisted_by_user, times_used, username_element, password_element, scheme, date_last_used, date_password_modified, federation_url FROM logins WHERE id = 1")
+                }
+            case .fieldAtLimit, .fieldOverLimit:
+                let size = scenario == .fieldAtLimit ? 16_384 : 16_385
+                try modify("Login Data", "UPDATE logins SET username_value = '" + String(repeating: "x", count: size) + "' WHERE id = 1")
+            case .empty:
+                try modify("Login Data", "DELETE FROM logins; DELETE FROM password_notes")
+                try modify("Web Data", "DELETE FROM addresses; DELETE FROM address_type_tokens; DELETE FROM credit_cards")
+                try modify("Cookies", "DELETE FROM cookies")
+            case .nonlocalAddress:
+                try modify("Web Data", "INSERT INTO addresses SELECT guid || '-remote', use_count, use_date, date_modified, language_code, 1 FROM addresses")
+            case .invalidLogin:
+                try modify("Login Data", "UPDATE logins SET password_value = X'763131' WHERE id = 1")
+            }
+        }
+    }
+
+    func createDatabase(_ name: String, profile: String? = nil, sql: String) throws {
+        let file = (profile.map { directory.appendingPathComponent($0) } ?? directory).appendingPathComponent(name)
         let fd = Darwin.open(file.path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0o600)
         guard fd >= 0 else { throw ArcHistoryImportError.copyFailed }
         Darwin.close(fd)
@@ -27,6 +58,62 @@ final class SyntheticSecretsFixture {
         defer { sqlite3_close(db) }
         guard sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else { throw ArcHistoryImportError.schemaMismatch }
     }
+
+    /// Full Section 15 source fixture. SQL contains fixture strings only.
+    func createImportProfiles(key: [UInt8]) throws {
+        func encrypted(_ value: String) throws -> String {
+            var bytes = Array(value.utf8)
+            defer { zeroSecretBytes(&bytes) }
+            return "X'" + (try encryptFixture(bytes, key: key)).map { String(format: "%02x", $0) }.joined() + "'"
+        }
+        let now = Int64(Date().timeIntervalSince1970) - 60
+        let time = 11_644_473_600_000_000 + now * 1_000_000
+        let future = time + 365 * 86_400_000_000
+        let state = ["profile": ["info_cache": ["Default": [:], "Profile 1": [:]], "profiles_order": ["Default", "Profile 1"]]] as [String: Any]
+        try JSONSerialization.data(withJSONObject: state).write(to: directory.appendingPathComponent("Local State"))
+        for (index, profile) in ["Default", "Profile 1"].enumerated() {
+            try FileManager.default.createDirectory(at: directory.appendingPathComponent(profile), withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+            var logins = """
+                CREATE TABLE logins(id INTEGER PRIMARY KEY, origin_url, action_url, username_value, password_value, signon_realm,
+                  date_created, blacklisted_by_user, times_used, username_element, password_element, scheme, date_last_used,
+                  date_password_modified, federation_url);
+                CREATE TABLE password_notes(parent_id, key, value);
+                """
+            for row in 1...5 {
+                let host = row == 3 ? "other.example.com" : "login.example.com"
+                let password = row == 4 ? "X''" : try encrypted("fixture-password")
+                logins += "INSERT INTO logins VALUES(\(row), 'https://\(host)/', 'https://\(host)/submit', 'fixture-\(index)-\(row)', \(password), 'https://\(host)/', \(time), \(row == 4 ? 1 : 0), 2, 'email', 'password', 0, \(time), \(time), '\(row == 5 ? "https://federation.example.com/" : "")');"
+            }
+            logins += "INSERT INTO password_notes VALUES(1, '', \(try encrypted("fixture-note")));"
+            // A named system note is not the user's visible note.
+            logins += "INSERT INTO password_notes VALUES(1, 'system', X'763131');"
+            try createDatabase("Login Data", profile: profile, sql: logins)
+            var cookies = """
+                CREATE TABLE meta(key PRIMARY KEY, value); INSERT INTO meta VALUES('version', 24);
+                CREATE TABLE cookies(host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, has_expires,
+                  creation_utc, last_access_utc, last_update_utc, samesite, priority, source_scheme, source_port, top_frame_site_key,
+                  has_cross_site_ancestor);
+                """
+            for row in 1...5 {
+                let blob = "X'" + (try encryptFixture(SHA256Fixture("login.example.com") + Array("fixture-cookie".utf8), key: key)).map { String(format: "%02x", $0) }.joined() + "'"
+                let expiry = row == 2 ? 0 : row == 5 ? time : future
+                cookies += "INSERT INTO cookies VALUES('login.example.com', 'fixture-\(index)-\(row)', '', \(blob), '/', \(expiry), 1, \(row == 3 ? 1 : 0), \(row == 2 ? 0 : 1), \(time), \(time), \(time), 1, 2, 2, 443, '\(row == 4 ? "https://other.example.com" : "")', \(row == 4 ? 1 : 0));"
+            }
+            try createDatabase("Cookies", profile: profile, sql: cookies)
+            let web = """
+                CREATE TABLE addresses(guid, use_count, use_date, date_modified, language_code, record_type);
+                CREATE TABLE address_type_tokens(guid, type, value, verification_status);
+                CREATE TABLE credit_cards(guid, name_on_card, expiration_month, expiration_year, card_number_encrypted, nickname, use_count, use_date);
+                CREATE TABLE keywords(id); CREATE TABLE autofill(date_created, date_last_used);
+                INSERT INTO addresses VALUES('fixture-address-\(index)', 3, \(now), \(now), 'en', 0);
+                INSERT INTO address_type_tokens VALUES('fixture-address-\(index)', 7, 'Fixture Person', 3);
+                INSERT INTO address_type_tokens VALUES('fixture-address-\(index)', 30, '1 Example Street', 4);
+                INSERT INTO credit_cards VALUES('fixture-card-\(index)', 'Fixture Person', 12, 2030, \(try encrypted("4111 1111 1111 1111")), 'Fixture card', 4, \(now));
+                """
+            try createDatabase("Web Data", profile: profile, sql: web)
+        }
+    }
+
 }
 
 public struct SyntheticSecretsResult {
