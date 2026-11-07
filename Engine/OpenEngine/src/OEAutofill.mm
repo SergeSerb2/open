@@ -9,6 +9,8 @@
 #include "include/cef_command_line.h"
 
 namespace {
+BOOL gAutofillActive = NO;
+BOOL AutofillAvailable() { return gAutofillActive && OEEngine.shared.running; }
 OEWebContent* ContentFor(CefRefPtr<CefBrowser> browser) {
   if (!browser) return nil;
   for (OEWebContent* content in OEEngine.shared.allWebContents) {
@@ -132,8 +134,13 @@ class OEAutofillHandler final : public CefOpenAutofillHandler {
  private:
   IMPLEMENT_REFCOUNTING(OEAutofillHandler);
 };
-void OEInstallAutofillHandler() { CefSetOpenAutofillHandler(new OEAutofillHandler()); }
+void OEInstallAutofillHandler() {
+  gAutofillActive = YES;
+  CefSetOpenAutofillHandler(new OEAutofillHandler());
+}
 void OERemoveAutofillHandler() {
+  // Close callbacks may call the API again before OEEngine clears running.
+  gAutofillActive = NO;
   // Shell sheets may outlive shutdown. Release every CEF prompt before the
   // library loader goes away, including offers already answered by CEF.
   for (OESavePrompt* offer in Prompts().objectEnumerator) [offer oe_withdraw];
@@ -184,14 +191,15 @@ OEAutofillContextState* ContextState(OEBrowserContext* context, BOOL create) {
 }
 BOOL Preference(OEBrowserContext* context, const char* name) {
   if (context.ephemeral) return NO;
-  if (!context.oe_isReady) return YES;
+  if (!AutofillAvailable() || !context.oe_isReady) return YES;
   auto value = context.oe_requestContext->GetPreference(name);
   return value && value->GetBool();
 }
 void SetPreference(OEBrowserContext* context, const char* name, BOOL enabled) {
-  if (context.ephemeral) return;
+  if (context.ephemeral || !AutofillAvailable()) return;
   std::string key(name);
   [context oe_whenReady:^{
+    if (!AutofillAvailable()) return;
     auto request = context.oe_requestContext;
     if (!request->CanSetPreference(key)) return;
     auto value = CefValue::Create(); value->SetBool(enabled);
@@ -200,7 +208,7 @@ void SetPreference(OEBrowserContext* context, const char* name, BOOL enabled) {
   }];
 }
 BOOL CanEnable(OEBrowserContext* context, const char* name) {
-  return !context.ephemeral && MockPromptsAllowed() && context.oe_isReady &&
+  return AutofillAvailable() && !context.ephemeral && MockPromptsAllowed() && context.oe_isReady &&
       context.oe_requestContext->CanSetPreference(name);
 }
 }
@@ -239,6 +247,12 @@ class OECountsCallback final : public CefOpenCountsCallback {
 - (BOOL)addressesSavingEnabled { return Preference(self, "autofill.profile_enabled"); }
 - (void)setAddressesSavingEnabled:(BOOL)enabled { SetPreference(self, "autofill.profile_enabled", enabled); }
 - (void)fetchCredentialCountsWithCompletion:(void (^)(OECredentialCounts*))completion {
+  // Private contexts have no saved data. Neither they nor a stopped engine
+  // need a CEF data bridge that could outlive profile/library teardown.
+  if (self.ephemeral || !AutofillAvailable()) {
+    completion([[OECredentialCounts alloc] initOEWithLogins:0 blocked:0 cards:0 addresses:0 cookies:0]);
+    return;
+  }
   auto state = ContextState(self, YES);
   if (state->data) state->data->GetCounts(new OECountsCallback(completion));
   else completion([[OECredentialCounts alloc] initOEWithLogins:0 blocked:0 cards:0 addresses:0 cookies:0]);
@@ -252,7 +266,7 @@ class OECountsCallback final : public CefOpenCountsCallback {
 }
 @end
 @implementation OEEngine (Autofill)
-- (BOOL)supportsSecretsImport { return self.running; }
+- (BOOL)supportsSecretsImport { return AutofillAvailable(); }
 - (BOOL)usesMockKeychain {
   return self.configuration.useMockKeychain || HasBrowserSwitch(@"use-mock-keychain");
 }
@@ -478,7 +492,7 @@ void Import(OEBrowserContext* context, NSArray<id<OEImportRecord>>* records, int
   // Refusal clears every supplied source, without making binary copies.
   OEErrorCode error = context.ephemeral ? OEErrorEphemeralContext :
       OEEngine.shared.usesMockKeychain && !HasBrowserSwitch(@"open-allow-mock-keychain-secrets")
-        ? OEErrorMockKeychain : records.count > 256 || !OEEngine.shared.running
+        ? OEErrorMockKeychain : records.count > 256 || !AutofillAvailable()
         ? OEErrorUnsupported : (OEErrorCode)0;
   auto state = !error ? ContextState(context, YES) : nil;
   if (!error && (!state || !state->data)) error = OEErrorUnsupported;
