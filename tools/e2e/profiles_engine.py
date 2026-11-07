@@ -58,6 +58,9 @@ def run(factory, results, tmp, config, new_tab, wait_until):
         private_keys.discard(key)
 
     def data(page):
+        # Switching a Space can retire its hidden page. The tab UUID reopens
+        # it through the product host factory; wait for that real navigation.
+        app.call('wait', tab=page)
         return app.eval(page, '({cookie:document.cookie,storage:localStorage.getItem("s10")})')
 
     def shutdown_receipt(instance, deadline):
@@ -82,6 +85,19 @@ def run(factory, results, tmp, config, new_tab, wait_until):
         disk = new_tab(app, base)
         work_dir = app.page(disk)['context']
         app.eval(disk, 'document.cookie="s10_disk_work=1;max-age=86400";localStorage.setItem("s10","disk");1')
+        if os.environ.get('OPEN_PROFILES_ENGINE_NEGATIVE') == 'retained-page':
+            error = ''
+            try:
+                app.call('profile-engine', action='delete', profile='Engine Work')
+            except RuntimeError as failure:
+                error = str(failure)
+            results['s10_delete_retained_native_page'] = {
+                'ok': 'profile-keep-alive-held:' in error
+                      and (root / 'Engine' / work_dir).is_dir()
+                      and (root / 'Profiles' / work_dir).is_dir(),
+                'error': error, 'engine_files_intact': (root / 'Engine' / work_dir).is_dir(),
+                'open_files_intact': (root / 'Profiles' / work_dir).is_dir()}
+            return
         first = private('Engine Work', 'work1')
         no_seed = data(first['page'])
         app.eval(first['page'], 'document.cookie="s10_private_work=1";localStorage.setItem("s10","private");1')
@@ -97,6 +113,8 @@ def run(factory, results, tmp, config, new_tab, wait_until):
             'contexts': [first, second, other], 'shared': shared, 'other_contexts': isolated}
         results['s10_private_no_seeding'] = {
             'ok': not no_seed['cookie'] and no_seed['storage'] is None, 'initial': no_seed}
+        if os.environ.get('OPEN_PROFILES_ENGINE_NEGATIVE') == 'parent':
+            return
         try:
             app.call('profile-engine', action='delete', profile='Default')
             default_refused = False
@@ -140,30 +158,44 @@ def run(factory, results, tmp, config, new_tab, wait_until):
         before_allow = app.eval(fresh['page'], 'document.documentElement.dataset.s10Extension || ""')
         management = new_tab(app, 'chrome://extensions')
         wait_until(lambda: app.eval(management, 'typeof chrome.developerPrivate') == 'object', timeout=20)
+        # Chrome reloads a command-line fixture as an unpacked extension when
+        # access changes. That developer fixture requires developer mode.
+        developer_mode = app.eval(management, 'new Promise(done=>chrome.developerPrivate.updateProfileConfiguration('
+                                  '{inDeveloperMode:true},()=>done(!chrome.runtime.lastError)))')
         grant = app.eval(management, 'new Promise(done=>chrome.developerPrivate.updateExtensionConfiguration('
                          '{extensionId:%s,incognitoAccess:true},()=>done(chrome.runtime.lastError?'
                          'chrome.runtime.lastError.message:"ok")))' % json.dumps(extension))
         app.call('close', tab=management)
-        app.call('navigate', tab=fresh['page'], url=base + '?allowed=1')
+        # The opt-in reloads the extension. Its content-script file loader is
+        # asynchronous; observe a fresh regular document before private load.
+        app.call('navigate', tab=disk, url=base + '?extension-ready=1')
+        app.call('wait', tab=disk)
+        regular_ready = wait_until(lambda: app.eval(disk, 'document.documentElement.dataset.s10Extension || ""')
+                                   == 'regular', timeout=20)
+        close('work3')
+        fresh = private('Engine Work', 'work3', base + '?allowed=1')
         ran = wait_until(lambda: app.eval(fresh['page'], 'document.documentElement.dataset.s10Extension || ""')
                          == 'private', timeout=20)
+        after_allow = app.eval(fresh['page'], 'document.documentElement.dataset.s10Extension || ""')
         worker = wait_until(lambda: app.eval(disk, 'document.documentElement.dataset.s10Worker || ""') == 'live', timeout=20)
         results['s10_private_extension_opt_in'] = {
-            'ok': before_allow == '' and grant == 'ok' and bool(ran) and bool(worker),
-            'before': before_allow, 'grant': grant, 'spanning_script': bool(ran), 'mv3_worker': bool(worker)}
+            'ok': developer_mode is True and before_allow == '' and grant == 'ok' and bool(ran) and bool(worker),
+            'before': before_allow, 'after': after_allow, 'grant': grant,
+            'regular_after_grant': bool(regular_ready),
+            'spanning_script': bool(ran), 'mv3_worker': bool(worker)}
 
         # Page JS creates real timestamps on each side of begin. No clock,
         # CDP cookie mutation, or Open-side timestamp filtering participates.
         for label in ('bounded_range', 'all_time'):
             app.call('profile-engine', action='clear', profile='Engine Work', kinds=2)
-            old_storage = new_tab(app, 'http://old-storage.localhost:%d/' % port)
+            old_storage = new_tab(app, 'http://old-%s-storage.localhost:%d/' % (label, port))
             app.eval(old_storage, 'localStorage.setItem("s10","old");1')
             app.eval(disk, 'document.cookie="s10_old=1;max-age=86400";1')
             # Chromium normally commits localStorage metadata after five seconds.
             time.sleep(6)
             boundary = time.time()
             time.sleep(.5)
-            new_storage = new_tab(app, 'http://new-storage.localhost:%d/' % port)
+            new_storage = new_tab(app, 'http://new-%s-storage.localhost:%d/' % (label, port))
             app.eval(new_storage, 'localStorage.setItem("s10","new");1')
             app.eval(disk, 'document.cookie="s10_new=1;max-age=86400";1')
             time.sleep(6)
@@ -172,8 +204,14 @@ def run(factory, results, tmp, config, new_tab, wait_until):
             app.call('profile-engine', action='clear', profile='Engine Work', kinds=2, begin=begin, end=end)
             got = data(disk)
             other_cookie = data(default)['cookie']
-            old_value, new_value = [app.eval(p, 'localStorage.getItem("s10")')
-                                    for p in (old_storage, new_storage)]
+            # Reopen the documents to observe the backend result independently
+            # of renderer-local StorageArea caches and queued storage events.
+            values = []
+            for page in (old_storage, new_storage):
+                app.call('navigate', tab=page, url=app.page(page)['url'])
+                app.call('wait', tab=page)
+                values.append(app.eval(page, 'localStorage.getItem("s10")'))
+            old_value, new_value = values
             preserved = label == 'bounded_range'
             results['s10_clear_' + label] = {
                 'ok': ('s10_old=1' in got['cookie']) == preserved and 's10_new' not in got['cookie']
@@ -190,18 +228,39 @@ def run(factory, results, tmp, config, new_tab, wait_until):
         before_cache = counts.get('/cached', 0)
         app.eval(disk, 'fetch("/cached").then(r=>r.text())')
         cached_count = counts.get('/cached', 0)
+        app.call('space', space=home); app.call('select', tab=default); app.call('wait', tab=default)
         app.eval(default, 'fetch("/cached").then(r=>r.text())')
         primed_count = counts.get('/cached', 0)
         app.call('profile-engine', action='clear', profile='Engine Work', kinds=4)
+        app.call('space', space=work); app.call('select', tab=disk); app.call('wait', tab=disk)
         app.eval(disk, 'fetch("/cached").then(r=>r.text())')
         cleared_count = counts.get('/cached', 0)
+        app.call('space', space=home); app.call('select', tab=default); app.call('wait', tab=default)
         app.eval(default, 'fetch("/cached").then(r=>r.text())')
         results['s10_clear_http_cache'] = {
             'ok': before_cache == cached_count and primed_count == cached_count + 1
                   and cleared_count == primed_count + 1 and counts.get('/cached', 0) == cleared_count,
             'requests': [before_cache, cached_count, primed_count, cleared_count, counts.get('/cached', 0)]}
 
+        # The App's Settings adapter supplies real Last hour / All time ranges.
+        app.call('space', space=work); app.call('select', tab=disk); app.call('wait', tab=disk)
+        for label, interval in [('last_hour', 'Last hour'), ('all_time', 'All time')]:
+            app.eval(disk, 'document.cookie="s10_settings=1;max-age=86400";localStorage.setItem("s10","settings");1')
+            app.call('profile-engine', action='settings-clear', profile='Engine Work', kinds=2, range=interval)
+            app.call('navigate', tab=disk, url=base + '?settings=' + label); app.call('wait', tab=disk)
+            after = data(disk)
+            results['s10_settings_' + label] = {
+                'ok': after == {'cookie': '', 'storage': None}
+                      and 's10_disk_default=1' in data(default)['cookie'], 'after': after}
+        created = app.call('profiles-shell', action='create', name='History Only')
+        unused = next(p for p in created['profiles'] if p['name'] == 'History Only')
+        cleared = app.call('profile-engine', action='settings-clear', profile='History Only', kinds=1, range='Last hour')
+        results['s10_history_only_stays_lazy'] = {
+            'ok': cleared['contextsBefore'] == cleared['contextsAfter']
+                  and not (root / 'Engine' / unused['directory']).exists(), 'contexts': cleared}
+
         # Delete with a live regular page, worker and primary OTR child.
+        app.call('space', space=work); app.call('select', tab=disk); app.call('wait', tab=disk)
         app.call('navigate', tab=disk, url=base + '?delete-worker=1')
         app.call('wait', tab=disk)
         worker_before_delete = bool(wait_until(

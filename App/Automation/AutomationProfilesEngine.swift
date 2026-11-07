@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
 import AppKit
 import OpenEngine
+import OpenSettings
 
 /// Real native windows for the engine's profile proofs. No BrowserModel tabs,
 /// history writer, Archive sink or durable window state participate here.
@@ -77,6 +78,18 @@ extension AutomationController {
     case "close":
       profileProofWindows.removeValue(forKey: key)?.close()
       return true
+    case "settings-clear":
+      guard let profile = app.model.profiles.first(where: { $0.name == name }),
+        let kinds = a["kinds"] as? Int, kinds > 0, kinds & ~15 == 0,
+        let raw = a["range"] as? String, let range = ClearDataRange(rawValue: raw) else {
+        throw Failure(message: "invalid Settings data-clear request")
+      }
+      let before = OEEngine.shared.contexts.count
+      if let error = await app.settingsPresenter.clearBrowsingData(profileID: profile.id,
+        kinds: ClearDataKinds(rawValue: kinds), range: range) {
+        throw Failure(message: error)
+      }
+      return ["contextsBefore": before, "contextsAfter": OEEngine.shared.contexts.count]
     case "clear":
       let context = try regular()
       guard a["kinds"] == nil || a["kinds"] is Int else { throw Failure(message: "invalid browsing-data kinds") }

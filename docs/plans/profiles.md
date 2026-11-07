@@ -746,21 +746,18 @@ users; precedent: the `littleArc` → `littleOpen` one-way migration in
 (§7.1) offers, as a **separate explicit action** after a successful model
 delete, "Delete Profile data from disk" which the App runs in this order:
 
-1. Engine teardown for that Profile first (§6.5): destroy every web content
-   on its context, then release the context. Deleting files under a live
-   Chromium Profile corrupts it.
-2. `ProfileDirectories.deleteProfileData(dataDirectoryName:)` with the name
-   captured **before** the model delete (the Profile object is gone after).
-   It removes `Profiles/<dir>/`, `Engine/<dir>/`, and the Profile's cache
-   folder (`~/Library/Caches/<root name>/Engine/<dir>`, §5.1): a deleted
-   Profile's browsing cache must not stay behind. Also unload the Chromium
-   Profile through the engine first and drop its `Local State` entry
-   (`releaseContext` completes when no page is left, not when Chromium's
-   Profile is destroyed; `docs/followups.md`).
-3. `SnapshotStore.saveNow` so a crash cannot resurrect a Profile whose
-   directory is gone. (If it did resurrect, `repairMissing…` does not apply
-   — the Profile exists; its stores simply recreate empty. The save-first
-   ordering is what prevents that.)
+1. Commit the directory tombstone through the archive sink and remove the
+   Profile from the model. Capture its directory name before removing it.
+2. `ProfileTeardown.wipe` journals the name in `Profiles/.pending-wipe.json`,
+   flushes Open's stores and retires the Profile's normal and private hosts.
+   `OEEngine.shared.deleteContext(context)` waits for the native wipe, actual
+   Profile destruction and committed Local State cleanup (§6.5). A mere
+   `releaseContext` callback does not provide this barrier.
+3. Only after success, remove `Profiles/<dir>/`, `Engine/<dir>/` and
+   `~/Library/Caches/<root name>/Engine/<dir>`, then remove the journal entry.
+   A successful native deletion needs no App-side Local State JSON edit.
+   Errors preserve folders and retain the journal for recovery before the
+   next engine start. A never-created native directory needs no native unload.
 
 Undo of the model delete after a disk wipe restores sidebar data only
 (§3.4). There is no undo for the wipe. The confirmation copy in §7.1 must

@@ -11236,7 +11236,7 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing unpacked extensions in %s" % opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
-    if opts.only in ("profiles", "profiles-engine"):
+    if opts.only in ("profiles", "profiles-engine", "incognito"):
         extra += ["--load-extension=" + ",".join(os.path.join(ROOT, "tools", "e2e", "fixtures", name)
                                                for name in ("tabs-probe", "profile-engine-probe")),
                   "--disable-features=DisableLoadExtensionCommandLineSwitch"]
@@ -11439,7 +11439,7 @@ def main():
                     profiles_checks(factory, results[opts.only], tmp, opts.config)
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
                     factory, results[opts.only], tmp, globals(), domain_before)
-            else:
+            if opts.only == "profiles-engine" or not opts.profiles_shell_only:
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_engine.py"))["run"](
                     factory, results[opts.only], tmp, opts.config, new_tab, wait_until)
         elif opts.only == "measure":

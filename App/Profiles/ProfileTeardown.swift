@@ -40,6 +40,17 @@ final class ProfileTeardown {
     try Self.enqueue(directory, directories: app.directories)
     await app.stores.flushHistory()
     app.archiveSink.flushAll()
+    // An unopened Profile may still have native data/attributes from a prior
+    // launch. Load that context for Chromium's ordered metadata cleanup too.
+    if loaded[profileID] == nil,
+      FileManager.default.fileExists(atPath: app.directories.engineDirectory(dataDirectoryName: directory).path) {
+      guard app.engineReady, app.engine.result.layout == .engine,
+        OEEngine.shared.context(identifier: directory,
+          directory: app.directories.engineDirectory(dataDirectoryName: directory)) != nil else {
+        throw Self.failure("The Profile context is unavailable for deletion.")
+      }
+      loaded[profileID] = directory
+    }
     try await unload(profileID: profileID)
     try Self.removeIfPresent(app.directories.profileDirectory(dataDirectoryName: directory))
     try Self.wipeEngine(directory, directories: app.directories)
