@@ -950,7 +950,42 @@ Read `Secure Preferences` as JSON.
 Never print an extension name. A name can hold user text.
 Never print a full path. Print counts only. See section 5 for the ID flag rule.
 
-### 4.3 Reinstall plan (waits for the engine)
+### 4.3 Reinstall plan
+
+**Implementation errata (Section 14 C3, 2026-11-06):** Branch implementation;
+acceptance is blocked on an engine completion hook for local CRX failures.
+The real-App block passes 14/15 rows, but a damaged signature logs a Chromium
+error without a manager failure event. The bounded automation timeout is not
+accepted as error propagation. Final nested-Profile, negative-proof, and full
+regression checks remain pending.
+
+ The App now detects
+extensions during import for each `sourceProfileDirectories` entry. It retains
+only in-memory metadata, grouped by the imported Open Profile ID, and records
+total, internal, candidate, and missing-manifest counts in `ImportReport`.
+Unreadable extension preferences are counted per Profile and do not stop the
+sidebar import.
+
+Both the first-run report and Settings import result show an **Extensions**
+section only when mapped candidates exist. Every row starts checked and shows
+the manifest name; imports with multiple Profiles also show the Profile name.
+The report explains that extension settings and data stay behind. The user
+must click **Install Extensions**. The queue calls the target Profile's
+`OEExtensionManager.installFromWebStore` one item at a time and uses Open's
+normal consent sheet. Cancel and already-installed items are skipped. Errors
+retain the engine error string. Rows and the final installed/skipped/failed
+counts show the result. First run can finish without installing.
+
+An extension install is a separate user action. **Undo Import does not
+uninstall an extension installed from this section.** No extension folder,
+cache CRX, or extension storage is copied from Arc. Automation builds alone
+can map synthetic candidate IDs to signed local CRX fixtures, using the P3
+`installLocalCRX` consent path for offline e2e verification. Production always
+uses the Web Store API. The e2e block is `tools/e2e/firstrun_extensions.py`,
+called by the `firstrun` suite.
+
+The historical staging plan below describes the original data/engine split;
+the App workflow above supersedes its "engine side later" timing.
 
 Data side now:
 

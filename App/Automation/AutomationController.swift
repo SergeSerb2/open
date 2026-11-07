@@ -32,6 +32,7 @@
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
     var firstRunActionTask: Task<Void, Never>?
+    var importExtensionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
@@ -95,6 +96,7 @@
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
+      case "import-extensions": return try await runImportExtensions(a)
       case "timing" where app.frontWindowController == nil:
         var marks = LaunchTiming.shared.report
         marks["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart

@@ -119,6 +119,9 @@ def run(factory, results, tmp, h):
         # output only, never a source database. The normal API also checks counts.
         return app.call('archive-list')
     try:
+        if os.environ.get("OPEN_E2E_IMPORT_EXT_ONLY") == "1":
+            runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_extensions.py"))["run"](launch, state, until, row, source, tmp, h)
+            return
         app = launch(fresh=True, OPEN_AUTOMATION_IMPORT_DELAY_MS='1500')
         for key in ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane', 'open.advanced.tabSleepMode'):
             saved[key] = app.call('defaults', key=key, persistent=True)
@@ -429,6 +432,7 @@ def run(factory, results, tmp, h):
             and len(app.call('spaces')) == 1 and app.call('tabs') == [])
         app.quit()
         runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_history.py"))["run"](launch, state, until, row, source, tmp, h)
+        runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_extensions.py"))["run"](launch, state, until, row, source, tmp, h)
         timings = []
         for _ in range(5):
             app = launch(fresh=True)

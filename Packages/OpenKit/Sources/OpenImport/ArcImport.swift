@@ -61,6 +61,8 @@ public struct ImportReport: Sendable {
     public var sessionAppliedSelections: Int = 0
     public var sessionDistinctChromiumIDs: Int = 0
     public var sessionMalformedPairs: Int = 0
+    public var extensions = ArcExtensionReport()
+    public var extensionProfilesUnreadable: Int = 0
 
     public var accounted: Int {
         importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedUnknown
@@ -83,6 +85,8 @@ public struct ArcImportResult {
     public var archiveRecords: [ArchivedTabRecord]
     /// Original Chromium directory, before destination collision suffixes.
     public var sourceProfileDirectories: [ProfileID: String] = [:]
+    /// In-memory metadata only; no payload or extension storage is imported.
+    public var extensionsByProfile: [ProfileID: [ArcExtensionRecord]] = [:]
 }
 
 public enum ImportError: Error {
@@ -969,9 +973,29 @@ public struct ArcImporter {
             }
         }
 
+        let sourceProfileDirectories = Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) })
+        var extensionsByProfile: [ProfileID: [ArcExtensionRecord]] = [:]
+        for (profileID, directory) in sourceProfileDirectories.sorted(by: { $0.key.description < $1.key.description }) {
+            do {
+                guard !directory.isEmpty, directory.utf8.count <= 255, directory != ".", directory != "..",
+                      !directory.contains("/"), !directory.contains("\\"),
+                      !directory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { throw ImportError.malformedSidebar }
+                let root = arcDirectory.appendingPathComponent("User Data").resolvingSymlinksInPath()
+                guard root.path.hasPrefix(arcDirectory.resolvingSymlinksInPath().path + "/") else { throw ImportError.malformedSidebar }
+                let profile = root.appendingPathComponent(directory)
+                guard profile.resolvingSymlinksInPath().path.hasPrefix(root.path + "/") else { throw ImportError.malformedSidebar }
+                let result = try ArcExtensionsReader(profileDirectory: profile).read()
+                report.extensions.totalRecords += result.report.totalRecords
+                report.extensions.internalRecords += result.report.internalRecords
+                report.extensions.reinstallCandidates += result.report.reinstallCandidates
+                report.extensions.missingManifest += result.report.missingManifest
+                extensionsByProfile[profileID] = result.records
+            } catch { report.extensionProfilesUnreadable += 1 }
+        }
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
         return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords,
-            sourceProfileDirectories: Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) }))
+            sourceProfileDirectories: sourceProfileDirectories,
+            extensionsByProfile: extensionsByProfile)
     }
 
     private static func routingMatchForArcMatches(_ pattern: String) -> RoutingMatch {
