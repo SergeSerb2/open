@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <OpenEngine/OEBrowserContext.h>
 #import <OpenEngine/OEDefines.h>
+#import <OpenEngine/OEAutofill.h>
 #import <OpenEngine/OENavigationHistory.h>
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
@@ -78,6 +79,19 @@ typedef NS_ENUM(NSInteger, OEWebContentCrashState) {
 NS_SWIFT_UI_ACTOR
 @protocol OEWebContentDelegate <NSObject>
 @optional
+/// An unanswered prompt is ignored when the shell releases it.
+- (void)webContent:(OEWebContent*)webContent showSavePrompt:(OESavePrompt*)prompt
+    NS_SWIFT_NAME(webContent(_:showSavePrompt:));
+/// The engine already answered Ignored. Remove the queued or visible sheet.
+- (void)webContent:(OEWebContent*)webContent withdrawSavePrompt:(OESavePrompt*)prompt
+    NS_SWIFT_NAME(webContent(_:withdrawSavePrompt:));
+/// Chromium could not save the password because the Keychain is unavailable.
+- (void)webContentDidFailToSavePasswordForKeychainError:(OEWebContent*)webContent
+    NS_SWIFT_NAME(webContentDidFailToSavePasswordForKeychainError(_:));
+/// A Chromium Manage link, routed to the page's own profile.
+- (void)webContent:(OEWebContent*)webContent openAutofillPage:(OEAutofillPage)page
+    NS_SWIFT_NAME(webContent(_:openAutofillPage:));
+
 /// State changed. Read the new values from the web content's properties.
 - (void)webContent:(OEWebContent*)webContent
          didChange:(OEWebContentChange)changes
