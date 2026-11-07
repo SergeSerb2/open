@@ -34,6 +34,8 @@
     var firstRunActionTask: Task<Void, Never>?
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
+    var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
+    var profileProofContexts: [String: OEBrowserContext] = [:]
 
     init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
 
@@ -89,6 +91,7 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "profile-engine": return try await runProfileEngineCommand(a)
       case "first-run": return try await runFirstRun(a)
       case "timing" where app.frontWindowController == nil:
         var marks = LaunchTiming.shared.report

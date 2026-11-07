@@ -828,10 +828,13 @@ corruption case fact 2 warns about. The registry therefore stores, per
 ProfileID, either `.global` or a created context handle, and answers
 browsers accordingly.
 
-Incognito (D-P8): `CefRequestContextSettings` with **empty** `cache_path`
-and `persist_session_cookies` = false, one context per incognito window,
-created when the window opens and released when it closes (§6.5). Never
-seed it from the default Profile (Arc §5.2 rule 6).
+Incognito (Section 10 erratum): use
+`OEEngine.makeIncognitoContext(for:completion:)` with the chosen regular disk
+Profile, including Default. Fork API `CefCreateIncognitoContext` adopts that
+Profile's primary OTR. All its private windows share one session; the last
+private Browser closes the session, and the next window gets a fresh one.
+There is no cookie seeding. This is an Open decision based on Chrome's
+extension semantics; Arc's exact parent selection remains unverified.
 
 ### 6.3 What "Profile switch" means in one window
 
@@ -900,18 +903,19 @@ plan §9.2 LA-7). Little Open tabs are not sidebar tabs and never enter
 
 ### 6.5 Destroying contexts (delete and quit)
 
-Only two teardown paths exist:
+Teardown follows these paths:
 
-- **Profile delete** (§5.5): the App holds the Profile's
-  `dataDirectoryName`, calls the model delete, then — through the
-  registry — destroys every browser on that Profile's context, drops its
-  registry entry (releasing the `CefRefPtr`), waits for OpenEngine to
-  confirm release, and only then calls
+- **Profile delete** (§5.5, Section 10 erratum): the App holds the Profile's
+  `dataDirectoryName`, calls the model delete, then calls
+  `try await OEEngine.shared.deleteContext(context)`. Its completion waits for
+  native data removal, wrapper invalidation, actual Profile destruction and
+  the Local State commit. Only successful completion permits
   `ProfileDirectories.deleteProfileData`. If the Profile backed the global
   context this path can never run (default is undeletable, D-P1), so the
   global context is never released mid-session.
-- **Incognito close**: destroy the window's browser, then release its
-  context. No store writes follow (D-P8).
+- **Incognito close**: destroy the window's Browser. Chrome's last-Browser
+  path ends the chosen parent's primary OTR session and invalidates its shell
+  context. No private navigation is saved in Open's durable stores.
 - **Quit**: destroy browsers, release non-global contexts, then
   `CefShutdown` (OpenEngine owns the order). Snapshot `saveNow` and store
   `flush()` calls happen before teardown completes, per §5.4's bootstrap
@@ -919,21 +923,21 @@ Only two teardown paths exist:
 
 ### 6.6 Assumed minimal `OpenEngine` interface (list — confirm, do not extend silently)
 
-`docs/engine-api.md` does not exist, so this plan assumes exactly these
+The original plan assumed these
 App-facing calls (ObjC++ in `Engine/OpenEngine/`, Swift-visible through the
 App target only; names follow the adblock plan's `OpenEngineAdBlock.h`
-convention). Steps 6–7 implement the Profile registry against this list.
-If the engine spike ships different names, adapt the registry and record
-the mapping in the Step 6 PR — do not change OpenKit to match.
+convention). The implemented mapping is in [engine-api.md](../engine-api.md).
+Section 10 replaces E2 and E6 below; the other rows retain the original plan's
+notation. Packages continue to use engine-independent protocols.
 
 | # | Assumed call | Contract |
 |---|---|---|
 | E1 | `OEProfileContextManager.shared` with `contextHandle(forProfileID:cachePath:persistSessionCookies:) -> OEContextHandle` (creates lazily, caches, `.global` for the default Profile) | One handle per ProfileID; repeat calls return the same handle |
-| E2 | `releaseContext(forProfileID:) async` (destroys attached browsers first; completion after CEF release) | Used by §6.5 only |
+| E2 | `OEEngine.shared.deleteContext(context)` (`async throws`, also `deleteContext(_:completion:)`) | Completion after native wipe, actual destruction and committed Local State cleanup; errors leave folders intact |
 | E3 | `makeWebContent(tabID:context:initialURL:) -> OEWebContent` with an `NSView`, `load(URL)`, `destroy()` | One web content per live sidebar tab; tab identity is Open's `ItemID`, never a CEF browser integer |
 | E4 | Context events: `onCookieChanged` / storage-ready callback per context (or a pollable `isReady`) | App enables history/cookie-dependent UI only after ready |
 | E5 | Ad-block hand-off: the `CefRequestContext` behind a handle accepts the adblock-fork §11 calls (`SetOpenAdBlock…`) | Profiles only supplies the handle + `AdBlock/lists/` directory (§5.1) |
-| E6 | Incognito: `makeIncognitoContext(windowID:) -> OEContextHandle` (empty cache path) + `releaseContext` on close | No disk directory is ever passed |
+| E6 | `OEEngine.shared.makeIncognitoContext(for: original, completion:)` | Chosen regular parent; primary OTR shared until last private Browser; no seeding or Default fallback |
 
 OpenKit additions for the engine steps: **none**. The registry lives in
 the App target (`App/ProfileContextRegistry.swift`, created by Step 7)

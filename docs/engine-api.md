@@ -67,7 +67,7 @@ OEEngine.shared.shutdown()                             // CefShutdown
 | `shared`, `delegate`, `configuration`, `isRunning`, `isInitialized` | |
 | `chromiumVersion`, `cefVersion` | `156.0.8078.48`, `156.0.14+g4fa4ab5+chromium-156.0.8078.48` |
 | `start(configuration:)`, `runMessageLoop()`, `terminate()`, `shutdown()` | Lifecycle above |
-| `defaultContext`, `context(identifier:directory:)`, `context(identifier:)`, `makeEphemeralContext()`, `releaseContext(_:completion:)`, `contexts` | Profiles. `userDataDirectory` is Chromium's `root_cache_path`. The global context is the default profile, always at `<userDataDirectory>/Default`: CEF ignores any other child `cache_path` for it (`cef_types.h`, `CefSettings.cache_path`). Other contexts must be direct children of the root: CEF loads a disk profile only when `cache_path`'s parent is `root_cache_path`, compared as strings, and otherwise silently makes an in-memory profile. `context(identifier:directory:)` names the folder through the resolved root (`/tmp` → `/private/tmp`) and refuses (returns nil, and asserts in Debug) a folder that is not a direct child: Chromium would keep that profile in memory as an off-the-record profile of the default profile. New `Engine/<dir>` folders get mode 0700. Asking for the default folder returns `defaultContext`, so two contexts never share one Chromium profile folder. |
+| `defaultContext`, `context(identifier:directory:)`, `context(identifier:)`, `makeIncognitoContext(for:completion:)`, `deleteContext(_:completion:)`, `releaseContext(_:completion:)`, `contexts` | Profiles. `userDataDirectory` is Chromium's `root_cache_path`. The global context is the default profile, always at `<userDataDirectory>/Default`: CEF ignores any other child `cache_path` for it (`cef_types.h`, `CefSettings.cache_path`). Other contexts must be direct children of the root: CEF loads a disk profile only when `cache_path`'s parent is `root_cache_path`, compared as strings, and otherwise silently makes an in-memory profile. `context(identifier:directory:)` names the folder through the resolved root (`/tmp` → `/private/tmp`) and refuses (returns nil, and asserts in Debug) a folder that is not a direct child: Chromium would keep that profile in memory as an off-the-record profile of the default profile. New `Engine/<dir>` folders get mode 0700. Asking for the default folder returns `defaultContext`, so two contexts never share one Chromium profile folder. |
 | `browsers`, `allWebContents`, `webContent(identifier:)` | Live objects (weak registry) |
 | `sampleProcessMetrics(after:)` | Chromium task manager rows: kind, memory, GPU memory, CPU |
 | `showTaskManager()` | Chromium's task manager window (plans/page-platform.md EP-10a, D-8): runs `IDC_TASK_MANAGER_MAIN_MENU` through `CefBrowserHost::ExecuteChromeCommand` on the first live Chrome style page (a hosted tab's hidden window works). `false` when no live Chrome style page exists. A second call brings the open window to the front (Chrome's `TaskManagerView::Show`). |
@@ -80,11 +80,11 @@ The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) �
 | Plan | OpenEngine |
 |---|---|
 | E1 `contextHandle(forProfileID:cachePath:…)` | `context(identifier:directory:)` (cached by identifier; the default profile maps to `defaultContext`) |
-| E2 `releaseContext(forProfileID:)` | `releaseContext(_:completion:)` |
+| E2 `releaseContext(forProfileID:)` | `deleteContext(_:completion:)` / `try await deleteContext(_:)` for permanent deletion; `releaseContext` is only a page-close operation |
 | E3 `makeWebContent(tabID:context:initialURL:)` | `OEWebContent(configuration:url:)` with `OEWebContentConfiguration(context:)`; the shell keys pages by `ItemID` |
 | E4 context ready | Pages created before a context is ready wait inside the engine; no public flag yet |
 | E5 ad-block hand-off | The `CefRequestContext` behind each `OEBrowserContext` (plans/adblock-fork.md §11) |
-| E6 `makeIncognitoContext(windowID:)` | `makeEphemeralContext()` + `releaseContext(_:completion:)` |
+| E6 `makeIncognitoContext(windowID:)` | `makeIncognitoContext(for:completion:)` selects the regular parent; its primary OTR is shared until the last private Browser closes |
 
 `OEEngineDelegate`: `engineDidInitialize()`, `engineWebContent(forUnownedOpenRequest:)` (Chromium opened a page on its own, for example an extension welcome page or `chrome.tabs.create` from a service worker: return a web content to show it as an Open tab; the engine closes Chromium's own window), `engineWillShutDown()`.
 
@@ -93,13 +93,36 @@ The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) �
 | Member | Notes |
 |---|---|
 | `identifier`, `directory`, `isEphemeral` | Ephemeral contexts are in memory only (incognito) |
+| `originalContext`, `state` | A private context has its chosen regular parent. State is `.live` or `.closed`; retained closed wrappers and managers stay inert. Unknown native contexts never fall back to Default. |
 | `extensions` | `OEExtensionManager` |
 | `userScripts`, `addUserScript(_:)`, `removeUserScript(identifier:)`, `removeAllUserScripts()` | Boosts and Zap. `OEUserScript`: JavaScript or a style sheet, document start or end, Chrome match patterns, main frame only. New documents in every page of the context get changes at once. Main world only (patch P7). |
 | `requestFilter` | `(OEResourceRequest) -> OERequestDecision`, called on the network thread for every request of the context, including service workers. Allowed requests get no per-request handler. |
 | `permissionState(for:origin:)`, `setPermissionState(_:for:origin:)` | Chromium content settings for Site Control Center |
 | `clearBrowsingData(origin:)` | With an origin: the host cookies of that URL's host, any path (`CefCookieManager::DeleteCookies` with a URL and no name; `Domain=` cookies stay), and nothing else: the HTTP cache is untouched. With nil: every cookie and the whole HTTP cache. Per-site cache clearing (Site Control E2) needs a fork patch: DevTools `Storage.clearDataForOrigin` has no HTTP cache type and CEF's `ClearHttpCache` clears every site. |
+| `clearBrowsingData(_:from:to:completion:)` | Per-Profile Chromium history, cookies and site data, cached files, and download records, over `[begin, end)`. Uses Chromium's browsing-data remover and reports its real completion or an error. Site data includes localStorage, IndexedDB, service workers and cache storage. Downloaded files and Open's separate HistoryStore are not removed by this API. |
 | `websiteColorScheme` | `.automatic`, `.light`, `.dark` (EP-9a): Chrome's browser color scheme of the context's profile (`CefRequestContext::SetChromeColorScheme`, user color transparent). Chrome derives `prefers-color-scheme` from it (`GetPreferredColorScheme` in `chrome_content_browser_client.cc`); open pages update without a reload. Chrome keeps the value in the profile's prefs, so the first set always reaches Chromium, later sets only on a change. Chrome's default incognito policy follows device appearance. The setter also calls `CefSetWebsiteColorScheme` (fork 0505, EP-9b, #158/#164), which sets the web preference on both styles and after navigation. |
 | `downloads`, `delegate` | `browserContext(_:decideDestinationFor:suggestedFilename:completion:)`, `browserContext(_:downloadDidUpdate:)`; `OEDownload` has state, bytes, speed, `cancel/pause/resume` |
+
+`OEEngine.makeIncognitoContext(for:completion:)` rejects a null, uninitialized,
+closed, closing, private, guest or system parent and policy-disabled standard
+incognito. It never copies cookies or selects a different parent. Chrome owns
+extension opt-in and spanning/split semantics through the selected primary OTR.
+
+`OEEngine.deleteContext(_:completion:)` rejects Default and private contexts and
+coalesces duplicate requests. It blocks new contexts/installs for the directory,
+closes dependent pages, private children, popups and downloads, then waits for
+`WIPE_PROFILE`. It invalidates every shell wrapper and releases CEF handles,
+waits for an independent late Profile-destruction sentinel, removes the Local
+State attributes and active/last-used entries, and commits Local State. Only a
+successful completion permits `ProfileDirectories.deleteProfileData`. Errors
+include disabled native unload, remaining keep-alive origins/counts, wipe
+failure and timeout; they leave folders intact. No keep-alive is force-cleared.
+
+Before `CefShutdown`, OpenEngine invalidates disk, private, Default and retained
+retired wrappers after browser close callbacks, including the three-second
+quit-deadline path. Automation builds can qualify that path without a blocked
+renderer using `OPEN_AUTOMATION_QUIT_AT_DEADLINE=1`. The shutdown log records only
+context counts and the selected path.
 
 ## OEBrowser (window tab strip)
 

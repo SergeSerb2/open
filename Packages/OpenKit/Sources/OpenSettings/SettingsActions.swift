@@ -9,7 +9,7 @@ public struct ClearDataKinds: OptionSet, Sendable {
     public static let history = Self(rawValue: 1), cookies = Self(rawValue: 2), cache = Self(rawValue: 4), downloads = Self(rawValue: 8)
 }
 public enum ClearDataRange: String, CaseIterable, Sendable {
-    case lastHour = "Last hour", lastDay = "Last 24 hours", lastWeek = "Last 7 days", all = "All time"
+    case lastHour = "Last hour", lastDay = "Last 24 hours", lastWeek = "Last 7 days", lastFourWeeks = "Last 4 weeks", all = "All time"
 }
 public enum ProfilePage: String, Sendable { case privacy, passwords, paymentMethods, notifications }
 public struct ImportPlan: Sendable {
