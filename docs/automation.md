@@ -156,6 +156,32 @@ and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
 and `settingsError`. These actions use the real cached wizard and shared App
 runner. `lastOutcome` and `lastFailures` remain readable after the first-run window closes. History streams through the existing Profile stores; passwords/cookies stay disabled. `OPEN_AUTOMATION_HISTORY_DELAY_MS` (automation builds only, at most 10000 ms per batch) pauses after the reader yields a real batch, before its transaction, so the suite can verify browsing while imported visits are still absent.
 
+`import-extensions` reads the report's candidate rows, selection, per-row
+status, queue state, and final counts. It omits manifest and Profile names.
+`action=toggle row=ROW on=BOOL` changes an unprocessed checkbox;
+`action=install` uses the report's Install Extensions action and returns while
+the serial queue waits for normal `ext-prompt` consent. `action=registries`
+reads installed IDs by Open Profile for synthetic isolation checks.
+`action=fixtures files='{"<candidate-id>":"<signed-local-crx>"}'` supplies at
+most 4,096 automation-only ID/file mappings (32 a–p characters per ID and
+4,096 UTF-8 bytes per path). Production has no fixture path.
+`action=inspect` scrolls and reads pixels from the report window; it is
+available only after synthetic fixture mappings are configured. Use it only
+with synthetic data. `OPEN_E2E_IMPORT_EXT_ONLY=1` runs this block alone inside
+`firstrun`. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` deliberately
+change fixture ownership/classification and real actions, so the matching EI
+gates must FAIL; clear both variables for normal acceptance.
+The synthetic second Profile uses `custom._0.directoryBasename = Profile 2`.
+`EI_default_role_mapping` reimports into a live Default with a different ID;
+`EI_default_role_target` checks its actual manager and the other Profile.
+The fixture mapping may name a missing file to verify App initiation failure.
+Once a local install starts, no App timeout completes it or cancels its sheet.
+`EI_failure_reported_engine` stays BLOCKED until the engine supplies completion
+for damaged signatures. `OPEN_E2E_IMPORT_EXT_NETWORK=1` adds one INFO Web Store
+receipt (no fixture mapping), observed for at most two minutes; no answer leaves
+the queue pending. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` apply
+real source/action faults to qualify the EI gates; normal runs restore them.
+
 Run the synthetic first-run flow with:
 
 ```sh
@@ -421,6 +447,7 @@ Additional socket commands:
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
 | `settings-profile` | Read the actual Profiles create-sheet state: `creating`, attached native `sheet` window number, `pane`, selected `spaces`, and `error`. `cancel=true` dismisses through the existing sheet state. |
+| `settings-profile-page` | `profile`: an existing Profile ID, `page`: `passwords`, `paymentMethods`, `privacy`, or `notifications`. Selects that Profile in the real Profiles view model and runs its row action (`openProfileSubpage`). Keeps the Settings adapter's Space choice and no-Space fallback. |
 | `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs` (total main work), `restorePreparationMs` (main preparation), `restoreSetterMs` (AppKit setter), `restoreDecodeMs` (worker decode/TIFF preparation). Restore uses one low-priority turn at least about 1 s after paint. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil and does no restore work. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |

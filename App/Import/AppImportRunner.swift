@@ -13,13 +13,19 @@ final class AppImportRunner {
   unowned let app: AppDelegate
   private(set) var lastOutcome: ImportOutcome?
   private var running = false
+  var extensionAttempt: AppImportExtensionAttempt?
+  var installingExtension = false
+  #if OPEN_AUTOMATION
+  var extensionFixtures: [String: URL] = [:]
+  var extensionWebStoreCompletion: (installed: Bool, error: String?)?
+  #endif
   private(set) var historyInProgress = false
   private(set) var historyProcessed = 0
   private(set) var importAllMilliseconds: Double = 0
   init(app: AppDelegate) { self.app = app }
 
   func run(plan: ImportPlan, firstRun: Bool) async -> ImportOutcome {
-    guard !running else { return ImportOutcome(errorText: "An import is already running.") }
+    guard !running, !installingExtension else { return ImportOutcome(errorText: "An import is already running.") }
     running = true
     lastOutcome = nil
     app.importInProgress = true
@@ -47,8 +53,11 @@ final class AppImportRunner {
     #endif
     var counts: [String: Int] = [:]
     var failures: [String: String] = [:]
+    var extensions: [ImportExtensionCandidate] = []
+    var extensionProfileCount = 0
     func result(_ message: String? = nil) -> ImportOutcome {
-      let outcome = ImportOutcome(counts: counts, errorText: message, failures: failures)
+      let outcome = ImportOutcome(counts: counts, errorText: message, failures: failures,
+        extensions: extensions, extensionProfileCount: extensionProfileCount)
       lastOutcome = outcome; return outcome
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
@@ -70,6 +79,11 @@ final class AppImportRunner {
       return result("Open could not read your Arc data.")
     }
     let report = imported.report
+    counts["Extensions total"] = report.extensions.totalRecords
+    counts["Extensions internal"] = report.extensions.internalRecords
+    counts["Extensions candidates"] = report.extensions.reinstallCandidates
+    counts["Extensions missing manifest"] = report.extensions.missingManifest
+    counts["Extensions unreadable profiles"] = report.extensionProfilesUnreadable
     let hasSidebarData = report.sourceSpaces > 0 || report.importedTabNodes > 0 || report.folders > 0
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if plan.archive && report.archiveStatus == "present but unreadable" { failures["Archive"] = "Could not be read" }
@@ -98,6 +112,23 @@ final class AppImportRunner {
         } else if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
       }
     }
+    func mapExtensions() {
+      extensionProfileCount = imported.model.profiles.count
+      var seen = Set<String>()
+      extensions = []
+      for source in imported.model.profiles {
+        let targetID = profileMapping[source.id] ?? source.id
+        guard imported.sourceProfileDirectories[source.id] != nil,
+          let target = app.model.profile(id: targetID) else { continue }
+        for record in imported.extensionsByProfile[source.id] ?? [] where !record.isInternal {
+          let candidate = ImportExtensionCandidate(extensionID: record.extensionID,
+            name: record.manifestName ?? record.extensionID, profileID: target.id, profileName: target.name)
+          if seen.insert(candidate.id).inserted { extensions.append(candidate) }
+        }
+      }
+    }
+    // Even an empty sidebar can have extensions for an existing destination.
+    mapExtensions()
     if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history) {
       do {
         _ = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
@@ -135,6 +166,7 @@ final class AppImportRunner {
         ensureSelection(in: imported.model)
         app.installModel(imported.model)
         app.settingsPresenter.modelWasInstalled()
+        mapExtensions()
       }
       app.showFirstRunBrowser()
       do {
@@ -177,6 +209,9 @@ final class AppImportRunner {
         return result("Open could not save your data. The previous browser state was kept. Try again.")
       }
     }
+    // Resolve metadata only after the live model has landed. Destination
+    // directory collision suffixes must never be used to read the Arc source.
+    mapExtensions()
     if plan.archive {
       progress("Importing your archive…")
       for (sourceID, records) in Dictionary(grouping: imported.archiveRecords, by: \.profileID) {
