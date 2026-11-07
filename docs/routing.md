@@ -57,6 +57,8 @@ Synthetic Open rule-sheet renders show the Work destination at [1x](routing-atc/
 
 The Air Traffic Control command opens Settings ▸ Links and targets the rules section. Its search aliases are Link Routing, Link Preferences, and Air Traffic Controller. The section heading uses the shared Settings heading style.
 
+[Section 10 acceptance and regression proofs](routing-atc/verification.md) record the real CLI, Settings preview, and App results.
+
 ### Arc import: facts and explicit guesses
 
 Arc's reflected stored enums contain matches/contains, and destinations space/littleArc carrying profile/space/mostRecent (local research: `.re/s10/arc-routing-fields.tsv:16-20,24-34`; schema: `docs/re/data-model.md` §2.7). These names and shapes do not prove Arc's comparison behavior.
