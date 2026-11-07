@@ -901,3 +901,89 @@ break-and-revert proofs, load averages and the pre-#153 A/B comparison. Keep
 Section 2's existing command-bar budgets unchanged.
 
 For the Section 8 milestone, the lead's final instruction defers full and targeted regression suites to one run on final main. This PR records the completed negative proofs and current-display before/after measurements; it does not claim a new full-suite PASS.
+
+# Renderer recovery without a system crash report (Section 16)
+
+The `features` suite's `crash_recovery` row terminates a real renderer with
+`chrome://kill`. It checks Open's killed crash state (`2`) and the sidebar
+model's crashed flag. It then navigates the same tab back to `example.com`,
+checks crash state `0`, the cleared model flag, and the loaded page title.
+It also checks that another tab still runs JavaScript and that Open keeps
+the same PID. The tab closes in `finally`.
+
+The old row used `chrome://crash`. It checked a nonzero engine crash state,
+the model's crashed flag, and recovery to state `0` at the expected URL
+after navigation. It did not assert visible sad-tab pixels, the reload
+command, the model flag after recovery, or another tab's survival. Those
+visual and reload-command claims remain outside this row's evidence.
+The existing `OPEN_E2E_NO_CRASH_PROBES=1` opt-out remains unchanged.
+
+Source evidence (strictly read-only, no engine build or change):
+
+- In `~/Developer/open-engine-s8/chromium_git/chromium/src/`,
+  `third_party/blink/common/chrome_debug_urls.cc:160-192` handles both URLs.
+  `chrome://crash` calls `CrashIntentionally`; `chrome://kill` sends the
+  renderer itself `SIGTERM` on POSIX, including macOS.
+- `third_party/blink/common/crash_helpers.cc:13-23` implements the null
+  pointer write. `base/process/kill_posix.cc:40-63` classifies `SIGTERM`
+  and `SIGKILL` as `TERMINATION_STATUS_PROCESS_WAS_KILLED`.
+- `cef/libcef/browser/browser_contents_delegate.cc:427-450` converts that
+  result to `TS_PROCESS_WAS_KILLED` and calls `OnRenderProcessTerminated`.
+- In this repo, `Engine/OpenEngine/src/OEClient.mm:666-678` maps that
+  callback to `OEWebContentCrashStateKilled`. Its value is `2` in
+  `Engine/OpenEngine/include/OpenEngine/OEWebContent.h:70-75`.
+  `App/WebContent/EngineWebContentHost.swift:42-45` maps every nonzero crash
+  state to the model's `isCrashed` flag.
+
+An automation `SIGKILL` command would need renderer PID discovery or a new
+engine hook. The existing debug URL reaches the same killed state with no
+new App API. `~/Developer/open-engine-s8-main/README.txt` confirms that the
+permitted main engine view contains a recorded distribution, not source;
+the source reads above used the separately authorized Section 12 tree.
+
+Negative evidence, M1, 2026-11-07: the exact old row ran once from WIP
+`6eac2d72`, through the real App and its automation socket. It passed with
+crash state `1`, model crashed `true`, and recovery state `0`. macOS wrote
+`Open Helper (Renderer)-2026-11-07-162618.ips`, with process name
+`Open Helper (Renderer)`, exception `EXC_BAD_ACCESS`, signal `SIGSEGV`, and
+address zero. A null-checked Swift `CGWindowListCopyWindowInfo` probe counted
+windows owned by UserNotificationCenter, ReportCrash, Problem Reporter,
+and CrashReporter names. The before/peak/after counts were `0/0/0`, through
+60.1 seconds after App exit. No dialog was observed in that interval; the
+system report is the negative evidence that requires avoiding this fault.
+Load averages before/after were `4.75/7.15/8.86` and `3.94/6.60/8.53`.
+
+The negative run used the old row body extracted from its source, without
+edits or mocks, inside the normal real-App suite launcher. Its observer
+would terminate the owned suite on a new report or reporter window and
+never replay it. The report arrived after the suite had exited cleanly.
+The complete `features` suite is the positive validation command.
+Raw receipts and the temporary observer live in the shared project's
+`.re/s16/crash-row-dialog/`; they contain no copied Arc code or assets.
+
+Positive evidence, M1, code commit `b2a64381`: the full command
+`python3 -I tools/e2e/engine_e2e.py --only features --keep` passed all
+19 rows, without an interrupted attempt. Its source receipt is clean.
+
+| Proof | Observed result |
+|---|---|
+| Real renderer termination reaches Open | killed crash state `2`, model crashed `true` |
+| Same tab recovers by navigation | state `0`, model recovered `true`, URL `https://example.com/`, title `Example Domain` |
+| Another tab remains live | JavaScript title unchanged, model not crashed |
+| Open remains alive | same App PID before and after termination |
+| No system crash UI or report | reporter windows before/peak/after `0/0/0`; no new `.ips`, through 60.3 seconds after App exit |
+| Owned cleanup | graceful quit, no forced cleanup, no remaining processes, zero owned windows |
+
+Loads before/after the positive observation were `2.37/4.19/6.19` and
+`3.46/4.03/5.82`. Both Debug builds passed: baseline start/end loads were
+`4.11/6.86/9.36` and `10.59/10.13/10.19`; merged App start/end loads were
+`3.65/6.17/8.09` and `7.52/6.11/7.32`. The new exact state-`2` requirement
+rejects the old row's observed state `1`; no fault was replayed for this
+negative proof. All listed results are functional M1 evidence.
+
+This change touches only the e2e harness and this document.
+`grep -n engine_e2e tools/verify-all.sh` returns no matches. The task's
+harness-only exception therefore omits the full M5 `verify-all` gate.
+Every App build ran through the M1's `heavy.sh`, and each on-screen run
+held its `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`. No crash probe ran
+on the M5. No CrashReporter, ReportCrash, launchctl, or system setting changed.
