@@ -7,14 +7,21 @@ umask 077
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 export PATH="/opt/homebrew/bin:$PATH"
-DRY=0 CHANNEL=stable SKIP_ENGINE=0 SKIP_NOTARY=0
+DRY=0 CHANNEL=stable SKIP_ENGINE=0 SKIP_NOTARY=0 PREFLIGHT_ONLY=0
 IDENTITY=${OPEN_SIGN_IDENTITY:-}
+NOTARY_PROFILE=${OPEN_NOTARY_PROFILE:-open-notary}
+KEY_ACCOUNT=${OPEN_SPARKLE_KEY_ACCOUNT:-ed25519}
+KEY_FILE=${OPEN_SPARKLE_KEY_FILE:-}
 PHASE=arguments
 usage() {
     cat <<'EOF'
 Usage: tools/release.sh [--dry-run] [--config stable|beta] [--skip-engine]
                         [--skip-notarize] [--identity "<full identity name>"]
-Env: OPEN_SIGN_IDENTITY, OPEN_SPARKLE_TOOLS, OPEN_ENGINE_ROOT,
+                        [--preflight-only]
+Env: OPEN_SIGN_IDENTITY, OPEN_NOTARY_PROFILE (default open-notary),
+     OPEN_SPARKLE_TOOLS, OPEN_SPARKLE_KEY_ACCOUNT (default ed25519),
+     OPEN_SPARKLE_KEY_FILE (optional, instead of Keychain),
+     OPEN_RELEASE_FEED_URL, OPEN_RELEASE_DOWNLOAD_PREFIX, OPEN_ENGINE_ROOT,
      OPEN_BUILD_JOBS (default 6)
 Production requires the completed release prerequisites, an existing Developer ID
 identity and open-notary profile. This script never creates them or publishes.
@@ -33,6 +40,7 @@ while [[ $# -gt 0 ]]; do
         --config) [[ $# -ge 2 ]] || die '--config needs stable or beta'; CHANNEL=$2; shift 2 ;;
         --skip-engine) SKIP_ENGINE=1; shift ;;
         --skip-notarize) SKIP_NOTARY=1; shift ;;
+        --preflight-only) PREFLIGHT_ONLY=1; shift ;;
         --identity) [[ $# -ge 2 && -n "$2" ]] || die '--identity needs a full name'; IDENTITY=$2; shift 2 ;;
         *) die "unknown option: $1" ;;
     esac
@@ -77,19 +85,27 @@ TAG="v$VERSION"
 [[ "$CHANNEL" != beta ]] || TAG="v$VERSION-beta.$BUILD"
 FEED=appcast.xml
 [[ "$CHANNEL" != beta ]] || FEED=appcast-beta.xml
+FEED_URL=${OPEN_RELEASE_FEED_URL:-https://sergeserb2.github.io/open/appcast.xml}
+if [[ "$CHANNEL" == beta ]]; then FEED_URL=${FEED_URL%/*}/appcast-beta.xml; fi
+DOWNLOAD_PREFIX=${OPEN_RELEASE_DOWNLOAD_PREFIX:-https://github.com/SergeSerb2/open/releases/download/$TAG/}
+DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX%/}/
 TOOLS=${OPEN_SPARKLE_TOOLS:-$HOME/Developer/open-release-tools/sparkle-${SPARKLE_PIN:-UNCONFIGURED}/bin}
 MODE=production
 [[ $SKIP_NOTARY == 0 ]] || MODE=NOT-NOTARIZED
-if [[ $DRY == 1 ]]; then MODE=dry-run; IDENTITY=-; fi
+if [[ $DRY == 1 ]]; then MODE=dry-run; IDENTITY=-; KEY_FILE=; fi
 mkdir -p "$STAGE" "$STAMPS"
 [[ ! -L "$REL" && ! -L "$STAGE" && ! -L "$STAMPS" ]] || die 'release directories must not be symlinks'
 mkdir "$REL/.release-lock" 2>/dev/null || die "another release owns $REL/.release-lock; inspect its PID before removing a stale lock"
 printf '%s\n' "$$" > "$REL/.release-lock/pid"
 KEY_DIR=
 MOUNT_DIR=
+PROBE_DIR=
+SMOKE_DIR=
 cleanup() {
     [[ -z "$MOUNT_DIR" ]] || hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || true
     [[ -z "$KEY_DIR" ]] || rm -rf "$KEY_DIR"
+    [[ -z "$PROBE_DIR" ]] || rm -rf "$PROBE_DIR"
+    [[ -z "$SMOKE_DIR" ]] || rm -rf "$SMOKE_DIR"
     rm -f "$REL/.release-lock/pid"
     rmdir "$REL/.release-lock" 2>/dev/null || true
 }
@@ -128,6 +144,7 @@ mode_skip() {
     log "mode-SKIP: $*"
 }
 ready() { [[ -f "$STAMPS/$1.result" ]] && [[ $(cut -f1 "$STAMPS/$1.result") == PASS ]]; }
+engine_available() { ready 02-engine || [[ $DRY == 1 && -f "$STAGE/dev-engine.txt" ]]; }
 reason() { cut -f2- "$STAMPS/$1.result"; }
 row() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$STAGE/acceptance.tsv"; }
 replace_row() {
@@ -179,21 +196,9 @@ if not Path('App/UpdaterController.swift').is_file():missing.append('Step 8 upda
 print('; '.join(missing))
 PY
 )
-# Resolving an existing identity is read-only. Dry runs never query Keychain.
+# All production credentials are explicit inputs. Dry runs never query Keychain.
 TEAM=
-if [[ $DRY == 0 ]]; then
-    identities=$(security find-identity -v -p codesigning)
-    if [[ -z "$IDENTITY" ]]; then
-        candidates=$(printf '%s\n' "$identities" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p')
-        count=$(printf '%s\n' "$candidates" | sed '/^$/d' | wc -l | tr -d ' ')
-        [[ "$count" == 1 ]] || die "expected exactly one Developer ID identity; supply --identity. Candidates: $candidates"
-        IDENTITY=$candidates
-    fi
-    [[ "$IDENTITY" == 'Developer ID Application: '* ]] || die 'production requires a Developer ID Application identity'
-    printf '%s\n' "$identities" | grep -Fq "\"$IDENTITY\"" || die 'requested identity is not installed/valid'
-    TEAM=$(printf '%s\n' "$IDENTITY" | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p')
-    [[ -n "$TEAM" ]] || die 'cannot read Team ID from identity'
-fi
+[[ $DRY == 1 ]] || TEAM=$(printf '%s\n' "$IDENTITY" | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p')
 LOCALES=$(python3 - <<'PY'
 import re
 from pathlib import Path
@@ -211,11 +216,11 @@ official_fw="$SRC/$OUT_DIR_RELEASE/cefclient.app/Contents/Frameworks/Chromium Em
 # The current fork also supports the flat framework layout.
 [[ -f "$official_fw" ]] || official_fw="$SRC/$OUT_DIR_RELEASE/Chromium Embedded Framework.framework/Chromium Embedded Framework"
 source_list="$STAGE/source-inputs.txt"
-git ls-files --cached --others --exclude-standard -- App Helper Engine Packages tools assets docs/release project.yml > "$source_list"
+git ls-files --cached --others --exclude-standard -- App Helper Engine Packages tools assets docs/release/licenses.md docs/release/licenses docs/release/notes project.yml > "$source_list"
 source_hash=$(python3 - "$source_list" <<'PY'
-import hashlib,subprocess,sys
+import hashlib,sys
 from pathlib import Path
-h=hashlib.sha256(subprocess.check_output(['git','rev-parse','HEAD']))
+h=hashlib.sha256()
 for name in sorted(set(Path(sys.argv[1]).read_text().splitlines())):
  p=Path(name);h.update(name.encode())
  if p.is_symlink():h.update(str(p.readlink()).encode())
@@ -223,8 +228,67 @@ for name in sorted(set(Path(sys.argv[1]).read_text().splitlines())):
 print(h.hexdigest())
 PY
 )
-BASE=$(printf '%s\n' "$source_hash" "$MODE" "$CHANNEL" "$SKIP_ENGINE" "$SKIP_NOTARY" "$IDENTITY" "$LOCALES" "$TOOLS" "${OPEN_BUILD_JOBS:-6}" "$prerequisites" "$(digest "$SRC/$OUT_DIR_RELEASE/args.gn" "$official_fw" "$ENGINE_ROOT/.open-engine-state/distrib.txt" "${recorded:-$STAGE/no-distrib}/README.txt" "${recorded:-$STAGE/no-distrib}/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework" "${recorded:-$STAGE/no-distrib}/CREDITS.html" "$ENGINE_ROOT/.open-engine-state/applied.json" "$TOOLS/generate_appcast" "$TOOLS/sign_update")" | shasum -a 256 | awk '{print $1}')
+BASE=$(printf '%s\n' "$source_hash" "$MODE" "$CHANNEL" "$SKIP_ENGINE" "$SKIP_NOTARY" "$IDENTITY" "$NOTARY_PROFILE" "$KEY_ACCOUNT" "$FEED_URL" "$DOWNLOAD_PREFIX" "$(digest "${KEY_FILE:-$STAGE/no-private-key}")" "$LOCALES" "$TOOLS" "${OPEN_BUILD_JOBS:-6}" "$prerequisites" "$(digest "$SRC/$OUT_DIR_RELEASE/args.gn" "$official_fw" "$ENGINE_ROOT/.open-engine-state/distrib.txt" "${recorded:-$STAGE/no-distrib}/README.txt" "${recorded:-$STAGE/no-distrib}/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework" "${recorded:-$STAGE/no-distrib}/CREDITS.html" "$ENGINE_ROOT/.open-engine-state/applied.json" "$TOOLS/generate_appcast" "$TOOLS/sign_update")" | shasum -a 256 | awk '{print $1}')
 CHAIN=$BASE
+# CryptoKit verifies Ed25519 with only the public key, independently of Sparkle's
+# private-key selection. No secret is passed on a command line or printed.
+ensure_verifier() {
+    cat > "$STAGE/verify-ed25519.swift.tmp" <<'SWIFT'
+import Foundation
+import CryptoKit
+do {
+    let args = CommandLine.arguments
+    guard args.count == 3 || args.count == 4 else { throw NSError(domain: "arguments", code: 1) }
+    if args[1] == "public-key" {
+        let text = try String(contentsOfFile: args[2], encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let seed = Data(base64Encoded: text), seed.count == 32 else { throw NSError(domain: "seed", code: 1) }
+        print(try Curve25519.Signing.PrivateKey(rawRepresentation: seed).publicKey.rawRepresentation.base64EncodedString())
+    } else {
+        guard args.count == 4, let key = Data(base64Encoded: args[1]), key.count == 32,
+              let signature = Data(base64Encoded: args[2]), signature.count == 64 else { throw NSError(domain: "encoding", code: 1) }
+        let data = try Data(contentsOf: URL(fileURLWithPath: args[3]), options: .mappedIfSafe)
+        guard try Curve25519.Signing.PublicKey(rawRepresentation: key).isValidSignature(signature, for: data) else { throw NSError(domain: "signature", code: 1) }
+        print("Ed25519 signature verified with the public key")
+    }
+} catch {
+    fputs("Ed25519 public-key verification failed\n", stderr)
+    exit(1)
+}
+SWIFT
+    if [[ ! -x "$STAGE/verify-ed25519" ]] || ! cmp -s "$STAGE/verify-ed25519.swift.tmp" "$STAGE/verify-ed25519.swift"; then
+        mv "$STAGE/verify-ed25519.swift.tmp" "$STAGE/verify-ed25519.swift"
+        xcrun swiftc "$STAGE/verify-ed25519.swift" -o "$STAGE/verify-ed25519"
+    else rm "$STAGE/verify-ed25519.swift.tmp"; fi
+}
+production_key_proof() {
+    local public signature args=()
+    public=$(python3 - 2>/dev/null <<'PY'
+import base64,plistlib
+from pathlib import Path
+p=plistlib.loads(Path('App/Info.plist').read_bytes()).get('SUPublicEDKey','')
+try: key=base64.b64decode(p,validate=True)
+except ValueError: key=b''
+if p=='PASTE_PUBLIC_KEY_FROM_GENERATE_KEYS' or len(key)!=32:
+ raise SystemExit('OPEN_SPARKLE_KEY_ACCOUNT / OPEN_SPARKLE_KEY_FILE: install the real App/Info.plist SUPublicEDKey (docs/release-user-steps.md U-4)')
+print(p)
+PY
+) || die 'OPEN_SPARKLE_KEY_ACCOUNT / OPEN_SPARKLE_KEY_FILE: U-4 public key missing or invalid; see docs/release-user-steps.md U-4'
+    if [[ -n "$KEY_FILE" ]]; then
+        python3 - "$KEY_FILE" "$ROOT" <<'PY' || die 'OPEN_SPARKLE_KEY_FILE must be a mode-600 private file outside the checkout; see docs/release-user-steps.md U-4'
+from pathlib import Path
+import stat,sys
+p=Path(sys.argv[1]).resolve();root=Path(sys.argv[2]).resolve()
+if not p.is_file() or p.is_relative_to(root) or stat.S_IMODE(p.stat().st_mode)&0o077 or p.stat().st_size>4096:raise SystemExit(1)
+PY
+        args=(--ed-key-file "$KEY_FILE")
+    else args=(--account "$KEY_ACCOUNT"); fi
+    PROBE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/open-release-probe.XXXXXX")
+    openssl rand 64 > "$PROBE_DIR/probe"
+    signature=$("$TOOLS/sign_update" "${args[@]}" -p "$PROBE_DIR/probe" 2> "$PROBE_DIR/error") || die 'OPEN_SPARKLE_KEY_ACCOUNT / OPEN_SPARKLE_KEY_FILE: signing key unavailable; see docs/release-user-steps.md U-4'
+    "$STAGE/verify-ed25519" "$public" "$signature" "$PROBE_DIR/probe" || die 'OPEN_SPARKLE_KEY_ACCOUNT / OPEN_SPARKLE_KEY_FILE: private key does not match App/Info.plist SUPublicEDKey; see docs/release-user-steps.md U-4'
+    rm -rf "$PROBE_DIR"; PROBE_DIR=
+    log 'Production Sparkle key matches SUPublicEDKey (signed random probe, public-key verification)'
+}
 run_phase() {
     PHASE=$1
     local fn=$2 extra_input=${3:-} want got stamp="$STAMPS/$1.stamp" result_file="$STAMPS/$1.result" outputs="$STAMPS/$1.outputs"
@@ -255,7 +319,7 @@ run_phase() {
 preflight() {
     [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || die 'macOS arm64 required'
     [[ $(sw_vers -productVersion | cut -d. -f1) -ge 26 ]] || die 'macOS 26 or newer required'
-    for tool in xcodebuild xcodegen python3 ditto hdiutil codesign xcrun curl xmllint openssl swift lipo; do
+    for tool in xcodebuild xcodegen python3 ditto hdiutil codesign xcrun curl xmllint openssl swift lipo node; do
         command -v "$tool" >/dev/null || die "missing $tool"
     done
     xcodebuild -version
@@ -266,25 +330,58 @@ free=shutil.disk_usage(sys.argv[1]).free
 print('Free bytes:',free)
 if free < 5*1024**3: raise SystemExit('at least 5 GB free required')
 PY
-    if [[ $DRY == 0 && $SKIP_NOTARY == 0 ]]; then xcrun notarytool history --keychain-profile open-notary > "$STAGE/notary-history.txt"; fi
-    if [[ -n "$prerequisites" ]]; then
-        [[ $DRY == 1 ]] || die "$prerequisites"
-        log "Dry-run prerequisites not landed: $prerequisites"
+    if [[ $DRY == 0 ]]; then
+        [[ -n "$IDENTITY" ]] || die 'OPEN_SIGN_IDENTITY is required; see docs/release-user-steps.md U-2 (after U-1)'
+        [[ "$IDENTITY" == 'Developer ID Application: '* && -n "$TEAM" ]] || die 'OPEN_SIGN_IDENTITY must name a Developer ID Application certificate; see docs/release-user-steps.md U-2'
     fi
     if [[ ! -x "$TOOLS/generate_appcast" || ! -x "$TOOLS/sign_update" ]]; then
-        [[ $DRY == 1 ]] || die "Step 7 Sparkle tools missing: $TOOLS"
-        log "Step 7 tools unavailable: $TOOLS"
+        die 'OPEN_SPARKLE_TOOLS must contain pinned generate_appcast and sign_update; see docs/release-user-steps.md U-4 (tool setup)'
     else
         "$TOOLS/generate_appcast" --help > "$STAGE/generate_appcast-help.txt"
+        "$TOOLS/sign_update" -h > "$STAGE/sign_update-help.txt"
         for flag in --ed-key-file --download-url-prefix --link --channel; do
             grep -q -- "$flag" "$STAGE/generate_appcast-help.txt" || die "pinned generate_appcast lacks $flag; stop for tool contract drift"
         done
+        grep -q -- --ed-key-file "$STAGE/sign_update-help.txt" || die 'OPEN_SPARKLE_KEY_FILE is unsupported by pinned sign_update; see docs/release-user-steps.md U-4'
     fi
+    python3 - "$FEED_URL" "$DOWNLOAD_PREFIX" <<'PY'
+import sys,urllib.parse
+for name,value in zip(('OPEN_RELEASE_FEED_URL','OPEN_RELEASE_DOWNLOAD_PREFIX'),sys.argv[1:]):
+ u=urllib.parse.urlsplit(value)
+ if len(value)>4096 or any(ord(c)<33 or c in '\"\'<>\\' for c in value) or u.scheme!='https' or not u.hostname or u.username or u.password or u.query or u.fragment:
+  raise SystemExit(name+' must be an HTTPS URL without credentials, query or fragment; see docs/release-user-steps.md U-8 / U-5')
+PY
+    ensure_verifier
+    if [[ $DRY == 0 ]]; then
+        production_key_proof
+        [[ -z "$prerequisites" ]] || die "$prerequisites; source implementation is still required (not a credential)"
+        security find-identity -v -p codesigning | grep -F "\"$IDENTITY\"" >/dev/null || die 'OPEN_SIGN_IDENTITY is not installed/valid; see docs/release-user-steps.md U-2'
+        if [[ $SKIP_NOTARY == 0 ]]; then
+            xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" > "$STAGE/notary-history.txt" 2>&1 || die 'OPEN_NOTARY_PROFILE is unavailable/invalid; see docs/release-user-steps.md U-3'
+        fi
+    fi
+    [[ -z "$prerequisites" ]] || log "Dry-run source limits: $prerequisites"
     printf 'mode=%s\nchannel=%s\nlocales=%s\nprerequisites=%s\n' "$MODE" "$CHANNEL" "$LOCALES" "$prerequisites" > "$STAGE/preflight.txt"
     output "$STAGE/preflight.txt"
+    output "$STAGE/verify-ed25519" "$STAGE/verify-ed25519.swift"
 }
 engine() {
+    rm -f "$STAGE/dev-engine.txt"
     if [[ ! -f "$official_fw" || ! -f "$SRC/$OUT_DIR_RELEASE/args.gn" ]]; then
+        if [[ $DRY == 1 ]]; then
+            [[ -n "$recorded" && -d "$recorded" ]] || die 'OPEN_ENGINE_ROOT has no recorded dev distribution for the local dry run'
+            CEF_SOURCE=fork "$HOME/Library/Caches/OpenRE/scripts/heavy.sh" "$ROOT/tools/fetch-cef.sh"
+            python3 - "$recorded" "$CHROMIUM_COMMIT" "$CEF_COMMIT" <<'PY'
+from pathlib import Path
+import sys
+d=Path(sys.argv[1]);text=(d/'README.txt').read_text()
+if any(pin not in text for pin in sys.argv[2:]):raise SystemExit('dev distrib README commits differ from VERSIONS')
+PY
+            local dev_fw="$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework"
+            cmp "$recorded/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework" "$dev_fw" || die 'dev framework fetch differs from recorded distribution'
+            { printf 'DEV ENGINE ONLY; NOT AN OFFICIAL RELEASE\n'; shasum -a 256 "$dev_fw"; } > "$STAGE/dev-engine.txt"
+            output "$STAGE/dev-engine.txt" "$dev_fw"
+        fi
         mode_skip 'Steps 2/10: official engine output/provenance unavailable; the engine lead owns the build and packaging (PGO must be fetched first). No engine build attempted.'
         return
     fi
@@ -332,7 +429,11 @@ prepare_notes_inputs() {
     # snapshot bytes/mtime when unchanged so an identical run remains a no-op.
     PHASE=03-notes-inputs
     local status fetch_exit=0
-    status=$(curl -sS -L --connect-timeout 5 --max-time 15 -o "$STAGE/current-feed.fetch" -w '%{http_code}' "https://sergeserb2.github.io/open/$FEED" 2>/dev/null) || fetch_exit=$?
+    if [[ $DRY == 1 ]]; then
+        status=local-only
+    else
+        status=$(curl -sS -L --connect-timeout 5 --max-time 15 --max-filesize 4194304 -o "$STAGE/current-feed.fetch" -w '%{http_code}' "$FEED_URL" 2>/dev/null) || fetch_exit=$?
+    fi
     python3 - "$ROOT/build/release" "$REL" "$BUILD" "$CHANNEL" "$MODE" "$FEED" "${status:-offline}" "$fetch_exit" <<'PY'
 from pathlib import Path
 import hashlib,json,sys
@@ -396,34 +497,39 @@ PY
 acknowledgements() {
     require_release_inputs
     if [[ -z "$ENGINE_STAMP" ]]; then mode_skip 'Step 6 OpenEngineStamp is not present in App/Info.plist'; return; fi
-    if ! ready 02-engine; then mode_skip "$(reason 02-engine)"; return; fi
-    python3 tools/generate-acknowledgements.py "$STAGE/credits/Credits.rtf" --text-output "$REL/Acknowledgements.txt" --marketing-version "$VERSION" --build-number "$BUILD" --engine-stamp "$ENGINE_STAMP" --require-cef-credits
+    if ! engine_available; then mode_skip "$(reason 02-engine)"; return; fi
+    local args=()
+    [[ $DRY == 1 ]] || args+=(--require-cef-credits)
+    python3 tools/generate-acknowledgements.py "$STAGE/credits/Credits.rtf" --text-output "$REL/Acknowledgements.txt" --marketing-version "$VERSION" --build-number "$BUILD" --engine-stamp "$ENGINE_STAMP" ${args[@]+"${args[@]}"}
     cp Vendor/cef/CREDITS.html "$REL/CREDITS.html"
     output "$STAGE/credits/Credits.rtf" "$REL/Acknowledgements.txt" "$REL/CREDITS.html"
 }
 app_build() {
-    if ! ready 02-engine; then mode_skip "$(reason 02-engine)"; return; fi
-    if [[ -n "$prerequisites" ]]; then mode_skip "$prerequisites"; return; fi
+    if ! engine_available; then mode_skip "$(reason 02-engine)"; return; fi
+    if [[ -n "$prerequisites" && $DRY == 0 ]]; then die "$prerequisites"; fi
     if ! ready 04-acknowledgements; then mode_skip "$(reason 04-acknowledgements)"; return; fi
     [[ ${OPEN_AUTOMATION:-0} != 1 ]] || die 'OPEN_AUTOMATION must be off for release'
     # No gclient, engine-build, or autoninja. This is the Swift/ObjC++ shell build.
-    OPEN_AUTOMATION=0 CEF_SOURCE=fork OPEN_KEEP_LOCALES="$LOCALES" python3 -c 'import subprocess,sys;sys.exit(subprocess.call(sys.argv[1:],start_new_session=True))' "$ROOT/tools/build.sh" Release
+    OPEN_AUTOMATION=0 CEF_SOURCE=fork OPEN_KEEP_LOCALES="$LOCALES" "$HOME/Library/Caches/OpenRE/scripts/heavy.sh" "$ROOT/tools/build.sh" Release
     rm -rf "$STAGE/built"
     mkdir -p "$STAGE/built"
     ditto "$ROOT/build/Release/Open.app" "$STAGE/built/Open.app"
+    # U-8 can move hosting. Change the staged bundle before signing, never the
+    # developer's source plist or the already signed app.
+    /usr/libexec/PlistBuddy -c "Set :SUFeedURL $FEED_URL" "$STAGE/built/Open.app/Contents/Info.plist"
     cp "$ROOT/build/xcodebuild-Release.log" "$STAGE/app-build.log"
     output "$STAGE/built" "$STAGE/app-build.log"
 }
 bundle_check() {
-    python3 - "$1" "$LOCALES" "$VERSION" "$BUILD" "$CHROMIUM_TAG" "$CEF_COMMIT" "$ENGINE_STAMP" "$SPARKLE_PIN" <<'PY'
+    python3 - "$1" "$LOCALES" "$VERSION" "$BUILD" "$CHROMIUM_TAG" "$CEF_COMMIT" "$ENGINE_STAMP" "$SPARKLE_PIN" "$FEED_URL" <<'PY'
 from pathlib import Path
 import plistlib,re,subprocess,sys
-app,locales,version,build,chromium,cef,stamp,sparkle=sys.argv[1:];a=Path(app)
+app,locales,version,build,chromium,cef,stamp,sparkle,feed_url=sys.argv[1:];a=Path(app)
 p=plistlib.loads((a/'Contents/Info.plist').read_bytes())
 for k,v in [('CFBundleIdentifier','io.github.sergeserb2.open'),('CFBundleShortVersionString',version),('CFBundleVersion',build),('OpenChromiumVersion',chromium),('OpenCEFCommit',cef),('OpenEngineStamp',stamp),('LSMinimumSystemVersion','26.0')]:
  if p.get(k)!=v:raise SystemExit('bundle metadata mismatch: '+k)
 if stamp!=f'Chromium {chromium} · CEF {cef[:7]}':raise SystemExit('engine display stamp differs from VERSIONS')
-if p.get('SUFeedURL')!='https://sergeserb2.github.io/open/appcast.xml':raise SystemExit('unexpected update feed URL')
+if p.get('SUFeedURL')!=feed_url:raise SystemExit('bundle SUFeedURL differs from OPEN_RELEASE_FEED_URL')
 fw=a/'Contents/Frameworks/Chromium Embedded Framework.framework'
 binaries=[a/'Contents/MacOS/Open',a/'Contents/Frameworks/OpenEngine.framework/OpenEngine',fw/'Chromium Embedded Framework']
 for name in ['Open Helper','Open Helper (GPU)','Open Helper (Renderer)','Open Helper (Plugin)','Open Helper (Alerts)']:
@@ -466,6 +572,21 @@ sign_one() {
     [[ "$preserve" == 0 ]] || args+=(--preserve-metadata=entitlements)
     codesign "${args[@]}" "$target"
 }
+# Compare the sealed app and all five helper entitlement dictionaries, rather
+# than grepping for an exception the plugin helper legitimately already has.
+exact_entitlements() {
+    python3 - "$1" "$ROOT" <<'PY'
+import pathlib,plistlib,subprocess,sys
+app,root=map(pathlib.Path,sys.argv[1:])
+pairs=[(app,root/'App/Open.entitlements')]
+for suffix,name in [('', 'Open Helper'),('.gpu','Open Helper (GPU)'),('.renderer','Open Helper (Renderer)'),('.plugin','Open Helper (Plugin)'),('.alerts','Open Helper (Alerts)')]:
+ pairs.append((app/'Contents/Frameworks'/(name+'.app'),root/('Helper/Entitlements/helper'+suffix+'.entitlements')))
+for bundle,source in pairs:
+ actual=plistlib.loads(subprocess.check_output(['codesign','-d','--entitlements','-','--xml',str(bundle)],stderr=subprocess.DEVNULL))
+ if actual!=plistlib.loads(source.read_bytes()):raise SystemExit('entitlement drift: supplemental launch exception must never enter release app or DMG')
+print('Exact committed app/helper entitlements: PASS (no supplemental launch exception)')
+PY
+}
 sign_app() {
     if ! ready 06-hygiene; then mode_skip "$(reason 06-hygiene)"; return; fi
     rm -rf "$STAGE/signed"
@@ -499,6 +620,7 @@ PYKEY
     fi
     sign_one "$a" "$ROOT/App/Open.entitlements"
     codesign --verify --deep --strict --verbose=2 "$a"
+    exact_entitlements "$a"
     codesign -dvv "$a" 2> "$STAGE/signature.txt"
     grep -q runtime "$STAGE/signature.txt" || die 'signature lacks Hardened Runtime'
     if [[ $DRY == 1 ]]; then
@@ -519,7 +641,7 @@ PY
     fi
     for suffix in '' .gpu .renderer .plugin .alerts; do
         case "$suffix" in '') name='Open Helper' ;; .gpu) name='Open Helper (GPU)' ;; .renderer) name='Open Helper (Renderer)' ;; .plugin) name='Open Helper (Plugin)' ;; .alerts) name='Open Helper (Alerts)' ;; esac
-        codesign -d --entitlements - "$frameworks/$name.app" > "$STAGE/helper${suffix:-.generic}.plist"
+        codesign -d --entitlements - --xml "$frameworks/$name.app" > "$STAGE/helper${suffix:-.generic}.plist"
         python3 - "$STAGE/helper${suffix:-.generic}.plist" "$ROOT/Helper/Entitlements/helper$suffix.entitlements" <<'PY'
 import plistlib,sys
 from pathlib import Path
@@ -542,11 +664,11 @@ notarize() {
     fi
     if [[ -f "$failed" && $(cat "$failed") == "$hash" ]]; then die "unchanged $label was rejected previously; inspect saved log and fix it before resubmitting"; fi
     local submit_exit=0
-    xcrun notarytool submit "$target" --keychain-profile open-notary --wait --output-format json > "$receipt" || submit_exit=$?
+    xcrun notarytool submit "$target" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json > "$receipt" || submit_exit=$?
     submission=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("id",""))' "$receipt")
     status=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("status",""))' "$receipt")
     if [[ "$status" != Accepted ]]; then
-        [[ -z "$submission" ]] || xcrun notarytool log "$submission" --keychain-profile open-notary > "$REL/notary-$label-log.json"
+        [[ -z "$submission" ]] || xcrun notarytool log "$submission" --keychain-profile "$NOTARY_PROFILE" > "$REL/notary-$label-log.json"
         printf '%s\n' "$hash" > "$failed"
         die "notary $label status=$status; inspect $receipt and saved log"
     fi
@@ -572,15 +694,17 @@ notarize_app() {
     output "$APP"
 }
 size_check() {
-    python3 - "$@" <<'PY'
+    python3 - "$DRY" "$@" <<'PY'
 from pathlib import Path
 import subprocess,sys
-for arg in sys.argv[1:]:
+for arg in sys.argv[2:]:
  p=Path(arg)
  size=int(subprocess.check_output(['du','-sk',str(p)]).split()[0])*1024 if p.is_dir() else p.stat().st_size
  mb=size/1_000_000
  print(f'{p.name}: {mb:.2f} MB ({size} bytes)')
- if mb>320:raise SystemExit('FAIL: size exceeds 320 MB hard limit')
+ if mb>320:
+  if sys.argv[1]!='1':raise SystemExit('FAIL: size exceeds 320 MB hard limit')
+  print('mode-SKIP: dev-engine dry run exceeds 320 MB; production limit is unchanged')
  if mb>285:print('WARN: size exceeds 285 MB warning threshold')
  if mb>300:print('WARN: above the 300 MB target; within hard limit')
 PY
@@ -634,7 +758,17 @@ PY
         if [[ -f "$(dirname "$previous")/$FEED" ]]; then cp "$(dirname "$previous")/$FEED" "$archives/$FEED"; fi
         log "Delta source: build $previous_build (same $CHANNEL channel)"
     else log 'No predecessor; full DMG only'; fi
-    args=(--download-url-prefix "https://github.com/SergeSerb2/open/releases/download/$TAG/" --link https://sergeserb2.github.io/open/ --embed-release-notes --versions "$BUILD" -o "$archives/$FEED")
+    local download_prefix="$DOWNLOAD_PREFIX" link="${FEED_URL%/*}/" public
+    if [[ $DRY == 1 ]]; then
+        download_prefix=$(python3 - "$REL" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).as_uri()+'/')
+PY
+)
+        link=$download_prefix
+    fi
+    args=(--download-url-prefix "$download_prefix" --link "$link" --embed-release-notes --versions "$BUILD" -o "$archives/$FEED")
     [[ "$CHANNEL" != beta ]] || args+=(--channel beta)
     if [[ $DRY == 1 ]]; then
         KEY_DIR=$(mktemp -d "${TMPDIR:-/tmp}/open-release-key.XXXXXX")
@@ -644,31 +778,45 @@ PY
         openssl rand -base64 32 > "$KEY_DIR/seed"
         chmod 600 "$KEY_DIR/seed"
         args+=(--ed-key-file "$KEY_DIR/seed")
+        public=$("$STAGE/verify-ed25519" public-key "$KEY_DIR/seed")
+        printf '%s\n' "$public" > "$REL/dry-run-public-key.txt"
+    elif [[ -n "$KEY_FILE" ]]; then
+        args+=(--ed-key-file "$KEY_FILE")
+        public=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$ROOT/App/Info.plist")
+    else
+        args+=(--account "$KEY_ACCOUNT")
+        public=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$ROOT/App/Info.plist")
     fi
     "$TOOLS/generate_appcast" "${args[@]}" "$archives"
     [[ -z "$KEY_DIR" ]] || { rm -rf "$KEY_DIR"; KEY_DIR=; }
     xmllint --noout "$archives/$FEED"
-    python3 - "$archives/$FEED" "$BUILD" "$VERSION" "$CHANNEL" "$DMG" <<'PY'
-import base64,sys,xml.etree.ElementTree as E
+    python3 - "$archives/$FEED" "$BUILD" "$VERSION" "$CHANNEL" "$DMG" "$download_prefix" "$public" "$STAGE/verify-ed25519" <<'PY'
+import base64,subprocess,sys,xml.etree.ElementTree as E
 from pathlib import Path
-feed,build,version,channel,dmg=sys.argv[1:];ns='{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+feed,build,version,channel,dmg,prefix,public,verifier=sys.argv[1:];ns='{http://www.andymatuschak.org/xml-namespaces/sparkle}'
 items=[i for i in E.parse(feed).iter('item') if i.findtext(ns+'version')==build]
 if len(items)!=1:raise SystemExit('feed must contain exactly one current-build item')
 i=items[0];e=i.find('enclosure')
 if i.findtext(ns+'shortVersionString')!=version or i.findtext(ns+'minimumSystemVersion')!='26.0':raise SystemExit('feed version/system mismatch')
 if (i.findtext(ns+'channel') or '')!=('beta' if channel=='beta' else ''):raise SystemExit('feed channel mismatch')
-tag=f'v{version}-beta.{build}' if channel=='beta' else f'v{version}'
-expected=f'https://github.com/SergeSerb2/open/releases/download/{tag}/Open-{version}.dmg'
+expected=prefix+f'Open-{version}.dmg'
 if e is None or e.get('url')!=expected or e.get('length')!=str(Path(dmg).stat().st_size):raise SystemExit('feed enclosure URL/length mismatch')
 for enclosure in i.iter('enclosure'):
  sig=enclosure.get(ns+'edSignature','')
  if len(base64.b64decode(sig,validate=True))!=64:raise SystemExit('missing/invalid EdDSA signature')
+ path=Path(dmg) if enclosure is e else Path(feed).parent/Path(enclosure.get('url','')).name
+ subprocess.run([verifier,public,sig,str(path)],check=True)
 if not i.findtext('description') and not i.findtext(ns+'releaseNotesLink'):raise SystemExit('feed has no release notes')
 print('Feed XML, build, marketing, minimum OS, channel, URL, length, signature fields and notes: PASS')
 PY
+    # This verifies the enclosure signature with the independently selected
+    # public key, not merely its base64 shape or the private key's own identity.
+    printf 'PASS: all current-item enclosure Ed25519 signatures verified with public key\n' > "$REL/feed-signature-proof.txt"
     cp "$archives/$FEED" "$REL/$FEED"
     cp "$archives/Open-$VERSION.html" "$REL/Open-$VERSION.html"
     output "$REL/$FEED" "$REL/Open-$VERSION.html"
+    output "$REL/feed-signature-proof.txt"
+    [[ $DRY != 1 ]] || output "$REL/dry-run-public-key.txt"
     local delta found=0
     for delta in "$archives/"*.delta; do
         [[ -f "$delta" ]] || continue
@@ -679,11 +827,17 @@ PY
     if [[ "$found" == 0 ]]; then log 'No delta generated; clients will use the full DMG'; fi
 }
 manifest() {
-    python3 - "$REL" "$VERSION" "$BUILD" "$ENGINE_STAMP" "$MODE" "$CHANNEL" "$IDENTITY" "$TEAM" "$LOCALES" "$SPARKLE_PIN" "$STAMPS" <<'PY'
+    python3 - "$REL" "$VERSION" "$BUILD" "$ENGINE_STAMP" "$MODE" "$CHANNEL" "$IDENTITY" "$TEAM" "$LOCALES" "$SPARKLE_PIN" "$STAMPS" "$NOTARY_PROFILE" "$FEED_URL" "$DOWNLOAD_PREFIX" "$ENGINE_ROOT" <<'PY'
 from pathlib import Path
 import hashlib,json,sys
-rel,version,build,engine,mode,channel,identity,team,locales,sparkle,stamps=sys.argv[1:];r=Path(rel)
-lines=[f'marketing={version}',f'build={build}',f'engine={engine or "UNAVAILABLE (Step 6)"}',f'mode={mode}',f'channel={channel}',f'identity={"ad-hoc (dry run)" if mode=="dry-run" else identity}',f'team={team or "absent (ad-hoc)"}',f'locales={locales}',f'sparkle={sparkle or "UNAVAILABLE (Step 7)"}','notary_profile=open-notary','symbols=LOCAL ONLY - NEVER UPLOAD','dmg_background=Open-owned placeholder; Finder geometry/positions deferred']
+rel,version,build,engine,mode,channel,identity,team,locales,sparkle,stamps,profile,feed_url,prefix,engine_root=sys.argv[1:];r=Path(rel)
+lines=[f'marketing={version}',f'build={build}',f'engine={engine or "UNAVAILABLE (Step 6)"}',f'mode={mode}',f'channel={channel}',f'identity={"ad-hoc (dry run)" if mode=="dry-run" else identity}',f'team={team or "absent (ad-hoc)"}',f'locales={locales}',f'sparkle={sparkle or "UNAVAILABLE (Step 7)"}',f'notary_profile={profile}',f'feed_url={feed_url}',f'download_prefix={prefix}','symbols=LOCAL ONLY - NEVER UPLOAD','dmg_background=Open-owned placeholder; Finder geometry/positions deferred']
+if (r/'.staging/dev-engine.txt').is_file():lines.append('engine_provenance=mode-SKIP: main dev distribution via OPEN_ENGINE_ROOT; not official ThinLTO/PGO')
+lines.append('engine_root='+engine_root)
+dev=r/'.staging/dev-engine.txt'
+if dev.is_file():lines.append('dev_framework_sha256='+dev.read_text().splitlines()[1].split()[0])
+if mode=='dry-run':
+ lines.extend(['launch_smoke=supplemental local-only launch copy, disable-library-validation exception, not the shipped signature','artifact_entitlements=exact committed app/helper files; no supplemental launch exception','exact_artifact_launch=expected dry-run limit: Library Validation refuses OpenEngine; see .staging/exact-launch.json','acknowledgements=local preview only; sample Chromium credits and U-8 source offer remain blocked'])
 if mode!='production':lines.append('notarization=SKIP: '+mode)
 previous=r/'.staging/previous.txt';lines.append('previous_build='+((previous.read_text().splitlines() or ['no predecessor'])[0] if previous.exists() else 'unavailable'))
 for p in sorted(Path(stamps).glob('*.result')):
@@ -692,7 +846,7 @@ for label in ['app','dmg']:
  p=r/('notary-'+label+'.json')
  if p.is_file():
   j=json.loads(p.read_text());lines.append('notary_'+label+'='+j.get('id','')+' '+j.get('status',''))
-for pattern in ['Open-*.dmg','Open-*.dmg.sha256','*.delta','appcast*.xml','Acknowledgements.txt','CREDITS.html','release-notes.md','Open-*.html']:
+for pattern in ['Open-*.dmg','Open-*.dmg.sha256','*.delta','appcast*.xml','Acknowledgements.txt','CREDITS.html','release-notes.md','Open-*.html','dry-run-public-key.txt','feed-signature-proof.txt']:
  for p in sorted(r.glob(pattern)):
   h=hashlib.sha256()
   with p.open('rb') as f:
@@ -711,6 +865,63 @@ PY
 # Exercise only the process launched here. CDP reads the real page; the saved
 # BrowserModel snapshot proves the sidebar tab. Quit is an AppleEvent to its
 # exact PID, with interaction forbidden, never a system UI action.
+onscreen_turn() {
+    python3 - <<'PY'
+from pathlib import Path
+import time
+p=Path('/tmp/open-onscreen-priority')
+while p.exists():
+ try: age=time.time()-p.stat().st_mtime
+ except FileNotFoundError:break
+ if age>=1800:break
+ print('Waiting for on-screen priority owner',flush=True)
+ time.sleep(15)
+PY
+}
+exact_launch_limit() {
+    onscreen_turn
+    /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 - "$APP" "$STAGE" <<'PY'
+from pathlib import Path
+import json,os,subprocess,sys,tempfile
+app,stage=map(Path,sys.argv[1:])
+with tempfile.TemporaryDirectory(prefix='open-exact-launch-') as data:
+ with (stage/'exact-launch.log').open('w') as log:
+  p=subprocess.Popen([str(app/'Contents/MacOS/Open'),'--skip-first-run','--user-data-dir='+data],env=dict(os.environ,OPEN_USER_DATA=data,OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS='1'),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+  try: code=p.wait(timeout=15)
+  except subprocess.TimeoutExpired:
+   p.terminate();p.wait(timeout=10)
+   raise SystemExit('exact-entitlement artifact stayed alive; inspect changed Library Validation behavior')
+ text=(stage/'exact-launch.log').read_text(errors='replace')
+ if code==0 or 'OpenEngine' not in text or not any(s in text for s in ('no Team ID','library validation','Library not loaded','code signature')):
+  raise SystemExit('exact-entitlement launch failed without the expected OpenEngine Library Validation error; inspect exact-launch.log')
+ (stage/'exact-launch.json').write_text(json.dumps({'result':'expected dry-run limit','exit':code,'reason':'Library Validation refuses OpenEngine','signature':'exact committed entitlements'},indent=2)+'\n')
+ print('Expected dry-run limit: exact-entitlement artifact refused OpenEngine (Library Validation); exit',code)
+PY
+}
+supplemental_smoke() {
+    local source=$1 evidence=$2
+    [[ $DRY == 1 ]] || { smoke "$source" "$evidence"; return; }
+    log 'supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
+    SMOKE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/open-release-launch.XXXXXX")
+    ditto "$source" "$SMOKE_DIR/Open.app"
+    python3 - "$ROOT" "$SMOKE_DIR" <<'PY'
+from pathlib import Path
+import plistlib,sys
+root,temp=map(Path,sys.argv[1:])
+for name,source in [('app',root/'App/Open.entitlements')]+[(p.stem,p) for p in (root/'Helper/Entitlements').glob('*.entitlements')]:
+ d=plistlib.loads(source.read_bytes());d['com.apple.security.cs.disable-library-validation']=True
+ (temp/(name+'.entitlements')).write_bytes(plistlib.dumps(d))
+PY
+    local suffix name
+    for suffix in '' .gpu .renderer .plugin .alerts; do
+        case "$suffix" in '') name='Open Helper' ;; .gpu) name='Open Helper (GPU)' ;; .renderer) name='Open Helper (Renderer)' ;; .plugin) name='Open Helper (Plugin)' ;; .alerts) name='Open Helper (Alerts)' ;; esac
+        sign_one "$SMOKE_DIR/Open.app/Contents/Frameworks/$name.app" "$SMOKE_DIR/helper$suffix.entitlements"
+    done
+    sign_one "$SMOKE_DIR/Open.app" "$SMOKE_DIR/app.entitlements"
+    codesign --verify --deep --strict "$SMOKE_DIR/Open.app"
+    smoke "$SMOKE_DIR/Open.app" "$evidence"
+    rm -rf "$SMOKE_DIR"; SMOKE_DIR=
+}
 smoke() {
     local a=$1 evidence=$2
     if [[ ! -x "$STAGE/quit-pid" ]]; then
@@ -731,15 +942,16 @@ int main(int argc,char **argv) {
 OBJC
         clang -framework Carbon "$STAGE/quit-pid.m" -o "$STAGE/quit-pid"
     fi
-    python3 - "$a" "$evidence" "$STAGE/quit-pid" <<'PY'
+    onscreen_turn
+    /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 - "$a" "$evidence" "$STAGE/quit-pid" <<'PY'
 from pathlib import Path
-import json,os,socket,subprocess,sys,tempfile,time,urllib.request
+import json,os,signal,socket,subprocess,sys,tempfile,time,urllib.request
 app,evidence,quit_tool=sys.argv[1:];e=Path(evidence);e.parent.mkdir(parents=True,exist_ok=True)
 data=Path(tempfile.mkdtemp(prefix='smoke-',dir=e.parent)).resolve()
 with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
 result={}
 with e.with_suffix('.log').open('w') as log:
- proc=subprocess.Popen([str(Path(app)/'Contents/MacOS/Open'),'--skip-first-run','--user-data-dir='+str(data),'--open-remote-debugging-port='+str(port),'https://example.com'],env=dict(os.environ,OPEN_USER_DATA=str(data)),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+ proc=subprocess.Popen([str(Path(app)/'Contents/MacOS/Open'),'--skip-first-run','--user-data-dir='+str(data),'--open-remote-debugging-port='+str(port),'https://example.com'],env=dict(os.environ,OPEN_USER_DATA=str(data),OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS='1'),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
  try:
   deadline=time.monotonic()+60
   while time.monotonic()<deadline:
@@ -751,6 +963,11 @@ with e.with_suffix('.log').open('w') as log:
    time.sleep(.25)
   else:raise RuntimeError('example.com title did not arrive')
   result['page_title']='Example Domain'
+  target=next(t for t in targets if t.get('title')=='Example Domain')
+  js='(()=>{const f=new Function("n","let s=0;for(let i=0;i<n;i++)s+=i;return s");let r;for(let j=0;j<10000;j++)r=f(1000);return r===499500})()'
+  node='''const ws=new WebSocket(process.argv[1]);const timeout=setTimeout(()=>{process.exit(2)},10000);ws.onopen=()=>ws.send(JSON.stringify({id:1,method:"Runtime.evaluate",params:{expression:process.argv[2],returnByValue:true}}));ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id===1){clearTimeout(timeout);ws.close();process.exit(m.result?.result?.value===true?0:1)}};'''
+  subprocess.run(['node','-e',node,target['webSocketDebuggerUrl'],js],check=True,timeout=15)
+  result['javascript_dynamic_function_hot_loop']=True
   lines=subprocess.check_output(['ps','-axo','pid=,ppid=,command='],text=True).splitlines();children=set([proc.pid]);commands=[]
   rows=[line.strip().split(None,2) for line in lines]
   for _ in range(8):
@@ -776,6 +993,8 @@ with e.with_suffix('.log').open('w') as log:
    proc.terminate()
    try:proc.wait(timeout=10)
    except subprocess.TimeoutExpired:proc.kill();proc.wait()
+  try:os.killpg(proc.pid,signal.SIGTERM)
+  except ProcessLookupError:pass
 e.write_text(json.dumps(result,indent=2)+'\n');print(e.read_text())
 PY
 }
@@ -789,17 +1008,24 @@ summary() {
         artifact_hash=$(shasum -a 256 "$DMG" | awk '{print $1}')
         [[ ! -f "$STAGE/runtime.sha256" ]] || runtime_hash=$(cat "$STAGE/runtime.sha256")
         if [[ "$runtime_hash" != "$artifact_hash" ]]; then
-            smoke "$APP" "$STAGE/launch.json"
+            exact_entitlements "$APP"
+            [[ $DRY != 1 ]] || exact_launch_limit
+            supplemental_smoke "$APP" "$STAGE/launch.json"
             MOUNT_DIR=$(mktemp -d "$STAGE/mount.XXXXXX")
             hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_DIR" "$DMG"
-            smoke "$MOUNT_DIR/Open.app" "$STAGE/mounted-launch.json"
+            codesign --verify --deep --strict "$MOUNT_DIR/Open.app"
+            exact_entitlements "$MOUNT_DIR/Open.app"
+            supplemental_smoke "$MOUNT_DIR/Open.app" "$STAGE/mounted-launch.json"
             hdiutil detach "$MOUNT_DIR"
             rmdir "$MOUNT_DIR"; MOUNT_DIR=
             printf '%s\n' "$artifact_hash" > "$STAGE/runtime.sha256"
         fi
-        row A-2 PASS 'real page title + saved sidebar tab; PID-targeted clean quit'
-        row A-3 PASS 'renderer and GPU descendants of this launched PID'
+        local launch_label='signed artifact'
+        [[ $DRY != 1 ]] || launch_label='supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
+        row A-2 PASS "$launch_label; real page title, saved sidebar, clean quit"
+        row A-3 PASS "$launch_label; renderer, GPU and JavaScript hot loop"
         codesign --verify --deep --strict "$APP"
+        exact_entitlements "$APP"
         row A-4 PASS "inside-out signatures verified ($MODE)"
         if [[ $DRY == 1 || $SKIP_NOTARY == 1 ]]; then
             row A-5 mode-SKIP "$MODE: no Gatekeeper acceptance claimed"
@@ -809,12 +1035,14 @@ summary() {
             if xcrun stapler validate "$APP" && xcrun stapler validate "$DMG"; then row A-6 PASS 'app + DMG tickets validated'; else row A-6 FAIL 'staple validation failed'; fi
         fi
         size_check "$APP" "$DMG"
-        row A-7 PASS 'within hard size limit; warning/target lines recorded'
+        if grep -q mode-SKIP "$STAGE/sizes.txt"; then
+            row A-7 mode-SKIP 'dev engine exceeds 320 MB; measured sizes recorded; production limit unchanged'
+        else row A-7 PASS 'within hard size limit; warning/target lines recorded'; fi
         bundle_check "$APP"
         row A-8 PASS "exact locale set: $LOCALES"
         row A-9 PASS 'no dSYMs in app'
         row A-10 PASS 'no automation socket string or compilation flag'
-        row A-11 PASS 'read-only DMG mount; actual mounted app launched and quit; detached'
+        row A-11 PASS "DMG verified, mounted, exact entitlements verified, detached; launch: $launch_label"
     else
         local id
         for id in A-2 A-3 A-4 A-7 A-8 A-9 A-10 A-11; do row "$id" mode-SKIP "$(reason 09-dmg)"; done
@@ -822,9 +1050,9 @@ summary() {
         row A-6 mode-SKIP "$MODE; no notarized app/DMG available"
     fi
     if ready 10-appcast; then
-        local feed_status=PASS feed_evidence='XML and current item fields verified; dry-run URLs are not publication evidence'
+        local feed_status=PASS feed_evidence='XML, fields and Ed25519 public-key verification pass; dry-run file:// enclosure points to local DMG'
         if [[ $DRY == 0 && $SKIP_NOTARY == 0 ]]; then
-            local url="https://github.com/SergeSerb2/open/releases/download/$TAG/Open-$VERSION.dmg"
+            local url="${DOWNLOAD_PREFIX}Open-$VERSION.dmg"
             if ! curl -fsIL --connect-timeout 5 --max-time 20 "$url" >/dev/null; then
                 feed_status=FAIL
                 feed_evidence='post-publication enclosure URL is not yet reachable; assets must precede feed'
@@ -841,7 +1069,9 @@ summary() {
         # Native About UI and real update evidence cannot be inferred from text
         # files. The lead records manual/API verification, bound to these bits.
         local receipt="$REL/acceptance.json"
-        if [[ -f "$receipt" ]] && python3 - "$receipt" "$DMG" about <<'PY'
+        if [[ $DRY == 1 ]]; then
+            row A-14 mode-SKIP 'local acknowledgement preview generated; complete Chromium credits, U-8 source offer and native About receipt still required'
+        elif [[ -f "$receipt" ]] && python3 - "$receipt" "$DMG" about <<'PY'
 import hashlib,json,sys
 from pathlib import Path
 p,dmg,kind=sys.argv[1:];j=json.loads(Path(p).read_text())
@@ -908,7 +1138,7 @@ PY
         printf 'git -C %q commit -m %q\n' "$pages" "Publish Open $VERSION ($BUILD) $CHANNEL feed"
         printf 'git -C %q push origin HEAD:gh-pages\n' "$pages"
         printf 'git -C %q worktree remove %q\n' "$ROOT" "$pages"
-        printf 'curl -fsI %q\n' "https://sergeserb2.github.io/open/$FEED"
+        printf 'curl -fsI %q\n' "$FEED_URL"
         log 'Verify enclosure URLs and the real update before announcing. No upload, worktree, commit or tag is run here.'
         log 'release-body.md includes the post-stapling DMG SHA-256; review it before the approved upload.'
     else log "$MODE: local preparation only; no publish commands or trust-root operations"; fi
@@ -917,7 +1147,9 @@ PY
     else result PASS 'all applicable checks pass; mode-SKIP rows are explicitly bounded'; fi
     output "$STAGE/acceptance.tsv"
 }
+if [[ $DRY == 0 ]]; then rm -f "$STAMPS/01-preflight.stamp"; fi
 run_phase 01-preflight preflight
+[[ $PREFLIGHT_ONLY == 0 ]] || { log 'Preflight complete; no build, signing, notary submission or publishing performed'; exit 0; }
 run_phase 02-engine engine
 prepare_notes_inputs
 run_phase 03-version-notes notes "$(digest "$STAGE/notes-live-inputs.json")"
