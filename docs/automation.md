@@ -89,8 +89,9 @@ cleanup. `--tools PATH` selects the pinned tools folder. `--output PATH` selects
 the private JSON receipt (default `.re/updater/results.json`). Install and relaunch
 are not tested; ad-hoc library validation does not qualify a shipped update.
 For a launch receipt, build main and branch Release with `OPEN_AUTOMATION=1`, then
-use `--config Release --main-bundle /path/to/main/Open.app`. Run under quiet,
-heavy, then screen locks at load1 ≤ 12. It alternates main/branch five times and
+use `--config Release --main-bundle /path/to/main/Open.app`. Wait for load1 ≤ 12,
+then take the quiet and screen locks; this pairing needs no heavy slot. Timing
+reruns of `verify-all.sh` take the heavy slot outside the quiet lock. The pairing alternates main/branch five times and
 requires branch median `sidebarDrawn` ≤ main median. Every sample records load.
 
 ## Enable automation
