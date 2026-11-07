@@ -43,7 +43,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path.removeprefix('/') in PAGES:
             self.reply(200, (ROOT / path.removeprefix('/')).read_bytes())
         elif path == '/welcome':
-            self.reply(200, b'<!doctype html><title>Fixture welcome</title><h1 id="welcome">Submitted</h1>')
+            redirect = (b'<script>location.replace("/dashboard")</script>'
+                        if self.headers.get('Host', '').split(':', 1)[0] == 'redirect.example.com' else b'')
+            self.reply(200, b'<!doctype html><title>Fixture welcome</title><h1 id="welcome">Submitted</h1>' + redirect)
+        elif path == '/dashboard':
+            self.reply(200, b'<!doctype html><title>Fixture dashboard</title><h1 id="dashboard">Dashboard</h1>')
         elif path == '/set-cookies':
             self.reply(200, b'<!doctype html><title>Cookies set</title><p>Fixture cookies set.</p>', headers=[
                 ('Set-Cookie', 'oe_persist=fixture; Path=/; Max-Age=86400; HttpOnly'),

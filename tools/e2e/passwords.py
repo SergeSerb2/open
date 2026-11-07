@@ -77,6 +77,7 @@ class PasswordGuard:
             self.results[name] = {'ok': False, 'reason': 'App death or new crash report', 'load': os.getloadavg()}
             raise
         self.results[name] = dict(result, newCrashReports=0, load=os.getloadavg())
+        print(name, result.get('status', 'PASS' if result.get('ok') else 'FAIL'), flush=True)
 
 
 class PasswordBlocked(RuntimeError):
@@ -108,11 +109,12 @@ def run_save_prompts(factory, results, tmp, harness):
         assert gone(), 'save sheet did not close after answer'
 
     def row(name, fn):
+        harness['begin_row'](name)
         try:
             detail = fn() or {}
             results[name] = {'ok': True, **detail}
         finally:
-            app.call('save-prompt', withdraw=True)
+            app.call('save-prompt', withdraw=True, timeout=3)
             assert gone(), 'case cleanup left a save sheet open'
 
     try:
@@ -322,6 +324,7 @@ def run_manage_pages(factory, results, tmp, harness):
         return tab
 
     def row(name, fn):
+        harness['begin_row'](name)
         try:
             results[name] = {'ok': True, **(fn() or {})}
         except Exception:
@@ -434,6 +437,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
     fixture_root = Path(h['ROOT']) / 'tools/e2e/fixtures/passwords'
 
     def row(name, flow, requires=()):
+        h['begin_row'](name)
         guard.check()
         if any(r not in passed for r in requires):
             results[name] = {'status': 'BLOCKED', 'reason': 'requires passing ' + ', '.join(requires)}
@@ -457,8 +461,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         finally:
             if app and not app.closed:
                 try:
-                    app.call('save-prompt', withdraw=True)
-                    app.call('key', key='escape', route='app')
+                    app.call('save-prompt', withdraw=True, timeout=3)
+                    app.call('key', key='escape', route='app', timeout=3)
                 except Exception:
                     guard.check()
 
@@ -601,10 +605,32 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             if 'P-1' not in passed:
                 results['P-1'] = {'ok': False, 'reason': 'real password prompt did not appear'}
 
+            def redirect_prompt():
+                before = app.call('credentials')['logins']
+                events()
+                tab = load(urls['login'].replace('login.example.com', 'redirect.example.com'))
+                try:
+                    fill(tab)
+                    app.call('click', tab=tab, selector='#submit')
+                    assert wait(lambda: app.eval(tab, 'location.pathname === "/dashboard" && document.readyState === "complete" && !!document.querySelector("#dashboard")'), timeout=10, step=.1), 'post-login redirect did not reach the dashboard'
+                    value = wait(lambda: (s if (s := sheet()).get('visible') else None), timeout=5, step=.05)
+                    assert value and value['kind'] == 'password', 'save sheet was withdrawn during post-login navigation'
+                    assert value['title'] == 'Save password for redirect.example.com?'
+                    # Keep the sheet unanswered across another real engine turn.
+                    app.call('ping')
+                    assert sheet().get('visible'), 'save sheet closed before an answer'
+                    assert any(e.get('type') == 'savePrompt' and e.get('answer') == 'pending' for e in events())
+                    app.call('save-prompt', answer='save')
+                    assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05), 'save sheet did not close after its answer'
+                    return dict(counts(logins=before + 1), dashboardLoaded=True, heldUntilAnswered=True)
+                finally:
+                    guard.check()
+                    app.call('close', tab=tab)
             def dropdown():
                 tab = load(urls['login']); identity['refill'] = tab
-                assert empty(tab)
-                windows = popup(tab); assert windows
+                assert empty(tab), 'login fields were filled before a dropdown choice'
+                windows = popup(tab)
+                assert windows, 'specific autofill dropdown did not appear after clicking the username field'
                 # Empty form + masked dropdown; never snapshot filled data.
                 app.call('snapshot', window=windows[0]['number'], path=os.path.join(tmp, 'P-3-dropdown.png'))
                 return {'childWindowVisible': True}
@@ -826,6 +852,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             for policy in ['record', 'save', 'never', 'dismiss']:
                 row('PW-POLICY-'+policy, lambda policy=policy: auto_policy(policy))
 
+            row('P-24-post-login-redirect', redirect_prompt)
+
             def mock_guard():
                 before = app.call('credentials', profile='Default')['logins']
                 relaunch(allow=False)
@@ -867,7 +895,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 assert checked >= 3
                 return {'encryptedCookies': checked, 'plaintextValuesEmpty': True}
             row('C-3', encrypted_cookies, ['C-1'])
-            results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'No synthetic Keychain-error injection API; real Keychain access is prohibited by CHILD-RULES rule 6'}
+            results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'Lead decision: user hand check; no synthetic Keychain-error hook and no real Keychain access in this suite'}
             def https_first_warning(action):
                 if not app.call('credentials')['supportsSecretsImport']:
                     raise PasswordBlocked('running engine has no 08xx capability (supportsSecretsImport is false)')
