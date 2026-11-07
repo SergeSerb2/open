@@ -21,6 +21,7 @@ import argparse
 import atexit
 import base64
 import ctypes
+import contextlib
 import json
 import math
 import glob
@@ -430,6 +431,43 @@ def new_tab(app, url, **kw):
     except RuntimeError:
         pass
     return t["id"]
+
+
+@contextlib.contextmanager
+def passwords_fixture_server():
+    """Own one loopback server/ephemeral port; share URLs and engine switches.
+
+    Pass ``engine_switches`` as factory(extra_args=...). CEF receives the
+    App's argv (OEEngine.mm, CefMainArgs), in addition to additionalSwitches.
+    No form values or HTTP headers are logged by the server.
+    """
+    import select
+    server = os.path.join(ROOT, 'tools/e2e/fixtures/passwords/server.py')
+    proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0'],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    try:
+        if not select.select([proc.stdout], [], [], 10)[0]:
+            raise RuntimeError('passwords fixture server startup timed out')
+        port = int(proc.stdout.readline().strip())
+        local = 'http://localhost:%d' % port
+        login = 'http://login.example.com'
+        yield {'port': port, 'login': login + '/login.html',
+               'change': login + '/change.html', 'signup': login + '/signup.html',
+               'iframe': 'http://other.example.com/iframe.html',
+               'address': login + '/address.html', 'card': local + '/card.html',
+               'webauthn': local + '/webauthn.html', 'basic': login + '/basic',
+               'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
+               'local_login': local + '/login.html',
+               'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
+                                   '--no-proxy-server']}
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        proc.stdout.close()
 
 
 def frame(f):
@@ -11364,7 +11402,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords-probe"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--keep", action="store_true",
@@ -11386,6 +11424,8 @@ def main():
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
         ap.error("--only is required unless --engine-fingerprint-only is set")
+    if opts.only == 'passwords-probe' and opts.style != 'chrome':
+        ap.error('passwords-probe requires --style chrome')
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
         ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
@@ -11397,6 +11437,8 @@ def main():
     # its name is unique per run, so the cache root is too.
     # Keep AF_UNIX's 104-byte sun_path limit with this suite's longer name.
     root_kind = "sidebarc" if opts.only == "sidebar-completion" else opts.only
+    if opts.only == 'passwords-probe':
+        root_kind = 'pwprobe'  # Leave room for automation.sock in macOS sun_path.
     run_name = "Open-E2E-%s-%s-%d-%s" % (root_kind, opts.style, os.getpid(), os.urandom(4).hex())
     sweep_stale_runs()
     user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
@@ -11551,6 +11593,8 @@ def main():
                          'embeddedSHA256': embedded_sha, 'distributionSHA256': vendor_sha,
                          'requiredSHA256': opts.engine_sha256 or '',
                          'embeddedCodeSHA256': embedded_code_sha, 'distributionCodeSHA256': vendor_code_sha}
+    if opts.only == 'passwords-probe':
+        results['engine']['stamp'] = 'fork main recorded distribution' if stamp.startswith('fork ') else 'unconfirmed'
     if embedded_code_sha != vendor_code_sha or (opts.engine_sha256 and vendor_sha != opts.engine_sha256):
         sys.exit('ENGINE_FINGERPRINT_MISMATCH before app launch: expectedVendor=%s vendor=%s embeddedCode=%s vendorCode=%s' %
                  (opts.engine_sha256, vendor_sha, embedded_code_sha, vendor_code_sha))
@@ -11559,7 +11603,11 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "firstrun":
+        if opts.only == 'passwords-probe':
+            results[opts.only] = {}
+            results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
+                sys.modules[__name__], factory, results[opts.only], tmp)
+        elif opts.only == "firstrun":
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
             # sys.path. Load this owned sibling by its exact repository path.
@@ -11689,7 +11737,8 @@ def main():
                 app.quit()
 
     interrupted_attempts = []
-    for attempt in range(1, 4):
+    # Never replay a potentially crashing probe row after foreground loss.
+    for attempt in range(1, 2 if opts.only == 'passwords-probe' else 4):
         tracker = FocusTracker()
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
@@ -11720,9 +11769,9 @@ def main():
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
                                          checks=dict(results.get(opts.only, {}))))
         print("%s attempt %d INTERRUPTED: %s" % (opts.only, attempt, interruption["reason"]), flush=True)
-        if attempt == 3:
+        if attempt == 3 or opts.only == 'passwords-probe':
             dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
-                "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": 3})
+                "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": attempt})
         elif opts.focus_retry_delay_seconds:
             print("retrying interrupted foreground flow in %ds" % opts.focus_retry_delay_seconds, flush=True)
             remaining = opts.focus_retry_delay_seconds
@@ -11733,7 +11782,8 @@ def main():
     results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
-    name = ("results-actions-p2.json" if opts.only == "actions" else
+    name = ('results-passwords-probe.json' if opts.only == 'passwords-probe' else
+            "results-actions-p2.json" if opts.only == "actions" else
             "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
@@ -11747,6 +11797,10 @@ def main():
     print("wrote", os.path.join(OUT, name))
     failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
+    if opts.only == 'passwords-probe':
+        failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
+        if any(v.get('status') in ('NOT_RUN', 'UNVERIFIED') for v in results[opts.only].values()):
+            failures.append('probe-incomplete')
     if failures or not results["cleanup"]["ok"]:
         sys.exit(1)
     if any(isinstance(v, dict) and v.get("status") == "INTERRUPTED" for v in results.get(opts.only, {}).values()):

@@ -1052,3 +1052,13 @@ checks that returning to the start mode adds no action. Width commits and the
 hidden-gesture notification remain mouse-up effects. The `window` and `sidebar`
 suites set the hide-hint flag to a fixed value at each attempt and restore its
 pre-launch value (including absence) in `finally`.
+
+## Passwords Step 0 probe
+
+Run `python3 -I tools/e2e/engine_e2e.py --config Debug --style chrome --only passwords-probe`
+under the on-screen lock, after the shared priority check. Export the current
+`OPEN_ENGINE_ROOT` as for builds. This uses only temporary App data and the
+mock Keychain. It records PR-1 through PR-9 as observations, with per-row App
+liveness and new-crash-report checks. It saves no screenshots or secret values.
+The reusable fixture server and URL/switch dictionary are documented in
+[the fixtures README](../tools/e2e/fixtures/passwords/README.md).
