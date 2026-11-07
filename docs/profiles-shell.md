@@ -101,9 +101,15 @@ forced termination. All temporary source breaks were restored before the
 final builds.
 
 The merged full gate passes 23 of 24 checks. Its command-bar timing rows
-150/151 need the focused quiet rerun: CPU p95 8.63 ms (8 ms budget), inline
-increment 0.471 ms (0.3 ms budget), load 19.5 / 30.9 / 35.5. The lead's
-18:01 quiet-window ruling holds that rerun until "quiet window over".
+150/151 failed at CPU p95 8.63 ms (8 ms budget), inline increment 0.471 ms
+(0.3 ms budget), load 19.5 / 30.9 / 35.5. After the lead ended the quiet
+window, one strict focused rerun passed all 151 checks: CPU p95 6.81 ms,
+inline increment -0.042 ms, measurement load 7.4 / 7.9 / 14.4. It ran under
+the quiet lock and Section 10 wrapper; build 2 s, check 37 s, load start
+5.05 / 7.73 / 14.67 and end 7.41 / 7.89 / 14.40. All 24 verify-all checks
+now pass across the full run and its focused closure. No threshold or
+baseline changed. Every command-bar attempt and its load is recorded in
+[acceptance.json](profiles-shell/acceptance.json).
 
 Native light/dark 1x captures cover the header at rest/hover, Space Manager
 and Little Open's custom Profile icon. `header-render-*@1x.png` and

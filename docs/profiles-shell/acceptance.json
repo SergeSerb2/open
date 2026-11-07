@@ -247,6 +247,53 @@
   },
   "runtime": "Chromium 156, Chrome style, Debug, M5 native 1x",
   "verification": {
+    "commandbarAttempts": [
+      {
+        "cpuP95Ms": 9.01,
+        "inlineIncrementP95Ms": 0.231,
+        "load": [
+          32.9,
+          35.4,
+          33.9
+        ],
+        "result": "FAIL",
+        "run": "17:07 full, before final main merge"
+      },
+      {
+        "cpuP95Ms": 8.27,
+        "inlineIncrementP95Ms": 0.267,
+        "load": [
+          35.1,
+          40.6,
+          34.1
+        ],
+        "result": "FAIL",
+        "run": "17:44 full, before incognito integration"
+      },
+      {
+        "cpuP95Ms": 8.63,
+        "inlineIncrementP95Ms": 0.471,
+        "load": [
+          19.5,
+          30.9,
+          35.5
+        ],
+        "result": "FAIL",
+        "run": "17:56 merged full"
+      },
+      {
+        "cpuP95Ms": 6.81,
+        "inlineIncrementP95Ms": -0.042,
+        "load": [
+          7.4,
+          7.9,
+          14.4
+        ],
+        "result": "PASS",
+        "run": "18:32 strict quiet focused"
+      }
+    ],
+    "finalResult": "24 PASS; 0 FAIL; 0 SKIP: 23 checks in the full run, commandbar-render in the strict quiet focused rerun",
     "full": [
       {
         "name": "build",
@@ -438,6 +485,33 @@
         }
       }
     },
-    "timingRerun": "HELD by lead quiet window 18:01"
+    "timingRerun": {
+      "buildErrors": 0,
+      "buildSeconds": 2,
+      "buildWarnings": 0,
+      "checkSeconds": 37,
+      "command": "/usr/bin/lockf -k /tmp/open-m5-quiet.lock /Users/serge/.t3/projects/open/.re/s10/s10-heavy.sh tools/verify-all.sh --only commandbar-render --keep-logs",
+      "cpuP95Ms": 6.81,
+      "inlineIncrementP95Ms": -0.042,
+      "loadEnd": [
+        7.41,
+        7.89,
+        14.4
+      ],
+      "loadStart": [
+        5.05,
+        7.73,
+        14.67
+      ],
+      "measurementLoad": [
+        7.4,
+        7.9,
+        14.4
+      ],
+      "passed": 151,
+      "result": "PASS",
+      "strictBudgetsUnchanged": true,
+      "total": 151
+    }
   }
 }
