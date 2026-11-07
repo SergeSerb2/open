@@ -15,6 +15,10 @@ from extensions_p3 import pack_probe
 
 
 def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions):
+    from profiles_extensions import run as profiles_extensions
+    profiles_extensions(factory, results, tmp, root, wait_until)
+    if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") in ("profiles", "profiles-memory"):
+        return
     class Progress:
         def __init__(self, target): self.target = target
         def __setitem__(self, key, value):
@@ -23,7 +27,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             print(key, recorded.get("status", "PASS" if recorded.get("ok") else "FAIL"), flush=True)
         def __getitem__(self, key): return self.target[key]
     results = Progress(results)
-    app = factory(urls=("about:blank",))
+    app = factory(urls=("about:blank",), fresh=True)
     saved = {}
     bindings = Path(app.user_data) / "State/keybindings.json"
     previous_bindings = bindings.read_bytes() if bindings.exists() else None

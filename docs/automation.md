@@ -71,6 +71,29 @@ OPEN_USER_DATA="$first_run_root" \
 Use a synthetic source folder for this check. Quit the App before removing
 the temporary root.
 
+## Profile context reads
+
+`engine-contexts` returns the sorted identifiers of live engine contexts,
+including Default. It works after the last standard window closes.
+`focusedBrowser` reads, extension/menu scans, and Settings shortcut-conflict
+reads do not load a Profile. A real focus change can attach a window Browser
+only when that Profile context is already loaded.
+
+Automation extension, popup, permission, script, filter and download commands
+use existing Browsers by default. Pass `create: true` only when a test intends
+an extension or site interaction to load the focused Profile. Unloaded read
+lists are empty (`extensions.loaded` is false); mutations that need a Browser
+return a not-loaded error. Notification reads likewise use an existing context.
+A pending Little Open window never borrows a standard window's Browser.
+
+The real-App `extensions-ui` suite includes `P10_*` rows for empty-Space focus,
+Settings/read laziness, two-window Profile actions, key-window menus and
+shortcuts, Work popups/management, context reuse, Little Open, unloaded
+Profile deletion and five-second quit cleanup. `OPEN_E2E_EXTENSIONS_UI_SCOPE=profiles`
+selects these rows alone. `profiles-memory` selects five fresh two-Profile
+launches and the existing OS idle CPU sampler; see [the receipt](profiles-memory.md).
+Both modes reset and restore their shared defaults keys in `finally`.
+
 ## Protocol
 
 One JSON object per line in each direction.

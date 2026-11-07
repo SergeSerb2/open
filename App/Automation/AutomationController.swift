@@ -91,6 +91,9 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "engine-contexts":
+        guard app.engineReady else { return [] as [String] }
+        return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
       case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
@@ -778,10 +781,12 @@
 
       // Extensions.
       case "extensions":
-        let browser = try focusedBrowser(w)
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
+          return ["loaded": false, "ready": false, "duplicatesDropped": 0, "installed": [], "actions": []] as [String: Any]
+        }
         if a["refresh"] as? Bool == true { browser.context.extensions.reload() }
         return [
-          "ready": browser.context.extensions.isReady,
+          "loaded": true, "ready": browser.context.extensions.isReady,
           "duplicatesDropped": w.extensions.host?.duplicatesDropped ?? 0,
           "installed": browser.context.extensions.installedExtensions.map(describe),
           "actions": browser.extensionActions.map { action in
@@ -793,7 +798,7 @@
         ]
       case "popup":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
-        let browser = try focusedBrowser(w)
+        let browser = try focusedBrowser(w, create: a["create"] as? Bool ?? false)
         guard EngineExtensionHost(browser).executeAction(extensionID: id), let popup = browser.extensionPopup else {
           throw Failure(message: "action did not open a popup")
         }
@@ -803,16 +808,18 @@
         }
         return describe(popup, in: w)
       case "popup-close":
-        try focusedBrowser(w).closeExtensionPopup()
+        try focusedBrowser(w, create: a["create"] as? Bool ?? false).closeExtensionPopup()
         return true
 
       // Toolbar actions from Chrome's model (fork patch P2).
       case "actions":
-        let browser = try focusedBrowser(w)
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
+          return ["loaded": false, "ready": false, "actions": []] as [String: Any]
+        }
         return ["ready": browser.extensionActionsReady, "actions": browser.extensionActions.map(describe)] as [String: Any]
       case "ext-pin":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
-        let browser = try focusedBrowser(w)
+        let browser = try focusedBrowser(w, create: a["create"] as? Bool ?? false)
         browser.setExtensionAction(id, pinned: a["pinned"] as? Bool ?? true)
         if let index = a["index"] as? Int {
           guard index >= 0, index < 512 else { throw Failure(message: "invalid pinned index") }
@@ -827,7 +834,7 @@
         if a["engine"] as? Bool == true {
           // C5's boundary checks deliberately exercise engine refusal before
           // the App clamps a native drag's destination.
-          try focusedBrowser(w).moveExtensionAction(id, toPinnedIndex: UInt(index))
+          try focusedBrowser(w, create: a["create"] as? Bool ?? false).moveExtensionAction(id, toPinnedIndex: UInt(index))
         } else { w.extensions.host?.movePinned(extensionID: id, to: index) }
         return true
       case "ext-run":
@@ -835,7 +842,7 @@
         try focusActionPane(a, w)
         let source: OEBrowser.ExtensionActionSource =
           switch a["source"] as? String { case "menu": .menuEntry; case "command": .command; default: .toolbarButton }
-        return try focusedBrowser(w).executeExtensionAction(id, source: source)
+        return try focusedBrowser(w, create: a["create"] as? Bool ?? false).executeExtensionAction(id, source: source)
       case "ext-menu":
         // The action's context menu: its items, or select one by title.
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
@@ -843,7 +850,7 @@
         if a["keep"] as? Bool != true, a["stale"] as? Bool != true, a["snapshot"] as? Bool != true {
           return try await runExtensionUICommand("ext-ui-menu", a, w)
         }
-        let browser = try focusedBrowser(w)
+        let browser = try focusedBrowser(w, create: a["create"] as? Bool ?? false)
         guard let menu = browser.contextMenu(forExtensionAction: id, source: a["source"] as? String == "menu" ? .menuItem : .toolbarAction)
         else { throw Failure(message: "no menu") }
         func items(_ list: [OEContextMenuItem]) -> [[String: Any]] {
@@ -879,8 +886,7 @@
         }
         return listed
       case "ext-popup":
-        let browser = try focusedBrowser(w)
-        guard let popup = browser.extensionPopup else { return ["open": false] as [String: Any] }
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false), let popup = browser.extensionPopup else { return ["open": false] as [String: Any] }
         return ["open": true, "page": describe(popup, in: w), "extension": browser.extensionPopupExtensionIdentifier ?? "",
                 "source": ["user", "command", "api"][browser.extensionPopupSource.rawValue],
                 "staysOpenOnBlur": browser.extensionPopupStaysOpenOnBlur] as [String: Any]
@@ -1147,10 +1153,13 @@
         if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
         return w.pageChrome.permissions.state
       case "permission-decisions":
-        let store = SitePermissionStore.forContext(try focusedBrowser(w).context)
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
+          return ["ready": false, "decisions": []] as [String: Any]
+        }
+        let store = SitePermissionStore.forContext(browser.context)
         return ["ready": store.indexReady, "decisions": store.allDecisions().map { ["origin": $0.origin.absoluteString, "kind": $0.kind.rawValue, "state": $0.state.rawValue] }]
       case "script-add":
-        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.addUserScript(
           UserScript(
             id: a["id"] as? String ?? UUID().uuidString, source: a["source"] as? String ?? "",
@@ -1160,12 +1169,12 @@
             mainFrameOnly: !(a["allFrames"] as? Bool ?? false)))
         return profile.userScripts.map(\.id)
       case "script-remove":
-        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.removeUserScript(id: a["id"] as? String ?? "")
         return profile.userScripts.map(\.id)
       case "filter":
         let patterns = a["block"] as? [String] ?? []
-        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         blockCounter.reset()
         if patterns.isEmpty {
           profile.setRequestFilter(nil)
@@ -1184,7 +1193,7 @@
         return blockCounter.snapshot()
       case "permission":
         let origin = try url(a, "origin")
-        let context = try focusedBrowser(w).context
+        let context = try focusedBrowser(w, create: a["create"] as? Bool ?? false).context
         let rawKind = a["kind"] as? Int ?? 0
         guard let bits = UInt32(exactly: rawKind) else { throw Failure(message: "invalid permission kind") }
         let kind = OEPermissionKind(rawValue: bits)
@@ -1197,7 +1206,7 @@
         w.downloadDirectory = URL(fileURLWithPath: a["path"] as? String ?? NSTemporaryDirectory())
         return true
       case "downloads":
-        return try focusedBrowser(w).context.downloads.map {
+        return (w.focusedBrowser(create: a["create"] as? Bool ?? false)?.context.downloads ?? []).map {
           [
             "id": $0.identifier, "state": $0.state.rawValue, "received": $0.receivedBytes, "total": $0.totalBytes,
             "path": $0.destinationURL?.path ?? "", "url": $0.sourceURL.absoluteString,
@@ -1258,8 +1267,8 @@
       return page
     }
 
-    func focusedBrowser(_ w: EngineWebContentHostFactory) throws -> OEBrowser {
-      guard let b = w.focusedBrowser else { throw Failure(message: "no browser") }
+    func focusedBrowser(_ w: EngineWebContentHostFactory, create: Bool = false) throws -> OEBrowser {
+      guard let b = w.focusedBrowser(create: create) else { throw Failure(message: "profile browser is not loaded (use create: true for an explicit interaction)") }
       return b
     }
 
