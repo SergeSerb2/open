@@ -60,8 +60,9 @@ keeps live Space metadata, Profile assignments, item order, and selections.
 It merges search-engine fields only when selected. Equal routing rule bodies
 are duplicates even when the source importer assigns a new rule ID; the live
 default destination stays authoritative. Source objects are unchanged.
-Structural edits emit precise insert/remove events; new containers emit
-reloads. The caller's synchronous snapshot save is part of the command.
+Structural edits coalesce into one reload per changed parent after the merge,
+rollback or model Undo/Redo. The caller's synchronous snapshot save is part
+of the command.
 Failure reverses the edits and registers no undo. Success registers one undo
 step for the sidebar/search/routing merge. The App captures that inverse in
 a private UndoManager and registers one native import action with committed
@@ -379,6 +380,10 @@ Existing imported visits and ordinary visits with equal URL/time/transition
 remain. Redo imports the receipt and keeps its new row IDs for the next Undo.
 Each native Undo/Redo handler retains its receipt until that action leaves the
 stack. A no-op repeat creates no action and does not release earlier receipts.
+Settings merge, rollback and model Undo/Redo coalesce structural notifications
+into one reload per changed parent after the synchronous edit. Observers see
+the final graph, avoiding a sidebar rebuild and engine mirror sync for every
+imported item.
 No SQLite schema migration is needed. Model Undo includes imported Profiles;
 physical directories and loaded engine contexts remain Section 10's boundary.
 An Undo during an awaited batch stops later batches. Store Undo/Redo waits
@@ -401,8 +406,9 @@ outstanding ping and a 5 ms interval. The timer stops on every return path.
 pending store Undo. The `import-robust` suite checks both repeat paths,
 source failures, partial success and Undo, plus a 6-Space/2-Profile fixture
 with 1,200 added tabs, 2,000 Archive rows and 100,000 History visits.
-Real-App acceptance and negative proofs are pending the shared macOS crash
-dialog. See [robustness verification](import-robustness.md).
+The real-App suite covers functional rows, 27 negative proofs, Release phase
+lag and idle work. Current engine receipts and the full verifier table are
+recorded in draft #224. See [robustness verification](import-robustness.md).
 
 The upsert skips unchanged or empty replacement titles. This preserves the specified title result and avoids redundant FTS trigger work. The first F2 run, before this guard, failed the timing gate at 3.307 s. The final streaming implementation passed at 1.443 s. Re-import updates no visit count by hand and inserts no duplicate visit.
 

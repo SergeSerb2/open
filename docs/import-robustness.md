@@ -1,9 +1,9 @@
 # Import robustness and Undo
 
 C4 is draft [#224](https://github.com/SergeSerb2/open/pull/224) on
-`s14/robustness`. It includes main through `09d6c189` (#221, #216, #217 and
-#220). The App Boosts seam counts source records and stores none; Boosts
-therefore have no import Undo receipt.
+`s14/robustness`. It includes main through `7f405f3b` (#221, #216/#217, #220, #204, #225,
+#219, #226, #222 and #227). The App Boosts seam stores no data. Extension
+installs keep their separate queue. Neither is part of import Undo.
 
 ## Behavior
 
@@ -35,6 +35,11 @@ and their Undo receipts. The first-run failure screen adds a `Spaces:` value
 under its existing heading. Settings and first run preserve the actual failure
 value instead of replacing every failure with the same text.
 
+Settings merge, rollback and native Undo/Redo publish one structural reload
+per changed parent after the synchronous edit. Sidebar and engine observers
+read the final graph once per parent. The model still uses each item's stable
+ID and keeps the same one-step Undo.
+
 The utility worker prepares optional JSON and Archive value records/payloads.
 The main actor still constructs and merges the live sidebar model. Automation
 builds alone run a 5 ms background main-queue watchdog, with one outstanding
@@ -42,9 +47,9 @@ ping. It records the overall maximum and each import phase's maximum and duratio
 The watchdog stops on every exit. No debugger or external process probe
 is used.
 
-## Checks run on the M5
+## Earlier CLI receipts (historical engine)
 
-All App builds and verifiers used engine root `open-engine-s8-main`, recorded
+The earlier child's builds and verifiers used engine root `open-engine-s8-main`, recorded
 framework SHA-256
 `af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`.
 They ran under Section 14 token B, then `heavy.sh`. CLI timing took the quiet
@@ -91,64 +96,68 @@ expected CLI error and exit 4. Source locks never touched the user's Arc files.
 
 ## Real-App verification
 
-The 12:00:53 pre-fix crash followed a no-op Settings re-import and native
-Cmd+Z. Its report is `Open-2026-11-07-120053.ips` in DiagnosticReports:
-`ZombieObjectCrash` → `CrZombie forwardingTargetForSelector:` →
+Before-fix crash evidence is
+`/Users/serge/Library/Logs/DiagnosticReports/Open-2026-11-07-120053.ips`:
+EXC_BAD_ACCESS after a no-op Settings re-import and native Cmd+Z.
+The stack is `ZombieObjectCrash` → `CrZombie forwardingTargetForSelector:` →
 `swift_getObjectType` → `_NSUndoStack popAndInvoke` →
-`NSUndoManager undoNestedGroup`. The Undo manager did not retain its target,
-and the next import had replaced the runner's only strong receipt reference.
-The handler now retains the receipt. The crashing build was not rerun.
+`NSUndoManager undoNestedGroup`. The Undo manager did not retain its target.
+Each action now retains its receipt. The crashing build was not rerun.
 
-The merged-head Debug suite passed all 24 functional rows, including import →
-no-op repeat → Cmd+Z → Cmd+Z → Cmd+Shift+Z, and two real imports undone in
-order. History and idle passed. Debug main lag failed under load; Release
-qualification remains pending. Every one of the 27 negative rows failed with
-its original assertion, and owned-process/window cleanup passed. Current
-private receipts are in `.re/c4b/`; the table above retains the earlier child's
-CLI and interrupted-run history.
-
-`tools/e2e/import_robust.py`, registered as `--only import-robust`, covers:
+`tools/e2e/import_robust.py` runs through the real App. It covers:
 
 - Settings twice and first run → Settings, with all category counts.
-- First-run and all-parts Undo/Redo; re-import after Undo; quit during pending
-  store Undo; Undo/Redo during a pending History batch; existing-row and title
-  retention.
-- Missing folder/sidebar, unreadable folder, truncated/invalid sidebar, missing
-  History, unsupported schema, corrupt Archive, missing Profile, unreadable
-  WAL, and a readable WAL under a writer lock.
-- Partial Archive/History failure with successful sidebar and other-Profile
-  History, followed by Undo.
-- The large fixture, App History ≤1,400 ms (plan hard limit 3,000 ms), maximum
-  main lag <50 ms, and stable stores/snapshot counters plus CPU <1% after
-  ten seconds of idle time.
+- Import → no-op repeat → Cmd+Z → Cmd+Z → Cmd+Shift+Z, plus two real
+  imports undone in order. Each row checks state and continued App replies.
+- First-run and all-parts Undo/Redo, repeat after Undo, pending-batch Undo/Redo,
+  quit during store Undo, exact visit identity, and newer title retention.
+- Missing folder/sidebar/History/Profile, unreadable sources, truncated or
+  invalid JSON, unsupported History schema, corrupt Archive, unreadable WAL,
+  and a readable committed WAL under a held writer.
+- Partial failure with successful parts followed by Undo.
+- Six Spaces × 200 tabs, 2,000 Archive rows, 2 Profiles, 5,000 URLs and
+  100,000 visits. History target is 1,400 ms (plan hard limit 3,000 ms),
+  observed main-thread lag stays below 50 ms, and idle CPU stays below 1%.
+  Ten seconds after import, store files and save/snapshot/mirror counters
+  must stay fixed and the automation watchdog must be inactive.
 
-Each row retains its original assertion in negative mode. The fixture, input,
-App actions or automation delay breaks that condition. The complete negative proof passed. The
-forced early-sheet failure cleanup passed with a graceful quit and zero owned
-windows/processes. The merged-head full first-run suite passed 69 rows; six existing Boosts
-persistence gates remain BLOCKED on Section 12. The separate focused
-multi-profile rerun is waiting for the screen. The suite resets its
-used defaults at launch and restores them in `finally`; each launch has a
-synthetic source and a temporary Open data root.
+On engine `d94583ef`, after notification batching, all 27 positive rows and
+all 27 negative proofs completed. Negative mode breaks the fixture or action
+and retains each original assertion. A forced failure with the actual Settings
+sheet open proved graceful cleanup and zero owned windows/processes.
+The full first-run suite passed 86 rows and focused multi-profile passed 17.
+Six inherited Boosts persistence gates and the extension-engine completion
+remain BLOCKED; the latter belongs to the full extension flow.
+All successful receipts had zero interrupted attempts and clean shutdown.
 
-Once the foreground and priority checks permit screen use, run each suite in
-its own on-screen lock invocation:
+The first negative attempt had a launch-readiness failure after five intended
+failures. Its complete retry produced all 27 intended failures. The first
+merged extension run reached 50 passing rows, then hit a sibling-module import
+error under Python's isolated mode. The helper now loads its owned sibling by
+exact path; the complete 86-row rerun passed. Both original receipts remain.
 
-```sh
-/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --only import-robust
-OPEN_E2E_IMPORT_ROBUST_NEGATIVE=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --only import-robust
-OPEN_E2E_IMPORT_ROBUST_EARLY_FAILURE=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --only import-robust
-/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --only firstrun
-OPEN_E2E_FIRSTRUN_MULTIPROFILE_ONLY=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --only firstrun
-```
+Release on `d94583ef` established the real sidebar stall before batching:
+80.25 ms overall and 77.09 ms in sidebar landing at load 6.72/9.05/12.96.
+There were 1,217 structural callbacks and 1,218 engine mirror syncs. Batching
+reduces these to 15 and 16. The batched Debug App on the same engine measured
+25.50 ms overall and 15.26 ms in sidebar landing at load 5.60/7.03/7.28;
+100,000 visits took 713.67 ms. Idle CPU was 0.200%, with zero changed stores
+and stable counters at load 5.24/6.88/7.22.
 
-The negative and cleanup commands must fail for their deliberate conditions;
-inspect their rows and cleanup result. Timing misses under load need a bounded
-quiet rerun with load averages. The merged-head automation Release build passed. Its final timing is pending.
-`OPEN_E2E_IMPORT_ROBUST_ONLY=timing` selects the large fixture.
-`OPEN_E2E_APP_BUNDLE` is forwarded through the harness's bundle override.
-Use an automation Release build for the final speed qualification. Complete the
-full verifier when its native gates can run under the screen rules.
+The final gate uses current main through `7f405f3b`, including Profile engine
+#222, and `open-engine-s8-main` framework SHA-256
+`2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10`.
+Its exact source head, Debug/Release fingerprints, App results, Release phase
+lags and loads, idle evidence and full `verify-all --with-arc-data` table are
+recorded in draft [#224](https://github.com/SergeSerb2/open/pull/224).
+Earlier `d94583ef` results remain historical receipts. Each run names its engine.
+
+Builds and the full verifier take Section 14 token B → `heavy.sh`. Each App
+suite owns one screen-lock call; dedicated timing takes quiet → B → heavy →
+screen. Priority and foreground guards run before screen use. Every source
+and Open data root is synthetic and temporary. Used defaults are reset at
+launch and restored in `finally`. Real Arc verification copies files first
+and reports counts only. Private receipts: `.re/c4/` and `.re/c4b/`.
 
 ## Lead decisions and remaining boundaries
 
@@ -161,5 +170,5 @@ full verifier when its native gates can run under the screen rules.
 - The lead approved the small first-run model Undo hook, quit-drain hook and
   receipt APIs. Physical Profile teardown stays with Section 10.
 - Parser decoded-memory/directory boundary qualification remains the existing
-  multi-profile follow-up. This draft does not claim that those limits or
-  App responsiveness are accepted.
+  multi-profile follow-up. This draft does not claim those parser limits are accepted. Final-engine
+  receipts and loads are recorded in the PR.

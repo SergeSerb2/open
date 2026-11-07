@@ -296,11 +296,11 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 ## Section 14: multi-profile import boundaries
 
 - C4 adds one import Undo for the model plus newly inserted Archive rows and
-  History visits/keys. The real-App functional and negative flows pass; final
-  Release responsiveness and the full verifier remain separate gates. See
+  History visits/keys. The real-App functional and negative flows pass. Current engine, Release
+  performance and full-verifier receipts are recorded in draft #224. See
   [verification](import-robustness.md). Physical Profile directory and loaded
-  engine context removal still waits on Section 10's in-session deletion path
-  (0702). Logical row removal does not delete those directories or bypass
+  engine context removal remains separate. Section 10 owns its proven deletion
+  path; import Undo does not call that destructive flow. Logical row removal does not delete directories or bypass
   typed confirmation and context teardown.
 - Session Favorite keys contain a Profile and window but no Space. When a source
   window focuses another Profile, import uses the Favorite owner's first Space.
