@@ -868,42 +868,56 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 return {'encryptedCookies': checked, 'plaintextValuesEmpty': True}
             row('C-3', encrypted_cookies, ['C-1'])
             results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'No synthetic Keychain-error injection API; real Keychain access is prohibited by CHILD-RULES rule 6'}
-            def https_first():
+            def https_first_warning(action):
                 if not app.call('credentials')['supportsSecretsImport']:
                     raise PasswordBlocked('running engine has no 08xx capability (supportsSecretsImport is false)')
+                # Each decision gets a new origin and a restarted engine. A
+                # previous Continue decision must not bypass the next warning.
+                relaunch(allow=False)
+                app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
                 settings = load('chrome://settings/security')
                 enabled = app.eval(settings, '''new Promise(resolve => chrome.settingsPrivate.setPref('https_only_mode_enabled', true, '', success => resolve(success === true)))''')
                 assert enabled, 'could not enable HTTPS-First in the disposable profile'
-                before = {w['number'] for w in children()}
-                url = urls['login'].replace('login.example.com', 'https-first.example.com')
-                tab = app.call('open', url=url)['id']
-
-                def warning():
-                    child = next((w for w in children() if w['number'] not in before), None)
-                    if child:
-                        return ('dialog', child)
-                    try:
-                        if app.eval(tab, '!!document.querySelector("#proceed-button, #proceed-link")'):
-                            return ('interstitial', None)
-                    except RuntimeError:
-                        guard.check()
-                    return None
-
-                shown = wait(warning, timeout=20, step=.1)
-                assert shown, 'HTTPS-First did not show a warning'
-                if shown[0] == 'dialog':
-                    window = shown[1]['number']
-                    texts = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == window)
+                baseline = urls['local_login']
+                tab = load(baseline)
+                try:
+                    before = {w['number'] for w in children()}
+                    host = 'https-first.example.com' if action == 'continue' else 'https-first-%s.example.com' % action
+                    url = urls['login'].replace('login.example.com', host)
+                    app.call('navigate', tab=tab, url=url)
+                    shown = wait(lambda: next((w for w in children() if w['number'] not in before), None), timeout=20, step=.1)
+                    assert shown, 'HTTPS-First did not show a native warning'
+                    window = shown['number']
                     import re
-                    assert any(re.search(r'HTTPS|secure connection|[Cc]ontinue', text) for text in texts), 'new child was not the HTTPS warning'
-                    app.call('snapshot', window=window, path=os.path.join(tmp, 'PW-HF1-warning.png'))
-                    key('return', window=window)
-                else:
-                    app.call('snapshot', path=os.path.join(tmp, 'PW-HF1-warning.png'))
-                    app.call('click', tab=tab, selector='#proceed-button, #proceed-link')
-                assert wait(lambda: app.eval(tab, 'location.hostname === "https-first.example.com" && !!document.querySelector("#username")'), timeout=15, step=.1), 'Continue did not load the fixture'
-                return {'warning': shown[0], 'continuedToFixture': True, 'distributionSHA256': engine_distribution_sha256}
-            row('PW-HF1', https_first)
+                    buttons = app.call('child-dialog-button', window=window)['buttons']
+                    assert any(re.fullmatch(r'go back', label, re.I) for label in buttons), 'HTTPS warning has no Go back button'
+                    continue_label = next((label for label in buttons if re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I)), None)
+                    assert continue_label, 'HTTPS warning has no Continue button'
+                    texts = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == window)
+                    assert any(re.search(r'HTTPS|secure connection', text, re.I) for text in texts), 'new child was not the HTTPS warning'
+                    app.call('snapshot', window=window, path=os.path.join(tmp, 'PW-HF-%s-warning.png' % action))
+                    if action == 'continue':
+                        pressed = app.call('child-dialog-button', window=window, label=continue_label)
+                        assert pressed['pressed'], 'Continue button did not accept its real press action'
+                    else:
+                        key(action, window=window)
+                    assert wait(lambda: all(w['number'] != window for w in children()), timeout=5, step=.05), 'HTTPS warning stayed open'
+                    expected = url if action == 'continue' else baseline
+                    def settled():
+                        return (not app.tab(tab)['loading'] and
+                                app.eval(tab, 'location.href === %s && document.readyState === "complete" && !!document.querySelector("#username")' % json.dumps(expected)))
+                    assert wait(settled, timeout=15, step=.1), 'HTTPS warning decision did not load the expected page'
+                    guard.check()
+                    return {'warning': 'dialog', 'action': action, 'continuedToFixture': action == 'continue',
+                            'returnedToPreviousPage': action != 'continue', 'distributionSHA256': engine_distribution_sha256}
+                finally:
+                    # Closing this row's own tab also disposes its native modal
+                    # if an assertion fails before the dialog gets an answer.
+                    guard.check()
+                    app.call('close', tab=tab)
+            row('PW-HF1', lambda: https_first_warning('continue'))
+            row('PW-HF2-return', lambda: https_first_warning('return'))
+            row('PW-HF2-escape', lambda: https_first_warning('escape'))
             guard.check(); results['P-15'] = {'ok': True, 'allExecutedRowsAlive': True}
         finally:
             if app: app.quit()

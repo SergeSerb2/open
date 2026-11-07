@@ -812,6 +812,17 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | P-22 | Relaunch without `--open-allow-mock-keychain-secrets` (mock-key build); sign in on a new fixture site | No sheet, no `savePrompt` event; `logins` unchanged; `canEnablePasswordSaving` is false |
 | P-23 | On `login.html` with a saved login, `eval` `navigator.credentials.get({password: true})` | Resolves to `null` within 2 s; no dialog window |
 
+HTTPS-First regression rows use `credentials.supportsSecretsImport` from the
+running engine as their capability gate. The distribution framework SHA-256
+is recorded as evidence; it does not enable or disable a row. Each row restarts
+the engine and navigates from localhost to a separate fixture origin.
+
+| # | Flow | Pass when |
+|---|---|---|
+| PW-HF1 | Enable HTTPS-First in the disposable profile, navigate to the HTTP login fixture, activate the native warning's named Continue button with `child-dialog-button` | The real dialog press succeeds, the warning closes, and the exact `http://` fixture URL and form finish loading |
+| PW-HF2-return | Open the same native warning on a new fixture origin, press Return | The warning closes and the previous localhost page finishes loading; Open stays alive with no new crash report |
+| PW-HF2-escape | Repeat on another fixture origin, press Esc | Same Go back result and crash checks as Return |
+
 ### 9.3 Suite `--only secrets-import`
 
 The fixture extends `SyntheticSecretsFixture`: two Arc profile directories (`Default`, `Profile 1`) and a `Local State` listing both, generated in a fresh `0o700` temp dir from the known mock password, with the full column sets of §8.2. Contents: per profile 3 logins on `login.example.com` and `other.example.com` (one with a note), 1 blocked site, 1 federated row, 4 cookies (persistent, session, HttpOnly, partitioned), 1 expired cookie, 1 address, 1 card. The two profiles hold different usernames and cookie names.
