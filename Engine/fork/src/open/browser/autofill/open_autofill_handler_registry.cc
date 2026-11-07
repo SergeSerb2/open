@@ -39,7 +39,8 @@ bool SecretsPromptsAllowed(content::WebContents* contents) {
 }
 bool OpenAutofillPage(content::WebContents* contents, int page) {
   if (!IsOpenWebContents(contents)) return false;
-  State().handler->OnOpenAutofillPage(
+  auto handler = State().handler;
+  handler->OnOpenAutofillPage(
       CefBrowserHostBase::GetBrowserForContents(contents), page);
   return true;
 }
@@ -85,7 +86,8 @@ void ShowSavePrompt(CefRefPtr<OpenSavePrompt> prompt) {
           prompt->Answer(3);
           return;
         }
-        State().handler->OnShowSavePrompt(
+        auto handler = State().handler;
+        handler->OnShowSavePrompt(
             CefBrowserHostBase::GetBrowserForContents(contents), prompt);
       }, prompt));
 }

@@ -6,6 +6,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/global_features.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
 #include "chrome/browser/ui/autofill/address_bubbles_controller.h"
 #include "chrome/browser/ui/autofill/autofill_ai/autofill_ai_import_data_controller.h"
@@ -21,7 +23,9 @@
 #include "chrome/browser/ui/autofill/save_address_bubble_controller.h"
 #include "chrome/browser/ui/autofill/update_address_bubble_controller.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "components/application_locale_storage/application_locale_storage.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/ui/addresses/autofill_address_util.h"
 #include "open/browser/autofill/open_autofill_handler_registry.h"
 #include "open/browser/autofill/open_save_prompt_impl.h"
 
@@ -99,9 +103,14 @@ AutofillBubbleBase* AddressPrompt(content::WebContents* contents,
 }
 }  // namespace
 
-OpenAutofillBubbleHandler::OpenAutofillBubbleHandler(BrowserWindowInterface* browser)
-    : scoped_user_data_(browser->GetUnownedUserDataHost(), *this) {}
+OpenAutofillBubbleHandler::OpenAutofillBubbleHandler() = default;
 OpenAutofillBubbleHandler::~OpenAutofillBubbleHandler() = default;
+void OpenAutofillBubbleHandler::SetBrowser(BrowserWindowInterface* browser) {
+  scoped_user_data_.reset();
+  if (browser) scoped_user_data_ = std::make_unique<
+      ui::ScopedUnownedUserData<autofill::AutofillBubbleHandler>>(
+          browser->GetUnownedUserDataHost(), *this);
+}
 
 autofill::AutofillBubbleBase* OpenAutofillBubbleHandler::ShowSaveCreditCardBubble(
     content::WebContents* contents, autofill::SaveCardBubbleController* controller,
@@ -140,7 +149,10 @@ autofill::AutofillBubbleBase* OpenAutofillBubbleHandler::ShowUpdateAddressProfil
     content::WebContents* contents,
     std::unique_ptr<autofill::UpdateAddressBubbleController> controller, bool gesture) {
   auto profile = controller->GetProfileToSave();
-  return AddressPrompt(contents, std::move(controller), profile, {}, 4, gesture);
+  auto label = autofill::GetEnvelopeStyleAddress(profile,
+      g_browser_process->GetFeatures()->application_locale_storage()->GetTag().tag_string(),
+      /*include_recipient=*/true, /*include_country=*/true);
+  return AddressPrompt(contents, std::move(controller), profile, label, 4, gesture);
 }
 
 autofill::AutofillBubbleBase* OpenAutofillBubbleHandler::ShowIbanBubble(

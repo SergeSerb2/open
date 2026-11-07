@@ -674,7 +674,7 @@ void ProfileData::WriteNextCookie() {
     return;
   }
   cookies_.clear();
-  Cookies()->FlushCookieStore(base::BindOnce(&ProfileData::Finish, weak_.GetWeakPtr()));
+  Cookies()->FlushCookieStore(base::BindOnce(&ProfileData::Finish, weak_.GetWeakPtr(), 0));
 }
 }  // namespace
 }  // namespace open_engine

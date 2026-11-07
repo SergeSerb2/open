@@ -155,7 +155,8 @@ struct OpenBrowserWindow::HostState {
 OpenBrowserWindow::OpenBrowserWindow(Profile* profile)
     : profile_(profile),
       location_bar_(std::make_unique<contextual_tasks::LocationBarStub>()),
-      host_(std::make_unique<HostState>()) {}
+      host_(std::make_unique<HostState>()),
+      autofill_handler_(std::make_unique<OpenAutofillBubbleHandler>()) {}
 
 OpenBrowserWindow::~OpenBrowserWindow() {
   host_->StopObserving();
@@ -169,9 +170,8 @@ OpenBrowserWindow::~OpenBrowserWindow() {
 }
 
 void OpenBrowserWindow::SetBrowser(Browser* browser) {
-  autofill_handler_.reset();
   browser_ = browser;
-  if (browser_) autofill_handler_ = std::make_unique<OpenAutofillBubbleHandler>(browser_);
+  autofill_handler_->SetBrowser(browser_);
   if (browser_ && IsActive()) {
     BrowserActiveStateManager::From(browser_)->DidBecomeActive();
   }

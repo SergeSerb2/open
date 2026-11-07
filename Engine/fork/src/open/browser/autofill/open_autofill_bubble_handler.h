@@ -7,8 +7,9 @@ class BrowserWindowInterface;
 namespace open_engine {
 class OpenAutofillBubbleHandler final : public autofill::AutofillBubbleHandler {
  public:
-  explicit OpenAutofillBubbleHandler(BrowserWindowInterface* browser);
+  OpenAutofillBubbleHandler();
   ~OpenAutofillBubbleHandler() override;
+  void SetBrowser(BrowserWindowInterface* browser);
   autofill::AutofillBubbleBase* ShowSaveCreditCardBubble(
       content::WebContents* web_contents,
       autofill::SaveCardBubbleController* controller,
@@ -77,7 +78,8 @@ class OpenAutofillBubbleHandler final : public autofill::AutofillBubbleHandler {
       autofill::WalletReminderNoticeBubbleController* controller,
       bool is_user_gesture) override;
  private:
-  ui::ScopedUnownedUserData<autofill::AutofillBubbleHandler> scoped_user_data_;
+  std::unique_ptr<ui::ScopedUnownedUserData<autofill::AutofillBubbleHandler>>
+      scoped_user_data_;
 };
 }  // namespace open_engine
 #endif
