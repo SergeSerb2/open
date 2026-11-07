@@ -134,6 +134,44 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         check('history_profile_isolation', profile1 != profile2 and any(r['url'] == base + '/second' for r in rows2)
               and not any(r['url'] == base + '/second' for r in rows1) and not any(r['url'] == base + '/link' for r in rows2),
               profile1Count=len(rows1), profile2Count=len(rows2), file1=history(profile1)['file'], file2=state2['file'])
+        # Two actual standard windows. The first model window has Profile 1,
+        # while the front window has Profile 2: model order cannot pass this gate.
+        first_window = app.call('shell-windows')[0]['id']
+        space1 = next(s['id'] for s in app.call('spaces') if s['profile'] == profile1)
+        app.call('library-history-state', profile=profile1, selectProfile=True)
+        app.call('download-library-close')
+        app.call('space', space=space1)
+        app.call('command', id='new-window'); dismiss_bar()
+        second_window = app.call('window-state')['id']
+        app.call('space', space=space2)
+        app.call('key', key='y', modifiers=['cmd'], route='app')
+        picked = app.call('library-history-state')['profile']
+        check('history_front_profile_cmd_y', first_window != second_window and picked == profile2 and picked != profile1,
+              profile=picked, expected=profile2)
+        app.call('library-history-state', profile=profile1, selectProfile=True)
+        app.call('window-focus', id=second_window, activate=True)
+        app.call('menu-perform', id='view-history')
+        kept = app.call('library-history-state')['profile']
+        check('history_manual_profile_while_open', kept == profile1 and kept != profile2, profile=kept)
+        app.call('download-library-close')
+        app.call('window-focus', id=second_window, activate=True)
+        app.call('menu-perform', id='view-history')
+        picked = app.call('library-history-state')['profile']
+        check('history_front_profile_menu_reopen', picked == profile2 and picked != kept, profile=picked)
+        app.call('library-history-state', profile=profile1, selectProfile=True)
+        app.call('download-library-close')
+        app.call('window-focus', id=second_window, activate=True)
+        command = bar('View History')
+        action = next((i for i, r in enumerate(command.get('rows', [])) if r.get('action') == 'view-history'), None)
+        if action is None: raise RuntimeError('History command missing from real command bar')
+        # Move through the real command field and submit its selected result.
+        selected = command.get('selected', 0)
+        for _ in range(abs(action - selected)):
+            app.call('key', key='down' if action > selected else 'up', route='app')
+        app.call('key', key='return', route='app')
+        picked = app.call('library-history-state')['profile']
+        check('history_front_profile_commandbar', picked == profile2 and picked != profile1
+              and app.call('settings-state')['librarySection'] == 'history', profile=picked, command=command)
         app.quit(); app = factory(urls=()); app.call('suggest-remote', enabled=False)
         for key in keys: app.call('defaults', key=key, value=None)
         app.call('defaults', key='open.search.hasSeenSuggestionsNotice', value=True)
@@ -196,6 +234,15 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         app.call('library-history-state', profile=profile1, selectProfile=True)
         before_all = dbrows(profile1); app.call('library-history-delete', all=True)
         check('history_library_clear_all', bool(before_all) and not dbrows(profile1), beforeCount=len(before_all))
+        app.call('library-history-state', profile=profile2, selectProfile=True)
+        app.call('download-library-close')
+        for window in app.call('shell-windows'):
+            app.call('window-focus', id=window['id'], activate=True)
+            app.call('window-close')
+        app.call('menu-perform', id='view-history')
+        fallback = app.call('library-history-state')['profile']
+        check('history_default_profile_without_window', not app.call('shell-windows') and fallback == profile1
+              and fallback != profile2, profile=fallback)
     finally:
         if app:
             restore_defaults(app, saved)

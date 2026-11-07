@@ -66,6 +66,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)
+    if let library, (section ?? library.section) == .history,
+      libraryPresenter?.window?.isVisible != true {
+      library.historyProfileID = app.frontStandardWindowController?.context.focusedSpace?.profileID
+        ?? app.model.defaultProfile?.id ?? library.historyProfileID
+    }
     libraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
   }
   /// Use the Library button's view model and confirmation dialog unchanged.
@@ -253,20 +258,23 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? {
     // Validate the entire selection before changing any data.
     let engineKinds = kinds.intersection([.cookies, .cache])
-    guard !kinds.isEmpty, !kinds.contains(.downloads),
+    guard !kinds.isEmpty, kinds.subtracting([.history, .downloads, .cookies, .cache]).isEmpty,
           engineKinds.isEmpty || (range == .all && engineKinds == [.cookies, .cache]) else {
-      return "History supports every time range. Cookies and cache must be cleared together for All time. Download history clearing is not available yet."
+      return "History and download history support every time range. Cookies and cache must be cleared together for All time."
     }
+    guard app.model.profile(id: profileID) != nil else { return "This profile is no longer available." }
     let context = app.hostFactories.values.compactMap { $0.context(for: profileID) }.first
     if !engineKinds.isEmpty, context == nil { return "This profile is not open." }
+    let end = Date()
+    let seconds: TimeInterval? = switch range { case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800; case .all: nil }
+    let start = seconds.map { end.addingTimeInterval(-$0) }
     if kinds.contains(.history) {
       guard let history = app.stores.history(for: profileID) else { return "This profile is no longer available." }
-      let end = Date()
-      let seconds: TimeInterval? = switch range { case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800; case .all: nil }
       await app.stores.flushHistory()
-      do { try await history.deleteVisits(since: seconds.map { end.addingTimeInterval(-$0) }, through: end) }
+      do { try await history.deleteVisits(since: start, through: end) }
       catch { return error.localizedDescription }
     }
+    if kinds.contains(.downloads) { app.downloadsCenter.clearHistory(profileID: profileID, since: start, through: end) }
     if !engineKinds.isEmpty, let context {
       await withCheckedContinuation { continuation in context.clearBrowsingData(origin: nil) { continuation.resume() } }
     }
