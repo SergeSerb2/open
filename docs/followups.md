@@ -1,5 +1,13 @@
 # Follow-ups
 
+- Import Arc Boosts — C2 adds the bounded Firestore cache reader, synthetic CLI
+  flow and locked CLI persistence. App persistence, live apply, re-import and
+  shared Undo remain BLOCKED (Section 12 AppBoosts). Wire only through
+  `app.stores.boosts.store(for:)` and `refresh(profile:)`; never create another
+  App BoostStore. Confirm color/zoom conversion, absent local enablement policy,
+  account-to-Default Profile assignment and a populated real cache sample.
+  See [storage evidence](re/boosts-store.md). — Section 14 C2, 2026-11-06
+
 Small items found during review and verification. Each line: area — issue — where found.
 
 - Boost code mode (Step 7 package, [Code mode #203](https://github.com/SergeSerb2/open/pull/203)) — App Step 5 must implement `BoostEditorHost.loadedJS(boostID:tabID:)` from the bound document, call `BoostEditorController.boundPageDidCommit(tabID:)` after commit, and prove real-page B5 (CSS live, JS only after reload). Native code flows (including available CSS selector insertion and one-step undo) and bar comparison cover the package; real-App rest/hover snapshots await host integration. The JS notice uses the lead’s 2026-11-06 ruling recorded in plan §4.10. Package evidence and negative-proof logs are in the PR body. — Section 12 child C, 2026-11-06.
