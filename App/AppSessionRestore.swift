@@ -17,5 +17,6 @@ extension AppDelegate {
     }
     // Little Open sessions are managed separately and never restored here.
     model.windows = [state]
+    if autoCreatedLaunchWindowID != nil { autoCreatedLaunchWindowID = state.id }
   }
 }
