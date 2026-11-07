@@ -2,6 +2,7 @@ import Foundation
 import OpenModel
 import OpenStore
 import OpenImport
+import OpenBoosts
 
 @MainActor
 func printTree(model: BrowserModel, showTitles: Bool) {
@@ -61,6 +62,10 @@ func runImportArc(args: [String]) async throws {
         FileHandle.standardError.write(Data("usage: openkit import-arc [--arc-dir PATH] --out DIR [--show-titles|--counts-only]\n".utf8))
         exit(2)
     }
+    // Retain the existing exclusive data-root lock through every Boost write.
+    // A running App with this root refuses the CLI before any import output.
+    let preparation = try OpenDataRoot.prepare(root: outDir)
+    defer { withExtendedLifetime(preparation) {} }
     let store = SnapshotStore(root: outDir)
     let previous = try store.load()
     let directories = ProfileDirectories(root: outDir)
@@ -76,6 +81,33 @@ func runImportArc(args: [String]) async throws {
     // Preserve old output stores before opening any new per-Profile archive.
     _ = try prepareProfiles(model, root: outDir)
     try store.saveNow(model: model)
+    for (id, boosts) in result.boostsByProfile {
+        guard let profile = model.profile(id: id) else { continue }
+        let sink = BoostStore(root: outDir, profileID: id, fileURL: directories.boostsFileURL(for: profile))
+        _ = sink.load()
+        for boost in boosts {
+            if let existing = sink.boost(id: boost.id) {
+                report.boostsStoredDuplicates += 1
+                if existing.updatedAt > boost.updatedAt { report.boostsProtectedEdits += 1 }
+                // Add-only re-import preserves every existing Boost. A source
+                // edit never replaces user data; Undo can later remove additions.
+                continue
+            }
+            sink.upsert(boost); report.boostsStoredNew += 1
+        }
+        sink.saveNow()
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .secondsSince1970
+        let saved = try decoder.decode(BoostFileDTO.self, from: Data(contentsOf: sink.fileURL))
+        // Compare in the file's date representation. Conversion between Date's
+        // reference epoch and Unix seconds can round a sub-microsecond fraction.
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .secondsSince1970
+        let expected = try decoder.decode([Boost].self, from: encoder.encode(sink.allBoosts()))
+        guard saved.profileID == id.description, Set(saved.boosts.map(\.id)) == Set(sink.allBoosts().map(\.id)),
+              saved.boosts.count == sink.allBoosts().count,
+              Set(saved.boosts) == Set(expected) else {
+            throw NSError(domain: "OpenImport", code: 1, userInfo: [NSLocalizedDescriptionKey: "Boosts could not be saved."])
+        }
+    }
     let archiveSink = profileArchiveSink(model: model, directories: directories)
     for (id, records) in Dictionary(grouping: result.archiveRecords, by: \.profileID) {
         let stored = await archiveSink.store(for: id).importRecords(records)
@@ -110,6 +142,8 @@ func runImportArc(args: [String]) async throws {
         print("  archive filePresent=false total=0 imported=0")
     }
     print("  boosts: \(report.boostsStatus)")
+    print("  boosts found=\(report.boosts.found) imported=\(report.boosts.imported) storedNew=\(report.boostsStoredNew) storedDuplicates=\(report.boostsStoredDuplicates) protectedEdits=\(report.boostsProtectedEdits) malformed=\(report.boosts.malformed) deleted=\(report.boosts.deleted) unknownDocuments=\(report.boosts.unknownDocuments) otherCollections=\(report.boosts.otherCollections)")
+    print("  boosts mappedFields=\(report.boosts.mappedFields) droppedFields=\(report.boosts.fieldsDropped.values.reduce(0, +)) unknownFields=\(report.boosts.unknownFields) defaultProfileGuesses=\(report.boosts.defaultProfileGuesses) enablementUnknown=\(report.boosts.enablementUnknown)")
     if report.sessionFilePresent {
         print("  session filePresent=true totalPairs=\(report.sessionTotalPairs) mapped=\(report.sessionMapped) unmappedItems=\(report.sessionUnmappedItems) unmappedWindows=\(report.sessionUnmappedWindows) ignoredIncognito=\(report.sessionIgnoredIncognito) windows=\(report.sessionWindows) appliedSelections=\(report.sessionAppliedSelections) distinctChromiumIDs=\(report.sessionDistinctChromiumIDs) malformedPairs=\(report.sessionMalformedPairs)")
     } else {

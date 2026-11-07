@@ -1,5 +1,13 @@
 # Follow-ups
 
+- Import Arc Boosts — C2 adds the bounded Firestore cache reader, synthetic CLI
+  flow and locked CLI persistence. App persistence, live apply, re-import and
+  shared Undo remain BLOCKED (Section 12 AppBoosts). Wire only through
+  `app.stores.boosts.store(for:)` and `refresh(profile:)`; never create another
+  App BoostStore. Confirm color/zoom conversion, absent local enablement policy,
+  account-to-Default Profile assignment and a populated real cache sample.
+  See [storage evidence](re/boosts-store.md). — Section 14 C2, 2026-11-06
+
 Small items found during review and verification. Each line: area — issue — where found.
 
 - Boost code mode (Step 7 package, [Code mode #203](https://github.com/SergeSerb2/open/pull/203)) — App Step 5 now implements `BoostEditorHost.loadedJS(boostID:tabID:)` from the installed document snapshot and calls `BoostEditorController.boundPageDidCommit(tabID:)` after real document commits. Real-page B5 checks live CSS, deferred JS, Refresh to Run and reload. Native code flows (including available CSS selector insertion and one-step undo) and bar comparison cover the package; real-App rest/hover snapshots await host integration. The JS notice uses the lead’s 2026-11-06 ruling recorded in plan §4.10. Package evidence and negative-proof logs are in the PR body. — Section 12 child C, 2026-11-06.
@@ -296,3 +304,33 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 - Incognito planning is available in the package. Private-window presenter
   integration remains deferred (lead, 2026-11-06 16:12); private windows have
   no persistent Boost store and receive no plan from this App adapter.
+
+## Section 14: multi-profile import boundaries
+
+- Import Undo removes created Profiles and sidebar/routing changes from the
+  model. Main's Profile deletion path needs typed confirmation and defers loaded
+  context data until restart. Undo does not erase Archive/History stores or
+  engine directories. Complete this through Section 10's in-session deletion
+  path (0702); do not bypass its teardown boundary.
+- Session Favorite keys contain a Profile and window but no Space. When a source
+  window focuses another Profile, import uses the Favorite owner's first Space.
+  This is an accepted, marked guess. Settings keeps its current windows and selections and
+  imports selections only for newly added Spaces; it does not recreate Arc
+  window layout. User-operated Arc evidence is needed for exact inactive-Profile
+  session behavior. See [multi-profile import](import-multiprofile.md).
+
+- C1c review-fix App validation (2026-11-07): 12 `MP_*` positives, all 11
+  fixture-negative proofs, the Default-role code-break proof, forced dialog
+  cleanup, full `firstrun` (64/64), counts-only real-App audit, `routing`,
+  `sidebar`, and `settings-preview` passed. The existing sidebar durable-cookie
+  row remains SKIP because `profiles` owns it. The final full verifier table
+  is recorded in draft PR #221 on its final head. See [current receipts](import-multiprofile.md).
+
+- Directory-limit boundary flows (255-byte acceptance and 256-byte refusal)
+  and general decoded-memory bounds for the inherited JSON parser remain
+  follow-ups. They are outside PR #221's review fix. No boundary-flow or
+  worst-allocation acceptance is claimed.
+
+The lead decided against provenance migration for earlier Settings imports:
+only pre-release development builds made them. Arc Default maps by role to the
+live Open Default; named Profiles still match stable import IDs only.

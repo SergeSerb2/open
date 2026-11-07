@@ -506,15 +506,15 @@ public enum SavePromptAnswer: Sendable { case save, neverForSite, dismiss }
 
 ### 6.1 Save sheet
 
-One shared component for every Arc sheet dialog: `Packages/OpenKit/Sources/OpenDesign/DialogSheet.swift` (AppKit, no SwiftUI): `DialogSheetPanel` (an `NSPanel`, style `.borderless`, `hasShadow = true`, shown with `NSWindow.beginSheet(_:completionHandler:)`) and `DialogSheetView`. The extensions UI plan's `ExtensionPromptSheet` (PR #58 §3.11) uses the same component with an icon and a body list. Whichever PR lands first creates the file; the other adopts it.
+One shared component for sheet dialogs: `Packages/OpenKit/Sources/OpenDesign/DialogSheet.swift` (AppKit, no SwiftUI): `DialogSheetPanel` (an `NSPanel`, style `.borderless`, `hasShadow = true`, shown with `NSWindow.beginSheet(_:completionHandler:)`) and `DialogSheetView`. The save sheet uses it with `Typography.promptTitle` and `.promptBody`, matching `ExtensionPromptView` without its icon. `ExtensionPromptSheet` stays unchanged; adopting the shared component with its icon and body list is a later follow-up.
 
 Layout. Values come from the extensions UI plan's sheet; they stay guesses until screenshot S-1.
 
 | Element | Value | Token |
 |---|---|---|
 | Sheet | width 420; padding 24; corner radius 12; background `Core.popoverBackground`; no icon in v1 (guess) | `DialogSheetMetrics.width`, `.padding`, `.cornerRadius` |
-| Title | top 24, left 24, width 372; 15 Semibold; `Core.foregroundPrimary`; up to 2 lines, then middle-truncate the host | `Typography.dialogTitle = FontToken(15, .semibold)` |
-| Body | title bottom + 8; 13 Regular; `Core.foregroundSecondary`; up to 3 lines | `Typography.dialogBody = FontToken(13, .regular)` |
+| Title | top 24, left 24, width 372; 15 Semibold; `Core.foregroundPrimary`; up to 2 lines, then middle-truncate the host | `Typography.promptTitle` |
+| Body | title bottom + 8; 13 Regular; `Core.foregroundSecondary`; up to 3 lines | `Typography.promptBody` |
 | Button row | body bottom + 20; height 28; 24 from the bottom edge | `DialogSheetMetrics.buttonHeight` |
 | Buttons | corner radius 8; minimum width 88; gap 8; label 13 Medium; default fill `Core.brandBlue` with white text; other fill `SidebarColors.itemBackground` with `Core.foregroundPrimary`; each shows its key hint ("↩", "esc") in `Typography.keycap` at 0.6 opacity after the label | `DialogSheetMetrics.buttonRadius`, `.buttonMinWidth`, `.buttonGap` |
 | Order | right aligned: secondary, then default (rightmost). "Never on this site" is left aligned at x 24 (guess; macOS three-button order). | — |
@@ -546,6 +546,8 @@ Queue rules (`Packages/OpenKit/Sources/OpenFeatures/SavePromptPresenter.swift`, 
 7. After "Save", show no confirmation (Arc shows none we know of; screenshot S-3).
 
 Renders: a new `features-render save-sheet --kind password|update|card|address --out FILE [--scale 1|2] [--appearance light|dark]` draws the four sheets offscreen (`docs/m4/save-sheet-*.png` next to the other feature renders), with fixture hosts only. `features-render check` asserts each sheet's frame and button order.
+
+Step 3 also has a real-App mock path, compiled only with `OPEN_AUTOMATION`: `save-prompt` enqueues synthetic kind/host metadata through each window's production presenter. Answers click real sheet buttons; unanswered release emits `ignored`. `tools/e2e/engine_e2e.py --only passwords` dispatches the M-* rows in `tools/e2e/passwords.py`. These prove sheet UI and request lifetimes before the engine bridge; P-* engine/storage rows remain Step 4. Queue length in automation counts waiting requests (maximum three), separate from the visible sheet. No credentials are displayed or stored by this path. Arc visual parity still needs S-1.
 
 ### 6.2 Fill dropdown (Chromium's)
 
