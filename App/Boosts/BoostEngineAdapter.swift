@@ -44,7 +44,8 @@ final class BoostEngineAdapter {
       let matcher = registrations[ObjectIdentifier(host.content.context)]?.documentStartMatcher ?? BoostMatcher(boosts: [])
       let installed = BoostInjectionPlanner.plan(url: url, profileID: host.profileID, matcher: matcher,
         boostsGloballyEnabled: true, context: host.content.context.isEphemeral ? .incognito : .normal)
-      documentJS[ObjectIdentifier(host)] = Dictionary(uniqueKeysWithValues: installed.boosts.compactMap {
+      let injected = ["http", "https"].contains(url.scheme?.lowercased() ?? "") ? installed.boosts : []
+      documentJS[ObjectIdentifier(host)] = Dictionary(uniqueKeysWithValues: injected.compactMap {
         $0.js.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : ($0.boostID, $0.js)
       })
     }
