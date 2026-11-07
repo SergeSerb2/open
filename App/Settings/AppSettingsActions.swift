@@ -251,24 +251,36 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String? { await clearBrowsingData(profileID: profileID, kinds: kinds, range: .all) }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? {
-    // Validate the entire selection before changing any data.
-    let engineKinds = kinds.intersection([.cookies, .cache])
-    guard !kinds.isEmpty, !kinds.contains(.downloads),
-          engineKinds.isEmpty || (range == .all && engineKinds == [.cookies, .cache]) else {
-      return "History supports every time range. Cookies and cache must be cleared together for All time. Download history clearing is not available yet."
-    }
-    let context = app.hostFactories.values.compactMap { $0.context(for: profileID) }.first
+    guard kinds.rawValue > 0, (kinds.rawValue & ~15) == 0 else { return "Choose valid browsing data to clear." }
+    guard let profile = app.model.profile(id: profileID) else { return "This profile is no longer available." }
+    let engineKinds = kinds.intersection([.cookies, .cache, .downloads])
+    // A History-only clear must not load a native context just to clear Open's
+    // HistoryStore. If already loaded, clear Chromium's own history as well.
+    let identifier = profile.id == app.model.defaultProfile?.id ? "Default" : profile.dataDirectoryName
+    let loaded = OEEngine.shared.contexts.first { $0.identifier == identifier && $0.state == .live }
+    let context = engineKinds.isEmpty ? loaded :
+      (loaded ?? app.hostFactories.values.compactMap { $0.context(for: profileID, create: true) }.first)
     if !engineKinds.isEmpty, context == nil { return "This profile is not open." }
+    let now = Date()
+    let end = range == .all ? Date.distantFuture : now
+    let seconds: TimeInterval? = switch range {
+    case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800
+    case .lastFourWeeks: 2_419_200; case .all: nil
+    }
+    let begin = seconds.map { now.addingTimeInterval(-$0) } ?? .distantPast
     if kinds.contains(.history) {
       guard let history = app.stores.history(for: profileID) else { return "This profile is no longer available." }
-      let end = Date()
-      let seconds: TimeInterval? = switch range { case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800; case .all: nil }
       await app.stores.flushHistory()
-      do { try await history.deleteVisits(since: seconds.map { end.addingTimeInterval(-$0) }, through: end) }
+      do { try await history.deleteVisits(since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
       catch { return error.localizedDescription }
     }
-    if !engineKinds.isEmpty, let context {
-      await withCheckedContinuation { continuation in context.clearBrowsingData(origin: nil) { continuation.resume() } }
+    if let context {
+      let nativeKinds = OEBrowsingDataKinds(rawValue: UInt32(kinds.rawValue))
+      return await withCheckedContinuation { continuation in
+        context.clearBrowsingData(nativeKinds, from: begin, to: end) { error in
+          continuation.resume(returning: error?.localizedDescription)
+        }
+      }
     }
     return nil
   }
