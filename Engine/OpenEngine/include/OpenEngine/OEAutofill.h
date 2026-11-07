@@ -59,6 +59,7 @@ OE_EXPORT @interface OECredentialCounts : NSObject
 @property(nonatomic, readonly) BOOL canEnablePasswordSaving; // NO: ephemeral context, mock key (§7.1), or policy
 @property(nonatomic) BOOL creditCardsSavingEnabled;        // autofill.credit_card_enabled
 @property(nonatomic, readonly) BOOL canEnableCreditCardsSaving;
+@property(nonatomic) BOOL creditCardReauthenticationEnabled; // autofill.payment_methods_mandatory_reauth
 @property(nonatomic) BOOL addressesSavingEnabled;          // autofill.profile_enabled
 - (void)fetchCredentialCountsWithCompletion:(void (^)(OECredentialCounts* counts))completion
     NS_SWIFT_NAME(fetchCredentialCounts(completion:));     // imports as async
