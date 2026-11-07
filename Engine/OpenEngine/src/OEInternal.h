@@ -14,6 +14,7 @@
 #include "include/cef_media_controller.h"
 #include "include/cef_navigation_history.h"
 #include "include/cef_open_page.h"
+#include "include/cef_open_autofill.h"
 #include "include/cef_open_omnibox.h"
 #include "include/cef_page_lifecycle.h"
 #include "include/cef_request_context.h"
@@ -58,6 +59,8 @@ extern const char kOEExtraScripts[];        // extra_info key
 #pragma mark - Engine internals
 
 class OEClient;
+void OEInstallAutofillHandler();
+void OERemoveAutofillHandler();
 
 @interface OEEngine ()
 - (void)oe_registerWebContent:(OEWebContent*)webContent;
@@ -83,6 +86,7 @@ class OEClient;
 /// YES once the request context finished initializing.
 @property(nonatomic, readonly) BOOL oe_isReady;
 - (void)oe_contextInitialized;
+- (void)oe_closeAutofill;
 /// Serialized user scripts for the renderer (extra_info / process message).
 - (CefRefPtr<CefListValue>)oe_scriptsValue;
 - (void)oe_handleBeforeDownload:(CefRefPtr<CefDownloadItem>)item

@@ -97,6 +97,7 @@
         let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []
         let events = savePromptEvents; savePromptEvents.removeAll()
         return pageEvents + events
+      case "credentials": return try await credentialCounts(a)
       case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)

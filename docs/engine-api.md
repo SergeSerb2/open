@@ -377,3 +377,80 @@ are in `Engine/OpenEngine/src/`. The tables above give behavior and limits.
 [#149](https://github.com/SergeSerb2/open/pull/149) adds relaunch evidence, not a public API. G2 App sleep integration
 merged in [#165](https://github.com/SergeSerb2/open/pull/165); e2e `sleep` F0/F2/F4/F5 prove the App paths.
 `sleep_f3_capture` remains BLOCKED without a camera/mic grant.
+
+## Passwords and autofill
+
+`OEAutofill.h` exposes Chromium's local password, address, card, and cookie
+stores through OpenEngine. These APIs run on the main thread. Profile contexts
+are created lazily by the App; the bridge does not assume that every profile
+already has a context.
+
+`webContent(_:showSavePrompt:)` delivers an `OESavePrompt` for a password save
+or update, card save, or address save or update. The shell retains the prompt
+while it shows or queues its sheet. `answer(_:)` accepts `.save`,
+`.neverForSite`, `.dismiss`, or `.ignored`; the first answer wins. Only a new
+password offer has `offersNeverForSite == true`. Releasing an unanswered
+prompt answers Ignored. Navigation, replacement, and page destruction withdraw
+the old offer through `webContent(_:withdrawSavePrompt:)`. A missing save
+delegate ignores the offer. `webContentDidFailToSavePasswordForKeychainError(_:)`
+reports Chromium's Keychain-error state before its shown/hidden lifecycle settles.
+The App owns the corresponding toast.
+
+The prompt's display host is formatted by Chromium. Its username, card label,
+and address label are UI data, and must not enter logs or screenshots. No
+password value is exposed by the prompt API. The engine keeps Chromium's
+password/autofill dropdowns. Its own password/card/address bubbles are
+replaced by the prompt bridge. Other autofill bubble methods return a
+non-null empty view and close as not interacted. The account chooser,
+auto-sign-in, leak, card-unmask, and autofill-error dialogs close without a
+Views window. Credential Management requests therefore settle instead of
+waiting for an invisible chooser.
+
+`webContent(_:openAutofillPage:)` asks the App to open a Manage page.
+`+[OEBrowserContext URLForAutofillPage:]` maps Passwords to
+`chrome://password-manager/passwords`, Payment Methods to
+`chrome://settings/payments`, and Addresses to `chrome://settings/addresses`.
+The App owns tab placement. The real web-modal host supplies the parent
+NSView for Chromium's WebAuthn and HTTP-authentication dialogs. The HTTPS
+fallback warning uses that host too, since an Open window has no Views
+primary-window widget. Chrome's top-center placement is used; Arc's exact
+placement remains a guess.
+
+`OEBrowserContext` has `passwordSavingEnabled`, `creditCardsSavingEnabled`,
+and `addressesSavingEnabled`. The password and card switches also expose
+`canEnablePasswordSaving` and `canEnableCreditCardsSaving`, which respect
+policy, off-the-record storage, and the mock key. `fetchCredentialCounts`
+returns saved logins, blocked sites, local cards, local addresses, and cookies.
+Counts contain no secret fields. The automation `credentials` command reads
+these counts and capability flags for the focused or named profile.
+
+`OEEngine.supportsSecretsImport` identifies a running engine with this bridge.
+`usesMockKeychain` reflects the actual browser command line and configuration.
+Startup rejects an empty Keychain service or `Chromium Safe Storage` before
+CEF starts. Open defaults to service `Open Safe Storage`, account `Open`.
+With `--use-mock-keychain`, password and card offers are answered Ignored
+before they reach the shell, and their `canEnable` flags are NO. The fixture
+switch `--open-allow-mock-keychain-secrets` permits those prompts and switches.
+Mock-key imports also require every record to pass the browser-process fixture
+check in the plan §7.1. One non-fixture record rejects the whole batch before
+any write with `OEErrorMockKeychain` (code 8). The switch never permits imported
+real secrets. Real-key engines have no fixture check. No stored preference is
+changed by prompt suppression. Off-the-record contexts never save or import;
+imports return `OEErrorEphemeralContext` (code 7).
+
+The import methods accept `OEImportedLogin`, `OEImportedAddress`,
+`OEImportedCard`, and `OEImportedCookie` batches of at most 256 records.
+One context serializes its batches. Strings are copied and bounded; secret
+bytes use `NSMutableData`, are copied only when accepted for import, and are
+zeroed synchronously before the import call returns. Engine-owned binary
+copies are cleared after conversion or rejection. Callers must clear their
+other copies. Chromium then owns the store records and encryption.
+
+`OEImportResult` contains added, existing, and failed counts. Existing Open
+records win: login realm plus username (or blocked realm), cookie name plus
+domain/path/partition key, and address/card GUID then contents. Password
+completion waits for `AddLogins`, then verifies stored keys. Addresses wait
+for the address manager's pending changes, then a read on the same web data
+service; cards wait for that service read. Cookies wait for
+`FlushCookieStore`. These are the durability barriers in the password plan
+§8.3. Completions contain counts only, never imported values.

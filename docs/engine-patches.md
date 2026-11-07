@@ -115,6 +115,7 @@ unsafe `MovePinnedAction` call. No Chromium debugger was used.
 | P6 | Audible state callback (done 2026-11-02, part of "Media" below) | Correct speaker icon (Web Audio too); OpenSleep needs every audio change | 1–2 days | — |
 | P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
+| P9 | Passwords and autofill | Save prompt routing, local stores and bounded import API | Section 15 | P1 |
 
 The extension series as built (P1–P3; excerpt). Two series with their own numbers:
 `Engine/fork/patches/chromium/series` for files outside `src/cef/`, and
@@ -487,6 +488,73 @@ unicode-bidi 0.3.18 5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e2
 unicode-normalization 0.1.26 75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d
 url 2.5.8 ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed
 ```
+
+## P9. Passwords and autofill (Section 15)
+
+This bridge keeps Chromium's password manager, autofill stores, and fill
+dropdowns, and sends save offers and Manage links to OpenEngine. The API is
+`OEAutofill.h`, described in [engine-api.md](engine-api.md#passwords-and-autofill).
+The implementation follows [passwords-autofill.md](plans/passwords-autofill.md)
+Steps 1–2. The save sheet and import wizard belong to their own App changes.
+
+| Patch | Purpose |
+|---|---|
+| `0801-open-password-prompt-routing.patch` | H-1: route password show/hide through Open's controller adapter. |
+| `0802-open-address-bubble-handler-lookup.patch` | H-3: find the address handler through the tab's Browser unowned data, without a BrowserView. |
+| `0803-open-autofill-page-routing.patch` | H-4: send password, address, and payment Manage links to the App. |
+| `0804-open-null-credential-dialogs.patch` | H-6: replace the five credential/autofill factories for Open pages. |
+| `0805-open-autofill-defaults.patch` | Fill on account select on; leak detection and auto-sign-in off; mandatory card re-auth on for new profiles, with no opt-in promo. |
+| `0806-open-https-fallback-dialog-host.patch` | Route the Step 0 HTTPS fallback warning through the native modal host; cancel when a detached page has no host. |
+
+New files live in `open/browser/autofill/` and the overlay header
+`cef/include/cef_open_autofill.h`. CEF generates the C API and wrappers when
+`engine-apply` runs. The overlay GN source list adds the implementation to
+`libcef_static`. Chromium hook files use a small installed function table,
+so those targets do not link against CEF. `IsOpenWebContents` identifies a
+live OpenEngine page through the process handler; other CEF clients retain
+Chromium's normal path.
+
+`OpenBrowserWindow` owns and registers a non-null autofill handler. Every
+unimplemented bubble returns an empty view and settles its controller on a
+later turn. Save prompts retain Chromium's existing controllers and answer
+once; the registry holds weak references so releasing the shell's offer
+ignores it. Withdrawal uses prompt identity, so an old withdrawal cannot
+remove a replacement offer. The window also provides the hosted page's
+parent NSView, size, and resize notifications for web-modal dialogs. Its
+top-center placement follows Chrome and remains a guess for Arc.
+
+The Step 0 crash is in `AskBeforeHttpDialogController::ShowDialog` calling
+`TabDialogManager::CreateTabScopedDialog`, which CHECKs its absent Views
+host. See the [probe receipt](engine-spike/results-passwords-probe.json),
+PR-7. The 0806 hook retains the warning and its decisions, and uses
+`constrained_window::ShowWebModalDialogViewsOwned` with Open's real modal
+host. A missing Views host also takes that path for detached pages; if no
+native host remains, it cancels. It does not bypass HTTPS warnings or allow an
+insecure navigation.
+The related callers already use that web-modal path: HTTP auth in
+`chrome/browser/ui/views/login_handler_views.cc:180`, and WebAuthn in
+`chrome/browser/ui/views/webauthn/authenticator_request_dialog_view_controller_views.cc:54`.
+Neither calls `TabDialogManager`; both rely on H-7's real host. The probe's
+HTTPS-fallback crash is not evidence of a Basic-auth failure.
+
+OpenEngine refuses an empty or Chromium Keychain service before CEF starts.
+With the public mock key, password/card offers are ignored before any shell
+delegate call. The fixture prompt switch permits those offers and their
+`canEnable` flags. Mock-key imports require the same switch plus a browser-process
+fixture check of every record (plan §7.1); one non-fixture record rejects the whole
+batch before any write with `OEErrorMockKeychain = 8`. The real import wizard
+still refuses mock-key engines. Off-the-record imports return
+`OEErrorEphemeralContext = 7`; they never write stores. The Keychain-error state
+calls the optional OpenEngine delegate, then settles its shown/hidden lifecycle.
+
+The profile bridge serializes bounded batches through Chromium's stores.
+Existing records win. Login completion waits for AddLogins and reads stored
+keys; address/card completion waits for a read on the same web data service;
+cookies wait for FlushCookieStore. Secret source buffers and bridge-owned
+binary buffers are cleared on acceptance and rejection. No new LOG, VLOG,
+or os_log statement contains a credential value.
+
+Build and real-App receipts will be recorded here after verification.
 
 ## Tab sleeping (memory fork, Section 8 PR #158)
 

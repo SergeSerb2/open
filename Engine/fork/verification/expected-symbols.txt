@@ -32,3 +32,7 @@ _cef_media_controller_get_for_browser
 _cef_extension_manager_create
 # E12 omnibox session bridge (generated C API).
 _cef_open_omnibox_create
+
+# P9 password/autofill and profile-store bridge (generated C API).
+_cef_set_open_autofill_handler
+_cef_open_profile_data_get_for_context

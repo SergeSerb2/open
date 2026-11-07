@@ -27,6 +27,7 @@ class WebContentsModalDialogHost;
 }
 
 namespace open_engine {
+class OpenAutofillBubbleHandler;
 
 // The BrowserWindow of a hidden tab-strip Browser (docs/engine-patches.md,
 // P1). It has no Views: it stands for one Open window. GetNativeWindow is the
@@ -205,6 +206,7 @@ class OpenBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
   raw_ptr<Browser> browser_ = nullptr;
   std::unique_ptr<contextual_tasks::LocationBarStub> location_bar_;
   std::unique_ptr<HostState> host_;
+  std::unique_ptr<OpenAutofillBubbleHandler> autofill_handler_;
   std::unique_ptr<web_modal::WebContentsModalDialogHost> dialog_host_;
   bool html_fullscreen_ = false;
   gfx::Rect pending_bounds_;
