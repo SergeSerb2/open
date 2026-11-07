@@ -16,14 +16,14 @@ Native M5 runs use main's engine distribution `af4b3cc3ad1b42439b229d79c8f7a869b
 |---|---|
 | `heavy.sh tools/build.sh Debug` | PASS |
 | `heavy.sh swift build -c release --package-path Packages/OpenKit` | PASS |
-| Real-App `incognito` | 25 PASS, 0 FAIL, 0 interruptions; owned processes and windows cleaned |
+| Real-App `incognito` | 25 PASS in Alloy and 25 PASS in Chrome; 0 FAIL, 0 interruptions; owned processes and windows cleaned |
 | Cookie lifetime | Normal/private isolation in both directions; two private windows share; one close retains; final close resets |
 | No Open records | `browser.json` SHA-256, all Open SQLite table row counts, capture/thumbnail inventory, normal model counts, history writes, and download history unchanged after private navigations, close, and download |
 | Native 1x light/dark | PASS; real window captures under light/dark app appearances, with empty sidebar pixels within 2 RGB levels of #26232B. The system appearance setting is untouched. |
 | Source fault: normal model | PASS: `no_snapshot_history_change FAIL`, exit 1, cleanup PASS; [receipt](engine-spike/incognito/negative-model.json) |
 | Source fault: disk context | PASS: `cookie_normal_absent_private FAIL`, exit 1, cleanup PASS; [receipt](engine-spike/incognito/negative-disk.json) |
 | Required regressions | PASS: sidebar 19, features 19, window 76, Little Open 39, Profiles 14, context-menus 34, commandbar 77; zero failed/interrupted, cleanup PASS. [Receipt](engine-spike/incognito/regressions.json) |
-| Full verify | Pending |
+| Full verify | 24 checks PASS overall; initial full run 23 PASS / 1 timing FAIL, followed by one quiet commandbar-render 151/151 PASS; commands-dump 0/0/0 with the same 11 allowed-missing rows. [Summary and checklist](engine-spike/incognito/verification.md) |
 
 The suite resets each preference key it uses and restores the persistent values in `finally`. HTTP fixtures, data/cache directories, and ports belong to the run. Keys use `route=app`; Option-Command-click uses engine input dispatch. The quit row checks an actual process exit before harness cleanup.
 
