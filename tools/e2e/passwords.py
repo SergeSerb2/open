@@ -41,6 +41,9 @@ def fill_from_dropdown(app, tab, wait_until, selector='#username', down=1):
     assert show_autofill_dropdown(app, tab, wait_until, selector), 'autofill dropdown did not appear after a field click'
     for _ in range(down):
         app.call('key', key='down', route='app')
+    # Selection can change row bounds. Preserve Chromium's visibility/idle
+    # acceptance barrier after the selected row has had a display turn.
+    time.sleep(.65)
     app.call('key', key='return', route='app')
     return True
 
@@ -526,7 +529,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         return show_autofill_dropdown(app, tab, wait, selector)
 
     def choose():
-        key('down'); key('return')
+        key('down'); time.sleep(.65); key('return')
 
     def empty(tab):
         return app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).every(e => e.value === "")')
@@ -729,7 +732,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             def footer():
                 tab = load(urls['login']); assert popup(tab); events()
                 # Password dropdown has one fixture entry followed by its footer.
-                key('down'); key('down'); key('return')
+                key('down'); key('down'); time.sleep(.65); key('return')
                 assert wait(lambda: any(e.get('type') == 'autofillPage' and e.get('page') == 'passwords' for e in events()), timeout=5, step=.1)
                 selected = next(t for t in app.call('tabs') if t.get('selected'))
                 assert selected['id'] == identity['manage']
