@@ -11364,7 +11364,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--keep", action="store_true",
@@ -11658,6 +11658,9 @@ def main():
                 profiles_checks(factory, results["profiles"], tmp, opts.config)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
                 factory, results["profiles"], tmp, globals(), domain_before)
+        elif opts.only == "passwords":
+            results["passwords"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](factory, results["passwords"], tmp, globals())
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)

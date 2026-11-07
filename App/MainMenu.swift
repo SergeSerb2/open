@@ -33,6 +33,12 @@ enum MainMenu {
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
+    if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
+      if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
+      // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before
+      // the browser's reserved key router can consume them.
+      return false
+    }
     if (Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner))
       .contains(where: { $0.pageChrome.dialogs.blocksBrowserShortcut(event) }) { return true }
     app.prepareCommandServices()
