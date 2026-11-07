@@ -219,7 +219,7 @@ def run(opts, folder, results, apps):
             serve_fixture = True
             for channel, expected in [('stable', '900001'), ('beta', '900002')]:
                 write('open.general.updateChannel', channel)
-                write('open.general.automaticallyUpdate', True)
+                write('open.general.automaticallyUpdate', None if channel == 'stable' else True)
                 write('open.debug.updateFeedURL', canary)
                 # Avoid a scheduled check competing with the manual check on startup.
                 write('SULastCheckTime', datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))
@@ -245,6 +245,10 @@ def run(opts, folder, results, apps):
                         and found['lastCheck'] is not None and all(p == '/appcast.xml' for p in requests),
                         'state': found, 'sparkleWindowTitles': [r['title'] for r in windows if r['visible']],
                         'loopbackRequests': len(requests)}
+                    busy = app.call('updater-state')
+                    menu = [r for r in app.call('menu-state') if r['id'] == 'check-for-updates']
+                    results[channel + '_menu_disabled_during_check'] = {'ok': not busy['canCheck']
+                        and len(menu) == 1 and not menu[0]['enabled'], 'state': busy, 'menu': menu}
                     if opts.force_failure:
                         raise AssertionError('forced failure while Sparkle update window is open')
                     # Invoke General's toggle model and its real preference writer.
