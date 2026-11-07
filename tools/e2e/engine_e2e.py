@@ -11805,8 +11805,9 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords-probe"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "passwords-probe"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
@@ -11815,6 +11816,8 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.firstrun_boosts_only and opts.only != "firstrun":
+        ap.error("--firstrun-boosts-only requires --only firstrun")
     # Startup itself may migrate legacy Peek choices before the socket answers.
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
@@ -12029,7 +12032,10 @@ def main():
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
             # sys.path. Load this owned sibling by its exact repository path.
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+            if not opts.firstrun_boosts_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun_boosts.py"))["run"](
                 factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
@@ -12128,6 +12134,9 @@ def main():
                 profiles_checks(factory, results["profiles"], tmp, opts.config)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/profiles_shell.py"))["run"](
                 factory, results["profiles"], tmp, globals(), domain_before)
+        elif opts.only == "passwords":
+            results["passwords"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](factory, results["passwords"], tmp, globals())
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
@@ -12213,14 +12222,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito"):
+    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito")
+    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

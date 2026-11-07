@@ -33,6 +33,7 @@
     private var managerUndoCount = 0
     var firstRunActionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
+    var savePromptEvents: [[String: Any]] = []
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
 
@@ -91,6 +92,11 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "save-prompt": return try await savePrompt(a)
+      case "events":
+        let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []
+        let events = savePromptEvents; savePromptEvents.removeAll()
+        return pageEvents + events
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
         return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
@@ -722,8 +728,6 @@
         return try await mouse(a, w)
       case "key":
         return try await sendKey(a, w)
-      case "events":
-        return w.drainEvents()
       case "find-state":
         var state = w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
         state["display"] = FindIdleProbe.displayInfo(window: w.window)
@@ -2002,6 +2006,8 @@
         return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
       }
       let keys: [String: (String, UInt16)] = [
+        ".": (".", 47),
+        "enter": ("\u{3}", 76),
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "g": ("g", 5), "s": ("s", 1), "a": ("a", 0),
