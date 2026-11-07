@@ -86,6 +86,7 @@ public struct ArcProbe:Sendable {
             if let routes=json("StorableLinkRouting.json") as? [String:Any],let rules=routes["rules"] as? [Any] {counts["Routing rules"]=rules.count}
             else {counts["Routing rules"]=0}
             result.settingsCounts=counts
+            result.settingsCounts["Boosts"] = parsed.boosts.report.imported
         }
         guard !Task.isCancelled else {return result}
         let archiveURL=arcDirectory.appendingPathComponent("StorableArchiveItems.json")

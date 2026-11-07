@@ -4,6 +4,7 @@ import OpenImport
 import OpenModel
 import OpenSettings
 import OpenStore
+import OpenBoosts
 
 /// The sole App import implementation. Settings merges; first run installs.
 /// History streams through the existing Profile stores after the landing gate.
@@ -93,6 +94,14 @@ final class AppImportRunner {
     counts["Skipped unknown"] = report.skippedUnknown + (plan.archive ? report.archiveSkippedUnknownKind : 0)
     counts["Imported welcome"] = report.importedWelcome
     counts["Session selections"] = report.sessionAppliedSelections
+    if plan.boosts {
+      recordBoostImport(imported.boostsByProfile, counts: &counts)
+      counts["Boosts malformed"] = report.boosts.malformed
+      counts["Boost fields dropped"] = report.boosts.fieldsDropped.values.reduce(0, +)
+      counts["Boost fields unknown"] = report.boosts.unknownFields
+      if report.boosts.cacheFound && report.boosts.status != "read" { failures["Boosts"] = "Could not be read" }
+      else if report.boosts.imported > 0 { failures["Boosts"] = "Not imported in this build" }
+    }
     var profileMapping: [ProfileID: ProfileID] = [:]
     if !firstRun || !plan.spaces || !hasSidebarData {
       for profile in imported.model.profiles {
@@ -348,6 +357,16 @@ final class AppImportRunner {
       case .split(let split): return split.panes
       }
     }
+  }
+
+  /// Section 12's AppBoosts owner is not on main yet. This seam records source
+  /// counts only; it must never create a BoostStore or write a Boost file.
+  /// Follow-up: app.stores.boosts.store(for: profileID).upsert(boost), then
+  /// app.stores.boosts.refresh(profile: profileID) once per destination Profile.
+  /// Add-only merge, the import's shared Undo, and live-page gates stay blocked.
+  private func recordBoostImport(_ boosts: [ProfileID: [Boost]], counts: inout [String: Int]) {
+    counts["Boosts found"] = boosts.values.reduce(0) { $0 + $1.count }
+    counts["Boosts"] = 0 // Parsed source Boosts have not been stored in the App.
   }
 
   private func ensureSelection(in model: BrowserModel) {
