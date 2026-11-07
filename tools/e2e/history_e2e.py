@@ -153,6 +153,7 @@ def history_checks(factory, results, tmp, wait_until, restore_defaults):
         app.call('menu-perform', id='view-history')
         kept = app.call('library-history-state')['profile']
         check('history_manual_profile_while_open', kept == profile1 and kept != profile2, profile=kept)
+        app.call('library-history-state', profile=profile1, selectProfile=True)
         app.call('download-library-close')
         app.call('window-focus', id=second_window, activate=True)
         app.call('menu-perform', id='view-history')
