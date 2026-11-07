@@ -9,6 +9,13 @@ only; the App cannot consume it. Production still needs an official engine,
 complete Chromium credits, final release notes, and the Step 8 updater controller.
 See [the receipt](release/s16-pipeline-verification.md) for the current limits.
 
+The agent packages and checks signatures on the M5 without launching the exact
+app or its mounted DMG app. Supplemental smoke runs only on a separate temporary
+DLV copy on the M1, under its own screen lock. The agent imports the DMG-bound
+`m1-smoke.json` receipt before the final M5 summary. The exact artifact's expected
+Library Validation refusal is static evidence only (§4.4). Never relaunch a build
+that failed to load. If a build crashes, stop on-screen work and tell the lead.
+
 ## U-1: Apple Developer Program membership
 
 This unlocks a Developer ID certificate and notarization. Open
@@ -89,7 +96,14 @@ Delete the temporary export in the same session:
 umask 077
 open_sparkle_backup=$(mktemp "${TMPDIR:-/tmp}/open-sparkle-backup.XXXXXX")
 "$OPEN_SPARKLE_TOOLS/generate_keys" --account "$OPEN_SPARKLE_KEY_ACCOUNT" -x "$open_sparkle_backup"
-# Import this file into the password manager without printing it.
+printf 'Backup file: %s\n' "$open_sparkle_backup"
+```
+
+Use the password manager's file-import command to import that displayed path.
+Do not print the file's contents. Confirm that the backup is saved. Then delete
+the temporary file in the same terminal session:
+
+```bash
 rm -f "$open_sparkle_backup"
 unset open_sparkle_backup
 ```

@@ -7,7 +7,7 @@ umask 077
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 export PATH="/opt/homebrew/bin:$PATH"
-DRY=0 CHANNEL=stable SKIP_ENGINE=0 SKIP_NOTARY=0 PREFLIGHT_ONLY=0
+DRY=0 CHANNEL=stable SKIP_ENGINE=0 SKIP_NOTARY=0 PREFLIGHT_ONLY=0 SMOKE_ONLY=0
 IDENTITY=${OPEN_SIGN_IDENTITY:-}
 NOTARY_PROFILE=${OPEN_NOTARY_PROFILE:-open-notary}
 KEY_ACCOUNT=${OPEN_SPARKLE_KEY_ACCOUNT:-ed25519}
@@ -17,7 +17,7 @@ usage() {
     cat <<'EOF'
 Usage: tools/release.sh [--dry-run] [--config stable|beta] [--skip-engine]
                         [--skip-notarize] [--identity "<full identity name>"]
-                        [--preflight-only]
+                        [--preflight-only] [--smoke-only]
 Env: OPEN_SIGN_IDENTITY, OPEN_NOTARY_PROFILE (default open-notary),
      OPEN_SPARKLE_TOOLS, OPEN_SPARKLE_KEY_ACCOUNT (default ed25519),
      OPEN_SPARKLE_KEY_FILE (optional, instead of Keychain),
@@ -26,6 +26,8 @@ Env: OPEN_SIGN_IDENTITY, OPEN_NOTARY_PROFILE (default open-notary),
 Production requires the completed release prerequisites, an existing Developer ID
 identity and open-notary profile. This script never creates them or publishes.
 Dry runs use ad-hoc signing and a temporary file-based Sparkle seed, never Keychain.
+Dry-run packaging never launches the exact app. --dry-run --smoke-only runs
+only on an M1, using a temporary disable-library-validation copy of the DMG app.
 Unfinished Steps 2, 4–8 or 10 cause explicit mode-SKIP rows in dry runs.
 --skip-engine reuses Vendor/cef but still requires official-engine provenance.
 --skip-notarize produces NOT-NOTARIZED internal artifacts, never a publishable feed.
@@ -41,11 +43,13 @@ while [[ $# -gt 0 ]]; do
         --skip-engine) SKIP_ENGINE=1; shift ;;
         --skip-notarize) SKIP_NOTARY=1; shift ;;
         --preflight-only) PREFLIGHT_ONLY=1; shift ;;
+        --smoke-only) SMOKE_ONLY=1; shift ;;
         --identity) [[ $# -ge 2 && -n "$2" ]] || die '--identity needs a full name'; IDENTITY=$2; shift 2 ;;
         *) die "unknown option: $1" ;;
     esac
 done
 case "$CHANNEL" in stable|beta) ;; *) die "invalid channel: $CHANNEL" ;; esac
+[[ $SMOKE_ONLY == 0 || ( $DRY == 1 && $PREFLIGHT_ONLY == 0 ) ]] || die '--smoke-only requires --dry-run and excludes --preflight-only'
 case "${OPEN_BUILD_JOBS:-6}" in ''|*[!0-9]*|0) die 'OPEN_BUILD_JOBS must be a positive integer' ;; esac
 command -v python3 >/dev/null || die 'python3 required'
 settings=$(python3 - <<'PY'
@@ -859,7 +863,7 @@ lines.append('engine_root='+engine_root)
 dev=r/'.staging/dev-engine.txt'
 if dev.is_file():lines.append('dev_framework_sha256='+dev.read_text().splitlines()[1].split()[0])
 if mode=='dry-run':
- lines.extend(['launch_smoke=supplemental local-only launch copy, disable-library-validation exception, not the shipped signature','artifact_entitlements=exact committed app/helper files; no supplemental launch exception','exact_artifact_launch=expected dry-run limit: Library Validation refuses OpenEngine; see .staging/exact-launch.json','acknowledgements=local preview only; sample Chromium credits and U-8 source offer remain blocked'])
+ lines.extend(['launch_smoke=M1 only: supplemental local-only launch copy, disable-library-validation exception, not the shipped signature','artifact_entitlements=exact committed app/helper files; no supplemental launch exception','exact_artifact_launch=NEVER LAUNCHED: static runtime/no-Team-ID evidence predicts Library Validation refusal; release.md section 4.4; see .staging/exact-signature.json','acknowledgements=local preview only; sample Chromium credits and U-8 source offer remain blocked'])
 if mode!='production':lines.append('notarization=SKIP: '+mode)
 previous=r/'.staging/previous.txt';lines.append('previous_build='+((previous.read_text().splitlines() or ['no predecessor'])[0] if previous.exists() else 'unavailable'))
 for p in sorted(Path(stamps).glob('*.result')):
@@ -900,29 +904,31 @@ while p.exists():
  time.sleep(15)
 PY
 }
-exact_launch_limit() {
-    onscreen_turn
-    /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 - "$APP" "$STAGE" <<'PY'
+exact_signature_limit() {
+    # Lead STOP-rule, 2026-11-07: never launch the exact dry-run artifact.
+    python3 - "$APP" "$STAGE" <<'PY'
 from pathlib import Path
-import json,os,subprocess,sys,tempfile
+import json,subprocess,sys
 app,stage=map(Path,sys.argv[1:])
-with tempfile.TemporaryDirectory(prefix='open-exact-launch-') as data:
- with (stage/'exact-launch.log').open('w') as log:
-  p=subprocess.Popen([str(app/'Contents/MacOS/Open'),'--skip-first-run','--user-data-dir='+data],env=dict(os.environ,OPEN_USER_DATA=data,OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS='1'),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
-  try: code=p.wait(timeout=15)
-  except subprocess.TimeoutExpired:
-   p.terminate();p.wait(timeout=10)
-   raise SystemExit('exact-entitlement artifact stayed alive; inspect changed Library Validation behavior')
- text=(stage/'exact-launch.log').read_text(errors='replace')
- if code==0 or 'OpenEngine' not in text or not any(s in text for s in ('no Team ID','library validation','Library not loaded','code signature')):
-  raise SystemExit('exact-entitlement launch failed without the expected OpenEngine Library Validation error; inspect exact-launch.log')
- (stage/'exact-launch.json').write_text(json.dumps({'result':'expected dry-run limit','exit':code,'reason':'Library Validation refuses OpenEngine','signature':'exact committed entitlements'},indent=2)+'\n')
- print('Expected dry-run limit: exact-entitlement artifact refused OpenEngine (Library Validation); exit',code)
+evidence=[]
+for binary in [app,app/'Contents/Frameworks/OpenEngine.framework']:
+ p=subprocess.run(['codesign','-dvv',str(binary)],capture_output=True,text=True,check=True)
+ if 'runtime' not in p.stderr or 'TeamIdentifier=not set' not in p.stderr:
+  raise SystemExit('dry artifact must have runtime and no Team ID')
+ evidence.append(p.stderr)
+(stage/'exact-signature.txt').write_text('\n'.join(evidence))
+(stage/'exact-signature.json').write_text(json.dumps({'result':'static expected dry-run limit','launched':False,'reason':'runtime, no Team ID: Library Validation will refuse OpenEngine','reference':'docs/plans/release.md section 4.4','signature':'exact committed entitlements'},indent=2)+'\n')
+print('Static only; artifact NEVER launched: runtime + no Team ID predicts OpenEngine Library Validation refusal (release.md section 4.4)')
 PY
+}
+require_m1() {
+    [[ $(sysctl -n machdep.cpu.brand_string) == 'Apple M1'* ]] || die 'dry-run launch smoke is M1-only; never launch a release smoke on the M5 (lead STOP-rule)'
 }
 supplemental_smoke() {
     local source=$1 evidence=$2
     [[ $DRY == 1 ]] || { smoke "$source" "$evidence"; return; }
+    [[ $SMOKE_ONLY == 1 ]] || die 'dry-run launch requires the explicit M1 --smoke-only path'
+    require_m1
     log 'supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
     SMOKE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/open-release-launch.XXXXXX")
     ditto "$source" "$SMOKE_DIR/Open.app"
@@ -946,6 +952,26 @@ PY
 }
 smoke() {
     local a=$1 evidence=$2
+    if [[ $DRY == 1 ]]; then
+        require_m1
+        [[ $SMOKE_ONLY == 1 && -n "$SMOKE_DIR" && "$a" == "$SMOKE_DIR/Open.app" ]] || die 'refusing dry-run launch: only the temporary DLV copy may run'
+        python3 - "$a" "$ROOT" "${TMPDIR:-/tmp}" <<'PYGUARD' || die 'refusing dry-run launch: temporary app/helper DLV seals or runtime signature invalid'
+from pathlib import Path
+import plistlib,subprocess,sys
+app,root,temp=map(Path,sys.argv[1:])
+if not app.resolve().is_relative_to(temp.resolve()) or not app.parent.name.startswith('open-release-launch.'):
+ raise SystemExit('launch copy must be under TMPDIR')
+pairs=[(app,root/'App/Open.entitlements')]
+for suffix,name in [('', 'Open Helper'),('.gpu','Open Helper (GPU)'),('.renderer','Open Helper (Renderer)'),('.plugin','Open Helper (Plugin)'),('.alerts','Open Helper (Alerts)')]:
+ pairs.append((app/'Contents/Frameworks'/(name+'.app'),root/('Helper/Entitlements/helper'+suffix+'.entitlements')))
+for bundle,source in pairs:
+ expected=plistlib.loads(source.read_bytes());expected['com.apple.security.cs.disable-library-validation']=True
+ actual=plistlib.loads(subprocess.check_output(['codesign','-d','--entitlements','-','--xml',str(bundle)],stderr=subprocess.DEVNULL))
+ signature=subprocess.run(['codesign','-dvv',str(bundle)],capture_output=True,text=True,check=True).stderr
+ if actual!=expected or 'runtime' not in signature or 'TeamIdentifier=not set' not in signature:raise SystemExit('temporary launch seal mismatch')
+print('M1-only temporary DLV launch guard: PASS')
+PYGUARD
+    fi
     if [[ ! -x "$STAGE/quit-pid" ]]; then
         cat > "$STAGE/quit-pid.m" <<'OBJC'
 #import <Carbon/Carbon.h>
@@ -1020,32 +1046,82 @@ with e.with_suffix('.log').open('w') as log:
 e.write_text(json.dumps(result,indent=2)+'\n');print(e.read_text())
 PY
 }
+m1_smoke_only() {
+    PHASE=m1-supplemental-smoke
+    require_m1
+    [[ -f "$DMG" ]] || die 'copy the M5 dry-run DMG and checksum into this detached M1 worktree first'
+    (cd "$REL" && shasum -a 256 -c "Open-$VERSION.dmg.sha256")
+    MOUNT_DIR=$(mktemp -d "$STAGE/m1-mount.XXXXXX")
+    hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_DIR" "$DMG"
+    codesign --verify --deep --strict "$MOUNT_DIR/Open.app"
+    exact_entitlements "$MOUNT_DIR/Open.app"
+    supplemental_smoke "$MOUNT_DIR/Open.app" "$STAGE/m1-launch.json"
+    # Recheck the source: only the temporary copy was re-signed or launched.
+    codesign --verify --deep --strict "$MOUNT_DIR/Open.app"
+    exact_entitlements "$MOUNT_DIR/Open.app"
+    hdiutil detach "$MOUNT_DIR"
+    rmdir "$MOUNT_DIR"; MOUNT_DIR=
+    python3 - "$DMG" "$STAGE/m1-launch.json" "$REL/m1-smoke.json" <<'PY'
+from pathlib import Path
+import hashlib,json,subprocess,sys
+dmg,launch,receipt=map(Path,sys.argv[1:])
+h=hashlib.sha256()
+with dmg.open('rb') as f:
+ for chunk in iter(lambda:f.read(1048576),b''):h.update(chunk)
+machine=subprocess.check_output(['sysctl','-n','machdep.cpu.brand_string'],text=True).strip()
+results=json.loads(launch.read_text())
+required={'page_title':'Example Domain','javascript_dynamic_function_hot_loop':True,'renderer':True,'gpu':True,'sidebar_tab':True,'clean_quit':True}
+if results!=required or not machine.startswith('Apple M1'):raise SystemExit('M1 smoke receipt incomplete')
+receipt.write_text(json.dumps({'schema':1,'dmg_sha256':h.hexdigest(),'machine':machine,'exact_artifact_launched':False,'mounted_app_launched':False,'copy_deleted':True,'launch_policy':'supplemental local-only launch copy, disable-library-validation exception, not the shipped signature','results':results},indent=2)+'\n')
+print('M1 supplemental smoke receipt:',receipt)
+PY
+}
+m1_receipt_valid() {
+    python3 - "$REL/m1-smoke.json" "$DMG" <<'PY' >/dev/null 2>&1
+from pathlib import Path
+import hashlib,json,sys
+receipt,dmg=map(Path,sys.argv[1:])
+assert receipt.stat().st_size<=16384
+j=json.loads(receipt.read_text())
+h=hashlib.sha256()
+with dmg.open('rb') as f:
+ for chunk in iter(lambda:f.read(1048576),b''):h.update(chunk)
+assert j['schema']==1 and j['dmg_sha256']==h.hexdigest() and j['machine'].startswith('Apple M1')
+assert j['exact_artifact_launched'] is False and j['mounted_app_launched'] is False and j['copy_deleted'] is True
+assert j['launch_policy']=='supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
+assert j['results']=={'page_title':'Example Domain','javascript_dynamic_function_hot_loop':True,'renderer':True,'gpu':True,'sidebar_tab':True,'clean_quit':True}
+PY
+}
 summary() {
     : > "$STAGE/acceptance.tsv"
     if ready 02-engine; then row A-1 PASS 'official args, matching distrib binary/commits, engine-status --strict'; else row A-1 mode-SKIP "$(reason 02-engine)"; fi
     if ready 09-dmg; then
         # Always repeat runtime checks for a new final artifact, never infer them
         # from a build or a signature. Successful receipts are bound to the DMG.
-        local artifact_hash runtime_hash=
+        local artifact_hash runtime_hash= runtime_receipt="$STAGE/runtime.sha256"
+        [[ $DRY != 1 ]] || runtime_receipt="$STAGE/artifact-verification.sha256"
         artifact_hash=$(shasum -a 256 "$DMG" | awk '{print $1}')
-        [[ ! -f "$STAGE/runtime.sha256" ]] || runtime_hash=$(cat "$STAGE/runtime.sha256")
+        [[ ! -f "$runtime_receipt" ]] || runtime_hash=$(cat "$runtime_receipt")
         if [[ "$runtime_hash" != "$artifact_hash" ]]; then
             exact_entitlements "$APP"
-            [[ $DRY != 1 ]] || exact_launch_limit
-            supplemental_smoke "$APP" "$STAGE/launch.json"
+            if [[ $DRY == 1 ]]; then exact_signature_limit; else smoke "$APP" "$STAGE/launch.json"; fi
             MOUNT_DIR=$(mktemp -d "$STAGE/mount.XXXXXX")
             hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_DIR" "$DMG"
             codesign --verify --deep --strict "$MOUNT_DIR/Open.app"
             exact_entitlements "$MOUNT_DIR/Open.app"
-            supplemental_smoke "$MOUNT_DIR/Open.app" "$STAGE/mounted-launch.json"
+            [[ $DRY == 1 ]] || smoke "$MOUNT_DIR/Open.app" "$STAGE/mounted-launch.json"
             hdiutil detach "$MOUNT_DIR"
             rmdir "$MOUNT_DIR"; MOUNT_DIR=
-            printf '%s\n' "$artifact_hash" > "$STAGE/runtime.sha256"
+            printf '%s\n' "$artifact_hash" > "$runtime_receipt"
         fi
         local launch_label='signed artifact'
-        [[ $DRY != 1 ]] || launch_label='supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
-        row A-2 PASS "$launch_label; real page title, saved sidebar, clean quit"
-        row A-3 PASS "$launch_label; renderer, GPU and JavaScript hot loop"
+        local launch_status=PASS
+        if [[ $DRY == 1 ]]; then
+            launch_label='M1: supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
+            if ! m1_receipt_valid; then launch_status=mode-SKIP; launch_label='M1 supplemental smoke pending; copy DMG to detached M1 worktree, run --dry-run --smoke-only, import m1-smoke.json'; fi
+        fi
+        row A-2 "$launch_status" "$launch_label; real page title, saved sidebar, clean quit"
+        row A-3 "$launch_status" "$launch_label; renderer, GPU and JavaScript hot loop"
         codesign --verify --deep --strict "$APP"
         exact_entitlements "$APP"
         row A-4 PASS "inside-out signatures verified ($MODE)"
@@ -1064,7 +1140,7 @@ summary() {
         row A-8 PASS "exact locale set: $LOCALES"
         row A-9 PASS 'no dSYMs in app'
         row A-10 PASS 'no automation socket string or compilation flag'
-        row A-11 PASS "DMG verified, mounted, exact entitlements verified, detached; launch: $launch_label"
+        row A-11 "$launch_status" "DMG verified, mounted, exact entitlements verified, detached; launch: $launch_label"
     else
         local id
         for id in A-2 A-3 A-4 A-7 A-8 A-9 A-10 A-11; do row "$id" mode-SKIP "$(reason 09-dmg)"; done
@@ -1167,8 +1243,10 @@ PY
     if grep -q $'\tFAIL\t' "$STAGE/acceptance.tsv"; then
         result FAIL 'acceptance incomplete; inspect table and provide real evidence before release'
     else result PASS 'all applicable checks pass; mode-SKIP rows are explicitly bounded'; fi
-    output "$STAGE/acceptance.tsv"
+    output "$STAGE/acceptance.tsv" "$REL/m1-smoke.json"
+    [[ $DRY != 1 ]] || output "$STAGE/exact-signature.json" "$STAGE/exact-signature.txt" "$STAGE/artifact-verification.sha256"
 }
+if [[ $SMOKE_ONLY == 1 ]]; then m1_smoke_only; exit 0; fi
 if [[ $DRY == 0 ]]; then rm -f "$STAMPS/01-preflight.stamp"; fi
 run_phase 01-preflight preflight
 [[ $PREFLIGHT_ONLY == 0 ]] || { log 'Preflight complete; no build, signing, notary submission or publishing performed'; exit 0; }
@@ -1186,7 +1264,7 @@ run_phase 11-manifest manifest
 # Receipts and external publication can change after staging. Production always
 # refreshes acceptance; dry runs can reuse its artifact- and receipt-bound stamp.
 if [[ $DRY == 0 ]]; then rm -f "$STAMPS/12-summary.stamp"; fi
-CHAIN=$(printf '%s\n%s\n' "$CHAIN" "$(digest "$REL/acceptance.json")" | shasum -a 256 | awk '{print $1}')
+CHAIN=$(printf '%s\n%s\n%s\n' "$CHAIN" "$(digest "$REL/acceptance.json")" "$(digest "$REL/m1-smoke.json")" | shasum -a 256 | awk '{print $1}')
 run_phase 12-summary summary
 if [[ $(cut -f1 "$STAMPS/12-summary.result") == FAIL ]]; then die 'acceptance table has FAIL rows; no release acceptance claimed'; fi
 if [[ $DRY == 1 && -f "$STAGE/acceptance.tsv" ]]; then

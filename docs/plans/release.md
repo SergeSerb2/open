@@ -93,14 +93,18 @@ only; Sparkle does not consume a file feed (lead: pinned 2.10.1, error 2001).
 CryptoKit verifies the enclosure's Ed25519
 signature against the throwaway public key, independently of the signing key.
 
-The exact-entitlement ad-hoc artifact cannot pass Library Validation. The lead
-approved the Appendix's separate temporary launch-copy exception on 2026-11-07.
-A-2/A-3/A-11 may prove only the **supplemental local-only launch copy,
-disable-library-validation exception, not the shipped signature**. The copy and
-its temporary entitlement files are deleted. The app in `build/release` and the
-DMG keep exact committed entitlements, enforced by sealed-dictionary comparisons.
-The exact artifact's refusal is an expected dry-run limit. A production launch
-still uses the exact shipped signature. U-9 is not defined in §10 or follow-ups.
+The exact-entitlement ad-hoc artifact cannot pass Library Validation. The lead's
+2026-11-07 16:16 STOP-rule withdrew permission to launch it: an earlier probe
+caused a crash dialog. Never launch that artifact or the exact app on its DMG.
+Record only static `codesign` runtime/no-Team-ID evidence and cite §4.4.
+A-2/A-3/A-11 use only the **supplemental local-only launch copy,
+disable-library-validation exception, not the shipped signature**, on the M1
+under its own screen lock. The script refuses this smoke on the M5. It also
+checks the temporary app/helper DLV entitlement seals before launch. The copy
+and temporary entitlements are deleted. The app in `build/release` and the DMG
+keep exact committed entitlements, enforced by sealed-dictionary comparisons.
+Never relaunch a failed-to-load build. If anything crashes, stop on-screen work
+and report it to the lead. U-9 is not defined in §10 or follow-ups.
 
 | ID | Fact | Evidence |
 |---|---|---|

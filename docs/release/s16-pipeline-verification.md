@@ -52,85 +52,40 @@ dictionaries for the app and all five helpers. The script compares sealed plist
 dictionaries to the source files. The plugin helper's existing Library Validation
 exception is expected; no other release binary gains one.
 
-The lead approved only this separate smoke path on 2026-11-07:
-**supplemental local-only launch copy, disable-library-validation exception,
-not the shipped signature**. The script copies the source app to a temporary
-directory, creates temporary entitlement files, re-signs the app and helpers
-with runtime enabled, exercises the page/helpers/JavaScript, and deletes the
-copy and entitlement files. It repeats this with a copy read from the mounted
-DMG. This never proves that the exact ad-hoc release signature can launch.
-The exact artifact's Library Validation refusal is recorded as an expected
-dry-run limit. Production keeps exact entitlements and requires a Team ID.
+The lead's 2026-11-07 16:16 STOP-rule withdrew the earlier permission to launch
+the exact ad-hoc artifact. That probe caused a dyld crash dialog. Its successful
+wrapper exit did not make it acceptable. No exact artifact or mounted DMG app
+will be launched again. Static `codesign -d --entitlements` and `-dvv` evidence
+shows runtime and no Team ID; §4.4 predicts OpenEngine Library Validation refusal.
+
+The only permitted launch is the **supplemental local-only launch copy,
+disable-library-validation exception, not the shipped signature**, on the M1.
+`--dry-run --smoke-only` refuses the M5. Before launch, it verifies the temporary
+path, runtime/ad-hoc signature, and exact source dictionaries plus DLV for the
+app and all five helpers. It copies from a read-only DMG mount, launches only
+that temporary copy under the M1 screen lock, deletes it and its temporary
+entitlements, and detaches. `m1-smoke.json` binds the result to the DMG hash.
+The M5 summary accepts that receipt only for its exact DMG. Receipt import
+invalidates only the summary stamp. No failed-to-load build is relaunched.
+If anything crashes, on-screen work stops and the lead is told.
 
 ## Dry-run acceptance
 
-Retained attempts: attempt 1 built Release successfully, then was interrupted
-by editing the active shell script. Attempt 2 built and deeply verified the
-signed app, then failed at the entitlement parser. macOS 27.2 prints a text
-dictionary by default; `codesign --xml` fixes the extraction without changing
-any signing policy. Attempt 3 reached a valid DMG but the pinned appcast generator emitted no
-EdDSA enclosure signature for the dry archive. The script now uses `sign_update`
-explicitly for dry enclosures and verifies with the throwaway public key. These
-attempts are not acceptance runs.
+Attempts 1–4 are retained as history, not current acceptance. Attempt 1 was
+interrupted by an active script edit. Attempt 2 exposed macOS 27.2's default
+text entitlement output; explicit `codesign --xml` fixed extraction. Attempt 3
+exposed the pinned generator's unsigned dry enclosure; explicit `sign_update`
+and independent public-key verification fixed it. Attempt 4 completed but its
+exact-artifact launch caused the crash dialog addressed by the STOP-rule.
+Its M5 supplemental launches and original no-op run do not prove the new policy.
 
-The `file://` feed is a shape and Ed25519 signature proof only. It is not an
-App-consumable update feed. The lead reports Sparkle 2.10.1 rejects a file feed
-with error 2001 in the updater-core work. No live-update claim is made here.
+The replacement protocol is M5 packaging/static checks, an M1-only temporary
+copy smoke, receipt import, then an unchanged M5 run with 12 NO-OP phases.
+Final results and hashes will be filled from that run.
 
-Attempt 4 completed with exit 0. Its unchanged second run also exited 0 and
-reported **NO-OP for all 12 phases**. Stamps compare phase inputs and output
-bytes. The second run performed no build, signing, DMG creation or launch.
-
-Command: `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main tools/release.sh --dry-run`.
-The script takes a heavy slot for fetch/build and the on-screen lock for each
-launch. It honors the on-screen priority flag. No production credential was read.
-
-| §9.4 check | Result | Evidence / limit |
-|---|---|---|
-| A-1 Official engine | mode-SKIP | Main dev distribution; no official ThinLTO/PGO output. Manifest records root and binary hash. |
-| A-2 Launch/page/sidebar/quit | PASS, supplemental only | Real Example Domain title; saved sidebar tab; clean PID-targeted quit. |
-| A-3 Helpers/JavaScript | PASS, supplemental only | Own renderer and GPU descendants; dynamic JavaScript function and hot loop returned the expected result. |
-| A-4 Signature | PASS | Inside-out ad-hoc runtime signing; `codesign --verify --deep --strict`; exact six source entitlement dictionaries. |
-| A-5 Gatekeeper | mode-SKIP | No Developer ID or notarization acceptance claimed. |
-| A-6 Stapling | mode-SKIP | No notary ticket or credential used. |
-| A-7 Size | mode-SKIP | App 548,438,016 bytes; dev framework exceeds official budget. DMG 202,592,656 bytes. Production hard limit stays 320 MB. |
-| A-8 Locales | PASS | Exact set `en`; required engine resources and arm64-only binaries present. |
-| A-9 Symbols excluded | PASS | No dSYMs in the app. Official symbol archive remains open. |
-| A-10 Automation excluded | PASS | No automation socket string or compilation flag in the Release binary/build log. |
-| A-11 DMG | PASS, supplemental launch only | `hdiutil verify`; attach read-only; verify mounted app signature and exact entitlements; smoke a temporary copy; detach. |
-| A-12 Feed | PASS, shape/signature only | `xmllint`; exact enclosure URL/length/version/OS; CryptoKit verifies Ed25519 with throwaway public key. |
-| A-13 Real update | mode-SKIP | No shipped predecessor or real updater-consumption proof. |
-| A-14 About/credits | mode-SKIP | Incomplete preview generated; sample Chromium credits, U-8 offer and native About receipt still open. |
-| A-15 No secrets | PASS | Outputs ignored; no private-key files/PEM; throwaway seed removed. |
-
-A-2/A-3/A-11 use the **supplemental local-only launch copy,
-disable-library-validation exception, not the shipped signature**. Both the
-local-app copy and mounted-DMG copy passed all six smoke fields. The exact
-artifact exited with signal 6; its log names OpenEngine and the missing Team ID.
-This expected Library Validation refusal is not a successful launch.
-
-| Artifact | SHA-256 |
-|---|---|
-| `Open-0.1.0.dmg` | `e701e3c548755568b00c896bfadadc796a1b6498a60f3230a737c0544b31a70a` |
-| `appcast.xml` | `6dc1e731e1ea119dd7bc777d77c4bd6a263057a1378cc457528980b8b5d99c39` |
-| Dev framework | `2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10` |
-
-The DMG is unsigned (`codesign -dv` exits 1: code object is not signed at all).
-The app inside it is signed. After completion, no release mount, temporary launch
-copy, temporary entitlement file, throwaway-key directory, or owned Open process
-remained. The release lock was removed.
-
-Raw logs remain in the private `.re/s16/release-pipeline/` receipt directory:
-`dry-run-4.log`, `dry-run-noop.log`, and the preflight/provenance receipts.
-The artifact folder holds the manifest, checksum, feed/public key, exact-launch
-receipt, two smoke receipts and the machine-readable acceptance table.
-
-| Run | Local time | Load averages before → after | Exit |
-|---|---|---|---|
-| Accepted dry run | 15:47–15:54 | 16.82 / 19.71 / 21.60 → 17.97 / 15.19 / 18.31 | 0 |
-| Unchanged rerun | 15:54 | 28.78 / 17.99 / 19.23 → 28.16 / 18.04 / 19.24 | 0 |
-
-These loads describe functional checks. They are not quiet-machine timing proof.
+The `file://` feed proves shape and Ed25519 signatures only. Pinned Sparkle
+2.10.1 rejects file feeds in the real App (lead: error 2001). No App update
+consumption is claimed.
 
 ## Preflight failure cases
 
@@ -193,8 +148,8 @@ script and private keys were deleted. Receipts: `preflight-break-intact.log`,
 | Pixel checks | N/A | No image comparison added |
 | Exact dialog identity | N/A | No dialog check added; no generic-window success claim |
 | Timing logic | N/A | No new performance acceptance row; functional polling has a fixed timeout |
-| Isolated data/ports | PASS | Each smoke uses a new data root and ephemeral CDP port; release lock excludes same-version writers |
-| No human/cleanup | PASS | PID-targeted quit, finally cleanup of owned process group, EXIT cleanup of temporary copy/keys/mount; no mouse/keyboard automation |
+| Isolated data/ports | PASS | Each permitted M1 smoke uses a new data root and ephemeral CDP port; release lock excludes same-version writers |
+| No human/cleanup | Pending M1 proof | The earlier exact-artifact probe caused a crash dialog and was withdrawn. New code permits only guarded M1 temporary DLV launches, with finally/EXIT cleanup. No desktop input. |
 | Reduce Motion | N/A | No motion changed |
 | Interrupted animation | N/A | No animation changed |
 | Resize/hide animation | N/A | No geometry changed |
