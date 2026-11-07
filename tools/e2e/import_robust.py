@@ -164,7 +164,7 @@ def run(factory, results, tmp, h):
         archive['items'] += [new['sidebarItem']['id'], new]
         (source/'StorableArchiveItems.json').write_text(json.dumps(archive))
         with sqlite3.connect(source/'User Data/Default/History') as db:
-            db.execute('INSERT INTO visits VALUES(100,1,13437000040000000,0,0)')
+            db.execute('INSERT INTO visits SELECT coalesce(max(id),0)+1,1,13437000040000000,0,0 FROM visits')
     def file_state():
         return {str(f.relative_to(app.user_data)): (f.stat().st_size, f.stat().st_mtime_ns)
                 for f in Path(app.user_data).rglob('*') if f.is_file() and
@@ -179,7 +179,8 @@ def run(factory, results, tmp, h):
             for mode in ('settings_twice', 'first_then_settings'):
                 launch(source)
                 if mode == 'settings_twice':
-                    app.call('first-run', action='fresh'); first = settings_import(source)
+                    app.call('first-run', action='fresh'); empty = inventory(app)
+                    first = settings_import(source)
                 else:
                     first = first_import(); finish_first()
                 before = inventory(app)
@@ -190,9 +191,30 @@ def run(factory, results, tmp, h):
                 row('repeat_'+mode, before == after and all(counts.get(k, 0) == 0 for k in (
                     'Imported Spaces', 'Imported tabs', 'Favorites', 'Folders', 'Profiles', 'Routing rules', 'Imported Archive', 'History')),
                     before=before, after=after, imported=counts)
+                if mode == 'settings_twice':
+                    # A no-op repeat must not release the first import's
+                    # native Undo target when the runner replaces its receipt.
+                    restored = undo()
+                    twice = undo()
+                    app.call('sidebar-key', key='z', modifiers=['command', 'shift'])
+                    assert h.wait_until(lambda: not state().get('importUndoInProgress', False), timeout=30, step=.02)
+                    redone = inventory(app)
+                    row('repeat_then_undo', restored == empty and twice == empty and redone == before,
+                        before=empty, imported=before, afterFirstUndo=restored, afterSecondUndo=twice, redone=redone)
                 app.quit(); app = None
                 if negative:
                     shutil.rmtree(source); fixture(source, h)
+
+            launch(source); app.call('first-run', action='fresh'); empty = inventory(app)
+            settings_import(source); first = inventory(app)
+            expanded_ordered = root/'expanded-ordered'; shutil.copytree(source, expanded_ordered); expand(expanded_ordered)
+            settings_import(expanded_ordered); second = inventory(app)
+            restored_first = undo(); restored_empty = undo()
+            row('two_imports_undo_order', second['tabs'] == first['tabs']+1
+                and second['archive'] == first['archive']+1 and second['historyKeys'] == first['historyKeys']+1
+                and restored_first == first and restored_empty == empty,
+                empty=empty, first=first, second=second, afterFirstUndo=restored_first, afterSecondUndo=restored_empty)
+            app.quit(); app = None
 
             launch(source)
             before = dict(spaces=len(app.call('spaces')), profiles=1, routing=0, tabs=0,
@@ -271,11 +293,11 @@ def run(factory, results, tmp, h):
             expanded = root/'expanded'; shutil.copytree(source, expanded); expand(expanded)
             settings_import(expanded); added = inventory(app)
             with sqlite3.connect(destination) as db:
-                db.execute("UPDATE urls SET title='Example newer live title' WHERE url='https://example.com/b'")
+                db.execute("UPDATE urls SET title='Example newer live title' WHERE url='https://example.org/b'")
             restored = undo()
             with sqlite3.connect('file:'+str(destination)+'?mode=ro', uri=True) as db:
                 title_restored = db.execute("SELECT title FROM urls WHERE url='https://example.com/a'").fetchone()[0] == 'Example original live title'
-                newer_retained = db.execute("SELECT title FROM urls WHERE url='https://example.com/b'").fetchone()[0] == 'Example newer live title'
+                newer_retained = db.execute("SELECT title FROM urls WHERE url='https://example.org/b'").fetchone()[0] == 'Example newer live title'
             row('undo_keeps_existing', restored == baseline and added['historyKeys'] == baseline['historyKeys']+1
                 and added['archive'] == baseline['archive']+1 and title_restored and newer_retained,
                 before=baseline, added=added, after=restored, titleRestored=title_restored, newerTitleRetained=newer_retained)

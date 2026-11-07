@@ -58,8 +58,10 @@ final class AppImportUndo {
   private func register(on manager: UndoManager, undoing: Bool) {
     let group = manager.groupingLevel == 0 && !manager.isUndoing && !manager.isRedoing
     if group { manager.beginUndoGrouping() }
-    manager.registerUndo(withTarget: self) { receipt in
-      MainActor.assumeIsolated { receipt.apply(undoing: undoing) }
+    // UndoManager does not retain its target. A later no-op import replaces
+    // the runner's receipt, so the action itself must keep this one alive.
+    manager.registerUndo(withTarget: self) { [self] _ in
+      MainActor.assumeIsolated { apply(undoing: undoing) }
     }
     manager.setActionName("Import from Arc")
     if group { manager.endUndoGrouping() }
