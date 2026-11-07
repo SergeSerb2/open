@@ -80,6 +80,81 @@ takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads ca
 increase these estimates. The final table and each log give actual times/results.
 Performance budgets are never retried or relaxed by the runner.
 
+### Display and timer portability (Section 16)
+
+Visual references use the exact key `scale-<native backing scale>-icc-<SHA256>`.
+The ICC digest covers the color profile of the render host's screen. The host
+is never ordered on screen. Its screen is explicit, so selection does not use
+the requested synthetic render scale, a hostname, or a machine name. Both scale
+and the full profile digest must match. An unknown key fails with its key and a
+recording instruction. There is no fallback and no automatic recording.
+
+| Display | Native scale | ICC SHA-256 | Reference |
+|---|---:|---|---|
+| M5 AW2726DM | 1 | `b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43` | Original PNGs and original color caps |
+| M1 built-in | 2 | `b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856` | New exact 2x PNGs and recorded color caps |
+| M5 built-in, expected from its installed Color LCD profile | 2 | `689713e234c3a538d0c88d0ad0693b98d983cee00aefa50522cc6d9d001062fa` | Unknown key: FAIL; display rerun pending (lead/user) |
+
+The M5 built-in key is an offline profile inventory, not a runtime selection
+proof. No display setup was changed. Its actual selection and render proof are
+**display rerun pending (lead/user)** and are not a merge requirement.
+
+`space-legacy` and editor P1 retain all six original PNGs. The M5 renders at
+scale 1 and requires the same exact PNG bytes. The new M1 references render at
+scale 2 (1800×1400 pixels for the 900×700-point scene). They also require exact
+PNG bytes. The two renderers have separate references. Their metadata records
+trusted `origin/main` SHA `df4767ad235106863983b45b2a1ffd87c7bd1b46`, the build
+binary hashes, and each PNG hash. The recorder checks that the package source
+matches that commit. It refuses existing keys and writes only a new proposal
+directory. It never changes a reference in place.
+
+`sidebar-compare` keeps the original M5 absolute limits, positions, masks,
+element counts, exact paired geometry/ink, and 0.15 ΔE00 paired color drift.
+Its render scale remains 1 to match the reference capture scale. The display
+key uses the native screen scale and ICC profile because AppKit text and symbol
+rasterization depends on that environment. Three fresh trusted-main renders
+per state recorded the M1 limits with no added headroom. The three different
+caps are static-inactive **1.31**, selected-pinned **2.71**, and yellow **2.25**;
+the original M5 caps remain **1.17**, **1.73**, and **1.95**. Other M1 caps are
+equal to or lower than the original M5 caps. The manifest keeps all 39 measured
+samples and the trusted-main binary hash. The older checkpoint's OS-build-only
+key and its unverified recordings were not adopted.
+
+Suggestion check #31 remains a real wall-clock check. On every M5 CPU, its
+acceptance is exactly the original raw **<600 ms**, with at most three attempts.
+An unavailable CPU identity also uses that strict rule. Other CPUs compare
+against a same-run fixed reference: the real local query with networking off,
+then an independent 380 ms sleep, sampled three times. Acceptance requires
+`elapsed / max(1, medianReference / 380) < 600 ms`. A median outside
+`380..<600 ms` fails portable acceptance. The reference never invokes the remote
+provider or its timeout. Each receipt prints all reference samples, the raw
+elapsed time, calibrated time, lateness past 380 ms, CPU model, and load. The
+separate 80 ms debounce / 300 ms configured-timeout behavior check is unchanged.
+Calibration measures scheduler and local-query overhead. It does not claim that
+CPU counters measure sleeping time or that a busy host meets a quiet latency
+budget.
+
+The explicit negative-proof switch only breaks checks. It cannot make a gate
+pass. `OPEN_VERIFY_BREAK=all` changes one channel of one rendered pixel by
+1/255 in each legacy check, changes one sampled URL-field fill by 2/255 in the
+sidebar branch output, and increases the real remote timeout by 300 ms. It does
+not change any reference. Individual values are `legacy`, `editor`, `color`,
+and `suggest`. Leave this variable unset for positive and full runs.
+
+```sh
+export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main # M5 only
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock \
+  ~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=all \
+  tools/verify-all.sh --only space-legacy,space-editor,suggest-check,sidebar-compare
+```
+
+Run M1 jobs through `m1.sh` in a detached checkout of the pushed branch, per
+TANDEM §4M. Never commit or edit source there. The normal runner retains the
+on-screen lock and owned-window cleanup for the native editor suite. Private
+capture inputs and comparison images remain in ignored `.re/` or private
+receipt directories; the committed references use synthetic fixtures only.
+
 ## Section 1 completion (2026-10-28)
 
 Sidebar implementation PRs #123–#135 are merged through main `52212f17`.
