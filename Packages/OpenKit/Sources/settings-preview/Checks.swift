@@ -88,7 +88,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
+    let names = ["profile-icon-button", "profile-delete-dialogs", "extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -97,6 +97,35 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         let personal=vm.model.profiles[0].id,work=vm.model.profiles[1].id
         do {
             switch name {
+            case "profile-icon-button":
+                vm.set(true,for:"open.general.searchSuggestNoticeDismissed")
+                try await withAccessibleHost(ProfilesPane(model:vm.profiles),size:CGSize(width:600,height:600)) { host in
+                    try require(pressAccessibilityElement(host,label:"Change icon for \(vm.model.profiles[0].name)"),"native Profile icon button missing")
+                }
+                try require(env.actions.log.contains("chooseProfileIcon \(personal)"),"Profile icon press lost its captured identity")
+                vm.profiles.setIcon(.symbol("briefcase.fill"),profileID:personal)
+                _=try await render(ProfilesPane(model:vm.profiles),size:CGSize(width:600,height:600),scale:2,dark:true,to:env.root.appendingPathComponent("profile-icons.png"))
+                try require(try env.diskModel().profile(id:personal)?.icon == .symbol("briefcase.fill"),"Profile icon was not saved")
+            case "profile-delete-dialogs":
+                let first=vm.profiles.create(name:"Example Unused A")!
+                let second=vm.profiles.create(name:"Example Unused B")!
+                vm.profiles.select(first.id);vm.profiles.beginDelete()
+                vm.profiles.deleteConfirmation="example unused a"
+                try require(!vm.profiles.canConfirmDelete,"case-insensitive deletion allowed")
+                let labels=try await render(ProfileDeleteSheet(model:vm.profiles),size:CGSize(width:508,height:310),scale:1,dark:true,to:env.root.appendingPathComponent("delete-profile.png"),enhanceAccessibility:true)
+                try require(labels.contains("Delete this Profile") && labels.contains("Delete"),"specific delete dialog did not render: \(labels)")
+                vm.profiles.deleteConfirmation=first.name
+                try require(vm.profiles.canConfirmDelete,"exact name refused")
+                await vm.profiles.confirmDeletion()
+                try require(try env.diskModel().profile(id:first.id) == nil,"typed deletion was not saved")
+                vm.profiles.beginDelete(unused:true)
+                try require(vm.profiles.deletionProfiles.map(\.id) == [second.id],"assigned or Default Profile entered bulk dialog")
+                vm.profiles.deleteConfirmation="delete"
+                try require(!vm.profiles.canConfirmDelete,"lowercase bulk token accepted")
+                vm.profiles.deleteConfirmation="DELETE"
+                _=try await render(ProfileDeleteSheet(model:vm.profiles),size:CGSize(width:508,height:360),scale:2,dark:true,to:env.root.appendingPathComponent("delete-unused.png"))
+                await vm.profiles.confirmDeletion()
+                try require(try env.diskModel().profile(id:second.id) == nil,"bulk deletion was not saved")
             case "extension-shortcuts":
                 vm.selectedPane = .shortcuts
                 env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
@@ -445,11 +474,11 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(env.actions.log.count == 1 && env.actions.log[0].contains("clearBrowsingData \(vm.selectedProfileID)") && env.actions.log[0].contains("kinds=3"), "clear action profile/kinds")
                 _ = try env.diskModel()
             case "profile-guards":
-                try require(!vm.profiles.delete(id: vm.model.profiles[0].id), "default delete allowed")
-                try require(!vm.profiles.delete(id: vm.model.profiles[1].id), "in-use delete allowed")
+                let defaultDeleted = await vm.profiles.delete(id: vm.model.profiles[0].id); try require(!defaultDeleted, "default delete allowed")
+                let assignedDeleted = await vm.profiles.delete(id: vm.model.profiles[1].id); try require(!assignedDeleted, "in-use delete allowed")
                 try require(vm.profiles.create(name: "Work") == nil && vm.profiles.create(name: "bad/name") == nil, "invalid name allowed")
                 let created = vm.profiles.create(name: "Example Test")!
-                try require(created.settings.searchEngineID == "google" && vm.profiles.delete(id: created.id), "unused profile lifecycle")
+                let unusedDeleted = await vm.profiles.delete(id: created.id); try require(created.settings.searchEngineID == "google" && unusedDeleted, "unused profile lifecycle")
                 let disk = try env.diskModel(); try require(disk.profiles.count == 2, "profile deletion not on disk")
             case "links-rules":
                 vm.links.addRule(); let newID = vm.links.drafts.last!.id
@@ -713,7 +742,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"new profile was not attached")
                 try ad.store.closeProfile(created.id);ad.setExcluded("example.net",excluded:true)
                 try require(ad.errorText == "Ad block settings are still loading for this Profile.","store fault was mislabeled as invalid host")
-                await ad.openSelectedProfile();try require(vm.profiles.delete(id:created.id),"new profile delete failed")
+                await ad.openSelectedProfile();let deleted = await vm.profiles.delete(id:created.id); try require(deleted,"new profile delete failed")
                 do {try ad.store.setExcluded("example.com",excluded:true,profile:created.id);throw CheckFailure(description:"deleted profile state stayed open")}
                 catch let error as CheckFailure {throw error} catch {try require(String(describing:error).contains("profile is not open"),"wrong deletion failure")}
                 try require(try env.diskModel().profile(id:created.id) == nil,"deleted profile stayed on disk")
@@ -837,7 +866,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 ad.setExcluded("example.org",excluded:true)
                 let file=ad.store.listDirectory(for:created.id).appendingPathComponent("exclusions.json")
                 try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"ready host change did not persist")
-                try require(vm.profiles.delete(id:created.id) && !ad.openedProfiles.contains(created.id),"deleted Profile remained ready")
+                let deleted = await vm.profiles.delete(id:created.id); try require(deleted && !ad.openedProfiles.contains(created.id),"deleted Profile remained ready")
             case "settings-caches":
                 _=vm.shortcutsStore;let reads=vm.keyBindingLoadCount
                 for _ in 0..<20 {_=vm.shortcutsStore}

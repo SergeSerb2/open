@@ -14,6 +14,9 @@ import OpenDesign
     public var showsRename = false
     public var confirmsDelete = false
     public var confirmsUnused = false
+    public var deleteConfirmation = ""
+    public private(set) var deletionProfiles: [(id: ProfileID, name: String)] = []
+    public private(set) var deleting = false
     public var showsClear = false
     public var showsSuggestNotice = false
     public var nameDraft = ""
@@ -82,18 +85,53 @@ import OpenDesign
     }
     public var canDelete: Bool { profile.map { root.model.deleteBlockReason(for: $0.id) == nil } ?? false }
     public var unusedIDs: [ProfileID] { root.model.profiles.filter { root.model.deleteBlockReason(for: $0.id) == nil }.map(\.id) }
-    @discardableResult public func delete(id: ProfileID) -> Bool {
+    public func beginDelete(unused: Bool = false) {
+        let ids = unused ? unusedIDs : [root.selectedProfileID]
+        deletionProfiles = ids.compactMap { id in root.model.profile(id: id).map { (id, $0.name) } }
+        deleteConfirmation = ""; errorText = ""
+        confirmsUnused = unused; confirmsDelete = !unused
+    }
+    public var deleteToken: String { confirmsUnused ? "DELETE" : deletionProfiles.first?.name ?? "" }
+    public var canConfirmDelete: Bool { !deleting && !deletionProfiles.isEmpty && deleteConfirmation == deleteToken }
+    public func confirmDeletion() async {
+        guard canConfirmDelete else { return }
+        let captured = deletionProfiles
+        // Recheck the captured identities and names, never a later Settings selection.
+        guard captured.allSatisfy({ root.model.profile(id: $0.id)?.name == $0.name && root.model.deleteBlockReason(for: $0.id) == nil }) else {
+            errorText = "These Profiles changed. Close this dialog and try again."; return
+        }
+        deleting = true
+        defer { deleting = false; confirmsDelete = false; confirmsUnused = false }
+        for profile in captured { if !(await delete(id: profile.id)) { break } }
+    }
+    @discardableResult public func delete(id: ProfileID) async -> Bool {
+        guard let profile = root.model.profile(id: id) else { return false }
+        let directory = profile.dataDirectoryName
         if let block = root.model.deleteBlockReason(for: id) { errorText = block.message; return false }
         do { try root.adBlock?.closeProfile(id) }
         catch { errorText = "This Profile’s block lists are updating. Try deleting it after the update finishes."; return false }
-        if let error = root.actions.deleteProfileData(profileID: id) { root.adBlock?.refresh(); errorText = error; return false }
         do {
-            guard try dataModel.deleteProfile(in: root.model, id: id) else { return false }
+            let undo = root.model.undoManager
+            undo?.disableUndoRegistration()
+            let removed: Bool
+            do { removed = try dataModel.deleteProfile(in: root.model, id: id) }
+            catch { undo?.enableUndoRegistration(); throw error }
+            undo?.enableUndoRegistration()
+            guard removed else { return false }
+            // An older create/redo must not resurrect a permanently deleted Profile.
+            undo?.removeAllActions()
             if root.selectedProfileID == id, let first = root.model.defaultProfile { root.selectedProfileID = first.id }
-            root.save(); root.refreshLinks(); errorText = ""; return true
+            root.refreshLinks(); refresh()
+            let diskError = await root.actions.deleteProfileData(profileID: id, dataDirectoryName: directory)
+            try root.flush()
+            errorText = diskError ?? ""; return diskError == nil
         } catch { root.adBlock?.refresh(); errorText = "Could not delete this Profile. \(error.localizedDescription)"; return false }
     }
-    public func deleteUnused() { for id in unusedIDs { if !delete(id: id) { break } } }
+    public func deleteUnused() async { for id in unusedIDs { if !(await delete(id: id)) { break } } }
+    public func setIcon(_ icon: SpaceIcon?, profileID: ProfileID) {
+        guard root.model.profile(id: profileID) != nil else { return }
+        dataModel.setIcon(in: root.model, id: profileID, icon: icon); root.save()
+    }
     public func proposeArchive(_ interval: AutoArchiveInterval) { archiveProfileID = root.selectedProfileID; pendingArchive = interval }
     public func applyArchive(all: Bool) {
         guard let interval = pendingArchive, let id = archiveProfileID else { return }
@@ -149,23 +187,25 @@ public struct ProfilesPane: View {
                         Text("Your Profiles").font(Font(SettingsTokens.sectionTitle.font)).foregroundStyle(Color(nsColor:SettingsTokens.secondary.nsColor)).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,10).frame(height:27)
                         Divider()
                         ForEach(model.dataModel.rows) { row in
-                            Button { model.select(row.id) } label: {
-                                HStack(spacing:4) { Text(row.name).lineLimit(1);Spacer(minLength:2);Text("\(row.spaceCount.formatted()) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size:11)).foregroundStyle(.secondary) }
-                                    .padding(.horizontal,26).frame(height:31).background {if row.id == model.root.selectedProfileID {RoundedRectangle(cornerRadius:6).fill(Color(nsColor:SettingsTokens.selectedProfile.nsColor)).padding(.horizontal,16)}}
-                            }.buttonStyle(.plain)
+                            HStack(spacing:4) {
+                                ProfileIconButton(profile: row) { anchor in model.root.actions.chooseProfileIcon(profileID: row.id, anchor: anchor) }.frame(width:20,height:20)
+                                Button { model.select(row.id) } label: {
+                                    HStack(spacing:4) { Text(row.name).lineLimit(1);Spacer(minLength:2);Text("\(row.spaceCount.formatted()) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size:11)).foregroundStyle(.secondary) }.contentShape(Rectangle())
+                                }.buttonStyle(.plain)
+                            }.padding(.horizontal,20).frame(height:31).background {if row.id == model.root.selectedProfileID {RoundedRectangle(cornerRadius:6).fill(Color(nsColor:SettingsTokens.selectedProfile.nsColor)).padding(.horizontal,16)}}
                         }
                         Spacer(minLength:0)
                         Divider()
                         HStack(spacing:0) {
                             profileTool("plus",help:"Create Profile") { model.beginCreate() }
                             Divider().frame(height:15)
-                            profileTool("minus",help:"Delete Profile") { model.confirmsDelete=true }.disabled(!model.canDelete)
+                            profileTool("minus",help:"Delete Profile") { model.beginDelete() }.disabled(!model.canDelete)
                             Divider().frame(height:15)
                             profileTool("pencil",help:"Rename Profile") { model.nameDraft=model.profile?.name ?? "";model.showsRename=true }
                             Spacer(minLength:0)
                         }.frame(height:31)
                     }.frame(height:420).background(Color(nsColor:SettingsTokens.fill.nsColor),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:SettingsTokens.border.nsColor)))
-                    if !model.unusedIDs.isEmpty { Button("Delete unused Profiles") { model.confirmsUnused=true }.buttonStyle(.plain).font(.system(size:11)) }
+                    Button("Delete Unused Profiles…") { model.beginDelete(unused:true) }.buttonStyle(.plain).font(.system(size:11)).disabled(model.unusedIDs.isEmpty)
                 }.frame(width:205)
                 VStack(spacing:10) {
                     SettingsGroup {
@@ -198,8 +238,7 @@ public struct ProfilesPane: View {
         .sheet(isPresented:Binding(get:{model.pendingArchive != nil},set:{if !$0 {model.cancelArchive()}})) { ArchiveScopeSheet(model:model) }
         .sheet(isPresented:$model.showsSuggestNotice) { SuggestNoticeSheet(model:model) }
         .sheet(isPresented:$model.showsClear) { ClearBrowsingDataSheet(model:model) }
-        .confirmationDialog("Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to it.",isPresented:$model.confirmsDelete) { Button("Delete Profile",role:.destructive) { _=model.delete(id:model.root.selectedProfileID) } }
-        .confirmationDialog("Deleting unused Profiles will permanently remove any cookies, history, preferences, and logins that belong to those Profiles.",isPresented:$model.confirmsUnused) { Button("Delete unused Profiles",role:.destructive) { model.deleteUnused() } }
+        .sheet(isPresented:Binding(get:{model.confirmsDelete || model.confirmsUnused},set:{if !$0 {model.confirmsDelete=false;model.confirmsUnused=false}})) { ProfileDeleteSheet(model:model) }
     }
     private var introduction:AttributedString {
         var text=AttributedString("Profiles help keep your data separate across Spaces — like history, logins, cookies, and extensions. You can use any Profile across one or more Spaces. ")
@@ -207,12 +246,68 @@ public struct ProfilesPane: View {
     }
     private var downloadName:String { URL(fileURLWithPath:(model.downloadDirectory as NSString).expandingTildeInPath).lastPathComponent }
     private func chooseDownloads() { let panel=NSOpenPanel();panel.canChooseDirectories=true;panel.canChooseFiles=false;if panel.runModal() == .OK,let url=panel.url { model.downloadDirectory=url.path;model.askWhereToSave=false } }
-    private func profileTool(_ symbol:String,help:String,action:@escaping ()->Void)->some View { Button(action:action) { Image(systemName:symbol).frame(width:32,height:31) }.buttonStyle(.plain).help(help) }
+    private func profileTool(_ symbol:String,help:String,action:@escaping ()->Void)->some View { Button(action:action) { Image(systemName:symbol).frame(width:32,height:31) }.buttonStyle(.plain).help(help).accessibilityLabel(help) }
     private func page(_ title:String,symbol:String,color:Color,page:ProfilePage)->some View { dataRow(title,symbol:symbol,color:color) { model.open(page) } }
     private func dataRow(_ title:String,symbol:String,color:Color,divider:Bool=true,action:@escaping ()->Void)->some View {
         SettingsRow(height:34,divider:divider) { Button(action:action) { HStack(spacing:8) { Image(systemName:symbol).font(.system(size:13)).foregroundStyle(.white).frame(width:24,height:24).background(color,in:RoundedRectangle(cornerRadius:4));Text(title);Spacer();Text("→").foregroundStyle(Color(nsColor:SettingsTokens.link.nsColor)) } }.buttonStyle(.plain) }
     }
 }
+/// Native anchor for the shared App icon picker. Profile icon editing is a Section 10 guess.
+private struct ProfileIconButton: NSViewRepresentable {
+    let profile: ProfileRowData
+    let onPress: (NSView) -> Void
+    final class Coordinator: NSObject {
+        var action: (NSView) -> Void
+        init(action: @escaping (NSView) -> Void) { self.action = action }
+        @objc func press(_ sender: NSButton) { action(sender) }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(action:onPress) }
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title:"",target:context.coordinator,action:#selector(Coordinator.press(_:)))
+        button.isBordered=false; button.imageScaling = .scaleProportionallyDown
+        return button
+    }
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.action=onPress
+        button.title=""; button.image=nil; button.imagePosition = .imageOnly
+        switch profile.icon {
+        case .emoji(let emoji): button.title=emoji;button.imagePosition = .noImage;button.font=NSFont(name:"AppleColorEmoji",size:14)
+        case .symbol(let name): button.image=NSImage(systemSymbolName:name,accessibilityDescription:nil)
+        case .named(let name): button.image=NSImage(systemSymbolName:NamedSpaceIcons.symbolName(for:name),accessibilityDescription:nil)
+        case nil: button.image=NSImage(systemSymbolName:"person.crop.circle",accessibilityDescription:nil)
+        }
+        button.setAccessibilityLabel("Change icon for \(profile.name)");button.toolTip="Change icon for \(profile.name)"
+    }
+}
+
+public struct ProfileDeleteSheet: View {
+    @Bindable var model: ProfilesViewModel
+    public init(model: ProfilesViewModel) { self.model=model }
+    public var body: some View {
+        VStack(alignment:.leading,spacing:16) {
+            Text(model.confirmsUnused ? "Delete Unused Profiles" : "Delete this Profile").font(.title3)
+                .accessibilityLabel(model.confirmsUnused ? "Delete Unused Profiles" : "Delete this Profile")
+            if model.confirmsUnused {
+                Text("Deleting these Profiles will permanently remove their cookies, history, preferences, and logins. This can't be undone.")
+                Text("The unused Profiles to be deleted are: \(model.deletionProfiles.map(\.name).joined(separator:", ")).")
+                Text("To continue, type DELETE:")
+            } else {
+                Text("Deleting “\(model.deletionProfiles.first?.name ?? "")” will permanently remove any cookies, history, preferences, and logins that belong to this Profile. This can't be undone.")
+                Text("To continue, type the name of this Profile:")
+            }
+            TextField("Confirmation",text:$model.deleteConfirmation)
+                .accessibilityIdentifier("profile-delete-confirmation")
+                .onSubmit { Task { await model.confirmDeletion() } }
+            SettingsError(text:model.errorText)
+            HStack {
+                Button("Cancel") { model.confirmsDelete=false;model.confirmsUnused=false }.keyboardShortcut(.cancelAction).disabled(model.deleting)
+                Spacer()
+                Button("Delete",role:.destructive) { Task { await model.confirmDeletion() } }.keyboardShortcut(.defaultAction).disabled(!model.canConfirmDelete).accessibilityIdentifier("profile-delete-submit").accessibilityLabel("Delete")
+            }
+        }.padding(24).frame(width:460)
+    }
+}
+
 public struct ProfileNameSheet:View {
     @Bindable var model:ProfilesViewModel;let create:Bool
     public init(model:ProfilesViewModel,create:Bool) { self.model=model;self.create=create }
