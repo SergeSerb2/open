@@ -47,7 +47,14 @@ def run(factory, results, tmp, h):
     except Exception as error:
         # The harness prints tracebacks. Do not let an eval failure expose a
         # fixture field literal from a source line or an engine description.
-        raise RuntimeError('synthetic secrets suite stopped: ' + type(error).__name__) from None
+        safe_assertions = {
+            'fixture Profile Space missing', 'fixture navigation timeout', 'fixture origin mismatch',
+            'autofill dropdown missing', 'autofill dropdown did not close',
+            'autofill dropdown did not appear after a field click',
+            'password manager unavailable', 'fixture checkpoint not reached',
+        }
+        detail = ': ' + str(error) if isinstance(error, AssertionError) and str(error) in safe_assertions else ''
+        raise RuntimeError('synthetic secrets suite stopped: ' + type(error).__name__ + detail) from None
 
 
 def _run(factory, results, tmp, h):
