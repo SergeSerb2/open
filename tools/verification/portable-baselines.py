@@ -48,4 +48,4 @@ def legacy_baseline(root):
         if path.stat().st_size > 16_777_216 or hashlib.sha256(path.read_bytes()).hexdigest() != entry["pngSHA256"]["legacy"][name]:
             raise ValueError("legacy baseline digest mismatch: " + name)
     print(f"legacy baseline: {environment['key']}; trusted main {entry['trustedMainCommit']}; byte identity")
-    return directory, entry["renderScale"]
+    return directory, entry["renderScale"], environment["key"]

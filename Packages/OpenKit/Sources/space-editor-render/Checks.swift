@@ -18,7 +18,7 @@ enum Checks {
         let environments: [String: Entry]
     }
 
-    static func legacyBaseline() throws -> (directory: String, scale: Double, digests: [String: String]?) {
+    static func legacyBaseline() throws -> (directory: String, scale: Double, digests: [String: String]?, key: String) {
         guard let main = NSScreen.main else { throw CLIError(description: "P1 no main display") }
         let host = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
                             styleMask: .borderless, backing: .buffered, defer: false, screen: main)
@@ -45,7 +45,7 @@ enum Checks {
             throw CLIError(description: "invalid trusted P1 baseline metadata")
         }
         print("P1 baseline: \(key); trusted main \(entry.trustedMainCommit); byte identity")
-        return (entry.original == true ? "" : "portable/\(key)/editor/", Double(entry.renderScale), hashes)
+        return (entry.original == true ? "" : "portable/\(key)/editor/", Double(entry.renderScale), hashes, key)
     }
     static var passed = 0
     static var failed = 0
@@ -215,7 +215,7 @@ enum Checks {
         for space in 0..<3 {
             let scene = try RenderCLI.scene(model: reloaded, args: ["--space", String(space)], size: CGSize(width: 900, height: 700))
             scene.background.renderScale = baseline.scale
-            var image = OffscreenRenderer().render(scene, scale: baseline.scale)
+            var image = OffscreenRenderer().render(scene, scale: baseline.scale, verificationKey: baseline.key)
             if ["all", "editor"].contains(ProcessInfo.processInfo.environment["OPEN_VERIFY_BREAK"] ?? "") {
                 guard let data = image.dataProvider?.data, let colorSpace = image.colorSpace,
                       image.bitsPerPixel == 32, image.bitsPerComponent == 8 else {

@@ -86,7 +86,9 @@ Visual references use the exact key `scale-<native backing scale>-icc-<SHA256>`.
 The ICC digest covers the color profile of the render host's screen. The host
 is never ordered on screen. Its screen is explicit, so selection does not use
 the requested synthetic render scale, a hostname, or a machine name. Both scale
-and the full profile digest must match. An unknown key fails with its key and a
+and the full profile digest must match. Each renderer also checks its actual
+host window against the selected key before drawing. A display change fails.
+An unknown key fails with its key and a
 recording instruction. There is no fallback and no automatic recording.
 
 | Display | Native scale | ICC SHA-256 | Reference |

@@ -286,7 +286,7 @@ def save_snapshot(data, directory="fixture"):
 
 def legacy_space_fixture(cli, root):
     portability = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))
-    baseline, scale = portability["legacy_baseline"](root)
+    baseline, scale, key = portability["legacy_baseline"](root)
     fixture = root / "Packages/OpenKit/Fixtures/space-schema1"
     original = (fixture / "State/browser.json").read_bytes()
     expected = json.loads(original)
@@ -303,7 +303,8 @@ def legacy_space_fixture(cli, root):
     for space in range(3):
         output = Path(f"legacy-space-{space}.png").resolve()
         run(renderer, "render", "--snapshot", str(directory), "--space", str(space),
-            "--size", "900x700", "--scale", str(scale), "--out", str(output))
+            "--size", "900x700", "--scale", str(scale), "--out", str(output),
+            env=dict(os.environ, OPEN_VERIFY_DISPLAY_KEY=key))
         if os.environ.get("OPEN_VERIFY_BREAK") in ("all", "legacy"):
             run("/usr/bin/swift", str(Path(__file__).with_name("break-render.swift")), str(output), "pixel")
         require(output.read_bytes() == (baseline / f"window-{space}.png").read_bytes(),

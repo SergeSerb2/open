@@ -280,6 +280,9 @@ def main():
     portability = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))
     environment = portability["display_environment"]()
     key = environment["key"]
+    # The branch renderer also verifies the actual host window's native screen.
+    # A display change between selection and rendering fails instead of reusing caps.
+    os.environ["OPEN_VERIFY_DISPLAY_KEY"] = key
     manifest = portability["read_manifest"](Path(__file__).with_name("sidebar-color-baselines.json"))
     entry = manifest["environments"].get(key)
     if entry is None and not args.record_limits:

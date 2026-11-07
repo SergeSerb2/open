@@ -4,6 +4,7 @@ import Metal
 import QuartzCore
 import ImageIO
 import UniformTypeIdentifiers
+import CryptoKit
 
 /// Renders an NSView tree offscreen, without a window, through Core Animation's
 /// own renderer (`CARenderer` into a Metal texture). Unlike `cacheDisplay` or
@@ -38,8 +39,20 @@ final class OffscreenRenderer {
         // verification key describes its native scale and ICC profile exactly.
         let window = ScaledWindow(contentRect: CGRect(origin: .zero, size: size),
                                   styleMask: [.borderless], backing: .buffered, defer: false, screen: NSScreen.main)
-        window.scale = scale
         window.isReleasedWhenClosed = false
+        if let expected = ProcessInfo.processInfo.environment["OPEN_VERIFY_DISPLAY_KEY"] {
+            let actual: String
+            if let screen = window.screen, let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304 {
+                let digest = SHA256.hash(data: profile).map { String(format: "%02x", $0) }.joined()
+                actual = "scale-\(Int(screen.backingScaleFactor))-icc-\(digest)"
+            } else { actual = "unavailable" }
+            guard actual == expected else {
+                window.close()
+                FileHandle.standardError.write(Data("verification display changed: expected \(expected), actual host \(actual); no fallback\n".utf8))
+                exit(1)
+            }
+        }
+        window.scale = scale
         window.colorSpace = .sRGB
         window.contentView = view
         view.frame = CGRect(origin: .zero, size: size)
