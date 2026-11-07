@@ -1,7 +1,7 @@
 import AppKit
 import CryptoKit
 
-// Read display metadata only. This helper creates no window and sends no event.
+// Read display metadata only. The helper never orders a window or sends an event.
 _ = NSApplication.shared
 NSApp.setActivationPolicy(.prohibited)
 guard let main = NSScreen.main else { fputs("verification: no main display\n", stderr); exit(1) }
