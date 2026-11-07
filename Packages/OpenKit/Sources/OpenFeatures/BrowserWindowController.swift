@@ -213,19 +213,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.
     public var lastToastTitle: String { toasts.lastTitle }
-    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil) {
+    public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, incognitoTitle: String? = nil) {
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
         let state = model.windows.first { $0.id == windowID }
         let dimensions = size ?? CGSize(width: max(640, state?.frameWidth ?? 1280), height: max(480, state?.frameHeight ?? 800))
         root = BrowserRootView(frame: CGRect(origin: .zero, size: dimensions))
-        context = SidebarContext(model: model, windowID: windowID)
+        context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
         context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
         splitController = SplitViewController(model: model, windowID: windowID, container: container)
         let window = BrowserWindow(contentRect: root.bounds, styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.isRestorable = false
-        window.title = "Open"; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+        window.title = incognitoTitle == nil ? "Open" : "Incognito";
+        if incognitoTitle != nil { window.appearance = NSAppearance(named: .darkAqua) }; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.tabbingMode = .disallowed; window.isMovableByWindowBackground = false
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
@@ -305,7 +306,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         container.onReturnPreviewHost = { [weak self] in
             self?.hoverPreview.hide(animated: false); self?.context.hoverPreviews.dismiss()
         }
-        container.onFocusedMetadata = { [weak self] in self?.window?.title = $0 }
+        container.onFocusedMetadata = { [weak self] title in
+            self?.window?.title = title.isEmpty && self?.context.isIncognito == true ? "Incognito" : title
+        }
         container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
         container.toasts = toasts
         container.onToolbarMenu = { [weak self] in self?.makeToolbarMenu() }
