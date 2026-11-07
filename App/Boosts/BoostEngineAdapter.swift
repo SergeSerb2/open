@@ -36,13 +36,13 @@ final class BoostEngineAdapter {
   /// Context creation only records identity. File I/O and script compilation
   /// belong immediately before this context creates its first web content.
   func record(_ context: OEBrowserContext, profile: ProfileID) {
-    guard !context.isEphemeral else { return }
+    guard !context.isEphemeral, !boosts.isRetired(profile) else { return }
     let key = ObjectIdentifier(context)
     guard registrations[key]?.context !== context else { return }
     registrations[key] = Registration(context: context, profile: profile)
   }
   func prepare(_ context: OEBrowserContext, profile: ProfileID) {
-    guard !context.isEphemeral else { return }
+    guard !context.isEphemeral, !boosts.isRetired(profile) else { return }
     record(context, profile: profile)
     let key = ObjectIdentifier(context)
     guard registrations[key]?.prepared == false else { return }
@@ -54,7 +54,7 @@ final class BoostEngineAdapter {
     registrations[key]?.prepared = true
   }
   func committed(_ host: EngineWebContentHost, url: URL, newDocument: Bool) {
-    guard !host.content.context.isEphemeral, host.owner?.isIncognito != true else { closed(host); return }
+    guard !host.content.context.isEphemeral, host.owner?.isIncognito != true, !boosts.isRetired(host.profileID) else { closed(host); return }
     prepare(host.content.context, profile: host.profileID)
     if newDocument {
       let matcher = registrations[ObjectIdentifier(host.content.context)]?.documentStartMatcher ?? BoostMatcher(boosts: [])
@@ -86,7 +86,7 @@ final class BoostEngineAdapter {
     refreshPages(profile: nil, start: start)
   }
   private func plan(url: URL, profile: ProfileID, ephemeral: Bool, matcher: BoostMatcher? = nil) -> InjectionPlan {
-    guard !ephemeral, boosts.app.model.profile(id: profile) != nil,
+    guard !ephemeral, !boosts.isRetired(profile), boosts.app.model.profile(id: profile) != nil,
       ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
       return InjectionPlan(planID: "empty", url: url, profileID: profile, boosts: [])
     }
@@ -94,7 +94,7 @@ final class BoostEngineAdapter {
       boostsGloballyEnabled: boosts.boostsGloballyEnabled, context: ephemeral ? .incognito : .normal)
   }
   func preview(_ boost: Boost, host: EngineWebContentHost) {
-    guard boosts.boostsGloballyEnabled, !host.closed, let url = host.content.url else { return }
+    guard !boosts.isRetired(host.profileID), boosts.boostsGloballyEnabled, !host.closed, let url = host.content.url else { return }
     var values = boosts.store(for: host.profileID).allBoosts().filter { $0.id != boost.id }
     values.append(BoostStore.normalizedForPreview(boost))
     deliver(plan(url: url, profile: host.profileID, ephemeral: host.content.context.isEphemeral, matcher: BoostMatcher(boosts: values)), to: host, url: url)
@@ -122,10 +122,10 @@ final class BoostEngineAdapter {
     }
   }
   private func canDeliver(to host: EngineWebContentHost) -> Bool {
-    !host.content.context.isEphemeral && host.owner?.isIncognito != true && !host.closed && host.content.isLive && !host.content.isDiscarded
+    !boosts.isRetired(host.profileID) && !host.content.context.isEphemeral && host.owner?.isIncognito != true && !host.closed && host.content.isLive && !host.content.isDiscarded
   }
   private func replaceScripts(_ context: OEBrowserContext, profile: ProfileID) {
-    guard !context.isEphemeral else { return }
+    guard !context.isEphemeral, !boosts.isRetired(profile) else { return }
     let web = EngineWebProfile(context), key = ObjectIdentifier(context)
     let scripts = makeScripts(profile: profile, ephemeral: context.isEphemeral)
     let previous = registrations[key]?.scripts ?? []
@@ -140,7 +140,7 @@ final class BoostEngineAdapter {
       ? boosts.matcher(for: profile) : BoostMatcher(boosts: [])
   }
   private func makeScripts(profile: ProfileID, ephemeral: Bool) -> [UserScript] {
-    guard !ephemeral, boosts.boostsGloballyEnabled, boosts.app.model.profile(id: profile) != nil else { return [] }
+    guard !ephemeral, !boosts.isRetired(profile), boosts.boostsGloballyEnabled, boosts.app.model.profile(id: profile) != nil else { return [] }
     let values = boosts.store(for: profile).allBoosts().filter { $0.isEnabled && !$0.siteMatch.domain.isEmpty }
     guard !values.isEmpty else { return [] }
     let matcher = boosts.matcher(for: profile)
@@ -226,6 +226,17 @@ final class BoostEngineAdapter {
   }
   func closed(_ host: EngineWebContentHost) {
     let key = ObjectIdentifier(host); deliveries.removeValue(forKey: key)?.cancel(); livePlans[key] = nil; documentJS[key] = nil
+  }
+  func retireProfile(_ profile: ProfileID) {
+    for (key, registration) in Array(registrations) where registration.profile == profile {
+      if let context = registration.context {
+        let web = EngineWebProfile(context)
+        for script in registration.scripts { web.removeUserScript(id: script.id) }
+      }
+      registrations[key] = nil
+    }
+    let pages = boosts.app.hostFactories.values.flatMap { Array($0.hosts.values) } + Array(boosts.app.littleOpenHosts.values)
+    for host in pages where host.profileID == profile { closed(host) }
   }
   func stop() {
     for task in deliveries.values { task.cancel() }; deliveries = [:]; livePlans = [:]; documentJS = [:]

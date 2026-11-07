@@ -1155,3 +1155,5 @@ PR-7 stays blocked pending an approved engine-fix distribution hash. After the
 lead clears a prior crash dialog, resume remaining rows with
 `--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
 write a separate receipt so the primary crash evidence survives.
+
+Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.

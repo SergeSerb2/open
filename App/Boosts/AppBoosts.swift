@@ -9,7 +9,7 @@ import OpenSiteControl
 
 /// The App's sole owner of per-Profile Boost stores and matcher snapshots.
 @MainActor @Observable
-final class AppBoosts: BoostsProvider {
+final class AppBoosts: BoostsProvider, ProfileDataOwner {
   unowned let app: AppDelegate
   private struct State {
     let store: BoostStore
@@ -30,6 +30,7 @@ final class AppBoosts: BoostsProvider {
       values.map { var boost = $0; boost.isEnabled = true; return boost }
     }
   }
+  @ObservationIgnored private var retiredProfiles: Set<ProfileID> = []
   @ObservationIgnored private var profiles: [ProfileID: State] = [:]
   @ObservationIgnored private var observers: [SiteControlObservationToken: @MainActor () -> Void] = [:]
   @ObservationIgnored private var defaultsObserver: (any NSObjectProtocol)?
@@ -47,6 +48,7 @@ final class AppBoosts: BoostsProvider {
     #endif
     self.app = app
     boostsGloballyEnabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
+    app.profileTeardown.register(self)
     defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.preferencesChanged() }
     }
@@ -63,6 +65,12 @@ final class AppBoosts: BoostsProvider {
   }
 
   func store(for id: ProfileID) -> BoostStore {
+    if retiredProfiles.contains(id) {
+      // Stale callers receive an inert store; never reopen a deleted Profile.
+      let store = BoostStore(root: app.directories.root, profileID: id)
+      store.retire()
+      return store
+    }
     if let state = profiles[id] { return state.store }
     // Callers resolve a loaded Profile before entering this mutation boundary.
     guard let profile = app.model.profile(id: id) else { preconditionFailure("Boost Profile is not loaded") }
@@ -75,9 +83,13 @@ final class AppBoosts: BoostsProvider {
     profiles[id] = State(store: store, values: values)
     return store
   }
-  func matcher(for id: ProfileID) -> BoostMatcher { _ = store(for: id); return profiles[id]!.matcher }
+  func isRetired(_ id: ProfileID) -> Bool { retiredProfiles.contains(id) }
+  func matcher(for id: ProfileID) -> BoostMatcher {
+    guard !isRetired(id) else { return BoostMatcher(boosts: []) }
+    _ = store(for: id); return profiles[id]!.matcher
+  }
   func matchingBoosts(url: URL, profileID: ProfileID) -> [Boost] {
-    guard app.model.profile(id: profileID) != nil else { return [] }
+    guard !isRetired(profileID), app.model.profile(id: profileID) != nil else { return [] }
     _ = store(for: profileID)
     guard let state = profiles[profileID] else { return [] }
     // Site Control and Edit Boost must also find disabled rows. Return the
@@ -90,7 +102,7 @@ final class AppBoosts: BoostsProvider {
   /// All App mutations, including the editor's commits/undo/delete, end here.
   func refresh(profile: ProfileID) {
     let start = ProcessInfo.processInfo.systemUptime
-    guard app.model.profile(id: profile) != nil else { return }
+    guard !isRetired(profile), app.model.profile(id: profile) != nil else { return }
     let store = store(for: profile)
     profiles[profile]?.rebuild(values: store.allBoosts())
     for factory in app.hostFactories.values {
@@ -116,7 +128,7 @@ final class AppBoosts: BoostsProvider {
   func removeBoostObserver(_ token: SiteControlObservationToken) { observers[token] = nil }
   func boosts(profileID: ProfileID) -> [BoostItemSnapshot] {
     _ = revision
-    guard app.model.profile(id: profileID) != nil else { return [] }
+    guard !isRetired(profileID), app.model.profile(id: profileID) != nil else { return [] }
     return store(for: profileID).allBoosts().map { BoostItemSnapshot(id: $0.id.description, name: $0.name, domain: $0.siteMatch.domain, pathPrefix: $0.siteMatch.pathPrefix, isEnabled: $0.isEnabled) }
   }
   func factory(for id: ItemID) -> EngineWebContentHostFactory? {
@@ -124,7 +136,7 @@ final class AppBoosts: BoostsProvider {
   }
   func canEdit(tabID: ItemID) -> Bool {
     guard let factory = factory(for: tabID), !factory.isIncognito, factory.controller != nil, let host = factory.hosts[tabID], !host.closed,
-          !host.content.context.isEphemeral, let url = host.content.url,
+          !host.content.context.isEphemeral, !isRetired(host.profileID), let url = host.content.url,
           ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { return false }
     return true
   }
@@ -166,9 +178,26 @@ final class AppBoosts: BoostsProvider {
     factory.focus(space: space)
     if let tab = factory.openNewTab(url: url, background: false) { pendingEditors[tab.id] = id }
   }
+  func retireProfile(_ profileID: ProfileID, directory: String) async {
+    // Block new work first. Closing an editor can flush its draft, so retire the
+    // retained store before closing the session. No folder removal belongs here.
+    retiredProfiles.insert(profileID)
+    profiles.removeValue(forKey: profileID)?.store.retire()
+    for factory in app.hostFactories.values {
+      if factory.controller?.boostEditor?.session?.context.profileID == profileID {
+        factory.controller?.boostEditor?.close(returnFocus: false)
+      }
+      for host in factory.hosts.values where host.profileID == profileID {
+        pendingEditors[host.tabID] = nil
+      }
+    }
+    adapter.retireProfile(profileID)
+    revision &+= 1
+    for observer in Array(observers.values) { observer() }
+  }
   func saveNow() {
     // Merely displaying a page must not create an empty Boosts file on quit.
-    for id in Array(profiles.keys) where profiles[id]?.needsSave == true {
+    for id in Array(profiles.keys) where !isRetired(id) && profiles[id]?.needsSave == true {
       profiles[id]?.store.saveNow(); profiles[id]?.needsSave = false
     }
   }

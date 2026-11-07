@@ -79,7 +79,7 @@ A page-invented nonce cannot pass the native session check.
 
 ## App runtime and editor (Section 12, Step 5)
 
-`AppBoosts` owns one store per loaded Profile. The editor, Library and matching
+`AppBoosts` owns one store per loaded Profile. It registers as a weak `ProfileDataOwner`. Profile deletion permanently retires the store before folder removal: pending writes are canceled, in-flight work is drained, dirty state is discarded, scripts are removed and the bound editor closes. Stale stores cannot save again, including on quit. The editor, Library and matching
 pages share it. Context creation only records identity;
 the host factory loads and installs scripts before that context creates its
 first `OEWebContent`, including a restored tab. Menu validation before engine
