@@ -259,10 +259,6 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
   is the open Section 8 item 13 / Section 16 launch budget. All checks and loads
   are in [the receipt](first-run/steps-ef-verification.md).
 
-## Section 10: Air Traffic Control capture gaps
-
-User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps.
-
 ### Section 10 private windows (lead design, 2026-11-06)
 
 - After 0701: replace only `IncognitoContextProvider.makeContext(parent:)` with the per-parent engine API. Then prove selected parent ancestry, different-parent cookie isolation, allowed spanning/split extensions, and final private-session teardown. Today's seam returns a fresh Default OTR per requested-parent session; the requested parent is retained, never presented as proven engine ancestry.
@@ -273,3 +269,7 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 - Guess S10-P3 capture: user opens private Today tabs; capture the full sidebar, empty sidebar, bottom bar and row context menu. Check Favorites/Pinned, Today header, Space pager, Library, New Space and close behavior. Open shows only private Today rows and New Tab.
 - Guess S10-P4 capture: user opens the private command bar and empty URL field in both appearances; capture its background against the sidebar. The measured Arc named color is white at 15% alpha; placement still needs a capture.
 - Guess S10-P5 capture: user Option-Command-clicks a link in a private reference window and records the destination/window/context behavior. Open opens a tab in that same private window; it does not enter persistent Little Open.
+
+## Section 10: Air Traffic Control capture gaps
+
+User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps.
