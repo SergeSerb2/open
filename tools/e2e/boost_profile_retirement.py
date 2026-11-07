@@ -15,7 +15,8 @@ def run(factory, results, tmp, env):
         try:
             app = factory(urls=(origin + '/boost.html',), fresh=True)
             for key, value in {'open.advanced.enableBoosts': True,
-                               'open.boosts.hasDismissedInterstitial': False}.items():
+                               'open.boosts.hasDismissedInterstitial': False,
+                               'open.library.lastSection': 'spaces'}.items():
                 saved[key] = app.call('defaults', key=key, persistent=True)
                 app.call('defaults', key=key, value=value)
             name = 'Boost Retire Work'
@@ -34,6 +35,7 @@ def run(factory, results, tmp, env):
             file = directory / 'Boosts/boosts.json'
             assert wait(lambda: file.exists(), timeout=5, step=.05), 'Boost file not persisted'
             evidence['fileBeforeDelete'] = file.exists()
+            boost_id = editor()['boost']['id']
             # Make another native edit after persistence. This dirties the owner
             # and schedules BoostStore's actual one-second debounced write.
             before = editor()['boost'].get('textTransform')
@@ -45,13 +47,22 @@ def run(factory, results, tmp, env):
                 app.call('alert', button='Change Profile')
             assert wait(lambda: next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile['id'])['spaces'] == 0,
                         timeout=5, step=.05)
+            app.call('library-open', section='boosts')
+            app.call('library-history-state', profile=profile['id'], selectProfile=True)
             app.call('profiles-shell', action='show', profile=name)
             time.sleep(.15) # Let Settings install its real SwiftUI accessibility controls.
             app.call('profiles-shell', action='press', label='Delete Profile')
             assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5, step=.05)
             app.call('profiles-shell', action='type-delete', text=name)
             assert app.call('profiles-shell')['deleteEnabled']
+            # The editor closed during Change Profile. Dirty the same visible
+            # Library row now, after the typed confirmation is ready, so no
+            # session-close flush cancels the store's new one-second debounce.
+            dirty_at = time.monotonic()
+            assert app.call('boost-library', action='rename', boost=boost_id, name='Dirty at delete')
+            evidence['dirtyLibraryEdit'] = True
             app.call('profiles-shell', action='press', label='Delete')
+            evidence['dirtyToDeleteCallMs'] = (time.monotonic() - dirty_at) * 1000
             assert wait(lambda: not app.call('profiles-shell')['deleting'] and app.call('profiles-shell')['sheet'] == 0,
                         timeout=30, step=.05)
             evidence['modelGone'] = not any(p['id'] == profile['id'] for p in app.call('profiles-shell')['profiles'])
@@ -71,7 +82,7 @@ def run(factory, results, tmp, env):
                            'directoryGoneAfterDebounce', 'directoryGoneAfterQuit', 'modelGoneAfterRelaunch',
                            'directoryGoneAfterRelaunch')) and not evidence['boostFileAfterQuit'] and not evidence['boostFileAfterRelaunch']
             results['B27_deleted_profile_not_recreated'] = dict(evidence, ok=positive,
-                negative=evidence['fileBeforeDelete'] and evidence['dirtyNativeEdit'], load=os.getloadavg())
+                negative=evidence['fileBeforeDelete'] and evidence['dirtyNativeEdit'] and evidence['dirtyLibraryEdit'], load=os.getloadavg())
         except env['FocusInterruption']:
             raise
         except Exception as error:
