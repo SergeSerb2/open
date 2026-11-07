@@ -1,6 +1,7 @@
 # Import robustness and Undo
 
-C4 is an implementation draft on `s14/robustness`, stacked on Section 14
+C4 is implementation draft [#224](https://github.com/SergeSerb2/open/pull/224)
+on `s14/robustness`, stacked on Section 14
 PR #221 (`s14/audit-multiprofile`). The base was refreshed to `42ff5a08`.
 `origin/main` at `7b3ab45f` is already an ancestor. This document records
 implementation and CLI evidence. It does not accept the real-App flows.
