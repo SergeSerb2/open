@@ -176,8 +176,8 @@ public enum RoutingMatch: Codable, Hashable, Sendable {
 
 public enum RoutingDestination: Codable, Hashable, Sendable {
     case space(SpaceID)
-    case littleOpen
-    case mostRecentSpace
+    case littleOpen(profile: ProfileID?)
+    case mostRecentSpace(profile: ProfileID?)
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: RoutingDestinationCodingKey.self)
@@ -190,9 +190,11 @@ public enum RoutingDestination: Codable, Hashable, Sendable {
             let nested = try container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: key)
             self = .space(try nested.decode(SpaceID.self, forKey: .value))
         case "littleOpen", "littleArc": // Legacy snapshots, decode only.
-            self = .littleOpen
+            let nested = try container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: key)
+            self = .littleOpen(profile: try nested.decodeIfPresent(ProfileID.self, forKey: .profile))
         case "mostRecentSpace":
-            self = .mostRecentSpace
+            let nested = try container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: key)
+            self = .mostRecentSpace(profile: try nested.decodeIfPresent(ProfileID.self, forKey: .profile))
         default:
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
                 debugDescription: "RoutingDestination: unknown key \(key.stringValue)"))
@@ -205,10 +207,12 @@ public enum RoutingDestination: Codable, Hashable, Sendable {
         case .space(let id):
             var nested = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .space)
             try nested.encode(id, forKey: .value)
-        case .littleOpen:
-            _ = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .littleOpen)
-        case .mostRecentSpace:
-            _ = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .mostRecentSpace)
+        case .littleOpen(let profile):
+            var nested = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .littleOpen)
+            try nested.encodeIfPresent(profile, forKey: .profile)
+        case .mostRecentSpace(let profile):
+            var nested = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .mostRecentSpace)
+            try nested.encodeIfPresent(profile, forKey: .profile)
         }
     }
 }
@@ -224,12 +228,12 @@ private struct RoutingDestinationCodingKey: CodingKey {
     static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
 }
 
-private enum RoutingDestinationSpaceKey: String, CodingKey { case value = "_0" }
+private enum RoutingDestinationSpaceKey: String, CodingKey { case value = "_0", profile }
 
 public enum DefaultDestination: Codable, Hashable, Sendable {
     case space(SpaceID)
-    case littleOpen
-    case mostRecentSpace
+    case littleOpen(profile: ProfileID?)
+    case mostRecentSpace(profile: ProfileID?)
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DefaultDestinationCodingKey.self)
@@ -242,9 +246,11 @@ public enum DefaultDestination: Codable, Hashable, Sendable {
             let nested = try container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: key)
             self = .space(try nested.decode(SpaceID.self, forKey: .value))
         case "littleOpen", "littleArc": // Legacy snapshots, decode only.
-            self = .littleOpen
+            let nested = try container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: key)
+            self = .littleOpen(profile: try nested.decodeIfPresent(ProfileID.self, forKey: .profile))
         case "mostRecentSpace":
-            self = .mostRecentSpace
+            let nested = try container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: key)
+            self = .mostRecentSpace(profile: try nested.decodeIfPresent(ProfileID.self, forKey: .profile))
         default:
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
                 debugDescription: "DefaultDestination: unknown key \(key.stringValue)"))
@@ -257,10 +263,12 @@ public enum DefaultDestination: Codable, Hashable, Sendable {
         case .space(let id):
             var nested = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .space)
             try nested.encode(id, forKey: .value)
-        case .littleOpen:
-            _ = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .littleOpen)
-        case .mostRecentSpace:
-            _ = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .mostRecentSpace)
+        case .littleOpen(let profile):
+            var nested = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .littleOpen)
+            try nested.encodeIfPresent(profile, forKey: .profile)
+        case .mostRecentSpace(let profile):
+            var nested = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .mostRecentSpace)
+            try nested.encodeIfPresent(profile, forKey: .profile)
         }
     }
 }
@@ -276,7 +284,7 @@ private struct DefaultDestinationCodingKey: CodingKey {
     static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
 }
 
-private enum DefaultDestinationSpaceKey: String, CodingKey { case value = "_0" }
+private enum DefaultDestinationSpaceKey: String, CodingKey { case value = "_0", profile }
 
 public struct RoutingRule: Codable, Hashable, Sendable, Identifiable {
     public var id: RuleID

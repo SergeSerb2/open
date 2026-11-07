@@ -9,6 +9,7 @@ import OpenAdBlock
 import OpenSidebar
 import OpenFeatures
 import OpenTranslate
+import OpenSpaceEditor
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -22,7 +23,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if let settingsStorage { return settingsStorage }
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
       root: app.directories.root, snapshot: app.snapshotStore,
-      focusedProfileID: app.frontWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
+      focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
+    vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
     if !app.isFirstRun || app.firstRunSaved {
       if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
       else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
@@ -78,7 +80,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func makeSpaceManagerView() -> NSView? {
     // Closing the last browser retains its model window for normal reopen.
     // Prefer a live browser, then that existing state; never create a window here.
-    let id = app.frontWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
+    let id = app.frontStandardWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
     guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
     if let spaceManager, spaceManager.context.windowID == id { spaceManager.prepareForPresentation(); return spaceManager }
     let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
@@ -232,47 +234,78 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   // One source with Help ▸ Troubleshooting (page-platform §4.11.3–4).
   func revealOpenDataFolder() { TroubleshootingActions.shared.revealOpenData() }
   func copyOpenInfoToPasteboard() { copyText(TroubleshootingActions.openInfoText) }
-  func deleteProfileData(profileID: ProfileID) -> String? {
-    guard let profile = app.model.profile(id: profileID) else { return "This profile is no longer available." }
-    guard !OEEngine.shared.contexts.contains(where: { app.downloadsCenter.profile(for: $0)?.id == profileID }) else { return "Close this profile's pages and restart Open before deleting its data." }
-    do { try app.directories.deleteProfileData(for: profile); return nil } catch { return "The profile data could not be deleted. \(error.localizedDescription)" }
+  func deleteProfileData(profileID: ProfileID, dataDirectoryName: String) async -> String? {
+    do { try await app.profileTeardown.wipe(profileID:profileID,directory:dataDirectoryName); return nil }
+    catch { return "The Profile was removed, but its data could not be fully deleted. \(error.localizedDescription)" }
+  }
+  @ObservationIgnored var profileIconPicker: IconPickerController?
+  func chooseProfileIcon(profileID: ProfileID, anchor: NSView) {
+    guard let profile = app.model.profile(id:profileID), let window = anchor.window else { return }
+    profileIconPicker?.close()
+    let picker = IconPickerController(target:.profile,current:profile.icon,window:window,anchor:anchor.convert(anchor.bounds,to:nil)) { [weak self] icon in
+      self?.settings.profiles.setIcon(icon,profileID:profileID)
+    }
+    profileIconPicker=picker
+    picker.onClose = { [weak self, weak picker] in if self?.profileIconPicker === picker { self?.profileIconPicker=nil } }
+    picker.show()
   }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String? { await clearBrowsingData(profileID: profileID, kinds: kinds, range: .all) }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? {
-    // Validate the entire selection before changing any data.
-    let engineKinds = kinds.intersection([.cookies, .cache])
-    guard !kinds.isEmpty, !kinds.contains(.downloads),
-          engineKinds.isEmpty || (range == .all && engineKinds == [.cookies, .cache]) else {
-      return "History supports every time range. Cookies and cache must be cleared together for All time. Download history clearing is not available yet."
-    }
-    let context = app.hostFactories.values.compactMap { $0.context(for: profileID) }.first
+    guard kinds.rawValue > 0, (kinds.rawValue & ~15) == 0 else { return "Choose valid browsing data to clear." }
+    guard let profile = app.model.profile(id: profileID) else { return "This profile is no longer available." }
+    let engineKinds = kinds.intersection([.cookies, .cache, .downloads])
+    // A History-only clear must not load a native context just to clear Open's
+    // HistoryStore. If already loaded, clear Chromium's own history as well.
+    let identifier = profile.id == app.model.defaultProfile?.id ? "Default" : profile.dataDirectoryName
+    let loaded = OEEngine.shared.contexts.first { $0.identifier == identifier && $0.state == .live }
+    let context = engineKinds.isEmpty ? loaded :
+      (loaded ?? app.hostFactories.values.compactMap { $0.context(for: profileID, create: true) }.first)
     if !engineKinds.isEmpty, context == nil { return "This profile is not open." }
+    let now = Date()
+    let end = range == .all ? Date.distantFuture : now
+    let seconds: TimeInterval? = switch range {
+    case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800
+    case .lastFourWeeks: 2_419_200; case .all: nil
+    }
+    let begin = seconds.map { now.addingTimeInterval(-$0) } ?? .distantPast
     if kinds.contains(.history) {
       guard let history = app.stores.history(for: profileID) else { return "This profile is no longer available." }
-      let end = Date()
-      let seconds: TimeInterval? = switch range { case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800; case .all: nil }
       await app.stores.flushHistory()
-      do { try await history.deleteVisits(since: seconds.map { end.addingTimeInterval(-$0) }, through: end) }
+      do { try await history.deleteVisits(since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
       catch { return error.localizedDescription }
     }
-    if !engineKinds.isEmpty, let context {
-      await withCheckedContinuation { continuation in context.clearBrowsingData(origin: nil) { continuation.resume() } }
+    if let context {
+      let nativeKinds = OEBrowsingDataKinds(rawValue: UInt32(kinds.rawValue))
+      return await withCheckedContinuation { continuation in
+        context.clearBrowsingData(nativeKinds, from: begin, to: end) { error in
+          continuation.resume(returning: error?.localizedDescription)
+        }
+      }
     }
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {
-    let path = [ProfilePage.privacy: "privacy", .passwords: "passwords", .paymentMethods: "payments", .notifications: "content/notifications"][page] ?? "privacy"
-    openURL(URL(string: "chrome://settings/\(path)")!, profileID: profileID)
+    let address: String
+    switch page {
+    case .privacy: address = "chrome://settings/privacy"
+    case .passwords: address = "chrome://password-manager/passwords"
+    case .paymentMethods: address = "chrome://settings/payments"
+    case .notifications: address = "chrome://settings/content/notifications"
+    }
+    openURL(URL(string:address)!, profileID:profileID)
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] {
-    guard let factory = app.hostFactories.values.first,
-          let context = factory.context(for: profileID) else { return [] }
+    guard app.engineReady, let profile = app.model.profile(id: profileID),
+          let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return [] }
     return app.extensionPrompts.table(context.extensions).conflicts
   }
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
   func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
   func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: false) }
+  func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
+    await app.importRunner.installExtension(candidate, window: settingsPresenter.window)
+  }
   func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
@@ -284,9 +317,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   /// Settings ▸ Advanced "Reset Translated-site Prompts" (page-platform §4.7.7): app scope, every profile.
   func resetTranslatePrompts(profileID: ProfileID) -> String? { TranslatePreferences().reset(); return nil }
   func openURL(_ url: URL, profileID: ProfileID) {
-    guard let space = app.model.spaces.first(where: { $0.profileID == profileID }),
-      let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: space.id),
-      let factory = app.hostFactories[controller.windowID] else { status("This Profile needs a Space before it can open a page."); return }
+    guard app.model.profile(id:profileID) != nil else { return }
+    guard let space = app.model.spaces.first(where: { $0.profileID == profileID }) else {
+      // guess S10: Arc's destination for a Profile with no Space is unverified.
+      app.openProfilePage(url,profileID:profileID); return
+    }
+    guard
+      let controller = app.frontStandardWindowController ?? app.makeWindow(focusedSpaceID: space.id),
+      let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
     if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
       let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -294,6 +332,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       if path.isEmpty || path == "shortcuts" {
         _ = factory.performAppCommand(path.isEmpty ? "manage-extensions" : "extension-shortcuts"); return
       }
+    }
+    if let page = AutofillPage.allCases.first(where: { $0.matches(url) }) {
+      factory.openAutofillPage(page, in: space); return
     }
     _ = factory.openNewTab(url: url, background: false)
   }
@@ -336,7 +377,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func openHistoryItem(url: URL) { if let profileID = library?.historyProfileID { openURL(url, profileID: profileID) } }
   func flushHistoryWrites() async { await app.stores.flushHistory() }
   func viewSpace(id: SpaceID) {
-    guard let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
+    guard let controller = app.frontStandardWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
   }
 }

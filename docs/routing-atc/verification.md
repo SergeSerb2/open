@@ -1,0 +1,199 @@
+# Air Traffic Control acceptance — 2026-11-06
+
+Section 10 adds Profile-scoped routing, native grouped destination menus,
+live-window Automatic Test, nested Arc import, and the Settings entry point.
+The implementation is `c5597282`. Integration `3763aa41` merged main
+`d5817079` (#209, private windows), after #207's identical screen-worker fix.
+Final integration `bc61afbf` merges main `f75a5d46` (#213, Profiles shell),
+retaining its public Little Open creation method and Profile-aware URL reuse.
+The historical full verification and the later focused checks are listed below.
+No engine source changed.
+
+Automatic Test and external intake use the same `AppLinkExecutor.snapshot()`.
+Its ordered controllers must have a persistent standard-window ID; private
+windows have separate models and never enter that set. The Settings adapter
+uses `frontStandardWindowController` for its initial Profile and retains the
+shared snapshot provider (`App/Settings/AppSettingsActions.swift:25–26`,
+`App/ExternalLink/AppLinkExecutor.swift:12–28`).
+
+Local receipts are under `.re/s10/atc-implementation/` in the project root.
+They are excluded from git. Real Arc data stays in that private evidence area;
+only aggregate counts appear here.
+
+| Acceptance | Result | Receipt |
+|---|---|---|
+| Release package build | PASS, no warnings or errors | `full-after-209/build.log` |
+| Debug App build, including after #213 merge | PASS | `debug-after-213.log` |
+| Real route CLI | A1–A24 PASS | `full-after-209/route.log` |
+| Existing schema-1 nil destination payloads | Byte-identical roundtrip; nil stays `{}` | A21 |
+| New payload read by old main decoder | PASS with main `98350a07` release CLI | A22; `OPEN_ROUTE_OLD_CLI` |
+| Nested Arc destinations and components | All six forms, fallback count, matches/contains, ordered components PASS | A23–A24 |
+| Copied real Arc import | Before/after: 1 routing rule, 0 skipped rules; after: 0 destination fallbacks | `arc-routing-counts.json` |
+| Settings preview | Post-#213: 46/46 PASS; all 236 renders and wrapper validation PASS | `settings-after-213/settings-preview.log` |
+| Command bar timing | Paired PASS under TANDEM §4 rule 4d | `paired-commandbar-final/summary.json` |
+| Commands and suggestions | PASS; commands missing/extra/different 0/0/0, allowed-missing 11 | `full-after-209/commands-dump.log`, `suggest-check.log` |
+| Real-App routing | Post-#213: 13/13 PASS, cleanup PASS | `routing-after-213/results-routing-debug.json` |
+| Real-App Little Open | Post-#213: 39/39 PASS, cleanup PASS | `littleopen-after-213/results-littleopen-debug.json` |
+| Real-App sidebar | 19/19 PASS; existing durable-storage row SKIP, covered by the dedicated Profiles suite; cleanup PASS | `sidebar-after-209/results-sidebar-debug.json` |
+| Sidebar comparison | 13/13 PASS; tables byte-identical | `full-after-209/sidebar-compare.log` |
+| Space editor under screen worker | 237/237 PASS on branch and unchanged main | `space-editor-locked-branch.log`, `space-editor-locked-main.log` |
+
+The routing App run proves that a second-Profile Space uses that Profile's
+engine context: its cookie is visible in Work and absent in Default. It also
+proves the explicit Little Open Profile hint, separate windows for the same URL
+in different Profiles, and Settings pane `links` with scroll target `links-rules`.
+The App runs have no focus interruptions and leave no owned processes or windows.
+The post-#209 starting load averages (1/5/15 minutes) were 18.37/26.88/33.17 for routing,
+16.90/24.08/31.42 for Little Open, and 18.37/23.44/30.80 for sidebar.
+
+All builds and verify-all runs use `heavy.sh` with
+`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`. New jobs from 17:32 use
+the lead's `s10-heavy.sh` token wrapper before entering `heavy.sh`. Each App suite runs alone
+under `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`, after the priority check,
+with no concurrent build from this worktree. The routing suite restores its four
+shared defaults in `finally`. These are real CLI, preview, and App flows; no unit
+tests were added.
+
+| New gate | Deliberate regression | Observed negative | Restored positive |
+|---|---|---|---|
+| A18 | Saved pre-S10 CLI | FAIL Profile standard-window order | PASS |
+| A19 | Saved pre-S10 CLI | FAIL stale/empty Profile skip | PASS |
+| A20 | Saved pre-S10 CLI | FAIL Little Open Profile hint | PASS |
+| A21 | Encode nil Profile as null | FAIL byte/schema guard | PASS |
+| A22 | Saved pre-S10 CLI as encoder | FAIL Profile payload preservation | PASS; old decoder also loads new output |
+| A23 | Saved pre-S10 CLI | FAIL nested destination context | PASS |
+| A24 | Saved pre-S10 CLI | FAIL matches/components | PASS |
+| `links-destination-picker` | Disable grouped branch | FAIL native menu order/grouping | PASS |
+| `links-profile-issues` | Disable Profile validation | FAIL missing Profile error | PASS |
+| `links-profile-destinations` | Drop saved Profile | FAIL on-disk destination | PASS |
+| `links-test-automatic` | Ignore snapshot provider | FAIL live front-window choice | PASS |
+| `routing_same_url_little_open_profile` | Remove Profile from reuse comparison | FAIL | PASS |
+| `routing_air_traffic_control_entry` | Wrong scroll target | FAIL | PASS |
+
+The negative App run also passed engine fingerprint and owned-process cleanup.
+Positive source restoration was checked against saved SHA-256 hashes.
+
+Earlier full verify attempts retained timing failures. The first also
+exposed the Space editor's missing screen serialization; the identical fix
+landed separately on main in #207 before the final merge.
+
+| Run | Load 1/5/15 | CPU p95 (<8 ms) | Inline overhead (≤0.3 ms) | Raw result |
+|---|---|---|---|---|
+| full-final-1 | 51.2/76.2/62.6 | 7.03 ms | +0.301 ms | 150/151; FAIL |
+| full-final-2 | 21.5/31.2/32.5 | 9.38 ms | +0.421 ms | 149/151; FAIL |
+| full-post-merge | 25.3/21.9/24.1 | 7.82 ms | +0.419 ms | 150/151; FAIL |
+| full-final-head | 23.9/27.1/27.3 | 11.15 ms | -0.012 ms | 150/151; FAIL |
+| full-after-209 | 27.4/43.3/40.2 | 10.89 ms | +0.509 ms | 149/151; FAIL |
+| commandbar-quiet-strict-2 | 14.0/14.8/21.1 | 11.29 ms | +0.222 ms | 150/151; FAIL |
+
+The original strict command-bar rule applied because this change touches
+`OpenCommands` and `OpenSuggest` aliases. The first executed quiet rerun still
+failed row 150. A second attempt was stopped before lock acquisition or execution
+when the lead reserved the quiet lock for Section 4.
+
+The Section 10 lead's **2026-11-06 18:27 ruling**, for ATC integration
+`3763aa41`, requires a paired comparison after “quiet window over”: unchanged
+main (`ae0eb050` or later) then branch, repeated three times under the quiet lock,
+each at load1 ≤20. Both CLIs run from their own `.build/release` folders with their
+resource bundles. Row 150 passes when the branch median is ≤main median ×1.10.
+Row 151 passes when its branch median is ≤main median ×1.10 or ≤0.3 ms.
+All strict and paired runs must remain visible. Stop and report if the pair fails.
+This specific lead ruling replaces strict-only acceptance for this PR; no source
+threshold, baseline, comparator, or allowlist was changed.
+
+The paired run passed under TANDEM §4 rule 4d and the lead's 18:27 ruling.
+Both Release builds passed with zero warnings/errors. Unchanged main
+`d58170792c942266171fc0e3557b53b58d13658f` and branch
+`f6acf907965e02609b0f8fd6d025ea5b2d56f59a` ran alternately under
+`/usr/bin/lockf -k /tmp/open-m5-quiet.lock`, with each native command through
+`s10-heavy.sh`, from its own `.build/release` directory with its resource bundle.
+
+| Run | Side | Load 1/5/15 | CPU p95 ms | Inline overhead ms | Strict rows |
+|---|---|---|---|---|---|
+| 1 | main | 13.6/10.7/14.6 | 8.74 | +0.308 | 149/151 |
+| 2 | branch | 14.7/11.4/14.7 | 7.85 | +0.735 | 150/151 |
+| 3 | main | 11.3/11.0/14.4 | 6.30 | +0.241 | 151/151 |
+| 4 | branch | 16.4/12.1/14.7 | 8.38 | +0.164 | 150/151 |
+| 5 | main | 17.8/13.2/14.9 | 8.55 | +0.397 | 149/151 |
+| 6 | branch | 13.9/12.7/14.7 | 3.93 | +0.167 | 151/151 |
+
+All functional rows 1–149 passed in every run. Every starting and measured
+load1 was ≤20. Median CPU p95: main **8.55 ms**, branch **7.85 ms** → PASS
+(branch ≤main ×1.10). Median inline overhead: main **0.308 ms**, branch
+**0.167 ms** → PASS under both the relative rule and the 0.3 ms absolute budget.
+Receipts: `paired-commandbar-final/runs.json`, `summary.json`, and six raw logs.
+No baseline, threshold, comparator or allowlist changed.
+
+The #213 integration changes no `OpenCommandBar`, `OpenCommands` or
+`OpenSuggest` code. Its only `OpenDesign` change adds independent
+`ProfileIndicatorMetrics`; existing command bar metrics stay unchanged.
+The lead's 18:46 instruction keeps this paired result valid after that merge.
+
+The [1x](profile-destination@1x.png) and [2x](profile-destination@2x.png)
+rule-sheet images are synthetic offscreen review renders. The preview inspects
+the native menu's sections, enabled state, and item order. Arc editor/menu
+captures, Test existence, invalid drafts, empty state, and matches semantics
+remain capture follow-ups in `docs/followups.md`; these results do not establish
+Arc visual or matching parity.
+
+
+## Post-#213 focused verification
+
+Main `f75a5d46` (#213, Profiles shell) was merged as `bc61afbf` with both
+sides retained. The two conflicts combined the preview check list and render
+inventory: 46 checks and 236 images. Public `create(url:profile:focus:)` and
+Profile-aware `open(url:profileHint:)` both remain. Settings retains its live
+routing snapshot provider and standard-window Profile selection.
+
+Per TANDEM §4 rule 5a and the lead's 18:46 instruction, this overlap required a
+Debug build and the following passing focused reruns; no new full verify-all was required.
+The App suites recorded clean source at `3c633385`, which adds only this
+verification document to the tested code integration `bc61afbf`.
+
+| Check | Result | Receipt |
+|---|---|---|
+| `s10-heavy.sh tools/build.sh Debug` | PASS | `debug-after-213.log` |
+| `s10-heavy.sh tools/verify-all.sh --only settings-preview`: build | PASS, 77 s; zero warnings/errors | `settings-after-213/build.log` |
+| Settings preview | 46/46 PASS, 91 s; all 236 renders validated | `settings-after-213/settings-preview.log` |
+| Real-App routing | 13/13 PASS, cleanup PASS, zero interruptions | `routing-after-213/results-routing-debug.json` |
+| Real-App Little Open | 39/39 PASS, cleanup PASS, zero interruptions | `littleopen-after-213/results-littleopen-debug.json` |
+
+Each App suite ran separately under `lockf -k /tmp/open-onscreen-e2e.lock`,
+after the priority check and after all builds from this worktree finished.
+Starting loads (1/5/15): routing **6.36/9.20/12.16**;
+Little Open **8.47/9.48/12.18**. Both suites removed every owned
+process and window. No check remained running at handoff.
+
+## Final full verification
+
+The full run after #209 completed with 23 PASS and one timing FAIL; no SKIP.
+The later paired run accepts the timing check under TANDEM §4 rule 4d.
+The #213 overlap uses focused checks per TANDEM §4 rule 5a and the lead's
+18:46 instruction; a second full verification was not required.
+
+| Name | Raw result | Seconds |
+|---|---|---|
+| build | PASS | 111 |
+| commands-demo | PASS | 3 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 2 |
+| space-editor | PASS | 130 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 31 |
+| commands-dump | PASS | 0 |
+| route | PASS | 8 |
+| favicons | PASS | 2 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 3 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 93 |
+| sidebar-render | PASS | 116 |
+| sidebar-compare | PASS | 25 |
+| commandbar-render | FAIL | 47 |
+| features-render | PASS | 103 |
+| extensions-render | PASS | 9 |
+| sitecontrol-render | PASS | 160 |
+| boosts | PASS | 8 |
+| import-arc | PASS | 1 |

@@ -6,15 +6,20 @@ import json
 import math
 import os
 from pathlib import Path
+import runpy
 import statistics
 import time
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from extensions_p3 import pack_probe
+pack_probe = runpy.run_path(str(Path(__file__).with_name("extensions_p3.py")))["pack_probe"]
 
 
-def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions):
+def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions, engine):
+    profiles_extensions = runpy.run_path(str(Path(__file__).with_name("profiles_extensions.py")))["run"]
+    profiles_extensions(factory, results, tmp, root, wait_until, engine)
+    if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") in ("profiles", "profiles-memory"):
+        return
     class Progress:
         def __init__(self, target): self.target = target
         def __setitem__(self, key, value):
@@ -23,7 +28,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             print(key, recorded.get("status", "PASS" if recorded.get("ok") else "FAIL"), flush=True)
         def __getitem__(self, key): return self.target[key]
     results = Progress(results)
-    app = factory(urls=("about:blank",))
+    app = factory(urls=("about:blank",), fresh=True)
     saved = {}
     bindings = Path(app.user_data) / "State/keybindings.json"
     previous_bindings = bindings.read_bytes() if bindings.exists() else None
@@ -453,9 +458,17 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         forced=hover(False)
         results["X3_popup_forces_visible"]={"ok":forced["visible"] and app.call("ext-popup-state")["open"],"strip":forced}
         close()
-        for _ in range(2): app.call("command", id="manage-extensions")
-        manage = [t for t in app.call("tabs") if t["url"] == "chrome://extensions"]
-        results["X17_manage_singleton"] = {"ok": len(manage) == 1 and manage[0]["selected"], "tabs": len(manage)}
+        management_tabs = []
+        for _ in range(2):
+            app.call("command", id="manage-extensions")
+            # Chromium commits the root WebUI with a trailing slash. Match the
+            # requested/committed forms, then require the same selected tab.
+            management_tabs.append([t for t in app.call("tabs")
+                                    if t["url"] in ("chrome://extensions", "chrome://extensions/")])
+        results["X17_manage_singleton"] = {
+            "ok": all(len(tabs) == 1 and tabs[0]["selected"] for tabs in management_tabs)
+                  and management_tabs[0][0]["id"] == management_tabs[1][0]["id"],
+            "tabs": len(management_tabs[-1]), "states": management_tabs}
         app.call("select", tab=control)
         app.call("split")
         app.call("command", id="next-split-pane")
@@ -613,8 +626,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                 except (OSError,RuntimeError,json.JSONDecodeError): pass
         finally:
             # Restore the real shared domain even after a crashed App.
-            from engine_e2e import _restore_defaults
-            _restore_defaults(app,saved)
+            engine._restore_defaults(app,saved)
             if previous_bindings is None: bindings.unlink(missing_ok=True)
             else: bindings.write_bytes(previous_bindings)
             app.quit()

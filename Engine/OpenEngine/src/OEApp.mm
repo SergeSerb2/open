@@ -164,6 +164,12 @@ class OEApp : public CefApp,
                                             sw.substr(eq + 1));
       }
     }
+    // CEF retains the initial Profile as its process-wide request context.
+    // Chromium's macOS startup otherwise chooses Local State's last_used
+    // Profile (GetStartupProfilePath), which would pin a named Profile and
+    // make Open's Default wrapper point at that Profile after relaunch.
+    // Open's global context is always Default; named Profiles load lazily.
+    command_line->AppendSwitchWithValue("profile-directory", "Default");
     // Chromium features Open turns on, added to any --enable-features list:
     // ExtensionsPinnedByDefault pins a new install's action (extensions UI
     // plan Q4; the profile pref extensions.pinned_by_default defaults on).

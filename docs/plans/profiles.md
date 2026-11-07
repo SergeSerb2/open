@@ -1,5 +1,29 @@
 # Profiles — implementation plan for Open
 
+Section 10 shell errata (2026-11-06): the App deletion flow supersedes the
+separate wipe and undo wording in §3.4, §5.5, §6.5 and §7.1. Settings asks
+for the exact Profile name, or `DELETE` for unused Profiles. It captures the
+directory, deletes the model with undo registration disabled, tears down the
+context, wipes Open-owned files, then calls `saveNow`. It clears older Undo
+actions so create/redo cannot restore the deleted identity. The model/CLI
+command remains undoable when used outside that irreversible App flow.
+
+Section 10 engine erratum: `releaseContext` proves page closure only;
+`deleteContext` now waits for native destruction and committed Local State
+cleanup. Successful deletion removes loaded engine/cache directories in the
+same session. A bounded, atomic, synced `Profiles/.pending-wipe.json` journal
+covers crashes and errors only. Recovery runs before engine startup and also
+cleans `profile.info_cache`, `last_used`, and `last_active_profiles` references.
+Normal successful deletion needs no App-side Local State JSON edit.
+
+App bootstrap and every `installModel` path repair missing Profile refs and
+save repairs. The first standard window shows one informational sheet with
+the affected Space titles. Settings rows use Section 4's shared icon picker.
+Header geometry and the more-than-one-Profile visibility rule are **guess
+S10-I1**; editable Profile icons and a new Little Open page for a Profile
+without a Space are also guesses. See [profiles-shell.md](../profiles-shell.md)
+for the acceptance receipt and evidence limits.
+
 Status: plan for implementation. Implementer: follow this file top to bottom.
 Do not spawn subagents (AGENTS.md rule 8). Do not write unit tests (rule 6).
 Verify end to end only: real `swift build`, real `openkit` CLI on real
@@ -168,8 +192,8 @@ changes are confined to store file locations (§5.4) and one new
 | D-P4 | The default Profile is the one with `dataDirectoryName == "Default"`; if none exists, `profiles.first` acts as default. No new `isDefault` flag | Add `isDefault: Bool` to `Profile` + DTO | The DTO already round-trips `dataDirectoryName`; a flag adds a schema-1 optional field and a two-sources-of-truth bug (flag vs. position) for zero user gain |
 | D-P5 | Archive becomes **one SQLite file per Profile** (`Profiles/<dir>/State/archive.sqlite3`). A composite sink routes by `ArchiveEntry.profileID` | Keep one global `archive.sqlite3` filtered by `profile_id` | Task scope and Arc isolation both point per-Profile; the global file would be the one store that survives a Profile disk-delete (§5.5), leaking its tab titles/URLs. The `profile_id` column stays (restore + import dedupe use it) |
 | D-P6 | History becomes **one SQLite file per Profile**. Favicons stay **one global file** | Per-Profile favicons | History is private browsing data (isolated in Arc, proven). Favicon bytes are public site icons keyed by origin (`FaviconStore` has no Profile key) and the sidebar draws icons for every Space at once; splitting it would duplicate fetches per Profile. The accepted leak is stated in §5.3, not hidden |
-| D-P7 | Request contexts load **lazily**: a Profile's `CefRequestContext` is created when a Space of that Profile is first shown (or a Little Open window first hints it), never for all Profiles at launch. Loaded contexts stay loaded until quit in v1 | Load all at launch; evict idle contexts | Arc evidence points lazy (`shouldLoadAllProfilesAtStartup`, [features-core.md](../re/features-core.md) §5.2 rule 6, marked Guess). Each loaded context costs a Chrome Profile in the browser process (§6.4); eviction correctness (live browsers, extensions) is a follow-up, not v1 |
-| D-P8 | Incognito is an **ephemeral Profile**: an in-memory request context (`cache_path` empty) keyed by window, never inserted into `BrowserModel.profiles`, never written to any Open store | A hidden persisted `Profile` row | Arc: incognito cookies are never seeded and nothing persists (§5.2 rule 6, §8.1 rule 3). A model row would leak into Settings, the snapshot, and `openkit profiles list` |
+| D-P7 | Request contexts load **lazily**: a Profile's `CefRequestContext` is created on its first page load or explicit extension/site action; focusing an empty Space does not load it, never for all Profiles at launch. Loaded contexts stay loaded until quit in v1 | Load all at launch; evict idle contexts | Arc evidence points lazy (`shouldLoadAllProfilesAtStartup`, [features-core.md](../re/features-core.md) §5.2 rule 6, marked Guess). Each loaded context costs a Chrome Profile in the browser process (§6.4); eviction correctness (live browsers, extensions) is a follow-up, not v1 |
+| D-P8 | Incognito is an **ephemeral Profile**: an in-memory request context (`cache_path` empty) shared by windows of one requested parent; a synthetic Profile lives only in each private window's separate model, never in `app.model.profiles` or an Open store (Section 10 lead erratum, 2026-11-06) | A hidden persisted `Profile` row | Arc: incognito cookies are never seeded and nothing persists (§5.2 rule 6, §8.1 rule 3). A model row would leak into Settings, the snapshot, and `openkit profiles list` |
 | D-P9 | One new `TreeChange` case, `.spaceProfileChanged(spaceID:from:to:)`. `updateSpace(profileID:)` keeps its combined-edit undo but emits the same case | Emit only `.reload` and let the engine diff `profileID` | The engine must destroy/recreate web contents on a Profile change; a diff-on-reload rule is implicit and easy to miss. One explicit case, two existing switch sites to update (§3.6) |
 | D-P10 | No DTO/schema change. `schemaVersion` stays 1; old snapshots load unchanged; `repairMissingProfileReferences()` runs explicitly at App/CLI load, not inside the mapper | Bump to schema 2; auto-repair inside `SnapshotMapper` | Every Profile field already persists. Hidden mapper repair would make `roundtrip` compare a repaired tree against its file and hide data loss |
 
@@ -722,21 +746,18 @@ users; precedent: the `littleArc` → `littleOpen` one-way migration in
 (§7.1) offers, as a **separate explicit action** after a successful model
 delete, "Delete Profile data from disk" which the App runs in this order:
 
-1. Engine teardown for that Profile first (§6.5): destroy every web content
-   on its context, then release the context. Deleting files under a live
-   Chromium Profile corrupts it.
-2. `ProfileDirectories.deleteProfileData(dataDirectoryName:)` with the name
-   captured **before** the model delete (the Profile object is gone after).
-   It removes `Profiles/<dir>/`, `Engine/<dir>/`, and the Profile's cache
-   folder (`~/Library/Caches/<root name>/Engine/<dir>`, §5.1): a deleted
-   Profile's browsing cache must not stay behind. Also unload the Chromium
-   Profile through the engine first and drop its `Local State` entry
-   (`releaseContext` completes when no page is left, not when Chromium's
-   Profile is destroyed; `docs/followups.md`).
-3. `SnapshotStore.saveNow` so a crash cannot resurrect a Profile whose
-   directory is gone. (If it did resurrect, `repairMissing…` does not apply
-   — the Profile exists; its stores simply recreate empty. The save-first
-   ordering is what prevents that.)
+1. Commit the directory tombstone through the archive sink and remove the
+   Profile from the model. Capture its directory name before removing it.
+2. `ProfileTeardown.wipe` journals the name in `Profiles/.pending-wipe.json`,
+   flushes Open's stores and retires the Profile's normal and private hosts.
+   `OEEngine.shared.deleteContext(context)` waits for the native wipe, actual
+   Profile destruction and committed Local State cleanup (§6.5). A mere
+   `releaseContext` callback does not provide this barrier.
+3. Only after success, remove `Profiles/<dir>/`, `Engine/<dir>/` and
+   `~/Library/Caches/<root name>/Engine/<dir>`, then remove the journal entry.
+   A successful native deletion needs no App-side Local State JSON edit.
+   Errors preserve folders and retain the journal for recovery before the
+   next engine start. A never-created native directory needs no native unload.
 
 Undo of the model delete after a disk wipe restores sidebar data only
 (§3.4). There is no undo for the wipe. The confirmation copy in §7.1 must
@@ -744,7 +765,7 @@ say both things.
 
 ---
 
-## 6. Engine contract — scope item 3 **[NEEDS ENGINE]**
+## 6. Engine contract — scope item 3
 
 Nothing in this section is OpenKit code. OpenKit (Steps 1–5) must compile
 and pass §9.1–§9.2 with no engine present. This section is the contract the
@@ -771,9 +792,12 @@ Source: `~/Developer/open-engine/chromium_git/chromium/src/cef/include/`
    must get a `cache_path` **different** from the global one.
 3. `CefSettings.cache_path` has the same under-`root_cache_path` rule; any
    child-directory value for the *global* context is ignored and the
-   "default" profile is used (`cef_types.h:285–296`). Therefore set the
-   global context to the default Open Profile explicitly (below) instead
-   of relying on a child path being honoured.
+   initial startup Profile is used (`cef_types.h:285–296`). On macOS,
+   Chromium can choose `profile.last_used`, so OpenEngine also passes
+   `--profile-directory=Default` (`OEApp.mm`). CEF retains that initial
+   Profile for the whole process; a named Profile must never become the
+   global context on relaunch. The real-App Profile deletion and storage
+   isolation rows cover a named Profile being last used before quitting.
 4. "Browser objects with different request contexts will never be hosted in
    the same render process." Same-context browsers may share one
    (`cef_request_context.h:100–107`). Isolation is at the context, not the
@@ -828,10 +852,14 @@ corruption case fact 2 warns about. The registry therefore stores, per
 ProfileID, either `.global` or a created context handle, and answers
 browsers accordingly.
 
-Incognito (D-P8): `CefRequestContextSettings` with **empty** `cache_path`
-and `persist_session_cookies` = false, one context per incognito window,
-created when the window opens and released when it closes (§6.5). Never
-seed it from the default Profile (Arc §5.2 rule 6).
+Incognito (Section 10 erratum): use
+`OEEngine.makeIncognitoContext(for:completion:)` with the chosen regular disk
+Profile, including Default. Fork API `CefCreateIncognitoContext` adopts that
+Profile's primary OTR. All its private windows share one session; the last
+private Browser closes the session, and the next window gets a fresh one.
+There is no cookie seeding. This is an Open decision based on Chrome's
+extension semantics; Arc's exact parent selection remains unverified.
+Each private window has its own in-memory model.
 
 ### 6.3 What "Profile switch" means in one window
 
@@ -875,11 +903,17 @@ plan §9.2 LA-7). Little Open tabs are not sidebar tabs and never enter
 
 ### 6.4 Lazy loading and memory
 
-- Create a Profile's context on **first need only**: first show of a Space
-  on that Profile, first Little Open hint of it, or first extension /
-  site-settings access for it. Launch creates only the global (default)
-  context, so cold launch keeps the architecture budget (sidebar ≤ 250 ms;
-  engine work stays off the sidebar path).
+- **Section 10 erratum (2026-11-06):** create a Profile's context on its
+  first page load or explicit extension/site action. Focusing an empty Space,
+  reading Settings shortcut conflicts, and automation reads do not load it.
+  A focus change can attach a window Browser to an already loaded context.
+  A Little Open page loads its own Profile after the first native frame.
+  The two-Profile launch gate leaves unvisited Work unloaded after 10 s.
+  [The receipt](../profiles-memory.md) records five Release launches: median
+  first-Work-page deltas of 31.6 MiB browser RSS, two helpers and 293.8 MiB
+  summed helper RSS (shared pages can be counted more than once).
+  The original sidebar ≤250 ms target remains open; laziness alone does not
+  prove that launch budget.
 - Cost model to design against (measure on the real build and record the
   numbers in the Step 6 PR; do not invent a budget): one loaded context =
   one Chrome Profile in the browser process — cookie/storage services,
@@ -900,18 +934,19 @@ plan §9.2 LA-7). Little Open tabs are not sidebar tabs and never enter
 
 ### 6.5 Destroying contexts (delete and quit)
 
-Only two teardown paths exist:
+Teardown follows these paths:
 
-- **Profile delete** (§5.5): the App holds the Profile's
-  `dataDirectoryName`, calls the model delete, then — through the
-  registry — destroys every browser on that Profile's context, drops its
-  registry entry (releasing the `CefRefPtr`), waits for OpenEngine to
-  confirm release, and only then calls
+- **Profile delete** (§5.5, Section 10 erratum): the App holds the Profile's
+  `dataDirectoryName`, calls the model delete, then calls
+  `try await OEEngine.shared.deleteContext(context)`. Its completion waits for
+  native data removal, wrapper invalidation, actual Profile destruction and
+  the Local State commit. Only successful completion permits
   `ProfileDirectories.deleteProfileData`. If the Profile backed the global
   context this path can never run (default is undeletable, D-P1), so the
   global context is never released mid-session.
-- **Incognito close**: destroy the window's browser, then release its
-  context. No store writes follow (D-P8).
+- **Incognito close**: destroy the window's Browser. Chrome's last-Browser
+  path ends the chosen parent's primary OTR session and invalidates its shell
+  context. No private navigation is saved in Open's durable stores.
 - **Quit**: destroy browsers, release non-global contexts, then
   `CefShutdown` (OpenEngine owns the order). Snapshot `saveNow` and store
   `flush()` calls happen before teardown completes, per §5.4's bootstrap
@@ -919,21 +954,21 @@ Only two teardown paths exist:
 
 ### 6.6 Assumed minimal `OpenEngine` interface (list — confirm, do not extend silently)
 
-`docs/engine-api.md` does not exist, so this plan assumes exactly these
+The original plan assumed these
 App-facing calls (ObjC++ in `Engine/OpenEngine/`, Swift-visible through the
 App target only; names follow the adblock plan's `OpenEngineAdBlock.h`
-convention). Steps 6–7 implement the Profile registry against this list.
-If the engine spike ships different names, adapt the registry and record
-the mapping in the Step 6 PR — do not change OpenKit to match.
+convention). The implemented mapping is in [engine-api.md](../engine-api.md).
+Section 10 replaces E2 and E6 below; the other rows retain the original plan's
+notation. Packages continue to use engine-independent protocols.
 
 | # | Assumed call | Contract |
 |---|---|---|
 | E1 | `OEProfileContextManager.shared` with `contextHandle(forProfileID:cachePath:persistSessionCookies:) -> OEContextHandle` (creates lazily, caches, `.global` for the default Profile) | One handle per ProfileID; repeat calls return the same handle |
-| E2 | `releaseContext(forProfileID:) async` (destroys attached browsers first; completion after CEF release) | Used by §6.5 only |
+| E2 | `OEEngine.shared.deleteContext(context)` (`async throws`, also `deleteContext(_:completion:)`) | Completion after native wipe, actual destruction and committed Local State cleanup; errors leave folders intact |
 | E3 | `makeWebContent(tabID:context:initialURL:) -> OEWebContent` with an `NSView`, `load(URL)`, `destroy()` | One web content per live sidebar tab; tab identity is Open's `ItemID`, never a CEF browser integer |
 | E4 | Context events: `onCookieChanged` / storage-ready callback per context (or a pollable `isReady`) | App enables history/cookie-dependent UI only after ready |
 | E5 | Ad-block hand-off: the `CefRequestContext` behind a handle accepts the adblock-fork §11 calls (`SetOpenAdBlock…`) | Profiles only supplies the handle + `AdBlock/lists/` directory (§5.1) |
-| E6 | Incognito: `makeIncognitoContext(windowID:) -> OEContextHandle` (empty cache path) + `releaseContext` on close | No disk directory is ever passed |
+| E6 | `OEEngine.shared.makeIncognitoContext(for: original, completion:)` | Chosen regular parent; primary OTR shared until last private Browser; no seeding or Default fallback |
 
 OpenKit additions for the engine steps: **none**. The registry lives in
 the App target (`App/ProfileContextRegistry.swift`, created by Step 7)
@@ -1201,16 +1236,17 @@ from `Secure Preferences`, not copied. Open Profiles whose Arc directory
 is missing (`chromiumDirsMissing`) import as empty engine Profiles; their
 sidebar Spaces/tabs still import fully.
 
-### 8.5 Verification limit (state it, do not hide it)
+### 8.5 Verification limit (updated 2026-11-06)
 
-No multi-Profile Arc install exists on this Mac, and Arc must not be
-launched by agents (AGENTS.md rule 4). §8.1–§8.2 are therefore verified
-against a **synthetic copied fixture** (two Spaces on two refs, two
-`topApps` pairs, hand-built `Local State`) plus the live single-Profile
-regression (§9.1). The real multi-Profile capture is data-model.md §5
-item 3 (user creates a second Arc Profile, quits Arc, agent reads the
-files). Until then the importer ships with the lenient parser above and
-the report lines make any mismatch visible instead of silent.
+The read-only two-Profile capture confirms
+`{custom:{_0:{directoryBasename:"Profile 1",machineID:…}}}` in both
+`Space.profile` and `topAppsContainerIDs`. Local State names both source
+directories. The source has 6 Spaces split 4/2 and 11 Favorites split 6/5.
+`StorableProfiles.json` and `StorableProfileContainers.json` are absent; their
+optional metadata shapes remain guesses. Arc was not launched by an agent.
+App and CLI receipts are in [import-multiprofile.md](../import-multiprofile.md).
+Named Open destination directories now come from the normal Profile allocator,
+not Arc's source basename. `sourceProfileDirectories` retains the source map.
 
 ---
 
@@ -1513,7 +1549,7 @@ PRs. Steps 6–7 are engine/App PRs. Branch names follow the repo pattern
 
 | # | Item | Handling |
 |---|---|---|
-| Q1 | Named Arc Profile ref shape and `StorableProfiles.json` fields are unverified (no multi-Profile install; Arc must not be launched by agents) | Lenient parser + report lines (§8); real capture is a user action (data-model.md §5 item 3). Does not block Steps 1–3 |
+| Q1 | Named Arc Profile ref confirmed on disk; optional `StorableProfiles.json` fields remain unverified | Observed custom directory reference + Local State names (§8.5); keep the optional Storable metadata parser marked as a guess |
 | Q2 | `ProfileSettings` has no download-location field, though Arc scopes it per Profile | Out of scope (§0.2); add with the downloads milestone as a whole-settings replace (no DTO break: `ProfileDTO.settings` gains a keyed field with a decode-default, planned there, not here) |
 | Q3 | Idle request-context eviction could cut memory but risks destroying extension/session state | v1 keeps contexts until quit (D-P7); follow-up after sleep history capture exists (§6.4) |
 | Q4 | Global favicon cache leaks "some Profile visited this origin" | Accepted and documented (D-P6, §5.3); revisit only if a privacy review flags it — the fix is a `profile` column + per-Profile files, contained in `OpenStore` |

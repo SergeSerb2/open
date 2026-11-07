@@ -1,5 +1,7 @@
 import Foundation
 import OpenModel
+import OpenRouting
+import OpenBoosts
 
 public struct ImportReport: Sendable {
     public var totalItems: Int = 0
@@ -26,9 +28,12 @@ public struct ImportReport: Sendable {
     public var skippedUnknown: Int = 0
     public var orphans: Int = 0
     public var skippedRoutingRules: Int = 0
+    public var routingDestinationFallbacks: Int = 0
     public var containers: Int = 0
     public var archiveStatus: String = "not imported (no real file exists)"
-    public var boostsStatus: String = "not imported (no real file exists)"
+    public var boosts = ArcBoostsReport()
+    public var boostsStatus: String { boosts.status }
+    public var boostsStoredNew = 0, boostsStoredDuplicates = 0, boostsProtectedEdits = 0
     /// imported tabs (pinned + today + favorites items that are tabs) + folders + splits + skipped* + orphans should equal total non-container items.
     public var importedTabNodes: Int = 0
     // Archive (StorableArchiveItems.json)
@@ -59,6 +64,8 @@ public struct ImportReport: Sendable {
     public var sessionAppliedSelections: Int = 0
     public var sessionDistinctChromiumIDs: Int = 0
     public var sessionMalformedPairs: Int = 0
+    public var extensions = ArcExtensionReport()
+    public var extensionProfilesUnreadable: Int = 0
 
     public var accounted: Int {
         importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedUnknown
@@ -79,6 +86,13 @@ public struct ArcImportResult {
     public var model: BrowserModel
     public var report: ImportReport
     public var archiveRecords: [ArchivedTabRecord]
+    /// The `{default:true}` role, independent of its display name or directory.
+    public var sourceDefaultProfileID: ProfileID
+    /// Original Chromium directory, before destination collision suffixes.
+    public var sourceProfileDirectories: [ProfileID: String] = [:]
+    /// In-memory metadata only; no payload or extension storage is imported.
+    public var extensionsByProfile: [ProfileID: [ArcExtensionRecord]] = [:]
+    public var boostsByProfile: [ProfileID: [Boost]] = [:]
 }
 
 public enum ImportError: Error {
@@ -142,23 +156,44 @@ public struct ArcImporter {
 
     /// JSONSerialization produces immutable containers. Their contents are private and read-only;
     /// only the model construction that consumes them runs on the main actor.
-    public struct ParsedSidebar: @unchecked Sendable { let root: [String: Any] }
+    public struct ParsedSidebar: @unchecked Sendable {
+        let root: [String: Any]
+        let boosts: ArcBoostsReadResult
+    }
     public func readSidebar() throws -> ParsedSidebar {
+        let root = try readSidebarRoot()
+        return ParsedSidebar(root: root, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
+    }
+    private func readSidebarRoot() throws -> [String: Any] {
         let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: url), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.missingSidebar }
-        return ParsedSidebar(root: root)
+        return root
     }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
     static func profileReferenceKey(_ raw:Any?)->String {
         if let value=raw as? String {return value}
         guard let object=raw as? [String:Any] else {return "default"}
         if object["default"] as? Bool == true {return "default"}
+        // Confirmed on disk: Space.profile and topAppsContainerIDs use this
+        // same ref. machineID identifies the source Mac, not another Profile.
+        if let directory = customProfileDirectory(raw) { return directory }
+        // Guess: older/unobserved Storable metadata may use a flat string ref.
         return object.keys.sorted().compactMap {object[$0] as? String}.first ?? "default"
+    }
+    private static func customProfileDirectory(_ raw: Any?) -> String? {
+        guard let object = raw as? [String: Any], let custom = object["custom"] as? [String: Any],
+              let payload = custom["_0"] as? [String: Any],
+              let directory = payload["directoryBasename"] as? String,
+              !directory.isEmpty, directory.utf8.count <= 255, directory != ".", directory != "..",
+              !directory.contains(where: { "/:\\".contains($0) }),
+              !directory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        return directory
     }
     /// UI labels only, read on a utility worker when the wizard prepares its review.
     /// The count-only probe never returns these strings or builds model objects.
     public func spaceMappingLabels() throws -> [String] {
-        let root=try readSidebar().root
+        // Mapping labels need no cache I/O; the caller can be on the UI actor.
+        let root=try readSidebarRoot()
         guard let sidebar=root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,let holder=containers[1] as? [String:Any],let spaces=holder["spaces"] as? [Any] else {throw ImportError.malformedSidebar}
         return stride(from:1,to:spaces.count,by:2).compactMap {index in
             guard let object=spaces[index] as? [String:Any] else {return nil}
@@ -169,7 +204,8 @@ public struct ArcImporter {
     struct ArcSourceProfile {let id:ProfileID;let name:String;let dataDirectoryName:String;let sourceDirectory:String}
     struct ArcSourceProfiles {let profiles:[ArcSourceProfile];let spaceOwners:[String:ProfileID];let refOwners:[String:ProfileID];let defaultID:ProfileID}
     func sourceProfiles(spacesRaw:[(id:String,obj:[String:Any])],holder:[String:Any],itemsByID:[String:[String:Any]],directoryNamesToAvoid:Set<String>=[],existingDirectories:[ProfileID:String]=[:],report:inout ImportReport)->ArcSourceProfiles {
-        // Multi-Profile Storable field shapes remain inferred. Unknown shapes are ignored.
+        // StorableProfiles/ProfileContainers metadata shapes remain inferred.
+        // Local State info_cache and custom._0.directoryBasename are confirmed.
         struct ProfileMetadata {
             var name: String?
             var directory: String?
@@ -232,6 +268,18 @@ public struct ArcImporter {
                 mergeMetadata(key, name: (info[directory] as? [String: Any])?["name"] as? String, directory: directory)
                 sourceDirectories.insert(directory)
             }
+        }
+        // The observed ref itself proves the source directory, even when
+        // Local State is absent from a selected/copy-only import folder.
+        let refs = spacesRaw.compactMap { $0.obj["profile"] }
+            + ((holder["topAppsContainerIDs"] as? [Any]).map { values in
+                stride(from: 0, to: max(0, values.count - 1), by: 2).map { values[$0] }
+            } ?? [])
+        for ref in refs {
+            guard let directory = Self.customProfileDirectory(ref) else { continue }
+            let key = metadataOrder.first { metadata[$0]?.directory == directory } ?? directory
+            mergeMetadata(key, name: nil, directory: directory)
+            sourceDirectories.insert(directory)
         }
         for directory in sourceDirectories {
             var isDirectory: ObjCBool = false
@@ -361,7 +409,8 @@ public struct ArcImporter {
     }
     @MainActor
     public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
-        let root = try (parsed ?? readSidebar()).root
+        let parsed = try parsed ?? readSidebar()
+        let root = parsed.root
         guard let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [Any], containers.count >= 2,
               let holder = containers[1] as? [String: Any],
@@ -371,6 +420,7 @@ public struct ArcImporter {
         }
 
         var report = ImportReport()
+        report.boosts = parsed.boosts.report
 
         // Parse alternating arrays.
         var itemsByID: [String: [String: Any]] = [:]
@@ -759,13 +809,28 @@ public struct ArcImporter {
 
         // Routing.
         var rules: [RoutingRule] = []
-        var defaultDestination: DefaultDestination = .littleOpen
+        var profileReferences = sourceProfiles.refOwners
+        for (arcID, object) in spacesRaw {
+            if let reference = object["profile"], let owner = sourceProfiles.spaceOwners[arcID] {
+                profileReferences[Self.profileReferenceKey(reference)] = owner
+            }
+        }
+        func destination(_ raw: Any?) -> DefaultDestination? {
+            let result = parseDestination(raw, arcSpaceIDToOpen: arcSpaceIDToOpen,
+                profileReferences: profileReferences, spaces: spaces)
+            if result.usedFallback { report.routingDestinationFallbacks += 1 }
+            return result.destination
+        }
+        var defaultDestination: DefaultDestination = .littleOpen(profile: nil)
         if let routeData = try? Data(contentsOf: arcDirectory.appendingPathComponent("StorableLinkRouting.json")),
            let routeRoot = try? JSONSerialization.jsonObject(with: routeData) as? [String: Any] {
-            defaultDestination = parseDestination(routeRoot["defaultDestination"], arcSpaceIDToOpen: arcSpaceIDToOpen) ?? .littleOpen
+            defaultDestination = destination(routeRoot["defaultDestination"]) ?? .littleOpen(profile: nil)
             for rawRule in (routeRoot["rules"] as? [[String: Any]]) ?? [] {
                 guard let components = rawRule["sourceComponents"] as? [[String: Any]] else { report.skippedRoutingRules += 1; continue }
+                let target = destination(rawRule["destination"])
                 var importedRule = false
+                // Guess: components are OR alternatives. Keep one Open rule per
+                // component in source order; Arc's comparison logic is unverified.
                 for component in components {
                     guard let ct = component["componentType"] as? [String: Any],
                           let urlMatch = ct["urlMatch"] as? [String: Any],
@@ -773,14 +838,20 @@ public struct ArcImporter {
                           let kindDict = urlMatch["_0"] as? [String: Any] else { continue }
                     let match: RoutingMatch
                     if kindDict.keys.contains("contains") { match = .hostContains(pattern) }
+                    else if kindDict.keys.contains("matches") {
+                        // Guess: Arc analytics calls this "equals". Treat a bare
+                        // host as hostEquals, other text as urlPrefix. Arc's actual
+                        // matching semantics remain unverified (s10 audit §2).
+                        match = Self.routingMatchForArcMatches(pattern)
+                    }
                     else if kindDict.keys.contains("equals") || kindDict.keys.contains("exact") { match = .hostEquals(pattern) }
                     else if kindDict.keys.contains("prefix") || kindDict.keys.contains("hasPrefix") { match = .urlPrefix(pattern) }
                     else { continue }
-                    guard let dest = parseDestination(rawRule["destination"], arcSpaceIDToOpen: arcSpaceIDToOpen) else { continue }
+                    guard let dest = target else { continue }
                     let destination: RoutingDestination
                     switch dest {
-                    case .littleOpen: destination = .littleOpen
-                    case .mostRecentSpace: destination = .mostRecentSpace
+                    case .littleOpen(let profile): destination = .littleOpen(profile: profile)
+                    case .mostRecentSpace(let profile): destination = .mostRecentSpace(profile: profile)
                     case .space(let sid): destination = .space(sid)
                     }
                     rules.append(RoutingRule(match: match, destination: destination))
@@ -885,9 +956,9 @@ public struct ArcImporter {
                     collect(space.pinned, space: space.id)
                     collect(space.today, space: space.id)
                 }
-                var favoriteIDs: Set<ItemID> = []
+                var favoriteProfiles: [ItemID: ProfileID] = [:]
                 for profile in profiles {
-                    for tab in profile.favorites { favoriteIDs.insert(tab.id); tabByItem[tab.id] = tab }
+                    for tab in profile.favorites { favoriteProfiles[tab.id] = profile.id; tabByItem[tab.id] = tab }
                 }
                 let arcItemToOpen: [String: ItemID] = Dictionary(uniqueKeysWithValues: nodeByArcID.map { ($0.key, $0.value.id) })
                 var windowIDsSeen: Set<String> = []
@@ -924,7 +995,17 @@ public struct ArcImporter {
                     var bestBySpace: [SpaceID: (item: ItemID, order: Int, active: Date)] = [:]
                     for entry in entries {
                         let targetSpace: SpaceID
-                        if favoriteIDs.contains(entry.item) { targetSpace = window.focusedSpaceID }
+                        if let owner = favoriteProfiles[entry.item] {
+                            // An inactive Profile's session may outlive a switch
+                            // to a different Profile. Never select its Favorite
+                            // in a Space that uses another engine context.
+                            // Guess: if this window no longer focuses that
+                            // Profile, use its first Space; the session mapping
+                            // has no Space ID for a Favorite.
+                            guard let owned = spaces.first(where: { $0.id == window.focusedSpaceID && $0.profileID == owner })
+                                ?? spaces.first(where: { $0.profileID == owner }) else { continue }
+                            targetSpace = owned.id
+                        }
                         else if let owned = spaceByItem[entry.item] { targetSpace = owned }
                         else { continue }
                         let active = tabByItem[entry.item]?.lastActiveAt ?? .distantPast
@@ -944,24 +1025,73 @@ public struct ArcImporter {
             }
         }
 
+        let sourceProfileDirectories = Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) })
+        var extensionsByProfile: [ProfileID: [ArcExtensionRecord]] = [:]
+        for (profileID, directory) in sourceProfileDirectories.sorted(by: { $0.key.description < $1.key.description }) {
+            do {
+                guard !directory.isEmpty, directory.utf8.count <= 255, directory != ".", directory != "..",
+                      !directory.contains("/"), !directory.contains("\\"),
+                      !directory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { throw ImportError.malformedSidebar }
+                let root = arcDirectory.appendingPathComponent("User Data").resolvingSymlinksInPath()
+                guard root.path.hasPrefix(arcDirectory.resolvingSymlinksInPath().path + "/") else { throw ImportError.malformedSidebar }
+                let profile = root.appendingPathComponent(directory)
+                guard profile.resolvingSymlinksInPath().path.hasPrefix(root.path + "/") else { throw ImportError.malformedSidebar }
+                let result = try ArcExtensionsReader(profileDirectory: profile).read()
+                report.extensions.totalRecords += result.report.totalRecords
+                report.extensions.internalRecords += result.report.internalRecords
+                report.extensions.reinstallCandidates += result.report.reinstallCandidates
+                report.extensions.missingManifest += result.report.missingManifest
+                extensionsByProfile[profileID] = result.records
+            } catch { report.extensionProfilesUnreadable += 1 }
+        }
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
-        return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords)
+        return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords,
+            sourceDefaultProfileID: defaultProfileID,
+            sourceProfileDirectories: sourceProfileDirectories,
+            extensionsByProfile: extensionsByProfile,
+            boostsByProfile: parsed.boosts.boosts.isEmpty ? [:] : [defaultProfileID: parsed.boosts.boosts])
     }
 
-    private func parseDestination(_ raw: Any?, arcSpaceIDToOpen: [String: SpaceID]) -> DefaultDestination? {
-        guard let dict = raw as? [String: Any] else { return nil }
-        if let spaceDict = dict["space"] as? [String: Any] {
-            if let zero = spaceDict["_0"] as? [String: Any] {
-                if zero.keys.contains("mostRecent") { return .mostRecentSpace }
-                // {_0: "<spaceArcID>"} form
-                for value in zero.values {
-                    if let s = value as? String, let openID = arcSpaceIDToOpen[s] { return .space(openID) }
-                }
-            }
-            if let s = spaceDict["_0"] as? String, let openID = arcSpaceIDToOpen[s] { return .space(openID) }
-            return .mostRecentSpace
+    private static func routingMatchForArcMatches(_ pattern: String) -> RoutingMatch {
+        HostNormalizer.isBareHostPattern(pattern) ? .hostEquals(pattern) : .urlPrefix(pattern)
+    }
+
+    @MainActor
+    private func parseDestination(_ raw: Any?, arcSpaceIDToOpen: [String: SpaceID],
+                                  profileReferences: [String: ProfileID], spaces: [Space])
+        -> (destination: DefaultDestination?, usedFallback: Bool) {
+        guard let dict = raw as? [String: Any] else { return (nil, true) }
+        let little = dict["littleArc"] ?? dict["little"]
+        guard let payload = (dict["space"] ?? little) as? [String: Any] else { return (nil, true) }
+        let isLittle = dict["space"] == nil
+        func recent(_ profile: ProfileID? = nil) -> DefaultDestination {
+            isLittle ? .littleOpen(profile: profile) : .mostRecentSpace(profile: profile)
         }
-        if dict["littleArc"] != nil || dict["little"] != nil { return .littleOpen }
-        return nil
+        func specificSpace(_ arcID: String) -> DefaultDestination? {
+            guard let id = arcSpaceIDToOpen[arcID] else { return nil }
+            if isLittle {
+                guard let space = spaces.first(where: { $0.id == id }) else { return nil }
+                return .littleOpen(profile: space.profileID)
+            }
+            return .space(id)
+        }
+        // Keep the older direct-string Space representation readable too.
+        if let id = payload["_0"] as? String {
+            return specificSpace(id).map { ($0, false) } ?? (recent(), true)
+        }
+        guard let context = payload["_0"] as? [String: Any], context.count == 1 else {
+            return (recent(), true)
+        }
+        if context["mostRecent"] != nil { return (recent(), false) }
+        if let space = context["space"] as? [String: Any],
+           let id = space["_0"] as? String, let destination = specificSpace(id) {
+            return (destination, false)
+        }
+        if let profile = context["profile"] as? [String: Any], let reference = profile["_0"],
+           let id = profileReferences[Self.profileReferenceKey(reference)] {
+            return (recent(id), false)
+        }
+        // Preserve the previous unknown-context fallback, and count the loss.
+        return (recent(), true)
     }
 }

@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8"><title>Open card fixture</title>
+<h1>Card fixture</h1>
+<form method="post" action="/card">
+<label>Name on card <input id="name" name="name" type="text" autocomplete="cc-name" data-fixture="Fixture User" required></label><br>
+<label>Card number <input id="number" name="number" type="text" autocomplete="cc-number" data-fixture="4111 1111 1111 1111" required></label><br>
+<label>Expiry <input id="expiry" name="expiry" type="text" autocomplete="cc-exp" data-fixture="12/2099" required></label><br>
+<label>Security code <input id="csc" name="csc" type="text" autocomplete="cc-csc" data-fixture="123" required></label><br>
+<button id="submit" type="submit">Submit</button>
+</form>
+<script>
+// Keep the synthetic expiry in the future without pre-filling the form.
+document.querySelector('#expiry').dataset.fixture = '12/' + (new Date().getFullYear() + 3);
+</script>

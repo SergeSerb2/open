@@ -5,6 +5,7 @@ _cef_shutdown
 _cef_version_info
 # Open fork API (P1, cef/include/cef_tab_strip.h)
 _cef_tab_strip_create
+_cef_get_open_browser_activation_diagnostics
 # Open fork API: tab sleeping (memory fork; cef/include/cef_page_lifecycle.h,
 # cef/include/cef_navigation_history.h)
 _cef_set_page_frozen
@@ -32,12 +33,19 @@ _cef_media_controller_get_for_browser
 _cef_extension_manager_create
 # E12 omnibox session bridge (generated C API).
 _cef_open_omnibox_create
+# Section 10 profiles (generated from cef_open_profile.h).
+_cef_create_incognito_context
+_cef_is_open_profile_context_live
+_cef_set_open_profile_handler
+_cef_clear_open_profile_browsing_data
+_cef_delete_open_profile
 
 # P7: reserved Open renderer world.
 _cef_is_page_script_context
 _cef_get_open_script_context
 _cef_is_open_script_context
 _cef_get_script_document_identifier
+_cef_set_browser_extra_info
 
 # Site Control E1/E2/E3 (cef_site_control.h).
 _cef_get_changed_site_settings

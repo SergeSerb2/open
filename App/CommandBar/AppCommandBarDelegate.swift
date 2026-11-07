@@ -34,7 +34,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       factory.app.focusWindow(factory.windowState.id, activate: true)
     }
     windowController.dismissSidebarReveal()
-    let engine = factory.app.stores.suggest(for: profile.id)
+    guard let engine = factory.suggestEngine() else { return }
     engine.extensionSource = extensionSource
     if controller?.engine !== engine {
       controller?.dismiss(reason: .programmatic)
@@ -80,7 +80,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       currentTabID: pinned?.id ?? (peek ? nil : factory.selectedTab?.id),
       currentTabURL: pinned?.pinnedURL ?? (peek ? factory.selectedContent?.url : factory.selectedTab?.url),
       currentTabTitle: pinned?.displayTitle ?? (peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle),
-      allowsRemoteSuggestions: profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
+      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
   }
   func contextDidChange() {
     guard isPresented else { return }
@@ -128,6 +128,7 @@ final class AppCommandBarSession: CommandBarDelegate {
   /// The (i) footer's "Dismiss": the same acknowledgement as Settings' notice ("Code 4"), then
   /// remote suggestions for this query when the Profile allows them (CC-42, D14).
   func commandBarDidDismissPrivacyNotice(_ commandBar: CommandBarController) {
+    guard !factory.isIncognito else { return }
     let presenter = factory.app.settingsPresenter
     presenter.settings.profiles.dismissSuggestNotice()
     guard let profile = commandBar.request?.profileID.flatMap({ factory.app.model.profile(id: $0) }) else { return }

@@ -5,6 +5,20 @@ import OpenModel
 import OpenSettings
 
 extension AutomationController {
+  func settingsProfilePage(_ args: [String: Any]) throws -> Bool {
+    guard Set(args.keys).isSubset(of: ["profile", "page"]),
+      let raw = args["profile"] as? String,
+      let profile = app.model.profiles.first(where: { $0.id.description == raw }),
+      let name = args["page"] as? String, let page = ProfilePage(rawValue: name) else {
+      throw Failure(message: "expected an existing profile ID and ProfilePage")
+    }
+    // The same Profiles row action, with Section 10's target selection intact.
+    let profiles = app.settingsPresenter.settings.profiles
+    profiles.select(profile.id)
+    profiles.open(page)
+    return true
+  }
+
   func settingsProfile(_ args: [String: Any]) throws -> [String: Any] {
     let adapter = app.settingsPresenter
     let profiles = adapter.settings.profiles
@@ -39,6 +53,9 @@ extension AutomationController {
       "imageObject": icon.appliedImage.map { String(describing: ObjectIdentifier($0)) } ?? "bundle",
       "pixels": icon.appliedImage?.representations.map { [$0.pixelsWide, $0.pixelsHigh] } ?? [],
       "restoreStartedMs": icon.restoreStartedMs ?? NSNull(),
+      "restoreDecodeMs": icon.restoreDecodeMs ?? NSNull(),
+      "restorePreparationMs": icon.restorePreparationMs ?? NSNull(),
+      "restoreSetterMs": icon.restoreSetterMs ?? NSNull(),
       "restoreElapsedMs": icon.restoreElapsedMs ?? NSNull()]
   }
 

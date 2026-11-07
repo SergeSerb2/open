@@ -197,6 +197,17 @@ Deviations from the plan:
 - Badge text and color, title, and enabled (part of P2) came along: `browserDidUpdateExtensionActions` fires on `chrome.action` changes.
 - Found on the way: `OEEngineConfiguration.userAgentProduct = "Open/0.1"` replaced Chrome's `Chrome/156` UA token, and Bitwarden (like many sites) took its Safari code path and never loaded. The shell no longer sets it.
 
+Window activation lifecycle (2026-11-06, X-19 / #192): `OpenBrowserWindow`
+stops its NSWindow key observers when real closing starts and when the Browser
+reports its close. A close request that the embedder can refuse keeps its
+observers. Activation requires a Browser that is still registered in
+`GlobalBrowserCollection`; this also covers `SetBrowser` and `SetHostView`.
+Chromium's collection checks stay intact. The automation-only diagnostic
+counts and refuses an unsafe activation before that check, so the real-App
+`window` row `engine_close_host_activation` can prove the old behavior fails
+without ending the App. The row includes immediate focus after a Profile
+switch, then closes twice and changes native key state before deferred deletion.
+
 Review round 1 (PR #53; engine review by Opus, shell review by Muse; lead decisions 2026-10-26):
 
 - **Discards.** Chrome never discards a hosted tab: Open sleeps tabs itself. `chrome.tabs.discard(tabId)` becomes a request (`OnTabDiscardRequested` → `-browser:requestsDiscardOfWebContent:`). The shell refuses the visible tab (Chrome's "Cannot discard tab" error). The current App uses `SleepController.debugSleepNow`: it discards a background renderer and keeps the sleeping page and its tab id until a later destroy deadline. `OEWebContent.isDiscarded` reports that renderer state. Desktop `chrome.tabs` still reports `discarded: false` because Chrome's own lifecycle unit did not perform the discard; this metadata mapping remains a P1 follow-up. The tab leaves `chrome.tabs` only when the page closes. `chrome.tabs.discard()` without an id finds nothing to discard. A replaced `WebContents` (only discards replace one) is logged, never reported as a page close.
@@ -410,6 +421,28 @@ CEF patch `0601-open-script-world.patch` confines queued-context actions and
 release notifications to the main world; isolated-world creation must not
 flush or invalidate the main frame's queue.
 
+CEF patch `0602-open-browser-extra-info.patch` makes the browser's stored
+extra-info snapshot replaceable. Its getter and setter share `CefBrowserInfo`'s
+lock; the setter stores a read-only copy on the UI thread. The experimental
+`cef_open_browser_info.h` API is implemented in `open/browser/page/open_browser_info.cc`.
+`oe_broadcastScripts` updates the snapshot before sending the existing renderer
+message. `OnRenderViewReady` keeps its resend as a second path.
+
+Handoff precheck: CEF `libcef/browser/browser_info_manager.cc:374–394` resolves
+an existing browser for `OnGetNewBrowserInfo`; `SendNewBrowserInfoResponse` at
+lines 810–845 uses the request's sequence and copies `browser_info->extra_info()`
+into the renderer reply. `OEApp.mm`'s `OnBrowserCreated` reads `oe.scripts`
+before `OnContextCreated`. Updating that stored value therefore reaches a
+replacement process before its first document-start script.
+
+The broadcast includes OTR browsers owned by the changed `OEBrowserContext`,
+using exact context identity and each web content's own script list. It does
+not inherit scripts from the parent Profile. The real-App
+`open_world_private_renderer` row installs page/Open scripts after a private
+tab exists, checks both at document start after a process swap, and checks
+normal/private script isolation in both directions. CEF 0601 and 0602 follow
+main's 0701 in the series, as directed for this stack; their numbers stay fixed.
+
 The overlay API `cef_open_world.h` creates or gets that world's context using
 Blink's `ExecuteScriptInIsolatedWorld` and `GetScriptContextFromWorldId`.
 `OEApp::OnContextCreated` filters to the main world, then runs matching Open
@@ -435,7 +468,8 @@ Section 13's work.
 
 Evidence: real-App `features` rows `open_world_document_start`,
 `open_world_extension_isolation`, `open_world_messages`, `open_world_limits`,
-plus the existing `user_scripts` row. Build and suite receipts are recorded in
+`open_world_non_json_result`, `open_world_replacement_renderer`, plus the
+existing `user_scripts` row. Build and suite receipts are recorded in
 the PR. This transport adds no App UI.
 
 ## P8. Native ad-block engine
@@ -573,6 +607,51 @@ Section 8 decisions (differences from page-platform §6, with the reason):
 - **EP-6 reports no page.** Chromium keeps the creating document of a non-persistent notification inside content's dispatcher; the embedder finds the tab by origin.
 - **Test hooks** (`CefGetDisplayedNotifications`, `CefSimulateNotificationClick`, `CefSimulateHistorySwipe`) run only with the browser switch `--open-automation`, which only automation builds of the App pass. The swipe hook replays the overlay controller sequence and the navigation, not Chromium's gesture recognition (manual check U-S1).
 
+## Profiles (Section 10, 0701–0703)
+
+The Profile APIs use the experimental surface in overlay header
+`cef/include/cef_open_profile.h`. `engine-apply` generates the C API, wrappers
+and hashes. Swift calls only OpenEngine. New implementation lives in
+`open/browser/profiles/open_profile_context.{h,cc}` and is compiled through
+`open/open_libcef_sources.gni`; neither `cef/BUILD.gn` nor 0310's files gain
+another manifest owner.
+
+OpenEngine pins Chromium startup to `--profile-directory=Default`. On macOS,
+`GetStartupProfilePath` otherwise selects `ProfileManager::GetLastUsedProfileDir`
+(`chrome/browser/ui/startup/startup_browser_creator.cc:1756`), and CEF retains
+that initial Profile as its global request context
+(`cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.cc:40–55`). A
+named Profile used before quit must not become the process context on relaunch:
+that would mix Default storage and keep the named Profile alive at deletion.
+Named Profiles still load lazily through their own request contexts.
+
+| Number | Change and reason | Files | Risk |
+|---|---|---|---|
+| 0701 | Chosen-parent primary OTR; observe native closure before CEF detaches it, and let a retained CEF wrapper report unavailable. Normal last-Browser cleanup stays with Chrome's ProfileDestroyer. A session released before its first Browser also goes through ProfileDestroyer. | `cef/0701-open-profile-lifecycle.patch`: `chrome/chrome_browser_context.cc`, `request_context_impl.h`; profile overlay and `cef_open_profile.h` | Primary OTR initializes before CEF adopts it. Native teardown can precede the shell's retained wrappers; they must become inert before another request. |
+| 0702 | Ordered deletion coordinator in the overlay: real `WIPE_PROFILE` completion, `OnStoreDeletionFromDisk`, release CEF, independent late destructor sentinel, then remove/commit Local State. The macOS probe passed with automatic unload; no ProfileManager hook is needed. Keep-alives are never force-cleared. | Profile overlay, OpenEngine context/engine lifecycle code | Keep-alives, downloads, workers or delayed IO can block teardown. Specific errors preserve folders and the App's crash/retry cleanup remains necessary. |
+| 0703 | Per-Profile browsing-data removal with completion, from begin through end, inclusive (Chromium semantics). This needs no upstream hunk: the public BrowsingDataRemover is reachable from the overlay. | Profile overlay, `cef_open_profile.h`, `OEBrowserContext.{h,mm}`, `AppSettingsActions.swift` | Storage backends use their own creation/modification timestamps; localStorage uses an origin's modification time. Open HistoryStore is separate. |
+
+`makeIncognitoContext(for:completion:)` shares one private session per regular
+parent, rejects unavailable/OTR/closing/policy-disabled parents, and never seeds
+cookies or falls back to Default. The primary OTR retains Chrome's extension
+opt-in and spanning/split behavior. This is an Open design choice; Arc's exact
+parent selection is not established by the static research.
+
+`deleteContext(_:completion:)` coalesces requests and retires the directory in
+the running process. It closes private children, Browsers, pages, popups and
+downloads before native deletion. The independent observer and late
+`SupportsUserData` sentinel distinguish CEF wrapper detachment from actual
+Profile destruction. The error diagnostics contain keep-alive origin numbers
+and counts, with no profile name or path. Only success permits the App to remove
+the Engine, cache and Open-store folders.
+
+Quit tracks wrappers independently of the disk-context registry and invalidates
+all managers/handles before `CefShutdown`, including the three-second deadline
+path. Retained Swift objects stay closed. The App automation command
+`profile-engine` provides native proof windows without introducing a second
+product incognito or teardown implementation. The `profiles` e2e suite includes
+the profile-engine flows; `--only profiles-engine` runs that portion alone.
+
 ## Decisions for the lead
 
 1. Spaces and windows in `chrome.windows`: one Chrome window per Open window (proposed), or one per Space? Arc: per window (`ArcBrowser` has a `windowIdentifier`, docs/re/arccore-engine.md §4.3).
@@ -624,3 +703,62 @@ production source is restored and rebuilt afterwards. Cache proof uses server
 hit counters: clearing origin A changes hits from [1, 1] to [2, 1], while
 origin B remains cached. Mixed-content and malicious-page classifications
 have source support but no dedicated runtime fixtures in this receipt.
+
+## Passwords Step 0 probe (2026-11-06; remaining rows 2026-11-07)
+
+The real Debug App used Chrome style and main's recorded engine distribution
+`af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`.
+The [results](engine-spike/results-passwords-probe.json) retain per-row times,
+engine fingerprints, native window identities, and crash checks. These are
+observations, not password-feature acceptance. Each final-attempt row starts
+in a fresh App/profile; refill and cookie relaunch keep data within their row.
+
+| Row | Observation |
+|---|---|
+| PR-1 | Native typing matched and login POST reached welcome. No password bubble was identified. An AppKit toolbar window appeared and the native full-screen flag changed from false to true during the flow; its cause is unverified. |
+| PR-2 | The password-manager WebUI API added a synthetic login. Fields were empty immediately on reload. Clicking username showed a Chromium window. Native Down/Return did not fill both fields. |
+| PR-3 | Native address entry matched and POST reached welcome. No new visible window appeared. |
+| PR-4 | Native card entry matched and POST reached welcome. A Chromium window appeared on the refill attempt, but the number stayed empty. The mandatory re-auth path remains unverified. |
+| PR-5 | WebAuthn create showed an unparented `NativeWidgetMacNSWindow`; the promise was pending at 500 ms. Native Escape settled it with `NotAllowedError`. |
+| PR-6 | Credential Management get resolved to null within its 2-second deadline, without a new window. This secure localhost profile had no saved login, so the account chooser remains unverified. |
+| PR-7 | The fresh-profile HTTP Basic navigation killed Open. The late report is `Open-2026-11-06-203144.ips`, with `EXC_CRASH` / `SIGABRT`; its process matches this row. No retry followed. |
+| PR-8 | Selected run on 2026-11-07: `oe_lax`, `oe_persist`, and `oe_session` appeared before quit and after a clean relaunch with the same data root. Only cookie names were retained. |
+| PR-9 | Selected run on 2026-11-07: `pages` showed Chrome/browser 1 for a tab and both Split View panes; Peek was Alloy/browser 0, index -1. Little Open loaded successfully: Chrome/browser 2, content identifier 4, index 0, kind `unowned`; its session reported browserID 2 and state `page`. |
+
+PR-7's top symbols include `abort`, `logging::LogMessage::HandleFatal`,
+`tabs::TabDialogManager::CreateTabScopedDialog`,
+`tabs::TabDialogManager::CreateAndShowDialog`,
+`AskBeforeHttpDialogController::ShowDialog`, and
+`HttpsOnlyModeTabHelper::DidFinishNavigation`. This is evidence of the HTTPS
+fallback dialog path. It does not establish that the Basic-auth prompt itself
+caused the abort. The JSON contains symbol names only, not raw crash output.
+
+An earlier shared-window run showed a Basic-auth native window and no crash.
+It also left stale native key flags after a password dropdown; the probe now
+isolates rows so that state cannot invalidate later form observations. Earlier
+attempts and their limits are not counted as passes for the stopped attempt.
+A deliberate exit while WebAuthn was open proved cleanup: zero owned processes
+or windows remained, no force kill was needed, and no new crash report appeared.
+
+All on-screen work stopped after the 2026-11-06 crash report arrived. The lead
+confirmed a system crash dialog and held the M5 screen. The lead cleared it on
+2026-11-07 at 12:02 (-07:00). C2 then rebuilt Debug against main's recorded
+engine after merging `origin/main` and ran only PR-8 and PR-9 once, in one
+`--only passwords-probe --passwords-probe-rows PR-8,PR-9` call under the screen
+lock after the priority check. No new crash report appeared. All three App
+instances quit without force; each left zero owned processes and windows.
+
+The [selected-run receipt](engine-spike/results-passwords-probe-PR-8-PR-9.json)
+records source `cf60ae069ca8858e66c2c8bd5b950029499590f7`, the same engine
+distribution as above, and 12:10:33–12:10:44 (-07:00). Load averages at probe
+start were 18.23 / 12.64 / 9.37. The primary JSON now includes those two rows
+and their separate run provenance. Its original crash row, symbols, and
+post-quit crash evidence remain unchanged. Earlier observations remain labeled
+as historical. These are observations, not password-feature acceptance.
+
+PR-7 stays blocked until the engine lead approves the exact distribution hash
+with the fix. Patch 0806 is on another branch per the C2 brief; this probe did
+not validate it. The guard cannot navigate the known HTTPS-First crash path on
+the current engine. A different hash alone does not enable it. The selected-row
+run exercised the post-change runner without replaying PR-7. It did not exercise
+the death-stop path because no App died.

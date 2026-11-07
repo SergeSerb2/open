@@ -16,6 +16,12 @@ def run(app, results, tmp, new_tab, wait_until):
             body = b'''<!doctype html><html><head><script nonce="p7">
               window.pageAtStart = {native:typeof __openNative, secret:typeof __p7,
                 attr:document.documentElement.getAttribute('data-p7')};
+              window.handoffAtStart = {
+                page:document.documentElement.getAttribute('data-handoff-page'),
+                open:document.documentElement.getAttribute('data-handoff-open')};
+              window.privateAtStart = {
+                page:document.documentElement.getAttribute('data-private-page'),
+                open:document.documentElement.getAttribute('data-private-open')};
               </script></head><body>P7 local fixture<iframe src="/child"></iframe></body></html>'''
             if self.path.startswith('/child'):
                 body = b'<!doctype html><html><body>child frame</body></html>'
@@ -181,7 +187,40 @@ def run(app, results, tmp, new_tab, wait_until):
                 and evaluation["pendingAtLimit"] == 64 and evaluation["pendingOverLimit"] == 1,
             "sizeBoundary": {k: boundary[k] - before[k] for k in before}, "flood": delta,
             "evaluation": evaluation}
+        try:
+            # |other| already exists: later scripts must also reach a new process.
+            before_processes = app.call("metrics", interval=0)["processes"]
+            for world in ("page", "open"):
+                source = """(() => {
+                  const mark = () => document.documentElement.setAttribute('data-handoff-%s', 'early');
+                  if (document.documentElement) mark(); else new MutationObserver((m,o)=>{
+                    if(document.documentElement){o.disconnect();mark()}
+                  }).observe(document,{childList:true});
+                })()""" % world
+                app.call("script-add", id="p7-handoff-" + world, world=world,
+                         source=source, matches=["http://*/*"])
+            observations = []
+            for host in ("localhost", "127.0.0.1"):
+                app.call("navigate", tab=other,
+                         url="http://%s:%d/handoff" % (host, server.server_port))
+                app.call("wait", tab=other, timeout=15)
+                observations.append(app.eval(other, "handoffAtStart"))
+                if host == "localhost":
+                    swapped_processes = app.call("metrics", interval=0)["processes"]
+            before_ids = {p["pid"] for p in before_processes}
+            new_renderers = [p for p in swapped_processes
+                             if p["pid"] not in before_ids and "(Re" in p["name"]]
+            results["open_world_replacement_renderer"] = {
+                "ok": bool(new_renderers) and observations == [{"page": "early", "open": "early"}] * 2,
+                "atDocumentStart": observations, "newRenderers": new_renderers,
+                "processesBefore": before_processes, "processesAfterSwap": swapped_processes}
+        except Exception as error:
+            results["open_world_replacement_renderer"] = {"ok": False, "error": str(error)}
+        runpy.run_path(str(Path(__file__).with_name("open_world_private.py")))["run"](
+            app, results, new_tab, wait_until, server.server_port, other)
     finally:
+        app.call("script-remove", id="p7-handoff-page")
+        app.call("script-remove", id="p7-handoff-open")
         app.call("script-remove", id="p7-open")
         app.call("script-remove", id="p7-open-css")
         if extension_id:

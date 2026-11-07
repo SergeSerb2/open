@@ -12,6 +12,18 @@ import Security
 
 // MARK: - Web content
 
+public enum SavePromptKind: Sendable { case password, passwordUpdate, card, address, addressUpdate }
+public enum SavePromptAnswer: Sendable { case save, neverForSite, dismiss }
+
+/// Releasing an unanswered request means ignored, rather than a user dismissal.
+@MainActor public protocol SavePromptRequest: AnyObject {
+    var kind: SavePromptKind { get }
+    var displayHost: String { get }
+    var offersNeverForSite: Bool { get }
+    var isAnswered: Bool { get }
+    func answer(_ answer: SavePromptAnswer)
+}
+
 /// What changed in a web content. Mirrors the engine's change bits.
 public struct WebContentChange: OptionSet, Sendable, Hashable {
     public let rawValue: UInt

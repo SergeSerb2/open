@@ -224,8 +224,14 @@ static NSColor* OEColorFromARGB(int argb) {
   }
   return self;
 }
-- (void)accept { if (_prompt) { _prompt->Answer(true); _prompt = nullptr; } }
-- (void)cancel { if (_prompt) { _prompt->Answer(false); _prompt = nullptr; } }
+- (void)accept {
+  auto prompt = _prompt; _prompt = nullptr;
+  if (prompt) prompt->Answer(true);
+}
+- (void)cancel {
+  auto prompt = _prompt; _prompt = nullptr;
+  if (prompt) prompt->Answer(false);
+}
 @end
 
 @interface OEExtensionManager ()
@@ -233,6 +239,7 @@ static NSColor* OEColorFromARGB(int argb) {
 - (void)oe_ready;
 - (void)oe_installed:(CefRefPtr<CefDictionaryValue>)state byUser:(BOOL)user;
 - (void)oe_failed:(NSString*)path error:(NSString*)error;
+- (void)oe_showPrompt:(OEExtensionPrompt*)prompt;
 @end
 namespace {
 class OEExtensionsHandler : public CefExtensionManagerHandler {
@@ -244,10 +251,7 @@ class OEExtensionsHandler : public CefExtensionManagerHandler {
   void OnLoadFailed(const CefString& path, const CefString& error) override { [manager_ oe_failed:OEString(path) error:OEString(error)]; }
   bool CanShowPrompt() override { return [manager_.delegate respondsToSelector:@selector(extensionManager:showPrompt:)]; }
   void OnPrompt(CefRefPtr<CefExtensionPrompt> prompt) override {
-    OEExtensionManager* manager = manager_;
-    id<OEExtensionManagerDelegate> delegate = manager.delegate;
-    if ([delegate respondsToSelector:@selector(extensionManager:showPrompt:)])
-      [delegate extensionManager:manager showPrompt:[[OEExtensionPrompt alloc] initOEWithPrompt:prompt]];
+    [manager_ oe_showPrompt:[[OEExtensionPrompt alloc] initOEWithPrompt:prompt]];
   }
  private:
   __weak OEExtensionManager* manager_;
@@ -269,14 +273,17 @@ class OEInstallCompletion : public CefExtensionInstallCallback {
   CefRefPtr<CefExtensionManager> _manager;
   NSArray<OEExtension*>* _installed;
   NSArray<OEExtensionCommand*>* _commands;
+  NSHashTable<OEExtensionPrompt*>* _prompts;
 }
 - (instancetype)initOEWithContext:(OEBrowserContext*)context {
   if ((self = [super init])) {
     _context = context;
+    _prompts = [NSHashTable weakObjectsHashTable];
     __weak OEExtensionManager* weakSelf = self;
     [context oe_whenReady:^{
       OEExtensionManager* s = weakSelf;
-      if (s) s->_manager = CefExtensionManager::Create(context.oe_requestContext, new OEExtensionsHandler(s));
+      if (s && context.oe_isReady && context.oe_requestContext)
+        s->_manager = CefExtensionManager::Create(context.oe_requestContext, new OEExtensionsHandler(s));
     }];
   }
   return self;
@@ -284,7 +291,23 @@ class OEInstallCompletion : public CefExtensionInstallCallback {
 - (void)dealloc { [self oe_contextClosed]; }
 - (void)oe_contextClosed {
   if (_manager) { _manager->Close(); _manager = nullptr; }
+  // A presenter can retain a prompt beyond its context's lifetime. Drop each
+  // prompt's CEF handle while the framework is still loaded.
+  for (OEExtensionPrompt* prompt in _prompts.allObjects) [prompt cancel];
+  [_prompts removeAllObjects];
   _installed = nil; _commands = nil;
+}
+- (void)oe_showPrompt:(OEExtensionPrompt*)prompt {
+  if (!_manager || _context.state == OEBrowserContextStateClosed || _context.oe_closing) {
+    [prompt cancel];
+    return;
+  }
+  [_prompts addObject:prompt];
+  id<OEExtensionManagerDelegate> delegate = _delegate;
+  if ([delegate respondsToSelector:@selector(extensionManager:showPrompt:)])
+    [delegate extensionManager:self showPrompt:prompt];
+  else
+    [prompt cancel];
 }
 - (CefRefPtr<CefExtensionManager>)oe_manager { return _manager; }
 - (BOOL)isReady { return _manager && _manager->IsReady(); }

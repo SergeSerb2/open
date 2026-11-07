@@ -32,8 +32,13 @@
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
     var firstRunActionTask: Task<Void, Never>?
+    var importExtensionTask: Task<Void, Never>?
+    var profileIndicatorMenuTitles: [String] = []
+    var savePromptEvents: [[String: Any]] = []
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
+    var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
+    var profileProofContexts: [String: OEBrowserContext] = [:]
     var recordedOpenWorldCallbacks: [[String: Any]] = []
 
     init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
@@ -57,6 +62,7 @@
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
@@ -90,7 +96,22 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "profile-engine": return try await runProfileEngineCommand(a)
+      case "save-prompt": return try await savePrompt(a)
+      case "events":
+        let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []
+        let events = savePromptEvents; savePromptEvents.removeAll()
+        return pageEvents + events
+      case "engine-contexts":
+        guard app.engineReady else { return [] as [String] }
+        return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
+      case "profiles-shell": return try await profilesShell(a)
+      case "incognito-state": return try incognitoState(a)
+      case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
+      case "import-extensions": return try await runImportExtensions(a)
+      case "engine-close-activation": return try probeEngineCloseActivation()
+      case "engine-activation-state": return try engineActivationState(a)
       case "timing" where app.frontWindowController == nil:
         var marks = LaunchTiming.shared.report
         marks["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
@@ -106,7 +127,7 @@
           return row
         }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
-      case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state":
+      case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state", "creation-state":
         if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
         return try await runEditorCommand(cmd, a)
       case "key": return try await sendKey(a, app.frontWindowController.flatMap { app.hostFactories[$0.windowID] })
@@ -154,6 +175,9 @@
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
+      case "menu-key-render":
+        guard let path = a["path"] as? String else { throw Failure(message: "missing render path") }
+        return try renderMenuKeys(to: path)
       case "command" where (a["id"] as? String).flatMap({ CommandRegistry.byID[$0] }).map({ $0.menuPath == nil }) == true:
         guard let id = a["id"] as? String, CommandRegistry.byID[id] != nil,
           let controller = try window.controller,
@@ -179,6 +203,7 @@
         return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
           "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "settingsVisible": adapter.settingsPresenter.window?.isVisible ?? false,
+          "scrollTarget": adapter.settings.scrollTarget ?? "",
           "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
@@ -189,6 +214,7 @@
           "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
           "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
       case "settings-profile": return try settingsProfile(a)
+      case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
@@ -667,7 +693,11 @@
 
       // Pages (any live web content).
       case "pages":
-        return OEEngine.shared.allWebContents.map { describe($0, in: w) }
+        return OEEngine.shared.allWebContents.filter { content in
+          a["private"] as? Bool == true || !app.hostFactories.values.contains {
+            $0.isIncognito && $0.incognitoSession?.context === content.context
+          }
+        }.map { describe($0, in: w) }
       case "site-settings", "site-setting", "site-data-clear", "security-state":
         return try await runSiteDataCommand(cmd, a, page: try content(a, w))
       case "eval":
@@ -689,6 +719,7 @@
         }
         return true
       case "type":
+        if w.controller?.spaceCreationController != nil { return try await sendKey(["text": a["text"] as? String ?? ""], w) }
         _ = try await content(a, w).sendDevToolsMethod(
           "Input.insertText", parameters: ["text": a["text"] as? String ?? ""])
         return true
@@ -708,8 +739,6 @@
         return try await mouse(a, w)
       case "key":
         return try await sendKey(a, w)
-      case "events":
-        return w.drainEvents()
       case "find-state":
         var state = w.findController?.automationState() ?? ["panes": [], "created": false, "pending": false]
         state["display"] = FindIdleProbe.displayInfo(window: w.window)
@@ -772,10 +801,12 @@
 
       // Extensions.
       case "extensions":
-        let browser = try focusedBrowser(w)
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
+          return ["loaded": false, "ready": false, "duplicatesDropped": 0, "installed": [], "actions": []] as [String: Any]
+        }
         if a["refresh"] as? Bool == true { browser.context.extensions.reload() }
         return [
-          "ready": browser.context.extensions.isReady,
+          "loaded": true, "ready": browser.context.extensions.isReady,
           "duplicatesDropped": w.extensions.host?.duplicatesDropped ?? 0,
           "installed": browser.context.extensions.installedExtensions.map(describe),
           "actions": browser.extensionActions.map { action in
@@ -787,7 +818,7 @@
         ]
       case "popup":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
-        let browser = try focusedBrowser(w)
+        let browser = try focusedBrowser(w, create: a["create"] as? Bool ?? false)
         guard EngineExtensionHost(browser).executeAction(extensionID: id), let popup = browser.extensionPopup else {
           throw Failure(message: "action did not open a popup")
         }
@@ -797,16 +828,18 @@
         }
         return describe(popup, in: w)
       case "popup-close":
-        try focusedBrowser(w).closeExtensionPopup()
+        try focusedBrowser(w, create: a["create"] as? Bool ?? false).closeExtensionPopup()
         return true
 
       // Toolbar actions from Chrome's model (fork patch P2).
       case "actions":
-        let browser = try focusedBrowser(w)
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
+          return ["loaded": false, "ready": false, "actions": []] as [String: Any]
+        }
         return ["ready": browser.extensionActionsReady, "actions": browser.extensionActions.map(describe)] as [String: Any]
       case "ext-pin":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
-        let browser = try focusedBrowser(w)
+        let browser = try focusedBrowser(w, create: a["create"] as? Bool ?? false)
         browser.setExtensionAction(id, pinned: a["pinned"] as? Bool ?? true)
         if let index = a["index"] as? Int {
           guard index >= 0, index < 512 else { throw Failure(message: "invalid pinned index") }
@@ -821,7 +854,7 @@
         if a["engine"] as? Bool == true {
           // C5's boundary checks deliberately exercise engine refusal before
           // the App clamps a native drag's destination.
-          try focusedBrowser(w).moveExtensionAction(id, toPinnedIndex: UInt(index))
+          try focusedBrowser(w, create: a["create"] as? Bool ?? false).moveExtensionAction(id, toPinnedIndex: UInt(index))
         } else { w.extensions.host?.movePinned(extensionID: id, to: index) }
         return true
       case "ext-run":
@@ -829,7 +862,7 @@
         try focusActionPane(a, w)
         let source: OEBrowser.ExtensionActionSource =
           switch a["source"] as? String { case "menu": .menuEntry; case "command": .command; default: .toolbarButton }
-        return try focusedBrowser(w).executeExtensionAction(id, source: source)
+        return try focusedBrowser(w, create: a["create"] as? Bool ?? false).executeExtensionAction(id, source: source)
       case "ext-menu":
         // The action's context menu: its items, or select one by title.
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
@@ -837,7 +870,7 @@
         if a["keep"] as? Bool != true, a["stale"] as? Bool != true, a["snapshot"] as? Bool != true {
           return try await runExtensionUICommand("ext-ui-menu", a, w)
         }
-        let browser = try focusedBrowser(w)
+        let browser = try focusedBrowser(w, create: a["create"] as? Bool ?? false)
         guard let menu = browser.contextMenu(forExtensionAction: id, source: a["source"] as? String == "menu" ? .menuItem : .toolbarAction)
         else { throw Failure(message: "no menu") }
         func items(_ list: [OEContextMenuItem]) -> [[String: Any]] {
@@ -873,8 +906,7 @@
         }
         return listed
       case "ext-popup":
-        let browser = try focusedBrowser(w)
-        guard let popup = browser.extensionPopup else { return ["open": false] as [String: Any] }
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false), let popup = browser.extensionPopup else { return ["open": false] as [String: Any] }
         return ["open": true, "page": describe(popup, in: w), "extension": browser.extensionPopupExtensionIdentifier ?? "",
                 "source": ["user", "command", "api"][browser.extensionPopupSource.rawValue],
                 "staysOpenOnBlur": browser.extensionPopupStaysOpenOnBlur] as [String: Any]
@@ -1004,6 +1036,10 @@
           "confirmation": controller.pendingConfirmation.map { ["title": $0.messageText, "text": $0.informativeText,
             "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? NSNull(),
           "sidebarResizeActive": controller.sidebarResizeActive,
+          "sidebarResizeHandleDragging": controller.sidebarResizeHandleDragging,
+          "sidebarResizeHandleVisible": controller.sidebarResizeHandleVisible,
+          "sidebarResizeHasStart": controller.sidebarResizeHasStart,
+          "sidebarWidthOverride": controller.context.sidebarWidthOverride.map { $0 as Any } ?? NSNull(),
           "sidebarWidthCommits": controller.sidebarWidthCommits, "sidebarGestureHides": controller.sidebarGestureHides,
           "sidebarGeometryChanges": controller.sidebarGeometryChanges,
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
@@ -1036,7 +1072,7 @@
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
-            "card": rect(reveal.card)] as [String: Any],
+            "card": rect(reveal.card), "pageBlur": controller.cardDrawsPageBlur] as [String: Any],
           "chrome": ["urlField": inRoot(chrome.urlField), "urlFieldHovered": chrome.urlFieldHovered, "favorites": inRoot(chrome.favorites),
             "header": inRoot(chrome.header), "headerTitle": inRoot(chrome.headerTitle),
             "headerTitleBaseline": chrome.headerTitleBaseline.map { Double(root.convert(CGPoint(x: 0, y: $0), from: sidebar).y) } ?? NSNull(),
@@ -1060,6 +1096,24 @@
         default: NSApp.appearance = nil
         }
         return NSApp.effectiveAppearance.name.rawValue
+      case "undo-state":
+        if a["clear"] as? Bool == true { app.undoManager.removeAllActions() }
+        return ["generation": app.model.undoGeneration, "canUndo": app.undoManager.canUndo,
+          "canRedo": app.undoManager.canRedo] as [String: Any]
+      case "window-interrupt":
+        guard let win = w.window else { throw Failure(message: "no window") }
+        switch a["kind"] as? String {
+        case "key": win.orderOut(nil)
+        case "sheet":
+          // Native sheet lifecycle, with no tracking loop or external input.
+          let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+          sheet.isReleasedWhenClosed = false
+          win.beginSheet(sheet, completionHandler: { _ in })
+        case "end-sheet":
+          if let sheet = win.attachedSheet { win.endSheet(sheet); sheet.orderOut(nil) }
+        default: throw Failure(message: "expected key, sheet, or end-sheet")
+        }
+        return true
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
         let readinessTimeout = a["readinessTimeout"] as? Double ?? 5
@@ -1141,11 +1195,14 @@
         if let answer = a["answer"] as? String { return w.pageChrome.permissions.press(answer) }
         return w.pageChrome.permissions.state
       case "permission-decisions":
-        let store = SitePermissionStore.forContext(try focusedBrowser(w).context)
+        guard let browser = w.focusedBrowser(create: a["create"] as? Bool ?? false) else {
+          return ["ready": false, "decisions": []] as [String: Any]
+        }
+        let store = SitePermissionStore.forContext(browser.context)
         return ["ready": store.indexReady, "decisions": store.allDecisions().map { ["origin": $0.origin.absoluteString, "kind": $0.kind.rawValue, "state": $0.state.rawValue] }]
       case "open-world-messages": return try await openWorldMessages(try content(a, w), factory: w, clear: a["clear"] as? Bool == true, subscribe: a["subscribe"] as? Bool)
       case "script-add":
-        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.addUserScript(
           UserScript(
             id: a["id"] as? String ?? UUID().uuidString, source: a["source"] as? String ?? "",
@@ -1155,12 +1212,12 @@
             mainFrameOnly: !(a["allFrames"] as? Bool ?? false), world: try scriptWorld(a)))
         return profile.userScripts.map(\.id)
       case "script-remove":
-        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.removeUserScript(id: a["id"] as? String ?? "")
         return profile.userScripts.map(\.id)
       case "filter":
         let patterns = a["block"] as? [String] ?? []
-        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         blockCounter.reset()
         if patterns.isEmpty {
           profile.setRequestFilter(nil)
@@ -1179,7 +1236,7 @@
         return blockCounter.snapshot()
       case "permission":
         let origin = try url(a, "origin")
-        let context = try focusedBrowser(w).context
+        let context = try focusedBrowser(w, create: a["create"] as? Bool ?? false).context
         let rawKind = a["kind"] as? Int ?? 0
         guard let bits = UInt32(exactly: rawKind) else { throw Failure(message: "invalid permission kind") }
         let kind = OEPermissionKind(rawValue: bits)
@@ -1192,7 +1249,7 @@
         w.downloadDirectory = URL(fileURLWithPath: a["path"] as? String ?? NSTemporaryDirectory())
         return true
       case "downloads":
-        return try focusedBrowser(w).context.downloads.map {
+        return (w.focusedBrowser(create: a["create"] as? Bool ?? false)?.context.downloads ?? []).map {
           [
             "id": $0.identifier, "state": $0.state.rawValue, "received": $0.receivedBytes, "total": $0.totalBytes,
             "path": $0.destinationURL?.path ?? "", "url": $0.sourceURL.absoluteString,
@@ -1222,7 +1279,7 @@
 
     private func modelTab(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Tab {
       if let s = a["tab"] as? String {
-        guard let uuid = UUID(uuidString: s), let tab = app.model.tab(id: ItemID(rawValue: uuid)) else {
+        guard let uuid = UUID(uuidString: s), let tab = w.model.tab(id: ItemID(rawValue: uuid)) else {
           throw Failure(message: "no tab \(s)")
         }
         return tab
@@ -1253,8 +1310,8 @@
       return page
     }
 
-    func focusedBrowser(_ w: EngineWebContentHostFactory) throws -> OEBrowser {
-      guard let b = w.focusedBrowser else { throw Failure(message: "no browser") }
+    func focusedBrowser(_ w: EngineWebContentHostFactory, create: Bool = false) throws -> OEBrowser {
+      guard let b = w.focusedBrowser(create: create) else { throw Failure(message: "profile browser is not loaded (use create: true for an explicit interaction)") }
       return b
     }
 
@@ -1269,7 +1326,7 @@
       let section: String
       if w.focusedProfile?.favorites.contains(where: { $0.id == tab.id }) == true {
         section = "favorites"
-      } else if app.model.isPinned(tabID: tab.id) {
+      } else if w.model.isPinned(tabID: tab.id) {
         section = "pinned"
       } else {
         section = "today"
@@ -1319,7 +1376,7 @@
       }
       let pageColor = w.hosts.values.first { $0.content === c }?.pageBackgroundColor
       return [
-        "identifier": c.identifier, "kind": kind, "live": c.isLive, "url": c.url?.absoluteString ?? "",
+        "identifier": c.identifier, "kind": kind, "live": c.isLive, "ephemeral": c.context.isEphemeral, "url": c.url?.absoluteString ?? "",
         "title": c.title, "loading": c.isLoading, "style": c.runtimeStyle == .chrome ? "chrome" : "alloy",
         "audible": c.isAudible, "muted": c.isMuted, "crash": c.crashState.rawValue, "fullscreen": c.isFullscreen,
         "favicon": c.favicon != nil, "context": c.context.identifier, "canGoBack": c.canGoBack,
@@ -1597,7 +1654,7 @@
       return String(arr.dropFirst().dropLast())
     }
 
-    private func describeIcon(_ icon: SpaceIcon?) -> Any {
+    func describeIcon(_ icon: SpaceIcon?) -> Any {
       guard let icon else { return NSNull() }
       switch icon {
       case .emoji(let value): return ["type": "emoji", "value": value]
@@ -1626,6 +1683,7 @@
         // Validate first, as AppKit does before it shows a menu: validation can set the title (CC-32).
         let enabled = menuEnabled(item)
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
+          "modifierMask": item.keyEquivalentModifierMask.rawValue,
           "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
@@ -1960,10 +2018,12 @@
         return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
       }
       let keys: [String: (String, UInt16)] = [
+        ".": (".", 47),
+        "enter": ("\u{3}", 76),
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "g": ("g", 5), "s": ("s", 1), "a": ("a", 0),
-        "e": ("e", 14), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
+        "e": ("e", 14), "r": ("r", 15), "k": ("k", 40), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
@@ -1982,7 +2042,28 @@
         }
       }
       if code >= 123 { mods.insert([.function, .numericPad]) }
+      // AppKit preserves Shift in charactersIgnoringModifiers. Native menu
+      // equivalents such as Redo need "Z", even though the key router folds case.
+      let eventCharacters = mods.contains(.shift) ? chars.uppercased() : chars
       let route = a["route"] as? String ?? "app"
+      let observeCommands = a["observeCommands"] as? Bool == true
+      var menuObserver: (any NSObjectProtocol)?
+      if observeCommands {
+        AutomationShortcutTrace.commands = []; AutomationShortcutTrace.recording = true
+        AutomationShortcutTrace.menuActions = []
+        menuObserver = NotificationCenter.default.addObserver(forName: NSMenu.didSendActionNotification, object: nil, queue: .main) { note in
+          let identifier = (note.userInfo?["MenuItem"] as? NSMenuItem)?.identifier?.rawValue
+          MainActor.assumeIsolated {
+            if let identifier, AutomationShortcutTrace.menuActions.count < 64 {
+              AutomationShortcutTrace.menuActions.append(identifier)
+            }
+          }
+        }
+      }
+      defer {
+        if let menuObserver { NotificationCenter.default.removeObserver(menuObserver) }
+        if observeCommands { AutomationShortcutTrace.recording = false }
+      }
       let dispatchStarted = ProcessInfo.processInfo.systemUptime
       // Modifier keys alone post one flagsChanged event (down: pass the modifier; up: none).
       let types: [NSEvent.EventType] = code == 59 || code == 55 ? [.flagsChanged] : [.keyDown, .keyUp]
@@ -1992,7 +2073,7 @@
         guard
           let event = NSEvent.keyEvent(
             with: type, location: .zero, modifierFlags: mods, timestamp: eventTimestamp,
-            windowNumber: target.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars,
+            windowNumber: target.windowNumber, context: nil, characters: eventCharacters, charactersIgnoringModifiers: eventCharacters,
             isARepeat: false, keyCode: code)
         else { continue }
         if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
@@ -2002,6 +2083,8 @@
       // turn, as a user-facing automation caller expects.
       try? await Task.sleep(for: .milliseconds(20))
       return ["dispatchMilliseconds": dispatchMilliseconds, "firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
+        "charactersIgnoringModifiers": eventCharacters,
+        "commands": observeCommands ? AutomationShortcutTrace.commands : [], "menuActions": observeCommands ? AutomationShortcutTrace.menuActions : [],
         "sidebarMode": w?.windowState.sidebarMode.rawValue ?? "", "barPresented": w?.commandBarSession?.isPresented == true,
         "keyWindow": NSApp.keyWindow?.windowNumber ?? 0] as [String: Any]
     }
@@ -2017,7 +2100,7 @@
       }
       if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
       if a["window"] as? String == "editor" {
-        guard let panel: NSWindow = w?.iconPicker?.panel ?? w?.controller?.themeEditor?.panel,
+        guard let panel: NSWindow = w?.iconPicker?.panel ?? w?.controller?.spaceCreationController?.themeEditor?.panel ?? w?.controller?.themeEditor?.panel,
               panel.isVisible else { throw Failure(message: "no editor") }
         return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }

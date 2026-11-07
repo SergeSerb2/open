@@ -1,6 +1,7 @@
-"""Steps C/D through the real App, using only owned roots and synthetic data."""
+"""First run through the real App, using only owned roots and synthetic data."""
 import json
 import os
+import runpy
 from pathlib import Path
 import sqlite3
 import shutil
@@ -71,6 +72,8 @@ def fixture(root):
 
 
 def run(factory, results, tmp, h):
+    if os.environ.get('OPEN_E2E_FIRSTRUN_MULTIPROFILE_ONLY') == '1':
+        return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['run'](factory, results, tmp, h)
     source = Path(tmp) / 'arc-synthetic'
     shutil.rmtree(source, ignore_errors=True)
     ids = fixture(source)
@@ -79,7 +82,9 @@ def run(factory, results, tmp, h):
     saved = {}
     app = None
     all_copy = []
+    ocr_retries = []
     def launch(fresh=False, directory=source, **env):
+        nonlocal app
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir=' + str(directory)], extra_env=env)
         app.call('first-run', action='focus') if app.call('first-run')['active'] else None
         return app
@@ -93,7 +98,9 @@ def run(factory, results, tmp, h):
         app.call('snapshot', path=path)
         return path
     def copy():
-        rows = app.call('first-run', action='inspect')['renderedText']
+        inspection = app.call('first-run', action='inspect', timeout=180)
+        ocr_retries.append(inspection['ocrRetries'])
+        rows = inspection['renderedText']
         text = '\n'.join(row['text'] for row in rows)
         all_copy.append(text)
         return text
@@ -114,6 +121,9 @@ def run(factory, results, tmp, h):
         # output only, never a source database. The normal API also checks counts.
         return app.call('archive-list')
     try:
+        if os.environ.get("OPEN_E2E_IMPORT_EXT_ONLY") == "1":
+            runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_extensions.py"))["run"](launch, state, until, row, source, tmp, h, results)
+            return
         app = launch(fresh=True, OPEN_AUTOMATION_IMPORT_DELAY_MS='1500')
         for key in ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane', 'open.advanced.tabSleepMode'):
             saved[key] = app.call('defaults', key=key, persistent=True)
@@ -146,7 +156,8 @@ def run(factory, results, tmp, h):
         imported_png = shot('import'); import_copy = copy()
         row('F2_import_choices', not state()['secretsEnabled'] and 'Import from Arc' in import_copy,
             png=imported_png, text=import_copy)
-        geometry = app.call('first-run', action='inspect')
+        geometry = app.call('first-run', action='inspect', timeout=180)
+        ocr_retries.append(geometry['ocrRetries'])
         heading = [r for r in geometry['renderedText'] if 'Import from Arc' in r['text']]
         light_bottom = max(r[1]+r[3] for r in geometry['trafficLights'])
         heading_top = min((r['frame'][1] for r in heading), default=0)
@@ -422,6 +433,9 @@ def run(factory, results, tmp, h):
         row('all_failed_continue', state()['completed'] and not state()['active']
             and len(app.call('spaces')) == 1 and app.call('tabs') == [])
         app.quit()
+        runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_history.py"))["run"](launch, state, until, row, source, tmp, h)
+        runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_extensions.py"))["run"](launch, state, until, row, source, tmp, h, results)
+        runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['run'](factory, results, tmp, h)
         timings = []
         for _ in range(5):
             app = launch(fresh=True)
@@ -434,7 +448,7 @@ def run(factory, results, tmp, h):
         import re
         forbidden = [text for text in all_copy if re.search(r'\b(?:sign in|account|Little Arc)\b', text, re.I)]
         row('F13_copy', not forbidden and 'Arc' not in welcome_copy.replace('Import from Arc', '')
-            and 'Open is a fast, private browser' in binary_strings, checkedScreens=len(all_copy))
+            and 'Open is a fast, private browser' in binary_strings, checkedScreens=len(all_copy), ocrRetries=sum(ocr_retries))
     finally:
         if app is not None:
             h._restore_defaults(app, saved)

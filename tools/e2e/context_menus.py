@@ -10,7 +10,7 @@ import traceback
 import urllib.parse
 
 
-LINK_ITEMS = ['Open Link in New Tab', 'Open Link in Split View', 'Open Link in Peek',
+LINK_ITEMS = ['Open Link in Incognito Window', 'Open Link in New Tab', 'Open Link in Split View', 'Open Link in Peek',
               'Open Link in Little Open', 'Open Link in New Window']
 
 
@@ -152,9 +152,10 @@ def context_menu_checks(factory, results, tmp, h):
 
     try:
         for key in ('open.translate.neverTranslateHosts', 'open.translate.enabled', 'open.previews.pinned',
-                    'open.links.littleOpenHotkeyEnabled'):
+                    'open.links.littleOpenHotkeyEnabled', 'open.profiles.confirmInterProfileMove'):
             saved[key] = app.call('defaults', key=key)
             app.call('defaults', key=key, value=None)
+        app.call('defaults', key='open.profiles.confirmInterProfileMove', value=True)
         app.call('window-frame', frame=[80, 60, 1360, 1000])
         focus()
         app.call('settings-custom-engine', template=origin + '/target.html?q=%s')
@@ -175,7 +176,7 @@ def context_menu_checks(factory, results, tmp, h):
             if name in ('link', 'mailto', 'linked_image'):
                 ok = ok and all(shown.count(t) == 1 for t in LINK_ITEMS)
                 anchor = shown.index(LINK_ITEMS[0]) if LINK_ITEMS[0] in shown else -1
-                ok = ok and shown[anchor:anchor + 6] == LINK_ITEMS + ['-']
+                ok = ok and shown[anchor:anchor + len(LINK_ITEMS) + 1] == LINK_ITEMS + ['-']
                 ok = ok and next((r['enabled'] for r in event.get('rows', []) if r['key'] == 'link-little-open'), None) is True
                 if name == 'mailto':
                     ok = ok and any('Copy Email Address' in t or 'Copy Link' in t for t in shown)
@@ -244,7 +245,7 @@ def context_menu_checks(factory, results, tmp, h):
                                          ('image', '#image', False), ('linked_image', '#linked-image', False),
                                          ('selection', '#selection', True), ('url', '#url', True), ('editable', '#editable', False)]:
             run('cm_order_' + name, lambda n=name, s=selector, v=selection: order(n, s, v))
-        run('cm_link_background', lambda: new_background('#link', LINK_ITEMS[0], origin + '/target.html'))
+        run('cm_link_background', lambda: new_background('#link', 'Open Link in New Tab', origin + '/target.html'))
         run('cm_image_background', lambda: new_background('#image', 'Open Image in New Tab', origin + '/image.svg'))
 
         def split():
@@ -562,6 +563,7 @@ def context_menu_checks(factory, results, tmp, h):
             urls = wait(lambda: [p['url'] for p in app.call('pages') if p['identifier'] == content and p['url'].startswith('https://')], timeout=5) or []
             app.call('peek-close')
             app.call('space-profile', space=second, profile='Unrelated')
+            app.call('alert', button='Change Profile')
             app.call('pin', tab=near); app.call('close', tab=near)
             unrelated = not row_enabled('peek-email')
             return {'ok': from_other and urls == [webmail('mail.proton.me', '/u/0/inbox')] and unrelated,

@@ -10,7 +10,7 @@ private final class EngineExtensionPrompt: ExtensionPromptModel {
   let type: ExtensionPromptType
   let icon: OpenWeb.ExtensionImage?
   private var answered = false
-  var onAnswer: (() -> Void)?
+  var onAnswer: ((Bool) -> Void)?
   init(_ source: OEExtensionPrompt) {
     self.source = source
     type = switch source.type {
@@ -30,7 +30,7 @@ private final class EngineExtensionPrompt: ExtensionPromptModel {
   func cancel() { finish(false) }
   private func finish(_ accepted: Bool) {
     guard !answered else { return }; answered = true
-    if accepted { source.accept() } else { source.cancel() }; onAnswer?(); onAnswer = nil
+    if accepted { source.accept() } else { source.cancel() }; onAnswer?(accepted); onAnswer = nil
   }
   isolated deinit { if !answered { source.cancel() } }
 }
@@ -58,6 +58,11 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     manager.delegate = self
     _ = table(manager)
   }
+  /// Private sessions do not leave shortcut snapshots keyed by a dead manager.
+  func unregister(_ manager: OEExtensionManager) {
+    if manager.delegate === self { manager.delegate = nil }
+    tables[ObjectIdentifier(manager)] = nil
+  }
   func table(_ manager: OEExtensionManager) -> ExtensionShortcutTable {
     let key = ObjectIdentifier(manager)
     if let table = tables[key] { return table }
@@ -73,7 +78,9 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     let model = EngineExtensionPrompt(prompt)
     guard ExtensionPromptSheet.accepts(model) else { prompt.cancel(); return }
     requests[key] = model; pending.append(prompt)
-    model.onAnswer = { [weak self, weak prompt] in
+    model.onAnswer = { [weak self, weak prompt, weak manager] accepted in
+      if let manager, let prompt, let attempt = self?.app.importRunner.extensionAttempt,
+        attempt.matches(manager, prompt.extensionIdentifier) { attempt.answered(accepted) }
       self?.requests[key] = nil
       if let prompt { self?.pending.removeAll { $0 === prompt } }
     }
@@ -91,6 +98,10 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     queue.enqueue(model)
   }
   private func requestingWindow(_ prompt: OEExtensionPrompt, manager: OEExtensionManager) -> NSWindow? {
+    if let attempt = app.importRunner.extensionAttempt, attempt.matches(manager, prompt.extensionIdentifier) {
+      guard let window = attempt.window, window.isVisible else { attempt.answered(false); return nil }
+      return window
+    }
     if let window = prompt.webContent?.view.window { return window }
     if let window = prompt.browser?.window { return window }
     if let key = NSApp.keyWindow, let factory = app.factory(forKeyWindow: key), factory.focusedBrowser?.context === manager.context { return factory.window }
@@ -110,6 +121,11 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     record(["event": "commands", "context": manager.context?.identifier ?? ""])
   }
   func extensionManager(_ manager: OEExtensionManager, didInstall extensionInfo: OEExtension, byUser: Bool) {
+    #if OPEN_AUTOMATION
+    if let attempt = app.importRunner.extensionAttempt, attempt.matches(manager, extensionInfo.identifier) {
+      attempt.completeLocal(.installed)
+    }
+    #endif
     record(["event": "installed", "id": extensionInfo.identifier, "byUser": byUser])
     guard byUser else { return }
     // Registry delivery precedes action-list delivery. Read after Chromium completes this turn.
@@ -126,6 +142,13 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     }
   }
   func extensionManager(_ manager: OEExtensionManager, didFailToLoadExtensionAt path: URL, error: String) {
+    #if OPEN_AUTOMATION
+    if let attempt = app.importRunner.extensionAttempt, attempt.manager === manager, let file = attempt.localFile {
+      let matches = file.resolvingSymlinksInPath() == path.resolvingSymlinksInPath()
+      record(["event": "importFixtureFailure", "samePath": matches])
+      if matches { attempt.completeLocal(.failed(error)) }
+    }
+    #endif
     record(["event": "loadFailed", "error": error])
     app.frontWindowController?.toasts.show(ToastContent(title: "Couldn't load extension", subtitle: error, lifetime: 6))
   }
