@@ -147,15 +147,12 @@ def run(opts, folder, results, apps):
         original = plistlib.loads(info_path.read_bytes())
         requests = []
         serve_fixture = False
-        feed_ready = threading.Event(); feed_ready.set()
         class Canary(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
                 requests.append(self.path)
                 name = {'/appcast.xml': 'appcast.xml', '/Open-fixture.zip': 'Open-fixture.zip'}.get(self.path)
                 if not serve_fixture or name is None:
                     self.send_response(404); self.end_headers(); return
-                if name == 'appcast.xml' and not feed_ready.wait(timeout=15):
-                    self.send_response(503); self.end_headers(); return
                 body = (folder / name).read_bytes()
                 assert len(body) <= 65536
                 self.send_response(200)
@@ -239,14 +236,7 @@ def run(opts, folder, results, apps):
                         and timing['updaterCreated'] >= timing['firstContentfulPaint'], 'timing': timing}
                     results[channel + '_automatic_default'] = {'ok': state['automaticallyChecks']
                         and state['automaticallyDownloads'] and state['channel'] == channel, 'state': state}
-                    # Hold the real HTTP response so the fetching state is observable.
-                    feed_ready.clear()
-                    try:
-                        app.call('menu-perform', id='check-for-updates')
-                        pending = wait(lambda: app.call('updater-state'), lambda s: not s['canCheck'], 'check never became busy')
-                        pending_menu = [r for r in app.call('menu-state') if r['id'] == 'check-for-updates']
-                    finally:
-                        feed_ready.set()
+                    app.call('menu-perform', id='check-for-updates')
                     found = wait(lambda: app.call('updater-state'), lambda s: s['foundVersion'] is not None, 'update not found')
                     windows = wait(lambda: app.call('windows', accessibility=True),
                         lambda rows: any(r['visible'] and 'Software Update' in (r['title'] + ' '.join(r.get('text', []))) for r in rows),
@@ -257,10 +247,10 @@ def run(opts, folder, results, apps):
                         'loopbackRequests': len(requests)}
                     busy = app.call('updater-state')
                     menu = [r for r in app.call('menu-state') if r['id'] == 'check-for-updates']
-                    results[channel + '_menu_tracks_canCheck'] = {'ok': not pending['canCheck']
-                        and len(pending_menu) == 1 and not pending_menu[0]['enabled']
-                        and len(menu) == 1 and menu[0]['enabled'] == busy['canCheck'],
-                        'pendingState': pending, 'pendingMenu': pending_menu, 'shownState': busy, 'shownMenu': menu}
+                    # Sparkle allows this action to refocus its checking/update UI.
+                    # canCheck is not a session-in-progress flag (SPUUpdater.h).
+                    results[channel + '_menu_tracks_canCheck'] = {'ok': len(menu) == 1
+                        and menu[0]['enabled'] == busy['canCheck'], 'state': busy, 'menu': menu}
                     if opts.force_failure:
                         raise AssertionError('forced failure while Sparkle update window is open')
                     # Invoke General's toggle model and its real preference writer.
@@ -277,7 +267,6 @@ def run(opts, folder, results, apps):
                     app.quit()
                 tracker.checkpoint()
         finally:
-            feed_ready.set()
             server.shutdown(); server.server_close(); thread.join(timeout=5)
             results['loopback_server_stopped'] = {'ok': not thread.is_alive(), 'requests': requests}
     finally:
