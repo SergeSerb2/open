@@ -581,11 +581,11 @@ private func remoteChecks(log: CheckLog, fx: Fixture) async {
                  cpu ?? "unavailable (strict)", strictM5 ? "600 ms" : "calibrated", loadAverage()))
     if ["all", "suggest"].contains(ProcessInfo.processInfo.environment["OPEN_VERIFY_BREAK"] ?? ""),
        var provider = remoteProvider {
-        // Exercise the real HTTP/timeout/stream path with a deliberate 250 ms delay.
+        // Exercise the real HTTP/timeout/stream path with a deliberate 300 ms delay.
         // The independent reference and the normal configured-deadline check stay unchanged.
-        provider.timeout += .milliseconds(250)
+        provider.timeout += .milliseconds(300)
         engine.providers = engine.providers.filter { $0.id != provider.id } + [provider]
-        print("  .. negative timer proof: real remote timeout increased by 250 ms")
+        print("  .. negative timer proof: real remote timeout increased by 300 ms")
     }
     // One real-time behavior, at most three attempts. Reference values outside the bounded
     // 380..<600 ms range refuse portable acceptance instead of providing unbounded headroom.
