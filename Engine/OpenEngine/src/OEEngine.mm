@@ -3,6 +3,18 @@
 #include <crt_externs.h>
 
 #include <set>
+#include <mach/mach_time.h>
+#include <os/signpost.h>
+
+// Opt-in startup boundaries only; no work is scheduled and no idle logs exist.
+static void OESpeedPhase(const char* phase) {
+  static const bool enabled = [] { const char* value = getenv("OPEN_SPEED_TRACE"); return value && !strcmp(value, "1"); }();
+  if (!enabled) return;
+  static os_log_t log = os_log_create("io.github.sergeserb2.open", "SpeedTrace");
+  uint64_t ticks = mach_continuous_time();
+  os_signpost_event_emit(log, OS_SIGNPOST_ID_EXCLUSIVE, "EnginePhase", "%{public}s", phase);
+  fprintf(stderr, "OpenSpeed engine %s %llu\n", phase, (unsigned long long)ticks);
+}
 
 #include "include/cef_application_mac.h"
 #include "include/cef_id_mappers.h"
@@ -332,6 +344,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   _configuration = [configuration copy];
 
   _loader = new CefScopedLibraryLoader();
+  OESpeedPhase("frameworkLoadBegin");
   if (!_loader->LoadInMain()) {
     if (error) {
       *error = [NSError
@@ -345,6 +358,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
     return NO;
   }
 
+  OESpeedPhase("frameworkLoaded");
   [NSFileManager.defaultManager
             createDirectoryAtURL:_configuration.userDataDirectory
       withIntermediateDirectories:YES
@@ -403,6 +417,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
     switches = [switches arrayByAddingObject:@"--use-mock-keychain"];
   }
   CefRefPtr<CefApp> app = OECreateApp(switches);
+  OESpeedPhase("cefInitializeBegin");
   if (!CefInitialize(args, settings, app, nullptr)) {
     if (error) {
       *error = [NSError
@@ -417,6 +432,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
     return NO;
   }
   _defaultClient = new OEDefaultClient();
+  OESpeedPhase("cefInitializeEnd");
   _running = YES;
   return YES;
 }

@@ -1,5 +1,6 @@
 import AppKit
 import OpenEngine
+import os.signpost
 
 /// Command-line options. Unknown `--switches` also reach Chromium, because
 /// CEF parses the process command line itself (for example
@@ -78,6 +79,9 @@ struct LaunchOptions {
 @MainActor
 final class LaunchTiming {
   static let shared = LaunchTiming()
+  /// Opt-in, fixed-count startup probes. No timers or idle logging.
+  let speedTraceEnabled = ProcessInfo.processInfo.environment["OPEN_SPEED_TRACE"] == "1"
+  private let speedLog = OSLog(subsystem: "io.github.sergeserb2.open", category: "SpeedTrace")
   let processStartTicks: UInt64
   let hasKernelProcessStart: Bool
   private let millisecondsPerTick: Double
@@ -101,11 +105,20 @@ final class LaunchTiming {
 
   var elapsedMilliseconds: Double { Double(mach_continuous_time() - processStartTicks) * millisecondsPerTick }
   func mark(_ name: String) {
-    if !marks.contains(where: { $0.0 == name }) { marks.append((name, mach_continuous_time())) }
+    if !marks.contains(where: { $0.0 == name }) {
+      marks.append((name, mach_continuous_time()))
+      if speedTraceEnabled { os_signpost(.event, log: speedLog, name: "LaunchPhase", "%{public}@", name as NSString) }
+    }
   }
+  func phase(_ name: String) { if speedTraceEnabled { mark(name) } }
   func recordFirstFrame(confirmed: Bool) { firstFrameConfirmed = confirmed }
   var report: [String: Any] {
     var result: [String: Any] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded() as Any) })
+    if speedTraceEnabled {
+      result["preciseMs"] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, Double($0.1 - processStartTicks) * millisecondsPerTick) })
+      result["processStartTicks"] = String(processStartTicks)
+      result["millisecondsPerTick"] = millisecondsPerTick
+    }
     if let firstFrameConfirmed { result["firstFrameConfirmed"] = firstFrameConfirmed }
     return result
   }

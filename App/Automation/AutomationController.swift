@@ -101,6 +101,7 @@
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
         return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
+      case "speed-trace": return try await speedTrace(a)
       case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)

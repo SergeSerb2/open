@@ -108,8 +108,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
+    LaunchTiming.shared.phase("settingsRegistered")
     NSApp.mainMenu = MainMenu.build()
+    LaunchTiming.shared.phase("mainMenuBuilt")
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
+    LaunchTiming.shared.phase("initialMenuRetargeted")
     NSApp.setActivationPolicy(.regular)
     // The window and sidebar come from the snapshot and do not wait for the
     // engine (docs/architecture.md, launch tactics). Pages created before
@@ -117,6 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     showWindowsIfNeeded()
     tabSleep.installSettingsPolicy()
     installScripting()
+    LaunchTiming.shared.phase("didFinishLaunchingEnd")
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -183,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   @discardableResult
   func prepareData() -> ProfileDirectories {
     if let directories { return directories }
+    LaunchTiming.shared.phase("prepareDataBegin")
     let root = options.userDataDirectory
     isFirstRun = !options.skipFirstRun && !FileManager.default.fileExists(atPath: root.appendingPathComponent("State/browser.json").path)
     // Chromium's data layout is its own step, before the snapshot loads. A
@@ -191,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     do {
       engine = try OpenDataRoot.prepareEngineLayout(root: root)
       try ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root))
+      LaunchTiming.shared.phase("engineLayoutPrepared")
     } catch {
       FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
       exit(1)
@@ -206,6 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     var loaded: BrowserModel?
     do {
       loaded = try snapshotStore.loadData().map(SnapshotMapper.model(from:))
+      LaunchTiming.shared.phase("snapshotLoaded")
     } catch {
       let kept = snapshotStore.fileURL.deletingLastPathComponent()
         .appendingPathComponent("browser.unreadable-\(Int(Date().timeIntervalSince1970)).json")
@@ -236,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     self.directories = directories
     if isFirstRun { firstRunDefaultModel = model }
     installModel(model)
+    LaunchTiming.shared.phase("modelInstalled")
     // Launch URLs enter the snapshot-backed model before window composition.
     // Only the final selection gets a page after engine readiness.
     if let state = model.windows.first(where: { $0.style == .standard }),
@@ -298,15 +306,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func drawWindowsBeforeEngine() {
+    LaunchTiming.shared.phase("sidebarDisplayBegin")
     showWindowsIfNeeded()
     firstRunWindowController?.window?.contentView?.layoutSubtreeIfNeeded()
     firstRunWindowController?.window?.displayIfNeeded()
     for controller in windowControllers {
       controller.prepareForInitialDisplay()
+      LaunchTiming.shared.phase("sidebarPrepared")
       controller.window?.contentView?.layoutSubtreeIfNeeded()
+      LaunchTiming.shared.phase("sidebarLaidOut")
       controller.window?.displayIfNeeded()
+      LaunchTiming.shared.phase("sidebarDisplayed")
     }
     CATransaction.flush()
+    LaunchTiming.shared.phase("sidebarFlushed")
     startupEvidence = [
       "sidebarClass": windowControllers.first.map { String(reflecting: type(of: $0.sidebar)) } ?? "",
       "pagesBeforeEngine": OEEngine.shared.allWebContents.count,
@@ -317,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   @discardableResult
   private func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil) -> BrowserWindowController {
+    LaunchTiming.shared.phase("windowCreateBegin")
     let windowModel = privateModel ?? model!
     windowModel.setWindowContentVisible(windowID: state.id, visible: true)
     let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session)
@@ -324,14 +338,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
       snapshotStore: session == nil ? snapshotStore : nil, incognitoTitle: title)
+    LaunchTiming.shared.phase("windowControllerCreated")
     if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
     factory.attach(controller)
     windowControllers.append(controller)
     if session == nil { media.attach(factory); tabSleep.attach(factory) }
     activeWindowID = state.id
+    LaunchTiming.shared.phase("windowServicesAttached")
     MainMenu.targetWindowCommands(factory)
+    LaunchTiming.shared.phase("windowMenuBuilt")
     if session == nil { todayAutoArchive?.attach(context: controller.context) }
     controller.showWindow(nil)
+    LaunchTiming.shared.phase("windowOrdered")
     if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }
     return controller
