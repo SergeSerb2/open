@@ -1,6 +1,7 @@
 import Foundation
 import OpenModel
 import OpenRouting
+import OpenBoosts
 
 public struct ImportReport: Sendable {
     public var totalItems: Int = 0
@@ -30,7 +31,9 @@ public struct ImportReport: Sendable {
     public var routingDestinationFallbacks: Int = 0
     public var containers: Int = 0
     public var archiveStatus: String = "not imported (no real file exists)"
-    public var boostsStatus: String = "not imported (no real file exists)"
+    public var boosts = ArcBoostsReport()
+    public var boostsStatus: String { boosts.status }
+    public var boostsStoredNew = 0, boostsStoredDuplicates = 0, boostsProtectedEdits = 0
     /// imported tabs (pinned + today + favorites items that are tabs) + folders + splits + skipped* + orphans should equal total non-container items.
     public var importedTabNodes: Int = 0
     // Archive (StorableArchiveItems.json)
@@ -81,8 +84,11 @@ public struct ArcImportResult {
     public var model: BrowserModel
     public var report: ImportReport
     public var archiveRecords: [ArchivedTabRecord]
+    /// The `{default:true}` role, independent of its display name or directory.
+    public var sourceDefaultProfileID: ProfileID
     /// Original Chromium directory, before destination collision suffixes.
     public var sourceProfileDirectories: [ProfileID: String] = [:]
+    public var boostsByProfile: [ProfileID: [Boost]] = [:]
 }
 
 public enum ImportError: Error {
@@ -146,23 +152,44 @@ public struct ArcImporter {
 
     /// JSONSerialization produces immutable containers. Their contents are private and read-only;
     /// only the model construction that consumes them runs on the main actor.
-    public struct ParsedSidebar: @unchecked Sendable { let root: [String: Any] }
+    public struct ParsedSidebar: @unchecked Sendable {
+        let root: [String: Any]
+        let boosts: ArcBoostsReadResult
+    }
     public func readSidebar() throws -> ParsedSidebar {
+        let root = try readSidebarRoot()
+        return ParsedSidebar(root: root, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
+    }
+    private func readSidebarRoot() throws -> [String: Any] {
         let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: url), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.missingSidebar }
-        return ParsedSidebar(root: root)
+        return root
     }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
     static func profileReferenceKey(_ raw:Any?)->String {
         if let value=raw as? String {return value}
         guard let object=raw as? [String:Any] else {return "default"}
         if object["default"] as? Bool == true {return "default"}
+        // Confirmed on disk: Space.profile and topAppsContainerIDs use this
+        // same ref. machineID identifies the source Mac, not another Profile.
+        if let directory = customProfileDirectory(raw) { return directory }
+        // Guess: older/unobserved Storable metadata may use a flat string ref.
         return object.keys.sorted().compactMap {object[$0] as? String}.first ?? "default"
+    }
+    private static func customProfileDirectory(_ raw: Any?) -> String? {
+        guard let object = raw as? [String: Any], let custom = object["custom"] as? [String: Any],
+              let payload = custom["_0"] as? [String: Any],
+              let directory = payload["directoryBasename"] as? String,
+              !directory.isEmpty, directory.utf8.count <= 255, directory != ".", directory != "..",
+              !directory.contains(where: { "/:\\".contains($0) }),
+              !directory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        return directory
     }
     /// UI labels only, read on a utility worker when the wizard prepares its review.
     /// The count-only probe never returns these strings or builds model objects.
     public func spaceMappingLabels() throws -> [String] {
-        let root=try readSidebar().root
+        // Mapping labels need no cache I/O; the caller can be on the UI actor.
+        let root=try readSidebarRoot()
         guard let sidebar=root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,let holder=containers[1] as? [String:Any],let spaces=holder["spaces"] as? [Any] else {throw ImportError.malformedSidebar}
         return stride(from:1,to:spaces.count,by:2).compactMap {index in
             guard let object=spaces[index] as? [String:Any] else {return nil}
@@ -173,7 +200,8 @@ public struct ArcImporter {
     struct ArcSourceProfile {let id:ProfileID;let name:String;let dataDirectoryName:String;let sourceDirectory:String}
     struct ArcSourceProfiles {let profiles:[ArcSourceProfile];let spaceOwners:[String:ProfileID];let refOwners:[String:ProfileID];let defaultID:ProfileID}
     func sourceProfiles(spacesRaw:[(id:String,obj:[String:Any])],holder:[String:Any],itemsByID:[String:[String:Any]],directoryNamesToAvoid:Set<String>=[],existingDirectories:[ProfileID:String]=[:],report:inout ImportReport)->ArcSourceProfiles {
-        // Multi-Profile Storable field shapes remain inferred. Unknown shapes are ignored.
+        // StorableProfiles/ProfileContainers metadata shapes remain inferred.
+        // Local State info_cache and custom._0.directoryBasename are confirmed.
         struct ProfileMetadata {
             var name: String?
             var directory: String?
@@ -236,6 +264,18 @@ public struct ArcImporter {
                 mergeMetadata(key, name: (info[directory] as? [String: Any])?["name"] as? String, directory: directory)
                 sourceDirectories.insert(directory)
             }
+        }
+        // The observed ref itself proves the source directory, even when
+        // Local State is absent from a selected/copy-only import folder.
+        let refs = spacesRaw.compactMap { $0.obj["profile"] }
+            + ((holder["topAppsContainerIDs"] as? [Any]).map { values in
+                stride(from: 0, to: max(0, values.count - 1), by: 2).map { values[$0] }
+            } ?? [])
+        for ref in refs {
+            guard let directory = Self.customProfileDirectory(ref) else { continue }
+            let key = metadataOrder.first { metadata[$0]?.directory == directory } ?? directory
+            mergeMetadata(key, name: nil, directory: directory)
+            sourceDirectories.insert(directory)
         }
         for directory in sourceDirectories {
             var isDirectory: ObjCBool = false
@@ -365,7 +405,8 @@ public struct ArcImporter {
     }
     @MainActor
     public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
-        let root = try (parsed ?? readSidebar()).root
+        let parsed = try parsed ?? readSidebar()
+        let root = parsed.root
         guard let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [Any], containers.count >= 2,
               let holder = containers[1] as? [String: Any],
@@ -375,6 +416,7 @@ public struct ArcImporter {
         }
 
         var report = ImportReport()
+        report.boosts = parsed.boosts.report
 
         // Parse alternating arrays.
         var itemsByID: [String: [String: Any]] = [:]
@@ -910,9 +952,9 @@ public struct ArcImporter {
                     collect(space.pinned, space: space.id)
                     collect(space.today, space: space.id)
                 }
-                var favoriteIDs: Set<ItemID> = []
+                var favoriteProfiles: [ItemID: ProfileID] = [:]
                 for profile in profiles {
-                    for tab in profile.favorites { favoriteIDs.insert(tab.id); tabByItem[tab.id] = tab }
+                    for tab in profile.favorites { favoriteProfiles[tab.id] = profile.id; tabByItem[tab.id] = tab }
                 }
                 let arcItemToOpen: [String: ItemID] = Dictionary(uniqueKeysWithValues: nodeByArcID.map { ($0.key, $0.value.id) })
                 var windowIDsSeen: Set<String> = []
@@ -949,7 +991,17 @@ public struct ArcImporter {
                     var bestBySpace: [SpaceID: (item: ItemID, order: Int, active: Date)] = [:]
                     for entry in entries {
                         let targetSpace: SpaceID
-                        if favoriteIDs.contains(entry.item) { targetSpace = window.focusedSpaceID }
+                        if let owner = favoriteProfiles[entry.item] {
+                            // An inactive Profile's session may outlive a switch
+                            // to a different Profile. Never select its Favorite
+                            // in a Space that uses another engine context.
+                            // Guess: if this window no longer focuses that
+                            // Profile, use its first Space; the session mapping
+                            // has no Space ID for a Favorite.
+                            guard let owned = spaces.first(where: { $0.id == window.focusedSpaceID && $0.profileID == owner })
+                                ?? spaces.first(where: { $0.profileID == owner }) else { continue }
+                            targetSpace = owned.id
+                        }
                         else if let owned = spaceByItem[entry.item] { targetSpace = owned }
                         else { continue }
                         let active = tabByItem[entry.item]?.lastActiveAt ?? .distantPast
@@ -971,7 +1023,9 @@ public struct ArcImporter {
 
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
         return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords,
-            sourceProfileDirectories: Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) }))
+            sourceDefaultProfileID: defaultProfileID,
+            sourceProfileDirectories: Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) }),
+            boostsByProfile: parsed.boosts.boosts.isEmpty ? [:] : [defaultProfileID: parsed.boosts.boosts])
     }
 
     private static func routingMatchForArcMatches(_ pattern: String) -> RoutingMatch {

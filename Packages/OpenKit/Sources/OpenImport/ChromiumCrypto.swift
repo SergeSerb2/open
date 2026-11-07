@@ -26,7 +26,10 @@ enum SecretsReadAccess {
     func permits(_ directory: URL) -> Bool {
         switch self {
         case .user: return true
-        case .synthetic(let fixture): return directory == fixture.directory
+        case .synthetic(let fixture):
+            return directory.standardizedFileURL.path == fixture.directory.standardizedFileURL.path ||
+                ["Default", "Profile 1"].contains(directory.lastPathComponent) &&
+                directory.deletingLastPathComponent().standardizedFileURL.path == fixture.directory.standardizedFileURL.path
         }
     }
 }
