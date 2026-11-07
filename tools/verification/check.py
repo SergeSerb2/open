@@ -786,6 +786,21 @@ def main():
     cli = str(root / "Packages/OpenKit/.build/release/openkit")
     if name == "build":
         build(root)
+    elif name == "verify-secrets-fixture":
+        for args in [[], ["--stop-after", "logins"], ["--stop-after", "webData"], ["--stop-after", "cookies"]]:
+            text = run(cli, name, *args)
+            require("FAIL" not in text and "PASS final counts without duplicates" in text, "secrets fixture expectations")
+        run(sys.executable, str(root / "tools/verification/secrets-consent.py"), str(root))
+        source = Path("synthetic-arc").resolve()
+        profile = source / "Default"
+        profile.mkdir(parents=True, mode=0o700)
+        with sqlite3.connect(profile / "Login Data") as db:
+            db.execute("CREATE TABLE logins(blacklisted_by_user INTEGER)")
+        text = run(cli, "import-arc-secrets", "--arc-user-data", str(source), "--dry-run")
+        require("keychain: not requested" in text and "stored=0" in text and "logins rows=0" in text,
+                "empty dry-run stays outside Keychain")
+        run(cli, "import-arc-secrets", "--arc-user-data", str(source), expected=3)
+        run(cli, "verify-secrets-fixture", "--stop-after", "invalid", expected=2)
     elif name == "commands-demo":
         directory = Path("data").resolve()
         text = run(cli, name, str(directory))
