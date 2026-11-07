@@ -950,7 +950,51 @@ Read `Secure Preferences` as JSON.
 Never print an extension name. A name can hold user text.
 Never print a full path. Print counts only. See section 5 for the ID flag rule.
 
-### 4.3 Reinstall plan (waits for the engine)
+### 4.3 Reinstall plan
+
+**Implementation errata (Section 14 C3c, 2026-11-07):** The App queue has
+no install deadline. An unanswered Chromium consent sheet remains pending.
+`EI_failure_reported_app` gates offline App failure handling: a missing fixture
+is refused before `installLocalCRX`, the row retains the error, the summary
+counts it, and the next candidate installs. `EI_failure_reported_engine` is
+**BLOCKED**, because `installLocalCRX` has no failure completion for a damaged
+signature; the lead filed the engine need. The damaged-signature fixture stays
+in the harness for that future hook. No engine change is part of this work.
+A production Web Store request for a well-formed nonexistent ID is an INFO
+receipt, bounded to two minutes by the harness. That bound never marks a row
+failed or advances the App queue. The merged multi-Profile mapping resolves
+Arc Default to the live Default by role, and named sources to their live
+Profiles. The synthetic second source uses the observed nested
+`custom._0.directoryBasename` shape with `Profile 2`. Readiness waits also have
+no deadline; shutdown, cancellation, or closing the report stops them.
+
+The App now detects
+extensions during import for each `sourceProfileDirectories` entry. It retains
+only in-memory metadata, grouped by the imported Open Profile ID, and records
+total, internal, candidate, and missing-manifest counts in `ImportReport`.
+Unreadable extension preferences are counted per Profile and do not stop the
+sidebar import.
+
+Both the first-run report and Settings import result show an **Extensions**
+section only when mapped candidates exist. Every row starts checked and shows
+the manifest name; imports with multiple Profiles also show the Profile name.
+The report explains that extension settings and data stay behind. The user
+must click **Install Extensions**. The queue calls the target Profile's
+`OEExtensionManager.installFromWebStore` one item at a time and uses Open's
+normal consent sheet. Cancel and already-installed items are skipped. Errors
+retain the engine error string. Rows and the final installed/skipped/failed
+counts show the result. First run can finish without installing.
+
+An extension install is a separate user action. **Undo Import does not
+uninstall an extension installed from this section.** No extension folder,
+cache CRX, or extension storage is copied from Arc. Automation builds alone
+can map synthetic candidate IDs to signed local CRX fixtures, using the P3
+`installLocalCRX` consent path for offline e2e verification. Production always
+uses the Web Store API. The e2e block is `tools/e2e/firstrun_extensions.py`,
+called by the `firstrun` suite.
+
+The historical staging plan below describes the original data/engine split;
+the App workflow above supersedes its "engine side later" timing.
 
 Data side now:
 

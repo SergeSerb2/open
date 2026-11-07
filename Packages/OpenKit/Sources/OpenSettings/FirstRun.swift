@@ -55,7 +55,7 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     }
     public var hasSelection:Bool {includeSpacesAndTabs || includeArchive || includeHistory || (includeSecrets && wizard.canImportPasswordsAndCookies)}
     public var outcome:ImportOutcome? {wizard.outcome}
-    public var busy:Bool {wizard.isImporting || step == .importing}
+    public var busy:Bool {wizard.isImporting || wizard.extensions.isInstalling || step == .importing}
     public var passwordsCopy:PasswordsImportCopy {.init(canImport:wizard.canImportPasswordsAndCookies,savedItems:probe?.secretsFound == false ? 0:probe?.savedItems)}
     public var welcomeStatus:String {
         guard let probe else {return "Checking for data to import…"}
@@ -265,9 +265,10 @@ public struct FirstRunView:View {
                 }}
             }}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
+            ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
             if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
-        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true)
+        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)
     }}
     private var defaultBrowser:some View {VStack(spacing:16) {
         sparse {VStack(spacing:8) {
