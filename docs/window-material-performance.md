@@ -65,6 +65,11 @@ count is its upper bound. This does not directly time the theme's commit call.
 A snapshot is taken only after
 that observation, because snapshot preparation can force a pending rebuild.
 No timing hook was added to the theme implementation itself.
+For synchronous rebuilds, the last unchanged callback can precede the key
+observer. The summary also retains this signed lower bound and the full
+callback-to-callback observation width, without clipping at the notification.
+A negative lower bound is uncertainty before the observer, not a measured
+negative activation delay. The older clipped metrics remain for compatibility.
 
 The idle observer covers view/layer events and schedulers within its existing
 attribution rules; it does not prove that the entire engine or OS has no timers.

@@ -85,7 +85,7 @@ def summarize(runs):
             pageBlur=[s['endState']['reveal'].get('pageBlur','not exposed') for _,s in segments])
     changes=[c for r in runs for c in r.get('activation',{}).get('probe',{}).get('changes',[])]
     switches=[c for r in runs for c in r.get('activation',{}).get('switches',[])]
-    callback_gaps=[]; lower_bounds=[]; widths=[]
+    callback_gaps=[]; lower_bounds=[]; widths=[]; signed_lower_bounds=[]; full_widths=[]; unbounded=0
     for run in runs:
         if not run.get('activation'): continue
         frames=run['activation']['probe']['frames']
@@ -98,8 +98,13 @@ def summarize(runs):
             lower=max(0,previous['time']-change['time'])*1000 if previous and previous['fields']==change['before'] else 0
             upper=(change['observed']-change['time'])*1000
             lower_bounds.append(lower); widths.append(upper-lower)
+            if previous and previous['fields']==change['before']:
+                signed=(previous['time']-change['time'])*1000
+                signed_lower_bounds.append(signed); full_widths.append(upper-signed)
+            else: unbounded+=1
     answer['activation']=dict(keyToObservedRebuildMs=stats([(c['observed']-c['time'])*1000 for c in changes if 'observed' in c]),
         callbackGapMs=stats(callback_gaps),fieldCommitLowerBoundMs=stats(lower_bounds),fieldCommitObservationWidthMs=stats(widths),
+        fieldRebuildSignedLowerBoundMs=stats(signed_lower_bounds),fieldRebuildFullObservationWidthMs=stats(full_widths),unboundedRebuildIntervals=unbounded,
         missingObservations=sum('observed' not in c for c in changes),
         focusRoundTripMs=stats([c['roundTripMs'] for c in switches]),
         settledSnapshotMs=stats([c['settledSnapshotMs'] for c in switches if 'settledSnapshotMs' in c]),load=loads([c['start'] for c in switches]))
