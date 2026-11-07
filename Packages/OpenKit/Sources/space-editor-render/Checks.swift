@@ -3,9 +3,45 @@ import Foundation
 import OpenDesign
 import OpenModel
 import OpenStore
+import CryptoKit
 
 @MainActor
 enum Checks {
+    struct PortableBaselines: Decodable {
+        struct Entry: Decodable {
+            let renderScale: Int
+            let trustedMainCommit: String
+            let pngSHA256: [String: [String: String]]
+        }
+        let schemaVersion: Int
+        let environments: [String: Entry]
+    }
+
+    static func legacyBaseline() throws -> (directory: String, scale: Double, digests: [String: String]?) {
+        guard let screen = NSScreen.main, [1.0, 2.0].contains(screen.backingScaleFactor),
+              let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304 else {
+            throw CLIError(description: "P1 main display has no supported scale/ICC profile")
+        }
+        let digest = SHA256.hash(data: profile).map { String(format: "%02x", $0) }.joined()
+        let key = "scale-\(Int(screen.backingScaleFactor))-icc-\(digest)"
+        let metadata = try Data(contentsOf: RenderCLI.fixtureURL("portable/manifest.json"))
+        guard metadata.count <= 1_048_576 else { throw CLIError(description: "oversized P1 metadata") }
+        let manifest = try JSONDecoder().decode(PortableBaselines.self, from: metadata)
+        guard manifest.schemaVersion == 1, manifest.environments.count <= 16 else {
+            throw CLIError(description: "invalid P1 baseline manifest")
+        }
+        guard let entry = manifest.environments[key] else {
+            print("P1 baseline: original strict bytes; display \(key)")
+            return ("", 1, nil)
+        }
+        guard entry.renderScale == Int(screen.backingScaleFactor),
+              entry.trustedMainCommit.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil,
+              let hashes = entry.pngSHA256["editor"], hashes.count == 3 else {
+            throw CLIError(description: "invalid trusted P1 baseline metadata")
+        }
+        print("P1 baseline: \(key); trusted main \(entry.trustedMainCommit); byte identity")
+        return ("portable/\(key)/editor/", Double(entry.renderScale), hashes)
+    }
     static var passed = 0
     static var failed = 0
     static func check(_ condition: Bool, _ message: String) {
@@ -162,6 +198,7 @@ enum Checks {
     }
 
     static func persistence() throws {
+        let baseline = try legacyBaseline()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("space-editor-p1-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = try RenderCLI.fixtureModel(), store = SnapshotStore(root: directory)
@@ -172,11 +209,19 @@ enum Checks {
         check(try encoder.encode(SnapshotMapper.dto(from: reloaded)) == before, "P1 frozen schema-1 DTO round trip byte-identical")
         for space in 0..<3 {
             let scene = try RenderCLI.scene(model: reloaded, args: ["--space", String(space)], size: CGSize(width: 900, height: 700))
-            scene.background.renderScale = 1
-            let image = OffscreenRenderer().render(scene, scale: 1)
+            scene.background.renderScale = baseline.scale
+            let image = OffscreenRenderer().render(scene, scale: baseline.scale)
             let file = directory.appendingPathComponent("window-\(space).png")
             OffscreenRenderer.writePNG(image, to: file)
-            check(try Data(contentsOf: file) == Data(contentsOf: RenderCLI.fixtureURL("window-\(space).png")), "P1 legacy window \(space) PNG byte-identical")
+            let name = "window-\(space).png"
+            let reference = try Data(contentsOf: RenderCLI.fixtureURL(baseline.directory + name))
+            guard reference.count <= 16_777_216 else { throw CLIError(description: "oversized P1 PNG") }
+            if let hashes = baseline.digests {
+                guard SHA256.hash(data: reference).map({ String(format: "%02x", $0) }).joined() == hashes[name] else {
+                    throw CLIError(description: "P1 baseline digest mismatch")
+                }
+            }
+            check(try Data(contentsOf: file) == reference, "P1 legacy window \(space) PNG byte-identical")
         }
         let first = reloaded.spaces[0]
         let tab = first.pinned.compactMap(\.tab).first!
