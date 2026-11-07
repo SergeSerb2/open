@@ -6,7 +6,7 @@ rows will exercise the engine when its bridge is available.
 import os
 
 
-def run(factory, results, tmp, harness):
+def run_save_prompts(factory, results, tmp, harness):
     wait = harness['wait_until']
     crashes_before = harness['_open_crash_reports']()
     app = factory(urls=('about:blank',), extra_args=['--use-mock-keychain'])
@@ -193,3 +193,163 @@ def run(factory, results, tmp, harness):
         except RuntimeError:
             pass  # No window remains after M-5.
         app.quit()  # Harness verifies every owned PID and on-screen window is gone.
+
+
+def run_manage_pages(factory, results, tmp, harness):
+    """MP-* rows use the real command bar and the Profiles row's action."""
+    from urllib.parse import urlsplit
+    wait = harness['wait_until']
+    crashes_before = harness['_open_crash_reports']()
+    app = factory(urls=('about:blank',), fresh=True, extra_args=['--use-mock-keychain'])
+    password_url = 'chrome://password-manager/passwords'
+    payment_url = 'chrome://settings/payments'
+
+    def key(value, modifiers=()):
+        return app.call('key', key=value, modifiers=list(modifiers), route='app')
+
+    def bar_query():
+        key('t', ['command'])
+        assert wait(lambda: app.call('commandbar-state').get('presented'), timeout=5, step=.05)
+        app.call('key', text='Manage Passwords')
+        return wait(lambda: (s if (s := app.call('commandbar-state')).get('text') == 'Manage Passwords'
+                             and s.get('final') else None), timeout=10, step=.05)
+
+    def manage():
+        state = bar_query()
+        assert state, 'Manage Passwords query did not finish'
+        index = next((i for i, r in enumerate(state['rows']) if r.get('action') == 'manage-passwords'), None)
+        assert index is not None, 'Manage Passwords action absent from command bar'
+        current = state['selected']
+        for _ in range(abs(index - current)):
+            key('down' if index > current else 'up')
+        key('return')
+        assert wait(lambda: not app.call('commandbar-state').get('presented'), timeout=5, step=.05)
+
+    def focused_space():
+        return next(s for s in app.call('spaces') if s['focused'])
+
+    def same_page(actual, expected):
+        a, b = urlsplit(actual), urlsplit(expected)
+        return (a.scheme, a.netloc, a.path.strip('/')) == (b.scheme, b.netloc, b.path.strip('/'))
+
+    def page(expected, space):
+        tab = wait(lambda: next((t for t in app.call('tabs') if t.get('selected') and t['space'] == space
+                                and same_page(t['url'], expected)
+                                and same_page(t.get('page', {}).get('url', ''), expected)), None), timeout=15, step=.1)
+        assert tab, 'manage page not selected in target Space'
+        app.call('wait', tab=tab['id'])
+        tab = app.call('tab-state', tab=tab['id'])
+        assert not tab['crashed'] and tab['page']['live'] and tab['page']['browser'] != 0, 'manage page has no live hosted browser'
+        assert tab['page']['style'] == 'chrome', 'manage page is not Chrome WebUI'
+        assert same_page(tab['page']['url'], expected), 'hosted page did not commit the manage URL'
+        return tab
+
+    def row(name, fn):
+        try:
+            results[name] = {'ok': True, **(fn() or {})}
+        except Exception:
+            results[name] = {'ok': False}
+            raise
+
+    try:
+        assert wait(lambda: app.call('tabs') and app.call('tabs')[0].get('page'), timeout=15, step=.1)
+        default = focused_space()
+        initial = len(app.call('tabs'))
+        identity = {}
+
+        def first():
+            manage()
+            tab = page(password_url, default['id'])
+            assert tab['profile'] == default['profile'] and tab['section'] == 'today'
+            tabs = app.call('tabs')
+            assert len(tabs) == initial + 1
+            assert next(t for t in tabs if t['space'] == default['id'] and t['section'] == 'today')['id'] == tab['id']
+            identity['passwords'] = tab['id']
+            identity['context'] = tab['page']['context']
+            return {'url': password_url, 'newTodayTabs': 1, 'placement': 'top', 'entry': 'commandbar-native-return'}
+        row('MP-1-commandbar', first)
+
+        def again():
+            count = len(app.call('tabs'))
+            # Select another tab first, so a successful result must reselect it.
+            other = next(t['id'] for t in app.call('tabs') if t['id'] != identity['passwords'])
+            app.call('select', tab=other)
+            manage()
+            assert page(password_url, default['id'])['id'] == identity['passwords']
+            assert len(app.call('tabs')) == count
+            return {'sameTab': True, 'tabCountUnchanged': True}
+        row('MP-2-commandbar-singleton', again)
+
+        def settings_passwords():
+            count = len(app.call('tabs'))
+            for args in [dict(profile='missing', page='passwords'),
+                         dict(profile=default['profile'], page='unknown'),
+                         dict(profile=default['profile'], page='passwords', extra=True)]:
+                try:
+                    app.call('settings-profile-page', **args)
+                    raise AssertionError('invalid Settings page action was accepted')
+                except RuntimeError as error:
+                    assert 'expected an existing profile ID and ProfilePage' in str(error), str(error)
+            assert len(app.call('tabs')) == count
+            app.call('select', tab=next(t['id'] for t in app.call('tabs') if t['id'] != identity['passwords']))
+            app.call('settings-profile-page', profile=default['profile'], page='passwords')
+            assert page(password_url, default['id'])['id'] == identity['passwords']
+            assert len(app.call('tabs')) == count
+            return {'sameTab': True, 'entry': 'ProfilesViewModel.open'}
+        row('MP-3-settings-passwords-singleton', settings_passwords)
+
+        def settings_cards():
+            count = len(app.call('tabs'))
+            app.call('settings-profile-page', profile=default['profile'], page='paymentMethods')
+            tab = page(payment_url, default['id'])
+            assert tab['profile'] == default['profile'] and tab['section'] == 'today'
+            assert len(app.call('tabs')) == count + 1
+            app.call('select', tab=identity['passwords'])
+            app.call('settings-profile-page', profile=default['profile'], page='paymentMethods')
+            assert page(payment_url, default['id'])['id'] == tab['id']
+            assert len(app.call('tabs')) == count + 1
+            return {'url': payment_url, 'sameTabOnRepeat': True}
+        row('MP-4-settings-credit-cards', settings_cards)
+
+        def second_profile():
+            work_id = app.call('space-create', title='Work', profile='Work')
+            work = focused_space()
+            assert work['id'] == work_id and work['profile'] != default['profile']
+            manage()
+            tab = page(password_url, work_id)
+            assert tab['profile'] == work['profile'] and tab['id'] != identity['passwords']
+            assert tab['page']['context'] != identity['context'], 'manage page reused the default engine context'
+            count = len(app.call('tabs'))
+            app.call('space', space=default['id'])
+            app.call('settings-profile-page', profile=work['profile'], page='passwords')
+            assert focused_space()['id'] == work_id
+            assert page(password_url, work_id)['id'] == tab['id'] and len(app.call('tabs')) == count
+            return {'isolatedProfile': True, 'settingsTargetsSelectedProfile': True}
+        row('MP-5-second-profile', second_profile)
+
+        def incognito():
+            app.call('menu-perform', id='new-incognito-window')
+            assert wait(lambda: app.call('incognito-state', private=True).get('private'), timeout=10, step=.05)
+            before = app.call('incognito-state', private=True)['tabs']
+            state = bar_query()
+            assert state and not any(r.get('action') == 'manage-passwords' for r in state.get('rows', []))
+            key('escape')
+            try:
+                app.call('command', id='manage-passwords')
+                raise AssertionError('private Manage Passwords command ran')
+            except RuntimeError as error:
+                assert 'disabled command' in str(error), str(error)
+            assert app.call('incognito-state', private=True)['tabs'] == before
+            app.call('window-close')
+            return {'actionAbsent': True, 'directCommandDisabled': True, 'tabCountUnchanged': True}
+        row('MP-6-incognito-unavailable', incognito)
+        new_crashes = harness['_open_crash_reports']() - crashes_before
+        results['MP-7-no-crash'] = {'ok': app.call('ping')['pid'] == app.pid and not new_crashes,
+                                    'newCrashReports': len(new_crashes)}
+    finally:
+        app.quit()
+
+
+def run(factory, results, tmp, harness):
+    run_save_prompts(factory, results, tmp, harness)
+    run_manage_pages(factory, results, tmp, harness)
