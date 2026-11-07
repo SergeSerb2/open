@@ -2,10 +2,12 @@
 
 Section 10 adds Profile-scoped routing, native grouped destination menus,
 live-window Automatic Test, nested Arc import, and the Settings entry point.
-The implementation is `c5597282`. Final integration `3763aa41` merges main
+The implementation is `c5597282`. Integration `3763aa41` merged main
 `d5817079` (#209, private windows), after #207's identical screen-worker fix.
-Both the post-#209 Debug App build and Release tool build passed; the Release
-build reported zero warnings and errors. No engine source changed.
+Final integration `bc61afbf` merges main `f75a5d46` (#213, Profiles shell),
+retaining its public Little Open creation method and Profile-aware URL reuse.
+The historical full verification and the later focused checks are listed below.
+No engine source changed.
 
 Automatic Test and external intake use the same `AppLinkExecutor.snapshot()`.
 Its ordered controllers must have a persistent standard-window ID; private
@@ -96,8 +98,35 @@ resource bundles. Row 150 passes when the branch median is ≤main median ×1.10
 Row 151 passes when its branch median is ≤main median ×1.10 or ≤0.3 ms.
 All strict and paired runs must remain visible. Stop and report if the pair fails.
 This specific lead ruling replaces strict-only acceptance for this PR; no source
-threshold, baseline, comparator, or allowlist was changed. The paired result is
-pending the end of the quiet window.
+threshold, baseline, comparator, or allowlist was changed.
+
+The paired run passed under TANDEM §4 rule 4d and the lead's 18:27 ruling.
+Both Release builds passed with zero warnings/errors. Unchanged main
+`d58170792c942266171fc0e3557b53b58d13658f` and branch
+`f6acf907965e02609b0f8fd6d025ea5b2d56f59a` ran alternately under
+`/usr/bin/lockf -k /tmp/open-m5-quiet.lock`, with each native command through
+`s10-heavy.sh`, from its own `.build/release` directory with its resource bundle.
+
+| Run | Side | Load 1/5/15 | CPU p95 ms | Inline overhead ms | Strict rows |
+|---|---|---|---|---|---|
+| 1 | main | 13.6/10.7/14.6 | 8.74 | +0.308 | 149/151 |
+| 2 | branch | 14.7/11.4/14.7 | 7.85 | +0.735 | 150/151 |
+| 3 | main | 11.3/11.0/14.4 | 6.30 | +0.241 | 151/151 |
+| 4 | branch | 16.4/12.1/14.7 | 8.38 | +0.164 | 150/151 |
+| 5 | main | 17.8/13.2/14.9 | 8.55 | +0.397 | 149/151 |
+| 6 | branch | 13.9/12.7/14.7 | 3.93 | +0.167 | 151/151 |
+
+All functional rows 1–149 passed in every run. Every starting and measured
+load1 was ≤20. Median CPU p95: main **8.55 ms**, branch **7.85 ms** → PASS
+(branch ≤main ×1.10). Median inline overhead: main **0.308 ms**, branch
+**0.167 ms** → PASS under both the relative rule and the 0.3 ms absolute budget.
+Receipts: `paired-commandbar-final/runs.json`, `summary.json`, and six raw logs.
+No baseline, threshold, comparator or allowlist changed.
+
+The #213 integration changes no `OpenCommandBar`, `OpenCommands` or
+`OpenSuggest` code. Its only `OpenDesign` change adds independent
+`ProfileIndicatorMetrics`; existing command bar metrics stay unchanged.
+The lead's 18:46 instruction keeps this paired result valid after that merge.
 
 The [1x](profile-destination@1x.png) and [2x](profile-destination@2x.png)
 rule-sheet images are synthetic offscreen review renders. The preview inspects
@@ -110,6 +139,9 @@ Arc visual or matching parity.
 ## Final full verification
 
 The full run after #209 completed with 23 PASS and one timing FAIL; no SKIP.
+The later paired run accepts the timing check under TANDEM §4 rule 4d.
+The #213 overlap uses focused checks per TANDEM §4 rule 5a and the lead's
+18:46 instruction; a second full verification was not required.
 
 | Name | Raw result | Seconds |
 |---|---|---|
