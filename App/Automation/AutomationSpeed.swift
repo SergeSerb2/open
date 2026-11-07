@@ -39,7 +39,11 @@ extension AutomationController {
         result["mainRunLoopWakeups"] = unsafeBitCast(address, to: (@convention(c) () -> UInt64).self)()
       }
       return result
-    default: return ["tracing": OEEngine.shared.isTracing]
+    default:
+      let environment = ProcessInfo.processInfo.environment
+      return ["tracing": OEEngine.shared.isTracing,
+        "dyldStatisticsRequested": environment["DYLD_PRINT_STATISTICS"] == "1",
+        "dyldDetailsRequested": environment["DYLD_PRINT_STATISTICS_DETAILS"] == "1"]
     }
   }
 }
