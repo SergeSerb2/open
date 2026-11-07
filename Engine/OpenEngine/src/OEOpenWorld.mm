@@ -165,7 +165,7 @@ bool OEOpenWorldRendererMessage(CefRefPtr<CefBrowser> browser,
   } else if (context->Eval(
       "(function(value,id){Promise.resolve(value).then(v=>{"
       "const json=JSON.stringify(v===undefined?null:v);"
-      "__openNative.completeEvaluation(id,json,'')"
+      "__openNative.completeEvaluation(id,json===undefined?'null':json,'')"
       "}).catch(e=>__openNative.completeEvaluation(id,'',String(e)))})",
       "openengine://open-eval-result", 1, settle, error)) {
     CefV8ValueList values{result ? result : CefV8Value::CreateUndefined(),
