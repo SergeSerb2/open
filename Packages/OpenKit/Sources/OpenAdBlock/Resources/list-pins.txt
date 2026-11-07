@@ -1,6 +1,7 @@
-# Official upstream snapshots, fetched 2026-11-07. Never taken from a browser bundle.
-# <local-name> <official-url> <sha256-hex-lowercase>
+# Official easylist/easylist gh-pages snapshots, commit-pinned on 2026-11-07.
+# Immutable seed URLs; runtime updates still use easylist.to. Never from a browser bundle.
+# <local-name> <seed-url> <sha256-hex-lowercase>
 # Update only through tools/fetch-adblock-lists.sh --update-pins and review the change.
 # Lists retain their upstream licenses (GPLv3+ or CC BY-SA 3.0+); text is not committed.
-easylist.txt https://easylist.to/easylist/easylist.txt 29b108fd009848df943b983aab4c1e84d3b1716aa0710307d447ee710cb5ca3a
-easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt 4f17cf7ea32f1ba41ccee0d292471efd0d6c876acfa10a97f5345f07feb6a697
+easylist.txt https://raw.githubusercontent.com/easylist/easylist/256e23a0e35b8a32cd7db5bff4801210cd2ff23d/easylist.txt 756ddc9aaae3c4c9a76068dc1dfc10129dba78721ddf79f07340c8102950c2b5
+easyprivacy.txt https://raw.githubusercontent.com/easylist/easylist/256e23a0e35b8a32cd7db5bff4801210cd2ff23d/easyprivacy.txt c1d09df31b339231a79a5e389031ea09745b229f90c9e379aca1f2d4b7e07813

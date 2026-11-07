@@ -16,14 +16,30 @@ mkdir -p "$DEST"
 STAGING="$(mktemp -d "$DEST/.fetch.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
 cp "$PINS" "$STAGING/list-pins.txt"
+commit=
+if [[ "$UPDATE" == true ]]; then
+  commit="$(git ls-remote https://github.com/easylist/easylist refs/heads/gh-pages | awk '$2 == "refs/heads/gh-pages" { print $1 }')"
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "invalid gh-pages commit" >&2; exit 1; }
+  echo "easylist/easylist gh-pages: $commit"
+fi
 count=0
 bytes=0
+seed_commit=
+seen_names=' '
 while read -r name url expected; do
   [[ -z "$name" || "$name" == \#* ]] && continue
-  case "$name $url" in
-    'easylist.txt https://easylist.to/easylist/easylist.txt'|'easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt') ;;
-    *) echo "unsupported list source: $name" >&2; exit 1 ;;
-  esac
+  if [[ ! "$url" =~ ^https://raw\.githubusercontent\.com/easylist/easylist/([0-9a-f]{40})/(easylist|easyprivacy)\.txt$ ||
+        "$name" != "${url##*/}" || ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "unsupported list source or pin: $name" >&2; exit 1
+  fi
+  current_commit="${url#https://raw.githubusercontent.com/easylist/easylist/}"
+  current_commit="${current_commit%%/*}"
+  [[ "$seen_names" != *" $name "* ]] || { echo "duplicate bundled list: $name" >&2; exit 1; }
+  seen_names+="$name "
+  [[ -z "$seed_commit" || "$seed_commit" == "$current_commit" ]] || { echo "bundled lists must use the same commit" >&2; exit 1; }
+  seed_commit="$current_commit"
+  old_url="$url"
+  [[ "$UPDATE" == false ]] || url="https://raw.githubusercontent.com/easylist/easylist/$commit/$name"
   # An existing snapshot is immutable until an explicit pin refresh. This also
   # makes offline builds repeatable and refuses a tampered cache without repair.
   if [[ "$UPDATE" == false && -e "$DEST/$name" ]]; then
@@ -39,23 +55,24 @@ while read -r name url expected; do
   [[ "$first" == '[Adblock Plus'* ]] || { echo "$name: invalid header" >&2; exit 1; }
   actual="$(shasum -a 256 "$STAGING/$name" | cut -d ' ' -f1)"
   if [[ "$UPDATE" == true ]]; then
-    python3 - "$STAGING/list-pins.txt" "$name" "$actual" <<'PY'
+    python3 - "$STAGING/list-pins.txt" "$name" "$url" "$actual" <<'PY'
 import pathlib,sys
 p=pathlib.Path(sys.argv[1])
 lines=p.read_text().splitlines()
 for i,line in enumerate(lines):
     fields=line.split()
     if fields and fields[0]==sys.argv[2]:
-        lines[i]=' '.join([fields[0],fields[1],sys.argv[3]])
+        lines[i]=' '.join([fields[0],sys.argv[3],sys.argv[4]])
 p.write_text('\n'.join(lines)+'\n')
 PY
-    echo "$name: $expected -> $actual"
+    echo "$name: $old_url $expected -> $url $actual"
   elif [[ "$actual" != "$expected" ]]; then
     echo "$name: SHA-256 pin mismatch expected=$expected actual=$actual" >&2; exit 1
   fi
   count=$((count + 1))
   bytes=$((bytes + $(wc -c < "$STAGING/$name")))
 done < "$PINS"
+[[ "$count" == 2 ]] || { echo "expected both bundled lists" >&2; exit 1; }
 # Publish only after every fetched file passed verification. Same-filesystem rename per file.
 while read -r name url expected; do
   [[ -z "$name" || "$name" == \#* ]] && continue
