@@ -1055,7 +1055,7 @@ def feature_checks(app, style, results, tmp):
 
     def crash_recovery():
         if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
-            return {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+            return {"status": "DEFERRED", "reason": "M1-only by rule; not run"}
         c = new_tab(app, "https://example.com/", background=True)
         try:
             app.call("navigate", tab=c, url="chrome://crash")
@@ -5228,7 +5228,7 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     results["extension_reload_with_popup"] = reload_with_popup(None)
 
     if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
-        results["popup_renderer_crash"] = {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+        results["popup_renderer_crash"] = {"status": "DEFERRED", "reason": "M1-only by rule; not run"}
     else:
         # The popup's renderer crashes: the popup closes and Chrome terminates
         # the extension (its action goes away until it is reloaded); Open keeps

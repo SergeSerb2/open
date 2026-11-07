@@ -976,6 +976,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 return cookie_names()
             row('C-1', cookies_graceful)
             def cookies_killed():
+                if os.environ.get('OPEN_E2E_NO_CRASH_PROBES') == '1':
+                    raise PasswordBlocked('M1-only by rule; not run')
                 load(urls['set_cookies'])
                 deadline = time.monotonic()+35
                 while time.monotonic() < deadline:
