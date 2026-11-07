@@ -39,7 +39,27 @@ def run(factory, results, tmp, h):
                   for y in range(int((middle - 9) * sy), int((middle + 9) * sy))
                   for x in range(int(width * .45), int(width * .95))
                   for r, g, b in [pixel(x, y)])
-        return dict(text=text, redPixels=red, png=str(path))
+        # Vision can omit a single isolated digit. Check the native zero's
+        # visible ring as well as its real outcome, rather than accepting
+        # a blank row because the model says zero.
+        left, right = int(width * .88), int(width * .95)
+        top, bottom = int((middle - 9) * sy), int((middle + 9) * sy)
+        area = {(x, y) for y in range(top, bottom) for x in range(left, right)}
+        ink = {point for point in area if min(pixel(*point)) > 120}
+        remaining = area - ink
+        holes = []
+        while remaining:
+            seed = remaining.pop(); component = {seed}; pending = [seed]
+            while pending:
+                x, y = pending.pop()
+                for point in ((x-1, y), (x+1, y), (x, y-1), (x, y+1)):
+                    if point in remaining:
+                        remaining.remove(point); component.add(point); pending.append(point)
+            if not any(x in (left, right-1) or y in (top, bottom-1) for x, y in component):
+                holes.append(len(component))
+        state = app.call('first-run')
+        return dict(text=text, redPixels=red, valueInkPixels=len(ink), enclosedAreas=holes,
+                    count=state['outcome'].get('Boosts'), failure=state['failures'].get('Boosts'), png=str(path))
     try:
         app = factory(urls=(), fresh=True, extra_args=['--arc-dir=' + str(source)])
         for key in ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane'):
@@ -84,7 +104,9 @@ def run(factory, results, tmp, h):
         def unavailable(value):
             return 'Boosts Not imported in this build' == value['text'] and value['redPixels'] > 10
         def zero(value):
-            return value['text'] == 'Boosts 0' and value['redPixels'] == 0
+            return value['text'] in ('Boosts', 'Boosts 0') and value['count'] == 0 and value['failure'] is None \
+                and value['redPixels'] == 0 and value['valueInkPixels'] > 10 \
+                and len(value['enclosedAreas']) == 1 and value['enclosedAreas'][0] > 2
         app.quit()
         app = factory(urls=(), fresh=True, extra_args=['--arc-dir=' + str(empty)])
         app.call('first-run', action='focus')
