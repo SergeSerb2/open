@@ -55,6 +55,13 @@ public final class ScriptTransientTabCommand: NSScriptCommand {
 @MainActor
 @objc(ScriptSetCommand)
 public final class ScriptSetCommand: NSSetCommand {
+    public override func execute() -> Any? {
+        guard ScriptThread.isMainThread else { return nil }
+        nonisolated(unsafe) let command = self
+        MainActor.assumeIsolated { command.restoreDirectParameter() }
+        return super.execute()
+    }
+
     public override func performDefaultImplementation() -> Any? {
         guard ScriptThread.isMainThread else { return nil }
         nonisolated(unsafe) let command = self
@@ -63,10 +70,16 @@ public final class ScriptSetCommand: NSSetCommand {
         return result
     }
 
-    private func setProperty() -> Any? {
+    private func restoreDirectParameter() {
+        // NSSetCommand validates its required receiver before it calls the
+        // default implementation. Restore Cocoa's omitted implicit parameter
+        // before that validation, including for ordinary model/window writes.
         if directParameter == nil, let descriptor = appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) {
             directParameter = NSScriptObjectSpecifier(descriptor: descriptor)
         }
+    }
+
+    private func setProperty() -> Any? {
         let requested = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
         guard let (reference, id) = ScriptTransientTarget.reference(in: requested) else {
             return super.performDefaultImplementation()
