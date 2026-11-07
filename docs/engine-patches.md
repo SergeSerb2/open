@@ -528,7 +528,9 @@ The Step 0 crash is in `AskBeforeHttpDialogController::ShowDialog` calling
 host. See the [probe receipt](engine-spike/results-passwords-probe.json),
 PR-7. The 0806 hook retains the warning and its decisions, and uses
 `constrained_window::ShowWebModalDialogViewsOwned` with Open's real modal
-host. It does not bypass HTTPS warnings or allow an insecure navigation.
+host. A missing Views host also takes that path for detached pages; if no
+native host remains, it cancels. It does not bypass HTTPS warnings or allow an
+insecure navigation.
 The related callers already use that web-modal path: HTTP auth in
 `chrome/browser/ui/views/login_handler_views.cc:180`, and WebAuthn in
 `chrome/browser/ui/views/webauthn/authenticator_request_dialog_view_controller_views.cc:54`.

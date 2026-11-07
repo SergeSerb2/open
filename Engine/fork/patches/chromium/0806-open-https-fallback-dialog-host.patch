@@ -1,5 +1,5 @@
 diff --git a/chrome/browser/ssl/ask_before_http_dialog_controller.cc b/chrome/browser/ssl/ask_before_http_dialog_controller.cc
-index 54cb810f9a23d281400e87697e5cf745210bbaf8..04534fe11abb22a356b5ec59b44e390bfe2af938 100644
+index 54cb810f9a23d281400e87697e5cf745210bbaf8..ea1addff5bfc1ce0d17a44112d7f686b9ee3bd8d 100644
 --- a/chrome/browser/ssl/ask_before_http_dialog_controller.cc
 +++ b/chrome/browser/ssl/ask_before_http_dialog_controller.cc
 @@ -36,6 +36,11 @@
@@ -14,14 +14,19 @@ index 54cb810f9a23d281400e87697e5cf745210bbaf8..04534fe11abb22a356b5ec59b44e390b
  #include "chrome/browser/ui/tabs/public/tab_dialog_manager.h"
  #include "chrome/browser/ui/tabs/public/tab_features.h"
  #include "ui/views/bubble/bubble_dialog_model_host.h"
-@@ -208,6 +213,37 @@ void AskBeforeHttpDialogController::ShowDialog(
+@@ -208,6 +213,42 @@ void AskBeforeHttpDialogController::ShowDialog(
    }
    is_suspended_ = false;
  
 +#if !BUILDFLAG(IS_ANDROID)
 +  auto& open_hooks = open_engine::GetAutofillHooks();
 +  const bool is_open = open_hooks.is_open && open_hooks.is_open(web_contents);
-+  if (is_open) {
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
++  auto* tab_features = tab ? tab->GetTabFeatures() : nullptr;
++  auto* tab_dialog_manager = tab_features ? tab_features->tab_dialog_manager() : nullptr;
++  const bool use_native_modal = is_open || !tab_dialog_manager ||
++                                !tab_dialog_manager->GetHostWidget();
++  if (use_native_modal) {
 +    auto* manager = web_modal::WebContentsModalDialogManager::FromWebContents(
 +        constrained_window::GetTopLevelWebContents(web_contents));
 +    auto* host = manager && manager->delegate()
@@ -30,7 +35,7 @@ index 54cb810f9a23d281400e87697e5cf745210bbaf8..04534fe11abb22a356b5ec59b44e390b
 +                     : nullptr;
 +    if (!host || !host->GetHostView() ||
 +        !web_contents->GetTopLevelNativeWindow()) {
-+      // A detached/closing Open page cannot display a child dialog. Treat
++      // A detached/closing page cannot display a child dialog. Treat
 +      // this as Cancel, never proceed without a warning or enter a Views
 +      // factory that CHECKs a missing host.
 +      RecordHttpsFirstModeUKM(
@@ -52,7 +57,7 @@ index 54cb810f9a23d281400e87697e5cf745210bbaf8..04534fe11abb22a356b5ec59b44e390b
    std::unique_ptr<ui::DialogModel> dialog_model =
        CreateDialogModel(request_url);
  
-@@ -242,11 +278,20 @@ void AskBeforeHttpDialogController::ShowDialog(
+@@ -242,11 +283,17 @@ void AskBeforeHttpDialogController::ShowDialog(
    // another window.
    tab_dialog_params->close_on_detach = false;
  
@@ -61,7 +66,7 @@ index 54cb810f9a23d281400e87697e5cf745210bbaf8..04534fe11abb22a356b5ec59b44e390b
 -  dialog_widget_ =
 -      tab->GetTabFeatures()->tab_dialog_manager()->CreateAndShowDialog(
 -          model_host, std::move(tab_dialog_params));
-+  if (is_open) {
++  if (use_native_modal) {
 +    // Open hosts pages in AppKit, with no Views primary-window widget.
 +    // Keep the HTTPS warning and its decisions through the real native
 +    // WebContentsModalDialogHost instead of CHECKing a nonexistent widget.
@@ -69,11 +74,8 @@ index 54cb810f9a23d281400e87697e5cf745210bbaf8..04534fe11abb22a356b5ec59b44e390b
 +        model_host, web_contents,
 +        views::Widget::InitParams::CLIENT_OWNS_WIDGET);
 +  } else {
-+    auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
-+    CHECK(tab);
-+    dialog_widget_ =
-+        tab->GetTabFeatures()->tab_dialog_manager()->CreateAndShowDialog(
-+            model_host, std::move(tab_dialog_params));
++    dialog_widget_ = tab_dialog_manager->CreateAndShowDialog(
++        model_host, std::move(tab_dialog_params));
 +  }
    dialog_widget_->MakeCloseSynchronous(
        base::BindOnce(&AskBeforeHttpDialogController::CloseDialogWidget,

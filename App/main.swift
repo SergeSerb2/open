@@ -92,7 +92,7 @@ configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 // never pass it. E2E launchers separately suppress macOS notification setup.
 configuration.additionalSwitches = configuration.additionalSwitches + ["--open-automation"]
 // Fixtures may exercise save prompts under the public mock key. This switch
-// never changes the engine's refusal to import secrets with that key.
+// never permits imported real secrets under that key.
 if CommandLine.arguments.contains("--open-allow-mock-keychain-secrets") {
   configuration.additionalSwitches.append("--open-allow-mock-keychain-secrets")
 }
