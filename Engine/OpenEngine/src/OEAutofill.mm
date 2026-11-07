@@ -184,14 +184,15 @@ OEAutofillContextState* ContextState(OEBrowserContext* context, BOOL create) {
 }
 BOOL Preference(OEBrowserContext* context, const char* name) {
   if (context.ephemeral) return NO;
-  if (!context.oe_isReady) return YES;
+  if (!OEEngine.shared.running || !context.oe_isReady) return YES;
   auto value = context.oe_requestContext->GetPreference(name);
   return value && value->GetBool();
 }
 void SetPreference(OEBrowserContext* context, const char* name, BOOL enabled) {
-  if (context.ephemeral) return;
+  if (context.ephemeral || !OEEngine.shared.running) return;
   std::string key(name);
   [context oe_whenReady:^{
+    if (!OEEngine.shared.running) return;
     auto request = context.oe_requestContext;
     if (!request->CanSetPreference(key)) return;
     auto value = CefValue::Create(); value->SetBool(enabled);
@@ -200,7 +201,7 @@ void SetPreference(OEBrowserContext* context, const char* name, BOOL enabled) {
   }];
 }
 BOOL CanEnable(OEBrowserContext* context, const char* name) {
-  return !context.ephemeral && MockPromptsAllowed() && context.oe_isReady &&
+  return OEEngine.shared.running && !context.ephemeral && MockPromptsAllowed() && context.oe_isReady &&
       context.oe_requestContext->CanSetPreference(name);
 }
 }
@@ -239,6 +240,12 @@ class OECountsCallback final : public CefOpenCountsCallback {
 - (BOOL)addressesSavingEnabled { return Preference(self, "autofill.profile_enabled"); }
 - (void)setAddressesSavingEnabled:(BOOL)enabled { SetPreference(self, "autofill.profile_enabled", enabled); }
 - (void)fetchCredentialCountsWithCompletion:(void (^)(OECredentialCounts*))completion {
+  // Private contexts have no saved data. Neither they nor a stopped engine
+  // need a CEF data bridge that could outlive profile/library teardown.
+  if (self.ephemeral || !OEEngine.shared.running) {
+    completion([[OECredentialCounts alloc] initOEWithLogins:0 blocked:0 cards:0 addresses:0 cookies:0]);
+    return;
+  }
   auto state = ContextState(self, YES);
   if (state->data) state->data->GetCounts(new OECountsCallback(completion));
   else completion([[OECredentialCounts alloc] initOEWithLogins:0 blocked:0 cards:0 addresses:0 cookies:0]);
