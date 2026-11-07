@@ -131,9 +131,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
-    if !shutdownPrepared, historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true {
+    if !shutdownPrepared, importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true) {
       historyQuitTask = Task { @MainActor in
         await self.stores.flushHistory()
+        await self.importRunner.flushUndoForQuit()
         self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
         NSApp.terminate(nil)
       }

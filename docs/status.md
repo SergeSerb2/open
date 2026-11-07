@@ -95,13 +95,13 @@ Row count by status (other areas retain their historical counts; §1.16 is refre
 | 1.12 Boosts and Zap | 1 | 1 | 5 | 1 | 1 |
 | 1.13 Site Control Center | 0 | 6 | 3 | 0 | 0 |
 | 1.14 Ad blocking | 2 | 1 | 3 | 1 | 0 |
-| 1.15 Import from Arc | 6 | 2 | 3 | 1 | 1 |
+| 1.15 Import from Arc | 6 | 5 | 3 | 1 | 1 |
 | 1.16 Extensions | 11 | 0 | 1 | 0 | 2 |
 | 1.17 Engine and platform basics | 19 | 1 | 24 | 1 | 1 |
 | 1.18 Settings and Library | 10 | 0 | 0 | 0 | 2 |
 | 1.19 First run | 4 | 0 | 1 | 0 | 0 |
 | 1.20 Release | 2 | 0 | 7 | 0 | 0 |
-| **Total (mixed audit dates)** | **167** | **9** | **92** | **8** | **11** |
+| **Total (mixed audit dates)** | **167** | **12** | **92** | **8** | **11** |
 
 
 ## 1. Feature tables
@@ -389,6 +389,9 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Extensions: detect reinstall candidates | import2 §2 | model.md | `OpenImport/ArcExtensions.swift` | CLI | model.md (synthetic union) | planned (detect only) | P3 management install is on main (#177); the import reinstall workflow still needs wiring (Import owns it). |
 | Boosts | DM §2.6 | none | — | — | — | unplanned | Blocked on a sample. |
 | Multi-profile Arc installs | DM §2.6; profiles Q1 | [multi-profile import](import-multiprofile.md) | `ArcImport.swift`; `AppImportRunner.swift`; `BrowserModel.mergeImportedSidebar` | shared first-run/Settings runner | `firstrun` `MP_*`; counts-only real 2-Profile audit | partial (physical Undo deferred) | Observed nested custom Profile refs feed one mapping for Spaces, Favorites, routing, Archive and History. Normal Profile creation allocates live directories; source directories stay separate. Settings maps Arc Default by role to the live Open Default; named Profiles retain stable import IDs. Physical store/context removal after Undo awaits Section 10 deletion (0702). Review-fix App acceptance is blocked by the macOS crash dialog; [receipt](import-multiprofile.md). |
+| Re-running import adds no duplicates | DM; import2 §1.12 | [robustness](import-robustness.md) | stable model IDs, Archive IDs, `history_import_keys` | shared App runner | new `import-robust` repeat paths with per-category counts | in PR (App checks blocked) | Settings twice and first run → Settings; includes Profiles and routing. No current App acceptance claimed. |
+| Missing/unreadable stores, partial failure and one Undo | import2 §1.9, §5.4 | [robustness](import-robustness.md) | `ArchiveStore.importRecordsWithUndo`; `HistoryStore.removeImportedHistory` | `AppImportUndo` | new `import-robust` failure and Undo rows | in PR (App checks blocked) | Undo owns only committed new rows. Existing rows remain. Physical Profile folders stay a separate follow-up. |
+| Import responsiveness, History speed and idle work | import2 §1.13 | [robustness](import-robustness.md) | utility-worker Archive preparation | automation-only main-thread watchdog | new `import-robust` timing/idle rows, 100k visits | in PR (timing unverified) | Targets: History ≈1.4 s (plan hard limit 3 s), main lag <50 ms, no repeated writes 10 s after completion. Loads must accompany receipts. |
 | Import wizard (Settings ▸ General ▸ Import from Arc…) | — | settings §5.8 | `OpenSettings/ImportWizard.swift`; shared count probe (#66) | shared App runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `settings-preview`; final `firstrun` Settings rows | done (partial) | Live sidebar/archive merge; background History and archive-aware duplicates in this PR. |
 | Import in the first-run flow | — | first-run Steps A–F | `OpenSettings/FirstRun.swift` | native window and runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` 52/52 ×3; [receipt](first-run/steps-ef-verification.md) | done | Functional flows pass. First-content 250 ms target remains open. |
 | Top Sites, site engagement | — | import2 lead decision: skip | — | — | — | out of scope | |

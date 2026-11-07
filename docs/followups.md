@@ -286,11 +286,12 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 14: multi-profile import boundaries
 
-- Import Undo removes created Profiles and sidebar/routing changes from the
-  model. Main's Profile deletion path needs typed confirmation and defers loaded
-  context data until restart. Undo does not erase Archive/History stores or
-  engine directories. Complete this through Section 10's in-session deletion
-  path (0702); do not bypass its teardown boundary.
+- C4 adds one import Undo for the model plus newly inserted Archive rows and
+  History visits/keys. App acceptance is pending the shared macOS crash dialog;
+  [verification](import-robustness.md). Physical Profile directory and loaded
+  engine context removal still waits on Section 10's in-session deletion path
+  (0702). Logical row removal does not delete those directories or bypass
+  typed confirmation and context teardown.
 - Session Favorite keys contain a Profile and window but no Space. When a source
   window focuses another Profile, import uses the Favorite owner's first Space.
   This is an accepted, marked guess. Settings keeps its current windows and selections and

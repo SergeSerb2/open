@@ -48,6 +48,9 @@ Physical deletion after Undo is not accepted yet. Main's Settings delete path
 requires typed confirmation and defers loaded Chromium data until restart.
 Import Undo removes the model entries but does not bypass that boundary or
 claim that orphaned Archive/History/engine directories were erased.
+C4 adds logical removal of newly inserted Archive rows and History visits
+as part of the same Undo; its App verification is tracked separately in
+[robustness verification](import-robustness.md).
 
 The lead accepted the inactive-Profile Favorite's first-Space selection as a
 marked guess. Settings preserves the live window layout. Older Settings

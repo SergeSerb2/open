@@ -63,8 +63,10 @@ default destination stays authoritative. Source objects are unchanged.
 Structural edits emit precise insert/remove events; new containers emit
 reloads. The caller's synchronous snapshot save is part of the command.
 Failure reverses the edits and registers no undo. Success registers one undo
-step for the sidebar/search/routing merge. Archive rows have their own
-per-Profile transaction and are not removed by sidebar Undo.
+step for the sidebar/search/routing merge. The App captures that inverse in
+a private UndoManager and registers one native import action with committed
+Archive and History receipts. Store removal and Redo run on the stores'
+own queues. A duplicate-only repeat registers no new action.
 
 Space editor inputs live in `SpaceTheme.style: SpaceStyle?`. A style stores
 only its key color, count, wheel, appearance, noise, texture, intensity, and
@@ -343,6 +345,38 @@ queue, then passes the ID sets into the synchronous model merge. Live-ID
 deduplication stays unchanged. Neither rule changes Arc's source files.
 
 The reader retains the plan's array-returning API and adds an awaited batch-consumer overload. The CLI uses that overload to keep at most one 5,000-visit batch in flight, plus the source URL map. `HistoryStore(fileURL:)` accepts a full destination path. The writer uses one checked transaction per batch, reuses prepared statements, and rolls back all changes on failure. `history_import_keys` deduplicates by source profile directory and Chromium visit ID. The new `(url_id, time)` index supports count recomputation. A result success flag also detects a bad destination for an empty import.
+
+The App's `AppImportUndo` records only newly inserted Archive records and
+History visits. Each History receipt binds the existing `history_import_keys`
+key to the exact destination visit row ID. Undo removes that visit and its
+key, recomputes aggregates, and drops only newly created empty URL rows.
+Changed titles are restored only while the imported value still owns them.
+Existing imported visits and ordinary visits with equal URL/time/transition
+remain. Redo imports the receipt and keeps its new row IDs for the next Undo.
+No SQLite schema migration is needed. Model Undo includes imported Profiles;
+physical directories and loaded engine contexts remain Section 10's boundary.
+An Undo during an awaited batch stops later batches. Store Undo/Redo waits
+for the import to finish collecting its final receipts, including when Redo
+is pressed before the awaited batch returns. Quit drains pending store work. The App serializes pending store Undo
+with the next import and reports a failed removal in the import wizard.
+
+`readSidebar()` prepares immutable JSON for the optional metadata, windows,
+routing, Archive and session files on the App's utility worker. `importAll`
+keeps its synchronous CLI entry point. The App builds its live graph on the
+main actor with `includeArchive: false`, then prepares Archive value records
+and payload JSON with `readArchive` on a utility worker. Missing sidebar or
+History files report "Not found"; unreadable and malformed files report
+"Could not be read". A readable committed WAL snapshot can import while a
+writer holds a transaction; the source database is never opened by SQLite.
+
+Automation imports run a background main-queue ping watchdog with one
+outstanding ping and a 5 ms interval. The timer stops on every return path.
+`first-run` exposes total/History time, maximum main lag, timer state and
+pending store Undo. The `import-robust` suite checks both repeat paths,
+source failures, partial success and Undo, plus a 6-Space/2-Profile fixture
+with 1,200 added tabs, 2,000 Archive rows and 100,000 History visits.
+Real-App acceptance and negative proofs are pending the shared macOS crash
+dialog. See [robustness verification](import-robustness.md).
 
 The upsert skips unchanged or empty replacement titles. This preserves the specified title result and avoids redundant FTS trigger work. The first F2 run, before this guard, failed the timing gate at 3.307 s. The final streaming implementation passed at 1.443 s. Re-import updates no visit count by hand and inserts no duplicate visit.
 

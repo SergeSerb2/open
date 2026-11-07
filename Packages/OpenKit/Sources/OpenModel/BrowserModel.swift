@@ -598,6 +598,31 @@ public final class BrowserModel {
     }
     public enum ProfileImportError: Error { case invalidProfile }
 
+    /// First run installs a complete model before the first browser window.
+    /// Its inverse keeps that installed model object so live observers retain
+    /// their owner. Physical Profile directories are outside model Undo.
+    public func registerImportedReplacementUndo(restoring previous: BrowserModel) {
+        let before = (previous.profiles, previous.spaces, previous.routingRules, previous.defaultDestination)
+        let after = (profiles, spaces, routingRules, defaultDestination)
+        func restore(_ model: BrowserModel, _ state: ([Profile], [Space], [RoutingRule], DefaultDestination)) {
+            let oldProfiles = model.profiles, oldSpaces = model.spaces
+            model.profiles = state.0; model.spaces = state.1
+            model.routingRules = state.2; model.defaultDestination = state.3
+            model.rebuildIndex()
+            for window in model.windows {
+                if model.space(id: window.focusedSpaceID) == nil, let first = model.spaces.first { window.focusedSpaceID = first.id }
+                window.selectedNodeBySpace = window.selectedNodeBySpace.filter { model.space(id: $0.key) != nil && model.node(id: $0.value) != nil }
+            }
+            for id in Set((oldProfiles + model.profiles).map(\.id)) { model.emit(.reload(parent: .favorites(id))) }
+            for id in Set((oldSpaces + model.spaces).map(\.id)) {
+                model.emit(.reload(parent: .spacePinned(id))); model.emit(.reload(parent: .spaceToday(id)))
+            }
+        }
+        registerUndo({ model in restore(model, before); return true }, reapply: { model in
+            restore(model, after); return { model in restore(model, before); return true }
+        })
+    }
+
     /// Imports into the live model without changing existing Space metadata, item
     /// order or selection. Source objects are copied with their stable IDs. The
     /// durable save is part of the command: failure reverses edits and registers

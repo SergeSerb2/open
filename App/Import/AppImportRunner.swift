@@ -12,18 +12,59 @@ final class AppImportRunner {
   unowned let app: AppDelegate
   private(set) var lastOutcome: ImportOutcome?
   private var running = false
+  private(set) var undoReceipt: AppImportUndo?
+  var undoTask: Task<Void, Never>?
+  var undoOperations = 0
+  var undoError = ""
+  private var undoQuitWaiters: [CheckedContinuation<Void, Never>] = []
+  var hasPendingUndo: Bool { undoOperations > 0 || (running && undoReceipt?.cancelled == true) }
+  func flushUndoForQuit() async {
+    if running, undoReceipt?.cancelled == true {
+      await withCheckedContinuation { undoQuitWaiters.append($0) }
+    }
+    await undoTask?.value
+  }
   private(set) var historyInProgress = false
   private(set) var historyProcessed = 0
   private(set) var importAllMilliseconds: Double = 0
+  private(set) var historyMilliseconds: Double = 0
+  private(set) var totalMilliseconds: Double = 0
+  #if OPEN_AUTOMATION
+  let watchdog = ImportMainThreadWatchdog()
+  #endif
   init(app: AppDelegate) { self.app = app }
 
   func run(plan: ImportPlan, firstRun: Bool) async -> ImportOutcome {
     guard !running else { return ImportOutcome(errorText: "An import is already running.") }
     running = true
+    await undoTask?.value
+    let undo = AppImportUndo(app: app)
+    undoReceipt = undo
+    let importStarted = CACurrentMediaTime()
+    historyMilliseconds = 0
+    #if OPEN_AUTOMATION
+    watchdog.start()
+    #endif
+    #if OPEN_AUTOMATION
+    if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_IMPORT_STALL_MS"], let ms = Int(raw), ms > 0 {
+      usleep(useconds_t(min(ms, 100) * 1_000))
+    }
+    #endif
+    defer {
+      totalMilliseconds = (CACurrentMediaTime() - importStarted) * 1_000
+      #if OPEN_AUTOMATION
+      watchdog.stop()
+      #endif
+    }
     lastOutcome = nil
     app.importInProgress = true
     historyProcessed = 0
-    defer { app.importInProgress = false; historyInProgress = false; running = false }
+    defer {
+      undo.finishImport()
+      app.importInProgress = false; historyInProgress = false; running = false
+      let waiters = undoQuitWaiters; undoQuitWaiters.removeAll()
+      for waiter in waiters { waiter.resume() }
+    }
     let flow = firstRun ? app.firstRunWindowController?.model : nil
     let wizard = flow?.wizard ?? app.settingsPresenter.settings.importWizard
     func progress(_ text: String, _ fraction: Double? = nil, landed: Bool = false) {
@@ -60,18 +101,29 @@ final class AppImportRunner {
       let started = CACurrentMediaTime()
       imported = try ArcImporter(arcDirectory: directory).importAll(sidebar: parsed,
         directoryNamesToAvoid: app.model.unavailableProfileDirectoryNames,
-        existingDirectories: Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0.dataDirectoryName) }))
+        existingDirectories: Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0.dataDirectoryName) }), includeArchive: false)
       importAllMilliseconds = (CACurrentMediaTime() - started) * 1_000
+      if plan.archive, let firstSpace = imported.model.spaces.first {
+        let profiles = Dictionary(uniqueKeysWithValues: imported.model.spaces.map { ($0.id, $0.profileID) })
+        let initial = imported.report, defaultSpaceID = firstSpace.id
+        let archive = await Task.detached(priority: .utility) {
+          ArcImporter(arcDirectory: directory).readArchive(sidebar: parsed, spaceProfiles: profiles,
+                                                         defaultSpaceID: defaultSpaceID, report: initial)
+        }.value
+        imported.archiveRecords = archive.records; imported.report = archive.report
+      }
       guard imported.report.accountedTotal == imported.report.totalItems,
             !plan.archive || imported.report.archiveAccounted == imported.report.archiveTotal else { throw ImportError.malformedSidebar }
     } catch {
-      for kind in ["Spaces", "Pinned and Today tabs", "Favorites", "Folders", "Archive"] { failures[kind] = "Could not be read" }
+      let value = (error as? ImportError) == .missingSidebar ? "Not found" : "Could not be read"
+      for kind in ["Spaces", "Pinned and Today tabs", "Favorites", "Folders", "Archive"] { failures[kind] = value }
       return result("Open could not read your Arc data.")
     }
     let report = imported.report
     let hasSidebarData = report.sourceSpaces > 0 || report.importedTabNodes > 0 || report.folders > 0
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if plan.archive && report.archiveStatus == "present but unreadable" { failures["Archive"] = "Could not be read" }
+    if plan.archive && !report.archiveFilePresent { failures["Archive"] = "Not found" }
     counts["Sidebar accounted"] = report.accountedTotal; counts["Sidebar total"] = report.totalItems
     counts["Archive accounted"] = report.archiveAccounted; counts["Archive total"] = report.archiveTotal
     counts["Skipped easels"] = report.skippedEasels + (plan.archive ? report.archiveSkippedEasels : 0)
@@ -91,11 +143,11 @@ final class AppImportRunner {
     }
     if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history) {
       do {
-        _ = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
+        _ = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: false, tabs: false, favorites: false, folders: false, searchSettings: false,
           profiles: true, saving: {
             for profile in app.model.profiles { try app.directories.ensureProfileDirectories(for: profile) }
-          })
+          }) }
       } catch { return result("Open could not create the imported Profiles.") }
     }
     // Phase 4 remains capability OFF. No consent token or secret API is called.
@@ -105,6 +157,8 @@ final class AppImportRunner {
         counts[ImportOutcomeKeys.spaces] = report.sourceSpaces
         counts["Pinned and Today tabs"] = report.pinnedTabs + report.todayTabs
         counts["Favorites"] = report.favorites; counts["Folders"] = report.folders
+        counts["Profiles"] = imported.model.profiles.count; counts["Routing rules"] = imported.model.routingRules.count
+        counts["Splits"] = report.splits
         counts["Imported tabs"] = report.importedTabNodes
         counts[ImportOutcomeKeys.tabs] = report.importedTabNodes
         // A fallback Profile in an empty source is not imported data.
@@ -124,6 +178,7 @@ final class AppImportRunner {
           for tab in importTabs(space.today) { tab.lastActiveAt = importedAt }
         }
         ensureSelection(in: imported.model)
+        undo.captureModel(imported.model) { imported.model.registerImportedReplacementUndo(restoring: app.model) }
         app.installModel(imported.model)
         app.settingsPresenter.modelWasInstalled()
       }
@@ -149,13 +204,16 @@ final class AppImportRunner {
             archivedIDs[profile.id] = try await store.existingIDs(in: candidates)
           }
         }
-        let merged = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
+        let beforeProfiles = app.model.profiles.count, beforeRules = app.model.routingRules.count
+        let merged = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
           searchSettings: plan.searchSettings, profiles: plan.archive || plan.history, archivedIDsByProfile: archivedIDs,
           importedAt: Date(), saving: {
             for profile in app.model.profiles { try app.directories.ensureProfileDirectories(for: profile) }
             try app.snapshotStore.saveNow(model: app.model)
-          })
+          }) }
+        counts["Profiles"] = app.model.profiles.count - beforeProfiles
+        counts["Routing rules"] = app.model.routingRules.count - beforeRules
         counts[ImportOutcomeKeys.spaces] = merged.spaces
         counts["Pinned and Today tabs"] = merged.tabs
         counts["Favorites"] = merged.favorites; counts["Folders"] = merged.folders
@@ -169,6 +227,7 @@ final class AppImportRunner {
       }
     }
     if plan.archive {
+      guard !undo.cancelled else { return result() }
       progress("Importing your archive…")
       for (sourceID, records) in Dictionary(grouping: imported.archiveRecords, by: \.profileID) {
         guard let source = sourceID.flatMap({ imported.model.profile(id: $0) }) ?? imported.model.defaultProfile else { continue }
@@ -189,7 +248,9 @@ final class AppImportRunner {
           for (id, batch) in Dictionary(grouping: mapped, by: \.profileID) {
             let destination = id.flatMap { app.model.profile(id: $0) } ?? profile
             let sink = destination.id == profile.id ? store : ArchiveStore(fileURL: app.directories.archiveFileURL(for: destination))
-            let write = try await sink.importRecords(batch, checking: true)
+            guard !undo.cancelled else { break }
+            let write = try await sink.importRecordsWithUndo(batch)
+            undo.append(archive: sink, records: write.undo)
             counts[ImportOutcomeKeys.archive, default: 0] += write.inserted
             counts["Archive duplicates", default: 0] += write.duplicates
             counts["Duplicates", default: 0] += write.duplicates
@@ -202,11 +263,15 @@ final class AppImportRunner {
     app.importInProgress = false
     if plan.directory != ArcImporter().arcDirectory { UserDefaults.standard.set(plan.directory.path, forKey: "open.import.lastArcDir") }
     if plan.history {
+      guard !undo.cancelled else { return result() }
+      let historyStarted = CACurrentMediaTime()
+      defer { historyMilliseconds = (CACurrentMediaTime() - historyStarted) * 1_000 }
       historyInProgress = true
       progress("Importing your history…", 0, landed: true)
       let estimate = wizard.probe?.historyVisits ?? 0
       var failedVisits = 0
       for source in imported.model.profiles {
+        guard !undo.cancelled else { break }
         let targetID = profileMapping[source.id] ?? source.id
         guard let directory = imported.sourceProfileDirectories[source.id],
               let target = app.model.profile(id: targetID),
@@ -227,9 +292,10 @@ final class AppImportRunner {
         let write = await Task.detached(priority: .utility) { [self] in
           var inserted = 0, duplicates = 0, processed = 0
           var succeeded = true
+          var readFailure: String?
           do {
             _ = try await ArcHistoryReader(historyFileURL: file).readBatches { batch in
-              guard succeeded, !Task.isCancelled else { return }
+              guard succeeded, !Task.isCancelled, !(await undo.cancelled) else { return }
               #if OPEN_AUTOMATION
               // Hold the real pending batch before its transaction so the
               // suite proves browsing while imported visits are still absent.
@@ -240,6 +306,7 @@ final class AppImportRunner {
               let visits = batch.map { ImportedHistoryVisit(chromiumVisitID: $0.chromiumVisitID,
                 urlString: $0.urlString, title: $0.title, time: $0.time, transition: $0.transition, isTyped: $0.isTyped) }
               let result = await store.importHistoryBatch(visits, sourceProfileKey: directory)
+              if let receipt = result.undo { await undo.append(history: store, receipt: receipt) }
               succeeded = result.succeeded
               inserted += result.insertedVisits; duplicates += result.duplicateVisits
               processed += batch.count
@@ -253,14 +320,18 @@ final class AppImportRunner {
             // like a successful zero-visit source.
             let ready = await store.importHistoryBatch([], sourceProfileKey: directory)
             succeeded = succeeded && ready.succeeded
-          } catch { succeeded = false }
-          return (inserted, duplicates, processed, succeeded)
+          } catch {
+            succeeded = false
+            if let error = error as? ArcHistoryImportError, case .missingHistoryFile = error { readFailure = "Not found" }
+            else { readFailure = "Could not be read" }
+          }
+          return (inserted, duplicates, processed, succeeded, readFailure)
         }.value
         counts["History", default: 0] += write.0
         counts["History duplicates", default: 0] += write.1
         counts["Duplicates", default: 0] += write.1
         if !write.3 {
-          failures["History"] = "Could not be read"
+          failures["History"] = write.4 ?? "Could not be read"
           failedVisits += max(0, expected - write.0 - write.1)
         }
       }
