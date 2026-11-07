@@ -157,6 +157,14 @@ public struct ArcImporter {
         if let value=raw as? String {return value}
         guard let object=raw as? [String:Any] else {return "default"}
         if object["default"] as? Bool == true {return "default"}
+        // Confirmed on disk: Space.profile and topAppsContainerIDs use this
+        // same ref. machineID identifies the source Mac, not another Profile.
+        if let custom = object["custom"] as? [String: Any],
+           let payload = custom["_0"] as? [String: Any],
+           let directory = payload["directoryBasename"] as? String, !directory.isEmpty {
+            return directory
+        }
+        // Guess: older/unobserved Storable metadata may use a flat string ref.
         return object.keys.sorted().compactMap {object[$0] as? String}.first ?? "default"
     }
     /// UI labels only, read on a utility worker when the wizard prepares its review.
@@ -173,7 +181,8 @@ public struct ArcImporter {
     struct ArcSourceProfile {let id:ProfileID;let name:String;let dataDirectoryName:String;let sourceDirectory:String}
     struct ArcSourceProfiles {let profiles:[ArcSourceProfile];let spaceOwners:[String:ProfileID];let refOwners:[String:ProfileID];let defaultID:ProfileID}
     func sourceProfiles(spacesRaw:[(id:String,obj:[String:Any])],holder:[String:Any],itemsByID:[String:[String:Any]],directoryNamesToAvoid:Set<String>=[],existingDirectories:[ProfileID:String]=[:],report:inout ImportReport)->ArcSourceProfiles {
-        // Multi-Profile Storable field shapes remain inferred. Unknown shapes are ignored.
+        // StorableProfiles/ProfileContainers metadata shapes remain inferred.
+        // Local State info_cache and custom._0.directoryBasename are confirmed.
         struct ProfileMetadata {
             var name: String?
             var directory: String?

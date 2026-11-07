@@ -596,6 +596,7 @@ public final class BrowserModel {
         public var spaces = 0, tabs = 0, favorites = 0, folders = 0, searchSettings = 0, duplicates = 0
         public init() {}
     }
+    public enum ProfileImportError: Error { case invalidProfile }
 
     /// Imports into the live model without changing existing Space metadata, item
     /// order or selection. Source objects are copied with their stable IDs. The
@@ -606,6 +607,7 @@ public final class BrowserModel {
                                      spaces includeSpaces: Bool, tabs includeTabs: Bool,
                                      favorites includeFavorites: Bool, folders includeFolders: Bool,
                                      searchSettings includeSearch: Bool,
+                                     profiles includeProfiles: Bool = false,
                                      archivedIDsByProfile: [ProfileID: Set<ItemID>] = [:],
                                      importedAt: Date = Date(), saving: () throws -> Void) throws -> ImportCounts {
         typealias Edit = (apply: @MainActor (BrowserModel) -> Void, undo: Revert)
@@ -677,19 +679,30 @@ public final class BrowserModel {
         for imported in source.profiles {
             let id = profileMapping[imported.id] ?? imported.id
             if profile(id: id) == nil {
-                guard includeSpaces || includeFavorites else { continue }
+                guard includeSpaces || includeFavorites || includeProfiles else { continue }
                 var name = imported.name
                 var suffix = 2
                 while profiles.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
                     name = imported.name + " (" + String(suffix) + ")"; suffix += 1
                 }
-                let copy = Profile(id: id, name: name, icon: imported.icon, dataDirectoryName: imported.dataDirectoryName)
-                let slot = profiles.count
-                perform({ model in model.insertProfile(copy, at: slot); model.emit(.reload(parent: .favorites(id))) },
+                // Use the normal creation path and its directory allocator.
+                // The source ID is the import identity, never a name match.
+                // This enclosing command owns the one Undo registration.
+                let enabled = undoManager?.isUndoRegistrationEnabled == true
+                if enabled { undoManager?.disableUndoRegistration() }
+                let created = createProfile(name: name, icon: imported.icon, id: id)
+                if enabled { undoManager?.enableUndoRegistration() }
+                guard let copy = created else {
+                    for edit in edits.reversed() { _ = edit.undo(self) }
+                    throw ProfileImportError.invalidProfile
+                }
+                let slot = profiles.count - 1
+                emit(.reload(parent: .favorites(id)))
+                edits.append((apply: { model in model.insertProfile(copy, at: slot); model.emit(.reload(parent: .favorites(id))) },
                         undo: { model in
                             guard model.profile(id: id) === copy else { return false }
                             model.removeProfile(id); model.emit(.reload(parent: .favorites(id))); return true
-                        })
+                        }))
             }
             guard let target = profile(id: id) else { continue }
             if includeSearch {
@@ -732,7 +745,15 @@ public final class BrowserModel {
             let ids = Set(routingRules.map(\.id))
             // Arc's importer assigns fresh rule IDs. Treat the same rule body
             // as a duplicate too, so a Settings re-import remains idempotent.
-            let rules = source.routingRules.filter { candidate in
+            let rules = source.routingRules.map { rule in
+                var mapped = rule
+                switch rule.destination {
+                case .space: break
+                case .littleOpen(let id): mapped.destination = .littleOpen(profile: id.map { profileMapping[$0] ?? $0 })
+                case .mostRecentSpace(let id): mapped.destination = .mostRecentSpace(profile: id.map { profileMapping[$0] ?? $0 })
+                }
+                return mapped
+            }.filter { candidate in
                 !ids.contains(candidate.id) && !routingRules.contains {
                     $0.match == candidate.match && $0.destination == candidate.destination && $0.sourceBundleID == candidate.sourceBundleID
                 }
@@ -1727,14 +1748,14 @@ public final class BrowserModel {
     }
 
     @discardableResult
-    public func createProfile(name: String, icon: SpaceIcon? = nil, settings: ProfileSettings = ProfileSettings()) -> Profile? {
-        guard Self.profileNameIssue(name, in: profiles) == nil else { return nil }
+    public func createProfile(name: String, icon: SpaceIcon? = nil, settings: ProfileSettings = ProfileSettings(), id: ProfileID = ProfileID()) -> Profile? {
+        guard profile(id: id) == nil, Self.profileNameIssue(name, in: profiles) == nil else { return nil }
         var directory = "Default"
         if !profiles.isEmpty || unavailableProfileDirectoryNames.contains("default") {
             repeat { directory = "Profile-" + UUID().uuidString.prefix(8).uppercased() }
             while unavailableProfileDirectoryNames.contains(directory.lowercased()) || profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame }
         }
-        let profile = Profile(name: name.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, settings: settings, dataDirectoryName: directory)
+        let profile = Profile(id: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, settings: settings, dataDirectoryName: directory)
         unavailableProfileDirectoryNames.insert(directory.lowercased())
         let slot = profiles.count
         insertProfile(profile, at: slot)
