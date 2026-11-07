@@ -19,6 +19,27 @@ def run(factory, results, tmp, h):
     saved = {}
     def row(name, ok, **detail):
         results[name] = dict(ok=bool(ok), load=os.getloadavg(), **detail)
+    def rendered_boost_row(name):
+        inspection = app.call('first-run', action='inspect', timeout=180)
+        lines = inspection['renderedText']
+        labels = [line for line in lines if line['text'].startswith('Boosts')]
+        assert len(labels) == 1, lines
+        label = labels[0]
+        middle = label['frame'][1] + label['frame'][3] / 2
+        aligned = [line for line in lines
+                   if abs(line['frame'][1] + line['frame'][3] / 2 - middle) < 8]
+        text = ' '.join(line['text'] for line in sorted(aligned, key=lambda line: line['frame'][0]))
+        path = Path(h.OUT) / 'firstrun' / ('boosts-' + name + '.png')
+        path.parent.mkdir(exist_ok=True)
+        app.call('snapshot', path=str(path), window=inspection['window'])
+        width, height, pixel = h.read_image(str(path), srgb=True)
+        sy = height / inspection['frameSize'][1]
+        # Only the value half of the Boosts row, excluding its label and other rows.
+        red = sum(r > g + 40 and r > b + 20
+                  for y in range(int((middle - 9) * sy), int((middle + 9) * sy))
+                  for x in range(int(width * .45), int(width * .95))
+                  for r, g, b in [pixel(x, y)])
+        return dict(text=text, redPixels=red, png=str(path))
     try:
         app = factory(urls=(), fresh=True, extra_args=['--arc-dir=' + str(source)])
         for key in ('open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane'):
@@ -59,6 +80,25 @@ def run(factory, results, tmp, h):
         state = app.call('first-run')
         row('boost_app_report_seam', report_seam(state) and not negative_report,
             negativeProof='FAIL' if not negative_report else 'NOT PROVEN')
+        populated = rendered_boost_row('found')
+        def unavailable(value):
+            return 'Boosts Not imported in this build' == value['text'] and value['redPixels'] > 10
+        def zero(value):
+            return value['text'] == 'Boosts 0' and value['redPixels'] == 0
+        app.quit()
+        app = factory(urls=(), fresh=True, extra_args=['--arc-dir=' + str(empty)])
+        app.call('first-run', action='focus')
+        assert h.wait_until(lambda: app.call('first-run').get('probeReady'), timeout=20, step=.05)
+        app.call('first-run', action='import')
+        app.call('first-run', action='continue')
+        assert h.wait_until(lambda: app.call('first-run')['step'] == 'report', timeout=30, step=.05)
+        absent = rendered_boost_row('empty')
+        # Swap the real populated/empty outcomes: each native row must reject
+        # the opposite input, including the text color captured from the window.
+        row('boost_app_report_unavailable_red', unavailable(populated) and not unavailable(absent),
+            negativeProof='FAIL' if not unavailable(absent) else 'NOT PROVEN', **populated)
+        row('boost_app_report_empty_zero', zero(absent) and not zero(populated),
+            negativeProof='FAIL' if not zero(populated) else 'NOT PROVEN', **absent)
         # These rows require Section 12's sole live store owner. They cannot
         # pass on the report-only seam or a direct BoostStore/file write.
         for name in ('boost_app_imported_count', 'boost_app_matching_page', 'boost_app_disabled',
