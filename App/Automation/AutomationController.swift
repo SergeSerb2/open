@@ -186,6 +186,7 @@
         return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
           "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "settingsVisible": adapter.settingsPresenter.window?.isVisible ?? false,
+          "scrollTarget": adapter.settings.scrollTarget ?? "",
           "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,

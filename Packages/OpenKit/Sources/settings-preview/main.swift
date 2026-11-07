@@ -190,6 +190,9 @@ import CryptoKit
             await settings.adBlock?.openSelectedProfile()
             try await render(AdBlockSettingsSheet(model:settings.adBlock!).buttonStyle(SettingsButtonStyle()),size:CGSize(width:600,height:560),scale:scale,dark:true,to:output.appendingPathComponent("sheet-adblock@\(scale)x.png"))
             try await render(LinkRuleSheet(root:settings,draft:settings.links.drafts[1]).buttonStyle(SettingsButtonStyle()),size:CGSize(width:520,height:380),scale:scale,dark:true,to:output.appendingPathComponent("sheet-link-rule@\(scale)x.png"))
+            var profileDraft=settings.links.drafts[1]
+            profileDraft.destination = .littleOpen(profile:settings.model.profiles[1].id)
+            try await render(LinkRuleSheet(root:settings,draft:profileDraft).buttonStyle(SettingsButtonStyle()),size:CGSize(width:520,height:380),scale:scale,dark:true,to:output.appendingPathComponent("sheet-link-rule-profile-work@\(scale)x.png"))
             settings.profiles.nameDraft="Example New Profile"
             try await render(ProfileNameSheet(model:settings.profiles,create:true).buttonStyle(SettingsButtonStyle()),size:CGSize(width:440,height:330),scale:scale,dark:false,to:output.appendingPathComponent("sheet-profile-create@\(scale)x.png"))
             settings.profiles.nameDraft="Example Work"

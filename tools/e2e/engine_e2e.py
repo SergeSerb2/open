@@ -7551,7 +7551,7 @@ def routing_checks(factory, results, tmp):
     import plistlib
     import uuid
     domain = 'io.github.sergeserb2.open'
-    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled', 'open.links.littleOpenNUXSeen')
+    keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled', 'open.links.littleOpenNUXSeen', 'open.settings.lastPane')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {key: domain_before.get(key) for key in keys}
@@ -7580,21 +7580,33 @@ def routing_checks(factory, results, tmp):
         app = factory(urls=(), fresh=True)
         state_before = app.call('default-browser-state')
         seed = snapshot()
+        work_profile = copy.deepcopy(seed['profiles'][0])
+        work_profile.update(id=str(uuid.uuid4()).upper(), name='Routing Work',
+                            dataDirectoryName='Routing-Work', favorites=[])
+        seed['profiles'].append(work_profile)
+        default_profile = seed['profiles'][0]['id']
         target = copy.deepcopy(seed['spaces'][0])
+        target['profileID'] = work_profile['id']
         target['id'] = str(uuid.uuid4()).upper()
         target['title'] = 'Routing target'
         target['today'] = []; target['pinned'] = []
         seed['spaces'].append(target)
-        seed['routingRules'] = [{'id': str(uuid.uuid4()).upper(),
+        seed['routingRules'] = [
+            {'id': str(uuid.uuid4()).upper(), 'match': {'urlPrefix': {'_0': origin + '/profile-little'}},
+             'destination': {'littleOpen': {'profile': work_profile['id']}}},
+            {'id': str(uuid.uuid4()).upper(),
             'match': {'hostEquals': {'_0': '127.0.0.1'}}, 'destination': {'space': {'_0': target['id']}}}]
         seed['defaultDestination'] = {'littleOpen': {}}
         fixture_path = os.path.join(tmp, 'routing-snapshot.json')
         with open(fixture_path, 'w') as stream: json.dump(seed, stream)
         app.quit()
         app = factory(urls=(), snapshot=fixture_path)
+        default_tab = new_tab(app, origin + '/default-context')
+        app.eval(default_tab, 'document.cookie="atc_default=1; max-age=3600"; 1')
         app.call('space', space=target['id'])
         existing_url = origin + '/existing-today'
-        app.call('open', url=existing_url)
+        work_tab = new_tab(app, existing_url)
+        app.eval(work_tab, 'document.cookie="atc_work=1; max-age=3600"; 1')
         app.call('space', space=seed['spaces'][0]['id'])
 
         warm = origin + '/warm-space'
@@ -7606,6 +7618,49 @@ def routing_checks(factory, results, tmp):
                and tabs[0]['url'] == warm and tabs[0]['section'] == 'today' and tabs[0]['selected']
                and tabs[1]['url'] == existing_url
                and len(entries(warm)) == 1, tabs=tabs, log=log())
+
+        warm_tab = next(t['id'] for t in tabs if t['url'] == warm)
+        app.call('wait', tab=warm_tab)
+        work_cookies = app.eval(warm_tab, 'document.cookie')
+        work_context = app.page(warm_tab)['context']
+        app.call('space', space=seed['spaces'][0]['id'])
+        app.call('select', tab=default_tab); app.call('wait', tab=default_tab)
+        default_cookies = app.eval(default_tab, 'document.cookie')
+        record('routing_second_profile_context', reached and 'atc_work=1' in work_cookies
+               and 'atc_default=' not in work_cookies and 'atc_work=' not in default_cookies
+               and 'atc_default=1' in default_cookies and work_context not in (None, 'Default'),
+               workContext=work_context, workCookiePresent='atc_work=1' in work_cookies,
+               defaultIsolated='atc_work=' not in default_cookies)
+
+        profile_url = origin + '/profile-little-initial'
+        sent = deliver(profile_url)
+        def little_page(url, profile):
+            return next((row for row in app.call('little-open-state')['sessions']
+                         if row['url'] == url and row['profile'] == profile and row['visible']
+                         and not row['loading'] and row['content'] > 0), None)
+        little_work = wait_until(lambda: little_page(profile_url, work_profile['id']), timeout=12, step=.05)
+        little_work_cookies = app.call('little-open-eval', id=little_work['id'], js='document.cookie') if little_work else ''
+        record('routing_little_open_profile_rule', sent.returncode == 0 and little_work
+               and (log()['lastLittleOpenRequest'] or {}).get('profileHint') == work_profile['id']
+               and 'atc_work=1' in little_work_cookies and 'atc_default=' not in little_work_cookies,
+               session=little_work, profileHint=(log()['lastLittleOpenRequest'] or {}).get('profileHint'))
+
+        # Open the identical URL through the real Little Open URL field in Default.
+        # This bypasses routing by design; the later OS delivery must obey the B rule.
+        collision = origin + '/profile-little-collision'
+        app.call('space', space=seed['spaces'][0]['id'])
+        app.call('little-open-action', action='blank', then='submit', text=collision)
+        default_little = wait_until(lambda: little_page(collision, default_profile), timeout=12, step=.05)
+        sessions_before = app.call('little-open-state')['sessions']
+        sent = deliver(collision)
+        second_profile = wait_until(lambda: little_page(collision, work_profile['id']), timeout=12, step=.05)
+        sessions_after = app.call('little-open-state')['sessions']
+        record('routing_same_url_little_open_profile', default_little and sent.returncode == 0 and second_profile
+               and default_little['id'] != second_profile['id']
+               and len(sessions_after) == len(sessions_before) + 1
+               and {row['profile'] for row in sessions_after if row['url'] == collision}
+                   == {default_profile, work_profile['id']},
+               before=sessions_before, after=sessions_after)
 
         default_url = origin.replace('127.0.0.1', 'localhost') + '/default-little'
         before = tab_count()
@@ -7715,19 +7770,18 @@ def routing_checks(factory, results, tmp):
                and len(entries(cold)) == 1 and app.call('tabs')[0]['selected'], log=cold_log,
                pending=pending, fastLaunch=fast_log,
                command='open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...')
+        app.call('command', id='air-traffic-control')
+        settings = wait_until(lambda: (lambda row: row if row['settingsVisible'] and row['pane'] == 'links'
+                              and row['scrollTarget'] == 'links-rules' else None)(app.call('settings-state')),
+                              timeout=4, step=.05)
+        record('routing_air_traffic_control_entry', bool(settings), settings=settings)
         state_after = app.call('default-browser-state')
         record('routing_default_browser_read_only', state_before == state_after
                and state_after['isDefaultBrowser'] == (state_after['http']['isDefault'] and state_after['https']['isDefault']),
                before=state_before, after=state_after)
     finally:
-        if app:
-            _restore_defaults(app, saved)
-            app.quit()
-        else:
-            # A failed initial launch still restores exactly the keys reset above.
-            for key, value in saved.items():
-                if value is None: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-                else: subprocess.run(['defaults', 'write', domain, key, '-bool', 'true' if value else 'false'], check=True)
+        _restore_defaults(app, saved)
+        if app: app.quit()
         server.shutdown(); server.server_close()
 
 

@@ -396,7 +396,7 @@ public enum CommandRegistry {
         CommandDefinition(id: "search-tabs", title: "Search Tabs", isCustomizable: true, aliases: ["Tabs"]),
         CommandDefinition(id: "mute-all-tabs", title: "Mute All Tabs", aliases: ["Mute"]),
         CommandDefinition(id: "unmute-all-tabs", title: "Unmute All Tabs", aliases: ["Unmute"]),
-        CommandDefinition(id: "air-traffic-control", title: "Air Traffic Control", aliases: ["Link Routing"]),
+        CommandDefinition(id: "air-traffic-control", title: "Air Traffic Control", aliases: ["Link Routing", "Link Preferences", "Air Traffic Controller"]),
         CommandDefinition(id: "manage-passwords", title: "Manage Passwords", aliases: ["Passwords"]),
         CommandDefinition(id: "search-settings", title: "Search Settings",
                           aliases: ["Manage Search Settings", "Search Engine", "Default Search Engine"]),

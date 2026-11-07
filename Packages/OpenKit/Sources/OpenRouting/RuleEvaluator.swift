@@ -40,6 +40,11 @@ public struct RoutingEvaluator: Sendable {
                 traces.append(trace(.targetSpaceMissing))
                 continue
             }
+            if case .mostRecentSpace(let profile?) = rule.destination,
+               mostRecentSpace(in: snapshot, profile: profile) == nil {
+                traces.append(trace(.targetProfileMissing))
+                continue
+            }
             traces.append(trace(.matched))
             let target = resolve(rule.destination, in: snapshot, mostRecent: mostRecent)
             return finish(target == nil ? .noSpaces : .rule(index: index, id: rule.id), target, traces)
@@ -56,11 +61,14 @@ public struct RoutingEvaluator: Sendable {
                 // Skipped stale rules explain themselves in their traces.
                 via = .fallbackMissingSpace(requested: id)
             }
-        case .mostRecentSpace:
-            target = mostRecent.map(resolvedSpace)
-        case .littleOpen:
+        case .mostRecentSpace(let profile):
+            if let profile, mostRecentSpace(in: snapshot, profile: profile) == nil {
+                target = mostRecent.map(resolvedSpace)
+                via = .fallbackMissingProfile(requested: profile)
+            } else { target = mostRecentSpace(in: snapshot, profile: profile).map(resolvedSpace) }
+        case .littleOpen(let profile):
             if snapshot.externalLinksInLittleOpen {
-                target = .littleOpen(profileHint: mostRecent?.profileID)
+                target = .littleOpen(profileHint: validProfile(profile, in: snapshot) ?? mostRecent?.profileID)
             } else {
                 target = mostRecent.map(resolvedSpace)
                 via = .defaultSuppressedByToggle
@@ -75,11 +83,16 @@ private func space(_ id: SpaceID, in snapshot: RoutingSnapshot) -> RoutingSpaceS
     snapshot.spaces.first { $0.id == id }
 }
 
-private func mostRecentSpace(in snapshot: RoutingSnapshot) -> RoutingSpaceSnapshot? {
+private func validProfile(_ profile: ProfileID?, in snapshot: RoutingSnapshot) -> ProfileID? {
+    profile.flatMap { snapshot.profiles.contains($0) ? $0 : nil }
+}
+
+private func mostRecentSpace(in snapshot: RoutingSnapshot, profile: ProfileID? = nil) -> RoutingSpaceSnapshot? {
+    if let profile, validProfile(profile, in: snapshot) == nil { return nil }
     for window in snapshot.windows where window.kind == .standard {
-        if let found = space(window.focusedSpaceID, in: snapshot) { return found }
+        if let found = space(window.focusedSpaceID, in: snapshot), profile == nil || found.profileID == profile { return found }
     }
-    return snapshot.spaces.first
+    return snapshot.spaces.first { profile == nil || $0.profileID == profile }
 }
 
 private func resolvedSpace(_ space: RoutingSpaceSnapshot) -> ResolvedDestination {
@@ -90,8 +103,8 @@ private func resolve(_ destination: RoutingDestination, in snapshot: RoutingSnap
                      mostRecent: RoutingSpaceSnapshot?) -> ResolvedDestination? {
     switch destination {
     case .space(let id): return space(id, in: snapshot).map(resolvedSpace)
-    case .mostRecentSpace: return mostRecent.map(resolvedSpace)
-    case .littleOpen: return .littleOpen(profileHint: mostRecent?.profileID)
+    case .mostRecentSpace(let profile): return mostRecentSpace(in: snapshot, profile: profile).map(resolvedSpace)
+    case .littleOpen(let profile): return .littleOpen(profileHint: validProfile(profile, in: snapshot) ?? mostRecent?.profileID)
     }
 }
 

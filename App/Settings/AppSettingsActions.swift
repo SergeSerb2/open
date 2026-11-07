@@ -24,6 +24,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
+    vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
     if !app.isFirstRun || app.firstRunSaved {
       if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
       else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
