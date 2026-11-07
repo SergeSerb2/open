@@ -402,13 +402,18 @@ prompt constructor uses the manager's profile and the existing shell presenter.
 A supplied page in the old API must still belong to that profile. Neither path
 permits silent installation or an ephemeral profile.
 
-Real-App acceptance lives in `extensions_p3.py`: signed CRX -> installed + ID,
-corrupt RSA signature -> failed + `CRX_SIGNATURE_VERIFICATION_FAILED`, Cancel,
-main-thread delivery and exactly-one completion counts. Those rows and the
-drop-callback negative proof remain **BLOCKED** until the lead sends "M5 clear".
-The Section 14 import-queue rerun is a separate acceptance gate.
-The [off-screen receipt](engine-spike/extensions-local-crx-completion-blocked.md)
-records the distribution, completed checks, load tuples and blocked reruns.
+Real-App acceptance in `extensions_p3.py` passed 19/19 before and after the
+negative proof: signed CRX -> installed + registry ID, corrupted RSA signature ->
+failed + `CRX_SIGNATURE_VERIFICATION_FAILED`, Cancel, main-thread delivery,
+exactly-one completion counts and fixture cleanup. Suppressing only the bridge's
+callback invocation made the signature row time out with zero events. The source
+was restored byte for byte, rebuilt, and the same gate passed.
+
+Section 14 still calls the old selector on this branch, so its import-queue
+failure row needs the consumer update and remains a separate gate.
+The [verification receipt](engine-spike/extensions-local-crx-completion.md)
+records the new distribution, load tuples, full gate, regression findings and
+remaining runtime boundaries.
 
 ## P4. Proprietary codecs and Widevine
 
