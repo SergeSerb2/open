@@ -71,6 +71,9 @@ transfers stay in the list, and downloaded files stay on disk. Library Downloads
 reads the same provider, so cleared rows disappear there too.
 
 `OEBrowserContext.h` exposes a read-only `downloads` array (“Every download of
-this context since launch”) and `clearBrowsingData(origin:completion:)` for
-site data. It exposes no download-history clear operation. This change clears
-the App list; it does not claim to erase Chromium's internal download records.
+this context since launch”). The required main merge brought Section 10's #222
+`clearBrowsingData(_:from:to:completion:)` API, whose download kind clears
+engine records without deleting files. Settings now invokes that API for the
+selected Profile and range, then clears the matching App rows after successful
+engine completion. It preserves main's independent cookies/cache choices and
+its additional Last 4 weeks range.
