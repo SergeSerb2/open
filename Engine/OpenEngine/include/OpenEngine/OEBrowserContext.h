@@ -224,7 +224,7 @@ OE_EXPORT @interface OEBrowserContext : NSObject
                                        completion
     NS_SWIFT_NAME(clearBrowsingData(origin:completion:));
 
-/// Clears Chromium browsing records for [begin, end) in this context. Site data
+/// Clears Chromium browsing records for [begin, end] (end inclusive; Chromium semantics) in this context. Site data
 /// includes cookies, localStorage, IndexedDB, service workers and cache storage.
 /// Downloads clears records, not downloaded files. Completion follows the real
 /// backend completion. Open's separate HistoryStore stays the shell's task.

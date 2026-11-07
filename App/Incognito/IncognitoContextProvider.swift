@@ -2,12 +2,27 @@ import AppKit
 import OpenEngine
 import OpenModel
 
-/// The single engine seam. After 0701 the lead replaces only context creation
-/// with makeIncognitoContext(for:completion:); the requested parent is retained.
+/// Creates the chosen regular Profile's primary OTR without copying its data.
 @MainActor
 enum IncognitoContextProvider {
-  static func makeContext(parent: Profile) -> OEBrowserContext {
-    OEEngine.shared.makeEphemeralContext()
+  static func makeContext(parent: Profile, app: AppDelegate,
+                          completion: @escaping @MainActor (OEBrowserContext?, (any Error)?) -> Void) {
+    guard app.engineReady, app.model.profile(id: parent.id) != nil,
+      app.engine.result.layout == .engine else {
+      completion(nil, NSError(domain: "Open.Incognito", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "The parent Profile is unavailable."]))
+      return
+    }
+    let original = parent.id == app.model.defaultProfile?.id ? OEEngine.shared.defaultContext :
+      OEEngine.shared.context(identifier: parent.dataDirectoryName,
+        directory: app.directories.engineDirectory(dataDirectoryName: parent.dataDirectoryName))
+    guard let original else {
+      completion(nil, NSError(domain: "Open.Incognito", code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "The parent Profile is unavailable."]))
+      return
+    }
+    app.profileTeardown.didLoad(parent)
+    OEEngine.shared.makeIncognitoContext(for: original, completion: completion)
   }
 }
 
@@ -15,20 +30,46 @@ enum IncognitoContextProvider {
 final class IncognitoSession {
   let parent: Profile
   private(set) var context: OEBrowserContext?
+  private var ended = false
   var windows = 0
-  init(parent: Profile) {
+  init(parent: Profile, app: AppDelegate) {
     self.parent = parent
-    context = IncognitoContextProvider.makeContext(parent: parent)
+    IncognitoContextProvider.makeContext(parent: parent, app: app) { [weak self, weak app] context, error in
+      guard let self, !self.ended else {
+        if let context { OEEngine.shared.releaseContext(context, completion: nil) }
+        return
+      }
+      guard let context, error == nil else {
+        // Fail closed. Never create a page on a different Profile.
+        for controller in app?.windowControllers ?? [] where
+          app?.hostFactories[controller.windowID]?.incognitoSession === self {
+          controller.window?.close()
+        }
+        return
+      }
+      self.context = context
+      if let app {
+        for factory in app.hostFactories.values where factory.incognitoSession === self {
+          factory.engineDidBecomeReady()
+        }
+      }
+    }
   }
-  func end() { context?.delegate = nil; context = nil }
+  func end() {
+    guard !ended else { return }
+    ended = true
+    context?.delegate = nil
+    if let context { OEEngine.shared.releaseContext(context, completion: nil) }
+    context = nil
+  }
 }
 
 /// Sessions are shared by parent; models, undo, and all window state are local.
 @MainActor
 final class IncognitoSessions {
   private var sessions: [ProfileID: IncognitoSession] = [:]
-  func acquire(parent: Profile) -> IncognitoSession {
-    let session = sessions[parent.id] ?? IncognitoSession(parent: parent)
+  func acquire(parent: Profile, app: AppDelegate) -> IncognitoSession {
+    let session = sessions[parent.id] ?? IncognitoSession(parent: parent, app: app)
     sessions[parent.id] = session; session.windows += 1
     return session
   }

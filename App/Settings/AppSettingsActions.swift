@@ -260,16 +260,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     let context = engineKinds.isEmpty ? loaded :
       (loaded ?? app.hostFactories.values.compactMap { $0.context(for: profileID) }.first)
     if !engineKinds.isEmpty, context == nil { return "This profile is not open." }
-    let end = Date()
+    let now = Date()
+    let end = range == .all ? Date.distantFuture : now
     let seconds: TimeInterval? = switch range {
     case .lastHour: 3_600; case .lastDay: 86_400; case .lastWeek: 604_800
     case .lastFourWeeks: 2_419_200; case .all: nil
     }
-    let begin = seconds.map { end.addingTimeInterval(-$0) } ?? .distantPast
+    let begin = seconds.map { now.addingTimeInterval(-$0) } ?? .distantPast
     if kinds.contains(.history) {
       guard let history = app.stores.history(for: profileID) else { return "This profile is no longer available." }
       await app.stores.flushHistory()
-      do { try await history.deleteVisits(since: seconds.map { end.addingTimeInterval(-$0) }, through: end) }
+      do { try await history.deleteVisits(since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
       catch { return error.localizedDescription }
     }
     if let context {

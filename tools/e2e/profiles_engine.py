@@ -152,32 +152,36 @@ def run(factory, results, tmp, config, new_tab, wait_until):
             'ok': before_allow == '' and grant == 'ok' and bool(ran) and bool(worker),
             'before': before_allow, 'grant': grant, 'spanning_script': bool(ran), 'mv3_worker': bool(worker)}
 
-        # Distinct creation times through page JS, with no CDP clock/cookie mutation.
-        # Each interval ends between the two writes, so the newer cookie is outside it.
-        for label, seconds in [('last_hour', 3600), ('all_time', None)]:
+        # Page JS creates real timestamps on each side of begin. No clock,
+        # CDP cookie mutation, or Open-side timestamp filtering participates.
+        for label in ('bounded_range', 'all_time'):
             app.call('profile-engine', action='clear', profile='Engine Work', kinds=2)
             old_storage = new_tab(app, 'http://old-storage.localhost:%d/' % port)
             app.eval(old_storage, 'localStorage.setItem("s10","old");1')
             app.eval(disk, 'document.cookie="s10_old=1;max-age=86400";1')
-            # LocalStorageImpl's normal commit delay is five seconds. Without
-            # a committed timestamp its usage report uses the current time.
+            # Chromium normally commits localStorage metadata after five seconds.
             time.sleep(6)
-            end = time.time()
-            time.sleep(2)
+            boundary = time.time()
+            time.sleep(.5)
             new_storage = new_tab(app, 'http://new-storage.localhost:%d/' % port)
             app.eval(new_storage, 'localStorage.setItem("s10","new");1')
             app.eval(disk, 'document.cookie="s10_new=1;max-age=86400";1')
-            begin = end - seconds if seconds else -62135596800
+            time.sleep(6)
+            end = time.time()
+            begin = boundary if label == 'bounded_range' else -62135596800
             app.call('profile-engine', action='clear', profile='Engine Work', kinds=2, begin=begin, end=end)
             got = data(disk)
             other_cookie = data(default)['cookie']
             old_value, new_value = [app.eval(p, 'localStorage.getItem("s10")')
                                     for p in (old_storage, new_storage)]
+            preserved = label == 'bounded_range'
             results['s10_clear_' + label] = {
-                'ok': 's10_old' not in got['cookie'] and 's10_new=1' in got['cookie']
-                      and 's10_disk_default=1' in other_cookie and old_value is None and new_value == 'new',
-                'range_seconds': seconds, 'work': got, 'default': other_cookie,
-                'old_origin_storage': old_value, 'new_origin_storage': new_value}
+                'ok': ('s10_old=1' in got['cookie']) == preserved and 's10_new' not in got['cookie']
+                      and 's10_disk_default=1' in other_cookie
+                      and old_value == ('old' if preserved else None) and new_value is None,
+                'contract': 'Chromium inclusive end; no Open filtering',
+                'work': got, 'default': other_cookie,
+                'before_begin_storage': old_value, 'after_begin_storage': new_value}
             for page in (old_storage, new_storage):
                 app.call('close', tab=page)
         app.call('profile-engine', action='clear', profile='Engine Work', kinds=2)

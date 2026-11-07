@@ -283,11 +283,13 @@ def run(factory, results, tmp, api, defaults_before):
         results['shell_delete_loaded_immediate'] = {
             'ok': 'shell_delete=old' in old_cookie and 'Shell Loaded' not in gone['rows']
                   and not any(p['id'] == loaded['id'] for p in state()['profiles']) and not gone['canUndo']
-                  and not (root / 'Profiles' / old_directory).exists() and old_engine.exists()
-                  and old_directory in json.loads(pending.read_text())
+                  and not (root / 'Profiles' / old_directory).exists() and not old_engine.exists()
+                  and not (Path.home() / 'Library/Caches' / root.name / 'Engine' / old_directory).exists()
+                  and (not pending.exists() or old_directory not in json.loads(pending.read_text()))
+                  and old_directory not in json.loads((root / 'Engine/Local State').read_text()).get('profile', {}).get('info_cache', {})
                   and not any(p['id'] == loaded['id'] for p in durable['profiles']),
             'modelGone': 'Shell Loaded' not in gone['rows'], 'canUndo': gone['canUndo'],
-            'openFilesGone': not (root / 'Profiles' / old_directory).exists(), 'engineDeferred': old_engine.exists(),
+            'openFilesGone': not (root / 'Profiles' / old_directory).exists(), 'engineGone': not old_engine.exists(),
             'error': gone['error']}
         app.quit()
         launch()

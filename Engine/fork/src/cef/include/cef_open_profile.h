@@ -70,7 +70,7 @@ class CefOpenProfileCallback : public virtual CefBaseRefCounted {
 };
 
 ///
-/// Removes browsing data of exactly this profile for [begin, end), expressed in
+/// Removes browsing data of exactly this profile for [begin, end] (end inclusive; Chromium semantics), expressed in
 /// seconds since the Unix epoch. Kinds are bit 0 history, bit 1 cookies and site
 /// data, bit 2 cache, bit 3 download records. Does not delete downloaded files.
 /// Returns false for invalid arguments without running callback. Otherwise the
