@@ -25,8 +25,10 @@ import OpenImport
     public private(set) var errorText = ""
     public private(set) var outcome: ImportOutcome?
     public private(set) var consentWasDecided = false
+    public private(set) var unfinishedSecretsImport: Bool
     public init(root: SettingsViewModel, directory: URL? = nil, actions: (any ImportActions)? = nil) {
         self.root = root; self.importActions = actions ?? root.actions
+        unfinishedSecretsImport = self.importActions.hasUnfinishedSecretsImport
         let path = root.defaults.string(forKey: "open.import.lastArcDir")
         plan = ImportPlan(directory: directory ?? path.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Arc"))
     }
@@ -57,6 +59,11 @@ import OpenImport
         return found ? "Could not be read":"Not found"
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
+    public var displayedReportCategories: [String] { Self.reportCategories.filter { $0 != "Passwords and cookies" || outcome?.secretsReportLines.isEmpty != false } }
+    public var secretsReportLines: [String] { outcome?.secretsReportLines ?? [] }
+    public var unfinishedSecretsImportMessage: String? {
+        unfinishedSecretsImport && !secretsReportLines.contains(ArcSecretsImportReport.unfinishedMessage) ? ArcSecretsImportReport.unfinishedMessage : nil
+    }
     public var reportSummary:String {
         var parts:[String]=[]
         if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
@@ -73,8 +80,11 @@ import OpenImport
         return parts.isEmpty ? "":"Skipped: " + parts.joined(separator:", ")
     }
     public var hasImportedData:Bool {outcome?.didImportAnything ?? false}
-    public var passwordsWereNotImported:Bool {!plan.secretsConsented}
+    public var passwordsWereNotImported:Bool {outcome?.secretsReportLines.isEmpty != false}
     public var canImportPasswordsAndCookies: Bool { importActions.canImportPasswordsAndCookies }
+    public var passwordsCopy: PasswordsImportCopy {
+        .init(canImport: canImportPasswordsAndCookies, savedItems: probe == nil ? nil : (probe?.secretsFound == false ? 0 : counts["Passwords and cookies"]))
+    }
     public func review() { guard canContinue else { return }; step = .review }
     public func beginImport() async {
         guard step == .review, canContinue else { return }
@@ -96,6 +106,7 @@ import OpenImport
         isImporting = true; step = .progress
         let result = await importActions.runImport(plan: plan)
         outcome = result; errorText = result.errorText ?? ""; isImporting = false; step = .report
+        unfinishedSecretsImport = importActions.hasUnfinishedSecretsImport
         root.profiles.refresh(); root.refreshLinks()
     }
     public func retry() { guard !busy else { return }; outcome = nil; step = .choose }
@@ -113,6 +124,7 @@ public struct ImportWizard: View {
             ScrollView { VStack(alignment: .leading, spacing: 14) {
                 switch model.step {
                 case .choose:
+                    if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
                     option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested).disabled(!model.canImportPasswordsAndCookies)
                     Text("Imports your search engine choice only.").font(.caption).foregroundStyle(.secondary)
@@ -122,7 +134,7 @@ public struct ImportWizard: View {
                     Text("Skipped: \(ImportCountCopy.phrase(model.counts["Skipped easels",default:0],singular:"Easel",plural:"Easels")), \(ImportCountCopy.phrase(model.counts["Skipped notes",default:0],singular:"Note",plural:"Notes")), \(ImportCountCopy.phrase(model.counts["Skipped unknown",default:0],singular:"unknown item",plural:"unknown items")).")
                     Text("Easels and Notes do not import. Open has no Easels or Notes.").foregroundStyle(.secondary)
                 case .consent:
-                    let copy=PasswordsImportCopy(canImport:model.canImportPasswordsAndCookies,savedItems:model.probe == nil ? nil:(model.probe?.secretsFound == false ? 0:model.counts["Passwords and cookies"]))
+                    let copy=model.passwordsCopy
                     Text(copy.title).font(.headline)
                     Text(copy.body)
                 case .progress:
@@ -132,10 +144,13 @@ public struct ImportWizard: View {
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : "Could not be read").monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
+                        ForEach(model.displayedReportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : "Could not be read").monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
+                        ForEach(model.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
+                    if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(.secondary) }
+                    if let message = model.unfinishedSecretsImportMessage { Text(message).foregroundStyle(.secondary) }
                 }
                 SettingsError(text: model.errorText)
             }.frame(maxWidth: .infinity, alignment: .leading) }

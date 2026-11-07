@@ -32,6 +32,10 @@
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
     var firstRunActionTask: Task<Void, Never>?
+    var secretsFixtureTask: Task<Void, Never>?
+    var secretsFixtureReport: [String: Any] = [:]
+    var secretsFixtureStage = "idle"
+    var secretsFixtureError = ""
     var profileIndicatorMenuTitles: [String] = []
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
@@ -92,6 +96,8 @@
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
       case "credentials": return try await credentialCounts(a)
+      case "import-secrets-fixture": return try await importSecretsFixture(a)
+      case "import-secrets-state": return secretsImportState()
       case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)

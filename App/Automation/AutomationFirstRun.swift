@@ -42,6 +42,20 @@ extension AutomationController {
             wizard.plan.folders = false; wizard.plan.archive = false; wizard.plan.searchSettings = false
           }
           if let on = args["history"] as? Bool { wizard.plan.history = on }
+        case "settings-passwords":
+          // Copy reference on a capability-OFF build. It uses the real view
+          // and real button guards and cannot grant consent or enable import.
+          guard !wizard.busy, !wizard.canImportPasswordsAndCookies else { throw Failure(message: "Passwords copy reference requires capability OFF") }
+          wizard.step = .consent
+        case "settings-allow-passwords":
+          guard !wizard.canImportPasswordsAndCookies else { throw Failure(message: "automation cannot grant real secrets consent") }
+          await wizard.allowAndImportSecrets()
+        case "settings-skip-passwords":
+          await wizard.skipSecrets()
+        case "settings-cancel-passwords":
+          guard !wizard.busy else { throw Failure(message: "wizard is busy") }
+          wizard.finish()
+        case "settings-inspect": break
         case "settings-run":
           guard firstRunActionTask == nil, wizard.step == .review else { throw Failure(message: "wizard is not ready") }
           firstRunActionTask = Task { @MainActor [weak self] in
@@ -142,6 +156,17 @@ extension AutomationController {
         state["settingsStep"] = wizard.step.rawValue
         state["settingsOutcome"] = wizard.outcome?.counts ?? [:]
         state["settingsError"] = wizard.outcome?.errorText ?? ""
+        state["secretsEnabled"] = wizard.canImportPasswordsAndCookies
+        let copy = wizard.passwordsCopy
+        state["secretsTitle"] = copy.title
+        state["secretsBody"] = copy.body
+        state["secretsButtons"] = wizard.step == .consent
+          ? (wizard.canImportPasswordsAndCookies ? [PasswordsImportCopy.skipButton, PasswordsImportCopy.allowButton, "Cancel"] : [PasswordsImportCopy.skipButton, "Cancel"]) : []
+        state["secretsAllowVisible"] = wizard.step == .consent && wizard.canImportPasswordsAndCookies
+        state["secretsAllowEnabled"] = wizard.step == .consent && wizard.canImportPasswordsAndCookies && !wizard.consentWasDecided && !wizard.busy
+        state["secretsConsented"] = wizard.plan.secretsConsented
+        state["secretsReportLines"] = wizard.secretsReportLines
+        state["secretsUnfinishedMessage"] = wizard.unfinishedSecretsImportMessage ?? ""
       }
     }
     return state

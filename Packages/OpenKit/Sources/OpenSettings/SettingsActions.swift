@@ -33,14 +33,15 @@ public struct ImportOutcome: Sendable {
     public var counts: [String: Int]
     public var errorText: String?
     public var failures: [String: String]
-    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:]) { self.counts = counts; self.errorText = errorText; self.failures = failures }
+    public var secretsReportLines: [String]
+    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], secretsReportLines: [String] = []) { self.counts = counts; self.errorText = errorText; self.failures = failures; self.secretsReportLines = secretsReportLines }
 }
 
 /// One import action and capability shared by Settings and first run.
 /// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
 public enum ImportOutcomeKeys {
     public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
-    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Passwords and cookies"]
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Passwords and cookies","Passwords","Cookies","Addresses","Cards"]
 }
 public extension ImportOutcome {
     func importedCount(_ category:String)->Int {
@@ -52,9 +53,13 @@ public extension ImportOutcome {
 
 @MainActor public protocol ImportActions: AnyObject {
     var canImportPasswordsAndCookies: Bool { get }
+    var hasUnfinishedSecretsImport: Bool { get }
     func runImport(plan: ImportPlan) async -> ImportOutcome
 }
-public extension ImportActions { var canImportPasswordsAndCookies: Bool { false } }
+public extension ImportActions {
+    var canImportPasswordsAndCookies: Bool { false }
+    var hasUnfinishedSecretsImport: Bool { false }
+}
 
 public struct ExtensionShortcutConflict: Sendable, Hashable {
     public var extensionName: String

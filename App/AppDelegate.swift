@@ -108,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
+    _ = importRunner.unfinishedSecretsImportAtLaunch
     NSApp.mainMenu = MainMenu.build()
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     NSApp.setActivationPolicy(.regular)

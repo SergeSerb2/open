@@ -12,13 +12,21 @@ final class AppImportRunner {
   unowned let app: AppDelegate
   private(set) var lastOutcome: ImportOutcome?
   private var running = false
+  var secretsFixtureInProgress = false
   private(set) var historyInProgress = false
   private(set) var historyProcessed = 0
   private(set) var importAllMilliseconds: Double = 0
-  init(app: AppDelegate) { self.app = app }
+  let unfinishedSecretsImportAtLaunch: Bool
+  var secretsConsentAdapterCalls = 0
+  var secretsKeychainProbeCalls = 0
+  var secretsKeychainReadCalls = 0
+  init(app: AppDelegate) {
+    self.app = app
+    unfinishedSecretsImportAtLaunch = (try? SecretsImportLedger(dataRoot: app.directories.root).unfinished) != nil
+  }
 
   func run(plan: ImportPlan, firstRun: Bool) async -> ImportOutcome {
-    guard !running else { return ImportOutcome(errorText: "An import is already running.") }
+    guard !running, !secretsFixtureInProgress else { return ImportOutcome(errorText: "An import is already running.") }
     running = true
     lastOutcome = nil
     app.importInProgress = true
@@ -46,8 +54,9 @@ final class AppImportRunner {
     #endif
     var counts: [String: Int] = [:]
     var failures: [String: String] = [:]
+    var secretsReportLines: [String] = []
     func result(_ message: String? = nil) -> ImportOutcome {
-      let outcome = ImportOutcome(counts: counts, errorText: message, failures: failures)
+      let outcome = ImportOutcome(counts: counts, errorText: message, failures: failures, secretsReportLines: secretsReportLines)
       lastOutcome = outcome; return outcome
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
@@ -113,7 +122,6 @@ final class AppImportRunner {
         } catch { failures["Archive"] = "Could not be read" }
       }
     }
-    // Phase 4 remains capability OFF. No consent token or secret API is called.
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if firstRun {
       if plan.spaces {
@@ -127,7 +135,7 @@ final class AppImportRunner {
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
-      guard ImportOutcome(counts: counts).didImportAnything || plan.history else {
+      guard ImportOutcome(counts: counts).didImportAnything || plan.history || (plan.secretsConsented && canImportPasswordsAndCookies) else {
         return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
       }
       if plan.spaces && hasSidebarData {
@@ -255,9 +263,16 @@ final class AppImportRunner {
       counts["History failed"] = failedVisits
       counts[ImportOutcomeKeys.history] = counts["History", default: 0]
       flow?.progress = 1; wizard.progress = 1
-      if failures["History"] != nil {
-        return result("Your Spaces and tabs are in. \(failedVisits.formatted()) history visits could not be read. You can import history later from Settings.")
-      }
+    }
+    if plan.secretsConsented && canImportPasswordsAndCookies {
+      progress("Importing your passwords and cookies…", landed: true)
+      let secrets = await importSecrets(plan: plan, imported: imported, profileMapping: profileMapping)
+      counts.merge(secrets.counts) { _, new in new }
+      failures.merge(secrets.failures) { _, new in new }
+      secretsReportLines = secrets.secretsReportLines
+    }
+    if failures["History"] != nil {
+      return result("Your Spaces and tabs are in. \(counts["History failed", default: 0].formatted()) history visits could not be read. You can import history later from Settings.")
     }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
   }
