@@ -2569,9 +2569,19 @@ public final class BrowserModel {
         registerChange(undo: { state.sidebarWidth = old }, redo: { state.sidebarWidth = value })
     }
 
-    public func setSidebarMode(windowID: WindowID, mode: SidebarMode) {
+    /// Live resize crossings update chrome without adding undo steps. The controller
+    /// records the start-to-final mode once at mouse-up, and records nothing on cancel.
+    public func setSidebarMode(windowID: WindowID, mode: SidebarMode, registerUndo: Bool = true) {
         guard let state = windows.first(where: { $0.id == windowID }), state.sidebarMode != mode else { return }
         let old = state.sidebarMode; state.sidebarMode = mode
+        if registerUndo { registerSidebarModeUndo(windowID: windowID, from: old) }
+        else { commitMutation() }
+    }
+
+    /// Registers an already applied gesture's mode change. Equal modes add no undo step.
+    public func registerSidebarModeUndo(windowID: WindowID, from old: SidebarMode) {
+        guard let state = windows.first(where: { $0.id == windowID }), state.sidebarMode != old else { return }
+        let mode = state.sidebarMode
         registerChange(undo: { state.sidebarMode = old }, redo: { state.sidebarMode = mode })
     }
 
