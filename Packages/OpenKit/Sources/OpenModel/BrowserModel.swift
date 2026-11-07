@@ -161,6 +161,9 @@ public final class BrowserModel {
     @ObservationIgnored public var diagnosticRollbackFailureAtMove: Int?
     #endif
     @ObservationIgnored private var spaceCreationEvents: [TreeChange]?
+    @ObservationIgnored private var importReloadParents: [NodeParent]?
+    @ObservationIgnored private var importReloadParentSet = Set<NodeParent>()
+    @ObservationIgnored private var importBatchDepth = 0
 
     /// Invalidates derived tab ownership after structural edits or a full import/load.
     @ObservationIgnored public private(set) var treeRevision: UInt64 = 0
@@ -202,9 +205,38 @@ public final class BrowserModel {
 
     private func emit(_ change: TreeChange) {
         if spaceCreationEvents != nil { spaceCreationEvents?.append(change); return }
+        if importReloadParents != nil {
+            switch change {
+            case .insert(let parent, _, _), .remove(let parent, _, _), .reload(let parent):
+                queueImportReload(parent); return
+            case .move(let from, _, let to, _, _):
+                queueImportReload(from); queueImportReload(to); return
+            case .spaceProfileChanged: break
+            }
+        }
         treeRevision &+= 1
         commitMutation()
         for handler in observers.values { handler(change) }
+    }
+
+    /// Import edits are synchronous. Observers need each parent's final graph,
+    /// rather than a sidebar rebuild and engine mirror sync for every item.
+    private func beginImportBatch() {
+        if importBatchDepth == 0 { importReloadParents = []; importReloadParentSet.removeAll(keepingCapacity: true) }
+        importBatchDepth += 1
+    }
+
+    private func queueImportReload(_ parent: NodeParent) {
+        if importReloadParentSet.insert(parent).inserted { importReloadParents?.append(parent) }
+    }
+
+    private func endImportBatch() {
+        importBatchDepth -= 1
+        guard importBatchDepth == 0 else { return }
+        let parents = importReloadParents ?? []
+        importReloadParents = nil
+        importReloadParentSet.removeAll(keepingCapacity: true)
+        for parent in parents { emit(.reload(parent: parent)) }
     }
 
     // MARK: Lookup
@@ -635,6 +667,8 @@ public final class BrowserModel {
                                      profiles includeProfiles: Bool = false,
                                      archivedIDsByProfile: [ProfileID: Set<ItemID>] = [:],
                                      importedAt: Date = Date(), saving: () throws -> Void) throws -> ImportCounts {
+        beginImportBatch()
+        defer { endImportBatch() }
         typealias Edit = (apply: @MainActor (BrowserModel) -> Void, undo: Revert)
         var edits: [Edit] = []
         var counts = ImportCounts()
@@ -812,10 +846,14 @@ public final class BrowserModel {
         // beneath this command. Redo only the edits that this undo reversed.
         var reversible = edits
         let revert: Revert = { model in
+            model.beginImportBatch()
+            defer { model.endImportBatch() }
             reversible = reversible.reversed().filter { $0.undo(model) }.reversed()
             return !reversible.isEmpty
         }
         registerUndo(revert, reapply: { model in
+            model.beginImportBatch()
+            defer { model.endImportBatch() }
             for edit in reversible { edit.apply(model) }
             return revert
         })
