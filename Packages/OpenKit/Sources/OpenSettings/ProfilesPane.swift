@@ -294,7 +294,9 @@ public struct ProfileDeleteSheet: View {
                 Text("Deleting “\(model.deletionProfiles.first?.name ?? "")” will permanently remove any cookies, history, preferences, and logins that belong to this Profile. This can't be undone.")
                 Text("To continue, type the name of this Profile:")
             }
-            TextField("Confirmation",text:$model.deleteConfirmation).accessibilityIdentifier("profile-delete-confirmation")
+            TextField("Confirmation",text:$model.deleteConfirmation)
+                .accessibilityIdentifier("profile-delete-confirmation")
+                .onSubmit { Task { await model.confirmDeletion() } }
             SettingsError(text:model.errorText)
             HStack {
                 Button("Cancel") { model.confirmsDelete=false;model.confirmsUnused=false }.keyboardShortcut(.cancelAction).disabled(model.deleting)

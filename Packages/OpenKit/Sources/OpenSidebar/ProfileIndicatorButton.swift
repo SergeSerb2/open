@@ -33,7 +33,10 @@ private final class ProfileIndicatorGlyph:NSView {
     override func hitTest(_ point:NSPoint)->NSView? { nil }
     override func draw(_ dirtyRect:NSRect) {
         guard let context, let space else { return }
-        let icon=tracked({ context.model.profile(id:space.profileID)?.icon }) { [weak self] in self?.needsDisplay=true }
+        let icon=tracked({
+            _ = context.appearance(for:space)
+            return context.model.profile(id:space.profileID)?.icon
+        }) { [weak self] in self?.needsDisplay=true }
         if case .emoji(let emoji)?=icon { EmojiRenderer.draw(emoji,fontSize:ProfileIndicatorMetrics.glyphSize,in:bounds);return }
         let name:String
         switch icon {
@@ -44,6 +47,6 @@ private final class ProfileIndicatorGlyph:NSView {
         guard let image=NSImage(systemSymbolName:name,accessibilityDescription:nil) else { return }
         let ratio=min(bounds.width/image.size.width,bounds.height/image.size.height)
         let size=CGSize(width:image.size.width*ratio,height:image.size.height*ratio)
-        image.drawTinted(in:CGRect(x:(bounds.width-size.width)/2,y:(bounds.height-size.height)/2,width:size.width,height:size.height),color:SidebarRole.spaceTitle.nsColor)
+        image.drawTinted(in:CGRect(x:(bounds.width-size.width)/2,y:(bounds.height-size.height)/2,width:size.width,height:size.height),color:SidebarRole.spaceTitle.resolved(context.appearance(for:space)).nsColor)
     }
 }

@@ -107,7 +107,11 @@ final class ProfileTeardown {
   static func finishPendingWipes(directories: ProfileDirectories) throws {
     let names = try pending(directories)
     guard !names.isEmpty else { return }
-    for name in names { try wipeEngine(name,directories:directories) }
+    for name in names {
+      // The process may have stopped between journaling and the immediate wipe.
+      try removeIfPresent(directories.profileDirectory(dataDirectoryName:name))
+      try wipeEngine(name,directories:directories)
+    }
     let url = directories.engineRoot.appendingPathComponent("Local State")
     if FileManager.default.fileExists(atPath:url.path) {
       // A 16 MiB Local State cap bounds decoding at approximately 384 MiB at

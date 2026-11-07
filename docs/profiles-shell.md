@@ -35,6 +35,26 @@ keeps its title-bar geometry and uses the Profile's icon. Settings and
 extension management create a fresh Little Open page on the requested
 Profile when it has no Space.
 
+## Profile page destinations
+
+The Settings actions use the Chromium 156 routes below. The real-App suite
+checks both the committed native URL and `location.href`, plus the actual
+engine context, for every page in a normal tab and in Little Open.
+
+| Profile page | URL |
+|---|---|
+| Privacy and Security | `chrome://settings/privacy` |
+| Passwords | `chrome://password-manager/passwords` |
+| Credit Cards | `chrome://settings/payments` |
+| Notifications | `chrome://settings/content/notifications` |
+
+Chromium 156 redirects the older `chrome://settings/passwords` route to the
+Settings root. The Passwords row must reject that redirect. Source evidence:
+Chromium `chrome/browser/resources/password_manager/router.ts` (`Page.PASSWORDS`)
+and `chrome/browser/resources/settings/route.ts` (`PRIVACY`, `PAYMENTS`,
+`SITE_SETTINGS_NOTIFICATIONS`). Runtime evidence takes priority over those
+source observations.
+
 ## Evidence limits
 
 - Typed-name deletion, the unused-Profile list, and the indicator's existence

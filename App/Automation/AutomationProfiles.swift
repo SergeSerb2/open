@@ -57,9 +57,15 @@ extension AutomationController {
         MainActor.assumeIsolated {
           guard let menu else {return}
           self?.profileIndicatorMenuTitles=menu.items.map(\.title)
-          DispatchQueue.main.async {menu.cancelTracking()}
+          nonisolated(unsafe) let trackingMenu=menu
+          let timer=Timer(timeInterval:0.05,repeats:false) { _ in
+            MainActor.assumeIsolated { trackingMenu.cancelTrackingWithoutAnimation() }
+          }
+          RunLoop.main.add(timer,forMode:.eventTracking)
         }
       }
+      // The timer runs in the menu's nested tracking loop, which does not
+      // service an ordinary main-queue async block on this AppKit version.
       defer {NotificationCenter.default.removeObserver(observer)}
       _=view.accessibilityPerformPress()
     default:throw Failure(message:"unknown Profiles shell action")
@@ -68,6 +74,10 @@ extension AutomationController {
     let owner=adapter.settingsPresenter.window, sheet=owner?.attachedSheet
     let delete=sheet.flatMap {profileAX($0,label:"Delete")}
     let enabled:Bool?=delete.flatMap {object in
+      if let element=object as? any NSAccessibilityProtocol { return element.isAccessibilityEnabled() }
+      if object.responds(to:NSSelectorFromString("isAccessibilityEnabled")) {
+        return (object as AnyObject).isAccessibilityEnabled?()
+      }
       let selector=NSSelectorFromString("accessibilityAttributeValue:")
       guard object.responds(to:selector) else {return nil}
       return object.perform(selector,with:"AXEnabled")?.takeUnretainedValue() as? Bool
@@ -77,12 +87,14 @@ extension AutomationController {
        "icon":String(describing:profile.icon),"loaded":app.profileTeardown.wasLoaded(profile.id)]
     },"rows":vm.dataModel.rows.map(\.name),"unused":vm.unusedIDs.map(\.description),
       "deleting":vm.deleting,"deleteEnabled":vm.canConfirmDelete,"deleteAXEnabled":enabled as Any? ?? NSNull(),
+      "deleteAXClass":delete.map {String(reflecting:type(of:$0))} ?? "",
       "deleteText":vm.deleteConfirmation,"deleteNames":vm.deletionProfiles.map(\.name),
       "sheet":sheet?.windowNumber ?? 0,"sheetText":sheet.map(windowText) ?? [],"settings":owner?.windowNumber ?? 0,
       "error":vm.errorText,"canUndo":app.undoManager.canUndo,
       "noticeShown":app.missingProfileNoticeCount,"noticeTitles":app.missingProfileNoticeTitles,
       "noticeVisible":app.missingProfileNotice?.window.isVisible ?? false,
       "iconPicker":adapter.profileIconPicker?.isClosed == false,"indicatorMenu":profileIndicatorMenuTitles,
+      "managerIndicators":profileIndicatorViews(in:adapter.libraryPresenter?.window?.contentView,identifier:"spaceManagerSpaceHeaderIndicator").map { $0.accessibilityLabel() ?? "" },
       "indicators":profileIndicatorViews().map {view in
         ["label":view.accessibilityLabel() ?? "","id":view.accessibilityIdentifier() ?? "",
          "frame":[view.frame.minX,view.frame.minY,view.frame.width,view.frame.height]] as [String:Any]
@@ -95,15 +107,18 @@ extension AutomationController {
     return nil
   }
   private func profileIndicatorViews()->[NSView] {
-    guard let sidebar=app.frontWindowController?.sidebar else {return []}
-    sidebar.layoutSubtreeIfNeeded()
+    profileIndicatorViews(in:app.frontWindowController?.sidebar,identifier:"space-profile-indicator")
+  }
+  private func profileIndicatorViews(in root:NSView?,identifier:String)->[NSView] {
+    guard let root else {return []}
+    root.layoutSubtreeIfNeeded()
     var result:[NSView]=[]
     func walk(_ view:NSView) {
       guard !view.isHiddenOrHasHiddenAncestor else {return}
-      if view.accessibilityIdentifier() == "space-profile-indicator" {result.append(view)}
+      if view.accessibilityIdentifier() == identifier {result.append(view)}
       for child in view.subviews {walk(child)}
     }
-    walk(sidebar);return result
+    walk(root);return result
   }
   private func profileAX(_ root:NSObject,label:String)->NSObject? {
     let write=NSSelectorFromString("accessibilitySetValue:forAttribute:")
@@ -112,7 +127,7 @@ extension AutomationController {
     func walk(_ object:NSObject,depth:Int)->NSObject? {
       guard depth <= 24,seen.count < 4096,seen.insert(ObjectIdentifier(object)).inserted else {return nil}
       if let view=object as? NSView,view.isHiddenOrHasHiddenAncestor {return nil}
-      for name in ["accessibilityLabel","accessibilityTitle","accessibilityHelp"] {
+      for name in ["accessibilityLabel","accessibilityTitle","accessibilityHelp","accessibilityValue"] {
         let selector=NSSelectorFromString(name)
         if object.responds(to:selector),object.perform(selector)?.takeUnretainedValue() as? String == label {return object}
       }

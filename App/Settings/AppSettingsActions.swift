@@ -272,8 +272,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {
-    let path = [ProfilePage.privacy: "privacy", .passwords: "passwords", .paymentMethods: "payments", .notifications: "content/notifications"][page] ?? "privacy"
-    openURL(URL(string: "chrome://settings/\(path)")!, profileID: profileID)
+    let address: String
+    switch page {
+    case .privacy: address = "chrome://settings/privacy"
+    case .passwords: address = "chrome://password-manager/passwords"
+    case .paymentMethods: address = "chrome://settings/payments"
+    case .notifications: address = "chrome://settings/content/notifications"
+    }
+    openURL(URL(string:address)!, profileID:profileID)
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] {

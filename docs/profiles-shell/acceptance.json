@@ -1,0 +1,214 @@
+{
+  "focused": {
+    "shell_cleanup_input_bounds": true,
+    "shell_delete_exact_name": true,
+    "shell_delete_loaded_immediate": true,
+    "shell_delete_loaded_relaunch": true,
+    "shell_delete_never_loaded": true,
+    "shell_delete_return": true,
+    "shell_delete_unused": true,
+    "shell_header_captures": true,
+    "shell_indicator_assigned_profile": true,
+    "shell_indicator_one_profile": true,
+    "shell_indicator_two_profiles": true,
+    "shell_manager_indicators": true,
+    "shell_missing_profile_repair": true,
+    "shell_owned_window_cleanup": true,
+    "shell_page_little_notifications": true,
+    "shell_page_little_passwords": true,
+    "shell_page_little_paymentMethods": true,
+    "shell_page_little_privacy": true,
+    "shell_page_tab_notifications": true,
+    "shell_page_tab_passwords": true,
+    "shell_page_tab_paymentMethods": true,
+    "shell_page_tab_privacy": true,
+    "shell_page_without_space": true,
+    "shell_profile_icon_pixels": true,
+    "shell_repair_notice_once": true,
+    "shell_same_name_cookie_isolation": true
+  },
+  "pages": {
+    "shell_page_little_notifications": {
+      "requestedURL": "chrome://settings/content/notifications",
+      "committedURL": "chrome://settings/content/notifications",
+      "nativeURL": "chrome://settings/content/notifications",
+      "profileMatches": true
+    },
+    "shell_page_little_passwords": {
+      "requestedURL": "chrome://password-manager/passwords",
+      "committedURL": "chrome://password-manager/passwords",
+      "nativeURL": "chrome://password-manager/passwords",
+      "profileMatches": true
+    },
+    "shell_page_little_paymentMethods": {
+      "requestedURL": "chrome://settings/payments",
+      "committedURL": "chrome://settings/payments",
+      "nativeURL": "chrome://settings/payments",
+      "profileMatches": true
+    },
+    "shell_page_little_privacy": {
+      "requestedURL": "chrome://settings/privacy",
+      "committedURL": "chrome://settings/privacy",
+      "nativeURL": "chrome://settings/privacy",
+      "profileMatches": true
+    },
+    "shell_page_tab_notifications": {
+      "requestedURL": "chrome://settings/content/notifications",
+      "committedURL": "chrome://settings/content/notifications",
+      "nativeURL": "chrome://settings/content/notifications",
+      "profileMatches": true
+    },
+    "shell_page_tab_passwords": {
+      "requestedURL": "chrome://password-manager/passwords",
+      "committedURL": "chrome://password-manager/passwords",
+      "nativeURL": "chrome://password-manager/passwords",
+      "profileMatches": true
+    },
+    "shell_page_tab_paymentMethods": {
+      "requestedURL": "chrome://settings/payments",
+      "committedURL": "chrome://settings/payments",
+      "nativeURL": "chrome://settings/payments",
+      "profileMatches": true
+    },
+    "shell_page_tab_privacy": {
+      "requestedURL": "chrome://settings/privacy",
+      "committedURL": "chrome://settings/privacy",
+      "nativeURL": "chrome://settings/privacy",
+      "profileMatches": true
+    }
+  },
+  "cleanup_input_boundaries": [
+    {
+      "exit": 0,
+      "expected": 0,
+      "name": "journal-at-64KiB"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "journal-over-64KiB"
+    },
+    {
+      "exit": 0,
+      "expected": 0,
+      "name": "names-at-1024"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "names-over-1024"
+    },
+    {
+      "exit": 0,
+      "expected": 0,
+      "name": "name-at-255"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "name-over-255"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "default"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "path"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "duplicate"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "trailing-JSON"
+    },
+    {
+      "exit": 0,
+      "expected": 0,
+      "name": "local-state-at-16MiB"
+    },
+    {
+      "exit": 1,
+      "expected": 1,
+      "name": "local-state-over-16MiB"
+    }
+  ],
+  "forced_dialog_failure": {
+    "expectedError": "intentional early dialog failure for cleanup proof",
+    "ownedWindowsAfterQuit": 0,
+    "remainingProcesses": 0,
+    "forcedTermination": false
+  },
+  "negative_proofs": {
+    "repair_calls_removed": {
+      "noticeShown": 0,
+      "ok": false,
+      "savedDefault": false,
+      "titles": []
+    },
+    "old_passwords_route": {
+      "shell_page_little_notifications": {
+        "ok": true,
+        "requestedURL": "chrome://settings/content/notifications",
+        "committedURL": "chrome://settings/content/notifications",
+        "nativeURL": "chrome://settings/content/notifications",
+        "profileMatches": true
+      },
+      "shell_page_little_passwords": {
+        "ok": false,
+        "requestedURL": "chrome://password-manager/passwords",
+        "committedURL": "chrome://settings/",
+        "nativeURL": "chrome://settings/",
+        "profileMatches": true
+      },
+      "shell_page_little_paymentMethods": {
+        "ok": true,
+        "requestedURL": "chrome://settings/payments",
+        "committedURL": "chrome://settings/payments",
+        "nativeURL": "chrome://settings/payments",
+        "profileMatches": true
+      },
+      "shell_page_little_privacy": {
+        "ok": true,
+        "requestedURL": "chrome://settings/privacy",
+        "committedURL": "chrome://settings/privacy",
+        "nativeURL": "chrome://settings/privacy",
+        "profileMatches": true
+      },
+      "shell_page_tab_notifications": {
+        "ok": true,
+        "requestedURL": "chrome://settings/content/notifications",
+        "committedURL": "chrome://settings/content/notifications",
+        "nativeURL": "chrome://settings/content/notifications",
+        "profileMatches": true
+      },
+      "shell_page_tab_passwords": {
+        "ok": false,
+        "requestedURL": "chrome://password-manager/passwords",
+        "committedURL": "chrome://settings/",
+        "nativeURL": "chrome://settings/",
+        "profileMatches": true
+      },
+      "shell_page_tab_paymentMethods": {
+        "ok": true,
+        "requestedURL": "chrome://settings/payments",
+        "committedURL": "chrome://settings/payments",
+        "nativeURL": "chrome://settings/payments",
+        "profileMatches": true
+      },
+      "shell_page_tab_privacy": {
+        "ok": true,
+        "requestedURL": "chrome://settings/privacy",
+        "committedURL": "chrome://settings/privacy",
+        "nativeURL": "chrome://settings/privacy",
+        "profileMatches": true
+      }
+    }
+  }
+}

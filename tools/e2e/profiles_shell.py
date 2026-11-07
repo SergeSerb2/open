@@ -1,6 +1,8 @@
 """Section 10 acceptance through the real App, Settings, native fields and AX actions."""
 import json
+import base64
 import os
+import re
 import subprocess
 import time
 import uuid
@@ -30,15 +32,73 @@ def run(factory, results, tmp, api, defaults_before):
 
     def little(url=None):
         sessions = app.call('little-open-state')['sessions']
-        return next((s for s in sessions if url is None or s['url'] == url), None)
+        return next((s for s in sessions if url is None or s['url'] == url
+                    ), None)
 
     def page_ready(url):
         def ready():
             session = little(url)
             return session if session and session['content'] and not session['loading'] else None
         answer = wait(ready, timeout=30)
-        assert answer, 'Little Open page did not load: ' + url
+        assert answer, 'Little Open page did not load: ' + url + ' ' + repr([{k: row[k] for k in ('url', 'profile', 'content', 'loading', 'browser')}
+                                             for row in app.call('little-open-state')['sessions']])
         return answer
+
+    page_urls = {'privacy': 'chrome://settings/privacy',
+                 'passwords': 'chrome://password-manager/passwords',
+                 'paymentMethods': 'chrome://settings/payments',
+                 'notifications': 'chrome://settings/content/notifications'}
+
+    def check_pages(name, has_space):
+        chosen = profile(name)
+        state(profile=name)
+        for page, requested in page_urls.items():
+            before = {row['id'] for row in app.call('little-open-state')['sessions']}
+            state(action='page', page=page)
+            if has_space:
+                selected = wait(lambda: next((row for row in app.call('tabs')
+                                             if row['selected'] and row.get('page')), None), timeout=10)
+                assert selected, app.call('tabs')
+                app.call('wait', tab=selected['id'])
+                # The WebUI router can replace the URL after the document load.
+                final = wait(lambda: app.call('eval', tab=selected['id'], js='location.href') == requested, timeout=5)
+                committed = app.call('eval', tab=selected['id'], js='location.href')
+                current = app.call('tab-state', tab=selected['id'])
+                context = current['page']['context']
+                native_url = current['page']['url']
+                actual_profile = current['profile']
+                app.call('close', tab=selected['id'])
+            else:
+                def ready():
+                    return next((row for row in app.call('little-open-state')['sessions']
+                                 if row['id'] not in before and row['content'] and not row['loading']), None)
+                session = wait(ready, timeout=30)
+                assert session, app.call('little-open-state')
+                final = wait(lambda: app.call('little-open-eval', id=session['id'], js='location.href') == requested, timeout=5)
+                committed = app.call('little-open-eval', id=session['id'], js='location.href')
+                current = next(row for row in app.call('little-open-state')['sessions'] if row['id'] == session['id'])
+                context = current['browser']['context']
+                native_url = current['url']
+                actual_profile = current['profile']
+                app.call('little-open-action', id=session['id'], action='close')
+            results['shell_page_' + ('tab_' if has_space else 'little_') + page] = {
+                'ok': bool(final) and committed == requested and native_url == requested and context == chosen['directory'] and actual_profile == chosen['id'],
+                'requestedURL': requested, 'committedURL': committed, 'nativeURL': native_url, 'context': context,
+                'profileMatches': actual_profile == chosen['id']}
+
+    def capture_native(label, window=None):
+        if window is None:
+            window = app.call('window-state')['number']
+        meta = next(row for row in app.call('windows') if row['number'] == window)
+        width_pt = float(re.findall(r'-?\d+(?:\.\d+)?', meta['frame'])[-2])
+        raw = Path(tmp) / (label + '.png')
+        shot = app.call('snapshot', window=window, path=str(raw))
+        width_px, _, _ = api['read_image'](str(raw))
+        scale = width_px / width_pt
+        assert scale in (1, 2), (width_px, width_pt)
+        destination = evidence / (label + '-%dx.png' % scale)
+        raw.replace(destination)
+        return dict(shot, path=str(destination), nativeScale=scale)
 
     def press(label):
         return state(action='press', label=label)
@@ -64,6 +124,11 @@ def run(factory, results, tmp, api, defaults_before):
         launch(fresh=True)
         one = state()
         results['shell_indicator_one_profile'] = {'ok': len(one['profiles']) == 1 and one['indicators'] == [], 'indicators': one['indicators']}
+        if os.environ.get('OPEN_PROFILES_SHELL_PAGES_ONLY') == '1':
+            check_pages('Default', has_space=True)
+            state(action='create', name='Page Without Space')
+            check_pages('Page Without Space', has_space=False)
+            return
         snapshot = Path(app.call('save'))
         root = Path(app.user_data)
         app.quit()
@@ -82,12 +147,16 @@ def run(factory, results, tmp, api, defaults_before):
                   and repaired['noticeTitles'] == ['Missing Profile Space'],
             'noticeShown': repaired['noticeShown'], 'titles': repaired['noticeTitles'],
             'savedDefault': persisted['spaces'][0]['profileID'] == default_id}
+        if os.environ.get('OPEN_PROFILES_SHELL_REPAIR_ONLY') == '1':
+            return
         state(action='notice-ok')
         app.quit()
         launch()
         repaired_again = state()
         results['shell_repair_notice_once'] = {'ok': repaired_again['noticeShown'] == 0 and not repaired_again['noticeVisible'],
                                                'noticeShown': repaired_again['noticeShown']}
+
+        check_pages('Default', has_space=True)
 
         # An unused Profile acquires a real engine context through its Settings page.
         state(action='create', name='Shell Loaded')
@@ -100,6 +169,27 @@ def run(factory, results, tmp, api, defaults_before):
                   and two['indicators'][0]['frame'][2:] == [20, 20]
                   and all(name in menu['indicatorMenu'] for name in ('Default', 'Shell Loaded', 'New Profile…')),
             'indicators': two['indicators'], 'menu': menu['indicatorMenu']}
+        # Native window evidence uses the display's real backing scale.
+        # 2x hardware captures stay deferred while the M1 is on hold.
+        evidence = Path(api['ROOT']) / 'docs/profiles-shell'
+        evidence.mkdir(parents=True, exist_ok=True)
+        app.call('window-frame', frame=[100, 100, 1000, 700])
+        capture_rows = []
+        for appearance in ('light', 'dark'):
+            app.call('appearance', name=appearance)
+            for hovered in (False, True):
+                header = app.call('window-state')['chrome']['header']
+                app.call('mouse', action='hover', x=120 if hovered else 900,
+                         y=header[1] + 18 if hovered else 500)
+                time.sleep(.15)
+                label = 'header-' + appearance + ('-hover' if hovered else '-rest')
+                shot = capture_native(label)
+                capture_rows.append(dict(shot, appearance=appearance, hovered=hovered))
+        results['shell_header_captures'] = {'ok': len(capture_rows) == 4, 'captures': capture_rows}
+        show('Shell Loaded')
+        state(action='page', page='passwords')
+        default_chip = page_ready('chrome://password-manager/passwords')
+        app.call('little-open-action', id=default_chip['id'], action='close')
         # The shared icon picker runs from the actual Settings row button.
         show('Shell Loaded')
         press('Change icon for Shell Loaded')
@@ -107,13 +197,26 @@ def run(factory, results, tmp, api, defaults_before):
         state(action='icon-symbol', index=0)
         assert wait(lambda: not state()['iconPicker'] and 'nil' != profile('Shell Loaded')['icon'], timeout=5), state()
         custom_icon = profile('Shell Loaded')['icon']
+        check_pages('Shell Loaded', has_space=False)
         state(action='page', page='passwords')
-        passwords = page_ready('chrome://settings/passwords')
+        passwords = page_ready('chrome://password-manager/passwords')
+        native_pixels = []
+        for label, session in (('default', default_chip), ('custom', passwords)):
+            path = Path(tmp) / ('profile-chip-' + label + '.tiff')
+            path.write_bytes(base64.b64decode(session['profileIconImage']))
+            w, h, pixel = api['read_image'](str(path))
+            native_pixels.append((w, h, [pixel(x, y) for y in range(h) for x in range(w)]))
+        results['shell_profile_icon_pixels'] = {'ok': native_pixels[0] != native_pixels[1],
+                                               'nativeImagesDiffer': native_pixels[0] != native_pixels[1]}
         results['shell_page_without_space'] = {
             'ok': passwords['profile'] == loaded['id'] and passwords['browser']['context'] == loaded['directory']
                   and loaded['spaces'] == 0 and passwords['profileIconImage'] != '',
             'profileMatches': passwords['profile'] == loaded['id'], 'context': passwords['browser']['context'],
+            'requestedURL': 'chrome://password-manager/passwords', 'actualURL': passwords['url'],
             'icon': custom_icon, 'nativeIconBytes': len(passwords['profileIconImage'])}
+        for appearance in ('light', 'dark'):
+            app.call('appearance', name=appearance)
+            capture_native('little-open-profile-' + appearance, window=passwords['window'])
         app.call('little-open-action', id=passwords['id'], action='close')
 
         url = origin + '/loaded'
@@ -134,15 +237,27 @@ def run(factory, results, tmp, api, defaults_before):
         show('Shell Loaded')
         press('Delete Profile')
         assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
+        if os.environ.get('OPEN_PROFILES_SHELL_FORCE_DIALOG_FAILURE') == '1':
+            raise AssertionError('intentional early dialog failure for cleanup proof')
+        app.call('key', window=state()['sheet'], key='escape', route='app')
+        assert wait(lambda: state()['sheet'] == 0, timeout=5), state()
+        press('Delete Profile')
+        assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
         state(action='type-delete', text='shell loaded')
+        app.call('key', window=state()['sheet'], key='return', route='app')
         wrong = state()
         results['shell_delete_exact_name'] = {'ok': not wrong['deleteEnabled'] and wrong['deleteAXEnabled'] is False,
                                               'draft': wrong['deleteText'], 'nativeEnabled': wrong['deleteAXEnabled']}
         state(action='type-delete', text='Shell Loaded')
         right = state()
         assert right['deleteAXEnabled'] is True and right['deleteEnabled'], right
-        press('Delete')
-        assert wait(lambda: not any(p['id'] == loaded['id'] for p in state()['profiles']) and not state()['deleting'], timeout=15), state()
+        app.call('key', window=state()['sheet'], key='return', route='app')
+        submitted = wait(lambda: not any(p['id'] == loaded['id'] for p in state()['profiles']) and not state()['deleting'], timeout=15)
+        results['shell_delete_return'] = {'ok': bool(submitted)}
+        if not submitted:
+            # Keep gathering disk evidence, while the Return row still fails.
+            press('Delete')
+            assert wait(lambda: not any(p['id'] == loaded['id'] for p in state()['profiles']) and not state()['deleting'], timeout=15), state()
         gone = state()
         app.call('key', window=gone['settings'], key='z', modifiers=['cmd'], route='app')
         pending = root / 'Profiles/.pending-wipe.json'
@@ -211,6 +326,15 @@ def run(factory, results, tmp, api, defaults_before):
         assigned = state()
         results['shell_indicator_assigned_profile'] = {'ok': any(i['label'] == 'Profile: Shell Assigned' for i in assigned['indicators']),
                                                       'indicators': assigned['indicators']}
+        app.call('library-open')
+        manager = app.call('space-manager-state')
+        labels = state()['managerIndicators']
+        results['shell_manager_indicators'] = {'ok': 'Profile: Default' in labels and 'Profile: Shell Assigned' in labels,
+                                               'labels': labels}
+        for appearance in ('light', 'dark'):
+            app.call('appearance', name=appearance)
+            capture_native('manager-' + appearance, window=manager['window'])
+        app.call('key', window=manager['window'], key='w', modifiers=['cmd'], route='app')
         app.quit()
         launch()  # drain every real deletion before synthetic input-boundary fixtures
         app.quit()
@@ -229,6 +353,22 @@ def run(factory, results, tmp, api, defaults_before):
             boundary.append({'name': label, 'exit': run.returncode, 'expected': expected})
 
         try:
+            interrupted = 'Interrupted-Wipe'
+            interrupted_paths = [root / 'Profiles' / interrupted, root / 'Engine' / interrupted,
+                                 Path.home() / 'Library/Caches' / root.name / 'Engine' / interrupted]
+            for folder in interrupted_paths:
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / 'synthetic-marker').write_text('interrupted cleanup fixture')
+            interrupted_state = json.loads(original_local_state)
+            interrupted_profile = interrupted_state.setdefault('profile', {})
+            interrupted_profile.setdefault('info_cache', {})[interrupted] = {'name': 'Synthetic'}
+            interrupted_profile['last_used'] = interrupted
+            interrupted_profile['last_active_profiles'] = [interrupted, 'Default']
+            early('interrupted-wipe', json.dumps([interrupted]).encode(), json.dumps(interrupted_state).encode())
+            cleaned = json.loads(local_state.read_bytes())['profile']
+            boundary[-1]['cleanupComplete'] = (all(not folder.exists() for folder in interrupted_paths)
+                and interrupted not in cleaned.get('info_cache', {}) and cleaned.get('last_used') == 'Default'
+                and cleaned.get('last_active_profiles') == ['Default'] and not pending.exists())
             early('journal-at-64KiB', b'[]' + b' ' * (65536 - 2))
             early('journal-over-64KiB', b'[]' + b' ' * (65537 - 2), expected=1)
             early('names-at-1024', json.dumps(['P%04d' % n for n in range(1024)]).encode())
@@ -238,6 +378,7 @@ def run(factory, results, tmp, api, defaults_before):
             for label, value in [('default', ['Default']), ('path', ['../Default']), ('duplicate', ['A', 'A'])]:
                 early(label, json.dumps(value).encode(), expected=1)
             early('trailing-JSON', b'["P"] {}', expected=1)
+            early('local-state-trailing-JSON', b'["P"]', original_local_state + b' {}', expected=1)
             # Real launch parser, not an isolated JSON helper. Each allocation is bounded.
             small = json.dumps({'profile': {}, 'padding': ''}, separators=(',', ':')).encode()
             at_limit = small.replace(b'"padding":""', b'"padding":"' + b'x' * (16777216 - len(small)) + b'"')
@@ -247,13 +388,13 @@ def run(factory, results, tmp, api, defaults_before):
             local_state.write_bytes(original_local_state)
             if pending.exists():
                 pending.unlink()
-        results['shell_cleanup_input_bounds'] = {'ok': all(row['exit'] == row['expected'] for row in boundary), 'rows': boundary}
+        results['shell_cleanup_input_bounds'] = {'ok': all(row['exit'] == row['expected'] and row.get('cleanupComplete', True) for row in boundary), 'rows': boundary}
     finally:
         if app is not None:
             if not app.closed:
                 try:
-                    state(action='cancel')
-                    state(action='notice-ok')
+                    app.call('profiles-shell', action='cancel', timeout=3)
+                    app.call('profiles-shell', action='notice-ok', timeout=3)
                 except Exception:
                     pass
             restore(app, saved)
