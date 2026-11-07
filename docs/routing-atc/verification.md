@@ -4,7 +4,10 @@ Section 10 adds Profile-scoped routing, native grouped destination menus,
 live-window Automatic Test, nested Arc import, and the Settings entry point.
 The implementation is `c5597282`; the final App receipts use `713d13cb`.
 Merge `528f2446` includes main `ae0eb050` and leaves that source tree unchanged.
-The post-merge Debug build also passed. No engine source changed.
+The post-merge Debug build also passed. Merge `f67adbb9` adds main #208's
+docs-only update. App, package, and verification sources still match `713d13cb`
+exactly (`git diff --exit-code 713d13cb HEAD -- App Packages tools`). No engine
+source changed.
 
 Local receipts are under `.re/s10/atc-implementation/` in the project root.
 They are excluded from git. Real Arc data stays in that private evidence area;
@@ -14,17 +17,17 @@ only aggregate counts appear here.
 |---|---|---|
 | Release package build | PASS, no warnings or errors | `release-2.log` |
 | Debug App build, including after main merge | PASS | `debug-final.log`, `debug-post-merge.log` |
-| Real route CLI | A1–A24 PASS | `full-final-2/route.log` |
+| Real route CLI | A1–A24 PASS | `full-final-head/route.log` |
 | Existing schema-1 nil destination payloads | Byte-identical roundtrip; nil stays `{}` | A21 |
 | New payload read by old main decoder | PASS with main `98350a07` release CLI | A22; `OPEN_ROUTE_OLD_CLI` |
 | Nested Arc destinations and components | All six forms, fallback count, matches/contains, ordered components PASS | A23–A24 |
 | Copied real Arc import | Before/after: 1 routing rule, 0 skipped rules; after: 0 destination fallbacks | `arc-routing-counts.json` |
-| Settings preview | 44/44 PASS; render and wrapper validation PASS | `full-final-2/settings-preview.log` |
-| Commands and suggestions | PASS; commands missing/extra/different 0/0/0, allowed-missing 11 | `full-final-2/commands-dump.log`, `suggest-check.log` |
+| Settings preview | 44/44 PASS; render and wrapper validation PASS | `full-final-head/settings-preview.log` |
+| Commands and suggestions | PASS; commands missing/extra/different 0/0/0, allowed-missing 11 | `full-final-head/commands-dump.log`, `suggest-check.log` |
 | Real-App routing | 13/13 PASS, cleanup PASS | `routing-positive-final/results-routing-debug.json` |
 | Real-App Little Open | 39/39 PASS, cleanup PASS | `littleopen-final/results-littleopen-debug.json` |
 | Real-App sidebar | 19/19 PASS; existing durable-storage row SKIP, covered by the dedicated Profiles suite; cleanup PASS | `sidebar-final/results-sidebar-debug.json` |
-| Sidebar comparison | 13/13 PASS; tables byte-identical | `full-final-2/sidebar-compare.log` |
+| Sidebar comparison | 13/13 PASS; tables byte-identical | `full-final-head/sidebar-compare.log` |
 | Space editor under screen worker | 237/237 PASS on branch and unchanged main | `space-editor-locked-branch.log`, `space-editor-locked-main.log` |
 
 The routing App run proves that a second-Profile Space uses that Profile's
@@ -62,7 +65,7 @@ tests were added.
 The negative App run also passed engine fingerprint and owned-process cleanup.
 Positive source restoration was checked against saved SHA-256 hashes.
 
-The first two full verify attempts retained timing failures. The first also
+Earlier full verify attempts retained timing failures. The first also
 exposed the Space editor's missing screen serialization; the identical fix
 landed separately on main in #207 before the final merge.
 
@@ -71,6 +74,7 @@ landed separately on main in #207 before the final merge.
 | `full-final-1` | 51.2/76.2/62.6 | 7.03 ms PASS | 0.301 ms FAIL | FAIL |
 | `full-final-2` | 21.5/31.2/32.5 | 9.38 ms FAIL | 0.421 ms FAIL | FAIL |
 | `full-post-merge` | 25.3/21.9/24.1 | 7.82 ms PASS | 0.419 ms FAIL | FAIL |
+| `full-final-head` | 23.9/27.1/27.3 | 11.15 ms FAIL | −0.012 ms PASS | FAIL |
 
 This change touches `OpenCommands` and `OpenSuggest` aliases, so the strict
 command-bar rule applies: every row must pass in one run. Split-pass and paired
