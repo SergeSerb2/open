@@ -55,7 +55,8 @@ def run(h, factory, results, tmp):
     last_tab = None
     baseline = h._open_crash_reports()
     out = Path(h.OUT) / 'results-passwords-probe.json'
-    evidence = {'started': timestamp(), 'featureAssertions': False, 'load': os.getloadavg(), 'rows': results}
+    evidence = {'started': timestamp(), 'featureAssertions': False, 'load': os.getloadavg(), 'rows': results,
+                'isolation': 'fresh App/profile per row; saved-data refill and cookie relaunch stay inside their row'}
     root_readme = Path(os.environ['OPEN_ENGINE_ROOT']) / 'README.txt'
     hashes = re.findall(r'framework SHA-256 ([0-9a-f]{64})', root_readme.read_text())
     if not hashes:
@@ -324,6 +325,17 @@ def run(h, factory, results, tmp):
             actions = [('PR-1', login), ('PR-2', saved_login), ('PR-3', address), ('PR-4', card),
                        ('PR-5', webauthn), ('PR-6', credential_get), ('PR-7', basic), ('PR-8', cookies), ('PR-9', pages)]
             for rowid, action in actions:
+                if rowid != 'PR-1':
+                    # A popup can leave native AppKit key flags stale even
+                    # after dismissal. Keep independent feature observations
+                    # independent; do not let that window state invalidate
+                    # every later form. No restart follows a crash.
+                    app.quit()
+                    if h._open_crash_reports() - baseline:
+                        evidence['stopped'] = 'New crash report during between-row quit; relaunch refused.'
+                        break
+                    app = factory(urls=(), fresh=True, extra_args=urls['engine_switches'])
+                    prepare_window()
                 if not record(rowid, action):
                     break
         finally:
