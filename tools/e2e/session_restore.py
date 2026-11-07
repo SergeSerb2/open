@@ -29,6 +29,16 @@ def run(factory, results, tmp, harness, config):
     def check(name, ok, **evidence):
         results[name] = dict(ok=bool(ok), **evidence)
         print('restore %-32s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
+    def sidebar_ids():
+        app.call('save')
+        snapshot = json.loads((Path(app.user_data) / 'State/browser.json').read_text())
+        def ids(value):
+            if isinstance(value, dict):
+                if isinstance(value.get('id'), str): yield value['id']
+                for child in value.values(): yield from ids(child)
+            elif isinstance(value, list):
+                for child in value: yield from ids(child)
+        return set(ids([snapshot['profiles'], snapshot['spaces']])), len(snapshot['spaces'])
     def quit_real():
         app.activation_trace = app.call('activation-events')
         app.call('quit')
@@ -61,13 +71,11 @@ def run(factory, results, tmp, harness, config):
             before = {i: app.call('window-state', id=i) for i in (first, second)}
             app.call('command', id='new-little-open-window')
             app.call('window-focus', id=first, activate=True)
-            tabs_before = {t['id'] for t in app.call('tabs')}
-            app.call('save')
+            tabs_before, space_count = sidebar_ids()
             quit_real()
             app = launch()
             windows = app.call('shell-windows')
             after = {w['id']: app.call('window-state', id=w['id']) for w in windows}
-            tabs_after = {t['id'] for t in app.call('tabs')}
             state = app.call('window-state')
             if restore:
                 check('restore_on_windows_frames_selection', len(after) == 2 and set(after) == set(before)
@@ -87,10 +95,10 @@ def run(factory, results, tmp, harness, config):
                 check('restore_off_recent_space_selection', len(after) == 1 and state['space'] == space1
                       and state['selected'] == tab1 and state['space'] != space2 and state['selected'] != tab2,
                       space=state['space'], selected=state['selected'], expected=[space1, tab1])
-            snapshot = json.loads((Path(app.user_data) / 'State/browser.json').read_text())
+            tabs_after, after_count = sidebar_ids()
             little = app.call('little-open-state')
             check('restore_%s_preserves_sidebar_no_little' % ('on' if restore else 'off'),
-                  tabs_before == tabs_after and len(snapshot['spaces']) >= 2 and not little['sessions'],
+                  tabs_before == tabs_after and space_count == after_count and after_count >= 2 and not little['sessions'],
                   tabsBefore=sorted(tabs_before), tabsAfter=sorted(tabs_after), little=little)
             quit_real()
     finally:
