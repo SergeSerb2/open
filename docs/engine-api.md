@@ -457,7 +457,7 @@ mirrors them through OpenWeb; OpenKit imports no CEF types.
 | OpenEngine | OpenWeb | Behavior |
 |---|---|---|
 | `changedSiteSettings(origin:) -> [OESiteSetting]` | `WebProfile.changedSiteSettings(origin:) -> [WebSiteSetting]` | Effective per-origin exceptions that differ from the profile default. Each `kind` is Chromium's registry name, such as `javascript`, `images` or `cookies`. Every scalar ContentSetting in `ContentSettingsRegistry` is visited, including future types; this is not the older permission whitelist. |
-| `setSiteSetting(_:state:origin:) -> Bool` | `setSiteSetting(_:kind:origin:) -> Bool` | `allow`, `block`, `ask`, `session`. Each kind accepts only its registered states. Returns false for an invalid origin, kind/state, or an uninitialized context. Setting the global default removes the effective exception from the returned list. |
+| `setSiteSetting(_:state:origin:) -> Bool` | `setSiteSetting(_:kind:origin:) -> Bool` | `allow`, `block`, `ask`, `session`. Each kind accepts only its registered states. Returns false for an invalid origin, kind/state, or an uninitialized context. A value equal to the global default is omitted from the returned list, but the API has no `default` state to clear an exception. Reset permissions remains a follow-up. |
 | `clearSiteData(origin:types:completion:)` | `clearSiteData(origin:kinds:) async throws` | Bits 1 cookies, 2 cache, 4 storage (`OESiteDataType` / `WebSiteDataKinds`). Empty kinds succeeds; invalid arguments fail. Completion runs once after every selected backend finishes; a backend failure can leave a partial result. Safe before profile initialization; completion may close the profile. |
 | `securityLevel` (`engineSecurityLevel` in Swift) | `WebContent.securityLevel: WebSecurityLevel` | `secure`, `neutral`, `insecure`, `dangerous`, `mixedContent`. Chrome's existing visible-security helper supplies certificate/mixed-content flags and available Safe Browsing verdicts. Major certificate errors take precedence; HTTP, including loopback, is insecure; non-network pages are neutral. This API does not add a Safe Browsing service or policy. |
 | `certificateChain` (`engineCertificateChain` in Swift) | `WebContent.certificateChain: [SecCertificate]` | Chromium's visible TLS chain as `SecCertificateRef` objects, leaf first. Empty on a non-TLS page or refusal. Maximum 32 certificates, 256 KiB per certificate, 1 MiB total. |
@@ -488,5 +488,5 @@ and throw `unsupported` for data removal until they implement these APIs.
 The `sitedata` real-App suite covers JavaScript/images, session and invalid/empty
 requests, separate cookie/cache/storage deletion with a second origin preserved,
 server-hit proof of HTTP cache eviction, HTTP/neutral/valid HTTPS/self-signed
-security, TLS certificates and the security change bit. Its runtime proof is
-pending the lead's screen HOLD release.
+security, TLS certificates and the security change bit. Current distribution
+fingerprints, runtime results and loads are recorded in the PR evidence.
