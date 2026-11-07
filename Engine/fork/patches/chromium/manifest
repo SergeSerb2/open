@@ -43,3 +43,6 @@ paths: components/password_manager/core/browser/features/password_features.cc co
 
 # 0806-open-https-fallback-dialog-host.patch
 paths: chrome/browser/ssl/ask_before_http_dialog_controller.cc
+
+# 0807-open-hosted-autofill-popup.patch
+paths: chrome/browser/ui/views/autofill/popup/popup_base_view.cc
