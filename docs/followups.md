@@ -290,24 +290,26 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   model. Main's Profile deletion path needs typed confirmation and defers loaded
   context data until restart. Undo does not erase Archive/History stores or
   engine directories. Complete this through Section 10's in-session deletion
-  path; do not bypass its teardown boundary.
+  path (0702); do not bypass its teardown boundary.
 - Session Favorite keys contain a Profile and window but no Space. When a source
   window focuses another Profile, import uses the Favorite owner's first Space.
-  This is a marked guess. Settings keeps its current windows and selections and
+  This is an accepted, marked guess. Settings keeps its current windows and selections and
   imports selections only for newly added Spaces; it does not recreate Arc
   window layout. User-operated Arc evidence is needed for exact inactive-Profile
   session behavior. See [multi-profile import](import-multiprofile.md).
 
-- C1 acceptance (2026-11-06): rerun the latest `firstrun`/`MP_*` positives,
-  all 11 negative proofs, forced dialog cleanup, counts-only real-App audit,
-  and real-App `routing`/`sidebar` after the unowned `UserNotificationCenter`
-  foreground blocker is gone. Earlier 62/62 first-run and 10-row proofs apply
-  to the initial implementation. The later session/source-directory/default
-  isolation changes have Debug/Release and CLI proof, but no accepted latest
-  App run. The full verifier has 22 PASS, command-bar timing misses, and Site
-  Control timing plus F25 foreground interruptions. No threshold changed.
+- C1 review-fix acceptance (2026-11-06): run the latest 12 `MP_*` positives,
+  the 11 existing fault injections plus a code-break proof for Default-role
+  mapping, forced dialog cleanup, full `firstrun`, counts-only real-App audit,
+  `routing`, `sidebar`, `settings-preview`, and the full verifier. The unowned
+  `UserNotificationCenter` crash dialog still blocks App runs. Earlier passes
+  do not accept the Default-role review fix. See [current receipts](import-multiprofile.md).
 
-- Earlier Settings imports can have merged Arc Default into an arbitrary live
-  Default ID. C1 now matches stable import IDs only, but adds no provenance
-  migration. Decide a migration separately; do not infer ownership from a
-  display name or silently move existing sidebar IDs between Profiles.
+- Directory-limit boundary flows (255-byte acceptance and 256-byte refusal)
+  and general decoded-memory bounds for the inherited JSON parser remain
+  follow-ups. They are outside PR #221's review fix. No boundary-flow or
+  worst-allocation acceptance is claimed.
+
+The lead decided against provenance migration for earlier Settings imports:
+only pre-release development builds made them. Arc Default maps by role to the
+live Open Default; named Profiles still match stable import IDs only.

@@ -311,19 +311,28 @@ Implemented from [import-phase2.md](plans/import-phase2.md), with its Lead decis
 
 `ArcHistoryReader` copies History and its WAL, or the rollback journal in rollback mode, into a private mode-700 directory. It never copies SHM; SQLite rebuilds that file. Copy destinations are created exclusively with mode 600 before any bytes are written. The CLI removes user-owned import directories older than one hour at startup. SQLite opens and recovers only the private copy. A failed quick check gets one fresh-copy retry after 200 ms. The reader deletes its copy on success and failure. It accepts History meta versions 65–75, converts Chromium microseconds with integer epoch subtraction, keeps http/https/file visits, and filters internal schemes, subframes, invalid times, and times more than 24 hours ahead. It maps transition core bits and counts typed visits only for core 1. No source aggregate count overrides visit rows.
 
-`ArcImportResult.sourceProfileDirectories` maps each imported Profile ID to its original Chromium directory, before Open destination collision suffixes. The App uses that mapping for background History imports through its shared Profile stores.
+`ArcImportResult.sourceProfileDirectories` maps each imported Profile ID to its original Chromium directory, before Open destination collision suffixes. `sourceDefaultProfileID` carries the resolver's `defaultID` for `{default:true}`. The App uses these values for background History imports through its shared Profile stores.
 
 The App creates live imported Profiles through `BrowserModel.createProfile`,
 with the stable import ID and Open's normal directory allocator. Named Arc
 directories are source paths only; an existing Open folder with the same
-basename is never adopted. Settings resolves an already imported Profile by
-ID. The existing default Profile stays separate too. A same-name Profile
-without that ID stays separate; the new display name receives a suffix.
+basename is never adopted. Settings and any first-run path that merges into
+the live model map Arc's `{default:true}` role to `app.model.defaultProfile`,
+even when its ID and display name differ. This role mapping takes priority
+over stable-ID lookup. It preserves the live Default's engine context and
+logins. The same `profileMapping` routes its Spaces, Favorites, routing
+destinations, Archive and History; no second mapping is used. Named Arc
+Profiles match only their stable import ID. A same-name named Profile without
+that ID stays separate; the new display name receives a suffix.
 Profiles exist before Spaces or Archive/History stores use them. A Settings
 merge keeps one model Undo, including its newly created Profiles. Physical
 store/context deletion after Undo still needs Section 10's in-session deletion
 contract; the current Settings deletion path requires confirmation and defers
 loaded engine data until restart. Import does not bypass that path.
+Older Settings imports from pre-release development builds get no provenance
+migration. Existing Space assignments stay authoritative on re-import.
+Settings preserves its live window layout. The inactive-Profile Favorite's
+first-Space selection remains an accepted, marked guess.
 
 An App import starts each added Today tab's `lastActiveAt` at the import time,
 so startup auto-archive does not immediately remove old source tabs. Pinned tabs

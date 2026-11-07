@@ -40,7 +40,9 @@ def fixture(root, h, negative=False):
     rules = []
     targets = [{'space': {'_0': {'space': {'_0': ids['beta']}}}},
                {'space': {'_0': {'profile': {'_0': ref}}}},
-               {'littleArc': {'_0': {'profile': {'_0': ref}}}}]
+               {'littleArc': {'_0': {'profile': {'_0': ref}}}},
+               {'space': {'_0': {'profile': {'_0': {'default': True}}}}},
+               {'littleArc': {'_0': {'profile': {'_0': {'default': True}}}}}]
     for index, target in enumerate(targets):
         rules.append({'id': str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/multi-route/'+str(index))),
             'sourceComponents': [{'componentType': {'urlMatch': {'_0': {'contains': {}}, '_1': 'route'+str(index)+'.example.com'}}}],
@@ -98,7 +100,7 @@ def run(factory, results, tmp, h):
             # An unrelated on-disk Arc-shaped directory is never an import target.
             occupied = Path(app.user_data)/'Profiles/Profile 1'; occupied.mkdir(parents=True, exist_ok=True)
             marker = occupied/'unrelated-data'; marker.write_text('synthetic unrelated Profile data')
-            existing = None
+            existing = live_default = None
             if mode != 'settings':
                 app.call('first-run', action='import')
                 if os.environ.get('OPEN_E2E_IMPORT_EARLY_FAILURE') == '1':
@@ -111,16 +113,17 @@ def run(factory, results, tmp, h):
                 app.call('first-run', action='fresh')
                 app.call('profiles-shell', action='create', name='Example Work')
                 before = snapshot(); existing = next(p for p in before['profiles'] if p['name'] == 'Example Work')
+                live_default = next(p for p in before['profiles'] if p['dataDirectoryName'] == 'Default')
                 first = settings_import()
             data = snapshot()
             profiles = data['profiles']; by_id = {p['id']:p for p in profiles}; spaces = {s['id']:s for s in data['spaces']}
             alpha, beta = spaces[ids['alpha']], spaces[ids['beta']]
             personal, work = by_id[alpha['profileID']], by_id[beta['profileID']]
-            expected_names = ('Default','Profile') if mode == 'sourceDirectories' else ('Example Personal','Example Work') if mode == 'firstRun' else ('Example Personal','Example Work (2)')
+            expected_names = ('Default','Profile') if mode == 'sourceDirectories' else ('Example Personal','Example Work') if mode == 'firstRun' else (live_default['name'],'Example Work (2)')
             stores = [counts(personal), counts(work)]
             destinations = [rule['destination'] for rule in data['routingRules']]
             checks = dict(
-                profiles=len(profiles) == (4 if mode == 'settings' else 2)
+                profiles=len(profiles) == (3 if mode == 'settings' else 2)
                     and (personal['name'],work['name']) == expected_names
                     and (existing is None or existing['id'] != work['id']),
                 spaceProfiles=alpha['profileID'] != beta['profileID'],
@@ -131,9 +134,17 @@ def run(factory, results, tmp, h):
                 history=stores[0]['history'] == 3 and stores[1]['history'] == 2,
                 routing={'space': {'_0': beta['id']}} in destinations
                     and {'mostRecentSpace': {'profile': work['id']}} in destinations
-                    and {'littleOpen': {'profile': work['id']}} in destinations,
+                    and {'littleOpen': {'profile': work['id']}} in destinations
+                    and {'mostRecentSpace': {'profile': personal['id']}} in destinations
+                    and {'littleOpen': {'profile': personal['id']}} in destinations,
                 collision=work['dataDirectoryName'].startswith('Profile-') and marker.read_text() == 'synthetic unrelated Profile data',
             )
+            if mode == 'settings':
+                # The live Default has its own random ID and keeps its context.
+                # Source Local State calls it Example Personal: names do not match.
+                checks['defaultRole'] = personal['id'] == live_default['id'] and personal['dataDirectoryName'] == live_default['dataDirectoryName'] \
+                    and len(profiles) == len(before['profiles']) + 1 \
+                    and {p['id'] for p in profiles if p['name'].startswith('Default')} == {live_default['id']}
             if negative:
                 app.quit()
                 path = Path(app.user_data)/'State/browser.json'
@@ -165,7 +176,7 @@ def run(factory, results, tmp, h):
                 checks['undoModel'] = undone['profiles'] == before['profiles'] and undone['spaces'] == before['spaces'] and undone['routingRules'] == before['routingRules']
             details[mode] = dict(checks=checks, profileCount=len(profiles), stores=stores, repairs=repairs, first=first, repeat=repeat, load=os.getloadavg())
             app.quit(); app = None
-        for name in ('profiles','spaceProfiles','favorites','archive','history','routing','collision','session','noRepairs','reimport','undoModel'):
+        for name in ('profiles','defaultRole','spaceProfiles','favorites','archive','history','routing','collision','session','noRepairs','reimport','undoModel'):
             results['MP_'+name] = dict(ok=all(d['checks'].get(name,True) for d in details.values()), modes=details, negative=negative, load=os.getloadavg())
     finally:
         h._restore_defaults(app, saved)

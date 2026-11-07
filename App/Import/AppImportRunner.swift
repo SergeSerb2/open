@@ -82,7 +82,11 @@ final class AppImportRunner {
     var profileMapping: [ProfileID: ProfileID] = [:]
     if !firstRun || !plan.spaces || !hasSidebarData {
       for profile in imported.model.profiles {
-        if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
+        // Arc Default keeps the live Default context, including its logins.
+        // Resolve the source role before stable IDs; names and paths are not identity.
+        if profile.id == imported.sourceDefaultProfileID, let live = app.model.defaultProfile {
+          profileMapping[profile.id] = live.id
+        } else if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
       }
     }
     if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history) {
