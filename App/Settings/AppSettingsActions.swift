@@ -292,6 +292,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
   func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
   func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: false) }
+  func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
+    await app.importRunner.installExtension(candidate, window: settingsPresenter.window)
+  }
   func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
@@ -318,6 +321,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       if path.isEmpty || path == "shortcuts" {
         _ = factory.performAppCommand(path.isEmpty ? "manage-extensions" : "extension-shortcuts"); return
       }
+    }
+    if let page = AutofillPage.allCases.first(where: { $0.matches(url) }) {
+      factory.openAutofillPage(page, in: space); return
     }
     _ = factory.openNewTab(url: url, background: false)
   }
