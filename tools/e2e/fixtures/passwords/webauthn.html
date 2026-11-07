@@ -5,11 +5,12 @@
 <button id="get">Get passkey</button>
 <output id="result">idle</output>
 <script>
-let pending;
+let pending, credentialId;
 async function credential(operation) {
   pending?.abort();
-  pending = new AbortController();
-  const timer = setTimeout(() => pending.abort(), 5000);
+  const controller = new AbortController();
+  pending = controller;
+  const timer = setTimeout(() => controller.abort(), 5000);
   document.querySelector('#result').textContent = 'pending';
   const challenge = new Uint8Array(32).fill(7);
   const publicKey = operation === 'create' ? {
@@ -18,9 +19,11 @@ async function credential(operation) {
     pubKeyCredParams: [{type: 'public-key', alg: -7}],
     authenticatorSelection: {authenticatorAttachment: 'cross-platform'},
     timeout: 4000, attestation: 'none'
-  } : {challenge, timeout: 4000, userVerification: 'discouraged'};
+  } : {challenge, timeout: 4000, userVerification: 'discouraged',
+    ...(credentialId ? {allowCredentials: [{type: 'public-key', id: credentialId}]} : {})};
   try {
-    const result = await navigator.credentials[operation]({publicKey, signal: pending.signal});
+    const result = await navigator.credentials[operation]({publicKey, signal: controller.signal});
+    if (operation === 'create' && result) credentialId = result.rawId;
     document.querySelector('#result').textContent = result ? 'resolved' : 'null';
   } catch (error) {
     document.querySelector('#result').textContent = error.name;
