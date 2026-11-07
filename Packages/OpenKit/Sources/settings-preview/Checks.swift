@@ -88,7 +88,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["profile-delete-dialogs", "extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
+    let names = ["profile-icon-button", "profile-delete-dialogs", "extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -97,13 +97,22 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         let personal=vm.model.profiles[0].id,work=vm.model.profiles[1].id
         do {
             switch name {
+            case "profile-icon-button":
+                vm.set(true,for:"open.general.searchSuggestNoticeDismissed")
+                try await withAccessibleHost(ProfilesPane(model:vm.profiles),size:CGSize(width:600,height:600)) { host in
+                    try require(pressAccessibilityElement(host,label:"Change icon for \(vm.model.profiles[0].name)"),"native Profile icon button missing")
+                }
+                try require(env.actions.log.contains("chooseProfileIcon \(personal)"),"Profile icon press lost its captured identity")
+                vm.profiles.setIcon(.symbol("briefcase.fill"),profileID:personal)
+                _=try await render(ProfilesPane(model:vm.profiles),size:CGSize(width:600,height:600),scale:2,dark:true,to:env.root.appendingPathComponent("profile-icons.png"))
+                try require(try env.diskModel().profile(id:personal)?.icon == .symbol("briefcase.fill"),"Profile icon was not saved")
             case "profile-delete-dialogs":
                 let first=vm.profiles.create(name:"Example Unused A")!
                 let second=vm.profiles.create(name:"Example Unused B")!
                 vm.profiles.select(first.id);vm.profiles.beginDelete()
                 vm.profiles.deleteConfirmation="example unused a"
                 try require(!vm.profiles.canConfirmDelete,"case-insensitive deletion allowed")
-                let labels=try await render(ProfileDeleteSheet(model:vm.profiles),size:CGSize(width:508,height:310),scale:1,dark:true,to:env.root.appendingPathComponent("delete-profile.png"))
+                let labels=try await render(ProfileDeleteSheet(model:vm.profiles),size:CGSize(width:508,height:310),scale:1,dark:true,to:env.root.appendingPathComponent("delete-profile.png"),enhanceAccessibility:true)
                 try require(labels.contains("Delete this Profile") && labels.contains("Delete"),"specific delete dialog did not render")
                 vm.profiles.deleteConfirmation=first.name
                 try require(vm.profiles.canConfirmDelete,"exact name refused")

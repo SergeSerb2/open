@@ -286,6 +286,7 @@ public struct ProfileDeleteSheet: View {
     public var body: some View {
         VStack(alignment:.leading,spacing:16) {
             Text(model.confirmsUnused ? "Delete Unused Profiles" : "Delete this Profile").font(.title3)
+                .accessibilityLabel(model.confirmsUnused ? "Delete Unused Profiles" : "Delete this Profile")
             if model.confirmsUnused {
                 Text("Deleting these Profiles will permanently remove their cookies, history, preferences, and logins. This can't be undone.")
                 Text("The unused Profiles to be deleted are: \(model.deletionProfiles.map(\.name).joined(separator:", ")).")
@@ -301,7 +302,7 @@ public struct ProfileDeleteSheet: View {
             HStack {
                 Button("Cancel") { model.confirmsDelete=false;model.confirmsUnused=false }.keyboardShortcut(.cancelAction).disabled(model.deleting)
                 Spacer()
-                Button("Delete",role:.destructive) { Task { await model.confirmDeletion() } }.keyboardShortcut(.defaultAction).disabled(!model.canConfirmDelete).accessibilityIdentifier("profile-delete-submit")
+                Button("Delete",role:.destructive) { Task { await model.confirmDeletion() } }.keyboardShortcut(.defaultAction).disabled(!model.canConfirmDelete).accessibilityIdentifier("profile-delete-submit").accessibilityLabel("Delete")
             }
         }.padding(24).frame(width:460)
     }
