@@ -7,8 +7,9 @@ import OpenDesign
 enum SettingsPopUpEntry<Value: Hashable> {
     case option(String, Value, symbol: String? = nil)
     case imageOption(String,Value,NSImage)
+    case section(String)
     case separator
-    var value:Value? {switch self {case .option(_,let value,_),.imageOption(_,let value,_):.some(value);case .separator:nil}}
+    var value:Value? {switch self {case .option(_,let value,_),.imageOption(_,let value,_):.some(value);case .separator,.section:nil}}
 }
 struct SettingsPopUp<Value: Hashable>: NSViewRepresentable {
     let title: String
@@ -36,6 +37,10 @@ struct SettingsPopUp<Value: Hashable>: NSViewRepresentable {
         for (index,entry) in entries.enumerated() {
             switch entry {
             case .separator: control.menu?.addItem(.separator())
+            case .section(let title):
+                let item=NSMenuItem(title:title,action:nil,keyEquivalent:"")
+                item.isEnabled=false
+                control.menu?.addItem(item)
             case .option(let title,let value,let symbol):
                 let item=NSMenuItem(title:title,action:nil,keyEquivalent:"")
                 if let symbol {item.image=NSImage(systemSymbolName:symbol,accessibilityDescription:nil)}

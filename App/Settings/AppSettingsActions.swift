@@ -9,6 +9,7 @@ import OpenAdBlock
 import OpenSidebar
 import OpenFeatures
 import OpenTranslate
+import OpenSpaceEditor
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -23,6 +24,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
+    vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
     if !app.isFirstRun || app.firstRunSaved {
       if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
       else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
@@ -232,10 +234,20 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   // One source with Help ▸ Troubleshooting (page-platform §4.11.3–4).
   func revealOpenDataFolder() { TroubleshootingActions.shared.revealOpenData() }
   func copyOpenInfoToPasteboard() { copyText(TroubleshootingActions.openInfoText) }
-  func deleteProfileData(profileID: ProfileID) -> String? {
-    guard let profile = app.model.profile(id: profileID) else { return "This profile is no longer available." }
-    guard !OEEngine.shared.contexts.contains(where: { app.downloadsCenter.profile(for: $0)?.id == profileID }) else { return "Close this profile's pages and restart Open before deleting its data." }
-    do { try app.directories.deleteProfileData(for: profile); return nil } catch { return "The profile data could not be deleted. \(error.localizedDescription)" }
+  func deleteProfileData(profileID: ProfileID, dataDirectoryName: String) async -> String? {
+    do { try await app.profileTeardown.wipe(profileID:profileID,directory:dataDirectoryName); return nil }
+    catch { return "The Profile was removed, but its data could not be fully deleted. \(error.localizedDescription)" }
+  }
+  @ObservationIgnored var profileIconPicker: IconPickerController?
+  func chooseProfileIcon(profileID: ProfileID, anchor: NSView) {
+    guard let profile = app.model.profile(id:profileID), let window = anchor.window else { return }
+    profileIconPicker?.close()
+    let picker = IconPickerController(target:.profile,current:profile.icon,window:window,anchor:anchor.convert(anchor.bounds,to:nil)) { [weak self] icon in
+      self?.settings.profiles.setIcon(icon,profileID:profileID)
+    }
+    profileIconPicker=picker
+    picker.onClose = { [weak self, weak picker] in if self?.profileIconPicker === picker { self?.profileIconPicker=nil } }
+    picker.show()
   }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String? { await clearBrowsingData(profileID: profileID, kinds: kinds, range: .all) }
   func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? {
@@ -261,8 +273,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {
-    let path = [ProfilePage.privacy: "privacy", .passwords: "passwords", .paymentMethods: "payments", .notifications: "content/notifications"][page] ?? "privacy"
-    openURL(URL(string: "chrome://settings/\(path)")!, profileID: profileID)
+    let address: String
+    switch page {
+    case .privacy: address = "chrome://settings/privacy"
+    case .passwords: address = "chrome://password-manager/passwords"
+    case .paymentMethods: address = "chrome://settings/payments"
+    case .notifications: address = "chrome://settings/content/notifications"
+    }
+    openURL(URL(string:address)!, profileID:profileID)
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] {
@@ -284,9 +302,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   /// Settings ▸ Advanced "Reset Translated-site Prompts" (page-platform §4.7.7): app scope, every profile.
   func resetTranslatePrompts(profileID: ProfileID) -> String? { TranslatePreferences().reset(); return nil }
   func openURL(_ url: URL, profileID: ProfileID) {
-    guard let space = app.model.spaces.first(where: { $0.profileID == profileID }),
+    guard app.model.profile(id:profileID) != nil else { return }
+    guard let space = app.model.spaces.first(where: { $0.profileID == profileID }) else {
+      // guess S10: Arc's destination for a Profile with no Space is unverified.
+      app.openProfilePage(url,profileID:profileID); return
+    }
+    guard
       let controller = app.frontStandardWindowController ?? app.makeWindow(focusedSpaceID: space.id),
-      let factory = app.hostFactories[controller.windowID] else { status("This Profile needs a Space before it can open a page."); return }
+      let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
     if url.scheme == "chrome", url.host() == "extensions", url.query == nil, url.fragment == nil {
       let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))

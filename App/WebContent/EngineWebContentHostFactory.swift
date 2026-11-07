@@ -190,13 +190,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.titleBar.onExtensions = { [weak self, weak controller] in
       guard let controller else { return }; self?.extensions.showLittleOpenMenu(controller)
     }
-    // Manage/Add still open in a Space of this profile, never in the standalone page.
+    // A Profile without a Space keeps management pages in Little Open (S10 guess).
     extensions.context.manageExtensions = { [weak self] in self?.performLittleOpenExtensionManagement("manage-extensions") }
     extensions.context.addExtension = { [weak self] in self?.performLittleOpenExtensionManagement("add-extension") }
   }
   func performLittleOpenExtensionManagement(_ command: String) {
-    guard let profile = littleOpenController?.session.profileID,
-          let space = model.mostRecentlyFocusedSpace(profileID: profile),
+    guard let profile = littleOpenController?.session.profileID else { return }
+    guard let space = model.mostRecentlyFocusedSpace(profileID: profile) else {
+      let address = command == "add-extension" ? "https://chromewebstore.google.com/category/extensions" : command == "extension-shortcuts" ? "chrome://extensions/shortcuts" : "chrome://extensions"
+      app.openProfilePage(URL(string:address)!,profileID:profile); return
+    }
+    guard
           let controller = app.windowControllers.first(where: { app.hostFactories[$0.windowID]?.focusedProfile?.id == profile })
             ?? app.makeWindow(focusedSpaceID: space.id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); _ = factory.performAppCommand(command)
@@ -400,7 +404,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     let context = OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
       .map(WebsiteAppearance.prepare)
-    if let context { app.extensionPrompts.register(context.extensions) }; return context
+    if let context { app.profileTeardown.didLoad(profile); app.extensionPrompts.register(context.extensions) }; return context
+  }
+  func retireProfile(_ id: ProfileID, directory: String) {
+    for (tab, host) in hosts where host.content.context.identifier == directory {
+      host.close(); hosts.removeValue(forKey:tab); modelHostIDs.remove(tab); queuedNavigations.removeValue(forKey:tab)
+    }
+    mirror.retireProfile(id)
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {

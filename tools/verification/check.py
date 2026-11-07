@@ -513,6 +513,8 @@ def route(cli, root, seed):
     decision = json.loads(run(cli, "route", save_snapshot(data), "https://example.com/", "--external-little-open", "off", "--json"))
     require("noSpaces" in decision["via"] and decision.get("resolved") is None, "A17 empty state did not report noSpaces")
     print("route A1-A17 passed")
+    runpy.run_path(str(root / "tools/verification/routing_atc.py"))["route_atc"](
+        cli, seed_snapshot(cli, seed), run, require, save_snapshot)
 
 
 @contextlib.contextmanager
@@ -853,7 +855,12 @@ def main():
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 226, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 236, "missing settings/library/appearance/detail/sheet/state renders")
+        require({f"sheet-link-rule-profile-work@{scale}x.png" for scale in (1, 2)} <= {p.name for p in pngs},
+                "missing two-Profile destination renders")
+        require({f"{state}@{scale}x.png" for state in
+                 ("profile-icons", "profile-delete-disabled", "profile-delete-enabled", "profile-delete-unused")
+                 for scale in (1, 2)} <= {p.name for p in pngs}, "missing Profile icon/deletion renders")
         require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
         require({f"shortcuts-extension-conflicts-{appearance}@{scale}x.png" for appearance in ("light", "dark") for scale in (1, 2)} <= {p.name for p in pngs},
                 "missing extension shortcut conflict renders")
@@ -874,9 +881,11 @@ def main():
             data = png.read_bytes()
             scale = 2 if "@2x" in png.name else 1
             sheets = {"previews": (480, 320), "search-engines": (520, 420), "clear-data": (460, 360),
-                      "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
+                      "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "link-rule-profile-work": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
             expected = (440, 384) if png.name.startswith("essential-shortcuts-") else (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
+            expected = {"profile-delete-disabled": (508, 310), "profile-delete-enabled": (508, 310),
+                        "profile-delete-unused": (508, 360)}.get(png.name.split("@")[0], expected)
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
     elif name == "extensions-render":
         renderer = str(root / "Packages/OpenKit/.build/release/extensions-render")

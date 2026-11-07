@@ -84,7 +84,7 @@ func runRoute(args: [String]) throws {
     }
     let toggle = externalLittleOpen ?? (UserDefaults.standard.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true)
     var snapshot = RoutingSnapshot(spaces: spaces, windows: routingWindows, rules: model.routingRules,
-        defaultDestination: model.defaultDestination, externalLinksInLittleOpen: toggle, mostRecentOverride: override)
+        defaultDestination: model.defaultDestination, externalLinksInLittleOpen: toggle, mostRecentOverride: override, profiles: model.profiles.map(\.id))
     let request = RoutingRequest(url: url, source: RoutingSource(bundleID: source))
     let decision = RoutingEvaluator().evaluate(request, in: snapshot)
     if json {
@@ -105,7 +105,7 @@ func runRoute(args: [String]) throws {
             // Use the same evaluator to resolve this expectation; no second routing
             // algorithm in the CLI that could drift from the real caller's behavior.
             snapshot.rules = []
-            snapshot.defaultDestination = .mostRecentSpace
+            snapshot.defaultDestination = .mostRecentSpace(profile: nil)
             let recent = RoutingEvaluator().evaluate(request, in: snapshot).resolved
             if case .space = recent { matches = decision.resolved == recent } else { matches = false }
         }

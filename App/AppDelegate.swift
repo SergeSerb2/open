@@ -47,6 +47,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var asyncEngineCalls: [String: Int] = [:]
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
+  lazy var profileTeardown = ProfileTeardown(app: self)
+  var pendingMissingProfileTitles: [String] = []
+  var missingProfileNotice: NSAlert?
+  var missingProfileNoticeTitles: [String] = []
+  var missingProfileNoticeCount = 0
   lazy var extensionPrompts = ExtensionPromptPresenter(app: self)
   lazy var extensionsMainMenu = ExtensionsMainMenuProvider(app: self)
   /// Mini players, auto-PiP and the media sleep feed (media-pip §7.2).
@@ -185,6 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // the next one); it never touches the model.
     do {
       engine = try OpenDataRoot.prepareEngineLayout(root: root)
+      try ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root))
     } catch {
       FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
       exit(1)
@@ -213,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model = Self.makeDefaultModel()
       autoCreatedLaunchWindowID = model.windows.first?.id
     }
+    let repaired = repairMissingProfiles(in: model)
     if model.windows.isEmpty, let space = model.spaces.first {
       let state = BrowserWindowState(focusedSpaceID: space.id)
       model.windows.append(state)
@@ -220,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     do {
       try OpenDataRoot.prepare(root: root, model: model)
+      if repaired { try snapshotStore.saveNow(model: model) }
     } catch {
       FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
       exit(1)
@@ -247,6 +255,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   /// One observer/service seam for initial load and the first-run model swap.
   func installModel(_ model: BrowserModel) {
+    if repairMissingProfiles(in: model) {
+      do { try snapshotStore.saveNow(model: model) }
+      catch { FileHandle.standardError.write(Data("Open: repaired Profiles could not be saved: \(error)\n".utf8)); exit(1) }
+    }
     if let modelSaveObserver { self.model?.removeObserver(modelSaveObserver) }
     self.model = model
     if isFirstRun { autoCreatedLaunchWindowID = nil }
@@ -320,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     MainMenu.targetWindowCommands(factory)
     if session == nil { todayAutoArchive?.attach(context: controller.context) }
     controller.showWindow(nil)
+    if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }
     return controller
   }
@@ -786,7 +799,14 @@ extension AppDelegate: CommandDispatcher {
     case "settings": if !settingsShortcutCaptured { settingsPresenter.show() }
     case "new-profile": settingsPresenter.showNewProfile()
     case "search-settings": performCommand(id, payload: nil)
-    case "air-traffic-control": settingsPresenter.show(pane: .links)
+    case "air-traffic-control":
+      settingsPresenter.settings.scrollTarget = nil
+      settingsPresenter.show(pane: .links)
+      // A repeated invocation must scroll again even if Settings was left on Links.
+      Task { @MainActor [weak self] in
+        await Task.yield()
+        self?.settingsPresenter.settings.scrollTarget = "links-rules"
+      }
     case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
     case "set-default-browser": settingsPresenter.settings.general.setDefault()
     case "check-for-updates": settingsPresenter.checkForUpdates()
