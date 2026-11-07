@@ -88,6 +88,7 @@ def run(h, factory, results, tmp):
         return last_tab
 
     def fill(tab):
+        app.call('focus', tab=tab)
         fields = app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).map(e => e.id)')
         for field in fields:
             app.call('click', tab=tab, selector='#' + field)
@@ -157,7 +158,7 @@ def run(h, factory, results, tmp):
                   return await Promise.race([
                     new Promise(resolve => chrome.passwordsPrivate.addPassword(%s, () => resolve({status:chrome.runtime.lastError ? 'backend-error' : 'added'}))),
                     new Promise(resolve => setTimeout(() => resolve({status:'timeout'}), 2000))]);
-                })()''' % json.dumps({'url': urls['login'], 'username': fixtures['USERNAME'], 'password': fixtures['PASSWORD'], 'note': ''})
+                })()''' % json.dumps({'url': urls['login'], 'username': fixtures['USERNAME'], 'password': fixtures['PASSWORD'], 'note': '', 'useAccountStore': False})
                 try:
                     row['seed'] = app.eval(tab, script)
                 except RuntimeError:
@@ -166,6 +167,7 @@ def run(h, factory, results, tmp):
                 tab = load(urls['login'])
                 row['emptyOnLoad'] = app.eval(tab, '!document.querySelector("#username").value && !document.querySelector("#password").value')
                 before = windows()
+                app.call('focus', tab=tab)
                 app.call('click', tab=tab, selector='#username')
                 time.sleep(.5)
                 row['newVisibleWindows'] = visible_delta(before)
@@ -188,6 +190,7 @@ def run(h, factory, results, tmp):
                 row['newVisibleWindowsAfterSubmit'] = visible_delta(before)
                 tab = load(urls['card'])
                 before = windows()
+                app.call('focus', tab=tab)
                 app.call('click', tab=tab, selector='#number')
                 time.sleep(.5)
                 row['newVisibleWindowsForRefill'] = visible_delta(before)
@@ -252,8 +255,14 @@ def run(h, factory, results, tmp):
                 row['peek'] = page_rows()
                 app.call('peek-close')
                 try:
-                    app.call('little-open-action', action='blank', then='submit', text=urls['local_login'])
-                    time.sleep(1)
+                    state = app.call('little-open-action', action='blank', timeout=10)
+                    session = state['sessions'][-1]
+                    app.call('little-open-action', id=session['id'], action='dismiss-intro')
+                    h.wait_until(lambda: any(s.get('browserID') for s in app.call('little-open-state')['sessions']), timeout=8, step=.2)
+                    app.call('key', window=session['window'], text=urls['local_login'] + '\r')
+                    loaded = h.wait_until(lambda: any(s['state'] == 'page' and not s['loading']
+                                                    for s in app.call('little-open-state')['sessions']), timeout=12, step=.2)
+                    row['littleOpenLoaded'] = bool(loaded)
                     row['littleOpen'] = page_rows()
                     state = app.call('little-open-state')
                     row['littleOpenSessions'] = [{k:s.get(k) for k in ('state','content','browserID')} for s in state['sessions']]
