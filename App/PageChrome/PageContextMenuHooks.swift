@@ -12,4 +12,11 @@ struct PageContextMenuHooks {
   }
   var mediaItems: (OEContextMenu) -> [Item] = { _ in [] }
   var extensionItems: (OEContextMenu) -> [Item] = { _ in [] }
+
+  init(manageExtensions: @escaping @MainActor () -> Void) {
+    extensionItems = { request in
+      guard !request.targets.contains(.editable) else { return [] }
+      return [Item(title: "Manage Extensions", action: manageExtensions)]
+    }
+  }
 }
