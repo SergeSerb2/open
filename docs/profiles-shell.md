@@ -35,6 +35,11 @@ keeps its title-bar geometry and uses the Profile's icon. Settings and
 extension management create a fresh Little Open page on the requested
 Profile when it has no Space.
 
+Private windows never show the Space-header Profile indicator. Repair and
+Settings deletion use the normal `app.model`; private window models are
+separate. Repair notices attach only to standard windows, and deletion
+retires hosts only in persistent factories.
+
 ## Profile page destinations
 
 The Settings actions use the Chromium 156 routes below. The real-App suite
