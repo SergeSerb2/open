@@ -348,6 +348,7 @@ enum FeatureChecks {
         try await ToastChecks.run { check($0, $1) }
         try await SwipeChecks.run { check($0, $1) }
         try await LittleOpenChecks.run { condition, label in check(condition, label) }
+        SaveSheetScenes.check { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }
