@@ -12,6 +12,10 @@ import time
 from pathlib import Path
 
 
+class ProbeAbort(RuntimeError):
+    """Deliberate early exit to verify real-dialog cleanup, never a crash."""
+
+
 def timestamp():
     return datetime.datetime.now().astimezone().isoformat(timespec='seconds')
 
@@ -106,6 +110,9 @@ def run(h, factory, results, tmp):
         persist()  # An interrupted/dead row always has a durable start record.
         try:
             action(row)
+        except ProbeAbort:
+            row['status'] = 'FORCED_FAILURE'
+            raise
         except h.FocusInterruption:
             row['status'] = 'INTERRUPTED'
             raise
@@ -206,7 +213,10 @@ def run(h, factory, results, tmp):
                 time.sleep(.5)
                 row['newVisibleWindows'] = visible_delta(before)
                 row['promiseAt500ms'] = app.eval(tab, 'document.querySelector("#result").textContent')
-                app.call('key', key='escape', route='app')
+                if os.environ.get('OPEN_E2E_PASSWORDS_PROBE_ABORT_DIALOG') == '1':
+                    raise ProbeAbort('Deliberate exit with WebAuthn dialog open (cleanup verification)')
+                target = row['newVisibleWindows'][0]['number'] if row['newVisibleWindows'] else None
+                app.call('key', key='escape', route='app', **({'window': target} if target else {}))
                 row['promiseAfterEscapeOrTimeout'] = app.eval(tab, 'new Promise(resolve => {const end=Date.now()+6000; const tick=()=>{const s=document.querySelector("#result").textContent; if(s!=="pending" || Date.now()>=end) resolve(s); else setTimeout(tick,50)};tick()})')
             def credential_get(row):
                 tab = load(urls['local_login'])
@@ -224,7 +234,8 @@ def run(h, factory, results, tmp):
                 tab = app.call('open', url=urls['basic'])['id']
                 time.sleep(1)
                 row['newVisibleWindows'] = visible_delta(before)
-                app.call('key', key='escape', route='app')
+                target = row['newVisibleWindows'][0]['number'] if row['newVisibleWindows'] else None
+                app.call('key', key='escape', route='app', **({'window': target} if target else {}))
                 row['requested'] = True
             def cookies(row):
                 nonlocal app
