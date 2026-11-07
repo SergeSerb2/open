@@ -278,7 +278,13 @@ Importer use: restore one window per entry, focus `focusedSpaceID`, and reopen `
 
 **Arc Profiles.** No `StorableProfiles.json` exists on this Mac, yet the binary knows `StorableProfiles.json` and `StorableProfileContainers.json`, plus keys `profileDirectoryBasename`, `defaultProfileDirectoryBasename`, `sourceProfileDirectoryBasename` (**confirmed (binary)**). Model (**inferred**): an Arc Profile has an id, a display name, and a `profileDirectoryBasename` that names its Chromium folder under `User Data/` (`Default` for the default profile). Spaces point at a profile via `Space.profile`. Multiple Spaces can share one profile (all 4 do here). Importer: create one Open profile per distinct `Space.profile` value, defaulting to a single profile. Verify field names against a real multi-profile install before shipping (§5).
 
-**Boosts.** `StorableBoostsData.json` is absent here. Binary evidence: `StorableBoostsDataStore.swift`, `BoostsStorageFirebaseImpl` (so Boosts also sync via Firebase), keys `boostID`, `boostTitle`, `activeBoosts`, `boostSnapshots` (**confirmed (binary)** names only). The Boost payload (CSS/JS/Zap rules per host) was not recoverable without a real file or a Ghidra query, and inventing fields would be worse than omitting them. Importer v1: if the file exists, preserve it raw and surface Boost names only if a `title`-like key is present; do not guess the rule schema. This is the weakest part of this doc and is flagged in §5.
+**Boosts (updated 2026-11-06).** `StorableBoostsData.json` is absent here and
+stores only `version` and `locallyEnabledBoostIDs`, not content. Reflection and
+the shared Ghidra snapshot establish the remote string dictionary and inner
+JSON component keys. The additional authorized Firestore offline cache contains
+a deleted Boost marker, with no live content document. See [Boost storage
+evidence](boosts-store.md) for exact symbols, wire schema, copy limits, mapping
+and remaining guesses. Do not preserve raw personal Boost files in Open data.
 
 **Site settings / Site Control Center.** These live in Chromium, not in Storable files: `User Data/Default/Preferences` → `profile.content_settings.exceptions` (103 exception types present here, mostly empty) plus per-site entries when the user changes a site (**confirmed (disk)** keys). Content-blocking lists live in `RemoteAssetDirectory/BlockListConfiguration_*` and `WebContentBehaviorConfiguration_*`. Import site settings from Chromium Preferences in the Chromium phase (§4), not from the sidebar.
 

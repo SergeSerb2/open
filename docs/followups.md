@@ -1,5 +1,13 @@
 # Follow-ups
 
+- Import Arc Boosts — C2 adds the bounded Firestore cache reader, synthetic CLI
+  flow and locked CLI persistence. App persistence, live apply, re-import and
+  shared Undo remain BLOCKED (Section 12 AppBoosts). Wire only through
+  `app.stores.boosts.store(for:)` and `refresh(profile:)`; never create another
+  App BoostStore. Confirm color/zoom conversion, absent local enablement policy,
+  account-to-Default Profile assignment and a populated real cache sample.
+  See [storage evidence](re/boosts-store.md). — Section 14 C2, 2026-11-06
+
 Small items found during review and verification. Each line: area — issue — where found.
 
 - Little Open Browser performance (Section 9, PR #185) — deferred creation passes first frame, but the strict page-load gate remains open. Final 30 interleaved Release pairs on engine `3f45b07b`, main `8920190f` versus the branch after merging `e83dc38f`, load1 8.32–11.98: first frame main 80.10/123.01 ms versus branch 66.86/93.76 ms median/p95; page load main 113.23/186.48 ms versus branch 130.11/209.34 ms. Browser creation to ready is 146.63/229.81 ms; added RSS is 5.26 MiB/window. The native-frame boundary, pending URL and cancellation flows pass real-App checks. No Chromium tree or patch was changed. Keep the PR draft; further performance work needs the lead's direction. [All attempts and methods](little-open/deferred-browser.md). — Section 9, 2026-11-06.

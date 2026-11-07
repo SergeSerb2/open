@@ -274,7 +274,31 @@ Sidebar parsing follows [data-model.md](re/data-model.md):
 
 `ImportReport` counts: `totalItems`, `spaces`, `pinnedTabs`, `todayTabs`, `favorites`, `folders`, `splits`, `routingRules`, imported welcome, named-icon counts, untitled Spaces, skipped easels / notes / unknown, `orphans`, and `skippedRoutingRules`.
 Audit rule: imported nodes + folders + splits + skipped + structural containers = `totalItems`. The CLI prints this check on every import and exits non-zero on a mismatch.
-Boosts import does not run yet. No real `StorableBoostsData.json` exists on this Mac. The report states "not imported" for Boosts.
+Boost parsing reads the Firestore offline cache through a private copy, with an
+own bounded LevelDB, Snappy and protobuf reader. It imports only live `boosts`
+remote documents. `StorableBoostsData.json` supplies local enablement only.
+See [Boost storage evidence](re/boosts-store.md) for the confirmed schema,
+counted guesses, dropped color/zoom fields and limits. `ImportReport.boosts`
+counts found, mapped, malformed, deleted, unknown and other-collection records,
+mapped/dropped/unknown fields, Default Profile guesses and unknown enablement.
+The real source on this Mac contains a deletion marker, not a populated Boost.
+
+`ArcImportResult.boostsByProfile` carries values without writing files. All
+account-scoped Boosts currently map to Default (a counted guess). The CLI writes
+through `OpenBoosts` at `ProfileDirectories.boostsFileURL(for:)`, retaining the
+exclusive data-root preparation token throughout. It refuses a root held by a
+running App. Re-import preserves every existing stable ID and reads the saved
+DTO back before reporting success. BoostStore stamps new records' modification
+time at import, so `protectedEdits` counts newer destination records, including
+unchanged imports. It cannot distinguish those from user edits.
+
+The App has a report-only `recordBoostImport([ProfileID: [Boost]], counts:)`
+seam. It reports source counts and `Not imported in this build`; it writes no
+Boosts. Persistence, live apply, re-import and shared Undo remain **BLOCKED
+(Section 12 AppBoosts)**. Follow-up must use
+`app.stores.boosts.store(for: profileID).upsert(boost)`, then
+`app.stores.boosts.refresh(profile: profileID)` once per Profile. No second App
+BoostStore is allowed: its delayed save could overwrite the sole owner's data.
 
 Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md) "Archive and session files (observed)"):
 
@@ -286,7 +310,7 @@ Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md)
 - The original Space comes from `source.space._0` through the Arc Space ID → Open Space ID map. An unknown Space ID falls back to the first Space. The profile comes from that Space.
 - The archived item's parent folder is lost in Arc's file (`parentID` is null). The record therefore stores `originalLocation` as `today:<spaceID>`. `restoreArchivedTab` then puts the tab at the top of that Space's Today section.
 - The payload holds the full tab fields (`id`, `url`, `title`, `customTitle`, `customIcon`, `createdAt`, `lastActiveAt`, `isMuted`, `isUnread`). `restoreArchivedTab` rebuilds the tab from it.
-- `ArcImporter.importAll()` returns the archive records. It does not write them. The CLI stores them through `ArchiveStore.importRecords(_:)`. OpenImport therefore still depends only on OpenModel.
+- `ArcImporter.importAll()` returns the archive records. It does not write them. The CLI stores them through `ArchiveStore.importRecords(_:)`. OpenImport depends on OpenModel, OpenRouting and OpenBoosts; it has no store writer.
 - Re-import is idempotent by Arc item ID. Stable Open IDs plus the store duplicate check give zero new rows on a second import into the same output folder.
 
 Session restoration (`StorableSessionRestorationData.json`):
