@@ -327,7 +327,7 @@ final class PageContextMenuBuilder {
       guard depth <= 8 else { return false }
       for item in candidate.items {
         count += 1
-        // 128 incoming nodes + at most eight Open rows/separators + 32 hook rows.
+        // Keep the final node cap, including Open rows, hook groups and separators.
         guard count <= 168, item.title.utf8.count <= 1024 else { return false }
         if let submenu = item.submenu, !visit(submenu, depth: depth + 1) { return false }
       }

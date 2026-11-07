@@ -188,10 +188,14 @@ def run(factory, results, tmp, h):
             def truncation(name=name):
                 checks = []
                 for kind in (['alert', 'confirm', 'prompt'] if name == 'message' else ['prompt']):
-                    for boundary, source, expected in [
+                    # Chromium caps message characters before the callback, without a mark.
+                    # Multibyte text stays below that character cap but exceeds our byte cap.
+                    samples = [
                         ('at', 'x' * 10240, 'x' * 10240),
-                        ('over', 'x' * 10241, 'x' * 10237 + '…'),
-                        ('multibyte', 'x' * 10235 + '😀' * 8, 'x' * 10235 + '…')]:
+                        ('over', 'x' + 'é' * 5120, 'x' + 'é' * 5118 + '…'),
+                        ('multibyte', 'x' * 10235 + '😀' * 8, 'x' * 10235 + '…')]
+                    if name == 'message': samples.append(('upstream', 'x' * 10241, 'x' * 10240))
+                    for boundary, source, expected in samples:
                         page()
                         message = source if name == 'message' else 'bounded prompt'
                         default = source if name == 'prompt' else 'seed'
@@ -212,6 +216,7 @@ def run(factory, results, tmp, h):
                         actual = value()
                         reply = 'done' if kind == 'alert' else True if kind == 'confirm' else expected if name == 'prompt' else 'seed'
                         checks.append(dict(kind=kind, boundary=boundary, sourceBytes=len(source.encode()),
+                            receivedBytes=state['sourceMessageBytes' if name == 'message' else 'sourcePromptBytes'],
                             shownBytes=len(shown.encode()), shownTail=shown[-8:], visible=state['visible'],
                             ok=shown == expected and len(shown.encode()) <= 10240 and actual == reply))
                 return check(all(c['ok'] for c in checks), cases=checks)

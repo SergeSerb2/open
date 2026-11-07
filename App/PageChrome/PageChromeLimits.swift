@@ -10,6 +10,8 @@ enum PageChromeLimits {
   static let pendingRequests = 8
 
   static func dialogText(_ text: String) -> String {
+    // Chromium may already have cut message characters without a mark. Mark only
+    // cuts made here; an upstream cut has no flag in the received engine request.
     guard text.utf8.count > dialogTextBytes else { return text }
     // Reserve the ellipsis's three bytes, then back up past any partial UTF-8 scalar.
     // The only temporary byte buffer is at most 10,237 bytes.
