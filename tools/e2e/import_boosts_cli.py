@@ -52,12 +52,13 @@ def initial_checks(process, output, ids):
             and 'outline:3px solid rgb(1,2,3)' in enabled.get('css', '') and enabled.get('js') == "document.body.dataset.exampleBoost='1'"
             and enabled.get('fontFamily') == 'Georgia' and enabled.get('textTransform') == 'uppercase'
             and [zap['selector'] for zap in enabled.get('zaps', [])] == ['#example-promo']
-            and enabled.get('forkedFromID') is None and enabled.get('createdAt') == 1780000000,
+            and enabled.get('forkedFromID') is None and enabled.get('createdAt') == 1780000000
+            and disabled.get('forkedFromID') == ids['enabled'],
         'boost_cli_enabled': enabled.get('isEnabled') is True,
         'boost_cli_disabled': disabled.get('isEnabled') is False,
         'boost_cli_malformed': counts.get('malformed') == 1,
         'boost_cli_unknown': counts.get('unknownFields') == 1,
-        'boost_cli_dropped': counts.get('droppedFields') == 20 and counts.get('mappedFields') == 20,
+        'boost_cli_dropped': counts.get('droppedFields') == 20 and counts.get('mappedFields') == 21,
         'boost_cli_tombstones': counts.get('deleted') == 1 and counts.get('unknownDocuments') == 1 and counts.get('otherCollections') == 1
             and not any(value in by_id for key, value in ids.items() if key in ('deleted', 'unknown', 'obsolete', 'wal-deleted')),
         'boost_cli_privacy': all(value not in process.stdout + process.stderr for value in

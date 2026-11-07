@@ -174,6 +174,8 @@ def write(root, sidebar=True):
     rows = []
     for name in ('enabled', 'disabled', 'malformed', 'deleted', 'unknown', 'wal-deleted'):
         fields = boost(name, futureFixtureField='unknown') if name == 'enabled' else boost(name)
+        if name == 'disabled':
+            fields['forkedFromBoostID'] = IDS['enabled']
         if name == 'malformed':
             fields['data'] = 'malformed JSON'
         if name == 'enabled':
