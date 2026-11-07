@@ -104,6 +104,26 @@ def run(h, factory, results, tmp):
         app.call('click', tab=tab, selector='#submit')
         return bool(h.wait_until(lambda: app.eval(tab, 'location.pathname === "/welcome"'), timeout=5, step=.2))
 
+    def choose_suggestion(tab, row):
+        try:
+            app.call('key', key='down', route='app')
+            app.call('key', key='return', route='app')
+            row['selectionKeyPath'] = 'NSApplication.sendEvent'
+        except h.FocusInterruption:
+            raise
+        except RuntimeError:
+            # Preserve a native-readiness refusal. CDP dispatches real browser
+            # key events, without assigning field values. It proves only the
+            # engine path, not App key routing through a native popup.
+            row['selectionKeyPath'] = 'CDP fallback after native key refusal'
+            for key, code, number in [('ArrowDown', 'ArrowDown', 40), ('Enter', 'Enter', 13)]:
+                for kind in ('keyDown', 'keyUp'):
+                    params = {'type': kind, 'key': key, 'code': code,
+                              'windowsVirtualKeyCode': number, 'nativeVirtualKeyCode': number}
+                    if key == 'Enter' and kind == 'keyDown':
+                        params['text'] = '\r'
+                    app.call('devtools', tab=tab, method='Input.dispatchKeyEvent', params=params)
+
     def record(rowid, action):
         row = {'started': timestamp(), 'status': 'OBSERVED'}
         results[rowid] = row
@@ -125,6 +145,9 @@ def run(h, factory, results, tmp):
             try:
                 responsive = bool(alive and app.call('ping', timeout=3))
                 row['windowsAfter'] = windows() if responsive else []
+                if responsive:
+                    state = app.call('window-state', timeout=5)
+                    row['nativeWindowState'] = {k:state[k] for k in ('fullscreen', 'fullscreenTransition', 'isKeyWindow', 'keySameObject')}
             except Exception:
                 responsive = False
             new = sorted(h._open_crash_reports() - baseline)
@@ -137,8 +160,7 @@ def run(h, factory, results, tmp):
             evidence['stopped'] = 'Process death, unresponsive automation, or new crash report; no retry.'
             persist()
             return False
-        app.call('key', key='escape', route='app')
-        app.call('dismiss')
+        app.cleanup_surfaces()
         return True
 
     with h.passwords_fixture_server() as urls:
@@ -178,8 +200,7 @@ def run(h, factory, results, tmp):
                 app.call('click', tab=tab, selector='#username')
                 time.sleep(.5)
                 row['newVisibleWindows'] = visible_delta(before)
-                app.call('key', key='down', route='app')
-                app.call('key', key='return', route='app')
+                choose_suggestion(tab, row)
                 row['filledFieldsMatch'] = app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).every(e => e.value === e.dataset.fixture)')
                 if row['seed'].get('status') != 'added':
                     row['limitation'] = 'No saved-login prerequisite established; dropdown/refill outcome is inconclusive.'
@@ -201,8 +222,7 @@ def run(h, factory, results, tmp):
                 app.call('click', tab=tab, selector='#number')
                 time.sleep(.5)
                 row['newVisibleWindowsForRefill'] = visible_delta(before)
-                app.call('key', key='down', route='app')
-                app.call('key', key='return', route='app')
+                choose_suggestion(tab, row)
                 row['refilled'] = app.eval(tab, '!!document.querySelector("#number")?.value')
                 row['limitation'] = 'Card re-auth path is exercised only if a saved card is offered and selected.'
             def webauthn(row):
