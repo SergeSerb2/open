@@ -95,7 +95,7 @@ Row count by status (other areas retain their historical counts; §1.16 is refre
 | 1.12 Boosts and Zap | 1 | 1 | 5 | 1 | 1 |
 | 1.13 Site Control Center | 0 | 6 | 3 | 0 | 0 |
 | 1.14 Ad blocking | 2 | 1 | 3 | 1 | 0 |
-| 1.15 Import from Arc | 7 | 0 | 4 | 1 | 1 |
+| 1.15 Import from Arc | 6 | 2 | 3 | 1 | 1 |
 | 1.16 Extensions | 11 | 0 | 1 | 0 | 2 |
 | 1.17 Engine and platform basics | 19 | 1 | 24 | 1 | 1 |
 | 1.18 Settings and Library | 10 | 0 | 0 | 0 | 2 |
@@ -380,7 +380,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
 | Sidebar: Spaces, pinned, Today, folders, splits, favorites, icons, themes | DM §2, §5 | model.md "OpenImport" | `OpenImport/ArcImport.swift` | shared App runner ([#195](https://github.com/SergeSerb2/open/pull/195)) | `firstrun` 52/52 ×3; full `verify-all --with-arc-data`; real-data 60/60 accounted | done (partial) | [#206](https://github.com/SergeSerb2/open/pull/206) adds archived-ID exclusion and fresh Today activity times; [receipts](first-run/steps-ef-verification.md). |
-| Windows and session selection | DM §2.4, "Archive and session files" | model.md | `ArcImport.swift` | shared first-run App runner (#195) | `firstrun` selected-tab landing; real-data 2 session selections | done | Uses imported session selection in the real window. |
+| Windows and session selection | DM §2.4, "Archive and session files" | model.md | `ArcImport.swift`; `BrowserModel.mergeImportedSidebar` | shared App runner | `firstrun` `MP_session`; counts-only real-data audit | partial (latest App rerun blocked) | First run restores source windows. Settings keeps live windows and selections, and adds selections for new Spaces. A Favorite on an inactive Profile uses that Profile’s first Space; its exact source Space is unknown. |
 | Routing rules | DM | model.md | `ArcImport.swift` | shared first-run/Settings runner (#195) | `firstrun` routing re-import; `routing` 9/9 | done | Stable-ID re-import keeps one rule. |
 | Archive | DM "Archive and session files" | model.md | `ArcImport.swift`; `ArchiveStore.importRecords` | shared App runner (#195) | `firstrun`; real-data 21 inserted, 0 on repeat; full gate | done | Duplicate-safe per-Profile store writes. |
 | History | import2 §2 | model.md "phase 2" | `OpenImport/ArcHistoryImport.swift`, `OpenStore/HistoryImport.swift` | CLI on main; App in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` WAL, 5,000 visits, browsing before commit, close, History-only repeat and E-2; real-data 75 then 0 | done | One awaited batch ≤5,000 visits into each existing Profile store, after landing. |
@@ -388,7 +388,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Write imported secrets into Open's profile | import2 §3.7 "Part B" | passwords-autofill (#72: Chromium manager in the fork) | none yet | none | none | planned | Was unplanned. The plan closes the §5.4 decision: use Chromium's built-in manager with Arc's UI. See §3, gap 2. |
 | Extensions: detect reinstall candidates | import2 §2 | model.md | `OpenImport/ArcExtensions.swift` | CLI | model.md (synthetic union) | planned (detect only) | P3 management install is on main (#177); the import reinstall workflow still needs wiring (Import owns it). |
 | Boosts | DM §2.6 | none | — | — | — | unplanned | Blocked on a sample. |
-| Multi-profile Arc installs | DM §6 item 3; profiles Q1 | profiles Q1 (lenient parser) | `ArcImport.swift` | — | — | planned | Needs a sample (§5.2). |
+| Multi-profile Arc installs | DM §2.6; profiles Q1 | [multi-profile import](import-multiprofile.md) | `ArcImport.swift`; `AppImportRunner.swift`; `BrowserModel.mergeImportedSidebar` | shared first-run/Settings runner | `firstrun` `MP_*`; counts-only real 2-Profile audit | partial (physical Undo deferred) | Observed nested custom Profile refs feed one mapping for Spaces, Favorites, routing, Archive and History. Normal Profile creation allocates live directories; source directories stay separate. Settings maps Arc Default by role to the live Open Default; named Profiles retain stable import IDs. Physical store/context removal after Undo awaits Section 10 deletion (0702). C1c App validation passed: 12 MP rows, all negative proofs, 64 first-run rows, counts-only real-App audit, routing, sidebar and Settings; [receipt](import-multiprofile.md). The final full verifier table is in PR #221. |
 | Import wizard (Settings ▸ General ▸ Import from Arc…) | — | settings §5.8 | `OpenSettings/ImportWizard.swift`; shared count probe (#66) | shared App runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `settings-preview`; final `firstrun` Settings rows | done (partial) | Live sidebar/archive merge; background History and archive-aware duplicates in this PR. |
 | Import in the first-run flow | — | first-run Steps A–F | `OpenSettings/FirstRun.swift` | native window and runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` 52/52 ×3; [receipt](first-run/steps-ef-verification.md) | done | Functional flows pass. First-content 250 ms target remains open. |
 | Top Sites, site engagement | — | import2 lead decision: skip | — | — | — | out of scope | |
