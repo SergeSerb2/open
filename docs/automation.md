@@ -81,7 +81,8 @@ App copy. The server binds only to `127.0.0.1` on an ephemeral port and stops in
 error 2001: “The download request URL must use http or https” (`SPUDownloader.m`).
 The loopback fixture replaces the plan's file feed with the lead's approval.
 It resets touched defaults before launch and restores their original
-plist types in `finally`, including Sparkle's `SU*` preferences.
+plist types in `finally`, including Sparkle's `SU*` preferences and its
+`NSWindow Frame SUUpdateAlert2` geometry entry.
 
 `--force-failure` exits 1 with the real update window open to prove process/window
 cleanup. `--tools PATH` selects the pinned tools folder. `--output PATH` selects

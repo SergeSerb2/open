@@ -32,7 +32,8 @@ DOMAIN = 'io.github.sergeserb2.open'
 OPEN_KEYS = {'open.general.automaticallyUpdate', 'open.general.updateChannel',
              'open.debug.updateFeedURL', 'open.settings.lastPane', 'OPEN_UPDATER_ALLOW_ADHOC',
              'open.links.openPeekShiftClick', 'open.links.openPeekOtherSites',
-             'open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed'}
+             'open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed',
+             'NSWindow Frame SUUpdateAlert2'}
 FIXTURE = 'data:text/html,<title>Updater fixture</title><h1>Updater fixture</h1>'
 
 
