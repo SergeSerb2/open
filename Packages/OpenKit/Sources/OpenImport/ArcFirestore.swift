@@ -57,6 +57,7 @@ enum ArcFirestore {
     }
     static func timestamp(_ bytes: [UInt8]) throws -> Date {
         let parts = try fields(bytes)
+        guard parts.filter({ $0.number == 1 || $0.number == 2 }).allSatisfy({ $0.wire == 0 }) else { throw ArcCacheError.invalid }
         let seconds = Int64(bitPattern: parts.last { $0.number == 1 }?.numberValue ?? 0)
         let nanos = parts.last { $0.number == 2 }?.numberValue ?? 0
         guard nanos < 1_000_000_000, (-62_135_596_800...253_402_300_799).contains(seconds) else { throw ArcCacheError.invalid }
@@ -72,7 +73,7 @@ enum ArcFirestore {
         case (2, 0): return .integer(Int64(bitPattern: f.numberValue))
         case (3, 1):
             let number = Double(bitPattern: f.numberValue)
-            guard number.isFinite else { throw ArcCacheError.invalid }; return .number(number)
+            return number.isFinite ? .number(number) : .unsupported
         case (6, 2): return .map(try map(f.bytes, fieldNumber: 1, depth: depth + 1))
         case (9, 2):
             let entries = try fields(f.bytes)
@@ -114,8 +115,12 @@ enum ArcFirestore {
                 guard !path[6].isEmpty, path[6].utf8.count <= 256 else { throw ArcCacheError.invalid }
                 if variant.number == 1 { result.deleted += 1; continue }
                 if variant.number == 3 { result.unknown += 1; continue }
-                let created = try contents.last { $0.number == 3 }.map { try timestamp($0.bytes) }
-                let updated = try contents.last { $0.number == 4 }.map { try timestamp($0.bytes) }
+                func documentTime(_ number: UInt64) throws -> Date? {
+                    guard let field = contents.last(where: { $0.number == number }) else { return nil }
+                    guard field.wire == 2 else { throw ArcCacheError.invalid }
+                    return try timestamp(field.bytes)
+                }
+                let created = try documentTime(3), updated = try documentTime(4)
                 let document = ArcFirestoreDocument(id: path[6], fields: try map(variant.bytes, fieldNumber: 2, depth: 0), createdAt: created, updatedAt: updated)
                 guard result.documents.count < 4096 else { throw ArcCacheError.limit }
                 result.documents.append(document)
