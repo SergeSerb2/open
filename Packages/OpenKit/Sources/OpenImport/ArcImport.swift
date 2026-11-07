@@ -1,6 +1,7 @@
 import Foundation
 import OpenModel
 import OpenRouting
+import OpenBoosts
 
 public struct ImportReport: Sendable {
     public var totalItems: Int = 0
@@ -30,7 +31,9 @@ public struct ImportReport: Sendable {
     public var routingDestinationFallbacks: Int = 0
     public var containers: Int = 0
     public var archiveStatus: String = "not imported (no real file exists)"
-    public var boostsStatus: String = "not imported (no real file exists)"
+    public var boosts = ArcBoostsReport()
+    public var boostsStatus: String { boosts.status }
+    public var boostsStoredNew = 0, boostsStoredDuplicates = 0, boostsProtectedEdits = 0
     /// imported tabs (pinned + today + favorites items that are tabs) + folders + splits + skipped* + orphans should equal total non-container items.
     public var importedTabNodes: Int = 0
     // Archive (StorableArchiveItems.json)
@@ -85,6 +88,7 @@ public struct ArcImportResult {
     public var sourceDefaultProfileID: ProfileID
     /// Original Chromium directory, before destination collision suffixes.
     public var sourceProfileDirectories: [ProfileID: String] = [:]
+    public var boostsByProfile: [ProfileID: [Boost]] = [:]
 }
 
 public enum ImportError: Error {
@@ -148,11 +152,18 @@ public struct ArcImporter {
 
     /// JSONSerialization produces immutable containers. Their contents are private and read-only;
     /// only the model construction that consumes them runs on the main actor.
-    public struct ParsedSidebar: @unchecked Sendable { let root: [String: Any] }
+    public struct ParsedSidebar: @unchecked Sendable {
+        let root: [String: Any]
+        let boosts: ArcBoostsReadResult
+    }
     public func readSidebar() throws -> ParsedSidebar {
+        let root = try readSidebarRoot()
+        return ParsedSidebar(root: root, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
+    }
+    private func readSidebarRoot() throws -> [String: Any] {
         let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: url), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.missingSidebar }
-        return ParsedSidebar(root: root)
+        return root
     }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
     static func profileReferenceKey(_ raw:Any?)->String {
@@ -177,7 +188,8 @@ public struct ArcImporter {
     /// UI labels only, read on a utility worker when the wizard prepares its review.
     /// The count-only probe never returns these strings or builds model objects.
     public func spaceMappingLabels() throws -> [String] {
-        let root=try readSidebar().root
+        // Mapping labels need no cache I/O; the caller can be on the UI actor.
+        let root=try readSidebarRoot()
         guard let sidebar=root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,let holder=containers[1] as? [String:Any],let spaces=holder["spaces"] as? [Any] else {throw ImportError.malformedSidebar}
         return stride(from:1,to:spaces.count,by:2).compactMap {index in
             guard let object=spaces[index] as? [String:Any] else {return nil}
@@ -393,7 +405,8 @@ public struct ArcImporter {
     }
     @MainActor
     public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
-        let root = try (parsed ?? readSidebar()).root
+        let parsed = try parsed ?? readSidebar()
+        let root = parsed.root
         guard let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [Any], containers.count >= 2,
               let holder = containers[1] as? [String: Any],
@@ -403,6 +416,7 @@ public struct ArcImporter {
         }
 
         var report = ImportReport()
+        report.boosts = parsed.boosts.report
 
         // Parse alternating arrays.
         var itemsByID: [String: [String: Any]] = [:]
@@ -1010,7 +1024,8 @@ public struct ArcImporter {
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
         return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords,
             sourceDefaultProfileID: defaultProfileID,
-            sourceProfileDirectories: Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) }))
+            sourceProfileDirectories: Dictionary(uniqueKeysWithValues: sourceProfiles.profiles.map { ($0.id, $0.sourceDirectory) }),
+            boostsByProfile: parsed.boosts.boosts.isEmpty ? [:] : [defaultProfileID: parsed.boosts.boosts])
     }
 
     private static func routingMatchForArcMatches(_ pattern: String) -> RoutingMatch {
