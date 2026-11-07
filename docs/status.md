@@ -95,7 +95,7 @@ Row count by status (other areas retain their historical counts; §1.16 is refre
 | 1.12 Boosts and Zap | 1 | 1 | 5 | 1 | 1 |
 | 1.13 Site Control Center | 0 | 6 | 3 | 0 | 0 |
 | 1.14 Ad blocking | 2 | 1 | 3 | 1 | 0 |
-| 1.15 Import from Arc | 7 | 0 | 4 | 1 | 1 |
+| 1.15 Import from Arc | 7 | 1 | 3 | 1 | 1 |
 | 1.16 Extensions | 11 | 0 | 1 | 0 | 2 |
 | 1.17 Engine and platform basics | 19 | 1 | 24 | 1 | 1 |
 | 1.18 Settings and Library | 10 | 0 | 0 | 0 | 2 |
@@ -388,7 +388,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Write imported secrets into Open's profile | import2 §3.7 "Part B" | passwords-autofill (#72: Chromium manager in the fork) | none yet | none | none | planned | Was unplanned. The plan closes the §5.4 decision: use Chromium's built-in manager with Arc's UI. See §3, gap 2. |
 | Extensions: detect reinstall candidates | import2 §2 | model.md | `OpenImport/ArcExtensions.swift` | CLI | model.md (synthetic union) | planned (detect only) | P3 management install is on main (#177); the import reinstall workflow still needs wiring (Import owns it). |
 | Boosts | DM §2.6 | none | — | — | — | unplanned | Blocked on a sample. |
-| Multi-profile Arc installs | DM §2.6; profiles Q1 | [multi-profile import](import-multiprofile.md) | `ArcImport.swift`; `AppImportRunner.swift`; `BrowserModel.mergeImportedSidebar` | shared first-run/Settings runner | `firstrun` `MP_*`; counts-only real 2-Profile audit | done (model Undo only) | Observed nested custom Profile refs feed one mapping for Spaces, Favorites, routing, Archive and History. Normal Profile creation allocates live directories; source directories stay separate. Re-import retains stable IDs. Physical store/context removal after Undo awaits the Profile deletion path. |
+| Multi-profile Arc installs | DM §2.6; profiles Q1 | [multi-profile import](import-multiprofile.md) | `ArcImport.swift`; `AppImportRunner.swift`; `BrowserModel.mergeImportedSidebar` | shared first-run/Settings runner | `firstrun` `MP_*`; counts-only real 2-Profile audit | partial (physical Undo deferred) | Observed nested custom Profile refs feed one mapping for Spaces, Favorites, routing, Archive and History. Normal Profile creation allocates live directories; source directories stay separate. Re-import retains stable IDs. Physical store/context removal after Undo awaits the Profile deletion path. |
 | Import wizard (Settings ▸ General ▸ Import from Arc…) | — | settings §5.8 | `OpenSettings/ImportWizard.swift`; shared count probe (#66) | shared App runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `settings-preview`; final `firstrun` Settings rows | done (partial) | Live sidebar/archive merge; background History and archive-aware duplicates in this PR. |
 | Import in the first-run flow | — | first-run Steps A–F | `OpenSettings/FirstRun.swift` | native window and runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` 52/52 ×3; [receipt](first-run/steps-ef-verification.md) | done | Functional flows pass. First-content 250 ms target remains open. |
 | Top Sites, site engagement | — | import2 lead decision: skip | — | — | — | out of scope | |
