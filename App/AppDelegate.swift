@@ -799,7 +799,14 @@ extension AppDelegate: CommandDispatcher {
     case "settings": if !settingsShortcutCaptured { settingsPresenter.show() }
     case "new-profile": settingsPresenter.showNewProfile()
     case "search-settings": performCommand(id, payload: nil)
-    case "air-traffic-control": settingsPresenter.show(pane: .links)
+    case "air-traffic-control":
+      settingsPresenter.settings.scrollTarget = nil
+      settingsPresenter.show(pane: .links)
+      // A repeated invocation must scroll again even if Settings was left on Links.
+      Task { @MainActor [weak self] in
+        await Task.yield()
+        self?.settingsPresenter.settings.scrollTarget = "links-rules"
+      }
     case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
     case "set-default-browser": settingsPresenter.settings.general.setDefault()
     case "check-for-updates": settingsPresenter.checkForUpdates()

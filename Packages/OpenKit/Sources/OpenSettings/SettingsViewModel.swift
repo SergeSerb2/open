@@ -16,6 +16,9 @@ import OpenAdBlock
     public let root: URL
     public let snapshot: SnapshotStore
     public var links: LinksSettingsModel
+    @ObservationIgnored public var routingSnapshotProvider: (@MainActor () -> RoutingSnapshot)? {
+        didSet { links.snapshotProvider = routingSnapshotProvider }
+    }
     /// Optional deep link into a long pane; used by the renderer and app presenters.
     public var scrollTarget: String?
     public var statusText = ""
@@ -45,7 +48,7 @@ import OpenAdBlock
         self.snapshot = snapshot
         selectedPane = PaneID(rawValue: defaults.string(forKey: "open.settings.lastPane") ?? "") ?? .general
         selectedProfileID = focusedProfileID ?? model.windows.first.flatMap { model.space(id: $0.focusedSpaceID)?.profileID } ?? model.defaultProfile?.id ?? ProfileID()
-        links = LinksSettingsModel(snapshot: RoutingSnapshot(spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }, windows: model.windows.map { RoutingWindowSnapshot(id: $0.id, kind: $0.style == .littleOpen ? .littleOpen : .standard, focusedSpaceID: $0.focusedSpaceID) }, rules: model.routingRules, defaultDestination: model.defaultDestination, externalLinksInLittleOpen: defaults.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true), spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0)) }, isDefaultBrowser: actions.isDefaultBrowser(), defaults: defaults)
+        links = Self.makeLinks(model: model, actions: actions, defaults: defaults, snapshotProvider: nil)
         refreshLinks()
     }
     @ObservationIgnored private var keyBindingStamp = "unread"
@@ -104,15 +107,28 @@ import OpenAdBlock
     }
     public func refreshLinks(preserveDrafts: Bool = false) {
         let previous = links
-        links = LinksSettingsModel(snapshot: RoutingSnapshot(spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }, windows: [], rules: model.routingRules, defaultDestination: model.defaultDestination, externalLinksInLittleOpen: bool("open.links.externalInLittleOpen")), spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0)) }, isDefaultBrowser: actions.isDefaultBrowser(), defaults: defaults)
+        links = Self.makeLinks(model: model, actions: actions, defaults: defaults, snapshotProvider: routingSnapshotProvider)
         links.littleOpenHotkeyEnabled = bool("open.links.littleOpenHotkeyEnabled")
         links.optionCommandClickLittleOpen = bool("open.links.optionCommandClickLittleOpen")
         links.littleOpenAutoArchiveAfter = model.profile(id: selectedProfileID)?.settings.littleOpenAutoArchiveAfter ?? .sixHours
         if preserveDrafts {
             links.drafts = previous.drafts; links.defaultDestinationKind = previous.defaultDestinationKind; links.defaultSpaceID = previous.defaultSpaceID
+            links.defaultProfileID = previous.defaultProfileID
             links.testURLString = previous.testURLString; links.testSourceBundleID = previous.testSourceBundleID; links.testMostRecentSpaceID = previous.testMostRecentSpaceID
             if previous.testDecision != nil { links.runTest() }
         }
+    }
+    private static func makeLinks(model: BrowserModel, actions: any SettingsActions, defaults: UserDefaults,
+                                  snapshotProvider: (@MainActor () -> RoutingSnapshot)?) -> LinksSettingsModel {
+        let snapshot = RoutingSnapshot(
+            spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) },
+            windows: [], rules: model.routingRules, defaultDestination: model.defaultDestination,
+            externalLinksInLittleOpen: defaults.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true,
+            profiles: model.profiles.map(\.id))
+        return LinksSettingsModel(snapshot: snapshot,
+            spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) },
+            profiles: model.profiles.map { RoutingProfileOption(id: $0.id, name: $0.name) },
+            isDefaultBrowser: actions.isDefaultBrowser(), defaults: defaults, snapshotProvider: snapshotProvider)
     }
     public func refreshExternalState() { general.refresh(); profiles.refresh(); adBlock?.refresh(); refreshLinks(preserveDrafts: true) }
     public func save() { snapshot.scheduleSave(model: model) }

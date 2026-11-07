@@ -40,7 +40,7 @@ public struct SettingsContent: View {
         }.font(Font(SettingsTokens.label.font)).controlSize(.regular)
         .background(Color(nsColor: SettingsTokens.content.nsColor)).buttonStyle(SettingsButtonStyle()).ignoresSafeArea()
         .onChange(of: viewModel.model.spaces.map { "\($0.id)|\($0.profileID)|\($0.title ?? "")" }) { _, _ in viewModel.refreshLinks(preserveDrafts: true); viewModel.profiles.refresh() }
-        .onChange(of: viewModel.model.profiles.map { "\($0.id)|\($0.name)" }) { _, _ in viewModel.profiles.refresh(); viewModel.adBlock?.refresh() }
+        .onChange(of: viewModel.model.profiles.map { "\($0.id)|\($0.name)" }) { _, _ in viewModel.profiles.refresh(); viewModel.adBlock?.refresh(); viewModel.refreshLinks(preserveDrafts: true) }
         .sheet(isPresented: $viewModel.showsPreviews) { PreviewsSheet(model: viewModel.general) }
         .sheet(isPresented: $viewModel.showsSearchEngines) { SearchEnginesSheet(model: viewModel.profiles) }
         .sheet(isPresented: $viewModel.showsImport) { ImportWizard(root: viewModel) }

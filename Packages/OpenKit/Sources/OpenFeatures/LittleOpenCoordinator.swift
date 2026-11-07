@@ -78,11 +78,11 @@ public final class LittleOpenCoordinator {
         model.windows.compactMap { model.space(id: $0.focusedSpaceID)?.profileID }.first ?? model.profiles.first?.id
     }
     public func open(url: URL, profileHint: ProfileID?) {
+        guard let profile = profileHint.flatMap({ model.profile(id: $0)?.id }) ?? defaultProfile else { return }
         let canonical = HostNormalizer.canonicalURLString(url)
-        if let session = sessions.first(where: { HostNormalizer.canonicalURLString(controllers[$0.id]?.currentURL ?? $0.tab.url) == canonical }) {
+        if let session = sessions.first(where: { $0.profileID == profile && HostNormalizer.canonicalURLString(controllers[$0.id]?.currentURL ?? $0.tab.url) == canonical }) {
             resurface(session.id); return
         }
-        guard let profile = profileHint.flatMap({ model.profile(id: $0)?.id }) ?? defaultProfile else { return }
         create(url: url, profile: profile, focus: false)
     }
     /// Every press creates a window; only duplicate delivery of the same key-down coalesces.

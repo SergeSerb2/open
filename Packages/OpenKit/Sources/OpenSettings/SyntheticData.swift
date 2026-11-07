@@ -23,7 +23,7 @@ import SQLite3
             for j in 0..<2 { space.pinned.append(.tab(Tab(id: ItemID(uuidString: "70000000-0000-0000-0000-0000000000\(i)\(j)"), url: URL(string: "https://example.com/pinned/\(i)/\(j)")!, title: "Example Pinned \(i+1).\(j+1)", pinnedURL: URL(string: "https://example.com/pinned/\(i)/\(j)")!, createdAt: fixtureDate))) }
             space.pinned.append(.folder(Folder(id: ItemID(uuidString: "71000000-0000-0000-0000-00000000000\(i+1)"), title: "Example Folder \(i+1)")))
         }
-        let rules = [RoutingRule(id: RuleID(uuidString: "30000000-0000-0000-0000-000000000001"), match: .hostEquals("example.com"), destination: .space(spaces[0].id)), RoutingRule(id: RuleID(uuidString: "30000000-0000-0000-0000-000000000002"), match: .hostContains("docs"), destination: .space(spaces[2].id)), RoutingRule(id: RuleID(uuidString: "30000000-0000-0000-0000-000000000003"), match: .urlPrefix("https://example.net/a"), destination: .littleOpen)]
+        let rules = [RoutingRule(id: RuleID(uuidString: "30000000-0000-0000-0000-000000000001"), match: .hostEquals("example.com"), destination: .space(spaces[0].id)), RoutingRule(id: RuleID(uuidString: "30000000-0000-0000-0000-000000000002"), match: .hostContains("docs"), destination: .space(spaces[2].id)), RoutingRule(id: RuleID(uuidString: "30000000-0000-0000-0000-000000000003"), match: .urlPrefix("https://example.net/a"), destination: .littleOpen(profile: nil))]
         let model = BrowserModel(profiles: [personal, work], spaces: spaces, windows: [BrowserWindowState(id: WindowID(uuidString: "40000000-0000-0000-0000-000000000001"), focusedSpaceID: spaces[0].id)], routingRules: rules)
         model.undoManager = UndoManager(); model.undoManager?.groupsByEvent = false
         return model
