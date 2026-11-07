@@ -24,7 +24,12 @@ public final class ThemeBackgroundView: NSView {
     public var targetStyle: SpaceThemeStyle { incoming?.theme ?? current.theme }
 
     public var isWindowActive: Bool = true {
-        didSet { if isWindowActive != oldValue { refresh() } }
+        didSet {
+            guard isWindowActive != oldValue else { return }
+            // The key change and the new field land in one transaction: no display-tick wait.
+            // A 64×64 field (or one solid color) is cheap; a live resize still defers it.
+            if inLiveResize || resizing || bounds.isEmpty { refresh() } else { rebuildFields() }
+        }
     }
 
     /// What lies under the theme (`WindowMaterial`).
