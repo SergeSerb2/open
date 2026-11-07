@@ -1,10 +1,9 @@
 # Import robustness and Undo
 
-C4 is implementation draft [#224](https://github.com/SergeSerb2/open/pull/224)
-on `s14/robustness`, stacked on Section 14
-PR #221 (`s14/audit-multiprofile`). The base was refreshed to `42ff5a08`.
-`origin/main` at `7b3ab45f` is already an ancestor. This document records
-implementation and CLI evidence. It does not accept the real-App flows.
+C4 is draft [#224](https://github.com/SergeSerb2/open/pull/224) on
+`s14/robustness`. It includes main through `09d6c189` (#221, #216, #217 and
+#220). The App Boosts seam counts source records and stores none; Boosts
+therefore have no import Undo receipt.
 
 ## Behavior
 
@@ -15,7 +14,9 @@ IDs, newly created URL IDs and changed titles. Undo removes those visits and
 keys, recomputes URL aggregates, removes newly created empty URLs, and restores
 an old title only while the imported title still owns that value. Unrelated
 visits remain, even when URL, time and transition equal an imported visit.
-Redo keeps its replacement receipts for the next Undo.
+Redo keeps its replacement receipts for the next Undo. Native Undo/Redo
+handlers retain each receipt until its action leaves the stack. A no-op repeat
+adds no action and cannot release the earlier import's target.
 
 Undo permanently stops later import batches. Store Undo/Redo waits for the
 active import's last receipt and runs in order on the stores' own queues.
@@ -37,7 +38,8 @@ value instead of replacing every failure with the same text.
 The utility worker prepares optional JSON and Archive value records/payloads.
 The main actor still constructs and merges the live sidebar model. Automation
 builds alone run a 5 ms background main-queue watchdog, with one outstanding
-ping. The watchdog stops on every exit. No debugger or external process probe
+ping. It records the overall maximum and each import phase's maximum and duration.
+The watchdog stops on every exit. No debugger or external process probe
 is used.
 
 ## Checks run on the M5
@@ -87,11 +89,23 @@ read the committed private snapshot and left source DB/WAL hashes unchanged.
 An unreadable WAL, schema version 99, and missing History each returned the
 expected CLI error and exit 4. Source locks never touched the user's Arc files.
 
-## Remaining App acceptance
+## Real-App verification
 
-UserNotificationCenter remains the foreground app. No C4 App suite has run.
-Do not launch Open or touch the dialog while it remains. Poll once per minute
-without holding locks. The M1 remains on HOLD.
+The 12:00:53 pre-fix crash followed a no-op Settings re-import and native
+Cmd+Z. Its report is `Open-2026-11-07-120053.ips` in DiagnosticReports:
+`ZombieObjectCrash` → `CrZombie forwardingTargetForSelector:` →
+`swift_getObjectType` → `_NSUndoStack popAndInvoke` →
+`NSUndoManager undoNestedGroup`. The Undo manager did not retain its target,
+and the next import had replaced the runner's only strong receipt reference.
+The handler now retains the receipt. The crashing build was not rerun.
+
+The merged-head Debug suite passed all 24 functional rows, including import →
+no-op repeat → Cmd+Z → Cmd+Z → Cmd+Shift+Z, and two real imports undone in
+order. History and idle passed. Debug main lag failed under load; Release
+qualification remains pending. Every one of the 27 negative rows failed with
+its original assertion, and owned-process/window cleanup passed. Current
+private receipts are in `.re/c4b/`; the table above retains the earlier child's
+CLI and interrupted-run history.
 
 `tools/e2e/import_robust.py`, registered as `--only import-robust`, covers:
 
@@ -109,8 +123,11 @@ without holding locks. The M1 remains on HOLD.
   ten seconds of idle time.
 
 Each row retains its original assertion in negative mode. The fixture, input,
-App actions or automation delay breaks that condition. Negative proofs and the
-forced early-sheet failure cleanup proof have not run. The suite resets its
+App actions or automation delay breaks that condition. The complete negative proof passed. The
+forced early-sheet failure cleanup passed with a graceful quit and zero owned
+windows/processes. The merged-head full first-run suite passed 69 rows; six existing Boosts
+persistence gates remain BLOCKED on Section 12. The separate focused
+multi-profile rerun is waiting for the screen. The suite resets its
 used defaults at launch and restores them in `finally`; each launch has a
 synthetic source and a temporary Open data root.
 
@@ -127,21 +144,21 @@ OPEN_E2E_FIRSTRUN_MULTIPROFILE_ONLY=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.l
 
 The negative and cleanup commands must fail for their deliberate conditions;
 inspect their rows and cleanup result. Timing misses under load need a bounded
-quiet rerun with load averages. Baseline/fixed App timing is still unmeasured.
+quiet rerun with load averages. The merged-head automation Release build passed. Its final timing is pending.
 `OPEN_E2E_IMPORT_ROBUST_ONLY=timing` selects the large fixture.
 `OPEN_E2E_APP_BUNDLE` is forwarded through the harness's bundle override.
 Use an automation Release build for the final speed qualification. Complete the
 full verifier when its native gates can run under the screen rules.
 
-## Decisions for the lead
+## Lead decisions and remaining boundaries
 
 - A writer lock with a readable committed WAL succeeds through a private copy.
   The unreadable-WAL case reports failure. Treating every writer lock as an
   error would discard an available consistent snapshot.
-- Approve the first-run failure line `Spaces: Not found` / `Spaces: Could not
+- The lead approved the first-run failure line `Spaces: Not found` / `Spaces: Could not
   be read` under the existing heading, and the existing save-error copy reused
   for store Undo failure.
-- Accept the small first-run model Undo hook and quit-drain hook; review the new
+- The lead approved the small first-run model Undo hook, quit-drain hook and
   receipt APIs. Physical Profile teardown stays with Section 10.
 - Parser decoded-memory/directory boundary qualification remains the existing
   multi-profile follow-up. This draft does not claim that those limits or

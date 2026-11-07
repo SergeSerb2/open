@@ -295,7 +295,8 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 ## Section 14: multi-profile import boundaries
 
 - C4 adds one import Undo for the model plus newly inserted Archive rows and
-  History visits/keys. App acceptance is pending the shared macOS crash dialog;
+  History visits/keys. The real-App functional and negative flows pass; final
+  Release responsiveness and the full verifier remain separate gates. See
   [verification](import-robustness.md). Physical Profile directory and loaded
   engine context removal still waits on Section 10's in-session deletion path
   (0702). Logical row removal does not delete those directories or bypass
