@@ -132,15 +132,17 @@ def run(factory, results, tmp, api, defaults_before):
             'ok': bool(shown) and shown['managerSheetParent'] == manager['window']
                   and all(t in text for t in ('Change Profile?', warning, 'Change Profile', 'Cancel', "Don't show again"))
                   and not app.call('incognito-state')['windows'] and assigned() == source['profile'],
-            'text': text, 'parent': shown['managerSheetParent'] if shown else 0, 'library': manager['window']}
+            'text': text, 'parent': shown['managerSheetParent'] if shown else 0, 'library': manager['window'],
+            'profileUnchanged': assigned() == source['profile']}
         assert results['shell_manager_profile_alert']['ok'], 'Change Profile sheet missing from Library'
         if os.environ.get('OPEN_PROFILES_SHELL_FORCE_MANAGER_DIALOG_FAILURE') == '1':
             raise AssertionError('intentional early Manager sheet failure for cleanup proof')
-        press('Cancel', library=True)
+        app.call('key', window=shown['managerSheet'], key='escape', route='app')
         assert wait(lambda: state()['managerSheet'] == 0, timeout=5)
         results['shell_manager_profile_cancel'] = {'ok': assigned() == source['profile']}
-        assert request(), 'Change Profile sheet missing after Cancel'
-        press('Change Profile', library=True)
+        shown = request()
+        assert shown, 'Change Profile sheet missing after Cancel'
+        app.call('key', window=shown['managerSheet'], key='return', route='app')
         changed = wait(lambda: assigned() == target['id'] and state()['managerSheet'] == 0, timeout=5)
         undo_name = state()['undoName']
         app.call('key', window=manager['window'], key='z', modifiers=['cmd'], route='app')

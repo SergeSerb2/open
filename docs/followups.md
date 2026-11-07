@@ -66,7 +66,7 @@ Small items found during review and verification. Each line: area — issue — 
 - Translation — Cmd+Z with the page focused goes to Chromium's own editing undo (`undo:` on the page view), so Edit ▸ Undo Translate works with the focus outside the page (the same holds for every window undo in Open today). Decide whether window undo should win when the page has no editable focus. — Section 8, 2026-11-02
 - Closed in [#153](https://github.com/SergeSerb2/open/pull/153): translation toasts use `ToastCenter` (`App/Page/TranslateAdapter.swift`), with 3 s success/revert and 6 s error lifetimes.
 - Translation — the status button hides while the content toolbar replaces the URL field (no capture of Arc with the toolbar and a French page); revisit with capture C-R1. — Section 8, 2026-11-02
-- Context menu (Section 10 implements the shell private-window item; native Chromium item remains hidden) — historical request: "Open Link in" a private window: Arc has New Incognito Window (docs/re/menus-and-hotkeys.md:125). Add a shell item that opens the link in Open's private window when app-shell §4.8 lands; Chromium's own "Open Link in Incognito Window" stays hidden (it would open a Chrome window). — engine lead, 2026-10-26
+- Closed, Section 10 #209 — the shell “Open Link in Incognito Window” item opens the link in Open’s private window. Chromium’s native window item stays hidden because it would open a Chrome window. Reference: `docs/re/menus-and-hotkeys.md:125`. — engine lead, 2026-10-26
 - Context menu (Arc parity, engine review r1 of #94) — "Manage Extensions": Arc adds it to the web content menu ("Title for the 'Manage Extensions' context menu action.", docs/re/features-advanced.md EX-18; position not in the binary). Still open: Section 11 owns the page-menu hook (`PageContextMenuHooks.extensionItems` remains empty). Add it after extension-contributed items, loading `chrome://extensions` with the `open://` display alias (extensions-ui §3.12, Q7). Capture S-9 settles placement. — checked Section 6 closeout, 2026-11-06
 - Closed in #178 — App-shell Step D Profile search in the page context menu uses `SearchEngines.resolve` and `OEContextMenu.selectionText`. Chromium’s default-engine item stays hidden by the #94 allowlist. E2e `context-menus` 34/34 covers the shell search action. — Section 11, 2026-11-06
 - ~~Engine P3 / shell — hosted Web Store consent and designed Open sheets.~~ Engine consent landed in [#177](https://github.com/SergeSerb2/open/pull/177); Open install/permission/remove sheets, FIFO and install toast landed in [#175](https://github.com/SergeSerb2/open/pull/175) and [#189](https://github.com/SergeSerb2/open/pull/189). `extensions-p3` and `extensions-ui` cover acceptance/cancel/close/quit; Chromium dialogs remain only when no shell prompt handler exists. — Section 6, 2026-11-06
@@ -200,7 +200,7 @@ The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `ver
 
 - Closed in [#153](https://github.com/SergeSerb2/open/pull/153): `BrowserWindowController.capture` sends Capture progress, image-copy, hint and error toasts to ToastCenter.
 - Closed in [#153](https://github.com/SergeSerb2/open/pull/153): `EnabledKey.webPage` names `hasWebPage`; `App/MainMenu.swift` and `App/Page/CaptureCommands.swift` supply its live-page value for capture commands.
-- C7 (incognito → no Library row) is blocked: Open has no incognito window yet (app-shell §4.8). The path reads `OEBrowserContext.isEphemeral`; offscreen features-render C3/C7 covers the card.
+- Closed, Section 10 #209 — private windows do not expose Library and write no capture/history records. Real-App `incognito` checks model/SQLite/capture inventories; offscreen features-render C3/C7 remains separate card evidence.
 - Closed in [#162](https://github.com/SergeSerb2/open/pull/162): `EngineWebContentHostFactory.syncHistorySwipe` pauses swipes while Capture is active; SW4_capture_overlay_pauses_swipes PASS.
 - A Cmd+Shift click replays the press with `NSWindow.sendEvent`, past the local monitors, so `WebContentContainer`'s click monitor does not see it: a Cmd+Shift click on a link in an unfocused split pane opens the link without focusing that pane first.
 - 2x on a real Retina screen: no 2x display was attached to the M5 during review round 1, so the 2x rows (`capture_2x_*`) run under DevTools device emulation (`deviceScaleFactor: 2`). EP-8 measures the scale from a visible screenshot, the same pixels the tiles come out at, so a real 2x window takes the same path; one run with Open's window on a 2x screen (the M1's built-in display) would close this.
@@ -280,26 +280,29 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 ### Section 10 private windows (lead design, 2026-11-06)
 
 - Completed, 0701: `IncognitoContextProvider.makeContext(parent:)` uses `makeIncognitoContext(for:completion:)` with that parent's regular context. Real product windows prove Work ancestry, no cookie seeding, different-parent isolation, extension opt-in and final private-session teardown. Spanning content-script behavior is verified; Chromium retains its own spanning/split implementation.
-- Section 12: fill SiteControlContext.isIncognito from factory.isIncognito; Boosts disabled in private windows (Arc fact: Boosts can't be installed or used in Incognito Mode)
-- Display reruns (2x, lead): on an authorized native 2x display, run `export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main; OPEN_INCOGNITO_CAPTURE_SCALE=2 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only incognito`. Check the shared priority flag first. This saves `docs/engine-spike/incognito/private-light-2x.png` and `private-dark-2x.png`; never upscale the 1x captures. M1 remains held (lead ruling 16:28).
-- Guess S10-P1 capture: user opens a private window in the reference build, once with light and once with dark system appearance; capture a resting full window and measure the sidebar color, gradient, noise, and forced appearance. Open currently uses flat sRGB #26232B, dark appearance, zero noise.
-- Guess S10-P2 capture: user opens a private window with one Profile, then with multiple Profiles; capture the header at rest and hovered, including icon, title, menu and Profile indicator. Open uses eyeglasses and `Incognito` / `Incognito · <Profile name>`, with no header menu or Profile indicator.
-- Guess S10-P3 capture: user opens private Today tabs; capture the full sidebar, empty sidebar, bottom bar and row context menu. Check Favorites/Pinned, Today header, Space pager, Library, New Space and close behavior. Open shows only private Today rows and New Tab.
-- Guess S10-P4 capture: user opens the private command bar and empty URL field in both appearances; capture its background against the sidebar. The measured Arc named color is white at 15% alpha; placement still needs a capture.
-- Guess S10-P5 capture: user Option-Command-clicks a link in a private reference window and records the destination/window/context behavior. Open opens a tab in that same private window; it does not enter persistent Little Open.
+- Open — owner Section 12: fill SiteControlContext.isIncognito from factory.isIncognito; disable Boosts in private windows (Arc fact: Boosts cannot be installed or used in Incognito Mode).
+- Native display evidence: the eight Profiles shell 2x window captures are complete (M1 built-in Retina, main `f65327a5`, 2026-11-07; [receipt](profiles-shell.md)). Incognito native 2x uses the final App-side snapshot rerun; [receipt](incognito.md). Any missing #217 extension UI 2x captures remain open, owner Section 10 lead; the exact command is in [profiles-memory.md](profiles-memory.md).
+- Guess S10-P1 capture (owner user / lead): user opens a private window in the reference build, once with light and once with dark system appearance; capture a resting full window and measure the sidebar color, gradient, noise, and forced appearance. Open currently uses flat sRGB #26232B, dark appearance, zero noise.
+- Guess S10-P2 capture (owner user / lead): user opens a private window with one Profile, then with multiple Profiles; capture the header at rest and hovered, including icon, title, menu and Profile indicator. Open uses eyeglasses and `Incognito` / `Incognito · <Profile name>`, with no header menu or Profile indicator.
+- Guess S10-P3 capture (owner user / lead): user opens private Today tabs; capture the full sidebar, empty sidebar, bottom bar and row context menu. Check Favorites/Pinned, Today header, Space pager, Library, New Space and close behavior. Open shows only private Today rows and New Tab.
+- Guess S10-P4 capture (owner user / lead): user opens the private command bar and empty URL field in both appearances; capture its background against the sidebar. The measured Arc named color is white at 15% alpha; placement still needs a capture.
+- Guess S10-P5 capture (owner user / lead): user Option-Command-clicks a link in a private reference window and records the destination/window/context behavior. Open opens a tab in that same private window; it does not enter persistent Little Open.
+
+- Section 10 whole-App idle goal remains open, owner Section 16 / lead. The [five-launch Profile memory and idle receipt](profiles-memory.md) proves lazy loading and no recurring App counter work in that workload; it does not prove approximately zero whole-App CPU.
+- Section 10 0704 local CRX automation completion remains in [#223](https://github.com/SergeSerb2/open/pull/223), owner Section 10 engine child / lead.
 
 ## Section 10: Air Traffic Control capture gaps
 
-User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps.
+User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps. Owner: user-operated captures / lead.
 
 
 ## Section 14: multi-profile import boundaries
 
 - Import Undo removes created Profiles and sidebar/routing changes from the
-  model. Main's Profile deletion path needs typed confirmation and defers loaded
-  context data until restart. Undo does not erase Archive/History stores or
-  engine directories. Complete this through Section 10's in-session deletion
-  path (0702); do not bypass its teardown boundary.
+  model. Main #222 now provides typed deletion and awaited native teardown
+  with in-session data removal (0702). Import Undo still does not erase
+  Archive/History stores or engine directories. Owner Section 14: integrate
+  that completed teardown path; do not bypass its boundary.
 - Session Favorite keys contain a Profile and window but no Space. When a source
   window focuses another Profile, import uses the Favorite owner's first Space.
   This is an accepted, marked guess. Settings keeps its current windows and selections and

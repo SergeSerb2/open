@@ -118,12 +118,16 @@ and Little Open's custom Profile icon. `header-render-*@1x.png` and
 `header-render-*@2x.png` are offscreen two-Profile renders. The Profile icon
 pane and all three deletion states also have offscreen 1x/2x renders.
 
-## Display reruns (2x, lead)
+## Display reruns (2x, lead) — done
 
-The M5 exposes only a native 1x display; the M1 is held. On a native 2x
-display, rerun the command below for `header-{light,dark}-{rest,hover}-2x.png`,
+Native captures were taken on the M1 Pro built-in Retina display on
+2026-11-07, at main `f65327a5`, with the command below (29 PASS, exit 0).
+The eight window PNGs are now committed: `header-{light,dark}-{rest,hover}-2x.png`,
 `manager-{light,dark}-2x.png`, and `little-open-profile-{light,dark}-2x.png`.
-The harness checks the captured pixel/window-point ratio; it never upscales.
+Each width and height is exactly twice its 1x sibling: header 2000 × 1400,
+Manager 1920 × 1280, Little Open 2370 × 1664. The harness checked the native
+pixel/window-point ratio. No image was upscaled. The M5 1x captures retain
+their original provenance; these M1 images do not claim Arc parity.
 
 ```sh
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \
