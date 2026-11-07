@@ -1,5 +1,13 @@
 # Follow-ups
 
+- Import Arc Boosts — C2 adds the bounded Firestore cache reader, synthetic CLI
+  flow and locked CLI persistence. App persistence, live apply, re-import and
+  shared Undo remain BLOCKED (Section 12 AppBoosts). Wire only through
+  `app.stores.boosts.store(for:)` and `refresh(profile:)`; never create another
+  App BoostStore. Confirm color/zoom conversion, absent local enablement policy,
+  account-to-Default Profile assignment and a populated real cache sample.
+  See [storage evidence](re/boosts-store.md). — Section 14 C2, 2026-11-06
+
 Small items found during review and verification. Each line: area — issue — where found.
 
 - Site Control live material — **open: material, R-7 follow-up (lead ruling)**. Keep `.hudWindow` and SCC Dark #686881 at 0.32 as **interim (lead 2026-11-06)**. S11/S12 retain FAIL gates at unchanged limits. Fresh M5 S11 probes have ΔE00 2.176/4.142/3.363/7.092; S12 passes 22/40 element checks and fails 18. The R-7 white/black response is ΔE00 25.430 at (300,140) and 19.392 at (260,250). This response does not establish parity. Older receipts do not qualify the current head. S11 includes an INFO-only white/black-page diagnostic at (300,140) and (260,250): ΔE00 <3 at both points indicates that the within-window material does not sample the engine remote layer. A larger response does not establish parity. Plan §11.1 sets the fallback: a borderless child window with `.behindWindow` blending. The lead owns that separate PR after this integration merges. These are new-suite rows, not regressions; the lead permits their interim merge without accepting them. — Section 12 child A, lead ruling 2026-11-06 14:49.
@@ -288,3 +296,34 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 ## Section 13: ad-block engine adapter
 
 - Site Control Center integration (`s12/scc-app`) — Section 13 owns the engine adapter and has not started. The source reads the existing shared `AdBlockStore` through `AppStores.existingAdBlock`: `isProfileOpen`, `isEnabled`, and `siteSnapshot(for:)` determine the row state; `setExcluded(_:excluded:profile:)` writes the per-site exclusion; `AdBlockStore.didChange` refreshes observers. Bind `AdBlockStore.onEngineEvent` to the engine and open its Profile before claiming that requests are blocked. Until then, S1 expects the actual main row, “Block Ads & Trackers”, in the `unavailable` state. Its tap calls `openAdBlockSettings` once and makes no `toggle` call. This differs from S1's planned initial On state. S2 reports `blocked: section 13 ad-block adapter` and never counts as PASS while blocked. Its real exclusion, persistence, reload and request-blocking flow remains in place and **must PASS when Section 13 lands**. — Section 12 lead ruling, 2026-11-06 14:41.
+
+
+## Section 14: multi-profile import boundaries
+
+- Import Undo removes created Profiles and sidebar/routing changes from the
+  model. Main's Profile deletion path needs typed confirmation and defers loaded
+  context data until restart. Undo does not erase Archive/History stores or
+  engine directories. Complete this through Section 10's in-session deletion
+  path (0702); do not bypass its teardown boundary.
+- Session Favorite keys contain a Profile and window but no Space. When a source
+  window focuses another Profile, import uses the Favorite owner's first Space.
+  This is an accepted, marked guess. Settings keeps its current windows and selections and
+  imports selections only for newly added Spaces; it does not recreate Arc
+  window layout. User-operated Arc evidence is needed for exact inactive-Profile
+  session behavior. See [multi-profile import](import-multiprofile.md).
+
+- C1c review-fix App validation (2026-11-07): 12 `MP_*` positives, all 11
+  fixture-negative proofs, the Default-role code-break proof, forced dialog
+  cleanup, full `firstrun` (64/64), counts-only real-App audit, `routing`,
+  `sidebar`, and `settings-preview` passed. The existing sidebar durable-cookie
+  row remains SKIP because `profiles` owns it. The final full verifier table
+  is recorded in draft PR #221 on its final head. See [current receipts](import-multiprofile.md).
+
+- Directory-limit boundary flows (255-byte acceptance and 256-byte refusal)
+  and general decoded-memory bounds for the inherited JSON parser remain
+  follow-ups. They are outside PR #221's review fix. No boundary-flow or
+  worst-allocation acceptance is claimed.
+
+The lead decided against provenance migration for earlier Settings imports:
+only pre-release development builds made them. Arc Default maps by role to the
+live Open Default; named Profiles still match stable import IDs only.

@@ -276,9 +276,29 @@ Importer use: restore one window per entry, focus `focusedSpaceID`, and reopen `
 
 ### 2.6 Profiles, Boosts, site settings (partial)
 
-**Arc Profiles.** No `StorableProfiles.json` exists on this Mac, yet the binary knows `StorableProfiles.json` and `StorableProfileContainers.json`, plus keys `profileDirectoryBasename`, `defaultProfileDirectoryBasename`, `sourceProfileDirectoryBasename` (**confirmed (binary)**). Model (**inferred**): an Arc Profile has an id, a display name, and a `profileDirectoryBasename` that names its Chromium folder under `User Data/` (`Default` for the default profile). Spaces point at a profile via `Space.profile`. Multiple Spaces can share one profile (all 4 do here). Importer: create one Open profile per distinct `Space.profile` value, defaulting to a single profile. Verify field names against a real multi-profile install before shipping (§5).
+**Arc Profiles (updated 2026-11-06).** A read-only private copy now contains
+2 Chromium directories named by `User Data/Local State` →
+`profile.info_cache`; each value supplies the display `name` (**confirmed
+(disk)**). `StorableSidebar.json` → `sidebar.containers[1].spaces` has 6 Spaces:
+4 use `{default:true}`, and 2 use
+`{custom:{_0:{directoryBasename:"Profile 1",machineID:<UUID>}}}`. The same
+nested reference appears in `topAppsContainerIDs`, with 6 Default Favorites
+and 5 named-Profile Favorites. Source counts: `.re/s14/c1/source-counts.json`;
+command: the private C1 Python copy/count receipt, reading only these JSON
+keys and copied History databases. No URL, title, Profile name, or machine ID
+is printed. `StorableProfiles.json` and `StorableProfileContainers.json` are
+still absent; their optional field shapes remain **guesses**. Source directory
+names identify source data, not an Open destination folder. The App allocates
+its own named Profile directory and retains the source map for History.
 
-**Boosts.** `StorableBoostsData.json` is absent here. Binary evidence: `StorableBoostsDataStore.swift`, `BoostsStorageFirebaseImpl` (so Boosts also sync via Firebase), keys `boostID`, `boostTitle`, `activeBoosts`, `boostSnapshots` (**confirmed (binary)** names only). The Boost payload (CSS/JS/Zap rules per host) was not recoverable without a real file or a Ghidra query, and inventing fields would be worse than omitting them. Importer v1: if the file exists, preserve it raw and surface Boost names only if a `title`-like key is present; do not guess the rule schema. This is the weakest part of this doc and is flagged in §5.
+
+**Boosts (updated 2026-11-06).** `StorableBoostsData.json` is absent here and
+stores only `version` and `locallyEnabledBoostIDs`, not content. Reflection and
+the shared Ghidra snapshot establish the remote string dictionary and inner
+JSON component keys. The additional authorized Firestore offline cache contains
+a deleted Boost marker, with no live content document. See [Boost storage
+evidence](boosts-store.md) for exact symbols, wire schema, copy limits, mapping
+and remaining guesses. Do not preserve raw personal Boost files in Open data.
 
 **Site settings / Site Control Center.** These live in Chromium, not in Storable files: `User Data/Default/Preferences` → `profile.content_settings.exceptions` (103 exception types present here, mostly empty) plus per-site entries when the user changes a site (**confirmed (disk)** keys). Content-blocking lists live in `RemoteAssetDirectory/BlockListConfiguration_*` and `WebContentBehaviorConfiguration_*`. Import site settings from Chromium Preferences in the Chromium phase (§4), not from the sidebar.
 
@@ -376,12 +396,12 @@ Read order: sidebar first (structure), windows second (what was open), routing t
 | Space | `StorableSidebar.json` → `sidebar.containers[1].spaces` (odd indices) | `id`, `title`, `profile`, `customInfo.iconType`, `customInfo.windowTheme`, container ids | Space (name, emoji/named icon, theme colors) | Default Space may have no `title`. Theme palette is deep; map foreground/background only, keep raw theme JSON aside. |
 | Pinned section | Space `newContainerIDs`/`containerIDs` `pinned` id → that container item's `childrenIds` | Ordered child ids | Pinned tabs + folders in that Space | Dual encoding (§2.3). Prefer `newContainerIDs`. |
 | Today (unpinned) section | Same, `unpinned` id → container `childrenIds` | Ordered child ids | Today tabs in that Space | Arc auto-archives these. Import all as open today tabs; let Open's auto-archive age them later. |
-| Favorite | `topApps` container item's `childrenIds` (via `topAppsContainerIDs[1]`) | Ordered tab item ids | Favorite (top app) | Old name `topApps`. One favorites container per profile (**inferred** for multi-profile). |
+| Favorite | Each alternating ProfileRef/container pair in `topAppsContainerIDs` | Ordered tab item ids and owner Profile | Favorite (top app) | Per-Profile ownership confirmed on the two-Profile copy (§2.6). |
 | Tab | Sidebar item with `data.tab` | `savedURL`, `savedTitle`, `title`, `createdAt`, `timeLastActiveAt`, `customInfo.iconType` | Tab (pinned / today / favorite per parent) | `savedTitle` can be stale. Open should refresh titles on first load. Skip `welcomeToArc` tabs or import as a normal tab (**inferred**: they are onboarding pages). |
 | Folder | Item with `data.list`, name in `title` | `title`, `childrenIds` (recursive) | Folder | Empty payload. Depth is unbounded; cap import depth and report truncation. |
 | Split View | Item with `data.splitView`, panes in `childrenIds` | `layoutOrientation`, `itemWidthFactors`, `focusItemID`, pane tab ids in order | Split group | `itemWidthFactors` may be empty (equal panes). Pane tabs also appear as flat items; do not double-import them as loose tabs. |
-| Archive item | `StorableArchiveItems.json` (if present) | Item shape + `archivedAt`, `archiveReason` (**inferred** wrapper) | Archived tab (closed, restorable) | File absent on this install. Build the parser after capturing a real file (§6). Until then, import nothing and say so. |
-| Arc Profile | `Space.profile` (+ `StorableProfiles.json` if present) | Profile id, (name, `profileDirectoryBasename` **inferred**) | Profile + its Chromium data folder | Single-profile evidence only. Multi-profile field names unverified. |
+| Archive item | `StorableArchiveItems.json` | `sidebarItem`, `archivedAt`, `reason`, `source.space._0` (§2.7) | Archived tab in the Space’s Profile store | Current copy has 23 entries, 21 eligible; the App preserves the 9/12 Profile split. |
+| Arc Profile | `Space.profile`, Favorites ProfileRef, `Local State.profile.info_cache` | Nested `custom._0.directoryBasename`; Local State display name (§2.6) | Profile and separate source-directory mapping | Nested custom ref confirmed. Optional Storable Profile metadata remains a guess. Open allocates its own live directory. |
 | Window | `StorableWindows.json` → `windows[]` | `focusedSpaceID`, `contents.windowContents`, `splitViewState`, sidebar width/mode | Window with focused Space and open contents | `style` variants beyond `standard` unverified. Unknown style → standard window. |
 | Air Traffic Control rule | `StorableLinkRouting.json` → `rules[]` | `sourceComponents[].componentType.urlMatch._1`, `destination` | Link-routing rule (host → Space / Little Arc) | Enum has more match kinds than the one observed. Import `contains` host rules; skip and count others. |
 | Default link destination | `StorableLinkRouting.json` → `defaultDestination` | `littleArc` / `space` + `mostRecent` | Default external-link behavior | `mostRecent: {}` means "most recent Space" (**inferred**). |
@@ -392,7 +412,7 @@ Read order: sidebar first (structure), windows second (what was open), routing t
 General importer rules:
 
 1. Parse leniently: ignore unknown keys, unknown `data` cases, and both sync states. Fail only if `sidebar.containers` is missing.
-2. Walk `childrenIds` from the four roots (favorites container + per-Space pinned/today containers). Any item object never reached is an orphan — import orphans as today tabs in the first Space and log them (**inferred** recovery rule; better than dropping tabs).
+2. Walk `childrenIds` from each Profile’s Favorites container and each Space’s pinned/today containers. Any item object never reached is an orphan — import orphans as today tabs in the first Space and log them (**inferred** recovery rule; better than dropping tabs).
 3. Convert all `Time` values with the 2001 epoch (§2). Convert Chromium times with the 1601 µs epoch. Mixing these up is the easiest silent bug.
 4. Keep Arc item ids in an import map (Arc id → Open id) so windows, splits, and routing can resolve references. Sentinel string ids map like any other id.
 5. Never write back to Arc's folder. Copy `History`/`Login Data` before opening them (Arc locks them while running).
@@ -420,7 +440,12 @@ Status after capture session 2 (2026-10-26; copies in `.re/runtime/appsupport/s2
 - New: a collapsed folder that shows one child stores `expandedItems: [folderID, {peeked: {_0: [childID]}}]`.
 - Item 5: `StorableKeyBindings.json` gained two timestamped copies (`StorableKeyBindings.<yyyy-MM-dd-HH-mm-ss-SSS>.json`); no custom binding was made.
 
-Until items 1–3 are done, the importer should ship with archive, Boost, and multi-profile support disabled and visibly reported as "not imported", not silently skipped.
+Update 2026-11-06: item 3’s source-directory and ownership mapping is confirmed
+by Local State, 6 Spaces split 4/2, and 11 Favorites split 6/5. The two optional
+Storable Profile metadata files remain absent. Counts-only evidence is
+`.re/s14/c1/source-counts.json` and the [App audit](../import-multiprofile.md).
+
+The older disable-until-sampled note is superseded for archive and multi-profile import by their observed schemas and App verification. Boost import remains a separate Section 14 gate.
 
 ---
 

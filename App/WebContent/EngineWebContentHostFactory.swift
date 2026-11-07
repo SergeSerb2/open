@@ -48,6 +48,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   // Unshown extension-created pages awaiting their first real address.
   private var pendingLittleOpenExtensionTabs: [Int: OEWebContent] = [:]
   var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
+  private(set) var savePrompts: SavePromptPresenter?
+  private func attachSavePrompts() {
+    guard savePrompts == nil, let window else { return }
+    savePrompts = SavePromptPresenter(window: window) { [weak self] page in
+      guard let self, let content = self.selectedContent else { return false }
+      return page == AnyHashable(content.identifier)
+    }
+  }
+  private func savePromptFocusChanged() {
+    savePrompts?.pageDidBecomeFocused(AnyHashable(selectedContent?.identifier ?? 0))
+  }
   let model: BrowserModel
   let incognitoSession: IncognitoSession?
   /// Section 12's read-only private-state hook (lead ruling 16:12).
@@ -184,8 +195,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if previous.delegate === self { previous.delegate = nil }
     }
     littleOpenController = controller; littleOpenContent = content
+    attachSavePrompts()
     littleOpenBrowser = browser; browser.window = controller.window; browser.delegate = self
     controller.onCloseRequested = { [weak self] in
+      self?.savePrompts?.cancelAll()
       guard let self, let window = self.window else { return }; self.app.extensionPrompts.cancel(window: window)
     }
     controller.extensionsUI = extensions.context
@@ -211,6 +224,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    attachSavePrompts()
     controller.shouldDeferKeyToFirstResponder = { [weak self] event in
       if let picker = self?.iconPicker, event.window === picker.panel || event.window === picker.toneWindow {
         return event.modifierFlags.intersection([.command, .control]).isEmpty
@@ -266,6 +280,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return PermissionPromptPresenter.Anchor(view: anchor, rect: anchor.bounds)
     }
     controller.onCloseRequested = { [weak self] in
+      self?.savePrompts?.cancelAll()
       guard let self, let window = self.window else { return }
       self.app.extensionPrompts.cancel(window: window)
     }
@@ -305,6 +320,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.translate.focusDidChange()
       self.findController?.sync()
       self.pageChrome.visibilityChanged()
+      self.savePromptFocusChanged()
     }
     // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
     // Open becomes active, and paused while the Capture overlay is up.
@@ -314,7 +330,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
     let previousVisibility = controller.onVisibilityChange
-    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange(); self?.pageChrome.visibilityChanged(); self?.extensions.sidebarVisibilityChanged() }
+    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange(); self?.pageChrome.visibilityChanged(); self?.extensions.sidebarVisibilityChanged(); self?.savePromptFocusChanged() }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
@@ -507,6 +523,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
     pageChrome.cancel(host.content)
     if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
     translate.contentDidClose(host.content)
@@ -827,6 +844,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
     privateDownloads.close()
