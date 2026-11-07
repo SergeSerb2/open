@@ -415,8 +415,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
     if profile.id == model.defaultProfile?.id {
-      let context = WebsiteAppearance.prepare(OEEngine.shared.defaultContext)
-      app.extensionPrompts.register(context.extensions); return context
+      return Self.createRegularContext(profileID: profileID, directory: profile.dataDirectoryName, app: app)
     }
     guard app.engine.result.layout == .engine else {
       // The old layout has no disk folder for other profiles (CEF refused
@@ -428,9 +427,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       }
       return nil
     }
-    let context = OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
-      .map(WebsiteAppearance.prepare)
-    if let context { app.profileTeardown.didLoad(profile); app.extensionPrompts.register(context.extensions) }; return context
+    return Self.createRegularContext(profileID: profileID, directory: profile.dataDirectoryName, app: app)
+  }
+  /// Explicit action path for a page, private session, or ordered deletion.
+  /// Read-only inspection must use context(for:create: false) instead.
+  static func createRegularContext(profileID: ProfileID, directory: String, app: AppDelegate) -> OEBrowserContext? {
+    guard app.engineReady else { return nil }
+    let context: OEBrowserContext?
+    if profileID == app.model.defaultProfile?.id {
+      context = OEEngine.shared.defaultContext
+    } else {
+      guard app.engine.result.layout == .engine else { return nil }
+      context = OEEngine.shared.context(identifier: directory,
+        directory: app.directories.engineDirectory(dataDirectoryName: directory))
+    }
+    guard let context, context.state == .live else { return nil }
+    app.profileTeardown.didLoad(profileID: profileID, directory: directory)
+    app.extensionPrompts.register(context.extensions)
+    return WebsiteAppearance.prepare(context)
   }
   func retireProfile(_ id: ProfileID, directory: String) {
     for (tab, host) in hosts where host.content.context.identifier == directory {

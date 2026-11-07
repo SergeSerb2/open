@@ -14,6 +14,7 @@
 #include "include/cef_media_controller.h"
 #include "include/cef_navigation_history.h"
 #include "include/cef_open_page.h"
+#include "include/cef_open_profile.h"
 #include "include/cef_open_omnibox.h"
 #include "include/cef_page_lifecycle.h"
 #include "include/cef_request_context.h"
@@ -63,10 +64,12 @@ class OEClient;
 - (void)oe_registerWebContent:(OEWebContent*)webContent;
 - (void)oe_unregisterWebContent:(OEWebContent*)webContent;
 - (void)oe_registerBrowser:(OEBrowser*)browser;
+- (void)oe_registerContext:(OEBrowserContext*)context;
+- (void)oe_contextClosed:(OEBrowserContext*)context;
 - (void)oe_browserDidClose;
 - (void)oe_contextInitialized;
 - (void)oe_extensionsChangedInContext:(OEBrowserContext*)context;
-- (OEBrowserContext*)oe_contextForRequestContext:
+- (nullable OEBrowserContext*)oe_contextForRequestContext:
     (CefRefPtr<CefRequestContext>)requestContext;
 - (CefRefPtr<CefClient>)oe_defaultClient;
 @property(nonatomic, readonly) BOOL oe_isTerminating;
@@ -76,6 +79,12 @@ class OEClient;
 - (instancetype)initOEWithIdentifier:(NSString*)identifier
                             directory:(nullable NSURL*)directory
                                global:(BOOL)global;
+- (nullable instancetype)initOEIncognitoWithIdentifier:(NSString*)identifier
+                                              original:(OEBrowserContext*)original;
+/// Marks the wrapper closed, closes managers and drops all its CEF handles.
+- (void)oe_invalidate;
+- (void)oe_nativeContextClosed;
+@property(nonatomic) BOOL oe_closing;
 @property(nonatomic, readonly) CefRefPtr<CefRequestContext> oe_requestContext;
 /// Runs `block` once the request context finished initializing (browsers
 /// created earlier lose their initial navigation).
