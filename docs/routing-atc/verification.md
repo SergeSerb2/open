@@ -23,16 +23,17 @@ only aggregate counts appear here.
 | Acceptance | Result | Receipt |
 |---|---|---|
 | Release package build | PASS, no warnings or errors | `full-after-209/build.log` |
-| Debug App build, including after main merge | PASS | `debug-after-209.log` |
+| Debug App build, including after #213 merge | PASS | `debug-after-213.log` |
 | Real route CLI | A1–A24 PASS | `full-after-209/route.log` |
 | Existing schema-1 nil destination payloads | Byte-identical roundtrip; nil stays `{}` | A21 |
 | New payload read by old main decoder | PASS with main `98350a07` release CLI | A22; `OPEN_ROUTE_OLD_CLI` |
 | Nested Arc destinations and components | All six forms, fallback count, matches/contains, ordered components PASS | A23–A24 |
 | Copied real Arc import | Before/after: 1 routing rule, 0 skipped rules; after: 0 destination fallbacks | `arc-routing-counts.json` |
-| Settings preview | 44/44 PASS; render and wrapper validation PASS | `full-after-209/settings-preview.log` |
+| Settings preview | Post-#213: 46/46 PASS; all 236 renders and wrapper validation PASS | `settings-after-213/settings-preview.log` |
+| Command bar timing | Paired PASS under TANDEM §4 rule 4d | `paired-commandbar-final/summary.json` |
 | Commands and suggestions | PASS; commands missing/extra/different 0/0/0, allowed-missing 11 | `full-after-209/commands-dump.log`, `suggest-check.log` |
-| Real-App routing | 13/13 PASS, cleanup PASS | `routing-after-209/results-routing-debug.json` |
-| Real-App Little Open | 39/39 PASS, cleanup PASS | `littleopen-after-209/results-littleopen-debug.json` |
+| Real-App routing | Post-#213: 13/13 PASS, cleanup PASS | `routing-after-213/results-routing-debug.json` |
+| Real-App Little Open | Post-#213: 39/39 PASS, cleanup PASS | `littleopen-after-213/results-littleopen-debug.json` |
 | Real-App sidebar | 19/19 PASS; existing durable-storage row SKIP, covered by the dedicated Profiles suite; cleanup PASS | `sidebar-after-209/results-sidebar-debug.json` |
 | Sidebar comparison | 13/13 PASS; tables byte-identical | `full-after-209/sidebar-compare.log` |
 | Space editor under screen worker | 237/237 PASS on branch and unchanged main | `space-editor-locked-branch.log`, `space-editor-locked-main.log` |
@@ -42,7 +43,7 @@ engine context: its cookie is visible in Work and absent in Default. It also
 proves the explicit Little Open Profile hint, separate windows for the same URL
 in different Profiles, and Settings pane `links` with scroll target `links-rules`.
 The App runs have no focus interruptions and leave no owned processes or windows.
-Their starting load averages (1/5/15 minutes) were 18.37/26.88/33.17 for routing,
+The post-#209 starting load averages (1/5/15 minutes) were 18.37/26.88/33.17 for routing,
 16.90/24.08/31.42 for Little Open, and 18.37/23.44/30.80 for sidebar.
 
 All builds and verify-all runs use `heavy.sh` with
@@ -135,6 +136,33 @@ captures, Test existence, invalid drafts, empty state, and matches semantics
 remain capture follow-ups in `docs/followups.md`; these results do not establish
 Arc visual or matching parity.
 
+
+## Post-#213 focused verification
+
+Main `f75a5d46` (#213, Profiles shell) was merged as `bc61afbf` with both
+sides retained. The two conflicts combined the preview check list and render
+inventory: 46 checks and 236 images. Public `create(url:profile:focus:)` and
+Profile-aware `open(url:profileHint:)` both remain. Settings retains its live
+routing snapshot provider and standard-window Profile selection.
+
+Per TANDEM §4 rule 5a and the lead's 18:46 instruction, this overlap required a
+Debug build and the following passing focused reruns; no new full verify-all was required.
+The App suites recorded clean source at `3c633385`, which adds only this
+verification document to the tested code integration `bc61afbf`.
+
+| Check | Result | Receipt |
+|---|---|---|
+| `s10-heavy.sh tools/build.sh Debug` | PASS | `debug-after-213.log` |
+| `s10-heavy.sh tools/verify-all.sh --only settings-preview`: build | PASS, 77 s; zero warnings/errors | `settings-after-213/build.log` |
+| Settings preview | 46/46 PASS, 91 s; all 236 renders validated | `settings-after-213/settings-preview.log` |
+| Real-App routing | 13/13 PASS, cleanup PASS, zero interruptions | `routing-after-213/results-routing-debug.json` |
+| Real-App Little Open | 39/39 PASS, cleanup PASS, zero interruptions | `littleopen-after-213/results-littleopen-debug.json` |
+
+Each App suite ran separately under `lockf -k /tmp/open-onscreen-e2e.lock`,
+after the priority check and after all builds from this worktree finished.
+Starting loads (1/5/15): routing **6.36/9.20/12.16**;
+Little Open **8.47/9.48/12.18**. Both suites removed every owned
+process and window. No check remained running at handoff.
 
 ## Final full verification
 
