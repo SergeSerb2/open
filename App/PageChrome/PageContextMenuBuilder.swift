@@ -179,6 +179,10 @@ final class PageContextMenuBuilder {
     let anchor = request.items.firstIndex { isLinkOpen($0) } ?? 0
     let survivingBefore = request.items.prefix(anchor).filter { $0.isSeparator || !isLinkOpen($0) }.count
     let items = [
+      openItem("link-incognito", "Open Link in Incognito Window") { [weak owner] in
+        guard let owner else { return }
+        owner.app.makeIncognitoWindow(parent: owner.incognitoSession?.parent ?? opener.flatMap { owner.profile(for: $0) } ?? owner.focusedProfile, url: link)
+      },
       openItem("link-new-tab", "Open Link in New Tab") { [weak owner] in _ = owner?.openNewTab(url: link, background: true, opener: opener) },
       openItem("link-split", "Open Link in Split View", enabled: canSplit) { [weak owner] in
         guard let owner, let opener, let controller = owner.controller else { return }
@@ -202,10 +206,11 @@ final class PageContextMenuBuilder {
       // Step 6 replaces that seam with the real page without changing this caller.
       openItem("link-little-open", "Open Link in Little Open") { [weak owner] in
         guard let owner else { return }
-        owner.app.openLittleOpen(url: link, profileHint: owner.focusedProfile?.id)
+        if owner.isIncognito { owner.openNewTab(url: link, background: false, opener: opener) }
+        else { owner.app.openLittleOpen(url: link, profileHint: owner.focusedProfile?.id) }
       },
       openItem("link-window", "Open Link in New Window") { [weak owner] in
-        guard let owner, let window = owner.app.makeUserWindow(), let target = owner.app.hostFactories[window.windowID] else { return }
+        guard let owner, let window = owner.isIncognito ? owner.app.makeIncognitoWindow(parent: owner.incognitoSession?.parent) : owner.app.makeUserWindow(), let target = owner.app.hostFactories[window.windowID] else { return }
         target.commandBarSession?.dismiss()
         _ = target.openNewTab(url: link, background: false)
       },

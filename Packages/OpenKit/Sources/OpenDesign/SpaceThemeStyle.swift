@@ -155,6 +155,12 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     /// Keycap plate inside a tooltip. guess: tooltip text at 18 %.
     public var tooltipKeycap: RGBA { tooltipText.withAlpha(0.18) }
 
+    /// Guess S10-P1: fixed private-window palette, pending an Arc capture.
+    public static let incognitoSidebar = RGBA(hex: 0x26232B)
+    public static let incognito = SpaceThemeStyle(fill: .corners(Array(repeating: incognitoSidebar, count: 4)),
+      noiseFactor: 0, translucency: .dark, contentAppearance: .dark, isVibrant: false,
+      texture: .grain, windowColorScheme: .dark)
+
     // MARK: Default theme
 
     /// The look of a Space without a stored theme. Measured in dark mode

@@ -506,15 +506,15 @@ public enum SavePromptAnswer: Sendable { case save, neverForSite, dismiss }
 
 ### 6.1 Save sheet
 
-One shared component for every Arc sheet dialog: `Packages/OpenKit/Sources/OpenDesign/DialogSheet.swift` (AppKit, no SwiftUI): `DialogSheetPanel` (an `NSPanel`, style `.borderless`, `hasShadow = true`, shown with `NSWindow.beginSheet(_:completionHandler:)`) and `DialogSheetView`. The extensions UI plan's `ExtensionPromptSheet` (PR #58 §3.11) uses the same component with an icon and a body list. Whichever PR lands first creates the file; the other adopts it.
+One shared component for sheet dialogs: `Packages/OpenKit/Sources/OpenDesign/DialogSheet.swift` (AppKit, no SwiftUI): `DialogSheetPanel` (an `NSPanel`, style `.borderless`, `hasShadow = true`, shown with `NSWindow.beginSheet(_:completionHandler:)`) and `DialogSheetView`. The save sheet uses it with `Typography.promptTitle` and `.promptBody`, matching `ExtensionPromptView` without its icon. `ExtensionPromptSheet` stays unchanged; adopting the shared component with its icon and body list is a later follow-up.
 
 Layout. Values come from the extensions UI plan's sheet; they stay guesses until screenshot S-1.
 
 | Element | Value | Token |
 |---|---|---|
 | Sheet | width 420; padding 24; corner radius 12; background `Core.popoverBackground`; no icon in v1 (guess) | `DialogSheetMetrics.width`, `.padding`, `.cornerRadius` |
-| Title | top 24, left 24, width 372; 15 Semibold; `Core.foregroundPrimary`; up to 2 lines, then middle-truncate the host | `Typography.dialogTitle = FontToken(15, .semibold)` |
-| Body | title bottom + 8; 13 Regular; `Core.foregroundSecondary`; up to 3 lines | `Typography.dialogBody = FontToken(13, .regular)` |
+| Title | top 24, left 24, width 372; 15 Semibold; `Core.foregroundPrimary`; up to 2 lines, then middle-truncate the host | `Typography.promptTitle` |
+| Body | title bottom + 8; 13 Regular; `Core.foregroundSecondary`; up to 3 lines | `Typography.promptBody` |
 | Button row | body bottom + 20; height 28; 24 from the bottom edge | `DialogSheetMetrics.buttonHeight` |
 | Buttons | corner radius 8; minimum width 88; gap 8; label 13 Medium; default fill `Core.brandBlue` with white text; other fill `SidebarColors.itemBackground` with `Core.foregroundPrimary`; each shows its key hint ("↩", "esc") in `Typography.keycap` at 0.6 opacity after the label | `DialogSheetMetrics.buttonRadius`, `.buttonMinWidth`, `.buttonGap` |
 | Order | right aligned: secondary, then default (rightmost). "Never on this site" is left aligned at x 24 (guess; macOS three-button order). | — |
@@ -546,6 +546,8 @@ Queue rules (`Packages/OpenKit/Sources/OpenFeatures/SavePromptPresenter.swift`, 
 7. After "Save", show no confirmation (Arc shows none we know of; screenshot S-3).
 
 Renders: a new `features-render save-sheet --kind password|update|card|address --out FILE [--scale 1|2] [--appearance light|dark]` draws the four sheets offscreen (`docs/m4/save-sheet-*.png` next to the other feature renders), with fixture hosts only. `features-render check` asserts each sheet's frame and button order.
+
+Step 3 also has a real-App mock path, compiled only with `OPEN_AUTOMATION`: `save-prompt` enqueues synthetic kind/host metadata through each window's production presenter. Answers click real sheet buttons; unanswered release emits `ignored`. `tools/e2e/engine_e2e.py --only passwords` dispatches the M-* rows in `tools/e2e/passwords.py`. These prove sheet UI and request lifetimes before the engine bridge; P-* engine/storage rows remain Step 4. Queue length in automation counts waiting requests (maximum three), separate from the visible sheet. No credentials are displayed or stored by this path. Arc visual parity still needs S-1.
 
 ### 6.2 Fill dropdown (Chromium's)
 
@@ -689,6 +691,8 @@ Threading: the importer runs on the main actor. A batch reader (`ArcSecretsBatch
 - One Keychain read serves all Arc profiles: Chromium uses one key per app.
 - Batches: at most 256 records; after the sink returns, the importer zeroes every record of the batch and drops it. One file set in memory at a time (import-phase2 §7).
 
+**Section 15 implementation erratum (2026-11-06):** `SecretsImportSink` adds an optional `openProfileID: UUID?` property with a default `nil` implementation. The App can supply its opaque Open profile ID for the ledger without changing `run(key:consent:sinks:)`. The required `runSyntheticFixture(sinks:)` entry remains. A second synthetic overload accepts a destination ledger and `stopAfter` step for CLI recovery verification; it accepts no source path, key, or ciphertext. Its fixed synthetic scenarios also cover batching, field-size boundaries, an empty source, and nonlocal address filtering.
+
 ### 8.2 Reader changes (`ArcSecrets.swift`)
 
 | Record | Add |
@@ -699,6 +703,8 @@ Threading: the importer runs on the main actor. A batch reader (`ArcSecretsBatch
 | `ImportedCardRecord` | `nickname`, `useCount`, `useDate`; CVCs are not read |
 
 Columns missing in an older source DB read as defaults. The synthetic fixture (§9.3) covers each new column.
+
+**Section 15 implementation erratum (2026-11-06):** Cookie expiry is a lifetime, so a valid future expiry is not subject to the activity timestamp limit of now + 24 hours used by the earlier reader. A zero expiry remains a session cookie. Only activity timestamps use that limit. Batches visit at most 256 source rows as well as returning at most 256 records, so a file of skipped rows also yields between reads. Selected fields are limited to 16 KiB each, 64 KiB per row, and address token values to 64 KiB per address (512 tokens maximum); oversized input is refused before copying it into Swift records.
 
 ### 8.3 Write order and durability
 
@@ -746,6 +752,8 @@ The wizard Report (`ImportWizard.swift`) replaces the single "Passwords and cook
 ### 8.7 CLI
 
 `openkit import-arc-secrets` keeps `--dry-run` (counts, no Keychain without `--allow-keychain-access`). It gains no write mode: writes need the engine and run only in the App. `openkit verify-secrets-fixture` runs `ArcSecretsImporter` with a counting sink over the extended fixture and prints per-kind counts, so the reader changes in §8.2 have a CLI check.
+
+**Section 15 implementation erratum (2026-11-06):** The CLI adds `--stop-after logins|webData|cookies`. It stops after the first profile's selected durable step, checks the unfinished ledger, and repeats all steps with a new run ID against the same sinks and ledger. `tools/verify-all.sh --only verify-secrets-fixture` runs the normal and three recovery commands plus the external consent compile check. These are OpenKit sink-contract checks; engine durability, App relaunch, and wizard wiring still need the engine acceptance in §9.3.
 
 ## 9. Verification (end to end; no unit tests)
 

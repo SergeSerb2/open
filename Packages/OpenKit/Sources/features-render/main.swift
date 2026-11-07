@@ -45,7 +45,15 @@ enum FeatureCLI {
             return
         }
         if cmd == "check" {
-            if args == ["check", "--only", "idle"] {
+            if args == ["check", "--only", "save-sheet"] {
+                var passed = 0, failed = 0
+                SaveSheetScenes.check { ok, label in
+                    print("\(ok ? "PASS" : "FAIL") \(label)")
+                    if ok { passed += 1 } else { failed += 1 }
+                }
+                print("save-sheet check: \(passed) passed, \(failed) failed")
+                if failed > 0 { throw CLIError(description: "save sheet checks failed") }
+            } else if args == ["check", "--only", "idle"] {
                 var passed = 0, failed = 0
                 try await IdleChecks.run { ok, label in
                     print("\(ok ? "PASS" : "FAIL") \(label)")
@@ -64,11 +72,12 @@ enum FeatureCLI {
             } else if args == ["check"] {
                 try await FeatureChecks.run()
             } else {
-                throw CLIError(description: "check accepts only --only auto-archive or --only idle (use tools/verification/features-idle.py for idle)")
+                throw CLIError(description: "check accepts --only save-sheet, --only auto-archive or --only idle (use tools/verification/features-idle.py for idle)")
             }
             return
         }
         if cmd == "pip" { try PiPScene.run(args); return }
+        if cmd == "save-sheet" { try SaveSheetScenes.render(args); return }
         if cmd == "translate" { try TranslateChecks.render(args); return }
         if cmd == "capture" { try CaptureChecks.render(args); return }
         if cmd == "compare" { try FeatureCompare.run(args); return }

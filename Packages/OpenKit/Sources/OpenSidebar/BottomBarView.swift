@@ -36,7 +36,11 @@ final class BottomBarView: NSView {
         home.inactiveTint = SidebarRole.homeGlyphInactive
         home.action = { [unowned context] in context.send(.showLibrary) }
         home.tooltip = { Tooltip(title: "Library", placement: .above, style: style()) }
-        plus.menuProvider = { [weak self] in self?.menus.plus() }
+        if context.isIncognito {
+            home.isHidden = true; strip.isHidden = true
+            plus.action = { [unowned context] in context.send(.newTab) }
+            plus.setAccessibilityLabel("New Tab")
+        } else { plus.menuProvider = { [weak self] in self?.menus.plus() } }
         plus.tooltip = { Tooltip(title: "New…", placement: .above, style: style()) }
         loop = ObservationLoop(read: { [weak self] in _ = self?.context.model.spaces.map(\.id) }) { [weak self] in self?.needsLayout = true }
     }
@@ -53,7 +57,7 @@ final class BottomBarView: NSView {
         plus.frame = CGRect(origin: CGPoint(x: w - m.plusTrailingInset - m.buttonSize.width, y: m.buttonY), size: m.buttonSize)
         let stripRect = CGRect(x: m.switcherLeading, y: 0, width: max(0, w - m.switcherLeading - m.switcherTrailing), height: m.height)
         strip.frame = stripRect
-        let spaces = context.model.spaces
+        let spaces = context.isIncognito ? [] : context.model.spaces
         let live = Set(spaces.map(\.id))
         for (id, v) in items where !live.contains(id) { v.removeFromSuperview(); items[id] = nil }
         // Centered when the items fit (4 Spaces: 136 pt in a 144 pt strip → 4 pt each side).

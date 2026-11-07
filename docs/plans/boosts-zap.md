@@ -2249,6 +2249,12 @@ PR-a: Steps 1–3. PR-b: Steps 4–5. PR-c: Steps 6–8. PR-d: Step 9.
 
 ### 13.3 Import from Arc (explicit non-goal with a hook)
 
+Update 2026-11-06 (Section 14 C2): the historical gate below is superseded by
+[Boost storage evidence](../re/boosts-store.md). Storable holds local enablement
+only; the bounded Firestore offline-cache parser is in OpenImport. CLI writes
+use the existing data-root lock. The App remains report-only until Section 12's
+sole `app.stores.boosts` owner merges; no second BoostStore may be created.
+
 `StorableBoostsData.json` has never been observed (data-model.md §2.6, model.md
 "boosts: not imported"). Do not write a parser. The hook: `Boost` field names
 (`css`, `js`, `zaps`, enabled, site match) are chosen so a future importer can map

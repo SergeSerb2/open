@@ -25,6 +25,9 @@ public final class BoostEditorController: NSObject {
     private weak var parent: NSWindow?
     private var chosenScreen = CGRect.zero
     private var generation = 0
+    private var modeGeneration = 0
+    private var simpleFrame: CGRect?
+    private var codeSize = BoostEditorMetrics.codeWindow
     public init(host: BoostEditorHost,defaults: UserDefaults = .standard,makePanel: @escaping @MainActor () -> BoostEditorPanel = { BoostEditorPanel(contentRect: CGRect(origin: .zero,size: BoostEditorMetrics.window),styleMask: [.borderless,.nonactivatingPanel],backing: .buffered,defer: false) }) { self.host = host;self.defaults = defaults;self.makePanel = makePanel;super.init() }
     isolated deinit { colorTask?.cancel();if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) };session?.finish() }
     @discardableResult public func present(parent: NSWindow,contentRect: CGRect,context: SiteControlContext,boostID: BoostID? = nil) -> Bool {
@@ -40,7 +43,7 @@ public final class BoostEditorController: NSObject {
         let session = BoostEditorSession(context: context,boost: boost,isNew: existing == nil,host: host,defaults: defaults),view = BoostEditorView(session: session),panel = makePanel()
         panel.isReleasedWhenClosed = false;panel.becomesKeyOnlyIfNeeded = true;panel.isFloatingPanel = true;panel.level = .floating
         panel.appearance = .init(named: .aqua);panel.backgroundColor = .clear;panel.isOpaque = false;panel.hasShadow = true;panel.colorSpace = .sRGB
-        panel.contentView = view;view.wantsLayer = true;view.layer?.cornerRadius = 12;view.layer?.cornerCurve = .continuous;view.layer?.masksToBounds = true
+        panel.contentView = view;view.autoresizingMask = [.width,.height];view.wantsLayer = true;view.layer?.cornerRadius = 12;view.layer?.cornerCurve = .continuous;view.layer?.masksToBounds = true
         self.session = session;self.view = view;self.panel = panel
         view.onClose = { [weak self] in self?.close(animated: true) };session.onDelete = { [weak self] in self?.close(animated: true) }
         view.onResize = { [weak self] height,_ in self?.resize(height: height) }
@@ -48,6 +51,7 @@ public final class BoostEditorController: NSObject {
         view.screenVisibleFrame = { [weak self] in self?.chosenScreen ?? .zero }
         panel.handleKey = { [weak self] in self?.handleKey($0) ?? false }
         panel.didBecomeKey = { [weak self,weak panel] in guard let self,let panel,self.activeAlert == nil,let view = self.view,!(panel.firstResponder is NSTextView) else { return };view.focus(view.focusOrder.first ?? view) }
+        view.onCodeMode = { [weak self] in self?.setCodeMode($0) }
         resize(height: 588);view.refresh();view.layoutSubtreeIfNeeded();parent.addChildWindow(panel,ordered: .above);panel.orderFront(nil);panel.makeFirstResponder(view)
         animateOpen()
         defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,object: defaults,queue: .main) { [weak view] _ in MainActor.assumeIsolated { view?.refresh() } }
@@ -55,26 +59,78 @@ public final class BoostEditorController: NSObject {
     }
     public func close(animated: Bool = false) {
         guard let panel else { return }
-        generation += 1
+        generation += 1;modeGeneration += 1
         if let alert = activeAlert { panel.endSheet(alert.window,returnCode: .cancel);activeAlert = nil }
         colorTask?.cancel();colorTask = nil;view?.closeAdvanced();session?.finish()
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver);self.defaultsObserver = nil }
         self.panel = nil;view = nil;session = nil
-        let finish: @MainActor @Sendable ()->Void = { [weak panel,weak parent] in guard let panel else { return };parent?.removeChildWindow(panel);panel.orderOut(nil);panel.close();parent?.makeKeyAndOrderFront(nil) }
+        let finish: @MainActor @Sendable ()->Void = { [weak panel,weak parent] in guard let panel else { return };parent?.removeChildWindow(panel);panel.orderOut(nil);panel.close();if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) } }
         if animated { NSAnimationContext.runAnimationGroup { context in context.duration = Motion.boostEditorCloseDuration;panel.animator().alphaValue = 0 } completionHandler: { MainActor.assumeIsolated { finish() } } } else { finish() }
-        parent?.makeKeyAndOrderFront(nil);onClose?()
+        if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) };onClose?()
     }
     public func boundContextDidChange(tabID: ItemID,profileID: ProfileID) { if let session,session.context.tabID != tabID || session.context.profileID != profileID { close() } }
     public func pageDidNavigate(tabID: ItemID,url: URL?) { if session?.context.tabID == tabID { session?.updatePageURL(url) } }
+    public func boundPageDidCommit(tabID: ItemID) { if session?.context.tabID == tabID { session?.boundPageDidCommit() } }
     public func boundTabDidClose(_ id: ItemID) { if session?.context.tabID == id { close() } }
     public func profileDidClose(_ id: ProfileID) { if session?.context.profileID == id { close() } }
     public func layout(contentRect: CGRect) { if let view { resize(height: view.frame.height) } }
     private func resize(height: CGFloat) {
         guard let panel,let parent else { return }
+        if view?.isCodeMode == true { return }
         let visible = chosenScreen.insetBy(dx: 8,dy: 8),w: CGFloat = 183,h = min(height,visible.height)
         let ideal = CGRect(x: parent.frame.maxX-w/2,y: parent.frame.maxY-160-h,width: w,height: h)
         let frame = CGRect(x: min(max(ideal.minX,visible.minX),visible.maxX-w),y: min(max(ideal.minY,visible.minY),visible.maxY-h),width: w,height: h)
         panel.setFrame(frame,display: true);view?.frame = CGRect(origin: .zero,size: frame.size)
+    }
+    public func setCodeMode(_ enabled: Bool,animated: Bool = true) {
+        guard let panel,let view,view.isCodeMode != enabled else { return }
+        modeGeneration += 1;let token = modeGeneration
+        let wasEditing = panel.firstResponder is NSTextView
+        view.pad.finishKeyboardGesture();session?.endInteractive();session?.flushCode()
+        if enabled {
+            simpleFrame = panel.frame
+            codeSize = BoostEditorMetrics.codeWindow
+            let raw = defaults.string(forKey: "open.boosts.codeEditorSize") ?? "480x588"
+            let parts = raw.utf8.count <= 64 ? raw.split(separator: "x",maxSplits: 2,omittingEmptySubsequences: false) : []
+            if parts.count == 2,let w = Double(parts[0]),let h = Double(parts[1]),w.isFinite,h.isFinite,w>0,h>0 { codeSize = CGSize(width: w,height: h) }
+        }
+        let visible = chosenScreen.insetBy(dx: BoostEditorMetrics.screenMargin,dy: BoostEditorMetrics.screenMargin)
+        let size = enabled ? CGSize(width: min(max(codeSize.width,BoostEditorMetrics.codeMinimum.width),visible.width),height: min(max(codeSize.height,BoostEditorMetrics.codeMinimum.height),visible.height)) : (simpleFrame?.size ?? BoostEditorMetrics.window)
+        let right = min(max(panel.frame.maxX,visible.minX+size.width),visible.maxX)
+        let top = min(max(panel.frame.maxY,visible.minY+size.height),visible.maxY)
+        let target = CGRect(x: right-size.width,y: top-size.height,width: size.width,height: size.height)
+        let install: @MainActor ()->Void = { [weak self,weak view] in
+            guard let self,let view,self.modeGeneration == token else { return }
+            view.setCodeMode(enabled)
+            view.codeView?.onResize = { [weak self] in self?.resizeCode(to: $0,persist: $1) }
+            if !enabled { panel.makeFirstResponder(view);if !wasEditing { self.parent?.makeKeyAndOrderFront(nil) } }
+            view.needsLayout = true;view.layoutSubtreeIfNeeded()
+        }
+        guard animated else { install();panel.setFrame(target,display: true);view.frame = CGRect(origin: .zero,size: target.size);view.alphaValue = 1;return }
+        // A new transition starts at the current native frame and presentation opacity.
+        let alpha = view.layer?.presentation()?.opacity ?? Float(view.alphaValue)
+        view.layer?.removeAllAnimations();view.alphaValue = CGFloat(alpha)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = BoostEditorMetrics.codeFadeOut;view.animator().alphaValue = 0
+        } completionHandler: { MainActor.assumeIsolated {
+            guard self.modeGeneration == token else { return };install()
+            NSAnimationContext.runAnimationGroup { context in context.duration = BoostEditorMetrics.codeFadeIn;view.animator().alphaValue = 1 }
+        } }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Motion.codeModeResize;context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { panel.setFrame(target,display: true) }
+            else { panel.animator().setFrame(target,display: true) }
+        }
+    }
+    public func resizeCode(to proposed: CGSize,persist: Bool) {
+        guard let panel,view?.isCodeMode == true,proposed.width.isFinite,proposed.height.isFinite else { return }
+        let visible = chosenScreen.insetBy(dx: BoostEditorMetrics.screenMargin,dy: BoostEditorMetrics.screenMargin)
+        let w = min(max(BoostEditorMetrics.codeMinimum.width,proposed.width),panel.frame.maxX-visible.minX)
+        let h = min(max(BoostEditorMetrics.codeMinimum.height,proposed.height),panel.frame.maxY-visible.minY)
+        codeSize = CGSize(width: w,height: h)
+        panel.setFrame(CGRect(x: panel.frame.maxX-w,y: panel.frame.maxY-h,width: w,height: h),display: true)
+        view?.frame = CGRect(origin: .zero,size: codeSize);view?.needsLayout = true
+        if persist { defaults.set("\(Int(w.rounded()))x\(Int(h.rounded()))",forKey: "open.boosts.codeEditorSize") }
     }
     private func animateOpen() {
         guard let panel,let layer = view?.layer else { return }
@@ -88,8 +144,11 @@ public final class BoostEditorController: NSObject {
         if event.keyCode == 53 {
             if editing { panel.makeFirstResponder(view);return true }
             if view.advanced { view.closeAdvanced();return true }
+            if view.isCodeMode { setCodeMode(false);return true }
             close(animated: true);return true
         }
+        if view.isCodeMode,event.modifierFlags.contains(.command),event.charactersIgnoringModifiers?.lowercased() == "r" { session.refreshToRun();return true }
+        if view.isCodeMode,event.modifierFlags.contains(.command),let key = event.charactersIgnoringModifiers,["1","2"].contains(key) { view.codeView?.select(key == "1" ? .css : .js);return true }
         if editing { return false }
         if event.modifierFlags.contains(.command),event.charactersIgnoringModifiers?.lowercased() == "z" { view.pad.finishKeyboardGesture();session.endInteractive();if event.modifierFlags.contains(.shift) { session.undoManager.redo() } else { session.undoManager.undo() };return true }
         if event.keyCode == 48 {

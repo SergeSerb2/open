@@ -2,6 +2,14 @@ import CoreGraphics
 import Foundation
 import OpenModel
 
+/// guess S10-I1: Arc names ProfileIndicatorView but its exact header geometry is unverified.
+public enum ProfileIndicatorMetrics {
+    public static let glyphSize: CGFloat = 14
+    public static let hitSize: CGFloat = 20
+    public static let gap: CGFloat = 2
+    public static let opacity: CGFloat = 0.55
+}
+
 // Layout metrics in points. Frames are `[x, y, w, h]` from the window's top-left
 // corner (y grows down), measured on Arc 1.170.0 at sidebar width 228
 // (docs/re/runtime-observations.md §1, docs/re/interaction-states.md).

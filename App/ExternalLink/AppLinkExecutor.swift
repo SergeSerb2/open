@@ -24,7 +24,8 @@ final class AppLinkExecutor: LinkDestinationExecutor {
         guard let state = model.windows.first(where: { $0.id == controller.windowID }), state.style == .standard else { return nil }
         return RoutingWindowSnapshot(id: state.id, kind: .standard, focusedSpaceID: state.focusedSpaceID)
       }, rules: model.routingRules, defaultDestination: model.defaultDestination,
-      externalLinksInLittleOpen: UserDefaults.standard.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true)
+      externalLinksInLittleOpen: UserDefaults.standard.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true,
+      profiles: model.profiles.map(\.id))
   }
 
   func openInSpace(_ url: URL, spaceID: SpaceID) {
@@ -34,7 +35,7 @@ final class AppLinkExecutor: LinkDestinationExecutor {
     if controller == nil {
       // makeWindow reuses the retained final standard state. Set its Space
       // before composition, so it cannot create a page in the old Space first.
-      if app.windowControllers.isEmpty, let retained = app.model.windows.first(where: { $0.style == .standard }) {
+      if app.frontStandardWindowController == nil, let retained = app.model.windows.first(where: { $0.style == .standard }) {
         app.model.focusSpace(windowID: retained.id, spaceID: spaceID)
       }
       controller = app.makeWindow(focusedSpaceID: spaceID)

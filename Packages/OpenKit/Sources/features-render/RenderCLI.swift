@@ -9,11 +9,12 @@ enum RenderCLI {
         [--controls visible|hidden] [--meeting] [--site twitch|meet|youtube|none] [--drag-precision N]
         [--menu] [--document --top-bar-title TEXT] [--document-hover-options] [--document-pressed-options]
           [--screen WIDTHxHEIGHT [--screen-frame WIDTHxHEIGHT] --natural-size WIDTHxHEIGHT --first-open --geometry-report FILE.json] [--hover-skip-ahead]
+    features-render save-sheet --kind password|update|card|address --out FILE [--scale 1|2] [--appearance light|dark]
     features-render toast --out FILE [--size WxH] [--scale 1|2] [--variant copy|plain|zoom|two-line|keycaps|undo|split|hidden|themed|light]
     features-render translate --out DIR [--scale 1|2] [--appearance light|dark]
     features-render capture --scene overlay|overlay-rest|overlay-above|card|card-private|card-full-page|portrait-theme|portrait-white|portrait-black
         --out FILE [--scale 1|2] [--appearance light|dark]
-    features-render compare --arc FILE --ours FILE --out DIR --state split|peek; check [--only auto-archive|idle]; bench
+    features-render compare --arc FILE --ours FILE --out DIR --state split|peek; check [--only auto-archive|idle|save-sheet]; bench
         idle: run via python3 tools/verification/features-idle.py (loads the native observer)
     """
     static func value(_ args: [String], _ key: String) -> String? { guard let i = args.firstIndex(of: key), args.indices.contains(i + 1) else { return nil }; return args[i + 1] }

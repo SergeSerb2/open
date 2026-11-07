@@ -42,11 +42,11 @@ func runImportArcSecrets(args: [String]) {
             print("  cookies decrypt ok=\(report.cookiesDecryptOK) failed=\(report.cookiesDecryptFailed) expired=\(report.cookiesExpired) invalidTime=\(report.cookiesInvalidTime) legacyNoHashPrefix=\(report.legacyNoHashPrefix)")
             print("  cards decrypt ok=\(report.cardsDecryptOK) failed=\(report.cardsDecryptFailed)")
             print("  badPrefix=\(report.badPrefix) addressesInvalidTime=\(report.addressesInvalidTime) autofillInvalidTime=\(report.autofillInvalidTime)")
-            let logins = report.loginsDecryptOK + report.loginsDecryptFailed + report.loginsBlacklisted + report.loginsInvalidTime
+            let logins = report.loginsDecryptOK + report.loginsDecryptFailed + report.loginsBlacklisted + report.loginsInvalidTime + report.loginsFederated
             let cookies = report.cookiesDecryptOK + report.cookiesDecryptFailed + report.cookiesExpired + report.cookiesInvalidTime
             let loginOK = logins == report.loginRows, cookieOK = cookies == report.cookieRows
             let cardOK = report.cardsDecryptOK + report.cardsDecryptFailed == report.cardRows
-            print("  check logins: ok+failed+blacklisted+invalidTime=\(logins) rows=\(report.loginRows) \(loginOK ? "OK" : "MISMATCH")")
+            print("  check logins: ok+failed+blacklisted+invalidTime+federated=\(logins) rows=\(report.loginRows) \(loginOK ? "OK" : "MISMATCH")")
             print("  check cookies: ok+failed+expired+invalidTime=\(cookies) rows=\(report.cookieRows) \(cookieOK ? "OK" : "MISMATCH")")
             print("  check cards: ok+failed=\(report.cardsDecryptOK + report.cardsDecryptFailed) rows=\(report.cardRows) \(cardOK ? "OK" : "MISMATCH")")
             matches = loginOK && cookieOK && cardOK

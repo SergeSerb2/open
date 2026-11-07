@@ -58,6 +58,11 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     manager.delegate = self
     _ = table(manager)
   }
+  /// Private sessions do not leave shortcut snapshots keyed by a dead manager.
+  func unregister(_ manager: OEExtensionManager) {
+    if manager.delegate === self { manager.delegate = nil }
+    tables[ObjectIdentifier(manager)] = nil
+  }
   func table(_ manager: OEExtensionManager) -> ExtensionShortcutTable {
     let key = ObjectIdentifier(manager)
     if let table = tables[key] { return table }

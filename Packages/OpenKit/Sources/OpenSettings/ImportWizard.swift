@@ -18,6 +18,9 @@ import OpenImport
     public private(set) var readable = false
     private var counting=false
     public private(set) var isImporting=false
+    public var phaseText = "Importing selected data…"
+    public var progress: Double?
+    public var browserHasLanded = false
     public var busy:Bool {counting || isImporting}
     public private(set) var errorText = ""
     public private(set) var outcome: ImportOutcome?
@@ -53,7 +56,7 @@ import OpenImport
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
     }
-    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
+    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public var reportSummary:String {
         var parts:[String]=[]
         if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
@@ -122,11 +125,14 @@ public struct ImportWizard: View {
                     let copy=PasswordsImportCopy(canImport:model.canImportPasswordsAndCookies,savedItems:model.probe == nil ? nil:(model.probe?.secretsFound == false ? 0:model.counts["Passwords and cookies"]))
                     Text(copy.title).font(.headline)
                     Text(copy.body)
-                case .progress: ProgressView(); Text("Importing selected data…")
+                case .progress:
+                    if let progress = model.progress { ProgressView(value: progress) } else { ProgressView() }
+                    Text(model.phaseText)
+                    if model.browserHasLanded { Text("Your browser is ready. History is still importing in the background.").foregroundStyle(.secondary) }
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.reportCount(name).formatted()).monospacedDigit()}}
+                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : (name == "Boosts" ? model.outcome?.failures[name] ?? "Could not be read" : "Could not be read")).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}

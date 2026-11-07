@@ -2,7 +2,7 @@ import AppKit
 import OpenDesign
 import OpenModel
 
-public enum IconTarget: String, Sendable { case space, tab, folder }
+public enum IconTarget: String, Sendable { case space, tab, folder, profile }
 public enum IconPickerPage: Int, Sendable { case emoji, icons }
 
 @MainActor

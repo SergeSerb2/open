@@ -27,6 +27,20 @@ public enum HostNormalizer {
         return ruleHost(host)
     }
 
+    /// A host alone, with no scheme, credentials, port, path, query or fragment.
+    /// Used by the explicitly provisional Arc matches import mapping.
+    public static func isBareHostPattern(_ raw: String) -> Bool {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !text.contains(where: \.isWhitespace),
+              !text.contains(where: { "/?#@:*[]".contains($0) }),
+              let parts = URLComponents(string: "https://" + text),
+              let host = componentHost(parts), !host.isEmpty,
+              parts.user == nil, parts.password == nil, parts.port == nil,
+              parts.path.isEmpty, parts.query == nil, parts.fragment == nil,
+              let canonical = canonicalHost(text), !canonical.isEmpty else { return false }
+        return true
+    }
+
     public static func canonicalPattern(_ raw: String) -> String { canonicalHost(raw) ?? "" }
 
     public static func canonicalURLString(_ url: URL) -> String {

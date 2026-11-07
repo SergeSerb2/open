@@ -138,7 +138,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if changes.contains(.loading), !page.isLoading { refreshPageBackground() }
     // Same-document History API path changes do not emit another load finish.
     if !page.isLoading, !changes.isDisjoint(with: [.URL, .loading]) { confirmFaviconForDocument(page, owner: owner) }
-    if !changes.isDisjoint(with: [.URL, .title]) { owner.app.scheduleSave() }
+    if !changes.isDisjoint(with: [.URL, .title]) { owner.scheduleSave() }
     // Share Quote follows the focused page's selection (page-platform §4.2.5, EP-3).
     if changes.contains(.selection) { owner.translate.syncStatus() }
     // Tab sleep's hard event contract: every change of every page, background tabs included.
@@ -174,7 +174,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   /// the committed document which icon it declares, then compare that URL with
   /// the engine image's URL. A changed/empty event invalidates this whole probe.
   private func confirmFaviconForDocument(_ page: OEWebContent, owner: EngineWebContentHostFactory) {
-    guard !closed, !page.isLoading, owner.app.engineReady, !owner.app.terminationRequested,
+    guard !owner.isIncognito, !page.context.isEphemeral, !closed, !page.isLoading, owner.app.engineReady, !owner.app.terminationRequested,
           let url = page.url, let key = FaviconStore.cacheKey(url), let iconURL = page.faviconURL,
           let image = page.favicon, let data = currentFaviconData(page), cachedFaviconURL == iconURL else { return }
     let isReport = faviconEventForDocument

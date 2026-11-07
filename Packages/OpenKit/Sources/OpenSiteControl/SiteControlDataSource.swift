@@ -41,6 +41,8 @@ import OpenBoosts
     /// Fan out validated picker events to every registered editor session.
     func observePickerEvents(_ observer: @escaping @MainActor (ItemID, BoostPickerEvent) -> Void) -> SiteControlObservationToken
     func removePickerObserver(_ token: SiteControlObservationToken)
+    /// JS of this Boost that the bound page's current document was loaded with; nil if none ran.
+    func loadedJS(boostID: BoostID, tabID: ItemID) -> String?
     func setDevToolsVisible(_ visible: Bool, tabID: ItemID)
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?

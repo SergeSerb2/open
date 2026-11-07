@@ -104,7 +104,15 @@ register no undo.
 and valid placement) and an explicit index in `0...spaces.count` before any
 write. A refusal returns
 nil with no mutation, event, undo, or save. Success inserts the Space and
-moves the nodes into Pinned, in order, as one undo step. Folder children,
+moves the nodes into Pinned by default, in order, as one undo step.
+The New Space form uses `placement: .preserveSection` for tab and selection
+moves: Pinned stays Pinned and Today stays Today, including nodes in folders.
+Folder conversion passes `placement: .today` and `removingEmptyFolder:`;
+the model validates the exact ordered children, moves them, and removes the
+empty folder in that same transaction. An optional `creatingProfileNamed:`
+creates the inline Profile in that transaction too; invalid names or moves
+create neither object. Undo removes both and refocuses each window's previous
+Space; redo preserves object IDs. Folder children,
 object identities, source positions, and pinned URLs restore on undo. The
 model buffers TreeChange events until every relocation succeeds. A late
 failure reverses all earlier moves and removes the inserted Space, then
@@ -260,7 +268,7 @@ Sidebar parsing follows [data-model.md](re/data-model.md):
 - Alternating `[id, object, …]` arrays for `items`, `spaces`, and `topAppsContainerIDs`.
 - Order comes from each parent `childrenIds`, never from the flat array order.
 - Space containers come from `newContainerIDs` first, with fallback to legacy `containerIDs`.
-- `topApps` becomes Favorites on the default profile.
+- Each alternating `topAppsContainerIDs` ProfileRef/container pair becomes Favorites on that Profile.
 - Tab fields: `savedURL`, `savedTitle`, item `title` (kept as `customTitle` only when it differs), `savedMuteStatus`, `customInfo.iconType`, timestamps.
 - Timestamps use the 2001 epoch: `unix = value + 978307200`.
 - Space icon: `emoji_v2`, then the `emoji` scalar, then the named `icon`.
@@ -268,13 +276,37 @@ Sidebar parsing follows [data-model.md](re/data-model.md):
 - Leniency: unknown keys and unknown `data` cases are skipped and counted. Nothing fails except a missing `sidebar.containers`.
 - Orphans (tab, folder, or split objects that no root reaches) become today items in the first Space and are counted in the report.
 - Easels and notes are skipped and counted. Welcome items import as ordinary tabs, retain their titles/timestamps, and use the public welcome page when the payload has no URL. `importedWelcome` is a subset of imported tabs, never an additional accounting term.
-- One Open profile is created per distinct `Space.profile` value. All observed data uses `{default: true}`, so one profile serves all Spaces.
+- `Space.profile` and Favorites share one Profile resolver. `{default:true}` selects Default; the observed named shape is `{custom:{_0:{directoryBasename:"Profile 1",machineID:…}}}`. The directory identifies the source Profile; the machine ID does not create another Profile. Names come from `User Data/Local State` → `profile.info_cache[directory].name`.
 - Windows: one `BrowserWindowState` per entry. Focus, sidebar width and mode, style, and stay-on-top map over. Unknown styles become standard windows.
 - Routing: `contains` becomes `.hostContains`, `equals` / `exact` becomes `.hostEquals`, `prefix` becomes `.urlPrefix`. Other match kinds are skipped and counted. A rule that points at the most recent Space maps to `.mostRecentSpace`. The file default destination maps directly.
 
 `ImportReport` counts: `totalItems`, `spaces`, `pinnedTabs`, `todayTabs`, `favorites`, `folders`, `splits`, `routingRules`, imported welcome, named-icon counts, untitled Spaces, skipped easels / notes / unknown, `orphans`, and `skippedRoutingRules`.
 Audit rule: imported nodes + folders + splits + skipped + structural containers = `totalItems`. The CLI prints this check on every import and exits non-zero on a mismatch.
-Boosts import does not run yet. No real `StorableBoostsData.json` exists on this Mac. The report states "not imported" for Boosts.
+Boost parsing reads the Firestore offline cache through a private copy, with an
+own bounded LevelDB, Snappy and protobuf reader. It imports only live `boosts`
+remote documents. `StorableBoostsData.json` supplies local enablement only.
+See [Boost storage evidence](re/boosts-store.md) for the confirmed schema,
+counted guesses, dropped color/zoom fields and limits. `ImportReport.boosts`
+counts found, mapped, malformed, deleted, unknown and other-collection records,
+mapped/dropped/unknown fields, Default Profile guesses and unknown enablement.
+The real source on this Mac contains a deletion marker, not a populated Boost.
+
+`ArcImportResult.boostsByProfile` carries values without writing files. All
+account-scoped Boosts currently map to Default (a counted guess). The CLI writes
+through `OpenBoosts` at `ProfileDirectories.boostsFileURL(for:)`, retaining the
+exclusive data-root preparation token throughout. It refuses a root held by a
+running App. Re-import preserves every existing stable ID and reads the saved
+DTO back before reporting success. BoostStore stamps new records' modification
+time at import, so `protectedEdits` counts newer destination records, including
+unchanged imports. It cannot distinguish those from user edits.
+
+The App has a report-only `recordBoostImport([ProfileID: [Boost]], counts:)`
+seam. It reports source counts and `Not imported in this build`; it writes no
+Boosts. Persistence, live apply, re-import and shared Undo remain **BLOCKED
+(Section 12 AppBoosts)**. Follow-up must use
+`app.stores.boosts.store(for: profileID).upsert(boost)`, then
+`app.stores.boosts.refresh(profile: profileID)` once per Profile. No second App
+BoostStore is allowed: its delayed save could overwrite the sole owner's data.
 
 Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md) "Archive and session files (observed)"):
 
@@ -286,15 +318,15 @@ Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md)
 - The original Space comes from `source.space._0` through the Arc Space ID → Open Space ID map. An unknown Space ID falls back to the first Space. The profile comes from that Space.
 - The archived item's parent folder is lost in Arc's file (`parentID` is null). The record therefore stores `originalLocation` as `today:<spaceID>`. `restoreArchivedTab` then puts the tab at the top of that Space's Today section.
 - The payload holds the full tab fields (`id`, `url`, `title`, `customTitle`, `customIcon`, `createdAt`, `lastActiveAt`, `isMuted`, `isUnread`). `restoreArchivedTab` rebuilds the tab from it.
-- `ArcImporter.importAll()` returns the archive records. It does not write them. The CLI stores them through `ArchiveStore.importRecords(_:)`. OpenImport therefore still depends only on OpenModel.
+- `ArcImporter.importAll()` returns the archive records. It does not write them. The CLI stores them through `ArchiveStore.importRecords(_:)`. OpenImport depends on OpenModel, OpenRouting and OpenBoosts; it has no store writer.
 - Re-import is idempotent by Arc item ID. Stable Open IDs plus the store duplicate check give zero new rows on a second import into the same output folder.
 
 Session restoration (`StorableSessionRestorationData.json`):
 
 - The file holds `mapping.keysToValues`, an alternating `[key, int, …]` array. Each key holds `browser.windowID`, `browser.contextID`, and `itemId`. The int is a Chromium SessionID.
-- Used: which sidebar items were open in which window. For one window and one Space, the item with the newest `lastActiveAt` becomes `selectedNodeBySpace` for that Space. A session item that is a Favorite selects in the window's focused Space. Pair order is only a tie-break.
+- Used: which sidebar items were open in which window. For one window and one Space, the item with the newest `lastActiveAt` becomes `selectedNodeBySpace` for that Space. A Favorite selects in the focused Space only when that Space uses its owner Profile. If the window now focuses another Profile, the importer uses the owner Profile's first Space; that last Space choice is a marked guess because the source session key has no Space ID for Favorites. Pair order is only a tie-break.
 - Ignored: the Chromium SessionID values (the report counts distinct values only), profile and context detail beyond the incognito check, incognito entries (counted), windows that are absent from `StorableWindows.json` (counted as unmapped windows), and items that are absent from the sidebar, for example archived items (counted as unmapped items). Chromium's own `Sessions/Tabs_*` files are not read.
-- The live file on this Mac at the last check held an empty mapping and `StorableWindows.json` held no windows. The session1 snapshot holds 10 pairs in one window and gives 2 applied selections.
+- Historical snapshots included an empty live mapping and a session1 capture with 10 pairs and 2 applied selections. The 2026-11-06 two-Profile copy has 8 pairs and one window; its inactive-Profile Favorite entries exposed the owner-Profile selection fix ([audit](import-multiprofile.md)).
 
 ### Import from Arc, phase 2 (M8)
 
@@ -302,6 +334,37 @@ Implemented from [import-phase2.md](plans/import-phase2.md), with its Lead decis
 `ArcImporter`, `CLI.swift`, and suggestion ranking are unchanged.
 
 `ArcHistoryReader` copies History and its WAL, or the rollback journal in rollback mode, into a private mode-700 directory. It never copies SHM; SQLite rebuilds that file. Copy destinations are created exclusively with mode 600 before any bytes are written. The CLI removes user-owned import directories older than one hour at startup. SQLite opens and recovers only the private copy. A failed quick check gets one fresh-copy retry after 200 ms. The reader deletes its copy on success and failure. It accepts History meta versions 65–75, converts Chromium microseconds with integer epoch subtraction, keeps http/https/file visits, and filters internal schemes, subframes, invalid times, and times more than 24 hours ahead. It maps transition core bits and counts typed visits only for core 1. No source aggregate count overrides visit rows.
+
+`ArcImportResult.sourceProfileDirectories` maps each imported Profile ID to its original Chromium directory, before Open destination collision suffixes. `sourceDefaultProfileID` carries the resolver's `defaultID` for `{default:true}`. The App uses these values for background History imports through its shared Profile stores.
+
+The App creates live imported Profiles through `BrowserModel.createProfile`,
+with the stable import ID and Open's normal directory allocator. Named Arc
+directories are source paths only; an existing Open folder with the same
+basename is never adopted. Settings and any first-run path that merges into
+the live model map Arc's `{default:true}` role to `app.model.defaultProfile`,
+even when its ID and display name differ. This role mapping takes priority
+over stable-ID lookup. It preserves the live Default's engine context and
+logins. The same `profileMapping` routes its Spaces, Favorites, routing
+destinations, Archive and History; no second mapping is used. Named Arc
+Profiles match only their stable import ID. A same-name named Profile without
+that ID stays separate; the new display name receives a suffix.
+Profiles exist before Spaces or Archive/History stores use them. A Settings
+merge keeps one model Undo, including its newly created Profiles. Physical
+store/context deletion after Undo still needs Section 10's in-session deletion
+contract; the current Settings deletion path requires confirmation and defers
+loaded engine data until restart. Import does not bypass that path.
+Older Settings imports from pre-release development builds get no provenance
+migration. Existing Space assignments stay authoritative on re-import.
+Settings preserves its live window layout. The inactive-Profile Favorite's
+first-Space selection remains an accepted, marked guess.
+
+An App import starts each added Today tab's `lastActiveAt` at the import time,
+so startup auto-archive does not immediately remove old source tabs. Pinned tabs
+and Favorites keep their source activity times. Settings re-import also treats
+a stable tab/Favorite ID already in the target Profile's ArchiveStore as a
+duplicate. The App awaits one batched ID lookup per Profile on the archive
+queue, then passes the ID sets into the synchronous model merge. Live-ID
+deduplication stays unchanged. Neither rule changes Arc's source files.
 
 The reader retains the plan's array-returning API and adds an awaited batch-consumer overload. The CLI uses that overload to keep at most one 5,000-visit batch in flight, plus the source URL map. `HistoryStore(fileURL:)` accepts a full destination path. The writer uses one checked transaction per batch, reuses prepared statements, and rolls back all changes on failure. `history_import_keys` deduplicates by source profile directory and Chromium visit ID. The new `(url_id, time)` index supports count recomputation. A result success flag also detects a bad destination for an empty import.
 
@@ -372,13 +435,13 @@ No real Keychain item was read or created. No real Login Data, Cookies, or Web D
 
 ## Profiles (M5 core)
 
-Implemented the non-engine steps of [profiles.md](plans/profiles.md), including its Lead decisions. The App and engine steps remain deferred. The model performs no I/O. No snapshot DTO changed; `schemaVersion` remains 1.
+Implemented the model steps of [profiles.md](plans/profiles.md), including its Lead decisions. The App now repairs missing Profile references before host creation and on model installation, saves repairs, and reports the affected Space titles once. The model performs no I/O. No snapshot DTO changed; `schemaVersion` remains 1.
 
 `createProfile` trims and validates names, rejects case-insensitive duplicates, and creates `Default` for the first Profile when that directory is available, or a unique `Profile-<8 uppercase hex>` name. Bootstrap reserves every existing `Profiles/` entry and every name in `State/retired-profile-dirs.json`, without case sensitivity. The deletion sink durably records that tombstone before removing the Profile. Undo and disk wipes retain the tombstone. Names have a 64-grapheme limit and reject path separators, colons, control characters, `.` and `..`. Rename never changes the directory. Default identity is the Profile whose directory is exactly `Default`, else the first Profile. Display order is array order.
 
-`deleteProfile` refuses the default Profile and any Profile with assigned Spaces. It calls the throwing `archiveForProfileDeletion` path and waits for the FULL-synchronous SQLite commit before removing any model entries. An archive failure throws and keeps the Profile, Favorites, events, and undo stack unchanged. Redo failures reach `onArchiveError`. Undo restores the same Profile and Favorites and discards their archive rows. The model never deletes disk data. An explicit disk wipe is separate; after engine teardown, the App can call `ProfileDirectories.deleteProfileData`. Undo after a wipe restores the sidebar, with empty browsing data.
+`deleteProfile` refuses the default Profile and any Profile with assigned Spaces. It calls the throwing `archiveForProfileDeletion` path and waits for the FULL-synchronous SQLite commit before removing any model entries. An archive failure throws and keeps the Profile, Favorites, events, and undo stack unchanged. Redo failures reach `onArchiveError`. The model/CLI command remains undoable. Settings uses an irreversible flow: exact typed confirmation, directory capture, model removal with undo disabled, context release, disk cleanup, and `SnapshotStore.saveNow`. Older Undo actions are cleared. Open-owned files disappear at once. Loaded engine directories wait in the bounded, atomic, synced pending-wipe journal until the next launch, before the engine starts. Never-loaded engine/cache folders are removed immediately. Local State edits always wait for launch. `releaseContext` does not prove Chromium Profile destruction; see [profiles-shell.md](profiles-shell.md).
 
-`moveSpace(id:toProfile:)` changes only the Space's Profile reference. Tabs keep their IDs, URLs and pinned URLs; Favorites remain with their owner Profile. It emits one `.spaceProfileChanged`, with an inverse event on undo. The combined `updateSpace` editor emits the same event and retains one undo step for all four edited values. A missing target Profile refuses the entire edit, with no event or undo step. `createSpace` falls back to the default for a missing Profile. `repairMissingProfileReferences` repairs dangling references in Space order, emits each change, and registers no undo. Snapshot mapping stays lossless; bootstrap/CLI maintenance owns repair.
+`moveSpace(id:toProfile:)` changes only the Space's Profile reference. Tabs keep their IDs, URLs and pinned URLs; Favorites remain with their owner Profile. It emits one `.spaceProfileChanged`, with an inverse event on undo. The combined `updateSpace` editor emits the same event and retains one undo step for all four edited values. A missing target Profile refuses the entire edit, with no event or undo step. `createSpace(...at:moving:)` refuses a missing Profile; the nonoptional overload requires a live Profile ID. `repairMissingProfileReferences` repairs dangling references in Space order, emits each change, and registers no undo. Snapshot mapping stays lossless; bootstrap/CLI maintenance owns repair.
 
 `ProfilesSettingsModel` exposes ordered rows, name and delete reasons, command wrappers, the Profile indicator, and App-owned pending disk-wipe data. `spaceProfileChoices`, `SpaceCreationProfilePickerModel`, and `ChangeProfileRequest` supply the creation picker and confirm-before-move data. The picker starts with the window's focused Space Profile, then falls back to default. Failed Profile creation creates no Space. These types contain no views, persistence, engine calls, or UserDefaults writes.
 
@@ -388,13 +451,15 @@ The per-Profile layout is:
 <root>/State/browser.json                  global snapshot
 <root>/State/favicons.sqlite3              global cache, deliberately shared
 <root>/Profiles/<dataDirectoryName>/
-  Engine/                                 future engine context
   State/history.sqlite3
   State/archive.sqlite3
   State/sleep.sqlite3                      SleepStore(fileURL:)
   Boosts/boosts.json
   AdBlock/lists/                          future ad-block data
 ```
+
+Chromium data lives separately at `<root>/Engine/<dataDirectoryName>/`.
+Pending engine cleanup is recorded at `<root>/Profiles/.pending-wipe.json`.
 
 `ProfileDirectories` owns these paths and creates empty directories. `OpenDataRoot.prepare()` runs migration before any store opens. Each history/archive/sleep SQLite set is copied into a staging `State` directory on the destination volume, flushed with `fsync`, and published with one atomic macOS directory swap. The JSON journal at `State/profile-migration.json` plus a commit marker resolves each interrupted step. Source cleanup follows durable publication and checks file identity, size, and modification time. Missing destination mains permit migration; destination orphan sidecars are retained under `State/.quarantine/`. A legacy WAL/SHM left by an older interrupted migration joins its destination main. Conflicting mains refuse store opens and retain the entire legacy set. Legacy symlinks are never moved: only regular targets inside the root are eligible; unsafe or dangling targets refuse the store and preserve the sources. This is a **ONE-WAY** disk-layout change: older builds ignore `Profiles/` and would open empty legacy-path databases. The favicon cache stays global and can disclose that some Profile visited an origin; no favicon isolation is claimed.
 
@@ -442,7 +507,7 @@ The full runner result is recorded in [verification.md](verification.md).
 
 Bootstrap contract: load → migrate → repair → ensure directories → attach `ProfileArchiveSink` → observe events → save after commands. Profiles CLI mutations save repairs even if the requested command refuses, except deletion: an archive failure must not save any snapshot changes. A `list --json` result keeps maintenance notices on stderr. `suggest --history DIR` selects that snapshot's default Profile history file; a direct path must be `…/Profiles/<dir>/State/history.sqlite3`. The old `State/history.sqlite3` path is a usage error.
 
-Import reserves `Default` for the actual default key, suffixes named claimants as `Default-named` (then numbered collisions), and always materializes that default key. Re-import preserves each matching Profile ID's directory, while new named Profiles avoid disk directories and tombstones. An unowned reserved `Default` directory refuses import. Import resolves all Space and `topApps` Profile refs, uses lenient Storable metadata and `Local State` precedence, preserves deterministic IDs, sanitizes directory basenames, and suffixes case-insensitive collisions. Space links missing from the sidebar can come from `StorableProfileContainers.json`. Local State directories with no Space still produce Profiles. The report prints Profile counts, guessed mappings, source-directory presence, and per-Profile Space/Favorite counts. Chromium data is recorded by the mapping; no engine files are copied. Real multi-Profile Storable shapes remain unverified; the evidence remains single-Profile disk data plus synthetic copied fixtures, as [data-model.md](re/data-model.md#26-spaces) and the plan state.
+Import reserves `Default` for the actual default key, suffixes named claimants as `Default-named` (then numbered collisions), and always materializes that default key. Re-import preserves each matching Profile ID's directory, while new named Profiles avoid disk directories and tombstones. An unowned reserved `Default` directory refuses import. Import resolves all Space and `topApps` Profile refs, uses lenient Storable metadata and `Local State` precedence, preserves deterministic IDs, sanitizes directory basenames, and suffixes case-insensitive collisions. Space links missing from the sidebar can come from `StorableProfileContainers.json`. Local State directories with no Space still produce Profiles. The report prints Profile counts, guessed mappings, source-directory presence, and per-Profile Space/Favorite counts. Chromium data is recorded by the mapping; no engine files are copied. The real two-Profile install now confirms the nested custom reference in both Spaces and Favorites: 6 Spaces split 4/2 and 11 Favorites split 6/5. `StorableProfiles.json` and `StorableProfileContainers.json` remain unobserved, so those optional parsers remain guesses. See [the import audit](import-multiprofile.md).
 
 Boosts landed before this change. `BoostStore(root:profileID:fileURL:)` now accepts the canonical `ProfileDirectories.boostsFileURL(for:)` destination without adding an OpenStore dependency. Its original standalone constructor remains compatible. The future App must pass the explicit Profile file URL; see [boosts.md](boosts.md).
 

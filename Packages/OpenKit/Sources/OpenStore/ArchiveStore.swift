@@ -151,6 +151,35 @@ public final class ArchiveStore: ArchiveSink {
         queue.sync {}
     }
 
+    /// One queued batch lookup, ordered after manual archive writes. Scan only
+    /// UUID keys, retaining at most the candidate set, with no payload decoding
+    /// or SQL bind-count ceiling. Each input row is bounded to 36 bytes.
+    public func existingIDs(in candidates: Set<ItemID>) async throws -> Set<ItemID> {
+        guard !candidates.isEmpty else { return [] }
+        return try await withCheckedThrowingContinuation { continuation in
+            queue.async { [self] in
+                do {
+                    try openOnQueue()
+                    guard let db, let statement = db.prepare("SELECT id FROM archived_tabs WHERE length(CAST(id AS BLOB)) = 36") else {
+                        throw archiveFailure()
+                    }
+                    defer { sqlite3_finalize(statement) }
+                    var found = Set<ItemID>()
+                    while true {
+                        let status = sqlite3_step(statement)
+                        if status == SQLITE_DONE { break }
+                        guard status == SQLITE_ROW else { throw archiveFailure() }
+                        if let key = db.columnText(statement, 0), let uuid = UUID(uuidString: key) {
+                            let id = ItemID(rawValue: uuid)
+                            if candidates.contains(id) { found.insert(id) }
+                        }
+                    }
+                    continuation.resume(returning: found)
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
     /// Stores imported archive records. A record whose ID is already stored
     /// counts as a duplicate and keeps the stored row. This makes re-import
     /// idempotent by Arc item ID (the importer maps Arc IDs to stable Open IDs).

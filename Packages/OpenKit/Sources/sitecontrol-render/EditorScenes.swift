@@ -16,7 +16,10 @@ final class EditorHost: BoostEditorHost {
     var snapshotDelay: TimeInterval = 0
     var snapshots: Data?
     var previews: [InjectionPlan] = [], previewTimes: [Double] = []
-    var refreshes = 0, exits = 0, libraries = 0
+    var refreshes = 0, exits = 0, libraries = 0, reloads = 0
+    var loadedScripts: [BoostID: String] = [:], reloadScripts: [BoostID: String] = [:]
+    var devTools: [Bool] = []
+    var calls: [String] = []
     var refreshedPlans: [InjectionPlan] = []
     var refreshDurations: [Double] = []
     var observers: [SiteControlObservationToken: @MainActor (ItemID,BoostPickerEvent)->Void] = [:]
@@ -83,8 +86,9 @@ final class EditorHost: BoostEditorHost {
     func requestZapCounts(tabID: ItemID) { pickerCalls.append("list") }
     func observePickerEvents(_ observer: @escaping @MainActor (ItemID,BoostPickerEvent)->Void) -> SiteControlObservationToken { let token = SiteControlObservationToken(); observers[token] = observer; return token }
     func removePickerObserver(_ token: SiteControlObservationToken) { observers[token] = nil }
-    func setDevToolsVisible(_ visible: Bool,tabID: ItemID) {}
-    func reload(tabID: ItemID) {}
+    func loadedJS(boostID: BoostID,tabID: ItemID) -> String? { loadedScripts[boostID] }
+    func setDevToolsVisible(_ visible: Bool,tabID: ItemID) { devTools.append(visible);calls.append("devtools") }
+    func reload(tabID: ItemID) { reloadScripts = Dictionary(uniqueKeysWithValues:boostStore.allBoosts().map { ($0.id,$0.js) });reloads += 1;calls.append("reload") }
     func currentURL(tabID: ItemID) -> URL? { url }
     func showBoostsLibrary(profileID: ProfileID) { libraries += 1 }
     static func png(neutral: Bool = false,width: Int = 2216,height: Int = 1394) -> Data {
@@ -119,6 +123,8 @@ final class EditorStage {
         if ["editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-on","editor-zap-count"].contains(state) {
             seed.colorWheel = BoostColorWheel(hue: 252.3,intensity: 46.2/(66.5*0.99),baseHue: 125);seed.colorAdjustment = seed.colorWheel?.adjustment
         }
+        if state == "editor-code-css" { seed.css = "/* Make this site your own. */\nbody {\n  color: #326d74;\n  font-size: 16px;\n}\n" }
+        if state == "editor-code-js-dirty" { seed.js = "// Runs when you refresh this page.\nconst heading = document.querySelector(\"h1\");\nif (heading) {\n  heading.textContent = \"Hello!\";\n}\n" }
         if state == "editor-font-selected" { seed.fontFamily = BoostEditorFonts.available[9].css }
         if state == "editor-zap-count" { seed.zaps = [ZappedElement(selector: ".ad")] }
         initialID = seed.id;if !isNew { _ = host.boostStore.upsert(seed) }
@@ -149,6 +155,7 @@ final class EditorStage {
         let deadline = Date().addingTimeInterval(3)
         while waitForColors && !session.colorsReady && Date()<deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }
         settle(waitForColors ? 0.2 : 0)
+        if state.hasPrefix("editor-code-") { controller.setCodeMode(true,animated: false);if state == "editor-code-js-dirty" { view.codeView?.select(.js) };settle() }
         if ["editor-zap-on", "editor-zap-count"].contains(state) { host.zapEnabled = true; session.toggleZap() }
         if state == "editor-color",let button = view.control(id: "editor.color.advanced") { mouse(.leftMouseDown,point: CGPoint(x: button.bounds.midX,y: button.bounds.midY),in: button);settle() }
         if state == "editor-advanced" { tap("editor.color.advanced");configureAdvancedFallback();settle(0.35) }
