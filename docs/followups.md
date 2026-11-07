@@ -298,12 +298,12 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   window layout. User-operated Arc evidence is needed for exact inactive-Profile
   session behavior. See [multi-profile import](import-multiprofile.md).
 
-- C1 review-fix acceptance (2026-11-06): run the latest 12 `MP_*` positives,
-  the 11 existing fault injections plus a code-break proof for Default-role
-  mapping, forced dialog cleanup, full `firstrun`, counts-only real-App audit,
-  `routing`, `sidebar`, `settings-preview`, and the full verifier. The unowned
-  `UserNotificationCenter` crash dialog still blocks App runs. Earlier passes
-  do not accept the Default-role review fix. See [current receipts](import-multiprofile.md).
+- C1c review-fix App validation (2026-11-07): 12 `MP_*` positives, all 11
+  fixture-negative proofs, the Default-role code-break proof, forced dialog
+  cleanup, full `firstrun` (64/64), counts-only real-App audit, `routing`,
+  `sidebar`, and `settings-preview` passed. The existing sidebar durable-cookie
+  row remains SKIP because `profiles` owns it. The final full verifier table
+  is recorded in draft PR #221 on its final head. See [current receipts](import-multiprofile.md).
 
 - Directory-limit boundary flows (255-byte acceptance and 256-byte refusal)
   and general decoded-memory bounds for the inherited JSON parser remain
