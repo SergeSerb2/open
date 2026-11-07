@@ -277,10 +277,10 @@ def context_menu_checks(factory, results, tmp, h):
                             inspect = next((i for i, title in enumerate(shown) if title.startswith('Inspect')), len(shown))
                             if contributed:
                                 # One contribution is top-level; preserve its group and Inspect separator.
-                                ok = index > 0 and shown[index - 1] == 'Manage placement probe'
+                                ok = index > 0 and shown[index - 1] == 'Manage placement probe' and shown[index + 1] == '-'
                             else:
-                                ok = index > 0 and shown[index - 1] == '-'
-                            ok = ok and shown.count('Manage Extensions') == 1 and shown[index + 1:inspect] == ['-']
+                                ok = index > 0 and shown[index - 1] == '-' and shown[index + 1:inspect] == ['-']
+                            ok = ok and shown.count('Manage Extensions') == 1
                         cases.append(dict(target=target, extension=contributed, ok=ok, shown=shown))
                 focus()
                 before = {t['id'] for t in app.call('tabs')}
