@@ -249,6 +249,13 @@ def run(factory, results, tmp, env, functional_only=False):
                     state=private_state,privateContext=private_context,
                     boostMenus=menu_rows,refusedCommands=refused_commands,negativeDisabledMenu=private_menu_refused,
                     negativeNormalContext=normal_context['isIncognito'],negativeDisabledTap=True)
+                if boost_controls:
+                    record('S10_boost_rows',all(not c['enabled'] for c in boost_controls)
+                           and all(refused(action='tap',id=c['id']) for c in boost_controls),
+                           controls=boost_controls)
+                else:
+                    blocked('S10_boost_rows','boost runtime: no matching Boost rows to exercise',
+                            controls=boost_controls,privateFlag=private_state['isIncognito'])
             finally:
                 app.call('window-focus',id=private_window['id'],activate=True)
                 app.call('menu-perform',id='close-window')
