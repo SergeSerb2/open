@@ -155,9 +155,13 @@ public struct ArcImporter {
         let boosts: ArcBoostsReadResult
     }
     public func readSidebar() throws -> ParsedSidebar {
+        let root = try readSidebarRoot()
+        return ParsedSidebar(root: root, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
+    }
+    private func readSidebarRoot() throws -> [String: Any] {
         let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: url), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.missingSidebar }
-        return ParsedSidebar(root: root, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
+        return root
     }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
     static func profileReferenceKey(_ raw:Any?)->String {
@@ -169,7 +173,8 @@ public struct ArcImporter {
     /// UI labels only, read on a utility worker when the wizard prepares its review.
     /// The count-only probe never returns these strings or builds model objects.
     public func spaceMappingLabels() throws -> [String] {
-        let root=try readSidebar().root
+        // Mapping labels need no cache I/O; the caller can be on the UI actor.
+        let root=try readSidebarRoot()
         guard let sidebar=root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,let holder=containers[1] as? [String:Any],let spaces=holder["spaces"] as? [Any] else {throw ImportError.malformedSidebar}
         return stride(from:1,to:spaces.count,by:2).compactMap {index in
             guard let object=spaces[index] as? [String:Any] else {return nil}
