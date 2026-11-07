@@ -16,22 +16,24 @@ def autofill_child_windows(app):
 
 
 def show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5):
-    """Click the actual field; identify the native popup by its Manage footer."""
-    import re
-    before = {w['number'] for w in autofill_child_windows(app)}
+    """Find Chromium's listbox in this page's native parent, including reuse."""
     app.call('focus', tab=tab)
+    parent = app.call('native-focus-state')['keyWindow']
     app.call('click', tab=tab, selector=selector)
 
     def specific_popup():
-        candidates = [w for w in autofill_child_windows(app) if w['number'] not in before]
-        if not candidates:
-            return None
-        text = {w['number']: w.get('text', []) for w in app.call('windows', accessibility=True)}
-        # Inspect only for public footer copy. Do not return usernames, masked
-        # passwords, payment labels or addresses from the accessibility tree.
-        return [w for w in candidates if any(re.search(r'manage (?:passwords|addresses|payment methods)', label, re.I)
-                                             for label in text.get(w['number'], []))]
-    return wait_until(specific_popup, timeout=timeout, step=.05)
+        return [w for w in app.call('windows', accessibilityRoles=True)
+                if w.get('visible') and w.get('parent') == parent and not w.get('sheet')
+                and w.get('class') == 'NativeWidgetMacNSWindow' and 'AXList' in w.get('roles', [])]
+
+    windows = wait_until(specific_popup, timeout=timeout, step=.05)
+    if windows:
+        # Chromium rejects acceptance until 500 ms after its first paint
+        # (AutofillSuggestionController::kIgnoreEarlyClicksOnSuggestionsDuration).
+        # Preserve that security guard and wait before sending user gestures.
+        time.sleep(.65)
+        windows = specific_popup()
+    return windows
 
 
 def fill_from_dropdown(app, tab, wait_until, selector='#username', down=1):
@@ -534,6 +536,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
           const e=document.getElementById(id); let expected=e.dataset.fixture;
           if (%s && id==='password') expected=%s;
           if (id==='expiry') {const a=e.value.replace(/\\D/g,''),b=expected.replace(/\\D/g,'');return a===b||a===b.slice(0,2)+b.slice(-2);}
+          if (id==='username'||id==='password') return e.value===expected;
           return e.value.replace(/\\s/g,'')===expected.replace(/\\s/g,''); });})()'''
         # The updated fixture value is read from our source, never printed.
         import re
@@ -631,22 +634,44 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 assert empty(tab), 'login fields were filled before a dropdown choice'
                 windows = popup(tab)
                 assert windows, 'specific autofill dropdown did not appear after clicking the username field'
-                # Empty form + masked dropdown; never snapshot filled data.
-                app.call('snapshot', window=windows[0]['number'], path=os.path.join(tmp, 'P-3-dropdown.png'))
+                # Role-only evidence avoids capturing credential labels.
                 return {'childWindowVisible': True}
             row('P-3', dropdown, ['P-2'])
 
             def refill():
                 tab = identity['refill']; assert popup(tab)
-                choose(); assert fields_match(tab, ['username', 'password'])
+                choose(); assert wait(lambda: fields_match(tab, ['username', 'password']), timeout=5, step=.05)
                 return {'bothFieldsMatch': True, 'inputRoute': 'app'}
             row('P-4', refill, ['P-3'])
+
+            def refill_mouse():
+                tab = load(urls['login'])
+                assert empty(tab), 'login fields were filled before a dropdown choice'
+                windows = popup(tab)
+                assert windows, 'password dropdown did not appear for mouse selection'
+                window = windows[0]
+                width = h['frame'](window['frame'])[2]
+                # The first credential row is below the popup's 8 pt shadow.
+                # Events stay inside this verified Open child window.
+                point = dict(window=window['number'], x=width / 2, y=28)
+                # Deliver the native exit/enter tracking path before clicking.
+                # Chromium rejects a click on an item that appeared under a
+                # stationary pointer (PopupRowView::OnMouseReleased).
+                app.call('mouse', action='hover', window=window['number'], x=width / 2, y=2)
+                app.call('mouse', action='hover', **point)
+                # Entry can paint a new row; allow Chromium's next-idle
+                # acceptance barrier to pass after that display turn.
+                time.sleep(.65)
+                app.call('mouse', action='click', queued=True, **point)
+                assert wait(lambda: fields_match(tab, ['username', 'password']), timeout=5, step=.05), 'mouse selection did not fill both fixture fields'
+                return {'bothFieldsMatch': True, 'inputRoute': 'native-popup-mouse'}
+            row('P-4-mouse', refill_mouse, ['P-4'])
 
             def update():
                 _, value = prompt('passwordUpdate', urls['change'], 'save')
                 assert value['buttons'] == ['No', 'Save']
                 tab = load(urls['login']); assert popup(tab); choose()
-                assert fields_match(tab, ['username', 'password'], changed=True)
+                assert wait(lambda: fields_match(tab, ['username', 'password'], changed=True), timeout=5, step=.05)
                 return {'updatedValueMatches': True, 'offersNever': False}
             row('P-5', update, ['P-4'])
 
@@ -677,13 +702,13 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('P-9', lambda: (prompt('address', urls['address'], 'save'), counts(addresses=1))[1])
             def address_fill():
                 tab = load(urls['address']); assert popup(tab, '#name'); choose()
-                assert fields_match(tab, ['name', 'street', 'city', 'postal'])
+                assert wait(lambda: fields_match(tab, ['name', 'street', 'city', 'postal']), timeout=5, step=.05)
                 return {'addressFieldsMatch': True}
             row('P-10', address_fill, ['P-9'])
             row('P-11', lambda: (prompt('card', urls['card'], 'save'), counts(cards=1))[1])
             def card_fill():
                 tab = load(urls['card']); assert popup(tab, '#number'); choose()
-                assert fields_match(tab, ['name', 'number', 'expiry'])
+                assert wait(lambda: fields_match(tab, ['name', 'number', 'expiry']), timeout=5, step=.05)
                 return {'cardFieldsMatch': True}
             row('P-12', card_fill, ['P-11'])
 
