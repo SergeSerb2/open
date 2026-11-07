@@ -249,6 +249,16 @@ def run(factory, results, tmp, api, defaults_before):
         assert old_directory in before_cache, before_cache
 
         launch()
+        # A named Profile was Chromium's last-used Profile at quit. Default
+        # must still use its own native storage after CEF initializes again.
+        default_space = next(s['id'] for s in app.call('spaces') if s['profile'] == profile('Default')['id'])
+        app.call('space', space=default_space)
+        default_page = api['new_tab'](app, origin + '/default-after-relaunch')
+        default_cookie = app.eval(default_page, 'document.cookie')
+        results['shell_default_after_named_profile_relaunch'] = {
+            'ok': app.page(default_page)['context'] == 'Default' and 'shell_delete' not in default_cookie,
+            'context': app.page(default_page)['context'], 'isolated': 'shell_delete' not in default_cookie}
+        app.call('close', tab=default_page)
         state(profile='Shell Loaded', action='open-url', url=url)
         session = page_ready(url)
         old_cookie = app.call('little-open-eval', id=session['id'], js='document.cookie')
@@ -283,11 +293,13 @@ def run(factory, results, tmp, api, defaults_before):
         results['shell_delete_loaded_immediate'] = {
             'ok': 'shell_delete=old' in old_cookie and 'Shell Loaded' not in gone['rows']
                   and not any(p['id'] == loaded['id'] for p in state()['profiles']) and not gone['canUndo']
-                  and not (root / 'Profiles' / old_directory).exists() and old_engine.exists()
-                  and old_directory in json.loads(pending.read_text())
+                  and not (root / 'Profiles' / old_directory).exists() and not old_engine.exists()
+                  and not (Path.home() / 'Library/Caches' / root.name / 'Engine' / old_directory).exists()
+                  and (not pending.exists() or old_directory not in json.loads(pending.read_text()))
+                  and old_directory not in json.loads((root / 'Engine/Local State').read_text()).get('profile', {}).get('info_cache', {})
                   and not any(p['id'] == loaded['id'] for p in durable['profiles']),
             'modelGone': 'Shell Loaded' not in gone['rows'], 'canUndo': gone['canUndo'],
-            'openFilesGone': not (root / 'Profiles' / old_directory).exists(), 'engineDeferred': old_engine.exists(),
+            'openFilesGone': not (root / 'Profiles' / old_directory).exists(), 'engineGone': not old_engine.exists(),
             'error': gone['error']}
         app.quit()
         launch()
