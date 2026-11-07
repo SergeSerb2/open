@@ -5815,6 +5815,10 @@ def media_checks(factory, results, tmp):
             "appearMs": round(appear_ms, 1), "load": os.getloadavg(), "card": card}
 
         # E-M4: the card's controls reach the page (Chromium's media session; next/previous route to the page's handlers).
+        # Real clicks need Open frontmost. LaunchServices can answer the socket before it grants the
+        # foreground, and an app that never became active resigns nothing, so the focus guard would not
+        # see it: establish the precondition through the exact-PID activation path (as tabstrip does).
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         select(home)
         wait_until(lambda: audio in ids(), timeout=2, step=.01)
         app.call("media-click", tab=audio, target="play")
@@ -5838,6 +5842,8 @@ def media_checks(factory, results, tmp):
         second = wait_until(lambda: (lambda w: w if len(w) >= 2 else None)(app.call("shell-windows")), timeout=5, step=.05)
         second_cards = ids() if second else None
         if second:
+            # Close Window needs the new window key (a menu command): activate it first.
+            app.call("window-focus", id=app.call("window-state")["id"], activate=True)
             app.call("command", id="close-window")
             wait_until(lambda: len(app.call("shell-windows")) == 1, timeout=5, step=.05)
         app.call("space", space=home_space)
@@ -6222,6 +6228,34 @@ def media_checks(factory, results, tmp):
             results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         select(fv); wait_pip("closed")
         close_tab(fv)
+        # Item 11 (#110 code review C5): with two cards in an expanded stack, Close or Back to Tab on the
+        # top card, then the pointer over the tab list: the other card must collapse. Synthetic pointer on
+        # the real tracking-area path (mouse hover delivers enter/exit to the views under the point).
+        def two_card_pass(target):
+            a, b = open_tab(base + "audio.html?c5=a" + target), open_tab(base + "audio.html?c5=b" + target)
+            start(a); start(b)
+            select(home)
+            both = wait_until(lambda: (lambda c: c if set(c) >= {a, b} else None)(ids()), timeout=3, step=.02)
+            top = (both or [b])[0]
+            other = a if top == b else b
+            app.call("media-click", tab=top, target=target)
+            # Back to Tab selects the top card's tab: it shows, so its card leaves (Close removes it too).
+            gone = wait_until(lambda: top not in ids(), timeout=3, step=.02)
+            app.call("hover", node=home)
+            def collapsed():
+                p = players()
+                card = next((c for c in p["cards"] if c["tab"] == other), None)
+                return p if card and not p["expanded"] and not card["expanded"] else None
+            rest = wait_until(collapsed, timeout=2, step=.02)
+            p = players()
+            for t in (a, b):
+                close_tab(t)
+            return {"ok": bool(both) and bool(gone) and bool(rest), "top": top, "gone": bool(gone),
+                    "stackExpanded": p["expanded"], "cards": [{k: c.get(k) for k in ("tab", "expanded")} for c in p["cards"]]}
+        c5_close = two_card_pass("close")
+        c5_title = two_card_pass("title")
+        results["media_two_card_collapse"] = {"ok": c5_close["ok"] and c5_title["ok"], "close": c5_close, "backToTab": c5_title}
+
         # E-M13 (EM-7): documentPictureInPicture.requestWindow() opens Open's Document PiP panel (28 pt top
         # bar, the PiP page in it at the requested size); the page's element moves into it, and Close
         # gives it back (the PiP document's pagehide). A navigation of the opener closes the panel.
