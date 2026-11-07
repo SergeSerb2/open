@@ -48,7 +48,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   // Unshown extension-created pages awaiting their first real address.
   private var pendingLittleOpenExtensionTabs: [Int: OEWebContent] = [:]
   var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
-  var model: BrowserModel { app.model }
+  let model: BrowserModel
+  let incognitoSession: IncognitoSession?
+  /// Section 12's read-only private-state hook (lead ruling 16:12).
+  var isIncognito: Bool { incognitoSession != nil }
+  func scheduleSave() { if !isIncognito { app.scheduleSave() } }
+  private lazy var privateSuggest = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
+  func suggestEngine() -> SuggestEngine? {
+    guard let profile = focusedProfile else { return nil }
+    return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)
+  }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
   private var developerModeObserver: (any NSObjectProtocol)?
@@ -115,7 +124,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if onPinnedPage {
       if let content = hosts[id]?.content { content.load(url) } else { tab.url = url }
     }
-    controller?.refresh(); mirror.sync(); app.scheduleSave()
+    controller?.refresh(); mirror.sync(); scheduleSave()
   }
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
@@ -137,6 +146,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
+  private lazy var privateDownloads = IncognitoDownloads()
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
@@ -152,10 +162,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   lazy var pageChrome = PageChromeCoordinator(owner: self)
   var pendingDialogs: [OEJavaScriptDialog] { pageChrome.dialogs.pendingDialogs }
 
-  init(app: AppDelegate, state: BrowserWindowState) {
-    self.app = app; windowState = state
+  init(app: AppDelegate, state: BrowserWindowState, model: BrowserModel? = nil, incognitoSession: IncognitoSession? = nil) {
+    self.app = app; windowState = state; self.model = model ?? app.model
+    self.incognitoSession = incognitoSession
     super.init()
-    observerID = model.addObserver { [weak self] change in self?.treeChanged(change) }
+    observerID = self.model.addObserver { [weak self] change in self?.treeChanged(change) }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   isolated deinit { if let observerID { model.removeObserver(observerID) } }
@@ -213,7 +224,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let self else { return false }
       if flags.contains([.command, .option]) {
         if UserDefaults.standard.object(forKey: "open.links.optionCommandClickLittleOpen") as? Bool ?? true {
-          self.app.openLittleOpen(url: url, profileHint: self.profile(for: id)?.id ?? self.focusedProfile?.id)
+          if self.isIncognito { self.openNewTab(url: url, background: false, opener: id) }
+          else { self.app.openLittleOpen(url: url, profileHint: self.profile(for: id)?.id ?? self.focusedProfile?.id) }
         } else {
           // The toggle-off contract is in-place navigation, including engines
           // that classify this modifier pair as a new-tab/download request.
@@ -361,10 +373,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return model.profiles.first { $0.favorites.contains { $0.id == tabID } }
   }
   func profile(for context: OEBrowserContext) -> Profile? {
-    context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier }
+    isIncognito ? (context === incognitoSession?.context ? model.profiles.first : nil)
+      : (context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier })
   }
   func context(for profileID: ProfileID) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
+    if isIncognito {
+      guard let context = incognitoSession?.context else { return nil }
+      app.extensionPrompts.register(context.extensions)
+      return WebsiteAppearance.prepare(context)
+    }
     // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
     if profile.id == model.defaultProfile?.id {
       let context = WebsiteAppearance.prepare(OEEngine.shared.defaultContext)
@@ -392,7 +410,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func tabID(for content: OEWebContent) -> ItemID? { hosts.first { $0.value.content === content }?.key }
   private func withoutUndo(_ body: () -> Void) {
-    app.undoManager.disableUndoRegistration(); defer { app.undoManager.enableUndoRegistration() }; body()
+    let undo = model.undoManager; undo?.disableUndoRegistration(); defer { undo?.enableUndoRegistration() }; body()
   }
 
   func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
@@ -538,7 +556,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let controller else { return }
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
-    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : "Open"
+    window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
     if focus { selectedContent?.focusPage() }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
     findController?.sync()
@@ -550,7 +568,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let space = focusedSpace else { return }
     withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nodeID) }
     controller?.dismissSidebarReveal()
-    showSelection(focus: focus); app.scheduleSave()
+    showSelection(focus: focus); scheduleSave()
   }
   @discardableResult
   func openNewTab(url: URL, background: Bool, opener: ItemID? = nil, typed: Bool = false) -> Tab? {
@@ -559,7 +577,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let tab = model.newTab(in: space.id, url: url, at: 0, unread: background); tab.openerID = opener
     if typed { typedNavigationTabs.insert(tab.id) }
     if !background { select(nodeID: tab.id) }
-    app.scheduleSave(); return tab
+    scheduleSave(); return tab
   }
   func adoptUnownedRequest(_ request: OEOpenRequest) -> OEWebContent? {
     guard app.engineReady else { return nil }
@@ -572,12 +590,31 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let id = iconPickerSpaceID, id != space.id { iconPicker?.close() }
     controller?.existingTabSwitcher?.cancel()
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
-    controller?.dismissSidebarReveal(); showSelection(); app.scheduleSave()
+    controller?.dismissSidebarReveal(); showSelection(); scheduleSave()
   }
 
   /// Only model-only cases fall back to the package. Unsupported later-step
   /// editors return false, so no successful no-op reaches the sidebar.
   func performSidebar(_ intent: SidebarIntent) -> Bool? {
+    if isIncognito {
+      switch intent {
+      case .newSpace, .newFolder, .manageSpaces, .showLibrary, .setPinnedCollapsed,
+           .selectFavorite, .openProfileSettings, .dismissAutoArchiveBanner,
+           .pin, .unpin, .setPinned, .resetToPinnedURL, .replacePinnedURL, .editPinnedURL,
+           .newNestedFolder, .turnFolderIntoSpace, .newFolderFromSelection,
+           .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
+           .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
+           .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace: return false
+      case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
+      case .close(let id) where model.tab(id: id) == nil:
+        guard model.node(id: id) != nil else { return false }
+        model.closeTab(id: id); return true
+      case .move(_, let parent, _), .moveNodes(_, let parent, _), .openURL(_, let parent, _):
+        guard case .spaceToday(let id) = parent, id == focusedSpace?.id else { return false }
+      default: break
+      }
+    }
     switch intent {
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
@@ -611,7 +648,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       for id in loaded { controller?.container.closeHost(for: id); hosts[id]?.close() }
       if let selected = selectedTab?.id, ids.contains(selected) {
         select(nodeID: model.sidebarSelectionID(for: orderedTabs.first { !ids.contains($0.id) }?.id))
-      } else { controller?.refresh(); mirror.sync(); app.scheduleSave() }
+      } else { controller?.refresh(); mirror.sync(); scheduleSave() }
       return true
     case .goBack: guard let page = selectedContent, page.canGoBack else { return false }; page.goBack(); return true
     case .goForward: guard let page = selectedContent, page.canGoForward else { return false }; page.goForward(); return true
@@ -620,17 +657,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .copyCurrentURL:
       return copyURL()
     case .toggleMute(let id):
-      guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; app.scheduleSave(); return true
+      guard let tab = model.tab(id: id) else { return false }; model.setMuted(tabID: id, muted: !tab.isMuted); hosts[id]?.content.isMuted = tab.isMuted; scheduleSave(); return true
     case .media(let intent): return app.media.perform(intent)
     case .resetToPinnedURL(let id):
-      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); app.scheduleSave(); return true
+      guard let tab = model.tab(id: id), let url = tab.pinnedURL else { return false }; model.resetPinnedTab(id: id); hosts[id]?.load(url); scheduleSave(); return true
     case .renameSpace(let id, let title):
       guard let space = model.space(id: id) else { return false }
       let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
       guard space.title != (trimmed.isEmpty ? nil : trimmed) else { return true }
       app.undoManager.beginUndoGrouping()
       model.renameSpace(id: id, title: title); app.undoManager.setActionName("Rename Space")
-      app.undoManager.endUndoGrouping(); app.scheduleSave(); return true
+      app.undoManager.endUndoGrouping(); scheduleSave(); return true
     case .setSpaceProfile(let space, let profile): return requestSpaceProfileChange(spaceID: space, profileID: profile)
     case .newSpace:
       return controller?.beginSpaceCreation() == true
@@ -734,13 +771,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if wasSelected {
       let remaining = orderedTabs.map(\.id).filter { $0 != id }
       select(nodeID: remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)])
-    } else { controller?.refresh(); mirror.sync(); app.scheduleSave() }
+    } else { controller?.refresh(); mirror.sync(); scheduleSave() }
   }
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
+    privateDownloads.close()
     pageContextMenu?.cancel(); pageContextMenu = nil
     controller?.existingTabSwitcher?.cancel()
     translate.closeAll()
@@ -851,7 +889,7 @@ extension EngineWebContentHostFactory {
         typedNavigationTabs.insert(id)
       }
       if !app.engineReady, let tab = selectedTab {
-        queuedNavigations[tab.id] = url; tab.url = url; app.scheduleSave()
+        queuedNavigations[tab.id] = url; tab.url = url; scheduleSave()
       } else { selectedContent?.load(url); selectedContent?.focusPage() }
     } else if let tab = openNewTab(url: url, background: background, typed: true) {
       if background { _ = ensureContent(for: tab) }
@@ -1176,7 +1214,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       return popup
     case .newWindow:
       let sourceSpace = tabID(for: webContent).flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
-      guard let controller = app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
+      guard let controller = isIncognito ? app.makeIncognitoWindow(parent: incognitoSession?.parent) : app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
       if webContent.runtimeStyle == .chrome, let url = request.url {
         // The engine would make the page a tab of the opener window's hidden
         // Chrome window (P1), which closes with that window. A new window
@@ -1506,7 +1544,7 @@ extension EngineWebContentHostFactory {
   @objc(browser:requestsPinned:forWebContent:)
   func browser(_ browser: OEBrowser, requestsPinned pinned: Bool, for webContent: OEWebContent) {
     defer { mirror.sync() }
-    guard let id = requestTabID(for: webContent), let parent = model.parent(of: id) else { return }
+    guard !isIncognito, let id = requestTabID(for: webContent), let parent = model.parent(of: id) else { return }
     if case .favorites = parent {
       record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
       return
@@ -1621,11 +1659,17 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     _ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String,
     completion: @escaping @MainActor (URL?) -> Void
   ) {
-    app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
+    if isIncognito {
+      privateDownloads.decide(download, filename: suggestedFilename, directory: downloadDirectory,
+        profile: incognitoSession?.parent, window: window, completion: completion)
+    } else {
+      app.downloadsCenter.decide(download, context: context, filename: suggestedFilename, window: window, directoryOverride: downloadDirectory, completion: completion)
+    }
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
-    app.tabSleep.downloadUpdated(download, factory: self)
+    if isIncognito { privateDownloads.updated(download) }
+    else { app.tabSleep.downloadUpdated(download, factory: self) }
     record(
       "download", download.webContent,
       [

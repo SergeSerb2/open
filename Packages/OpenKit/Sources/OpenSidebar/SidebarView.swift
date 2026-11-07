@@ -144,7 +144,7 @@ public final class SidebarView: NSView {
 
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
-        FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
+        context.isIncognito ? 0 : FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
     }
 
     public override func layout() {
@@ -161,7 +161,7 @@ public final class SidebarView: NSView {
         let oldFavorites = favorites.frame, oldPagerFrame = pager.frame
         if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
         let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
-        favorites.isHidden = isCreatingSpace
+        favorites.isHidden = isCreatingSpace || context.isIncognito
         let favH = isCreatingSpace ? 0 : favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
@@ -715,6 +715,13 @@ extension SidebarView {
 
     /// The text the URL field shows: the current page's host or the placeholder.
     public var displayedURLText: String { urlField.displayedText }
+    /// Read actual private-window view visibility for real-App acceptance.
+    public var incognitoChrome: [String: Bool] {
+        ["favoritesHidden": favorites.isHidden, "libraryHidden": bottomBar.home.isHidden,
+         "switcherEmpty": bottomBar.items.isEmpty, "headerMoreHidden": pager.currentPage?.header.more.isHidden == true,
+         "headerCollapseHidden": pager.currentPage?.header.chevron.isHidden == true,
+         "eyeglasses": pager.currentPage?.space.icon == .symbol("eyeglasses")]
+    }
 
     /// Chrome geometry in sidebar coordinates, for host checks: the URL field and its hover
     /// state, and the focused Space header band, its title frame and baseline, and its hover state.

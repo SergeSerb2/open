@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
   private(set) var windowControllers: [BrowserWindowController] = []
+  let incognitoSessions = IncognitoSessions()
   // CEF pumps AppKit without a normal per-event undo group boundary. The
   // model opens one group per command; multi-operation UI actions may nest.
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
@@ -303,19 +304,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   @discardableResult
-  private func createWindowController(state: BrowserWindowState) -> BrowserWindowController {
-    model.setWindowContentVisible(windowID: state.id, visible: true)
-    let factory = EngineWebContentHostFactory(app: self, state: state)
+  private func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil) -> BrowserWindowController {
+    let windowModel = privateModel ?? model!
+    windowModel.setWindowContentVisible(windowID: state.id, visible: true)
+    let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session)
     hostFactories[state.id] = factory
-    let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore)
-    controller.context.storedFavicons = stores.sidebarFavicons
+    let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
+    let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
+      snapshotStore: session == nil ? snapshotStore : nil, incognitoTitle: title)
+    if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
     factory.attach(controller)
     windowControllers.append(controller)
-    media.attach(factory)
-    tabSleep.attach(factory)
+    if session == nil { media.attach(factory); tabSleep.attach(factory) }
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
-    todayAutoArchive?.attach(context: controller.context)
+    if session == nil { todayAutoArchive?.attach(context: controller.context) }
     controller.showWindow(nil)
     if engineReady { factory.engineDidBecomeReady() }
     return controller
@@ -325,10 +328,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func makeWindow(focusedSpaceID: SpaceID? = nil) -> BrowserWindowController? {
     guard firstRunWindowController == nil || firstRunSaved else { return nil }
     // Closing the final window keeps its state for reopen and relaunch.
-    if windowControllers.isEmpty, let state = model.windows.first(where: { $0.style == .standard }) {
+    if frontStandardWindowController == nil, let state = model.windows.first(where: { $0.style == .standard }) {
       return createWindowController(state: state)
     }
-    guard let spaceID = focusedSpaceID ?? frontWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
+    guard let spaceID = focusedSpaceID ?? frontStandardWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
       let state = withoutWindowUndo({ model.createWindow(focusedSpaceID: spaceID) }) else { return nil }
     let offset = Double(windowControllers.count * 24)
     state.frameX += offset; state.frameY -= offset
@@ -336,6 +339,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     state.showsToolbar = frontWindowController?.context.window?.showsToolbar ?? false
     let controller = createWindowController(state: state)
     scheduleSave(); return controller
+  }
+
+  var frontStandardWindowController: BrowserWindowController? {
+    let normal = windowControllers.filter { hostFactories[$0.windowID]?.isIncognito == false }
+    return NSApp.orderedWindows.compactMap { window in normal.first { $0.window === window } }.first ?? normal.first
+  }
+
+  @discardableResult
+  func makeIncognitoWindow(parent: Profile? = nil, url: URL? = nil) -> BrowserWindowController? {
+    guard engineReady, let parent = parent ?? frontStandardWindowController?.context.focusedSpace.flatMap({ model.profile(id: $0.profileID) }) ?? model.defaultProfile else { return nil }
+    let session = incognitoSessions.acquire(parent: parent)
+    let profile = Profile(name: parent.name, settings: parent.settings, dataDirectoryName: "Incognito")
+    let space = Space(title: "Incognito", icon: .symbol("eyeglasses"), profileID: profile.id)
+    let state = BrowserWindowState(focusedSpaceID: space.id)
+    let memory = BrowserModel(profiles: [profile], spaces: [space], windows: [state])
+    let undo = UndoManager(); undo.groupsByEvent = false; memory.undoManager = undo
+    let controller = createWindowController(state: state, privateModel: memory, session: session)
+    if let factory = hostFactories[state.id] {
+      if let url { factory.openNewTab(url: url, background: false) }
+      else { factory.showCommandBar(.newTab) }
+    }
+    return controller
   }
 
   @objc func newWindow(_ sender: Any?) { makeUserWindow() }
@@ -371,6 +396,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    guard let factory = hostFactories[id] else { return }
+    if let session = factory.incognitoSession {
+      windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+      if session.windows == 1, let context = session.context { extensionPrompts.unregister(context.extensions) }
+      incognitoSessions.release(session)
+      if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
+      MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
+      return
+    }
     noteLaunchWindowNavigation(id)
     todayAutoArchive?.detach(windowID: id)
     if model.windows.filter({ $0.style == .standard }).count > 1 {
@@ -503,7 +537,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
-    frontWindowController.flatMap { hostFactories[$0.windowID]?.adoptUnownedRequest(request) }
+    let owner = hostFactories.values.first { $0.isIncognito && $0.incognitoSession?.context === request.context }
+      ?? frontStandardWindowController.flatMap { hostFactories[$0.windowID] }
+    return owner?.adoptUnownedRequest(request)
   }
 
   func engineWillShutDown() {
@@ -528,6 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     engineReady = false
     refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
+    incognitoSessions.closeAll()
     recordShutdownPhase("hostsClosed")
   }
 
@@ -617,7 +654,7 @@ extension AppDelegate: CommandDispatcher {
         if painted == true {
           if !self.commandServicesPrepared {
             self.prepareCommandServices()
-            if let id = self.frontWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+            if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
           }
           // Startup T5: the sleep controller starts after first paint, never before.
           self.tabSleep.start()
@@ -716,7 +753,7 @@ extension AppDelegate: CommandDispatcher {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
-    return ["new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
+    return ["new-incognito-window", "new-window", "blank-window", "new-tab", "new-profile", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-media", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "manage-spaces"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) {
     guard allowsFirstRunCommand(id) else { return }
@@ -741,6 +778,7 @@ extension AppDelegate: CommandDispatcher {
     if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     if PageTools.isAppCommandEnabled(id) == true, PageTools.performAppCommand(id) { return }
     switch id {
+    case "new-incognito-window": makeIncognitoWindow()
     case "new-window", "blank-window": makeUserWindow()
     case "new-tab":
       let controller = frontWindowController ?? makeWindow()
