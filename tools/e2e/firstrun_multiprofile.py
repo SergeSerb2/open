@@ -98,7 +98,10 @@ def run(factory, results, tmp, h):
             marker = occupied/'unrelated-data'; marker.write_text('synthetic unrelated Profile data')
             existing = None
             if mode != 'settings':
-                app.call('first-run', action='import'); app.call('first-run', action='select', history=True)
+                app.call('first-run', action='import')
+                if os.environ.get('OPEN_E2E_IMPORT_EARLY_FAILURE') == '1':
+                    raise RuntimeError('deliberate import-dialog cleanup proof')
+                app.call('first-run', action='select', history=True)
                 app.call('first-run', action='continue'); wait_for('step','report')
                 first = state()['outcome']
                 app.call('first-run', action='continue'); app.call('first-run', action='finish')

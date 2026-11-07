@@ -29,6 +29,8 @@ Run it under the shared on-screen lock. `OPEN_E2E_IMPORT_NEGATIVE=1` deliberatel
 misroutes the synthetic data, corrupts one saved Profile reference, and adds
 an intervening command before Undo. Each unchanged `MP_*` condition must fail.
 The next normal run restores the source and destination with fresh roots.
+`OPEN_E2E_IMPORT_EARLY_FAILURE=1` stops inside the open import dialog to verify
+that the suite’s `finally` path restores defaults and closes its owned App.
 
 Physical deletion after Undo is not accepted yet. Main's Settings delete path
 requires typed confirmation and defers loaded Chromium data until restart.
