@@ -7,6 +7,18 @@ import re
 import subprocess
 
 
+def read_manifest(path):
+    if path.stat().st_size > 1_048_576:
+        raise ValueError("oversized portable baseline metadata")
+    value = json.loads(path.read_text())
+    if (set(value) != {"schemaVersion", "environments"} or value["schemaVersion"] != 1
+            or not isinstance(value["environments"], dict) or len(value["environments"]) > 16
+            or any(not re.fullmatch(r"scale-[12]-icc-[0-9a-f]{64}", key)
+                   for key in value["environments"])):
+        raise ValueError("invalid portable baseline manifest")
+    return value
+
+
 def display_environment():
     result = subprocess.run(["/usr/bin/swift", str(Path(__file__).with_name("display-environment.swift"))],
                             capture_output=True, text=True, check=True, timeout=60)
@@ -23,7 +35,7 @@ def display_environment():
 def legacy_baseline(root):
     environment = display_environment()
     resources = root / "Packages/OpenKit/Sources/space-editor-render/Resources/space-schema1/portable"
-    manifest = json.loads((resources / "manifest.json").read_text())
+    manifest = read_manifest(resources / "manifest.json")
     entry = manifest["environments"].get(environment["key"])
     if entry is None:
         raise ValueError(f"unknown legacy display key {environment['key']}; record a new trusted-main reference; no fallback")

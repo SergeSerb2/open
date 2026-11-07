@@ -286,13 +286,17 @@ def main():
     if args.probe:
         print("13 sidebar capture states available")
         return 0
-    environment = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))["display_environment"]()
+    portability = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))
+    environment = portability["display_environment"]()
     key = environment["key"]
-    manifest = json.loads(Path(__file__).with_name("sidebar-color-baselines.json").read_text())
+    manifest = portability["read_manifest"](Path(__file__).with_name("sidebar-color-baselines.json"))
     entry = manifest["environments"].get(key)
     if entry is None and not args.record_limits:
         raise ValueError(f"unknown sidebar display key {key}; record new trusted-main limits; no fallback")
     color_limits = entry["colorLimits"] if entry else {}
+    if entry and (set(color_limits) != set(LIMITS) or not re.fullmatch(r"[0-9a-f]{40}", entry["trustedMainCommit"])
+                  or any(not Decimal(limit).is_finite() or Decimal(limit) <= 0 for limit in color_limits.values())):
+        raise ValueError("invalid recorded sidebar color limits")
     if args.record_limits and (entry or args.baseline_renderer or args.baseline_ref != "origin/main"):
         raise ValueError("recording requires a new key and a clean origin/main build, without baseline overrides")
     print(f"sidebar color environment: {key}; limits: {'recorded' if entry else 'original strict M5'}", flush=True)
