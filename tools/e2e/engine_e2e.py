@@ -11908,7 +11908,11 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
-    if opts.only == "extensions-ui":
+    if opts.only == "extensions-ui" and os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") == "adblock":
+        from settings_adblock import fixtures
+        extra += ["--load-extension=" + ",".join(fixtures(ROOT, tmp)),
+                  "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "extensions-ui" and os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") != "adblock":
         probe_copy = Path(tmp) / "action-probe-ui"
         shutil.copytree(Path(ROOT) / "tools/e2e/fixtures/action-probe", probe_copy)
         probe_manifest = json.loads((probe_copy / "manifest.json").read_text())

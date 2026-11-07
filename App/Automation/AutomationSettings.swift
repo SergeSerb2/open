@@ -5,6 +5,16 @@ import OpenModel
 import OpenSettings
 
 extension AutomationController {
+  func settingsAdBlock(_ args: [String: Any]) throws -> [String: Any] {
+    let adapter = app.settingsPresenter
+    guard let model = adapter.settings.adBlock else { throw Failure(message: "ad blocking unavailable") }
+    if let enabled = args["enabled"] as? Bool { model.setEnabled(enabled) }
+    return ["enabled": model.enabled, "hasOtherBlocker": model.hasOtherBlocker,
+      "ready": model.isReady, "error": model.errorText,
+      "listStatus": model.lists.filter(\.bundled).map { model.listStatus($0) },
+      "text": adapter.settingsPresenter.window.map { windowText($0) } ?? []]
+  }
+
   func settingsProfilePage(_ args: [String: Any]) throws -> Bool {
     guard Set(args.keys).isSubset(of: ["profile", "page"]),
       let raw = args["profile"] as? String,

@@ -1,6 +1,6 @@
-# Official upstream snapshots, fetched 2026-10-25. Never taken from a browser bundle.
+# Official upstream snapshots, fetched 2026-11-07. Never taken from a browser bundle.
 # <local-name> <official-url> <sha256-hex-lowercase>
 # Update only through tools/fetch-adblock-lists.sh --update-pins and review the change.
 # Lists retain their upstream licenses (GPLv3+ or CC BY-SA 3.0+); text is not committed.
-easylist.txt https://easylist.to/easylist/easylist.txt f167f3d1a0f5f0db5fcea739a51addc841c6abcd237a036963216b285403c13f
-easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt 909ce5a652f8929c3eda1da4a86f363b840f2932ff4139c0ee59f8fdef0da23c
+easylist.txt https://easylist.to/easylist/easylist.txt 03d9539e6aa3e9d376494317e2365cce04451545aa3cbbad72494cc1a411c40a
+easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt 6d25b173761203a3df346f938355573eb1f32d5917ae1a6ffcca71a454a89683

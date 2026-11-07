@@ -20,8 +20,21 @@ count=0
 bytes=0
 while read -r name url expected; do
   [[ -z "$name" || "$name" == \#* ]] && continue
-  curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 90 --retry 3 \
-    --max-filesize 16777216 -o "$STAGING/$name" "$url"
+  case "$name $url" in
+    'easylist.txt https://easylist.to/easylist/easylist.txt'|'easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt') ;;
+    *) echo "unsupported list source: $name" >&2; exit 1 ;;
+  esac
+  # An existing snapshot is immutable until an explicit pin refresh. This also
+  # makes offline builds repeatable and refuses a tampered cache without repair.
+  if [[ "$UPDATE" == false && -e "$DEST/$name" ]]; then
+    [[ $(wc -c < "$DEST/$name") -le 16777216 ]] || { echo "$name: size limit exceeded" >&2; exit 1; }
+    cp "$DEST/$name" "$STAGING/$name"
+  else
+    curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 90 --retry 3 \
+      --max-filesize 16777216 -o "$STAGING/$name" "$url" || {
+        echo "$name: no verified staged snapshot; fetch failed (offline builds require a pinned cache)" >&2; exit 1;
+      }
+  fi
   first="$(awk 'NF { sub(/^\xef\xbb\xbf/, ""); print; exit }' "$STAGING/$name")"
   [[ "$first" == '[Adblock Plus'* ]] || { echo "$name: invalid header" >&2; exit 1; }
   actual="$(shasum -a 256 "$STAGING/$name" | cut -d ' ' -f1)"
