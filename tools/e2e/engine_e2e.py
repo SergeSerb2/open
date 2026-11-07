@@ -5088,22 +5088,25 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     results["extension_update_with_popup"] = reload_with_popup("1.1")
     results["extension_reload_with_popup"] = reload_with_popup(None)
 
-    # The popup's renderer crashes: the popup closes and Chrome terminates
-    # the extension (its action goes away until it is reloaded); Open keeps
-    # running.
-    crash = {}
-    state = open_popup(ACTION_PROBE)
-    crash["opened"] = bool(state)
-    if state:
-        try:
-            app.call("devtools", tab=state["page"]["identifier"], method="Page.crash", timeout=5)
-        except Exception as e:  # the renderer dies before it answers
-            crash["crash_call"] = str(e)[:200]
-    crash["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10))
-    crash["action_gone"] = bool(wait_until(lambda: not action(ACTION_PROBE), timeout=10))
-    crash["alive"] = app.call("ping") is not None
-    results["popup_renderer_crash"] = {"ok": crash["opened"] and crash["closed"] and crash["action_gone"] and crash["alive"],
-                                       **crash}
+    if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
+        results["popup_renderer_crash"] = {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+    else:
+        # The popup's renderer crashes: the popup closes and Chrome terminates
+        # the extension (its action goes away until it is reloaded); Open keeps
+        # running.
+        crash = {}
+        state = open_popup(ACTION_PROBE)
+        crash["opened"] = bool(state)
+        if state:
+            try:
+                app.call("devtools", tab=state["page"]["identifier"], method="Page.crash", timeout=5)
+            except Exception as e:  # the renderer dies before it answers
+                crash["crash_call"] = str(e)[:200]
+        crash["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10))
+        crash["action_gone"] = bool(wait_until(lambda: not action(ACTION_PROBE), timeout=10))
+        crash["alive"] = app.call("ping") is not None
+        results["popup_renderer_crash"] = {"ok": crash["opened"] and crash["closed"] and crash["action_gone"] and crash["alive"],
+                                           **crash}
 
     # No live Chrome tab in the window: Chrome's model goes away (the shell
     # hears it), the list is the profile's (pins kept, not live), and an
