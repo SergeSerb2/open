@@ -3829,6 +3829,36 @@ check was narrowed to pass (no case deleted, no budget raised). If a
 case cannot run (for example CDP WebSocket unavailable), the PR says so
 and states what ran instead. Never substitute a unit test.
 
+#### 13.5.1 Lead rulings on the Step 4 FAIL rows (2026-11-07 15:10)
+
+Made by the lead on the user's go-ahead ("go with recommended steps").
+Nobody raised a budget before these rulings; each one names the new
+budget and what must be tried first. They replace the matching rows of
+§6.6, §7.8 and §13.4.
+
+1. **G-2 max.** The slowest check took 178–370 µs of thread CPU time;
+   the 1.1–1.2 ms maxima were wall time spent waiting for a core at
+   load 12–24. The G-2 max gate now counts **thread CPU time, ≤ 500 µs
+   per check**. Every run still records the wall max, and the Step 9
+   quiet run must show a wall max **≤ 2 ms at load1 ≤ 4**.
+2. **G-5 busy** (9 ms thread CPU per 200-request load against 3 ms).
+   Optimize first: cut the client-callback and `GURL`-rebuild costs
+   (4.9 + 1.4 ms of the profile; batch or avoid copies) and keep the
+   crate check. New budget: **≤ 5 ms thread CPU per 200-request load**,
+   measured off the UI thread. If 5 ms is not reachable after a real
+   attempt, the breakdown goes to the lead; the section does not raise
+   the budget itself. G-5 wall already passes.
+3. **G-6** (first-use regex compiles up to 15 ms). Compile or warm every
+   regex filter in the background engine build, before the new engine is
+   swapped in, so that no compile runs on the request path. The gate
+   stays as written.
+4. **Footprint** (+62–70 MiB against 40 MiB). Optimize first: one engine
+   shared by all Profiles (lead ruling 8), no resident copy of list text
+   or resources after the build, the 97-2 domain resolver (drops about
+   825 KiB of crate data), and DAT against text measured both ways. New
+   budget: **≤ 50 MiB**, stretch 40 MiB. If still above, the breakdown
+   (vmmap tag 14, PartitionAlloc) goes to the lead.
+
 ---
 
 ## 14. Risks and open questions
@@ -4365,7 +4395,13 @@ corpus (14,467 matched; 14 URLs cut at 8 KiB) and the same costs.
 **Left before a PR:**
 
 1. Lead rulings on the four FAIL rows (G-2 max on wall time, G-5 busy, G-6,
-   footprint). Nobody raised a budget.
+   footprint). Nobody raised a budget. **Ruled 2026-11-07 15:10**
+   (§13.5.1): G-2 max counts thread CPU ≤ 500 µs (wall max ≤ 2 ms at
+   load1 ≤ 4 in the Step 9 quiet run); G-5 busy ≤ 5 ms thread CPU per
+   200-request load after cutting the callback and `GURL` costs; G-6
+   stays, and regexes compile in the background build; footprint
+   ≤ 50 MiB (stretch 40) after the shared engine, no resident list text,
+   the 97-2 domain resolver, and DAT against text measured both ways.
 2. Break-and-revert proof (checklist §4): run the N-cases on a build without
    P-3 and record the FAIL lines (two attempts were killed by T3 restarts).
 3. Docs: an engine-patches row for P-3, a `docs/followups.md` entry for N-18
@@ -4378,3 +4414,33 @@ the same engine files as 65c6a780), the source state of the recorded
 distribution (stamp 5602914f…). Step 4 is not applied there. To put it
 back: copy `Engine/fork/src/open/adblock/` from this branch into the tree,
 then replace 0310 and apply 0311 from this branch's `patches/cef/`.
+
+### Section 13 lead decisions (2026-11-07)
+
+1. **Order.** Step 4 (with the §13.5.1 rulings) first. Then the control
+   API (Step 6 and Step 8 together) and the App adapter, so that the App
+   blocks requests before cosmetic filtering lands. Then Step 5
+   (cosmetics), Step 7 (resources, lists), Step 9. Reason: the App
+   integration is the long pole, and Step 5 does not change the API.
+2. **CEF API shape (revises Step 6).** The control API is a fork overlay
+   header `cef/include/cef_open_adblock.h` with free functions that take
+   a `CefRequestContext` (and a `CefBrowser` for the tab count), the same
+   pattern as `cef_open_page.h` (0505) and `cef_open_omnibox.h`. It does
+   not add virtual methods to `cef_request_context.h`. The translator
+   still generates the C API for it.
+3. **OpenEngine shape (revises §12.1).** The API is a category on the
+   existing `OEBrowserContext` (enable, list directory, reload,
+   exclusions, status dictionary) and a read-only blocked count on
+   `OEWebContent`, not a new `OEAdBlockController` with `void*` handles.
+4. **No blocked count in the UI.** Arc 1.170 shows none. Its Site
+   Control tile is "Block Ads & Trackers" with three tooltip states:
+   "The built-in ad blocker is turned on for this site.", "The built-in
+   ad blocker is disabled for this site.", and "The built-in ad blocker
+   is off. You can change this in Settings." (`strings -a` of the main
+   binary, `.re/features-advanced/strings-main.txt` lines 113200–113207).
+   The engine count stays for tests and debug info.
+5. **Other blockers.** Arc lists 19 Chrome Web Store IDs beside its
+   `AdBlockerExtensionID` cases (`strings-main.txt`, the block that
+   starts with `bcjindcccaagfpapjjmafapmmgkkhgoa`). Open warns in
+   Settings when native blocking is on and the Profile has an enabled
+   extension from that set.
