@@ -374,7 +374,45 @@ The upsert skips unchanged or empty replacement titles. This preserves the speci
 
 `ArcSecretsReader` parses passwords, cookies, addresses, form history, and cards in memory. It validates UTF-8 without making secret String copies, skips expired cookies, and counts blacklisted logins separately. The CLI uses `validateWithKey`; `readWithKey` lends one record at a time to typed callbacks and clears its secret buffer immediately afterward. No retaining API remains. Callbacks must not copy or retain records or fields. All four record types redact descriptions, debug descriptions, and reflection. Cookie schema 24 and later strips a matching SHA256 domain prefix. Valid UTF-8 values without a matching prefix remain eligible and increment `legacyNoHashPrefix`. Address use dates are Unix seconds. Evidence: local Chromium `net/extras/sqlite/sqlite_persistent_cookie_store.cc`, version-24 comment and `MakeCookiesFromSQLStatement`; `components/autofill/core/browser/webdata/addresses/address_autofill_table.cc`, `Time::FromTimeT` / `ToTimeT`; and the crypto sources listed in the plan's evidence index.
 
-Extensions are the union of Secure Preferences and installed payload folders. Classification uses path and payload rules. IDs never print. An explicit manifest request writes only candidate IDs, atomically with mode 600. The CLI omits the destination path from its success log to preserve counts-only output. It refuses destinations inside Arc data or a repository outside `.re/`. History destinations inside Arc data are also refused. Top Sites and site engagement are not read. No import code makes a network request. No secret writer exists; engine password-store, cookie-store, and autofill APIs remain the next gate.
+Extensions are the union of Secure Preferences and installed payload folders.
+Classification uses path and payload rules. `ArcImportResult.extensionsByProfile`
+holds only in-memory metadata for the original directories recorded in
+`sourceProfileDirectories`. Candidates then use the live Profile mapping:
+Arc Default maps to the live Default by role; named sources map to their live
+Profiles. Destination directory collision suffixes never select a source.
+`ImportReport.extensions` accounts for total,
+internal, candidate, and missing-manifest records; unreadable Profiles have a
+separate count. Preference JSON is limited to 16 MiB, 4,096 records per Profile,
+256 payload versions per extension, 1 MiB per manifest, and 1,024 UTF-8 bytes
+per display name. Symlinks cannot escape the Profile's source tree.
+
+The App maps each candidate to the live destination Profile after importing.
+The first-run and Settings report share `ImportExtensionsSection`. Names stay
+in the UI and never enter CLI output. Nothing installs until the user clicks
+Install Extensions. `AppImportExtensions` calls the destination context's
+Web Store installer, serially, through the existing consent sheet. Cancel and
+already installed are skipped; an engine error is shown per failed row. The
+final line counts installed, skipped, and failed rows. Finishing first run does
+not require installing. Undo Import leaves these separate user installs in
+place. The automation-only fixture mapping uses signed local CRX3s and the
+same consent sheet; production never installs from an Arc cache or payload.
+
+The queue has no install timeout; a consent sheet can remain open indefinitely.
+The offline App failure gate refuses a missing fixture before calling the
+engine, reports the error, counts the failure, and continues. The separate
+engine failure row is BLOCKED: local CRX initiation has no completion for a
+damaged-signature rejection. The lead filed that engine need. A real production
+Web Store failure receipt is INFO, with a two-minute harness observation bound
+that never changes queue results.
+
+The CLI prints counts only. An explicit manifest request writes only candidate
+IDs, atomically with mode 600. It omits the destination path from its success
+log. It refuses destinations inside Arc data or a repository outside `.re/`.
+History destinations inside Arc data are also refused. Top Sites and site
+engagement are not read. The import readers make no network requests; only an
+explicit App extension-install click calls the engine's Web Store API. No
+secret writer exists in OpenImport; engine password-store, cookie-store, and
+autofill APIs remain a separate gate.
 
 Verification on 2026-10-25, through the release `openkit` executable and the plan's throwaway synthetic Swift probes. Package builds used only `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`, in a separate session. Commands used `.build/release/openkit` after building, to prevent implicit unrestricted builds. Probes lived in `/tmp` and compiled the production reader/crypto sources with optimization and Swift 6. No unit tests were added. Output was reduced to counts and timings.
 

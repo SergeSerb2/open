@@ -34,7 +34,12 @@ public struct ImportOutcome: Sendable {
     public var counts: [String: Int]
     public var errorText: String?
     public var failures: [String: String]
-    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:]) { self.counts = counts; self.errorText = errorText; self.failures = failures }
+    public var extensions: [ImportExtensionCandidate]
+    public var extensionProfileCount: Int
+    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], extensions: [ImportExtensionCandidate] = [], extensionProfileCount: Int = 0) {
+        self.counts = counts; self.errorText = errorText; self.failures = failures
+        self.extensions = extensions; self.extensionProfileCount = extensionProfileCount
+    }
 }
 
 /// One import action and capability shared by Settings and first run.
@@ -54,8 +59,12 @@ public extension ImportOutcome {
 @MainActor public protocol ImportActions: AnyObject {
     var canImportPasswordsAndCookies: Bool { get }
     func runImport(plan: ImportPlan) async -> ImportOutcome
+    func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult
 }
-public extension ImportActions { var canImportPasswordsAndCookies: Bool { false } }
+public extension ImportActions {
+    var canImportPasswordsAndCookies: Bool { false }
+    func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult { .failed("Extension installation is unavailable.") }
+}
 
 public struct ExtensionShortcutConflict: Sendable, Hashable {
     public var extensionName: String
