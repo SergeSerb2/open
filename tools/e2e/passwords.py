@@ -16,22 +16,24 @@ def autofill_child_windows(app):
 
 
 def show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5):
-    """Click the actual field; identify the native popup by its Manage footer."""
-    import re
-    before = {w['number'] for w in autofill_child_windows(app)}
+    """Find Chromium's listbox in this page's native parent, including reuse."""
     app.call('focus', tab=tab)
+    parent = app.call('native-focus-state')['keyWindow']
     app.call('click', tab=tab, selector=selector)
 
     def specific_popup():
-        candidates = [w for w in autofill_child_windows(app) if w['number'] not in before]
-        if not candidates:
-            return None
-        text = {w['number']: w.get('text', []) for w in app.call('windows', accessibility=True)}
-        # Inspect only for public footer copy. Do not return usernames, masked
-        # passwords, payment labels or addresses from the accessibility tree.
-        return [w for w in candidates if any(re.search(r'manage (?:passwords|addresses|payment methods)', label, re.I)
-                                             for label in text.get(w['number'], []))]
-    return wait_until(specific_popup, timeout=timeout, step=.05)
+        return [w for w in app.call('windows', accessibilityRoles=True)
+                if w.get('visible') and w.get('parent') == parent and not w.get('sheet')
+                and w.get('class') == 'NativeWidgetMacNSWindow' and 'AXList' in w.get('roles', [])]
+
+    windows = wait_until(specific_popup, timeout=timeout, step=.05)
+    if windows:
+        # Chromium rejects acceptance until 500 ms after its first paint
+        # (AutofillSuggestionController::kIgnoreEarlyClicksOnSuggestionsDuration).
+        # Preserve that security guard and wait before sending user gestures.
+        time.sleep(.65)
+        windows = specific_popup()
+    return windows
 
 
 def fill_from_dropdown(app, tab, wait_until, selector='#username', down=1):
@@ -39,6 +41,9 @@ def fill_from_dropdown(app, tab, wait_until, selector='#username', down=1):
     assert show_autofill_dropdown(app, tab, wait_until, selector), 'autofill dropdown did not appear after a field click'
     for _ in range(down):
         app.call('key', key='down', route='app')
+    # Selection can change row bounds. Preserve Chromium's visibility/idle
+    # acceptance barrier after the selected row has had a display turn.
+    time.sleep(.65)
     app.call('key', key='return', route='app')
     return True
 
@@ -77,6 +82,7 @@ class PasswordGuard:
             self.results[name] = {'ok': False, 'reason': 'App death or new crash report', 'load': os.getloadavg()}
             raise
         self.results[name] = dict(result, newCrashReports=0, load=os.getloadavg())
+        print(name, result.get('status', 'PASS' if result.get('ok') else 'FAIL'), flush=True)
 
 
 class PasswordBlocked(RuntimeError):
@@ -108,11 +114,12 @@ def run_save_prompts(factory, results, tmp, harness):
         assert gone(), 'save sheet did not close after answer'
 
     def row(name, fn):
+        harness['begin_row'](name)
         try:
             detail = fn() or {}
             results[name] = {'ok': True, **detail}
         finally:
-            app.call('save-prompt', withdraw=True)
+            app.call('save-prompt', withdraw=True, timeout=3)
             assert gone(), 'case cleanup left a save sheet open'
 
     try:
@@ -322,6 +329,7 @@ def run_manage_pages(factory, results, tmp, harness):
         return tab
 
     def row(name, fn):
+        harness['begin_row'](name)
         try:
             results[name] = {'ok': True, **(fn() or {})}
         except Exception:
@@ -434,6 +442,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
     fixture_root = Path(h['ROOT']) / 'tools/e2e/fixtures/passwords'
 
     def row(name, flow, requires=()):
+        h['begin_row'](name)
         guard.check()
         if any(r not in passed for r in requires):
             results[name] = {'status': 'BLOCKED', 'reason': 'requires passing ' + ', '.join(requires)}
@@ -457,8 +466,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         finally:
             if app and not app.closed:
                 try:
-                    app.call('save-prompt', withdraw=True)
-                    app.call('key', key='escape', route='app')
+                    app.call('save-prompt', withdraw=True, timeout=3)
+                    app.call('key', key='escape', route='app', timeout=3)
                 except Exception:
                     guard.check()
 
@@ -520,7 +529,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         return show_autofill_dropdown(app, tab, wait, selector)
 
     def choose():
-        key('down'); key('return')
+        key('down'); time.sleep(.65); key('return')
 
     def empty(tab):
         return app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).every(e => e.value === "")')
@@ -530,6 +539,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
           const e=document.getElementById(id); let expected=e.dataset.fixture;
           if (%s && id==='password') expected=%s;
           if (id==='expiry') {const a=e.value.replace(/\\D/g,''),b=expected.replace(/\\D/g,'');return a===b||a===b.slice(0,2)+b.slice(-2);}
+          if (id==='username'||id==='password') return e.value===expected;
           return e.value.replace(/\\s/g,'')===expected.replace(/\\s/g,''); });})()'''
         # The updated fixture value is read from our source, never printed.
         import re
@@ -565,7 +575,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             def preference_inputs():
                 initial = app.call('credentials-prefs')
                 for invalid in [dict(profile='missing'), dict(passwordSaving=1), dict(cardsSaving='true'),
-                                dict(addressesSaving=None), dict(unknown=True), dict(profile='x'*4097)]:
+                                dict(addressesSaving=None), dict(cardReauthentication=1), dict(unknown=True), dict(profile='x'*4097)]:
                     try:
                         app.call('credentials-prefs', **invalid)
                         raise AssertionError('invalid credentials-prefs input was accepted')
@@ -578,8 +588,14 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                         raise AssertionError('invalid savePrompt policy was accepted')
                     except RuntimeError:
                         pass
-                return {'invalidInputsRejected': 9, 'preferencesUnchanged': True}
+                return {'invalidInputsRejected': 10, 'preferencesUnchanged': True}
             row('PW-PREFS-input', preference_inputs)
+
+            def reauthentication_default():
+                prefs = app.call('credentials-prefs')
+                assert prefs['canEnableCardsSaving'] and prefs['cardReauthentication'] is True
+                return {'freshProfile': True, 'cardReauthentication': True}
+            row('PW-REAUTH-default', reauthentication_default)
 
             def first():
                 tab, value = prompt('password', urls['login'])
@@ -601,26 +617,70 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             if 'P-1' not in passed:
                 results['P-1'] = {'ok': False, 'reason': 'real password prompt did not appear'}
 
+            def redirect_prompt():
+                before = app.call('credentials')['logins']
+                events()
+                tab = load(urls['login'].replace('login.example.com', 'redirect.example.com'))
+                try:
+                    fill(tab)
+                    app.call('click', tab=tab, selector='#submit')
+                    assert wait(lambda: app.eval(tab, 'location.pathname === "/dashboard" && document.readyState === "complete" && !!document.querySelector("#dashboard")'), timeout=10, step=.1), 'post-login redirect did not reach the dashboard'
+                    value = wait(lambda: (s if (s := sheet()).get('visible') else None), timeout=5, step=.05)
+                    assert value and value['kind'] == 'password', 'save sheet was withdrawn during post-login navigation'
+                    assert value['title'] == 'Save password for redirect.example.com?'
+                    # Keep the sheet unanswered across another real engine turn.
+                    app.call('ping')
+                    assert sheet().get('visible'), 'save sheet closed before an answer'
+                    assert any(e.get('type') == 'savePrompt' and e.get('answer') == 'pending' for e in events())
+                    app.call('save-prompt', answer='save')
+                    assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05), 'save sheet did not close after its answer'
+                    return dict(counts(logins=before + 1), dashboardLoaded=True, heldUntilAnswered=True)
+                finally:
+                    guard.check()
+                    app.call('close', tab=tab)
             def dropdown():
                 tab = load(urls['login']); identity['refill'] = tab
-                assert empty(tab)
-                windows = popup(tab); assert windows
-                # Empty form + masked dropdown; never snapshot filled data.
-                app.call('snapshot', window=windows[0]['number'], path=os.path.join(tmp, 'P-3-dropdown.png'))
+                assert empty(tab), 'login fields were filled before a dropdown choice'
+                windows = popup(tab)
+                assert windows, 'specific autofill dropdown did not appear after clicking the username field'
+                # Role-only evidence avoids capturing credential labels.
                 return {'childWindowVisible': True}
             row('P-3', dropdown, ['P-2'])
 
             def refill():
                 tab = identity['refill']; assert popup(tab)
-                choose(); assert fields_match(tab, ['username', 'password'])
+                choose(); assert wait(lambda: fields_match(tab, ['username', 'password']), timeout=5, step=.05)
                 return {'bothFieldsMatch': True, 'inputRoute': 'app'}
             row('P-4', refill, ['P-3'])
+
+            def refill_mouse():
+                tab = load(urls['login'])
+                assert empty(tab), 'login fields were filled before a dropdown choice'
+                windows = popup(tab)
+                assert windows, 'password dropdown did not appear for mouse selection'
+                window = windows[0]
+                width = h['frame'](window['frame'])[2]
+                # The first credential row is below the popup's 8 pt shadow.
+                # Events stay inside this verified Open child window.
+                point = dict(window=window['number'], x=width / 2, y=28)
+                # Deliver the native exit/enter tracking path before clicking.
+                # Chromium rejects a click on an item that appeared under a
+                # stationary pointer (PopupRowView::OnMouseReleased).
+                app.call('mouse', action='hover', window=window['number'], x=width / 2, y=2)
+                app.call('mouse', action='hover', **point)
+                # Entry can paint a new row; allow Chromium's next-idle
+                # acceptance barrier to pass after that display turn.
+                time.sleep(.65)
+                app.call('mouse', action='click', queued=True, **point)
+                assert wait(lambda: fields_match(tab, ['username', 'password']), timeout=5, step=.05), 'mouse selection did not fill both fixture fields'
+                return {'bothFieldsMatch': True, 'inputRoute': 'native-popup-mouse'}
+            row('P-4-mouse', refill_mouse, ['P-4'])
 
             def update():
                 _, value = prompt('passwordUpdate', urls['change'], 'save')
                 assert value['buttons'] == ['No', 'Save']
                 tab = load(urls['login']); assert popup(tab); choose()
-                assert fields_match(tab, ['username', 'password'], changed=True)
+                assert wait(lambda: fields_match(tab, ['username', 'password'], changed=True), timeout=5, step=.05)
                 return {'updatedValueMatches': True, 'offersNever': False}
             row('P-5', update, ['P-4'])
 
@@ -651,15 +711,90 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('P-9', lambda: (prompt('address', urls['address'], 'save'), counts(addresses=1))[1])
             def address_fill():
                 tab = load(urls['address']); assert popup(tab, '#name'); choose()
-                assert fields_match(tab, ['name', 'street', 'city', 'postal'])
+                assert wait(lambda: fields_match(tab, ['name', 'street', 'city', 'postal']), timeout=5, step=.05)
                 return {'addressFieldsMatch': True}
             row('P-10', address_fill, ['P-9'])
+            def http_card_guard():
+                prefs = app.call('credentials-prefs')
+                assert prefs['cardsSaving'] and prefs['canEnableCardsSaving']
+                assert app.call('credentials')['cards'] == 0
+                no_prompt(urls['http_card'])
+                counts(cards=0)
+                return {'scheme': 'http', 'cardSaveOffer': False, 'cardsUnchanged': True}
+            row('PW-CARD-HTTP', http_card_guard)
+
+            def secure_card_context():
+                tab = load(urls['card'])
+                assert app.eval(tab, 'location.protocol === "https:" && window.isSecureContext')
+                secure_type = dev(tab, 'Page.getFrameTree')['frameTree']['frame']['secureContextType']
+                assert secure_type in ['Secure', 'SecureLocalhost']
+                app.call('close', tab=tab)
+                return {'scheme': 'https', 'secureContext': True, 'secureContextType': secure_type}
+            row('PW-CARD-HTTPS', secure_card_context)
             row('P-11', lambda: (prompt('card', urls['card'], 'save'), counts(cards=1))[1])
             def card_fill():
-                tab = load(urls['card']); assert popup(tab, '#number'); choose()
-                assert fields_match(tab, ['name', 'number', 'expiry'])
-                return {'cardFieldsMatch': True}
+                # Only this synthetic profile opts out for unattended fill.
+                # New user profiles retain Chromium's mandatory device auth.
+                previous = app.call('credentials-prefs')['cardReauthentication']
+                try:
+                    app.call('credentials-prefs', cardReauthentication=False)
+                    assert wait(lambda: app.call('credentials-prefs')['cardReauthentication'] is False, timeout=3, step=.05)
+                    tab = load(urls['card']); assert popup(tab, '#number'); choose()
+                    assert wait(lambda: fields_match(tab, ['name', 'number', 'expiry']), timeout=5, step=.05)
+                    return {'cardFieldsMatch': True, 'syntheticProfileOptOut': True}
+                finally:
+                    app.call('credentials-prefs', cardReauthentication=previous)
+                    assert wait(lambda: app.call('credentials-prefs')['cardReauthentication'] is previous, timeout=3, step=.05)
             row('P-12', card_fill, ['P-11'])
+
+            def card_reauthentication():
+                assert app.call('credentials-prefs')['cardReauthentication'] is True
+                tab = load(urls['card']); assert popup(tab, '#number')
+                authenticating = app
+                tracker = app.focus_tracker
+                choose()
+                import socket
+                blocked = False
+                hist = []
+                try:
+                    hist = app.call('devtools', tab=tab, method='Browser.getHistograms',
+                                    params={'query': 'Autofill.PaymentMethods.CheckoutFlow.ReauthUsage', 'delta': False},
+                                    timeout=3)['histograms']
+                except socket.timeout:
+                    # Chromium's non-biometric fallback enters the macOS
+                    # Authorization Services modal loop. Do not answer it.
+                    blocked = True
+                time.sleep(1)
+                os.kill(app.pid, 0)
+                assert not h['_open_crash_reports']() - guard.baseline, 'card selection created a crash report'
+                # Verified-PID cleanup cancels this owned request before any
+                # later row. It does not send input to the system dialog.
+                relaunch()
+                assert app.call('credentials-prefs')['cardReauthentication'] is True
+                losses = tracker.loss() if tracker else []
+                auth_changes = [e for e in losses if e.get('event') == 'frontmostChanged'
+                                and e.get('frontmostBundleID') == 'com.apple.SecurityAgent'
+                                and e.get('openPID') == authenticating.pid]
+                def expected_auth_loss(event):
+                    if event in auth_changes: return True
+                    return (event.get('event') == 'NSApplicationDidResignActiveNotification'
+                            and event.get('openPID') == authenticating.pid
+                            and any(abs(event['uptime'] - change['uptime']) < 2
+                                    and event.get('frontmostPID') in [authenticating.pid, change['frontmostPID']]
+                                    for change in auth_changes))
+                if any(not expected_auth_loss(event) for event in losses):
+                    raise h['FocusInterruption']('unrelated foreground loss during device authentication', losses)
+                # Only this row requests the verified system-auth transition.
+                # All unrelated focus loss still invalidates native input.
+                if tracker: tracker.checkpoint()
+                started_metric = any(any(b['low'] == 1 and b['count'] for b in item['buckets']) for item in hist)
+                if blocked and not auth_changes:
+                    raise PasswordBlocked('Card selection left the App alive with no crash, but the native authentication loop blocked both metrics and the bundle-identified handoff trace')
+                assert started_metric or auth_changes, 'device authentication did not start for the saved card'
+                return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist,
+                        'verifiedSecurityAgentHandoff': bool(auth_changes),
+                        'authenticationCompletionRequired': False}
+            row('PW-REAUTH-request', card_reauthentication, ['P-12'])
 
             def manage():
                 key('t', modifiers=['command']); app.call('key', text='Manage Passwords', route='app')
@@ -678,7 +813,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             def footer():
                 tab = load(urls['login']); assert popup(tab); events()
                 # Password dropdown has one fixture entry followed by its footer.
-                key('down'); key('down'); key('return')
+                key('down'); key('down'); time.sleep(.65); key('return')
                 assert wait(lambda: any(e.get('type') == 'autofillPage' and e.get('page') == 'passwords' for e in events()), timeout=5, step=.1)
                 selected = next(t for t in app.call('tabs') if t.get('selected'))
                 assert selected['id'] == identity['manage']
@@ -732,10 +867,26 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('P-18', at_rest, ['P-2'])
 
             def private():
+                parent = next(s for s in app.call('spaces') if s['focused'])['profile']
+                before = app.call('credentials', profile=parent)
+                selected = next(t for t in app.call('tabs') if t.get('selected'))
+                parent_context = app.page(selected['id'])['context']
                 app.call('menu-perform', id='new-incognito-window')
                 assert wait(lambda: app.call('incognito-state', private=True).get('private'), timeout=10, step=.1)
-                try: return no_prompt(urls['login'].replace('login.example.com', 'private.example.com'))
-                finally: app.call('window-close')
+                try:
+                    state = app.call('incognito-state', private=True)
+                    assert state['ephemeral'] and state['parent'] == parent
+                    assert state['originalContext'] == parent_context
+                    private_before = app.call('credentials')
+                    assert private_before['logins'] == 0
+                    no_prompt(urls['login'].replace('login.example.com', 'private.example.com'))
+                    private_after = app.call('credentials')
+                    assert private_after == private_before
+                finally:
+                    app.call('window-close')
+                assert app.call('credentials', profile=parent) == before
+                return {'sheetVisible': False, 'privateLogins': 0, 'privateStoreUnchanged': True,
+                        'parentProfileMatchesFocusedSpace': True, 'parentStoreUnchanged': True}
             row('P-19', private)
 
             def virtual_authenticator():
@@ -758,7 +909,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 app.call('click', tab=tab, selector='#create')
                 child = wait(lambda: next((w for w in children() if w['number'] not in before), None), timeout=3, step=.05)
                 if not child:
-                    raise PasswordBlocked('H-7 WebAuthn native dialog is unavailable in this engine distribution')
+                    raise AssertionError('H-7 WebAuthn native dialog did not appear')
                 try:
                     labels = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == child['number'])
                     import re
@@ -826,6 +977,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             for policy in ['record', 'save', 'never', 'dismiss']:
                 row('PW-POLICY-'+policy, lambda policy=policy: auto_policy(policy))
 
+            row('P-24-post-login-redirect', redirect_prompt)
+
             def mock_guard():
                 before = app.call('credentials', profile='Default')['logins']
                 relaunch(allow=False)
@@ -845,6 +998,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 return cookie_names()
             row('C-1', cookies_graceful)
             def cookies_killed():
+                if os.environ.get('OPEN_E2E_NO_CRASH_PROBES') == '1':
+                    raise PasswordBlocked('M1-only by rule; not run')
                 load(urls['set_cookies'])
                 deadline = time.monotonic()+35
                 while time.monotonic() < deadline:
@@ -867,7 +1022,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 assert checked >= 3
                 return {'encryptedCookies': checked, 'plaintextValuesEmpty': True}
             row('C-3', encrypted_cookies, ['C-1'])
-            results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'No synthetic Keychain-error injection API; real Keychain access is prohibited by CHILD-RULES rule 6'}
+            results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'Lead decision: user hand check; no synthetic Keychain-error hook and no real Keychain access in this suite'}
             def https_first_warning(action):
                 if not app.call('credentials')['supportsSecretsImport']:
                     raise PasswordBlocked('running engine has no 08xx capability (supportsSecretsImport is false)')

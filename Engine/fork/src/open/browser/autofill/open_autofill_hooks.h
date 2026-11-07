@@ -4,6 +4,7 @@
 #define OPEN_BROWSER_AUTOFILL_OPEN_AUTOFILL_HOOKS_H_
 
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
+#include "ui/gfx/native_ui_types.h"
 #include "components/autofill/core/browser/ui/payments/autofill_error_dialog_view.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_view.h"
 
@@ -16,6 +17,7 @@ namespace open_engine {
 // A missing hook preserves Chromium's normal behavior.
 struct AutofillHooks {
   bool (*is_open)(content::WebContents*) = nullptr;
+  void (*attach_popup)(content::WebContents*, gfx::NativeWindow) = nullptr;
   bool (*show_password)(content::WebContents*, bool) = nullptr;
   bool (*hide_password)(content::WebContents*) = nullptr;
   bool (*open_page)(content::WebContents*, int) = nullptr;

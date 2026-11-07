@@ -135,6 +135,7 @@
         return NSApp.windows.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
           return row
         }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
@@ -938,6 +939,7 @@
         return NSApp.windows.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
           return row
         }
       case "panel-close":
@@ -1608,6 +1610,26 @@
       walk(window, depth: 0)
       if let content = window.contentView { walk(content, depth: 0) }
       return text.sorted()
+    }
+
+    /// Roles only: inspect native Chromium popup accessibility without values.
+    private func windowAccessibilityRoles(_ window: NSWindow) -> [String] {
+      var seen: Set<ObjectIdentifier> = [], roles: Set<String> = []
+      func walk(_ object: NSObject, depth: Int) {
+        guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
+        let role = NSSelectorFromString("accessibilityRole")
+        if object.responds(to: role), let value = object.perform(role)?.takeUnretainedValue() as? String {
+          roles.insert(value)
+        }
+        let children = NSSelectorFromString("accessibilityChildren")
+        if object.responds(to: children), let nodes = object.perform(children)?.takeUnretainedValue() as? [NSObject] {
+          for child in nodes.prefix(512) { walk(child, depth: depth + 1) }
+        }
+        if let view = object as? NSView { for child in view.subviews.prefix(512) { walk(child, depth: depth + 1) } }
+      }
+      walk(window, depth: 0)
+      if let content = window.contentView { walk(content, depth: 0) }
+      return roles.sorted()
     }
 
     // MARK: Helpers

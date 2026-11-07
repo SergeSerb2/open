@@ -45,6 +45,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 OUT = os.path.join(ROOT, "docs", "engine-spike")
 _ACTIVE_FOCUS_TRACKER = None
 _OWNED_APPS = []
+_SUITE_CRASH_BASELINE = None
+_ROW_TIMEOUT = None
+_ROW_NAME = 'startup'
 
 EXT = {
     "ublock": "ddkjiahejlhfcafbddmgiahcphecmpfh",
@@ -63,6 +66,82 @@ class FocusInterruption(RuntimeError):
 
 class AppDied(RuntimeError):
     fatal_app_death = True
+
+
+class SuiteAppDied(BaseException):
+    """Bypass per-row Exception handlers: a dead App must end the suite."""
+    fatal_app_death = True
+
+
+class SuiteStopped(BaseException):
+    """A failed row or watchdog cannot enter per-flow exception recovery."""
+    fatal_app_death = True  # Do not query focus while unwinding a failed flow.
+
+
+def begin_row(name):
+    global _ROW_NAME
+    _ROW_NAME = name
+    if _ROW_TIMEOUT is not None:
+        signal.setitimer(signal.ITIMER_REAL, _ROW_TIMEOUT)
+
+
+def row_timeout(_signal, _frame):
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    raise SuiteStopped('row watchdog expired after %ds: %s' % (_ROW_TIMEOUT, _ROW_NAME))
+
+
+def supervise_suite(arguments):
+    """Own a worker process group and bound the entire run, including cleanup."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--suite-timeout', type=int, default=600)
+    options, _ = parser.parse_known_args(arguments)
+    if not 1 <= options.suite_timeout <= 3600:
+        raise SystemExit('--suite-timeout must be between 1 and 3600 seconds')
+    resources = tempfile.TemporaryDirectory(prefix='open-e2e-resources-')
+    os.chmod(resources.name, 0o700)
+    worker_env = dict(os.environ, OPEN_E2E_RESOURCE_DIR=resources.name)
+    worker = subprocess.Popen([sys.executable, __file__, *arguments, '--e2e-supervised'],
+                              start_new_session=True, env=worker_env)
+    def stop_supervisor(signum, _frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, stop_supervisor)
+    signal.signal(signal.SIGHUP, stop_supervisor)
+    try:
+        try:
+            return worker.wait(timeout=options.suite_timeout)
+        except subprocess.TimeoutExpired:
+            print('SUITE_WATCHDOG expired after %ds; stopping the owned worker and App' % options.suite_timeout, flush=True)
+            return 124
+    finally:
+        # Direct App launches inherit this group. Never address an app name or
+        # another worktree. The App's owner-exit watcher is a second safeguard.
+        try:
+            os.killpg(worker.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            worker.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        try:
+            os.killpg(worker.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        worker.wait(timeout=5)
+        # The supervisor also removes certificates after a forced worker exit.
+        resources.cleanup()
+
+
+def check_suite_app_death(app=None):
+    if _SUITE_CRASH_BASELINE is None:
+        return
+    if _open_crash_reports() - _SUITE_CRASH_BASELINE:
+        raise SuiteAppDied('new Open crash report; stopped all remaining flows')
+    if app and app.pid and not app.closed:
+        try:
+            os.kill(app.pid, 0)
+        except ProcessLookupError:
+            raise SuiteAppDied('Open exited unexpectedly; stopped at first App death') from None
 
 
 class FocusTracker:
@@ -124,6 +203,8 @@ class CheckedResults(dict):
         self.tracker = tracker
 
     def __setitem__(self, key, value):
+        if isinstance(value, dict) and ("ok" in value or "status" in value):
+            value.setdefault("load", os.getloadavg())
         if isinstance(value, dict) and "ok" in value:
             self.tracker.check_alive()
             interruptions = self.tracker.loss()
@@ -135,10 +216,16 @@ class CheckedResults(dict):
                 raise FocusInterruption("foreground lost during " + key, interruptions)
             self.tracker.checkpoint()
         super().__setitem__(key, value)
+        if _ROW_TIMEOUT is not None:
+            if isinstance(value, dict) and value.get('ok') is False:
+                print(key + ' FAIL; stopping before the next row', flush=True)
+                raise SuiteStopped('row failed: ' + key)
+            begin_row('after ' + key)
 
 
 class Open:
     def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None, delivery_urls=(), first_run=False):
+        check_suite_app_death()
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
             raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
@@ -163,6 +250,7 @@ class Open:
         self.pid = None
         self.launch_waiter_ended_before_automation = False
         self.closed = False
+        self.quitting = False
         self.native_steps = []
         self.timing_steps = []
         self.observation_steps = []
@@ -174,9 +262,8 @@ class Open:
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
-        # A raw executable launch can have a visible window but no foreground
-        # activation grant. Launch the actual bundle through LaunchServices,
-        # just as a user does. -W tracks this new instance through app exit.
+        # Keep LaunchServices for delivery fixtures. Strict acceptance launches
+        # the executable as our direct child, then activates that exact PID.
         self.launch_log_path = log_path + ".launch-%d.log" % time.time_ns()
         # The first-frame timeout fixture also uses open without -W. Its
         # successful early launcher exit must not be mistaken for app exit.
@@ -187,17 +274,37 @@ class Open:
             if key.startswith("OPEN_") or key in (extra_env or {}):
                 launch += ["--env", key + "=" + value]
         launch += ["--args"] + args[1:]
-        self.proc = subprocess.Popen(launch, stdout=self.log, stderr=subprocess.STDOUT)
+        self.direct_child = _ROW_TIMEOUT is not None
+        self.proc = subprocess.Popen(args if self.direct_child else launch,
+                                     env=env if self.direct_child else None,
+                                     stdout=self.log, stderr=subprocess.STDOUT)
+        if self.direct_child:
+            self.pid = self.proc.pid
         _OWNED_APPS.append(self)
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
-                self.pid = self.call("ping")["pid"]
+                actual_pid = self.call("ping")["pid"]
+                if self.direct_child and actual_pid != self.proc.pid:
+                    raise SuiteStopped('automation PID is not the direct App child')
+                self.pid = actual_pid
+                if self.direct_child:
+                    parent = subprocess.check_output(['ps', '-p', str(self.pid), '-o', 'ppid='], text=True, timeout=5)
+                    if int(parent.strip()) != os.getpid():
+                        raise SuiteStopped('Open is not a child of this harness')
+                    print('direct_app_child PASS pid=%d parent=%d' % (self.pid, os.getpid()), flush=True)
                 self.discover_owned_processes()
+                if self.direct_child:
+                    activation = subprocess.run([self.activator, str(self.pid), self.executable],
+                                                capture_output=True, text=True, timeout=10)
+                    if activation.returncode:
+                        raise FocusInterruption('direct App child activation refused', [])
                 return
             except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
             if self.proc.poll() is not None:
+                if self.direct_child:
+                    raise SuiteAppDied('direct App child exited before automation was ready')
                 # LaunchServices may fail its -W GetProcessPID wait independently
                 # of launching the app. Only the real socket establishes readiness.
                 self.launch_waiter_ended_before_automation = True
@@ -205,6 +312,19 @@ class Open:
         raise RuntimeError("Open automation was not ready within 60 s (launcher exit %s); see %s" % (self.proc.returncode, log_path))
 
     def call(self, cmd, timeout=120, **args):
+        if os.environ.get('OPEN_E2E_TRACE_COMMANDS') != '1':
+            return self._call(cmd, timeout, **args)
+        # Names only: arguments and replies can contain fixture secrets.
+        print('automation start ' + cmd, flush=True)
+        started = time.monotonic()
+        try:
+            return self._call(cmd, timeout, **args)
+        finally:
+            print('automation end %s %.3fs' % (cmd, time.monotonic() - started), flush=True)
+
+    def _call(self, cmd, timeout=120, **args):
+        if not self.quitting:
+            check_suite_app_death(self)
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
         foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
@@ -295,7 +415,7 @@ class Open:
         # The unique data-root argument also finds a launch that failed before
         # ping returned its PID. Do not kill by app name or bundle identifier.
         rows = []
-        for line in subprocess.check_output(["ps", "-axo", "pid=,ppid="], text=True).splitlines():
+        for line in subprocess.check_output(["ps", "-axo", "pid=,ppid="], text=True, timeout=5).splitlines():
             fields = line.split()
             if len(fields) == 2:
                 rows.append((int(fields[0]), int(fields[1])))
@@ -307,7 +427,7 @@ class Open:
             for pid, _ in rows:
                 if self.process_path(pid) != root_path:
                     continue
-                args = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True).stdout
+                args = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, timeout=5).stdout
                 if "--user-data-dir=" + self.user_data in args:
                     owned.add(pid)
                     self.pid = pid
@@ -346,7 +466,8 @@ class Open:
     def quit(self):
         if self.closed:
             return
-        self.quit_report = {}
+        self.quitting = True  # Cleanup must work after the fatal guard fires.
+        self.quit_report = {'direct_child': self.direct_child}
         try:
             self.discover_owned_processes()
             self.cleanup_surfaces()
@@ -456,39 +577,57 @@ def new_tab(app, url, **kw):
 
 @contextlib.contextmanager
 def passwords_fixture_server():
-    """Own one loopback server/ephemeral port; share URLs and engine switches.
+    """Loopback HTTP plus HTTPS, trusted only by this run's certificate SPKI.
 
-    Pass ``engine_switches`` as factory(extra_args=...). CEF receives the
-    App's argv (OEEngine.mm, CefMainArgs), in addition to additionalSwitches.
-    No form values or HTTP headers are logged by the server.
+    The throwaway certificate/key never enter the repo or the system trust
+    store. HTTP remains available to prove payment security guards.
     """
     import select
     server = os.path.join(ROOT, 'tools/e2e/fixtures/passwords/server.py')
-    proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0'],
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    try:
-        if not select.select([proc.stdout], [], [], 10)[0]:
-            raise RuntimeError('passwords fixture server startup timed out')
-        port = int(proc.stdout.readline().strip())
-        local = 'http://localhost:%d' % port
-        login = 'http://login.example.com'
-        yield {'port': port, 'login': login + '/login.html',
-               'change': login + '/change.html', 'signup': login + '/signup.html',
-               'iframe': 'http://other.example.com/iframe.html',
-               'address': login + '/address.html', 'card': local + '/card.html',
-               'webauthn': local + '/webauthn.html', 'basic': login + '/basic',
-               'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
-               'local_login': local + '/login.html',
-               'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
-                                   '--no-proxy-server']}
-    finally:
-        proc.terminate()
+    with tempfile.TemporaryDirectory(prefix='open-passwords-tls-',
+                                     dir=os.environ.get('OPEN_E2E_RESOURCE_DIR')) as certificate_dir:
+        os.chmod(certificate_dir, 0o700)
+        cert = os.path.join(certificate_dir, 'localhost.pem')
+        key = os.path.join(certificate_dir, 'localhost-key.pem')
+        config = os.path.join(certificate_dir, 'openssl.cnf')
+        Path(config).write_text('[req]\ndistinguished_name=dn\nx509_extensions=extensions\nprompt=no\n'
+                                '[dn]\nCN=localhost\n[extensions]\n'
+                                'subjectAltName=DNS:localhost,DNS:*.example.com,DNS:example.com\n')
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                        '-config', config, '-keyout', key, '-out', cert],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
+        os.chmod(key, 0o600)
+        public_key = subprocess.check_output(['openssl', 'x509', '-in', cert, '-pubkey', '-noout'], timeout=10)
+        spki = subprocess.check_output(['openssl', 'pkey', '-pubin', '-outform', 'DER'], input=public_key, timeout=10)
+        pin = base64.b64encode(hashlib.sha256(spki).digest()).decode('ascii')
+        proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0', '--cert', cert, '--key', key],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        proc.stdout.close()
+            if not select.select([proc.stdout], [], [], 10)[0]:
+                raise RuntimeError('passwords fixture server startup timed out')
+            ports = json.loads(proc.stdout.readline())
+            port = ports['http']; tls_port = ports['https']
+            assert all(isinstance(p, int) and 0 < p < 65536 for p in [port, tls_port])
+            local = 'http://localhost:%d' % port
+            secure = 'https://localhost:%d' % tls_port
+            login = 'http://login.example.com'
+            yield {'port': port, 'login': login + '/login.html',
+                   'change': login + '/change.html', 'signup': login + '/signup.html',
+                   'iframe': 'http://other.example.com/iframe.html',
+                   'address': login + '/address.html', 'card': secure + '/card.html',
+                   'http_card': local + '/card.html',
+                   'webauthn': secure + '/webauthn.html', 'basic': login + '/basic',
+                   'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
+                   'local_login': local + '/login.html',
+                   'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
+                                       '--no-proxy-server', '--ignore-certificate-errors-spki-list=' + pin]}
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill(); proc.wait()
+            proc.stdout.close()
 
 
 def frame(f):
@@ -937,7 +1076,7 @@ def feature_checks(app, style, results, tmp):
 
     def crash_recovery():
         if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
-            return {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+            return {"status": "DEFERRED", "reason": "M1-only by rule; not run"}
         c = new_tab(app, "https://example.com/", background=True)
         try:
             app.call("navigate", tab=c, url="chrome://crash")
@@ -5110,7 +5249,7 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     results["extension_reload_with_popup"] = reload_with_popup(None)
 
     if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
-        results["popup_renderer_crash"] = {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+        results["popup_renderer_crash"] = {"status": "DEFERRED", "reason": "M1-only by rule; not run"}
     else:
         # The popup's renderer crashes: the popup closes and Chrome terminates
         # the extension (its action goes away until it is reloaded); Open keeps
@@ -11827,7 +11966,7 @@ def page_translate_checks(factory, results, tmp):
 
 
 def main():
-    global _ACTIVE_FOCUS_TRACKER
+    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
@@ -11844,9 +11983,20 @@ def main():
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
+    ap.add_argument('--stop-on-app-death', action='store_true',
+                    help='stop every remaining flow after an App death or new Open crash report')
+    ap.add_argument('--row-timeout', type=int, default=120, help='strict-run row deadline in seconds (default 120)')
+    ap.add_argument('--suite-timeout', type=int, default=600, help='strict-run whole-suite cap, including cleanup (default 600)')
+    ap.add_argument('--e2e-supervised', action='store_true', help=argparse.SUPPRESS)
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.stop_on_app_death:
+        _SUITE_CRASH_BASELINE = _open_crash_reports()
+        if not 1 <= opts.row_timeout <= 120 or not opts.row_timeout <= opts.suite_timeout <= 3600:
+            ap.error('require 1 <= row-timeout <= 120 and row-timeout <= suite-timeout <= 3600')
+        _ROW_TIMEOUT = opts.row_timeout
+        signal.signal(signal.SIGALRM, row_timeout)
     if opts.firstrun_boosts_only and opts.only != "firstrun":
         ap.error("--firstrun-boosts-only requires --only firstrun")
     # Startup itself may migrate legacy Peek choices before the socket answers.
@@ -12214,13 +12364,15 @@ def main():
 
     interrupted_attempts = []
     # Never replay a potentially crashing probe row after foreground loss.
-    max_attempts = 1 if opts.only == 'passwords-probe' else 2 if opts.only == 'passwords' else 3
+    max_attempts = 1 if opts.stop_on_app_death or opts.only == 'passwords-probe' else 2 if opts.only == 'passwords' else 3
     for attempt in range(1, max_attempts + 1):
         tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
+            if opts.stop_on_app_death:
+                begin_row('startup')
             if opts.only in ('passwords-probe', 'passwords'):
                 _restore_defaults(None, {'open.links.littleOpenNUXSeen': True,
                                          'open.general.searchSuggestNoticeDismissed': True,
@@ -12237,7 +12389,9 @@ def main():
                 dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(death)})
             else:
                 interruption = {"reason": str(error), "focus": error.evidence}
-        except Exception as error:
+        except (Exception, SuiteAppDied, SuiteStopped) as error:
+            if opts.stop_on_app_death:
+                signal.setitimer(signal.ITIMER_REAL, 0)
             try:
                 loss = [] if getattr(error, 'fatal_app_death', False) or tracker.fatal_app_death else tracker.loss()
             except Exception:
@@ -12248,6 +12402,8 @@ def main():
                 dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(error)})
                 traceback.print_exc()
         finally:
+            if opts.stop_on_app_death:
+                signal.setitimer(signal.ITIMER_REAL, 0)
             for instance in _OWNED_APPS:
                 instance.quit()
             _restore_defaults(None, startup_peek)
@@ -12295,4 +12451,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if '--stop-on-app-death' in sys.argv and '--e2e-supervised' not in sys.argv:
+        sys.exit(supervise_suite(sys.argv[1:]))
     main()

@@ -323,7 +323,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `ext-menu` | `extension`, `source` (`toolbar` default, `menu`), `select`, `keep`, `stale` | The action's context menu items (title, command, enabled, checked, separator, submenu); with `select`, run the item with that title and return `items` and `ran`. `keep` keeps this menu open (not cancelled); `select` with `stale` then runs the item on that kept menu and cancels the new one |
 | `ext-popup` | — | The open popup: `open`, its page, its extension, its source (`user`, `command`, `api`), and `staysOpenOnBlur` |
 | `activate` | — | Activate Open and make the focused window key (Chrome's "active window"), even with a popup panel in front; returns `key` |
-| `windows` | — | Open's windows: number, class, frame, key, first responder |
+| `windows` | `accessibilityRoles?:true` | Open's windows: number, class, frame, key, first responder, parent and level. With `accessibilityRoles`, also returns unique native accessibility roles, without labels or values. |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
 | `window-interrupt` | `kind`: `key`, `sheet`, `end-sheet` | Own window only: order out the browser for native key loss, begin a small native sheet, or end that sheet. Used after tagged down/drag events without mouse-up to exercise resize cancellation. No system input. |
@@ -1198,8 +1198,8 @@ write a separate receipt so the primary crash evidence survives.
 ## Passwords acceptance
 
 `--only passwords --style chrome` runs M rows (synthetic sheets), MP rows
-(manage pages), P-1 through P-23, C-1 through C-3, PW-SW1 through PW-SW3
-(saving preferences), the real-sheet policy rows, PW-HF1 (HTTPS-First) and
+(manage pages), P-1 through P-24, C-1 through C-3, PW-SW1 through PW-SW3
+(saving preferences), the real-sheet policy rows, PW-HF1 and PW-HF2 (HTTPS-First) and
 PW-KC1 (Keychain failure). The harness starts the fixture server, maps
 `*.example.com` to its loopback port, and passes `--use-mock-keychain` plus
 `--open-allow-mock-keychain-secrets`. P-22 relaunches without the latter switch.
@@ -1210,9 +1210,26 @@ The harness restores all shared defaults it changes in `finally`.
 PW-HF1 checks the engine's runtime `supportsSecretsImport` capability before
 it exercises the 08xx HTTPS-First fix. The distribution SHA-256 stays in the
 receipt as evidence. A rebuild does not require a hash allowlist. PW-KC1 stays
-BLOCKED until the engine provides a synthetic failure path; this suite never
-accesses the real Keychain. Missing WebAuthn dialog support is reported as
+BLOCKED by lead decision and becomes a user hand check; no synthetic failure
+hook is added, and this suite never accesses the real Keychain. P-24 checks
+that `/login` → 302 `/welcome` → immediate JavaScript `/dashboard` navigation
+keeps the real save sheet visible until answered. Missing WebAuthn dialog support is reported as
 BLOCKED with its reason. A blocked row is never reported as PASS.
+
+Pass `--stop-on-app-death` to a regression suite to stop all remaining flows
+on the first failed row, unexpected App exit, new Open crash report, or lost
+foreground. Strict runs launch Open as a direct child and verify its OS parent
+PID. They do not retry. `--row-timeout` defaults to 120 seconds (maximum 120);
+`--suite-timeout` defaults to 600 seconds. A separate supervisor stops the
+owned worker process group at that cap, with at most 15 further seconds for
+forced cleanup. Row alarms bypass per-flow exception recovery. Optional
+`OPEN_E2E_TRACE_COMMANDS=1` logs command names and durations without arguments
+or replies. The initial F3 hang and incomplete acceptance are recorded in
+`docs/engine-spike/results-passwords.json`; the raw log is
+`.re/s15/f3/passwords-initial.log` in the F3 checkout.
+The old HTTPS-First failure is `Open-2026-11-06-203144.ips` (2026-11-06 20:31:44
+-0700): SIGABRT in `tabs::TabDialogManager::CreateTabScopedDialog` through
+`AskBeforeHttpDialogController::ShowDialog`; see the Step 0 crash receipt.
 
 Other fixture suites can load `tools/e2e/passwords.py` with `runpy.run_path`.
 `show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5)`

@@ -24,6 +24,12 @@ Cookie echo responses contain names only. `/basic` always returns 401 and
 never reads or reflects Authorization. WebAuthn buttons publish state/error
 names only and abort outstanding requests after five seconds.
 
+On `redirect.example.com`, the same `/login` POST returns 302 `/welcome`,
+then the welcome document immediately uses JavaScript to load `/dashboard`.
+P-24 checks the save sheet on that completed dashboard and answers Save.
+Run acceptance with `--stop-on-app-death` to stop all later flows if Open dies
+or writes a new crash report. PW-KC1 is a user hand check by lead decision.
+
 `--only passwords-probe --style chrome` writes the Step 0 observations to
 `docs/engine-spike/results-passwords-probe.json`. A feature can be absent while
 its crash-safety check passes. Missing saved data makes refill and re-auth

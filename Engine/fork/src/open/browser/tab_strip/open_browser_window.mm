@@ -4,6 +4,8 @@
 
 #include "open/browser/tab_strip/open_browser_window.h"
 #include "open/browser/autofill/open_autofill_bubble_handler.h"
+#include "open/browser/autofill/open_autofill_handler_registry.h"
+#include "open/browser/autofill/open_autofill_hooks.h"
 #include "content/public/browser/web_contents.h"
 
 #include <limits>
@@ -181,7 +183,19 @@ OpenBrowserWindow::OpenBrowserWindow(Profile* profile)
     : profile_(profile),
       location_bar_(std::make_unique<contextual_tasks::LocationBarStub>()),
       host_(std::make_unique<HostState>()),
-      autofill_handler_(std::make_unique<OpenAutofillBubbleHandler>()) {}
+      autofill_handler_(std::make_unique<OpenAutofillBubbleHandler>()) {
+  GetAutofillHooks().attach_popup = [](content::WebContents* contents,
+                                     gfx::NativeWindow popup_window) {
+    if (!IsOpenWebContents(contents)) return;
+    NSWindow* parent = contents->GetNativeView().GetNativeNSView().window;
+    NSWindow* popup = popup_window.GetNativeNSWindow();
+    // NativeWidgetMac only resolves Views parents. Hosted tabs live in the
+    // shell's AppKit window, so attach this non-activating Views popup there.
+    if (parent && popup && parent != popup && !popup.parentWindow) {
+      [parent addChildWindow:popup ordered:NSWindowAbove];
+    }
+  };
+}
 
 OpenBrowserWindow::~OpenBrowserWindow() {
   host_->StopObserving();
@@ -492,10 +506,13 @@ OpenBrowserWindow::PreHandleKeyboardEvent(
 
 bool OpenBrowserWindow::HandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
-  // A key the page and the tab's CEF client left unhandled: give the main
-  // menu a chance, as CefBrowserPlatformDelegateNativeMac does for Alloy.
+  // Renderer acknowledgements arrive after NSApplication's original dispatch.
+  // AppKit's menu fallback must see shortcuts only: replaying plain editing
+  // input here can invoke a menu action after that dispatch has ended.
   NSEvent* ns_event = event.os_event.Get();
-  if (ns_event.type == NSEventTypeKeyDown) {
+  const bool shortcut = ns_event.modifierFlags &
+      (NSEventModifierFlagCommand | NSEventModifierFlagControl);
+  if (ns_event.type == NSEventTypeKeyDown && shortcut) {
     return [[NSApp mainMenu] performKeyEquivalent:ns_event];
   }
   return false;
