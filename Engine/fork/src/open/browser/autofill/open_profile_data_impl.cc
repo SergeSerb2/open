@@ -279,9 +279,7 @@ class ProfileData final : public CefOpenProfileData,
   void GetCounts(CefRefPtr<CefOpenCountsCallback> callback) override {
     CEF_REQUIRE_UIT();
     if (!callback) return;
-    if (closed_ || jobs_.size() >= kMaxQueuedBatches) {
-      callback->OnCounts(0, 0, 0, 0, 0); return;
-    }
+    if (closed_) { callback->OnCounts(0, 0, 0, 0, 0); return; }
     jobs_.push_back({-1, nullptr, nullptr, callback}); RunNext();
   }
   void ImportLogins(Records records, CefRefPtr<CefOpenImportCallback> done) override {
