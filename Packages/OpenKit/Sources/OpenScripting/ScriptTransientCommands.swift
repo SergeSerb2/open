@@ -55,6 +55,21 @@ public final class ScriptTransientTabCommand: NSScriptCommand {
 @MainActor
 @objc(ScriptSetCommand)
 public final class ScriptSetCommand: NSSetCommand {
+    public override var isWellFormed: Bool {
+        guard ScriptThread.isMainThread else { return false }
+        nonisolated(unsafe) let command = self
+        MainActor.assumeIsolated { command.restoreDirectParameter() }
+        let valid = super.isWellFormed
+        #if DEBUG
+        NSLog("Open scripting set metadata valid=%d direct=%d receiver=%d eventDirect=%d eventValue=%d arguments=%@", valid,
+            directParameter != nil, receiversSpecifier != nil,
+            appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) != nil,
+            appleEvent?.paramDescriptor(forKeyword: 0x64617461) != nil,
+            (arguments?.keys.sorted() ?? []) as NSArray)
+        #endif
+        return valid
+    }
+
     public override var evaluatedReceivers: Any? {
         guard ScriptThread.isMainThread else { return nil }
         nonisolated(unsafe) let command = self
