@@ -57,6 +57,7 @@ final class TabStripMirror {
     if let moveObserver { owner.model.removeObserver(moveObserver); self.moveObserver = nil }
     for browser in browsers.values { browser.close() }; browsers.removeAll()
   }
+  func retireProfile(_ id: ProfileID) { browsers.removeValue(forKey:id)?.close() }
   #if OPEN_AUTOMATION
   /// Exercise OEBrowser.dealloc, not its explicit -close path. Web contents
   /// and the engine registry hold only weak browser references.

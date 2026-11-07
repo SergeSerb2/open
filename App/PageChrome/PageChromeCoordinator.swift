@@ -114,7 +114,7 @@ final class PageQuitCoordinator {
     if running { return false }
     var seen: Set<ObjectIdentifier> = []
     let owners = Array(app.hostFactories.values) + app.littleOpenHosts.values.compactMap(\.owner)
-    remaining = owners.filter { seen.insert(ObjectIdentifier($0)).inserted }.flatMap { owner in
+    remaining = owners.filter { !$0.isIncognito && seen.insert(ObjectIdentifier($0)).inserted }.flatMap { owner in
       owner.contents.values.filter(\.hasUnloadHandlers).map { (owner, $0) }
     }
     if remaining.isEmpty { return true }
