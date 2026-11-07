@@ -321,6 +321,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         _ = factory.performAppCommand(path.isEmpty ? "manage-extensions" : "extension-shortcuts"); return
       }
     }
+    if let page = AutofillPage.allCases.first(where: { $0.matches(url) }) {
+      factory.openAutofillPage(page, in: space); return
+    }
     _ = factory.openNewTab(url: url, background: false)
   }
   func openHelp(topic: String) { if let profile = app.model.defaultProfile { openURL(AppCommand.helpURL, profileID: profile.id) } }
