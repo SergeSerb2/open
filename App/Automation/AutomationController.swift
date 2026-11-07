@@ -93,6 +93,7 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "save-prompt": return try await savePrompt(a)
       case "events":
         let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []
@@ -214,6 +215,7 @@
       case "settings-icon": return try settingsIcon(a)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
+        if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
