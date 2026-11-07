@@ -101,6 +101,17 @@ def run(factory, results, tmp, harness, config):
                   tabs_before == tabs_after and space_count == after_count and after_count >= 2 and not little['sessions'],
                   tabsBefore=sorted(tabs_before), tabsAfter=sorted(tabs_after), little=little)
             quit_real()
+            if not restore:
+                # A fresh fallback still belongs to the external-link intake.
+                # Replacing its window state must keep the existing tag valid.
+                app = launch(fresh=True)
+                fresh = app.call('window-state')
+                fallback = app.call('little-open-state')['autoCreatedLaunchWindow']
+                previous = results['restore_off_one_default_centered']
+                check('restore_off_one_default_centered', previous['ok'] and fallback == fresh['id'],
+                      **{k: v for k, v in previous.items() if k != 'ok'},
+                      freshFallback=fallback, freshWindow=fresh['id'])
+                quit_real()
     finally:
         E._restore_defaults(app, saved)
         if app: app.quit()
