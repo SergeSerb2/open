@@ -93,8 +93,11 @@ def supervise_suite(arguments):
     options, _ = parser.parse_known_args(arguments)
     if not 1 <= options.suite_timeout <= 3600:
         raise SystemExit('--suite-timeout must be between 1 and 3600 seconds')
+    resources = tempfile.TemporaryDirectory(prefix='open-e2e-resources-')
+    os.chmod(resources.name, 0o700)
+    worker_env = dict(os.environ, OPEN_E2E_RESOURCE_DIR=resources.name)
     worker = subprocess.Popen([sys.executable, __file__, *arguments, '--e2e-supervised'],
-                              start_new_session=True)
+                              start_new_session=True, env=worker_env)
     def stop_supervisor(signum, _frame):
         raise SystemExit(128 + signum)
     signal.signal(signal.SIGTERM, stop_supervisor)
@@ -121,6 +124,8 @@ def supervise_suite(arguments):
         except ProcessLookupError:
             pass
         worker.wait(timeout=5)
+        # The supervisor also removes certificates after a forced worker exit.
+        resources.cleanup()
 
 
 def check_suite_app_death(app=None):
@@ -549,39 +554,57 @@ def new_tab(app, url, **kw):
 
 @contextlib.contextmanager
 def passwords_fixture_server():
-    """Own one loopback server/ephemeral port; share URLs and engine switches.
+    """Loopback HTTP plus HTTPS, trusted only by this run's certificate SPKI.
 
-    Pass ``engine_switches`` as factory(extra_args=...). CEF receives the
-    App's argv (OEEngine.mm, CefMainArgs), in addition to additionalSwitches.
-    No form values or HTTP headers are logged by the server.
+    The throwaway certificate/key never enter the repo or the system trust
+    store. HTTP remains available to prove payment security guards.
     """
     import select
     server = os.path.join(ROOT, 'tools/e2e/fixtures/passwords/server.py')
-    proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0'],
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    try:
-        if not select.select([proc.stdout], [], [], 10)[0]:
-            raise RuntimeError('passwords fixture server startup timed out')
-        port = int(proc.stdout.readline().strip())
-        local = 'http://localhost:%d' % port
-        login = 'http://login.example.com'
-        yield {'port': port, 'login': login + '/login.html',
-               'change': login + '/change.html', 'signup': login + '/signup.html',
-               'iframe': 'http://other.example.com/iframe.html',
-               'address': login + '/address.html', 'card': local + '/card.html',
-               'webauthn': local + '/webauthn.html', 'basic': login + '/basic',
-               'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
-               'local_login': local + '/login.html',
-               'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
-                                   '--no-proxy-server']}
-    finally:
-        proc.terminate()
+    with tempfile.TemporaryDirectory(prefix='open-passwords-tls-',
+                                     dir=os.environ.get('OPEN_E2E_RESOURCE_DIR')) as certificate_dir:
+        os.chmod(certificate_dir, 0o700)
+        cert = os.path.join(certificate_dir, 'localhost.pem')
+        key = os.path.join(certificate_dir, 'localhost-key.pem')
+        config = os.path.join(certificate_dir, 'openssl.cnf')
+        Path(config).write_text('[req]\ndistinguished_name=dn\nx509_extensions=extensions\nprompt=no\n'
+                                '[dn]\nCN=localhost\n[extensions]\n'
+                                'subjectAltName=DNS:localhost,DNS:*.example.com,DNS:example.com\n')
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                        '-config', config, '-keyout', key, '-out', cert],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
+        os.chmod(key, 0o600)
+        public_key = subprocess.check_output(['openssl', 'x509', '-in', cert, '-pubkey', '-noout'], timeout=10)
+        spki = subprocess.check_output(['openssl', 'pkey', '-pubin', '-outform', 'DER'], input=public_key, timeout=10)
+        pin = base64.b64encode(hashlib.sha256(spki).digest()).decode('ascii')
+        proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0', '--cert', cert, '--key', key],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        proc.stdout.close()
+            if not select.select([proc.stdout], [], [], 10)[0]:
+                raise RuntimeError('passwords fixture server startup timed out')
+            ports = json.loads(proc.stdout.readline())
+            port = ports['http']; tls_port = ports['https']
+            assert all(isinstance(p, int) and 0 < p < 65536 for p in [port, tls_port])
+            local = 'http://localhost:%d' % port
+            secure = 'https://localhost:%d' % tls_port
+            login = 'http://login.example.com'
+            yield {'port': port, 'login': login + '/login.html',
+                   'change': login + '/change.html', 'signup': login + '/signup.html',
+                   'iframe': 'http://other.example.com/iframe.html',
+                   'address': login + '/address.html', 'card': secure + '/card.html',
+                   'http_card': local + '/card.html',
+                   'webauthn': secure + '/webauthn.html', 'basic': login + '/basic',
+                   'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
+                   'local_login': local + '/login.html',
+                   'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
+                                       '--no-proxy-server', '--ignore-certificate-errors-spki-list=' + pin]}
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill(); proc.wait()
+            proc.stdout.close()
 
 
 def frame(f):

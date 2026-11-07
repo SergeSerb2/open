@@ -5,7 +5,7 @@ import CoreFoundation
 
 extension AutomationController {
   func credentialPreferences(_ args: [String: Any]) throws -> [String: Any] {
-    let keys = ["passwordSaving", "cardsSaving", "addressesSaving"]
+    let keys = ["passwordSaving", "cardsSaving", "addressesSaving", "cardReauthentication"]
     guard args.keys.allSatisfy({ keys.contains($0) || $0 == "profile" }),
           keys.allSatisfy({ key in
             guard let value = args[key] else { return true }
@@ -13,7 +13,7 @@ extension AutomationController {
             return CFGetTypeID(number) == CFBooleanGetTypeID()
           }),
           args["profile"] == nil || (args["profile"] as? String).map({ $0.utf8.count <= 4096 }) == true else {
-      throw Failure(message: "expected profile and optional passwordSaving, cardsSaving, addressesSaving booleans")
+      throw Failure(message: "expected profile and optional passwordSaving, cardsSaving, addressesSaving, cardReauthentication booleans")
     }
     let factory = try window
     let profile = (args["profile"] as? String).flatMap { requested in
@@ -23,7 +23,8 @@ extension AutomationController {
     if let value = args["passwordSaving"] as? Bool { context.passwordSavingEnabled = value }
     if let value = args["cardsSaving"] as? Bool { context.creditCardsSavingEnabled = value }
     if let value = args["addressesSaving"] as? Bool { context.addressesSavingEnabled = value }
-    return ["passwordSaving": context.passwordSavingEnabled, "cardsSaving": context.creditCardsSavingEnabled,
+    if let value = args["cardReauthentication"] as? Bool { context.creditCardReauthenticationEnabled = value }
+    return ["cardReauthentication": context.creditCardReauthenticationEnabled, "passwordSaving": context.passwordSavingEnabled, "cardsSaving": context.creditCardsSavingEnabled,
       "addressesSaving": context.addressesSavingEnabled, "canEnablePasswordSaving": context.canEnablePasswordSaving,
       "canEnableCardsSaving": context.canEnableCreditCardsSaving, "canEnableCreditCardsSaving": context.canEnableCreditCardsSaving]
   }
