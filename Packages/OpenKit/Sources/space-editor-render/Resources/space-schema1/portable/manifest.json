@@ -28,6 +28,24 @@
         }
       },
       "reason": "Same-scale 2x render from unchanged trusted main. AppKit text and symbol rasterization follows the main backing scale and ICC profile. Existing 1x references stay byte-for-byte unchanged."
+    },
+    "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43": {
+      "original": true,
+      "renderScale": 1,
+      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "reason": "Original references on trusted main. No PNG is regenerated. Exact original byte comparisons and render scale 1 remain in force.",
+      "pngSHA256": {
+        "legacy": {
+          "window-0.png": "2631803ef7ccacd9992a211dd3ebf60a0ea807486f65340e8d7ffcb21253819c",
+          "window-1.png": "c75aa5197edcc3f463d104b1778cf8f922635858b4bf72469fbf60716c172dfa",
+          "window-2.png": "288e647edeeb792c28534a92492282401d0858209837abe28d2c568c0084a94b"
+        },
+        "editor": {
+          "window-0.png": "4a275632fc96d590060566c3cf47aadd5dacf31ec81b111d4f43ac192808d7a9",
+          "window-1.png": "e5756cd9be3da70fc31561f7a4e2dfb2891ce43a054f30b96a3b7f85999c6754",
+          "window-2.png": "bea8d9f21317991961b89de98ef4af4356999fa42d3101f3dbb175d1f295e7d9"
+        }
+      }
     }
   }
 }

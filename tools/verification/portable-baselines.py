@@ -26,11 +26,10 @@ def legacy_baseline(root):
     manifest = json.loads((resources / "manifest.json").read_text())
     entry = manifest["environments"].get(environment["key"])
     if entry is None:
-        print(f"legacy baseline: original strict bytes; display {environment['key']}")
-        return root / "Packages/OpenKit/Fixtures/space-schema1", 1
+        raise ValueError(f"unknown legacy display key {environment['key']}; record a new trusted-main reference; no fallback")
     if entry["renderScale"] != environment["backingScale"] or not re.fullmatch(r"[0-9a-f]{40}", entry["trustedMainCommit"]):
         raise ValueError("invalid trusted legacy baseline metadata")
-    directory = resources / environment["key"] / "legacy"
+    directory = root / "Packages/OpenKit/Fixtures/space-schema1" if entry.get("original") else resources / environment["key"] / "legacy"
     for space in range(3):
         name = f"window-{space}.png"
         path = directory / name

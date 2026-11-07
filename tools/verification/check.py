@@ -304,6 +304,8 @@ def legacy_space_fixture(cli, root):
         output = Path(f"legacy-space-{space}.png").resolve()
         run(renderer, "render", "--snapshot", str(directory), "--space", str(space),
             "--size", "900x700", "--scale", str(scale), "--out", str(output))
+        if os.environ.get("OPEN_VERIFY_BREAK") in ("all", "legacy"):
+            run("/usr/bin/swift", str(Path(__file__).with_name("break-render.swift")), str(output), "pixel")
         require(output.read_bytes() == (baseline / f"window-{space}.png").read_bytes(),
                 f"legacy Space {space} PNG differs from the committed pre-Step-1 baseline")
     require((fixture / "State/browser.json").read_bytes() == original, "legacy fixture source was modified")

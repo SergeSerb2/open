@@ -9,6 +9,7 @@ import CryptoKit
 enum Checks {
     struct PortableBaselines: Decodable {
         struct Entry: Decodable {
+            let original: Bool?
             let renderScale: Int
             let trustedMainCommit: String
             let pngSHA256: [String: [String: String]]
@@ -18,7 +19,12 @@ enum Checks {
     }
 
     static func legacyBaseline() throws -> (directory: String, scale: Double, digests: [String: String]?) {
-        guard let screen = NSScreen.main, [1.0, 2.0].contains(screen.backingScaleFactor),
+        guard let main = NSScreen.main else { throw CLIError(description: "P1 no main display") }
+        let host = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+                            styleMask: .borderless, backing: .buffered, defer: false, screen: main)
+        host.isReleasedWhenClosed = false
+        defer { host.close() }
+        guard let screen = host.screen, [1.0, 2.0].contains(screen.backingScaleFactor),
               let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304 else {
             throw CLIError(description: "P1 main display has no supported scale/ICC profile")
         }
@@ -31,8 +37,7 @@ enum Checks {
             throw CLIError(description: "invalid P1 baseline manifest")
         }
         guard let entry = manifest.environments[key] else {
-            print("P1 baseline: original strict bytes; display \(key)")
-            return ("", 1, nil)
+            throw CLIError(description: "unknown P1 display key \(key); record a new trusted-main reference; no fallback")
         }
         guard entry.renderScale == Int(screen.backingScaleFactor),
               entry.trustedMainCommit.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil,
@@ -40,7 +45,7 @@ enum Checks {
             throw CLIError(description: "invalid trusted P1 baseline metadata")
         }
         print("P1 baseline: \(key); trusted main \(entry.trustedMainCommit); byte identity")
-        return ("portable/\(key)/editor/", Double(entry.renderScale), hashes)
+        return (entry.original == true ? "" : "portable/\(key)/editor/", Double(entry.renderScale), hashes)
     }
     static var passed = 0
     static var failed = 0
@@ -210,7 +215,26 @@ enum Checks {
         for space in 0..<3 {
             let scene = try RenderCLI.scene(model: reloaded, args: ["--space", String(space)], size: CGSize(width: 900, height: 700))
             scene.background.renderScale = baseline.scale
-            let image = OffscreenRenderer().render(scene, scale: baseline.scale)
+            var image = OffscreenRenderer().render(scene, scale: baseline.scale)
+            if ["all", "editor"].contains(ProcessInfo.processInfo.environment["OPEN_VERIFY_BREAK"] ?? "") {
+                guard let data = image.dataProvider?.data, let colorSpace = image.colorSpace,
+                      image.bitsPerPixel == 32, image.bitsPerComponent == 8 else {
+                    throw CLIError(description: "unsupported P1 negative-proof image")
+                }
+                var bytes = [UInt8](data as Data)
+                let offset = (image.height / 2) * image.bytesPerRow + (image.width / 2) * 4
+                guard offset < bytes.count else { throw CLIError(description: "P1 proof pixel outside image") }
+                bytes[offset] ^= 1
+                guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+                      let altered = CGImage(width: image.width, height: image.height, bitsPerComponent: 8,
+                                            bitsPerPixel: 32, bytesPerRow: image.bytesPerRow, space: colorSpace,
+                                            bitmapInfo: image.bitmapInfo, provider: provider, decode: nil,
+                                            shouldInterpolate: false, intent: image.renderingIntent) else {
+                    throw CLIError(description: "P1 proof image construction failed")
+                }
+                image = altered
+                print("P1 negative proof: one rendered pixel channel changed by 1/255")
+            }
             let file = directory.appendingPathComponent("window-\(space).png")
             OffscreenRenderer.writePNG(image, to: file)
             let name = "window-\(space).png"

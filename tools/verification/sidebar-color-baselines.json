@@ -1,4 +1,386 @@
 {
   "schemaVersion": 1,
-  "environments": {}
+  "environments": {
+    "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43": {
+      "original": true,
+      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "colorLimits": {
+        "static-active": "1.59",
+        "static-inactive": "1.17",
+        "row-hover": "1.59",
+        "selected-pinned": "1.73",
+        "selected-favorite": "1.59",
+        "toggle-hover": "1.59",
+        "home-hover": "1.59",
+        "newtab-hover": "1.59",
+        "newtab-open": "2.00",
+        "selected-today": "2.03",
+        "default-dark": "1.77",
+        "yellow": "1.95",
+        "blue-grain": "2.38"
+      },
+      "reason": "Exact original M5 limits. No cap or reference changed."
+    },
+    "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856": {
+      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "baselineBinarySHA256": "9da313a5d133b0c6e462e515a5f5d63a8e4e474d8cd29de15f7d6c7df8e06847",
+      "renderScale": 1,
+      "colorLimits": {
+        "static-active": "1.56",
+        "static-inactive": "1.31",
+        "row-hover": "1.56",
+        "selected-pinned": "2.71",
+        "selected-favorite": "1.56",
+        "toggle-hover": "1.56",
+        "home-hover": "1.56",
+        "newtab-hover": "1.55",
+        "newtab-open": "2.00",
+        "selected-today": "2.03",
+        "default-dark": "1.77",
+        "yellow": "2.25",
+        "blue-grain": "2.34"
+      },
+      "measurements": [
+        {
+          "name": "static-active",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 2,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 3,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            }
+          ]
+        },
+        {
+          "name": "static-inactive",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.31"
+            },
+            {
+              "attempt": 2,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.31"
+            },
+            {
+              "attempt": 3,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.31"
+            }
+          ]
+        },
+        {
+          "name": "row-hover",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 33,
+              "summaryCount": 33,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 2,
+              "count": 33,
+              "summaryCount": 33,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 3,
+              "count": 33,
+              "summaryCount": 33,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            }
+          ]
+        },
+        {
+          "name": "selected-pinned",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 33,
+              "summaryCount": 33,
+              "position": "1.0",
+              "worstDeltaE00": "2.71"
+            },
+            {
+              "attempt": 2,
+              "count": 33,
+              "summaryCount": 33,
+              "position": "1.0",
+              "worstDeltaE00": "2.71"
+            },
+            {
+              "attempt": 3,
+              "count": 33,
+              "summaryCount": 33,
+              "position": "1.0",
+              "worstDeltaE00": "2.71"
+            }
+          ]
+        },
+        {
+          "name": "selected-favorite",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 28,
+              "summaryCount": 28,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 2,
+              "count": 28,
+              "summaryCount": 28,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 3,
+              "count": 28,
+              "summaryCount": 28,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            }
+          ]
+        },
+        {
+          "name": "toggle-hover",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 2,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 3,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "1.0",
+              "worstDeltaE00": "1.56"
+            }
+          ]
+        },
+        {
+          "name": "home-hover",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "2.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 2,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "2.0",
+              "worstDeltaE00": "1.56"
+            },
+            {
+              "attempt": 3,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "2.0",
+              "worstDeltaE00": "1.56"
+            }
+          ]
+        },
+        {
+          "name": "newtab-hover",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "1.0",
+              "worstDeltaE00": "1.55"
+            },
+            {
+              "attempt": 2,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "1.0",
+              "worstDeltaE00": "1.55"
+            },
+            {
+              "attempt": 3,
+              "count": 29,
+              "summaryCount": 29,
+              "position": "1.0",
+              "worstDeltaE00": "1.55"
+            }
+          ]
+        },
+        {
+          "name": "newtab-open",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 35,
+              "summaryCount": 35,
+              "position": "1.0",
+              "worstDeltaE00": "2.00"
+            },
+            {
+              "attempt": 2,
+              "count": 35,
+              "summaryCount": 35,
+              "position": "1.0",
+              "worstDeltaE00": "2.00"
+            },
+            {
+              "attempt": 3,
+              "count": 35,
+              "summaryCount": 35,
+              "position": "1.0",
+              "worstDeltaE00": "2.00"
+            }
+          ]
+        },
+        {
+          "name": "selected-today",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 36,
+              "summaryCount": 36,
+              "position": "1.0",
+              "worstDeltaE00": "2.03"
+            },
+            {
+              "attempt": 2,
+              "count": 36,
+              "summaryCount": 36,
+              "position": "1.0",
+              "worstDeltaE00": "2.03"
+            },
+            {
+              "attempt": 3,
+              "count": 36,
+              "summaryCount": 36,
+              "position": "1.0",
+              "worstDeltaE00": "2.03"
+            }
+          ]
+        },
+        {
+          "name": "default-dark",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.77"
+            },
+            {
+              "attempt": 2,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.77"
+            },
+            {
+              "attempt": 3,
+              "count": 31,
+              "summaryCount": 31,
+              "position": "1.0",
+              "worstDeltaE00": "1.77"
+            }
+          ]
+        },
+        {
+          "name": "yellow",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 23,
+              "summaryCount": 23,
+              "position": "1.0",
+              "worstDeltaE00": "2.25"
+            },
+            {
+              "attempt": 2,
+              "count": 23,
+              "summaryCount": 23,
+              "position": "1.0",
+              "worstDeltaE00": "2.25"
+            },
+            {
+              "attempt": 3,
+              "count": 23,
+              "summaryCount": 23,
+              "position": "1.0",
+              "worstDeltaE00": "2.25"
+            }
+          ]
+        },
+        {
+          "name": "blue-grain",
+          "measurements": [
+            {
+              "attempt": 1,
+              "count": 19,
+              "summaryCount": 19,
+              "position": "1.0",
+              "worstDeltaE00": "2.34"
+            },
+            {
+              "attempt": 2,
+              "count": 19,
+              "summaryCount": 19,
+              "position": "1.0",
+              "worstDeltaE00": "2.34"
+            },
+            {
+              "attempt": 3,
+              "count": 19,
+              "summaryCount": 19,
+              "position": "1.0",
+              "worstDeltaE00": "2.34"
+            }
+          ]
+        }
+      ],
+      "reason": "Three unchanged trusted-main renders per state. Offscreen scale stays 1 to match the 1x reference captures. AppKit rasterization differs with the native screen backing scale and ICC profile. The M5 entry preserves every original cap; paired geometry and 0.15 DeltaE drift remain unchanged."
+    }
+  }
 }

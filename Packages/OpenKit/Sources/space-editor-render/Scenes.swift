@@ -38,8 +38,9 @@ final class OffscreenRenderer {
     /// Puts `view` in an offscreen window at `scale` and lays it out.
     static func host(_ view: NSView, scale: CGFloat) -> ScaledWindow {
         let size = view.bounds.size
-        let window = ScaledWindow(contentRect: CGRect(origin: CGPoint(x: -20000, y: -20000), size: size),
-                                  styleMask: [.borderless], backing: .buffered, defer: false)
+        // Never ordered on screen. Match the scale/ICC screen used by P1's key.
+        let window = ScaledWindow(contentRect: CGRect(origin: .zero, size: size),
+                                  styleMask: [.borderless], backing: .buffered, defer: false, screen: NSScreen.main)
         window.scale = scale
         window.isReleasedWhenClosed = false
         window.colorSpace = .sRGB

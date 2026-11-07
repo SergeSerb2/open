@@ -3,7 +3,15 @@ import CryptoKit
 
 // Read display metadata only. This helper creates no window and sends no event.
 _ = NSApplication.shared
-guard let screen = NSScreen.main, [1.0, 2.0].contains(screen.backingScaleFactor),
+NSApp.setActivationPolicy(.prohibited)
+guard let main = NSScreen.main else { fputs("verification: no main display\n", stderr); exit(1) }
+// Match the render harness host: never order it on screen. Read its actual screen,
+// rather than the requested synthetic render scale (which can be 1 on a 2x panel).
+let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+                      styleMask: .borderless, backing: .buffered, defer: false, screen: main)
+window.isReleasedWhenClosed = false
+defer { window.close() }
+guard let screen = window.screen, [1.0, 2.0].contains(screen.backingScaleFactor),
       let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304 else {
     fputs("verification: main display has no supported scale/ICC profile\n", stderr)
     exit(1)

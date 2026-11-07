@@ -151,6 +151,9 @@ def run_state(renderer, root, capture, state, target):
     common = ["--width", "228", "--scale", "1"]
     command([renderer, "render", "--snapshot", root / snapshot, "--out", target / "render.png", "--size", f"{width}x{height}",
              "--appearance", "dark", *([] if "--space" in render else ["--space", "0"]), *common, *render], target / "render.log")
+    if os.environ.get("OPEN_VERIFY_BREAK") in ("all", "color") and "branch" in target.parts:
+        command(["/usr/bin/swift", Path(__file__).with_name("break-render.swift"), target / "render.png", "color"],
+                target / "negative-proof.log")
     command([renderer, "compare", "--arc", capture, "--ours", target / "render.png", "--out", target,
              "--title", name, *common, *compare], target / "compare.log")
     return (target / "table.md").read_bytes()
@@ -287,6 +290,8 @@ def main():
     key = environment["key"]
     manifest = json.loads(Path(__file__).with_name("sidebar-color-baselines.json").read_text())
     entry = manifest["environments"].get(key)
+    if entry is None and not args.record_limits:
+        raise ValueError(f"unknown sidebar display key {key}; record new trusted-main limits; no fallback")
     color_limits = entry["colorLimits"] if entry else {}
     if args.record_limits and (entry or args.baseline_renderer or args.baseline_ref != "origin/main"):
         raise ValueError("recording requires a new key and a clean origin/main build, without baseline overrides")
