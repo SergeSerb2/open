@@ -6,16 +6,17 @@ import json
 import math
 import os
 from pathlib import Path
+import runpy
 import statistics
 import time
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from extensions_p3 import pack_probe
+pack_probe = runpy.run_path(str(Path(__file__).with_name("extensions_p3.py")))["pack_probe"]
 
 
 def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions):
-    from profiles_extensions import run as profiles_extensions
+    profiles_extensions = runpy.run_path(str(Path(__file__).with_name("profiles_extensions.py")))["run"]
     profiles_extensions(factory, results, tmp, root, wait_until)
     if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") in ("profiles", "profiles-memory"):
         return
