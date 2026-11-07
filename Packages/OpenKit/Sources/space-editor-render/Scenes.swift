@@ -30,7 +30,8 @@ final class OffscreenRenderer {
     /// requested backing scale, so 2x renders work on a 1x display.
     func render(_ view: NSView, scale: CGFloat, colorSpace: CGColorSpace = OffscreenRenderer.sRGB,
                 verificationKey: String? = nil) -> CGImage {
-        let window = Self.host(view, scale: scale, verificationKey: verificationKey, verificationScreen: true)
+        let window = Self.host(view, scale: scale, verificationKey: verificationKey,
+                               verificationScreen: verificationKey != nil)
         let image = snapshot(view, scale: scale, colorSpace: colorSpace)
         window.contentView = nil
         window.close()
@@ -41,8 +42,8 @@ final class OffscreenRenderer {
     static func host(_ view: NSView, scale: CGFloat, verificationKey: String? = nil,
                      verificationScreen: Bool = false) -> ScaledWindow {
         let size = view.bounds.size
-        // render() never orders its host. Other suites can, so keep their original
-        // offscreen placement while P1 uses a host with a verifiable native screen.
+        // Only keyed P1 renders use a screen-associated host, never ordered.
+        // Other snapshots and suites retain their original offscreen placement.
         let origin = verificationScreen ? CGPoint.zero : CGPoint(x: -20000, y: -20000)
         let window = ScaledWindow(contentRect: CGRect(origin: origin, size: size),
                                   styleMask: [.borderless], backing: .buffered, defer: false,

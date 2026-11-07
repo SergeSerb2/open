@@ -25,7 +25,8 @@ final class OffscreenRenderer {
     /// AppKit builds and draws the layer tree normally. The window reports the
     /// requested backing scale, so 2x renders work on a 1x display.
     func render(_ view: NSView, scale: CGFloat) -> CGImage {
-        let window = Self.host(view, scale: scale, verificationScreen: true)
+        let window = Self.host(view, scale: scale,
+                               verificationScreen: ProcessInfo.processInfo.environment["OPEN_VERIFY_DISPLAY_KEY"] != nil)
         let image = snapshot(view, scale: scale)
         window.contentView = nil
         window.close()
@@ -35,8 +36,8 @@ final class OffscreenRenderer {
     /// Puts `view` in an offscreen window at `scale` and lays it out.
     static func host(_ view: NSView, scale: CGFloat, verificationScreen: Bool = false) -> ScaledWindow {
         let size = view.bounds.size
-        // Only render() uses a screen-associated host, and never orders it.
-        // Motion suites can order their hosts: retain their original offscreen frame.
+        // Only keyed verification renders use a screen-associated host, never ordered.
+        // Other snapshots and motion suites retain their original offscreen frame.
         let origin = verificationScreen ? CGPoint.zero : CGPoint(x: -20000, y: -20000)
         let window = ScaledWindow(contentRect: CGRect(origin: origin, size: size),
                                   styleMask: [.borderless], backing: .buffered, defer: false,
