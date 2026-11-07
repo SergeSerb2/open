@@ -648,6 +648,8 @@ Dark inactive windows add `w × (inactive − active backdrop)` = −26.7 levels
 
 The card draws the tint at opacity 0.885 over a `CABackdropLayer` with a `gaussianBlur` filter (radius 25, `scale` 0.25, normalized edges; `PageBlurLayer`). The window server renders it from what the window draws below the card, including the Chromium GPU process's page layers (checked: the card darkens over a dark page and lightens over a light band). CoreAnimation has no public backdrop layer; `NSVisualEffectView` adds its own tint and saturation, which would break the fitted 0.115 page share. Without the private classes the card stays opaque. The card shows the window's own field at its place (`ThemeBackgroundView.fieldFrame`), as Arc's card matches the anchored sidebar; before, the card stretched the field over its own width and was up to 4 levels redder. The card shadow is masked to the outside of the card, so the blur does not sample the shadow's fill. The backdrop layer exists only in the card's background view; it is hidden with the card and does no work while nothing under it changes.
 
+A key change rebuilds the window's field inside the same transaction as the key change (`ThemeBackgroundView.isWindowActive`): a 64 × 64 field or one solid color, so the inactive look lands with the window's own key-state change and no display tick later. A live resize still defers the rebuild to the next display tick.
+
 Real window, 1728 × 1084 at 1x, in-app snapshots (e2e `window`, rows `chrome_card_material`, `chrome_inactive_material`), region x 120–220, y 420–560 (card) and x 30–200, y 440–1000 (sidebar):
 
 | State | Arc | Open | ΔE00 |
