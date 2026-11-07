@@ -491,6 +491,16 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   virtual void Close() = 0;
 };
 
+///
+/// Automation diagnostic, available only with --open-automation on the UI
+/// thread. Returns the invalid host activation request count and the active
+/// Chrome window id, or nullptr outside automation. With |reset|, clears the
+/// count before returning it. Unsafe requests are counted and refused in
+/// automation so a regression reports a failure without ending the process.
+///
+/*--cef(added=experimental)--*/
+CefRefPtr<CefDictionaryValue> CefGetOpenBrowserActivationDiagnostics(bool reset);
+
 #endif  // CEF_API_ADDED(CEF_EXPERIMENTAL)
 
 #endif  // CEF_INCLUDE_CEF_TAB_STRIP_H_
