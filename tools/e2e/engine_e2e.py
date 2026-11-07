@@ -11838,6 +11838,8 @@ def main():
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
         ap.error('--passwords-probe-rows requires passwords-probe and unique PR-1 through PR-9 ids')
+    probe_result_name = ('results-passwords-probe-%s.json' % '-'.join(opts.passwords_probe_rows.split(','))
+                         if opts.passwords_probe_rows else 'results-passwords-probe.json')
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
         ap.error("--engine-sha256 must be 64 lowercase hexadecimal characters")
 
@@ -12019,7 +12021,9 @@ def main():
             results[opts.only] = {}
             results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
                 sys.modules[__name__], factory, results[opts.only], tmp,
-                row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None)
+                row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None,
+                result_name=probe_result_name,
+                engine_distribution_sha256=results['engine']['distributionSHA256'])
         elif opts.only == "firstrun":
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
@@ -12202,7 +12206,7 @@ def main():
     results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
-    name = ('results-passwords-probe.json' if opts.only == 'passwords-probe' else
+    name = (probe_result_name if opts.only == 'passwords-probe' else
             "results-actions-p2.json" if opts.only == "actions" else
             "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))

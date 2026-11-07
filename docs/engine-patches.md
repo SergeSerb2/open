@@ -612,3 +612,11 @@ All on-screen work stopped after the crash report arrived. The lead confirmed a 
 up to eight seconds for a delayed report after process death and supports
 `--passwords-probe-rows PR-8,PR-9` to finish unrun rows only after the lead has cleared
 the M5 screen hold. The crashed row must not be replayed until it is fixed.
+
+PR-7 is now blocked in the probe until the engine lead approves an exact fixed
+engine distribution hash. It cannot navigate the known HTTPS-First crash path
+on the current engine. An unrelated engine update does not enable it. After
+"M5 clear", run only PR-8 and PR-9 once. Selected runs use a separate result file
+so that they cannot overwrite the recorded PR-7 crash. The post-crash guard,
+delayed-report polling, and selected-row changes have source/CLI validation;
+they have not been exercised in the App during the screen hold.

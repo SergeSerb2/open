@@ -12,6 +12,12 @@ import time
 from pathlib import Path
 
 
+# Fail closed until the engine lead supplies the exact distribution containing
+# the TabDialogManager / HTTPS-First fallback fix. A different engine hash alone
+# is not evidence that PR-7 is safe to replay.
+PR7_FIXED_ENGINE_DISTRIBUTIONS = frozenset()
+
+
 class ProbeAbort(RuntimeError):
     """Deliberate early exit to verify real-dialog cleanup, never a crash."""
 
@@ -50,11 +56,12 @@ def crash_symbols(h, names):
     return symbols[:24]
 
 
-def run(h, factory, results, tmp, row_ids=None):
+def run(h, factory, results, tmp, row_ids=None,
+        result_name='results-passwords-probe.json', engine_distribution_sha256=None):
     app = None
     last_tab = None
     baseline = h._open_crash_reports()
-    out = Path(h.OUT) / 'results-passwords-probe.json'
+    out = Path(h.OUT) / result_name
     evidence = {'started': timestamp(), 'featureAssertions': False, 'load': os.getloadavg(), 'rows': results,
                 'isolation': 'fresh App/profile per row; saved-data refill and cookie relaunch stay inside their row',
                 'requestedRows': row_ids or ['PR-%d' % n for n in range(1, 10)]}
@@ -64,6 +71,15 @@ def run(h, factory, results, tmp, row_ids=None):
         raise RuntimeError('main engine root README has no distribution hash')
     evidence['recordedDistributionSHA256'] = hashes[-1]
     evidence['distributionHashSource'] = 'OPEN_ENGINE_ROOT/README.txt (last framework SHA-256)'
+    pr7_enabled = (engine_distribution_sha256 in PR7_FIXED_ENGINE_DISTRIBUTIONS
+                   and engine_distribution_sha256 == evidence['recordedDistributionSHA256'])
+    evidence['pr7EngineFixReceipt'] = {'enabled': pr7_enabled,
+        'actualDistributionSHA256': engine_distribution_sha256,
+        'reason': 'Exact fixed distribution receipt required before replaying the HTTPS-First crash path.'}
+    if 'PR-7' in evidence['requestedRows'] and not pr7_enabled:
+        results['PR-7'] = {'status': 'BLOCKED',
+            'reason': 'HTTPS-First fallback crash: PR-7 is disabled until the engine fix has an approved distribution hash.'}
+        print('PR-7 BLOCKED: engine fix receipt required; no HTTP Basic navigation attempted.', flush=True)
     readme = Path(h.ROOT) / 'Vendor/cef/README.txt'
     if readme.exists():
         import hashlib
@@ -76,6 +92,11 @@ def run(h, factory, results, tmp, row_ids=None):
     def persist():
         evidence['updated'] = timestamp()
         out.write_text(json.dumps(evidence, indent=2, sort_keys=True) + '\n')
+
+    if not any(rid != 'PR-7' or pr7_enabled for rid in evidence['requestedRows']):
+        evidence['finished'] = timestamp()
+        persist()
+        return {k: v for k, v in evidence.items() if k != 'rows'}
 
     def windows():
         return [{k: w[k] for k in ('number', 'class', 'visible', 'parent', 'sheet', 'key') if k in w}
@@ -273,6 +294,8 @@ def run(h, factory, results, tmp, row_ids=None):
                 row['newVisibleWindows'] = visible_delta(before)
                 row['limitation'] = 'Secure localhost origin has no seeded saved login; account chooser not established.'
             def basic(row):
+                if not pr7_enabled:
+                    raise ProbeAbort('PR-7 engine fix receipt is absent; HTTP navigation refused')
                 # Do not wait for navigation completion while auth is pending.
                 before = windows()
                 tab = app.call('open', url=urls['basic'])['id']
@@ -292,6 +315,8 @@ def run(h, factory, results, tmp, row_ids=None):
                 row['beforeQuit'] = app.eval(tab, 'JSON.parse(document.body.innerText)')
                 app.quit()
                 row['quitClean'] = app.quit_report.get('ok', False) and not app.quit_report.get('forced', True)
+                if not row['quitClean'] or app.quit_report.get('reply') is not True:
+                    raise RuntimeError('cookie relaunch refused after an unconfirmed shutdown')
                 new = sorted(h._open_crash_reports() - baseline)
                 if new:
                     raise RuntimeError('new crash report during quit; relaunch refused')
@@ -331,16 +356,22 @@ def run(h, factory, results, tmp, row_ids=None):
                         app.call('little-open-action', id=session['id'], action='close')
             actions = [('PR-1', login), ('PR-2', saved_login), ('PR-3', address), ('PR-4', card),
                        ('PR-5', webauthn), ('PR-6', credential_get), ('PR-7', basic), ('PR-8', cookies), ('PR-9', pages)]
-            actions = [(rid, action) for rid, action in actions if rid in evidence['requestedRows']]
+            actions = [(rid, action) for rid, action in actions if rid in evidence['requestedRows']
+                       and (rid != 'PR-7' or pr7_enabled)]
             for index, (rowid, action) in enumerate(actions):
                 if index:
                     # A popup can leave native AppKit key flags stale even
                     # after dismissal. Keep independent feature observations
                     # independent; do not let that window state invalidate
                     # every later form. No restart follows a crash.
+                    live_before_quit = bool(app.pid and app.process_path(app.pid) == os.path.realpath(app.executable))
                     app.quit()
-                    if h._open_crash_reports() - baseline:
-                        evidence['stopped'] = 'New crash report during between-row quit; relaunch refused.'
+                    if (not live_before_quit or app.quit_report.get('reply') is not True
+                            or app.quit_report.get('forced') or h._open_crash_reports() - baseline):
+                        previous = results[actions[index - 1][0]]
+                        previous.update(ok=False, betweenRowShutdownConfirmed=False)
+                        evidence['stopped'] = 'Process death, unconfirmed shutdown, or new crash report between rows; relaunch refused.'
+                        persist()
                         break
                     app = factory(urls=(), fresh=True, extra_args=urls['engine_switches'])
                     prepare_window()
