@@ -324,18 +324,22 @@ def checks(factory, results, tmp, config, harness):
             app.call('download-start-age', id=outside, seconds=(seconds * 2 if seconds else 20 * 86400))
             paths = [Path(item(k)['path']) for k in (inside, outside, other)]
             hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
-            before = {v['id'] for v in state()['items']}
+            before_items = state()['items']
+            before = {v['id'] for v in before_items}
             history_before = app.call('history-state', profile=profile)['rows']
             invalid = app.call('settings-clear-data', profile=profile, kinds=0, range=label)
             check('clear_validate_before_mutation_' + label, invalid['status'] != 'Done'
                   and {v['id'] for v in state()['items']} == before
                   and app.call('history-state', profile=profile)['rows'] == history_before, response=invalid)
             response = app.call('settings-clear-data', profile=profile, kinds=(15 if seconds is None else 8), range=label)
-            removed = {inside, failed, cancelled} | ({outside} if seconds is None else set())
+            removed = {v['id'] for v in before_items if v['profile'] == profile
+                       and v['state'] in ('completed', 'failed', 'cancelled')
+                       and (seconds is None or time.time() - v['startedAt'] <= seconds)}
             cleared = wait(lambda: not (removed & {v['id'] for v in state()['items']})
                            and not (removed & {v['id'] for v in state()['rows']}))
             retained = {v['id']: v for v in state()['items']}
             check('clear_downloads_' + label, response['status'] == 'Done' and cleared
+                  and set(retained) == before - removed
                   and retained.get(running, {}).get('state') == 'inProgress'
                   and retained.get(paused, {}).get('state') == 'paused' and other in retained
                   and (seconds is None or outside in retained)
