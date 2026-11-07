@@ -8,9 +8,16 @@ final class PageChromeCoordinator {
   unowned let owner: EngineWebContentHostFactory
   let dialogs = PageDialogPresenter()
   private var existingPermissions: PermissionPromptPresenter?
+  /// Bind Site Control geometry without constructing permission UI at launch.
+  var permissionAnchorProvider: ((OEWebContent) -> PermissionPromptPresenter.Anchor?)? {
+    didSet { existingPermissions?.anchorProvider = permissionAnchorProvider }
+  }
   var permissions: PermissionPromptPresenter {
     if let existingPermissions { return existingPermissions }
-    let presenter = PermissionPromptPresenter(owner: owner); existingPermissions = presenter; return presenter
+    let presenter = PermissionPromptPresenter(owner: owner)
+    presenter.anchorProvider = permissionAnchorProvider
+    existingPermissions = presenter
+    return presenter
   }
   func owns(_ window: NSWindow) -> Bool { existingPermissions?.owns(window) == true }
   func permissionPage(in window: NSWindow) -> OEWebContent? {

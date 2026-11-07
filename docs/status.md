@@ -351,16 +351,20 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app` after merging main `5a2cdec3`, fresh M5 Debug,
+On `s12/scc-app` after merging main `d54dc5e0`, fresh M5 Debug,
 automation Release and CLI builds pass. SCC has 23 PASS rows, S2/S4 BLOCKED,
 and S11/S12 FAIL at unchanged limits under the lead's interim ruling.
-P1 is 6.141 ms p95; all three native phase negatives are rejected. The heavy
+P1 is 6.067 ms p95; all three native phase negatives are rejected. The heavy
 page builds zero snapshots with the panel closed, one with it open, and zero
 for 250 title changes. X-13 passes in `extensions-ui` (72/72).
 The forced Advanced Settings failure restores saved defaults, closes both
-owned windows and leaves no process. Native proofs, remaining regressions,
-startup comparison and the final gate are pending. Interrupted and M1
-receipts do not count toward acceptance.
+owned windows and leaves no process. Native `sitecontrol-render` passes
+1549/1549, including F24/F25. M5 App suites pass: extensions-ui 72, toolbar 10,
+features 19, page 85 (4 blocked and 1 deferred), commandbar 77, split 40, and
+space-editor 167. Window has 83 PASS rows and two startup budget FAIL rows;
+pixel rows pass. Every suite has clean cleanup and no focus interruption.
+Startup qualification and the final full gate remain pending. Interrupted,
+M1 and superseded receipts do not count toward acceptance.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|

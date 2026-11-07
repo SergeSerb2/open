@@ -275,7 +275,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       }
     }
     #endif
-    pageChrome.permissions.anchorProvider = { [weak self] page in
+    pageChrome.permissionAnchorProvider = { [weak self] page in
       guard let self, let id = self.tabID(for: page), let anchor = self.controller?.visibleSiteControlAnchor(tabID: id) else { return nil }
       return PermissionPromptPresenter.Anchor(view: anchor, rect: anchor.bounds)
     }

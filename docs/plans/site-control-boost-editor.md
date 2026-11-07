@@ -1475,10 +1475,10 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 
 
 Step 3 verification (child A, 2026-11-07; PR pending): source head
-`04e9425f` has merged main `5a2cdec3`. Fresh M5 Debug, automation Release
+`97b3a8e7` has merged main `d54dc5e0`. Fresh M5 Debug, automation Release
 and all release CLIs build against main's engine. The automation dictionary
-has 43 unique keys, including one left and one right. The embedded engine
-code matches distribution `af4b3cc3`. Older and M1 receipts do not qualify
+has 45 unique keys, including one left and one right. The embedded engine
+code matches distribution `d94583ef`. Older and M1 receipts do not qualify
 this source.
 
 SCC records 23 PASS, S2/S4 BLOCKED, and S11/S12 FAIL. S1 verifies the actual
@@ -1503,16 +1503,16 @@ process left and no focus interruption. Earlier interrupted attempts remain
 excluded.
 
 R1-1 keeps signposts and gates forced layout/display/`CATransaction.flush()`
-on `onFirstDraw`, which only automation installs. P1 passes at 6.141 ms p95
-(6.290 ms including cold; first cold sample 17.552 ms). Separate native 12 ms
-layout/display/flush controls measure 54.073/29.389/28.079 ms and are rejected;
+on `onFirstDraw`, which only automation installs. P1 passes at 6.067 ms p95
+(6.152 ms including cold; first cold sample 15.511 ms). Separate native 12 ms
+layout/display/flush controls measure 53.516/26.784/28.291 ms and are rejected;
 each callback samples native call counts 3/1/1. This is native submission
 timing, not physical display scanout. Shipping presentation keeps normal
 AppKit scheduling.
 
 R1-2 uses a light button query, filtered source notifications and coalesced
 window refreshes. The 2000-card page builds zero full snapshots closed and
-one open (four light reads and one source delivery for each load). A burst
+one open (four/three light reads closed/open and one source delivery per load). A burst
 of 250 title changes builds zero snapshots, with five light reads and zero
 source deliveries. Full snapshot cost is O(1) per commit. R1-3 follows
 §3.6.1: empty Cmd+E focuses + and Return runs Add Extension. S1's empty case
@@ -1530,14 +1530,22 @@ implemented here. These new-suite visual FAIL rows are not regressions and
 do not block the interim merge under the lead ruling.
 
 P2 observes zero native SCC activity across all ten counters, and detects
-then clears its timer canary. S13 closed/open scroll p95 is 4.600/4.400 ms,
+then clears its timer canary. S13 closed/open scroll p95 is 4.500/4.400 ms,
 with zero dropped frames in either case; the slow-frame negative is rejected.
-Native F24/F25, remaining App regressions, startup comparison and the final
-full gate remain pending. The PR records every final count and load.
+Native `sitecontrol-render` passes 1549/1549, including F24/F25. The App
+regressions pass: extensions-ui 72, toolbar 10, features 19, page 85 (four
+blocked, one deferred), commandbar 77, split 40, and space-editor 167. Window
+has 83 PASS rows and two startup budget FAIL rows; its pixel rows pass. All
+suites have clean cleanup and no focus interruption. Startup qualification
+and the final full gate remain pending. The PR records every count and load.
 
-The retained offscreen commandbar comparison meets TANDEM §4c after a
+The historical offscreen commandbar comparison met TANDEM §4c after a
 30-minute quiet wait: main/branch CPU p95 medians 10.88/9.39 ms and inline
-medians 0.509/0.223 ms. All 149 non-timing rows pass in all six runs. The PR
+medians 0.509/0.223 ms. Those pre-merge timings are excluded from current
+acceptance. The fresh current-head quiet branch run passes 151/151 at
+CPU p95 4.09 ms and inline overhead +0.089 ms; unchanged main passes 150/151
+at 6.82 ms and +0.313 ms (the inline row fails). Both start at load1 ≤12.
+All 149 non-timing rows passed in all six historical runs. The PR
 includes all six runs, their raw timing failures and start/end loads. The
 lead's load ruling permits builds and functional suites at any load; timing
 misses keep their loads and are not waived as strict PASS. Add final receipts
