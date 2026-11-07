@@ -56,7 +56,7 @@ import OpenImport
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
     }
-    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
+    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Boosts","Passwords and cookies"]
     public var reportSummary:String {
         var parts:[String]=[]
         if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
@@ -132,7 +132,7 @@ public struct ImportWizard: View {
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : "Could not be read").monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
+                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : (name == "Boosts" ? model.outcome?.failures[name] ?? "Could not be read" : "Could not be read")).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
