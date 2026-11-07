@@ -136,7 +136,7 @@ budget.
 
 The explicit negative-proof switch only breaks checks. It cannot make a gate
 pass. `OPEN_VERIFY_BREAK=all` changes one channel of one rendered pixel by
-1/255 in each legacy check, changes one sampled URL-field fill by 2/255 in the
+1/255 in each legacy check, changes one sampled URL-field fill by 6/255 in the
 sidebar branch output, and increases the real remote timeout by 300 ms. It does
 not change any reference. Individual values are `legacy`, `editor`, `color`,
 and `suggest`. Leave this variable unset for positive and full runs.

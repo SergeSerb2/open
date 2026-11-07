@@ -26,7 +26,7 @@ case "color":
     for y in 48..<52 { for x in 60..<180 {
         let offset = y * image.bytesPerRow + x * 4 + channel
         guard offset < bytes.count else { exit(1) }
-        bytes[offset] = bytes[offset] <= 253 ? bytes[offset] + 2 : bytes[offset] - 2
+        bytes[offset] = bytes[offset] <= 249 ? bytes[offset] + 6 : bytes[offset] - 6
         changed += 1
     } }
 default: exit(2)
