@@ -1474,79 +1474,69 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-06; PR pending): current-head App flows,
-timing/pixel/color rows, startup comparison and full verification remain pending
-the screen holds. Debug and automation Release builds pass. The results below
-are historical pre-theme receipts; they do not qualify the current head.
-The `e0cb8699` receipt,
-after merging main `bfb7755a`, records Release `sitecontrol` with 21 PASS, 2 FAIL (S11/S12), and 3 BLOCKED
-(S2 Section 13 adapter, S4 Boost runtime, S10 incognito), with no interruptions
-and cleanup PASS. S1 verifies the unavailable ad-block row, its Advanced Settings
-action, and unchanged settings. The lead's 14:41 ruling keeps the actual main row,
-“Block Ads & Trackers”, `unavailable`, instead of S1's planned initial On state.
-The real tap must call `openAdBlockSettings` once and `toggle` zero times; automation
-records those action counts. The updated assertion still needs a fresh runtime
-receipt after the screen hold. Opening the store does not supply an engine adapter.
-S2 remains `blocked: section 13 ad-block adapter`; its real blocking flow stays
-ready and must pass when Section 13 binds the store. See the Section 13 follow-up.
-Both Section 12 suites use `tools/e2e/sitecontrol_fixtures.py`; only the SCC scroll
-page stays suite-local. The suite restores the sound, toolbar and Settings-pane
-defaults in `finally`. A separate forced failure with Advanced Settings open closes
-both owned windows and all owned processes, and restores its defaults.
+Step 3 verification (child A, 2026-11-06; PR pending): source head
+`06489af7` has merged main `94c7561c`. Fresh M5 Debug, automation Release and
+all release CLIs build successfully against main's engine. The automation key
+map has 43 unique entries, including one left and one right entry. The embedded
+engine code matches the `af4b3cc3` distribution. Offscreen sidebar comparison
+passes 13/13 states with byte-identical tables; CU5 passes both exact divider
+checks. Older acceptance receipts do not qualify this head; M1 receipts do not
+count.
 
-P1 first-draw p95 is 5.102 ms across all 35 opens, 4.908 ms after 5 declared warm-ups
-(first cold open 14.932 ms), load 13.55/11.31/12.54. The native delayed-draw canary is
-rejected at 29.243 ms. Only the automation callback forces layout/display and first
-Core Animation submission; shipping presentation keeps AppKit scheduling. This
-receipt does not claim physical display presentation. The source-refresh diagnostic
-records snapshots/buttons/change-deliveries of 0/3/1 for a closed page load, 1/3/1
-for an open page load, and 0/6/0 for 250 title changes. Button reads avoid permission
-and ad-block rows; source changes coalesce per visible tab on the next main-queue
-turn. Title, favicon and loading changes do not invalidate SCC rows.
+Three compiled real-App negative controls are rejected: eager AdBlockStore
+creation before engine startup, routing an unavailable row through toggle, and
+a false private-window snapshot flag. Focus and cleanup pass. An intentional
+failure after the specific Advanced Settings window opens closes both owned
+windows and all owned processes. A later explicit preference read-back attempt
+is INTERRUPTED in all three focus attempts by another build's crash dialog;
+none of its rows count. Preferences were restored and every owned App cleaned
+up. Rerun that case once after M5 screen clearance.
 
-Review R1-1 retains the signposts in every build and limits forced synchronous
-layout/display/flush to the installed `onFirstDraw` callback (automation only).
-The new negative-control code delays layout, display and flush separately;
-it samples native counters at that callback to check that each delayed phase is
-inside the receipt. R1-2 keeps the source/window coalescing and lightweight button query;
-its counter flow now loads the 2000-card heavy fixture with the panel
-closed and open. The earlier counts above used the smaller fixtures and do not
-replace this required heavy-fixture receipt. R1-3 follows §3.6.1 lines 365–367:
-with no extensions, Cmd+E focuses the "+" tile and Return runs `add-extension`.
-The real-key empty-picker flow is implemented. Fresh P1/native-negative,
-heavy-fixture, `window` Cmd+T, `commandbar` keystroke and empty-picker receipts
-remain pending the screen hold; these code changes alone do not prove runtime
-performance or physical display presentation.
+S1 verifies main's actual row, “Block Ads & Trackers”, `unavailable`, rather
+than the plan's initial On state (lead ruling 14:41). The real tap must call
+`openAdBlockSettings` once and `toggle` zero times. Opening Settings does not
+supply an engine adapter. S2 remains `blocked: section 13 ad-block adapter`;
+its real exclusion, persistence, reload and request-blocking flow must pass
+when Section 13 binds the existing store. S4 remains blocked on the shared
+Boost provider. Both Section 12 suites use one `fixture_server(tmp)` in
+`tools/e2e/sitecontrol_fixtures.py`; the 2000-card heavy page stays suite-local.
 
-P2 has ten zero scheduler/view counters and a timer canary of 1 then 0. Total App
-CPU is 2.283%, not zero (load 16.19/11.96/12.76). S13 scroll p95 is 4.9 ms closed and
-open, with zero dropped frames (load 13.62/11.26/12.54); the slow-frame canary is
-rejected at 12.6 ms. S11/S12 remain FAIL at unchanged limits: **open: material,
-R-7 follow-up (lead ruling)**. The shipped `.hudWindow` material and Dark #686881
-tint at 0.32 are **interim (lead 2026-11-06)**. S11's R-7 diagnostic is INFO, never
-gated. It probes (300,140) and (260,250) with the page white, then black, beneath
-the open panel. A ΔE00 < 3 at both points indicates that the within-window material
-does not sample the engine's remote layer. The historical pre-theme diagnostic
-changes the page from [255,255,255] to [0,0,0] and changes the material
-by up to 72 and 51 channel levels at (300,140) and (260,250), ΔE00 25.43 and 19.39
-(load 13.42/11.18/12.52). This demonstrates a backdrop response at those points;
-it does not establish visual parity or confirm the no-backdrop hypothesis. The
-14:49 lead ruling keeps these new-suite failures as open work, not regressions,
-and permits the interim merge. Plan §11.1 sets the fallback: a borderless child
-window with `.behindWindow` blending. A separate lead-owned follow-up PR will
-handle it after this PR merges; this PR does not implement it. A fresh diagnostic
-and final runtime receipts remain pending the screen hold.
-Historical Release `extensions-ui` passes 56/56 with cleanup PASS and no interruptions,
-including X13: first Cmd+E opens, second closes, third reopens; arrows, type-a,
-Return, reopen and Esc use the real App event path. The old App fails only the
-new toggle assertion (55/56), proving that earlier fix. Current regression,
-startup and full-verifier receipts are still pending. The empty-picker flow is
-ready to reject standard mode, focus Add Extension with Cmd+E, and open the
-store with Return. The source retains
-the model independently of the weak factory until its observation token is removed.
-Main `6d6fd687` (icon picker and first run) was then merged in `ecab648e`, and
-the branch has since merged main `c6e05c94`. Fresh final receipts and the PR link
-will be added after validation. No interrupted or void theme-merge receipt counts.
+The source now fills `SiteControlContext.isIncognito` from Section 10's
+`EngineWebContentHostFactory.isIncognito`. Private windows omit matching
+Boosts, never show the boosted glyph, disable New Boost, and refuse editing
+and toggle actions. S10 now exercises a real private window and ephemeral
+page context; its positive receipt remains pending.
+
+Review R1-1 keeps signposts in every build and gates forced layout/display/
+`CATransaction.flush()` on the automation-only `onFirstDraw` callback. Fresh
+P1 and three separate native 12 ms layout/display/flush controls remain pending.
+Their counters are sampled inside the callback. R1-2 uses light button queries,
+filtered source changes and main-queue coalescing. Its closed/open 2000-card
+page-load snapshot counts and 250 title changes remain pending, together with
+window Cmd+T and commandbar keystroke rows. R1-3 follows §3.6.1: with no
+extensions, Cmd+E focuses the + tile and Return runs Add Extension.
+
+S11/S12 retain FAIL gates at unchanged limits: **open: material, R-7 follow-up
+(lead ruling)**. `.hudWindow` and dark #686881 at 0.32 remain **interim (lead
+2026-11-06)**. S11's INFO-only diagnostic probes (300,140) and (260,250) over
+white and black page backgrounds. ΔE00 <3 at both points indicates that the
+within-window material does not sample the engine's remote layer; a larger
+response does not establish parity. Fresh numbers remain pending. Plan §11.1
+sets the fallback: a borderless child window with `.behindWindow` blending,
+owned by a separate lead follow-up after this integration merges. These are
+new-suite rows, not regressions; the lead permits the interim merge.
+
+P2 idle observation, S13 scroll, X-13, all App regressions, native F24/F25,
+startup comparison and the full gate remain pending the M5 screen hold.
+The offscreen commandbar comparison meets TANDEM §4c after a 30-minute
+quiet wait: main/branch CPU p95 medians are 10.88/9.39 ms and inline overhead
+medians are 0.509/0.223 ms. The six start load1 values are 21.35, 19.25,
+18.91, 31.98, 31.17 and 23.99; run 4 ends at 44.58. All 149 functional/render
+rows pass in each run. Absolute timing failures remain recorded; the PR draft
+contains all six runs and start/end load averages.
+The lead's 20:15 load rule permits builds and functional suites at any load;
+load-driven timing misses are reported with their loads. Add the final
+receipts and actual PR link after validation. No interrupted receipt counts.
 
 
 ## 11. Risks and open questions
