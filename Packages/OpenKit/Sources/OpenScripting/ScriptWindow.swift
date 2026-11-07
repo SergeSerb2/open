@@ -98,6 +98,7 @@ public final class ScriptWindow: NSObject {
     @objc public func objectInAppleScriptTabsAtIndex(_ index: Int) -> ScriptTab? { ScriptRead.at(index, in: appleScriptTabs, noun: "tab") }
     @objc public func valueInAppleScriptTabsWithUniqueID(_ id: String) -> ScriptTab? {
         guard liveState() != nil, let model = ScriptHost.shared.model else { return nil }
+        guard !ScriptRead.rejectsLittleTabContainment(id) else { return nil }
         // Enumeration follows focus; held favorite IDs must survive profile/window changes.
         let favorites = model.profiles.flatMap(\.favorites).map { ScriptHost.shared.tabWrapper(for: $0) }
         return ScriptRead.byID(id, in: appleScriptTabs + favorites, noun: "tab", uuid: { $0.tabID.rawValue })

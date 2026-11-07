@@ -1713,3 +1713,17 @@ the assumption in the PR. Do not block Steps 1–4 on any open question.
 - Phasing: Steps 1–4 now (no App target needed). Steps 5–7 run after the App target with the engine bridge exists (PR from the engine team); they become a separate task.
 - Naming: the dictionary terms stay identical to Arc's for script compatibility, but every user-visible description string says "Open", never "Arc".
 - Q5 (changed 2026-11-02, page-platform lead decision Q3): `execute` is gated behind View ▸ Developer ▸ Allow JavaScript from Apple Events, off by default (Chromium's default). When off, `executeJavascript:` returns error 1013 with "JavaScript from Apple Events is off. Turn it on in View ▸ Developer." The gate is `ScriptHost.allowsJavaScriptFromAppleEvents` (defaults key `open.developer.allowJavaScriptFromAppleEvents`) in `OpenScripting/ScriptCommands.swift`; it takes effect once the App hosts OpenScripting (Steps 5–7).
+
+## Little Open provider decision (2026-11-07, Section 11 lead)
+
+This supersedes §5.7's deferred provider choice and Q4. `ScriptHost.littleTab`
+implements `LittleTabProviding` for transient Little Open tabs, separate from
+BrowserModel. Application `make new tab` creates a fresh Little Open window and
+returns a `ScriptTab` with that session tab ID; no URL opens the blank bar with
+`about:blank`. `id`, URL get/set, title, loading, close, reload, back, forward, stop
+and execute are supported. Select, location and Space/window containment return
+the existing not-supported number 1009 with a clear Little Open message. Closed
+references return 1000. Application tabs stays write-only for enumeration/count.
+The App adapter alone imports both OpenScripting and OpenEngine; JavaScript keeps
+#174's gate, CSP-safe path and shared ten-second deadline. See [the scripting
+guide](../scripting.md#little-open-tab-references-2026-11-07) for acceptance.

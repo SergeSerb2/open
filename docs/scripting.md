@@ -18,14 +18,15 @@ Application responds to `quit` without a separate command declaration.
 
 | Object | Read API | Write API / verbs |
 |---|---|---|
-| application | windows, name, frontmost, version | make window; make tab is the Little Open creation term (App returns 1011 until its hook can return a script-addressable tab); quit |
+| application | windows, name, frontmost, version | make window; make tab creates a fresh Little Open window and returns its transient tab; quit |
 | window | id, name, index, closeable, minimizable, minimized, resizable, visible, zoomable, zoomed, active tab, active space, incognito, mode; tabs and spaces | index (1 only), minimized, visible, zoomed; make tab; close; mode/incognito only at creation |
 | space | id, title; tabs | make tab; focus |
 | tab | id, title, URL, loading, location | URL, location; select, go back, go forward, reload, stop, execute, close |
 
 IDs use the model's `UUID.uuidString`, without a prefix. ID lookup parses UUIDs,
 so lowercase input resolves the same object. Caches preserve wrapper identity.
-Every read resolves the current model through `ScriptHost.shared.modelProvider`.
+Sidebar-tab reads resolve the current model through `ScriptHost.shared.modelProvider`.
+Little Open reads resolve `ScriptHost.shared.littleTab`, an App-owned transient provider.
 A retained wrapper for a removed object reports error 1000. Missing model reports
 1005, except application windows returns `[]` as required by §5.2.
 
@@ -88,7 +89,7 @@ ScriptHost.shared.modelProvider: (() -> BrowserModel?)?
 ScriptHost.shared.windowStateID: ((NSWindow) -> WindowID?)?
 ScriptHost.shared.windowForState: ((WindowID) -> NSWindow?)?
 ScriptHost.shared.makeWindow: ((Bool) -> WindowID?)?
-ScriptHost.shared.makeLittleTab: ((URL?) -> ItemID?)?
+ScriptHost.shared.littleTab: (any LittleTabProviding)?
 ScriptHost.shared.engineBridge: (any ScriptEngineBridge)?
 ```
 
@@ -101,9 +102,9 @@ closures `windowStateID` and `windowForState`.
 The App-owned model observer calls `ScriptHost.shared.purgeRemovedWrappers()`
 on external removals and after model replacement. Scripting installs no observers.
 The App window close observer removes `BrowserWindowState`. Window creation receives
-the incognito Boolean; until supported, return nil for incognito (1010). Little Open
-may remain unavailable (1011) until M4. Its current hook result must identify a tab
-in the live model; a provider for tabs outside that model is deferred until M4 decides.
+the incognito Boolean; until supported, return nil for incognito (1010). Little Open uses `LittleTabProviding` for creation, existence, URL/title/loading,
+history availability and close. Its transient ID never enters the live model.
+An absent provider or a refused creation returns 1011.
 
 H2 protocol (all calls on the main actor):
 
@@ -127,7 +128,7 @@ The setting uses `open.developer.allowJavaScriptFromAppleEvents` (the page-platf
 lead decision supersedes the original Q5 default). Script text is never logged.
 
 For a fresh App build, repeat Steps 5–7, including `sdef Open.app`, Script Editor,
-A1–A14/A16/A17 and R1–R3, then cold-relaunch/ID checks. A15 may report 1011 per the lead.
+A1–A17 and R1–R3, then cold-relaunch/ID checks. A15 exercises real Little Open tabs.
 After dictionary changes, refresh the development bundle's registration as described
 in plan §9.4, or remove and rebuild the development app. The Step 1–4 task did not change
 LaunchServices registration or run the App. See the App verification below for Steps 5–7.
@@ -227,8 +228,8 @@ executes through normal Cocoa scripting handlers. It does not call wrappers or t
 engine directly. External osascript/JXA and the Script Editor check stay BLOCKED until
 the user supplies consent. A self-scripting PASS is not an external-sender PASS.
 
-Known limits: incognito creation returns 1010. Main has only `showLittleOpenStub`, so
-app-level tab creation returns 1011; no real section 9 executor was available. Window
+Historical #174 limits: incognito creation returned 1010 and app-level tab creation
+returned 1011. The Little Open provider below replaces that creation limit. Window
 index supports bringing a window to front with 1 and returns 1007 for other values.
 
 Review-round Debug scripting acceptance: **136 PASS, 0 FAIL, 2 TCC BLOCKED**,
@@ -308,10 +309,36 @@ These checks remain BLOCKED by macOS Automation consent (-1744) in [#174](https:
    javascript "1 + 2"` must error 1013 with the exact off message above. Turn the
    setting on in the test App; the same event must return text `3`. Restore the setting.
 4. Quit only the test instance. Confirm Script Editor/JXA results separately from
-   the automated self-scripting receipts. A15 (app-level Little Open creation) and
-   incognito remain 1011/1010 limits. #183 wires standalone Little Open pages, but
-   `ScriptHost.makeLittleTab` is still nil until Section 9’s coordinator returns a
-   script-addressable tab.
+   the automated self-scripting receipts. Include A15 and the Little Open checks below.
+   Incognito creation remains a 1010 limit.
+
+## Little Open tab references (2026-11-07)
+
+`make new tab with properties {URL:"https://example.com/"}` on the application
+creates a fresh Little Open window, including when that URL is already open.
+The returned `tab` uses the coordinator session's transient tab ID. It is valid
+until that window closes. No sidebar tab, Space or model window is created.
+With no URL, `make new tab` returns a reference to Little Open's blank bar with
+URL `about:blank`. Setting its URL starts navigation and opens the page state.
+
+Supported properties are `id`, `URL`, `title` and `loading`. `URL` is writable.
+Supported verbs are `close`, `reload`, `go back`, `go forward`, `stop` and
+`execute … javascript`. JavaScript uses the same off-by-default Apple-events
+gate, CSP-safe evaluation, value conversion and shared ten-second deadline as
+sidebar tabs. Navigation can target a blank window before its Browser exists.
+
+`select`, `location` reads/writes and explicit Space/window containment return
+1009 with a Little Open not-supported message. A closed reference returns 1000
+for property reads, setters and every verb, including a second close. Little Open
+references are not persisted across launches. Application `tabs` enumeration and
+count remain write-only (1004); only unique-ID reference resolution is available.
+
+`tools/e2e/applescript_littleopen.py` runs these flows through the actual bundled
+dictionary and Cocoa Apple events within `applescript`, on warm and cold launches.
+It checks the specific native window through `little-open-state`, page values,
+loading and request counts, and unchanged sidebar-tab IDs. Shared defaults are
+reset and restored in `finally`. External Automation consent remains a separate
+user gate.
 
 ## Step 1–4 verification (2026-10-25, America/Vancouver)
 

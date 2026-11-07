@@ -235,8 +235,7 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
                 (1008,'set mode of window 1 to "incognito"','mode can be set only once during creation of the window.'),
                 (1008,'set incognito of window 1 to true','mode can be set only once during creation of the window.'),
                 (1009,'make new space','Making a new space is not supported. Create a Space in the sidebar.'),
-                (1010,'make new window with properties {mode:"incognito"}','Incognito windows are not available in this build.'),
-                (1011,'make new tab','Little windows are not available yet.')]
+                (1010,'make new window with properties {mode:"incognito"}','Incognito windows are not available in this build.')]
             for i,(number,body,message) in enumerate(negatives):
                 results[prefix+'error_%d_%d'%(number,i)] = script.error(body,number,message)
             for number,unavailable,body,message in [
@@ -244,6 +243,10 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
                 (1006,'engine','reload '+target,'The page engine is not ready.'),
                 (1012,'window','make new window','There is no browser window.')]:
                 results[prefix+'error_'+str(number)] = script.error(body,number,message,unavailable)
+            results[prefix+'error_1011'] = script.error('make new tab', 1011,
+                'Little windows are not available yet.', unavailable='little')
+            from applescript_littleopen import run as little_open_checks
+            little_open_checks(app, script, results, wait_until, prefix)
             # Refused split-pane move uses the real Split View model and production creation.
             app.call('space',space=research)
             split_peer=app.call('open',url=origin+'/split-peer')['id']
