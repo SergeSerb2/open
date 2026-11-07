@@ -12,7 +12,7 @@ enum MainMenu {
     let dispatcher: any CommandDispatcher
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
     let menu = MenuBuilder.buildMainMenu(dispatcher: dispatcher,
-      spaces: app.model.spaces.map { SpaceMenuEntry(id: $0.id.description, title: app.model.displayTitle(for: $0)) },
+      spaces: (factory?.model ?? app.model).spaces.map { SpaceMenuEntry(id: $0.id.description, title: (factory?.model ?? app.model).displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
     menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
@@ -82,7 +82,7 @@ enum AppCommand {
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }
-  static let implemented: Set<String> = ["new-boost", "edit-boost", "new-legacy-boost", "peek-email", "exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "new-profile", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-extensions", "add-extension", "extension-shortcuts", "open-extensions-picker", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-space-icon", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
+  static let implemented: Set<String> = ["new-boost", "edit-boost", "new-legacy-boost", "new-incognito-window", "peek-email", "exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "new-profile", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-extensions", "add-extension", "extension-shortcuts", "open-extensions-picker", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-space-icon", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
 }
 
 import OpenEngine
@@ -106,12 +106,13 @@ extension EngineWebContentHostFactory {
     guard let context = selectionCommandContext(for: id) else { return nil }
     guard context.isSelectionCommandEnabled(id) else { return false }
     let result = context.performSelectionCommand(id)
-    if result { app.scheduleSave(); app.scheduleMenuRebuild() }
+    if result { scheduleSave(); app.scheduleMenuRebuild() }
     return result
   }
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "new-little-open-window"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
     if ["new-boost", "edit-boost", "new-legacy-boost"].contains(id) { return selectedTab.map { app.stores.boosts.canEdit(tabID: $0.id) } ?? false }
@@ -179,6 +180,7 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if isIncognito && !isAppCommandEnabled(id, payload: payload) { return false }
     // Find owns its pane even when AppKit's field editor implements the native selector.
     if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
       guard selectedContent != nil else { return false }
@@ -317,7 +319,7 @@ extension EngineWebContentHostFactory {
       }
     default: app.performCommand(id)
     }
-    app.scheduleSave(); app.scheduleMenuRebuild(); return true
+    scheduleSave(); app.scheduleMenuRebuild(); return true
   }
   private func savePage() {
     guard !isClosing, app.engineReady, !app.terminationRequested,

@@ -1,0 +1,109 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          38345,
+          38437,
+          38438,
+          38439,
+          38442,
+          38443,
+          38520
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 2
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "49529fd0e9fcab132dcd741c7276e9d1b7190a10cd62bf547673d40069771e66",
+    "distributionSHA256": "af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5",
+    "distributionUUID": "4C4C4483-5555-3144-A118-B2FC582D5923",
+    "embeddedCodeSHA256": "49529fd0e9fcab132dcd741c7276e9d1b7190a10cd62bf547673d40069771e66",
+    "embeddedSHA256": "52608c56cdff1ab875219e3d6896a147e51a4b533bbc533616d65b6c1317bc19",
+    "embeddedUUID": "4C4C4483-5555-3144-A118-B2FC582D5923",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793975938"
+  },
+  "incognito": {
+    "no_snapshot_history_change": {
+      "after": {
+        "snapshot": "6b99f6722001161777c16ba3f6d1c29bd75856b41ae6ae089b615bcabdc0c2df",
+        "tables": {
+          "Profiles/Default/State/archive.sqlite3": {
+            "archived_tabs": 0
+          },
+          "Profiles/Default/State/history.sqlite3": {
+            "history_fts": 1,
+            "history_fts_config": 1,
+            "history_fts_data": 4,
+            "history_fts_docsize": 1,
+            "history_fts_idx": 2,
+            "history_import_keys": 0,
+            "urls": 1,
+            "visits": 1
+          },
+          "Profiles/Default/State/sleep.sqlite3": {
+            "sleep_history": 0,
+            "sleep_meta": 0
+          },
+          "State/favicons.sqlite3": {
+            "favicons": 1
+          }
+        },
+        "thumbnails": []
+      },
+      "before": {
+        "snapshot": "8d2fa4d79d5c9cc1e2847cc95f9f63d86f2195ba5cb3e3bd93e1b6615198acc5",
+        "tables": {
+          "Profiles/Default/State/archive.sqlite3": {
+            "archived_tabs": 0
+          },
+          "Profiles/Default/State/history.sqlite3": {
+            "history_fts": 1,
+            "history_fts_config": 1,
+            "history_fts_data": 4,
+            "history_fts_docsize": 1,
+            "history_fts_idx": 2,
+            "history_import_keys": 0,
+            "urls": 1,
+            "visits": 1
+          },
+          "Profiles/Default/State/sleep.sqlite3": {
+            "sleep_history": 0,
+            "sleep_meta": 0
+          },
+          "State/favicons.sqlite3": {
+            "favicons": 1
+          }
+        },
+        "thumbnails": []
+      },
+      "ok": false
+    }
+  },
+  "interrupted_attempts": [],
+  "load": [
+    20.88134765625,
+    43.0634765625,
+    50.83740234375
+  ],
+  "source": {
+    "clean": false,
+    "diffSHA256": "78b89bfcf139809fb65deae20f5129f7f8e4dc226d3886881bfdf104eeb18c76",
+    "head": "98350a07f42ff19abb1852869e00ba81d922e772"
+  },
+  "started": "2026-11-06 16:55:29",
+  "style": "alloy"
+}

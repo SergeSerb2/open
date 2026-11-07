@@ -112,13 +112,13 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 window. Optional `action` drives the same view-model methods as the buttons:
 `import`, `fresh`, `continue`, `notnow`, `back`, `finish`, `retry`, or
 `choose-dir` with `directory=PATH`. `select` sets optional `spaces`, `archive`,
-and `history` checkbox booleans on Import. `retry` on a save-error Report retries
+`history`, and `secrets` checkbox booleans on Import. Capability OFF still excludes passwords from the plan. `retry` on a save-error Report retries
 the pending model's save. Directory strings are limited to 4096 UTF-8 bytes;
 action names to 32. There is no action that changes the system default browser.
 
 For native evidence, `focus` grants input focus to this instance's first-run
 window. `inspect` reads its rendered text and top-left text frames using
-Vision on a snapshot of that window only. State includes its native frame
+Vision on a snapshot of that window only. OCR runs on a utility worker and retries only `TextRecognition.CRImageReaderError` code 1, once after 250 ms. `ocrRetries` records 0 or 1; the suite keeps its bounded 180-second timeout and all copy/geometry assertions. State includes its native frame
 size, key flag, and traffic-light frames. `snapshot` prefers the first-run
 panel while it exists. `OPEN_AUTOMATION_IMPORT_DELAY_MS` (automation builds
 only, at most 5000 ms) holds the real progress view for animation captures.
@@ -126,12 +126,12 @@ only, at most 5000 ms) holds the real progress view for animation captures.
 can close and reopen Welcome before counting finishes. Reopen restarts a
 cancelled probe when counts have not landed.
 
-State also includes `importInProgress`; while a Settings import runs,
+State also includes `importInProgress`, `historyInProgress`, `historyProcessed`, and the main-thread `importAllMilliseconds`. The landing gate clears `importInProgress` before History starts. Progress includes `phase`, `progress`, and `browserHasLanded`. While a Settings import runs,
 `settingsStep` reports `Importing`. The same command also drives the visible Settings sheet after first run:
-`settings-import` with `directory=PATH`, `settings-next`, `settings-run`,
+`settings-import` with `directory=PATH`, `settings-select` with `history=true` and optional `historyOnly=true`, `settings-next`, `settings-run`,
 and `settings-done`. State then includes `settingsStep`, `settingsOutcome`,
 and `settingsError`. These actions use the real cached wizard and shared App
-runner. History has an explicit phase-3 seam; passwords/cookies stay disabled.
+runner. `lastOutcome` and `lastFailures` remain readable after the first-run window closes. History streams through the existing Profile stores; passwords/cookies stay disabled. `OPEN_AUTOMATION_HISTORY_DELAY_MS` (automation builds only, at most 10000 ms per batch) pauses after the reader yields a real batch, before its transaction, so the suite can verify browsing while imported visits are still absent.
 
 Run the synthetic first-run flow with:
 
@@ -206,6 +206,8 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
+| `window-interrupt` | `kind`: `key`, `sheet`, `end-sheet` | Own window only: order out the browser for native key loss, begin a small native sheet, or end that sheet. Used after tagged down/drag events without mouse-up to exercise resize cancellation. No system input. |
+| `undo-state` | `clear` (optional bool) | Model undo generation, `canUndo`, and `canRedo`. `clear=true` clears this isolated App's undo stack before a gesture proof. Undo itself uses `sidebar-key` Cmd+Z (focuses the outline, then the App key path). |
 | `window-focus` | `id`, `activate`, `readinessTimeout` | Make that own window key; optional own-app activation. Native readiness timeout: 0–5 seconds, default 5. |
 | `window-motion` | `reduced` (optional bool), `sampleCard` (optional bool) | Motion tokens and actual animations read back from the sidebar, panel, card, shadow, and Space-pager layers when scheduled; retained after completion. Response and damping come from the scheduled spring's physical values; `mass`, `stiffness`, `physicalDamping`, and `settlingDuration` expose those values and the CA settling estimate. The scheduled `duration` must equal `settlingDuration`; response is not the animation lifetime (Space response 0.20 s, visibly settled ≈ 0.27 s in S2 §20.12). `scheduledDelay` is the scheduled begin time minus its explicit scheduling reference in the layer's clock. `cardCurve` evaluates `Motion.springProgress` in the app. `sampleCard` records the real visible card's presentation offset every 4 ms for 0.32 s; it is off by default. `reduced` overrides only this process, without changing macOS settings. `window-state` also reports the live/model widths, resize-active state, width-commit and gesture-notification counts, geometry changes, and `spaceSwitcherFrames` in root coordinates for native switcher clicks. |
 | `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
@@ -366,7 +368,7 @@ Additional socket commands:
 | `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
 | `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters, including pane-local `generalError`/`advancedStatus`; commit the live Links settings model. |
 | `settings-profile` | Read the actual Profiles create-sheet state: `creating`, attached native `sheet` window number, `pane`, selected `spaces`, and `error`. `cancel=true` dismisses through the existing sheet state. |
-| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs`. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil. |
+| `settings-icon` | Read `selected`, `applied`, pane `error`, `matchesApplication` (exact pixel equality in the actual NSApp icon's output color space and component format, including float16; AppKit copies NSImage), `imageObject` (cache identity), bitmap `pixels`, and `restoreStartedMs`/`restoreElapsedMs` (total main work), `restorePreparationMs` (main preparation), `restoreSetterMs` (AppKit setter), `restoreDecodeMs` (worker decode/TIFF preparation). Restore uses one low-priority turn at least about 1 s after paint. `select=<AppIconOption ID>` uses the real picker action. Default resets `NSApp.applicationIconImage` to nil and does no restore work. |
 | `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
 | `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
 | `history-state` | Optional `profile` UUID and `query`. Drains accepted history writes, then returns the Profile store path, search rows, commit-to-enqueue samples (ms, automation only, bounded at 4,096) and writer operation count. Store opens/searches stay on the HistoryStore actor. |
@@ -1066,3 +1068,14 @@ and keeps a previously discarded shell beyond the 24 h destroy deadline.
 These suites save/reset/restore touched keys in the shared defaults domain. The runner also saves canonical Peek values before the first App launch, so startup migration and later Find/Escape launches cannot change the original stored values after cleanup.
 Launch marks `appIconRestoreStarted` and `appIconRestored` report deferred icon
 work after `windowShown` and first content paint (or the no-paint fallback).
+
+Sidebar resize interruption proof (`window` suite): `resize_lost_up_key` and
+`resize_lost_up_sheet_hides` inspect the held drag, native interruption, stale
+drag/up rejection, edge-hover recovery, and a new drag. `window-state` exposes
+`sidebarResizeHandleDragging`, `sidebarResizeHandleVisible`, `sidebarResizeHasStart`,
+and nullable `sidebarWidthOverride` for complete cleanup evidence. `drag_undo_single`
+checks three live crossings and two Cmd+Z events through the outline and App key path; `drag_undo_same_mode`
+checks that returning to the start mode adds no action. Width commits and the
+hidden-gesture notification remain mouse-up effects. The `window` and `sidebar`
+suites set the hide-hint flag to a fixed value at each attempt and restore its
+pre-launch value (including absence) in `finally`.

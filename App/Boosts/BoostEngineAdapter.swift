@@ -53,7 +53,8 @@ final class BoostEngineAdapter {
     refreshPages(profile: nil, start: start)
   }
   private func plan(url: URL, profile: ProfileID, ephemeral: Bool, matcher: BoostMatcher? = nil) -> InjectionPlan {
-    guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+    guard boosts.app.model.profile(id: profile) != nil,
+      ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
       return InjectionPlan(planID: "empty", url: url, profileID: profile, boosts: [])
     }
     return BoostInjectionPlanner.plan(url: url, profileID: profile, matcher: matcher ?? boosts.matcher(for: profile),
