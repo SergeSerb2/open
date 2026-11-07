@@ -191,7 +191,9 @@ def run(factory, results, tmp, env):
             def b26():
                 nonlocal app,tab
                 boost=items()[0]
-                tap("code");tap("editor.code.js")
+                ready();tap("code")
+                assert wait_until(lambda: call()["mode"] == "code",timeout=5,step=.02)
+                tap("editor.code.js")
                 call("type",text="window.boostRestoredFirstDocument='saved-before-launch';")
                 assert wait_until(lambda: call()["boost"]["js"] == "window.boostRestoredFirstDocument='saved-before-launch';",timeout=5,step=.02)
                 close()
@@ -211,7 +213,9 @@ def run(factory, results, tmp, env):
                 app.call("wait",tab=restored)
                 first=app.eval(restored,"window.boostAtFirstScript")
                 tab=restored;call("open",boost=boost["id"])
-                tap("code");tap("editor.code.js");call("type",text=boost["js"]);tap("editor.code.back")
+                ready();tap("code")
+                assert wait_until(lambda: call()["mode"] == "code",timeout=5,step=.02)
+                tap("editor.code.js");call("type",text=boost["js"]);tap("editor.code.back")
                 return dict(positive=first["style"] and "hue-rotate" in first["filter"] and first["js"] == "saved-before-launch",negative=negative,
                             restoredTab=restored,firstDocumentFirstScript=first,disabledFirstDocument=off)
             row("B26_restored_first_document",b26)
