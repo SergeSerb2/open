@@ -26,7 +26,7 @@ import OpenAdBlock
                       "searchEngineID": s.searchEngineID, "searchSuggestEnabled": String(s.searchSuggestEnabled), "downloadDirectory": s.downloadDirectory,
                       "askWhereToSaveEachFile": String(s.askWhereToSaveEachFile), "customSearchEngines": s.customSearchEngines.map(\.id).joined(separator: ",")]
         for key in fields.keys.sorted() { lines.append("snapshot profile \(profile.name) \(key) = \(fields[key]!)") }
-        let directory = root.appendingPathComponent("Profiles/\(profile.id.description)/adblock")
+        let directory = ProfileDirectories(root: root).adBlockDirectory(dataDirectoryName: profile.dataDirectoryName)
         let state = try JSONDecoder().decode(AdBlockProfileState.self, from: Data(contentsOf: directory.appendingPathComponent("catalog-state.json")))
         let exclusions = try JSONDecoder().decode([String].self, from: Data(contentsOf: directory.appendingPathComponent("exclusions.json")))
         let enabled = ((try? Data(contentsOf: root.appendingPathComponent("adblock-settings.json"))).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Bool] })?["nativeAdBlockEnabled"] ?? true

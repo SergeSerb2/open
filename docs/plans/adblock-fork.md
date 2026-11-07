@@ -2510,21 +2510,34 @@ files beside `cefsimple` via the smoke harness switch (§13.1).
 
 **Lead decision — 2026-10-25: use generations.** This replaces the earlier
 `AdBlock/lists/` layout and any directory-enumeration or unbound-DAT instructions
-elsewhere in this plan. The Swift slice uses `<root>/Profiles/<UUID>/adblock/`.
-The CEF/OpenEngine directory parameter names this `adblock/` root.
+elsewhere in this plan.
+
+**Folder correction — 2026-11-07.** The caller passes
+`ProfileDirectories.adBlockDirectory(dataDirectoryName:)` to
+`AdBlockStore.openProfile(_:directory:)`: `<root>/Profiles/<dataDirectoryName>/AdBlock/`.
+Swift settings and exclusions stay there; list generations, download caches and
+`current.json` live under `AdBlock/lists/`. The CEF/OpenEngine directory parameter
+names that **lists** directory. A UUID is the Profile identity, not its folder name.
+On first open with no new state, the old `Profiles/<UUID>/adblock/` contents migrate
+through a staged copy and atomic destination rename; failure leaves the old data
+untouched and opens defaults. Existing `AdBlock/exclusions.json` remains readable.
+The App registers its lazy store owner with `ProfileTeardown`; retirement marks
+the Profile deleted, cancels its schedule and tracked IO task, waits for IO to
+finish, drops state and emits `closed` before teardown removes its folder.
 
 ```text
-<profile-dir>/adblock/
-  catalog-state.json            Swift state, persisted before current.json moves
-  exclusions.json               Swift exclusion set
-  downloads/<listID>/<n>.body   source caches; never engine inputs
-  current.json                  live {generation, manifestSHA256}, previous ref
-  generations/<n>/
-    <listID>.txt                 exactly one per enabled list
-    manifest.json               generation, full file inventory, state snapshot
-    engine.dat                  optional browser-owned cache for THIS generation
-    engine-inputs.json          browser-owned DAT receipt (see below)
-  quarantine/<n>-<unique>/       rejected generation; never engine inputs
+<profile-dir>/AdBlock/
+  catalog-state.json              Swift state, persisted before current.json moves
+  exclusions.json                 Swift exclusion set
+  lists/                          engine directory
+    downloads/<listID>/<n>.body    source caches; never engine inputs
+    current.json                  live {generation, manifestSHA256}, previous ref
+    generations/<n>/
+      <listID>.txt                exactly one per enabled list
+      manifest.json              generation, full file inventory, state snapshot
+      engine.dat                 optional browser-owned cache for THIS generation
+      engine-inputs.json         browser-owned DAT receipt (see below)
+    quarantine/<n>-<unique>/       rejected generation; never engine inputs
 ```
 
 `current.json` is `{ "live": { "generation": n, "manifestSHA256": "..." },

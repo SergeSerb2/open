@@ -53,23 +53,24 @@ The normative engine directory contract is [plan §9.2](plans/adblock-fork.md#92
 <root>/
   .adblock-lock
   adblock-settings.json
-  Profiles/<UUID>/adblock/
+  Profiles/<dataDirectoryName>/AdBlock/
     catalog-state.json
     exclusions.json                   canonical Unicode sites; unbracketed IPs
-    downloads/<listID>/<index>.body    hash-checked source cache, never inputs
-    current.json                      live + previous {generation, manifestSHA256}
-    generations/<n>/
-      <listID>.txt                    complete enabled set, one file per list
-      manifest.json                   inventory, hashes, generation, state snapshot
-      engine.dat                      optional browser-owned, generation-bound
-      engine-inputs.json              browser DAT receipt, deferred integration
-    quarantine/<n>-<unique>/           rejected generation
+    lists/                            engine directory
+      downloads/<listID>/<index>.body  hash-checked source cache, never inputs
+      current.json                    live + previous {generation, manifestSHA256}
+      generations/<n>/
+        <listID>.txt                  complete enabled set, one file per list
+        manifest.json                 inventory, hashes, generation, state snapshot
+        engine.dat                    optional browser-owned, generation-bound
+        engine-inputs.json            browser DAT receipt, deferred integration
+      quarantine/<n>-<unique>/         rejected generation
 ```
 
-`listDirectory(for:)` and engine configure/reload events now pass the **adblock
-root**. The engine must resolve `current.json`, verify its manifest hash, and
+`openProfile(_:directory:)` takes the canonical `AdBlock` directory from its
+caller. `listDirectory(for:)` and engine configure/reload events pass **AdBlock/lists**. The engine must resolve `current.json`, verify its manifest hash, and
 verify every manifest file's size and SHA-256 before loading. It reads only that
-inventory. Extra `.txt` files, old `lists/` directories, and unreferenced
+inventory. Extra `.txt` files, legacy loose list directories, and unreferenced
 generations cannot become engine inputs. A cached DAT is valid only within the
 same generation with recorded input hashes equal to the manifest. The plan
 also specifies the DAT's own hash/size receipt. Swift never writes DAT.

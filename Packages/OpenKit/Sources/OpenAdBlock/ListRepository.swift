@@ -50,18 +50,60 @@ actor ListRepository {
 
     private var storage: GenerationStorage { GenerationStorage(maximumBytes: max(64 * 1024 * 1024, policy.maximumListBytes), ephemeral: ephemeral) }
 
+    /// Build the new layout beside its destination, then publish with one same-volume rename.
+    /// Until publication succeeds the old folder is read-only, so a failed copy loses no data.
+    func migrate(from old: URL, to directory: URL) throws {
+        let files = FileManager.default
+        try Task.checkCancellation()
+        guard files.fileExists(atPath: old.path) else { return }
+        let staging = directory.deletingLastPathComponent().appendingPathComponent(".adblock-migration-\(UUID().uuidString)")
+        defer { try? files.removeItem(at: staging) }
+        do {
+            let values = try old.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else { return }
+            // ProfileDirectories may already have made an empty AdBlock/lists directory.
+            let entries = files.fileExists(atPath: directory.path) ? try files.contentsOfDirectory(atPath: directory.path) : []
+            guard entries.allSatisfy({ $0 == "lists" }) else { return }
+            let existingLists = directory.appendingPathComponent("lists")
+            if files.fileExists(atPath: existingLists.path),
+               !(try files.contentsOfDirectory(atPath: existingLists.path)).isEmpty { return }
+            try Task.checkCancellation()
+            try files.createDirectory(at: staging.appendingPathComponent("lists"), withIntermediateDirectories: true)
+            for name in try files.contentsOfDirectory(atPath: old.path) {
+                try Task.checkCancellation()
+                let parent = ["exclusions.json", "catalog-state.json"].contains(name) ? staging : staging.appendingPathComponent("lists")
+                try files.copyItem(at: old.appendingPathComponent(name), to: parent.appendingPathComponent(name))
+            }
+            try Task.checkCancellation()
+            // Removing only empty directories preserves the no-state condition checked above.
+            let lists = directory.appendingPathComponent("lists")
+            if files.fileExists(atPath: lists.path) { try files.removeItem(at: lists) }
+            if files.fileExists(atPath: directory.path) { try files.removeItem(at: directory) }
+            try Task.checkCancellation()
+            try files.moveItem(at: staging, to: directory)
+        } catch {
+            try Task.checkCancellation()
+            // Opening the untouched destination now seeds bundled defaults instead.
+            return
+        }
+        // The transaction has committed. Cleanup cannot invalidate the new complete copy.
+        try Task.checkCancellation()
+        try? files.removeItem(at: old)
+        let parent = old.deletingLastPathComponent()
+        if (try? files.contentsOfDirectory(atPath: parent.path).isEmpty) == true { try? files.removeItem(at: parent) }
+    }
+
     func open(directory: URL, catalog: AdBlockCatalog) async throws -> AdBlockProfileState {
         // Migrate settings only from the former layout. Legacy list directories are never inputs.
-        let legacy = directory.deletingLastPathComponent().appendingPathComponent("AdBlock")
+        try Task.checkCancellation()
+        let legacy = directory.deletingLastPathComponent()
         let empty = AdBlockProfileState(catalogVersion: catalog.version, enabledBlockLists: catalog.defaultIDs)
         var state = empty
         var report: String?
-        let settings = directory.appendingPathComponent("catalog-state.json")
+        let settings = legacy.appendingPathComponent("catalog-state.json")
         do {
             if FileManager.default.fileExists(atPath: settings.path) {
                 state = try readJSON(AdBlockProfileState.self, at: settings, fallback: empty)
-            } else {
-                state = try readJSON(AdBlockProfileState.self, at: legacy.appendingPathComponent("catalog-state.json"), fallback: empty)
             }
         } catch { report = "catalog-state invalid; reconciled from committed generation or defaults" }
         let pointer: CurrentGeneration?
@@ -141,6 +183,7 @@ actor ListRepository {
 
     private func makeStaging(_ directory: URL) throws -> URL {
         let staging = directory.appendingPathComponent(".update-\(UUID().uuidString)")
+        try Task.checkCancellation()
         try FileManager.default.createDirectory(at: staging.appendingPathComponent("lists"), withIntermediateDirectories: true)
         return staging
     }
@@ -149,6 +192,7 @@ actor ListRepository {
         guard let reference = try storage.current(in: directory)?.live else { throw AdBlockError("no current generation") }
         let manifest = try storage.verify(reference, directory: directory, catalog: catalog)
         for file in manifest.files {
+            try Task.checkCancellation()
             try FileManager.default.copyItem(at: storage.path(reference, in: directory).appendingPathComponent(file.file),
                                             to: staging.appendingPathComponent("lists/\(file.file)"))
         }
