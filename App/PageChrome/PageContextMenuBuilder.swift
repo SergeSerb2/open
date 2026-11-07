@@ -248,8 +248,28 @@ final class PageContextMenuBuilder {
       return title.contains("Image") || title.contains("Video") || title.contains("Audio") || title == "Loop" || title == "Show Controls"
     }.map { $0 + 1 } ?? menu.items.count
     insert(media, prefix: "media", at: mediaIndex)
-    let extensionIndex = menu.items.firstIndex { isInspect($0) } ?? menu.items.count
-    insert(extensions, prefix: "extension", at: extensionIndex)
+    if !extensions.isEmpty {
+      // GUESS: S-9's user capture will settle placement. Keep Manage Extensions
+      // after Chromium's extension group, or in its own group before Inspect.
+      func hasExtension(_ item: NSMenuItem) -> Bool {
+        if let key = item.identifier?.rawValue, key.hasPrefix("engine:"),
+           let id = Int(key.dropFirst(7)), (49000...50000).contains(id) { return true }
+        return item.submenu?.items.contains(where: hasExtension) == true
+      }
+      if chromeModel, let last = menu.items.lastIndex(where: hasExtension) {
+        insert(extensions, prefix: "extension", at: last + 1)
+      } else {
+        var index = menu.items.firstIndex { isInspect($0) } ?? menu.items.count
+        // Preserve the separator belonging to Inspect's group below our new group.
+        if index > 0, menu.items[index - 1].isSeparatorItem { index -= 1 }
+        if index > 0, !menu.items[index - 1].isSeparatorItem {
+          menu.insertItem(.separator(), at: index); index += 1
+        }
+        insert(extensions, prefix: "extension", at: index)
+        let end = index + extensions.count
+        if end < menu.items.count, !menu.items[end].isSeparatorItem { menu.insertItem(.separator(), at: end) }
+      }
+    }
     return true
   }
   private func insert(_ items: [PageContextMenuHooks.Item], prefix: String, at anchor: Int) {
@@ -307,7 +327,7 @@ final class PageContextMenuBuilder {
       guard depth <= 8 else { return false }
       for item in candidate.items {
         count += 1
-        // 128 incoming nodes + at most eight Open rows/separators + 32 hook rows.
+        // Keep the final node cap, including Open rows, hook groups and separators.
         guard count <= 168, item.title.utf8.count <= 1024 else { return false }
         if let submenu = item.submenu, !visit(submenu, depth: depth + 1) { return false }
       }
