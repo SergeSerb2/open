@@ -37,6 +37,7 @@ def run(factory, results, tmp, env):
             states=[t for t in app.call("tabs") if t["id"] == tab]
             raise RuntimeError(str(error)+"; page state="+json.dumps(states)) from error
     def row(name, fn):
+        evidence = {}
         try:
             evidence = fn()
             assert evidence.pop("positive", False), "positive proof failed: " + json.dumps(evidence)
@@ -46,7 +47,7 @@ def run(factory, results, tmp, env):
         except env["FocusInterruption"]:
             raise
         except Exception as error:
-            results[name] = dict(ok=False, error=str(error), trace=traceback.format_exc()[-1400:], load=os.getloadavg())
+            results[name] = dict(evidence, ok=False, error=str(error), trace=traceback.format_exc()[-1400:], load=os.getloadavg())
             print(name, "FAIL", str(error)[:160], flush=True)
     def active():
         return call().get("open", False)
@@ -277,7 +278,7 @@ def run(factory, results, tmp, env):
             def b14():
                 nonlocal app,tab
                 app.call("library-close");app.call("defaults",key="open.advanced.enableBoosts",value=True);app.quit()
-                # A saved user Boost is the public input while Code mode is blocked.
+                # A saved user Boost is the persisted input for launch injection.
                 files=list(pathlib.Path(app.user_data).glob("Profiles/*/Boosts/boosts.json"))
                 source=next(p for p in files if json.loads(p.read_text())["boosts"])
                 dto=json.loads(source.read_text());base=dto["boosts"][0]
