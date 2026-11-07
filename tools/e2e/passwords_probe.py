@@ -162,6 +162,12 @@ def run(h, factory, results, tmp):
                     row['nativeWindowState'] = {k:state[k] for k in ('fullscreen', 'fullscreenTransition', 'isKeyWindow', 'keySameObject')}
             except Exception:
                 responsive = False
+            if not alive or not responsive:
+                # ReportCrash publishes asynchronously. Do not lose the stack
+                # or launch another App while its system dialog may appear.
+                deadline = time.monotonic() + 8
+                while not h._open_crash_reports() - baseline and time.monotonic() < deadline:
+                    time.sleep(.2)
             new = sorted(h._open_crash_reports() - baseline)
             row.update(appAlive=alive, automationResponsive=responsive, newCrashReports=new,
                        crashTopSymbols=crash_symbols(h, new), finished=timestamp(), ok=alive and responsive and not new)
@@ -344,7 +350,8 @@ def run(h, factory, results, tmp):
             evidence['cleanup'] = app.quit_report.get('ok', False)
             evidence['newCrashReportsAfterQuit'] = sorted(h._open_crash_reports() - baseline)
             results['postQuitSafety'] = {'ok': not evidence['newCrashReportsAfterQuit'],
-                                        'newCrashReports': evidence['newCrashReportsAfterQuit']}
+                                        'newCrashReports': evidence['newCrashReportsAfterQuit'],
+                                        'crashTopSymbols': crash_symbols(h, evidence['newCrashReportsAfterQuit'])}
             for index in range(1, 10):
                 results.setdefault('PR-%d' % index, {'status': 'NOT_RUN', 'reason': evidence.get('stopped', 'Probe interrupted before row')})
             evidence['finished'] = timestamp()
