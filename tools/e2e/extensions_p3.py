@@ -14,10 +14,12 @@ import zipfile
 import zlib
 
 
-def pack_probe(root, tmp, prefix="probe", icon_png=None):
+def pack_probe(root, tmp, prefix="probe", icon_png=None, name=None):
     folder = Path(tmp) / (prefix + "-packed")
     shutil.copytree(Path(root) / "tools/e2e/fixtures/action-probe", folder, dirs_exist_ok=True)
     manifest = json.loads((folder / "manifest.json").read_text())
+    if name is not None:
+        manifest["name"] = name
     if icon_png is not None:
         manifest["name"] = "Open icon boundary " + prefix
         manifest["icons"] = {"128": "boundary.png"}

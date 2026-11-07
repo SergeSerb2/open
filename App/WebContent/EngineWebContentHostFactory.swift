@@ -48,6 +48,17 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   // Unshown extension-created pages awaiting their first real address.
   private var pendingLittleOpenExtensionTabs: [Int: OEWebContent] = [:]
   var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
+  private(set) var savePrompts: SavePromptPresenter?
+  private func attachSavePrompts() {
+    guard savePrompts == nil, let window else { return }
+    savePrompts = SavePromptPresenter(window: window) { [weak self] page in
+      guard let self, let content = self.selectedContent else { return false }
+      return page == AnyHashable(content.identifier)
+    }
+  }
+  private func savePromptFocusChanged() {
+    savePrompts?.pageDidBecomeFocused(AnyHashable(selectedContent?.identifier ?? 0))
+  }
   let model: BrowserModel
   let incognitoSession: IncognitoSession?
   /// Section 12's read-only private-state hook (lead ruling 16:12).
@@ -181,8 +192,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       if previous.delegate === self { previous.delegate = nil }
     }
     littleOpenController = controller; littleOpenContent = content
+    attachSavePrompts()
     littleOpenBrowser = browser; browser.window = controller.window; browser.delegate = self
     controller.onCloseRequested = { [weak self] in
+      self?.savePrompts?.cancelAll()
       guard let self, let window = self.window else { return }; self.app.extensionPrompts.cancel(window: window)
     }
     controller.extensionsUI = extensions.context
@@ -208,6 +221,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    attachSavePrompts()
     controller.shouldDeferKeyToFirstResponder = { [weak self] event in
       if let picker = self?.iconPicker, event.window === picker.panel || event.window === picker.toneWindow {
         return event.modifierFlags.intersection([.command, .control]).isEmpty
@@ -248,6 +262,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
     extensions.attach()
     controller.onCloseRequested = { [weak self] in
+      self?.savePrompts?.cancelAll()
       guard let self, let window = self.window else { return }
       self.app.extensionPrompts.cancel(window: window)
     }
@@ -287,6 +302,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       self.translate.focusDidChange()
       self.findController?.sync()
       self.pageChrome.visibilityChanged()
+      self.savePromptFocusChanged()
     }
     // History swipes (page-platform §4.4.1): macOS's "Swipe between pages" setting, re-read when
     // Open becomes active, and paused while the Capture overlay is up.
@@ -296,7 +312,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     // Chained: MediaCoordinator.attach wraps this hook later and keeps it.
     let previousVisibility = controller.onVisibilityChange
-    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange(); self?.pageChrome.visibilityChanged(); self?.extensions.sidebarVisibilityChanged() }
+    controller.onVisibilityChange = { [weak self] in previousVisibility?(); self?.translate.visibilityDidChange(); self?.pageChrome.visibilityChanged(); self?.extensions.sidebarVisibilityChanged(); self?.savePromptFocusChanged() }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
     }
@@ -385,17 +401,19 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     isIncognito ? (context === incognitoSession?.context ? model.profiles.first : nil)
       : (context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier })
   }
-  func context(for profileID: ProfileID) -> OEBrowserContext? {
+  func context(for profileID: ProfileID, create: Bool = true) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
     if isIncognito {
       guard let context = incognitoSession?.context else { return nil }
       app.extensionPrompts.register(context.extensions)
       return WebsiteAppearance.prepare(context)
     }
+    if !create {
+      return OEEngine.shared.contexts.first { $0.identifier == profile.dataDirectoryName }
+    }
     // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
     if profile.id == model.defaultProfile?.id {
-      let context = WebsiteAppearance.prepare(OEEngine.shared.defaultContext)
-      app.extensionPrompts.register(context.extensions); return context
+      return Self.createRegularContext(profileID: profileID, directory: profile.dataDirectoryName, app: app)
     }
     guard app.engine.result.layout == .engine else {
       // The old layout has no disk folder for other profiles (CEF refused
@@ -407,9 +425,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       }
       return nil
     }
-    let context = OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
-      .map(WebsiteAppearance.prepare)
-    if let context { app.profileTeardown.didLoad(profile); app.extensionPrompts.register(context.extensions) }; return context
+    return Self.createRegularContext(profileID: profileID, directory: profile.dataDirectoryName, app: app)
+  }
+  /// Explicit action path for a page, private session, or ordered deletion.
+  /// Read-only inspection must use context(for:create: false) instead.
+  static func createRegularContext(profileID: ProfileID, directory: String, app: AppDelegate) -> OEBrowserContext? {
+    guard app.engineReady else { return nil }
+    let context: OEBrowserContext?
+    if profileID == app.model.defaultProfile?.id {
+      context = OEEngine.shared.defaultContext
+    } else {
+      guard app.engine.result.layout == .engine else { return nil }
+      context = OEEngine.shared.context(identifier: directory,
+        directory: app.directories.engineDirectory(dataDirectoryName: directory))
+    }
+    guard let context, context.state == .live else { return nil }
+    app.profileTeardown.didLoad(profileID: profileID, directory: directory)
+    app.extensionPrompts.register(context.extensions)
+    return WebsiteAppearance.prepare(context)
   }
   func retireProfile(_ id: ProfileID, directory: String) {
     for (tab, host) in hosts where host.content.context.identifier == directory {
@@ -419,9 +452,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
+    focusedBrowser(create: false)
+  }
+  /// A real focus change may attach this window to an already loaded Profile.
+  /// This never creates a request context for an empty, unvisited Profile.
+  func prepareFocusedExtensionBrowser() -> OEBrowser? {
+    if standaloneBrowser != nil || littleOpenController != nil || standaloneSurface != nil { return focusedBrowser }
+    guard app.engineReady, let profile = focusedProfile else { return nil }
+    return mirror.browser(for: profile.id, loadContext: false)
+  }
+  /// Focus, menu validation and read-only automation must not load a Profile.
+  /// Explicit extension interactions opt in; focus attaches loaded contexts separately.
+  func focusedBrowser(create: Bool) -> OEBrowser? {
     if let standaloneBrowser { return standaloneBrowser }
     if littleOpenController != nil || standaloneSurface != nil { return nil }
-    guard app.engineReady, let profile = focusedProfile else { return nil }; return mirror.browser(for: profile.id)
+    guard app.engineReady, let profile = focusedProfile else { return nil }
+    let browser = mirror.browser(for: profile.id, create: create)
+    if create { extensions.focusChanged() }
+    return browser
   }
   func tabID(for content: OEWebContent) -> ItemID? { hosts.first { $0.value.content === content }?.key }
   private func withoutUndo(_ body: () -> Void) {
@@ -471,6 +519,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
     pageChrome.cancel(host.content)
     if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
     translate.contentDidClose(host.content)
@@ -791,6 +840,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
     pageChrome.close()
     privateDownloads.close()

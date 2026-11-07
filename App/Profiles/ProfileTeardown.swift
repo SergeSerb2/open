@@ -13,7 +13,8 @@ final class ProfileTeardown {
   private var unloaded: Set<ProfileID> = []
   init(app: AppDelegate) { self.app = app }
 
-  func didLoad(_ profile: Profile) { loaded[profile.id] = profile.dataDirectoryName }
+  func didLoad(_ profile: Profile) { didLoad(profileID: profile.id, directory: profile.dataDirectoryName) }
+  func didLoad(profileID: ProfileID, directory: String) { loaded[profileID] = directory }
   func wasLoaded(_ id: ProfileID) -> Bool { loaded[id] != nil }
 
   func unload(profileID: ProfileID) async throws {
@@ -45,8 +46,8 @@ final class ProfileTeardown {
     if loaded[profileID] == nil,
       FileManager.default.fileExists(atPath: app.directories.engineDirectory(dataDirectoryName: directory).path) {
       guard app.engineReady, app.engine.result.layout == .engine,
-        OEEngine.shared.context(identifier: directory,
-          directory: app.directories.engineDirectory(dataDirectoryName: directory)) != nil else {
+        EngineWebContentHostFactory.createRegularContext(
+          profileID: profileID, directory: directory, app: app) != nil else {
         throw Self.failure("The Profile context is unavailable for deletion.")
       }
       loaded[profileID] = directory

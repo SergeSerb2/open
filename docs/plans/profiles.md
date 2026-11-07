@@ -192,7 +192,7 @@ changes are confined to store file locations (§5.4) and one new
 | D-P4 | The default Profile is the one with `dataDirectoryName == "Default"`; if none exists, `profiles.first` acts as default. No new `isDefault` flag | Add `isDefault: Bool` to `Profile` + DTO | The DTO already round-trips `dataDirectoryName`; a flag adds a schema-1 optional field and a two-sources-of-truth bug (flag vs. position) for zero user gain |
 | D-P5 | Archive becomes **one SQLite file per Profile** (`Profiles/<dir>/State/archive.sqlite3`). A composite sink routes by `ArchiveEntry.profileID` | Keep one global `archive.sqlite3` filtered by `profile_id` | Task scope and Arc isolation both point per-Profile; the global file would be the one store that survives a Profile disk-delete (§5.5), leaking its tab titles/URLs. The `profile_id` column stays (restore + import dedupe use it) |
 | D-P6 | History becomes **one SQLite file per Profile**. Favicons stay **one global file** | Per-Profile favicons | History is private browsing data (isolated in Arc, proven). Favicon bytes are public site icons keyed by origin (`FaviconStore` has no Profile key) and the sidebar draws icons for every Space at once; splitting it would duplicate fetches per Profile. The accepted leak is stated in §5.3, not hidden |
-| D-P7 | Request contexts load **lazily**: a Profile's `CefRequestContext` is created when a Space of that Profile is first shown (or a Little Open window first hints it), never for all Profiles at launch. Loaded contexts stay loaded until quit in v1 | Load all at launch; evict idle contexts | Arc evidence points lazy (`shouldLoadAllProfilesAtStartup`, [features-core.md](../re/features-core.md) §5.2 rule 6, marked Guess). Each loaded context costs a Chrome Profile in the browser process (§6.4); eviction correctness (live browsers, extensions) is a follow-up, not v1 |
+| D-P7 | Request contexts load **lazily**: a Profile's `CefRequestContext` is created on its first page load or explicit extension/site action; focusing an empty Space does not load it, never for all Profiles at launch. Loaded contexts stay loaded until quit in v1 | Load all at launch; evict idle contexts | Arc evidence points lazy (`shouldLoadAllProfilesAtStartup`, [features-core.md](../re/features-core.md) §5.2 rule 6, marked Guess). Each loaded context costs a Chrome Profile in the browser process (§6.4); eviction correctness (live browsers, extensions) is a follow-up, not v1 |
 | D-P8 | Incognito is an **ephemeral Profile**: an in-memory request context (`cache_path` empty) shared by windows of one requested parent; a synthetic Profile lives only in each private window's separate model, never in `app.model.profiles` or an Open store (Section 10 lead erratum, 2026-11-06) | A hidden persisted `Profile` row | Arc: incognito cookies are never seeded and nothing persists (§5.2 rule 6, §8.1 rule 3). A model row would leak into Settings, the snapshot, and `openkit profiles list` |
 | D-P9 | One new `TreeChange` case, `.spaceProfileChanged(spaceID:from:to:)`. `updateSpace(profileID:)` keeps its combined-edit undo but emits the same case | Emit only `.reload` and let the engine diff `profileID` | The engine must destroy/recreate web contents on a Profile change; a diff-on-reload rule is implicit and easy to miss. One explicit case, two existing switch sites to update (§3.6) |
 | D-P10 | No DTO/schema change. `schemaVersion` stays 1; old snapshots load unchanged; `repairMissingProfileReferences()` runs explicitly at App/CLI load, not inside the mapper | Bump to schema 2; auto-repair inside `SnapshotMapper` | Every Profile field already persists. Hidden mapper repair would make `roundtrip` compare a repaired tree against its file and hide data loss |
@@ -903,11 +903,17 @@ plan §9.2 LA-7). Little Open tabs are not sidebar tabs and never enter
 
 ### 6.4 Lazy loading and memory
 
-- Create a Profile's context on **first need only**: first show of a Space
-  on that Profile, first Little Open hint of it, or first extension /
-  site-settings access for it. Launch creates only the global (default)
-  context, so cold launch keeps the architecture budget (sidebar ≤ 250 ms;
-  engine work stays off the sidebar path).
+- **Section 10 erratum (2026-11-06):** create a Profile's context on its
+  first page load or explicit extension/site action. Focusing an empty Space,
+  reading Settings shortcut conflicts, and automation reads do not load it.
+  A focus change can attach a window Browser to an already loaded context.
+  A Little Open page loads its own Profile after the first native frame.
+  The two-Profile launch gate leaves unvisited Work unloaded after 10 s.
+  [The receipt](../profiles-memory.md) records five Release launches: median
+  first-Work-page deltas of 31.6 MiB browser RSS, two helpers and 293.8 MiB
+  summed helper RSS (shared pages can be counted more than once).
+  The original sidebar ≤250 ms target remains open; laziness alone does not
+  prove that launch budget.
 - Cost model to design against (measure on the real build and record the
   numbers in the Step 6 PR; do not invent a budget): one loaded context =
   one Chrome Profile in the browser process — cookie/storage services,
@@ -1230,16 +1236,17 @@ from `Secure Preferences`, not copied. Open Profiles whose Arc directory
 is missing (`chromiumDirsMissing`) import as empty engine Profiles; their
 sidebar Spaces/tabs still import fully.
 
-### 8.5 Verification limit (state it, do not hide it)
+### 8.5 Verification limit (updated 2026-11-06)
 
-No multi-Profile Arc install exists on this Mac, and Arc must not be
-launched by agents (AGENTS.md rule 4). §8.1–§8.2 are therefore verified
-against a **synthetic copied fixture** (two Spaces on two refs, two
-`topApps` pairs, hand-built `Local State`) plus the live single-Profile
-regression (§9.1). The real multi-Profile capture is data-model.md §5
-item 3 (user creates a second Arc Profile, quits Arc, agent reads the
-files). Until then the importer ships with the lenient parser above and
-the report lines make any mismatch visible instead of silent.
+The read-only two-Profile capture confirms
+`{custom:{_0:{directoryBasename:"Profile 1",machineID:…}}}` in both
+`Space.profile` and `topAppsContainerIDs`. Local State names both source
+directories. The source has 6 Spaces split 4/2 and 11 Favorites split 6/5.
+`StorableProfiles.json` and `StorableProfileContainers.json` are absent; their
+optional metadata shapes remain guesses. Arc was not launched by an agent.
+App and CLI receipts are in [import-multiprofile.md](../import-multiprofile.md).
+Named Open destination directories now come from the normal Profile allocator,
+not Arc's source basename. `sourceProfileDirectories` retains the source map.
 
 ---
 
@@ -1542,7 +1549,7 @@ PRs. Steps 6–7 are engine/App PRs. Branch names follow the repo pattern
 
 | # | Item | Handling |
 |---|---|---|
-| Q1 | Named Arc Profile ref shape and `StorableProfiles.json` fields are unverified (no multi-Profile install; Arc must not be launched by agents) | Lenient parser + report lines (§8); real capture is a user action (data-model.md §5 item 3). Does not block Steps 1–3 |
+| Q1 | Named Arc Profile ref confirmed on disk; optional `StorableProfiles.json` fields remain unverified | Observed custom directory reference + Local State names (§8.5); keep the optional Storable metadata parser marked as a guess |
 | Q2 | `ProfileSettings` has no download-location field, though Arc scopes it per Profile | Out of scope (§0.2); add with the downloads milestone as a whole-settings replace (no DTO break: `ProfileDTO.settings` gains a keyed field with a decode-default, planned there, not here) |
 | Q3 | Idle request-context eviction could cut memory but risks destroying extension/session state | v1 keeps contexts until quit (D-P7); follow-up after sleep history capture exists (§6.4) |
 | Q4 | Global favicon cache leaks "some Profile visited this origin" | Accepted and documented (D-P6, §5.3); revisit only if a privacy review flags it — the fix is a `profile` column + per-Profile files, contained in `OpenStore` |

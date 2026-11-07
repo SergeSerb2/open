@@ -197,6 +197,17 @@ Deviations from the plan:
 - Badge text and color, title, and enabled (part of P2) came along: `browserDidUpdateExtensionActions` fires on `chrome.action` changes.
 - Found on the way: `OEEngineConfiguration.userAgentProduct = "Open/0.1"` replaced Chrome's `Chrome/156` UA token, and Bitwarden (like many sites) took its Safari code path and never loaded. The shell no longer sets it.
 
+Window activation lifecycle (2026-11-06, X-19 / #192): `OpenBrowserWindow`
+stops its NSWindow key observers when real closing starts and when the Browser
+reports its close. A close request that the embedder can refuse keeps its
+observers. Activation requires a Browser that is still registered in
+`GlobalBrowserCollection`; this also covers `SetBrowser` and `SetHostView`.
+Chromium's collection checks stay intact. The automation-only diagnostic
+counts and refuses an unsafe activation before that check, so the real-App
+`window` row `engine_close_host_activation` can prove the old behavior fails
+without ending the App. The row includes immediate focus after a Profile
+switch, then closes twice and changes native key state before deferred deletion.
+
 Review round 1 (PR #53; engine review by Opus, shell review by Muse; lead decisions 2026-10-26):
 
 - **Discards.** Chrome never discards a hosted tab: Open sleeps tabs itself. `chrome.tabs.discard(tabId)` becomes a request (`OnTabDiscardRequested` → `-browser:requestsDiscardOfWebContent:`). The shell refuses the visible tab (Chrome's "Cannot discard tab" error). The current App uses `SleepController.debugSleepNow`: it discards a background renderer and keeps the sleeping page and its tab id until a later destroy deadline. `OEWebContent.isDiscarded` reports that renderer state. Desktop `chrome.tabs` still reports `discarded: false` because Chrome's own lifecycle unit did not perform the discard; this metadata mapping remains a P1 follow-up. The tab leaves `chrome.tabs` only when the page closes. `chrome.tabs.discard()` without an id finds nothing to discard. A replaced `WebContents` (only discards replace one) is logged, never reported as a page close.
@@ -660,3 +671,62 @@ service observer's set, independent of native macOS delivery. It adds no series
 entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
 clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
 [#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
+
+## Passwords Step 0 probe (2026-11-06; remaining rows 2026-11-07)
+
+The real Debug App used Chrome style and main's recorded engine distribution
+`af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5`.
+The [results](engine-spike/results-passwords-probe.json) retain per-row times,
+engine fingerprints, native window identities, and crash checks. These are
+observations, not password-feature acceptance. Each final-attempt row starts
+in a fresh App/profile; refill and cookie relaunch keep data within their row.
+
+| Row | Observation |
+|---|---|
+| PR-1 | Native typing matched and login POST reached welcome. No password bubble was identified. An AppKit toolbar window appeared and the native full-screen flag changed from false to true during the flow; its cause is unverified. |
+| PR-2 | The password-manager WebUI API added a synthetic login. Fields were empty immediately on reload. Clicking username showed a Chromium window. Native Down/Return did not fill both fields. |
+| PR-3 | Native address entry matched and POST reached welcome. No new visible window appeared. |
+| PR-4 | Native card entry matched and POST reached welcome. A Chromium window appeared on the refill attempt, but the number stayed empty. The mandatory re-auth path remains unverified. |
+| PR-5 | WebAuthn create showed an unparented `NativeWidgetMacNSWindow`; the promise was pending at 500 ms. Native Escape settled it with `NotAllowedError`. |
+| PR-6 | Credential Management get resolved to null within its 2-second deadline, without a new window. This secure localhost profile had no saved login, so the account chooser remains unverified. |
+| PR-7 | The fresh-profile HTTP Basic navigation killed Open. The late report is `Open-2026-11-06-203144.ips`, with `EXC_CRASH` / `SIGABRT`; its process matches this row. No retry followed. |
+| PR-8 | Selected run on 2026-11-07: `oe_lax`, `oe_persist`, and `oe_session` appeared before quit and after a clean relaunch with the same data root. Only cookie names were retained. |
+| PR-9 | Selected run on 2026-11-07: `pages` showed Chrome/browser 1 for a tab and both Split View panes; Peek was Alloy/browser 0, index -1. Little Open loaded successfully: Chrome/browser 2, content identifier 4, index 0, kind `unowned`; its session reported browserID 2 and state `page`. |
+
+PR-7's top symbols include `abort`, `logging::LogMessage::HandleFatal`,
+`tabs::TabDialogManager::CreateTabScopedDialog`,
+`tabs::TabDialogManager::CreateAndShowDialog`,
+`AskBeforeHttpDialogController::ShowDialog`, and
+`HttpsOnlyModeTabHelper::DidFinishNavigation`. This is evidence of the HTTPS
+fallback dialog path. It does not establish that the Basic-auth prompt itself
+caused the abort. The JSON contains symbol names only, not raw crash output.
+
+An earlier shared-window run showed a Basic-auth native window and no crash.
+It also left stale native key flags after a password dropdown; the probe now
+isolates rows so that state cannot invalidate later form observations. Earlier
+attempts and their limits are not counted as passes for the stopped attempt.
+A deliberate exit while WebAuthn was open proved cleanup: zero owned processes
+or windows remained, no force kill was needed, and no new crash report appeared.
+
+All on-screen work stopped after the 2026-11-06 crash report arrived. The lead
+confirmed a system crash dialog and held the M5 screen. The lead cleared it on
+2026-11-07 at 12:02 (-07:00). C2 then rebuilt Debug against main's recorded
+engine after merging `origin/main` and ran only PR-8 and PR-9 once, in one
+`--only passwords-probe --passwords-probe-rows PR-8,PR-9` call under the screen
+lock after the priority check. No new crash report appeared. All three App
+instances quit without force; each left zero owned processes and windows.
+
+The [selected-run receipt](engine-spike/results-passwords-probe-PR-8-PR-9.json)
+records source `cf60ae069ca8858e66c2c8bd5b950029499590f7`, the same engine
+distribution as above, and 12:10:33–12:10:44 (-07:00). Load averages at probe
+start were 18.23 / 12.64 / 9.37. The primary JSON now includes those two rows
+and their separate run provenance. Its original crash row, symbols, and
+post-quit crash evidence remain unchanged. Earlier observations remain labeled
+as historical. These are observations, not password-feature acceptance.
+
+PR-7 stays blocked until the engine lead approves the exact distribution hash
+with the fix. Patch 0806 is on another branch per the C2 brief; this probe did
+not validate it. The guard cannot navigate the known HTTPS-First crash path on
+the current engine. A different hash alone does not enable it. The selected-row
+run exercised the post-change runner without replaying PR-7. It did not exercise
+the death-stop path because no App died.

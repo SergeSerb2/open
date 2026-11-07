@@ -78,7 +78,10 @@ extension AutomationController {
     if ["ext-strip", "ext-click", "ext-popup-state", "ext-picker", "ext-hover", "ext-ui-menu"].contains(cmd) {
       return try await runExtensionUICommand(cmd, args, factory)
     }
-    let browser = try focusedBrowser(factory)
+    if cmd == "ext-commands", factory.focusedBrowser == nil, args["create"] as? Bool != true {
+      return ["ready": false, "context": "", "commands": []] as [String: Any]
+    }
+    let browser = try focusedBrowser(factory, create: args["create"] as? Bool ?? false)
     let manager = browser.context.extensions
     if cmd == "ext-omnibox" {
       guard let id = args["extension"] as? String else { throw Failure(message: "missing extension") }

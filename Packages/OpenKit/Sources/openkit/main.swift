@@ -12,7 +12,7 @@ let commands: [(name: String, handler: @MainActor ([String]) async throws -> Voi
     ("import-arc", { try await runImportArc(args: $0) }),
     ("import-arc-history", { await runImportArcHistory(args: $0) }),
     ("import-arc-secrets", { args in await Task.detached(priority: .utility) { runImportArcSecrets(args: args) }.value }),
-    ("verify-secrets-fixture", { _ in try runSyntheticSecretsFixture() }),
+    ("verify-secrets-fixture", { try await runSyntheticSecretsFixture(args: $0) }),
     ("archive-list", { await runArchiveList(args: $0) }),
     ("dump", { try runDump(args: $0) }),
     ("roundtrip", { try runRoundtrip(args: $0) }),
