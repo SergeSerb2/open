@@ -613,6 +613,7 @@ public final class BrowserModel {
         typealias Edit = (apply: @MainActor (BrowserModel) -> Void, undo: Revert)
         var edits: [Edit] = []
         var counts = ImportCounts()
+        let newSpaceIDs = Set(source.spaces.filter { space(id: $0.id) == nil }.map(\.id))
         func perform(_ apply: @escaping @MainActor (BrowserModel) -> Void,
                      undo: @escaping Revert) {
             apply(self); edits.append((apply, undo))
@@ -742,6 +743,20 @@ public final class BrowserModel {
             merge(imported.today, into: .spaceToday(imported.id))
         }
         if includeSpaces {
+            // Preserve the live windows and every existing selection. Newly
+            // imported Spaces can still resume their source session when the
+            // user first switches to them in an existing browser window.
+            for window in windows where window.style == .standard {
+                for imported in source.windows where imported.style == .standard {
+                    for (spaceID, itemID) in imported.selectedNodeBySpace
+                        where newSpaceIDs.contains(spaceID) && window.selectedNodeBySpace[spaceID] == nil && node(id: itemID) != nil {
+                        perform({ _ in window.selectedNodeBySpace[spaceID] = itemID }, undo: { _ in
+                            guard window.selectedNodeBySpace[spaceID] == itemID else { return false }
+                            window.selectedNodeBySpace[spaceID] = nil; return true
+                        })
+                    }
+                }
+            }
             let ids = Set(routingRules.map(\.id))
             // Arc's importer assigns fresh rule IDs. Treat the same rule body
             // as a duplicate too, so a Settings re-import remains idempotent.

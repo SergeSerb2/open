@@ -3,7 +3,6 @@
 OPEN_E2E_IMPORT_NEGATIVE=1 deliberately misroutes each fixture area and adds
 an intervening real command before Undo. The unchanged checks must fail.
 """
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -48,6 +47,9 @@ def fixture(root, h, negative=False):
             'destination': {'space': {'_0': {'mostRecent': {}}}} if negative else target})
     (root/'StorableLinkRouting.json').write_text(json.dumps({'rules': rules,
         'defaultDestination': {'littleArc': {'_0': {'mostRecent': {}}}}}))
+    (root/'StorableSessionRestorationData.json').write_text(json.dumps({'mapping': {'keysToValues': [] if negative else [
+        {'browser': {'windowID': ids['window'], 'contextID': {'profile': {'default': True}}}, 'itemId': ids['t0']}, 1,
+        {'browser': {'windowID': ids['window'], 'contextID': {'profile': ref}}, 'itemId': ids['work-favorite']}, 2]}}))
     return ids
 
 
@@ -75,9 +77,17 @@ def run(factory, results, tmp, h):
             if not file.exists(): return 0
             with sqlite3.connect('file:'+str(file)+'?mode=ro', uri=True) as db:
                 return db.execute('SELECT count(*) FROM '+table).fetchone()[0]
-        return dict(archive=count('archive.sqlite3','archived_tabs'), history=count('history.sqlite3','history_import_keys'))
+        archive_rows = []
+        if (store/'archive.sqlite3').exists():
+            with sqlite3.connect('file:'+str(store/'archive.sqlite3')+'?mode=ro', uri=True) as db:
+                archive_rows = db.execute('SELECT id, space_id, profile_id FROM archived_tabs').fetchall()
+        return dict(archive=count('archive.sqlite3','archived_tabs'), archiveRows=archive_rows,
+                    history=count('history.sqlite3','history_import_keys'))
     try:
-        for mode in ('firstRun', 'settings'):
+        local_state = (source/'User Data/Local State').read_bytes()
+        for mode in ('firstRun', 'sourceDirectories', 'settings'):
+            if mode == 'sourceDirectories': (source/'User Data/Local State').unlink()
+            else: (source/'User Data/Local State').write_bytes(local_state)
             app = factory(urls=(), fresh=True, extra_args=['--arc-dir='+str(source)])
             if not saved:
                 for key in ('open.firstRun.completed','open.import.lastArcDir','open.settings.lastPane','open.advanced.tabSleepMode'):
@@ -87,7 +97,7 @@ def run(factory, results, tmp, h):
             occupied = Path(app.user_data)/'Profiles/Profile 1'; occupied.mkdir(parents=True, exist_ok=True)
             marker = occupied/'unrelated-data'; marker.write_text('synthetic unrelated Profile data')
             existing = None
-            if mode == 'firstRun':
+            if mode != 'settings':
                 app.call('first-run', action='import'); app.call('first-run', action='select', history=True)
                 app.call('first-run', action='continue'); wait_for('step','report')
                 first = state()['outcome']
@@ -101,17 +111,18 @@ def run(factory, results, tmp, h):
             profiles = data['profiles']; by_id = {p['id']:p for p in profiles}; spaces = {s['id']:s for s in data['spaces']}
             alpha, beta = spaces[ids['alpha']], spaces[ids['beta']]
             personal, work = by_id[alpha['profileID']], by_id[beta['profileID']]
-            expected_names = ('Example Personal','Example Work') if mode == 'firstRun' else ('Default','Example Work (2)')
+            expected_names = ('Default','Profile') if mode == 'sourceDirectories' else ('Example Personal','Example Work') if mode == 'firstRun' else ('Example Personal','Example Work (2)')
             stores = [counts(personal), counts(work)]
             destinations = [rule['destination'] for rule in data['routingRules']]
             checks = dict(
-                profiles=len(profiles) == (2 if mode == 'firstRun' else 3)
+                profiles=len(profiles) == (4 if mode == 'settings' else 2)
                     and (personal['name'],work['name']) == expected_names
                     and (existing is None or existing['id'] != work['id']),
                 spaceProfiles=alpha['profileID'] != beta['profileID'],
                 favorites={f['tab']['_0']['id'] for f in personal['favorites']} == {ids['favorite']}
                     and {f['tab']['_0']['id'] for f in work['favorites']} == {ids['work-favorite']},
-                archive=stores[0]['archive'] == stores[1]['archive'] == 1,
+                archive=stores[0]['archiveRows'] == [(ids['archive0'], ids['alpha'], personal['id'])]
+                    and stores[1]['archiveRows'] == [(ids['archive1'], ids['beta'], work['id'])],
                 history=stores[0]['history'] == 3 and stores[1]['history'] == 2,
                 routing={'space': {'_0': beta['id']}} in destinations
                     and {'mostRecentSpace': {'profile': work['id']}} in destinations
@@ -123,7 +134,12 @@ def run(factory, results, tmp, h):
                 path = Path(app.user_data)/'State/browser.json'
                 broken = json.loads(path.read_text()); broken['spaces'][0]['profileID'] = str(uuid.uuid4()).upper(); path.write_text(json.dumps(broken))
                 app = factory(urls=(), extra_args=['--arc-dir='+str(source)])
+                assert h.wait_until(lambda: app.call('profiles-shell')['noticeShown'] > 0, timeout=10, step=.05)
                 app.call('profiles-shell', action='notice-ok')
+            selections = data['windows'][0]['selectedNodeBySpace']
+            app.call('space', space=ids['beta'])
+            selected = {tab['id'] for tab in app.call('tabs') if tab['selected']}
+            checks['session'] = selections.get(ids['alpha']) == ids['t0'] and selections.get(ids['beta']) == ids['work-favorite'] and selected == {ids['work-favorite']}
             repairs = app.call('profiles-shell')['noticeShown']
             checks['noRepairs'] = repairs == 0 and all(s['profileID'] in by_id for s in data['spaces'])
             if negative:
@@ -133,7 +149,7 @@ def run(factory, results, tmp, h):
                 graph['items'][graph['items'].index(ids['ta'])+1]['childrenIds'].append(new)
                 (source/'StorableSidebar.json').write_text(json.dumps(expanded))
             repeat = settings_import(); repeated = snapshot()
-            checks['reimport'] = all(repeat.get(k,0) == 0 for k in ('Imported Spaces','Imported tabs','Imported Archive','History')) and all(repeated[k] == data[k] for k in ('profiles','spaces','routingRules'))
+            checks['reimport'] = all(repeat.get(k,0) == 0 for k in ('Imported Spaces','Imported tabs','Imported Archive','History')) and {(p['id'],p['dataDirectoryName']) for p in repeated['profiles']} == {(p['id'],p['dataDirectoryName']) for p in data['profiles']} and {s['id'] for s in repeated['spaces']} == set(spaces) and len(repeated['routingRules']) == len(data['routingRules'])
             # A fresh Settings import is one model Undo. Disk/context destruction
             # is Section 10's separate restart/confirmation boundary on main.
             if mode == 'settings':
@@ -144,7 +160,7 @@ def run(factory, results, tmp, h):
                 checks['undoModel'] = undone['profiles'] == before['profiles'] and undone['spaces'] == before['spaces'] and undone['routingRules'] == before['routingRules']
             details[mode] = dict(checks=checks, profileCount=len(profiles), stores=stores, repairs=repairs, first=first, repeat=repeat, load=os.getloadavg())
             app.quit(); app = None
-        for name in ('profiles','spaceProfiles','favorites','archive','history','routing','collision','noRepairs','reimport','undoModel'):
+        for name in ('profiles','spaceProfiles','favorites','archive','history','routing','collision','session','noRepairs','reimport','undoModel'):
             results['MP_'+name] = dict(ok=all(d['checks'].get(name,True) for d in details.values()), modes=details, negative=negative, load=os.getloadavg())
     finally:
         h._restore_defaults(app, saved)

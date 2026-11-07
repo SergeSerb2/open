@@ -159,13 +159,18 @@ public struct ArcImporter {
         if object["default"] as? Bool == true {return "default"}
         // Confirmed on disk: Space.profile and topAppsContainerIDs use this
         // same ref. machineID identifies the source Mac, not another Profile.
-        if let custom = object["custom"] as? [String: Any],
-           let payload = custom["_0"] as? [String: Any],
-           let directory = payload["directoryBasename"] as? String, !directory.isEmpty {
-            return directory
-        }
+        if let directory = customProfileDirectory(raw) { return directory }
         // Guess: older/unobserved Storable metadata may use a flat string ref.
         return object.keys.sorted().compactMap {object[$0] as? String}.first ?? "default"
+    }
+    private static func customProfileDirectory(_ raw: Any?) -> String? {
+        guard let object = raw as? [String: Any], let custom = object["custom"] as? [String: Any],
+              let payload = custom["_0"] as? [String: Any],
+              let directory = payload["directoryBasename"] as? String,
+              !directory.isEmpty, directory.utf8.count <= 255, directory != ".", directory != "..",
+              !directory.contains(where: { "/:\\".contains($0) }),
+              !directory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        return directory
     }
     /// UI labels only, read on a utility worker when the wizard prepares its review.
     /// The count-only probe never returns these strings or builds model objects.
@@ -245,6 +250,18 @@ public struct ArcImporter {
                 mergeMetadata(key, name: (info[directory] as? [String: Any])?["name"] as? String, directory: directory)
                 sourceDirectories.insert(directory)
             }
+        }
+        // The observed ref itself proves the source directory, even when
+        // Local State is absent from a selected/copy-only import folder.
+        let refs = spacesRaw.compactMap { $0.obj["profile"] }
+            + ((holder["topAppsContainerIDs"] as? [Any]).map { values in
+                stride(from: 0, to: max(0, values.count - 1), by: 2).map { values[$0] }
+            } ?? [])
+        for ref in refs {
+            guard let directory = Self.customProfileDirectory(ref) else { continue }
+            let key = metadataOrder.first { metadata[$0]?.directory == directory } ?? directory
+            mergeMetadata(key, name: nil, directory: directory)
+            sourceDirectories.insert(directory)
         }
         for directory in sourceDirectories {
             var isDirectory: ObjCBool = false
@@ -919,9 +936,9 @@ public struct ArcImporter {
                     collect(space.pinned, space: space.id)
                     collect(space.today, space: space.id)
                 }
-                var favoriteIDs: Set<ItemID> = []
+                var favoriteProfiles: [ItemID: ProfileID] = [:]
                 for profile in profiles {
-                    for tab in profile.favorites { favoriteIDs.insert(tab.id); tabByItem[tab.id] = tab }
+                    for tab in profile.favorites { favoriteProfiles[tab.id] = profile.id; tabByItem[tab.id] = tab }
                 }
                 let arcItemToOpen: [String: ItemID] = Dictionary(uniqueKeysWithValues: nodeByArcID.map { ($0.key, $0.value.id) })
                 var windowIDsSeen: Set<String> = []
@@ -958,7 +975,17 @@ public struct ArcImporter {
                     var bestBySpace: [SpaceID: (item: ItemID, order: Int, active: Date)] = [:]
                     for entry in entries {
                         let targetSpace: SpaceID
-                        if favoriteIDs.contains(entry.item) { targetSpace = window.focusedSpaceID }
+                        if let owner = favoriteProfiles[entry.item] {
+                            // An inactive Profile's session may outlive a switch
+                            // to a different Profile. Never select its Favorite
+                            // in a Space that uses another engine context.
+                            // Guess: if this window no longer focuses that
+                            // Profile, use its first Space; the session mapping
+                            // has no Space ID for a Favorite.
+                            guard let owned = spaces.first(where: { $0.id == window.focusedSpaceID && $0.profileID == owner })
+                                ?? spaces.first(where: { $0.profileID == owner }) else { continue }
+                            targetSpace = owned.id
+                        }
                         else if let owned = spaceByItem[entry.item] { targetSpace = owned }
                         else { continue }
                         let active = tabByItem[entry.item]?.lastActiveAt ?? .distantPast

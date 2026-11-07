@@ -83,7 +83,6 @@ final class AppImportRunner {
     if !firstRun || !plan.spaces || !hasSidebarData {
       for profile in imported.model.profiles {
         if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
-        else if profile.dataDirectoryName == "Default", let live = app.model.defaultProfile { profileMapping[profile.id] = live.id }
       }
     }
     if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history) {

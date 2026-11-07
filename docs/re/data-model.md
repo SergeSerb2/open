@@ -276,7 +276,21 @@ Importer use: restore one window per entry, focus `focusedSpaceID`, and reopen `
 
 ### 2.6 Profiles, Boosts, site settings (partial)
 
-**Arc Profiles.** No `StorableProfiles.json` exists on this Mac, yet the binary knows `StorableProfiles.json` and `StorableProfileContainers.json`, plus keys `profileDirectoryBasename`, `defaultProfileDirectoryBasename`, `sourceProfileDirectoryBasename` (**confirmed (binary)**). Model (**inferred**): an Arc Profile has an id, a display name, and a `profileDirectoryBasename` that names its Chromium folder under `User Data/` (`Default` for the default profile). Spaces point at a profile via `Space.profile`. Multiple Spaces can share one profile (all 4 do here). Importer: create one Open profile per distinct `Space.profile` value, defaulting to a single profile. Verify field names against a real multi-profile install before shipping (§5).
+**Arc Profiles (updated 2026-11-06).** A read-only private copy now contains
+2 Chromium directories named by `User Data/Local State` →
+`profile.info_cache`; each value supplies the display `name` (**confirmed
+(disk)**). `StorableSidebar.json` → `sidebar.containers[1].spaces` has 6 Spaces:
+4 use `{default:true}`, and 2 use
+`{custom:{_0:{directoryBasename:"Profile 1",machineID:<UUID>}}}`. The same
+nested reference appears in `topAppsContainerIDs`, with 6 Default Favorites
+and 5 named-Profile Favorites. Source counts: `.re/s14/c1/source-counts.json`;
+command: the private C1 Python copy/count receipt, reading only these JSON
+keys and copied History databases. No URL, title, Profile name, or machine ID
+is printed. `StorableProfiles.json` and `StorableProfileContainers.json` are
+still absent; their optional field shapes remain **guesses**. Source directory
+names identify source data, not an Open destination folder. The App allocates
+its own named Profile directory and retains the source map for History.
+
 
 **Boosts.** `StorableBoostsData.json` is absent here. Binary evidence: `StorableBoostsDataStore.swift`, `BoostsStorageFirebaseImpl` (so Boosts also sync via Firebase), keys `boostID`, `boostTitle`, `activeBoosts`, `boostSnapshots` (**confirmed (binary)** names only). The Boost payload (CSS/JS/Zap rules per host) was not recoverable without a real file or a Ghidra query, and inventing fields would be worse than omitting them. Importer v1: if the file exists, preserve it raw and surface Boost names only if a `title`-like key is present; do not guess the rule schema. This is the weakest part of this doc and is flagged in §5.
 
@@ -420,7 +434,7 @@ Status after capture session 2 (2026-10-26; copies in `.re/runtime/appsupport/s2
 - New: a collapsed folder that shows one child stores `expandedItems: [folderID, {peeked: {_0: [childID]}}]`.
 - Item 5: `StorableKeyBindings.json` gained two timestamped copies (`StorableKeyBindings.<yyyy-MM-dd-HH-mm-ss-SSS>.json`); no custom binding was made.
 
-Until items 1–3 are done, the importer should ship with archive, Boost, and multi-profile support disabled and visibly reported as "not imported", not silently skipped.
+The older disable-until-sampled note is superseded for archive and multi-profile import by their observed schemas and App verification. Boost import remains a separate Section 14 gate.
 
 ---
 

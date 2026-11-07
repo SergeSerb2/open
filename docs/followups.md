@@ -274,3 +274,18 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 ## Section 10: Air Traffic Control capture gaps
 
 User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps.
+
+
+## Section 14: multi-profile import boundaries
+
+- Import Undo removes created Profiles and sidebar/routing changes from the
+  model. Main's Profile deletion path needs typed confirmation and defers loaded
+  context data until restart. Undo does not erase Archive/History stores or
+  engine directories. Complete this through Section 10's in-session deletion
+  path; do not bypass its teardown boundary.
+- Session Favorite keys contain a Profile and window but no Space. When a source
+  window focuses another Profile, import uses the Favorite owner's first Space.
+  This is a marked guess. Settings keeps its current windows and selections and
+  imports selections only for newly added Spaces; it does not recreate Arc
+  window layout. User-operated Arc evidence is needed for exact inactive-Profile
+  session behavior. See [multi-profile import](import-multiprofile.md).
