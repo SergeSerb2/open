@@ -228,13 +228,26 @@ def run(factory, results, tmp, env, functional_only=False):
                 private_state=opened()
                 private_context=app.call('incognito-state',private=True)
                 boost_controls=[c for c in private_state['controls'] if c['id'].startswith('boost.')]
+                boost_commands=('new-boost','edit-boost','new-legacy-boost','view-boosts')
+                menu_rows={r['id']:r for r in app.call('menu-state') if r['id'] in boost_commands}
+                refused_commands={}
+                for command in boost_commands:
+                    try:
+                        app.call('menu-perform',id=command)
+                        refused_commands[command]=False
+                    except RuntimeError:
+                        refused_commands[command]=True
+                private_menu_refused=refused(action='menu',item='New Boost…')
                 record('S10_incognito',private_context.get('private') is True and private_context.get('ephemeral') is True
                     and private_state['isIncognito'] is True and not normal_context['isIncognito']
                     and not private_state['canCreateBoost'] and not control(private_state,'action.newBoost')['enabled']
                     and not any(c['enabled'] for c in boost_controls)
                     and private_state['urlButtonState'] not in ('boosted','openBoosted')
+                    and len(menu_rows)==len(boost_commands) and all(not r['enabled'] for r in menu_rows.values())
+                    and all(refused_commands.values()) and private_menu_refused
                     and refused(action='tap',id='action.newBoost'),
                     state=private_state,privateContext=private_context,
+                    boostMenus=menu_rows,refusedCommands=refused_commands,negativeDisabledMenu=private_menu_refused,
                     negativeNormalContext=normal_context['isIncognito'],negativeDisabledTap=True)
             finally:
                 app.call('window-focus',id=private_window['id'],activate=True)
