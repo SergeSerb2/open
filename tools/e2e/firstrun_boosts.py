@@ -1,6 +1,7 @@
 """C2's separate real-App import block. Runtime gates remain explicit BLOCKED."""
 import os
 import runpy
+import shutil
 import time
 from pathlib import Path
 
@@ -10,6 +11,8 @@ def run(factory, results, tmp, h):
     generator = runpy.run_path(str(root / 'tools/e2e/fixtures/import-boosts/generate.py'))
     cli = runpy.run_path(str(root / 'tools/e2e/import_boosts_cli.py'))
     source = Path(tmp) / 'arc-boosts-app'
+    # The harness retries after focus loss in the same scratch root.
+    shutil.rmtree(source, ignore_errors=True)
     generator['write'](source)
     binary = root / 'Packages/OpenKit/.build/release/openkit'
     app = None
@@ -27,8 +30,8 @@ def run(factory, results, tmp, h):
         # A source without a cache must fail the same count predicate; restore
         # the populated synthetic source before the import.
         empty = Path(tmp) / 'arc-boosts-empty'
+        shutil.rmtree(empty, ignore_errors=True)
         generator['write'](empty)
-        import shutil
         shutil.rmtree(empty / 'Firestore')
         app.call('first-run', action='choose-dir', directory=str(empty))
         assert h.wait_until(lambda: app.call('first-run').get('probeReady'), timeout=20, step=.05)
