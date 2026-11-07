@@ -55,6 +55,8 @@ typedef NS_ERROR_ENUM(OEErrorDomain, OEErrorCode){
     OEErrorWebContentClosed = 4,
     OEErrorDevToolsFailure = 5,
     OEErrorUnsupported = 6,
+    OEErrorEphemeralContext = 7,
+    OEErrorMockKeychain = 8,
 };
 
 NS_HEADER_AUDIT_END(nullability, sendability)
