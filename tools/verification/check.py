@@ -739,18 +739,28 @@ def arc_import(cli):
         for line in text.splitlines():
             if re.match(r"^  (?:totalItems=|pinnedTabs=|folders=|skipped easels=|orphans=|archive filePresent=|archive check accounted=|containers\(structural\)=|accounted check:)", line):
                 print(line)
-        listed = run(cli, "archive-list", output, "--limit", "0", quiet=True)
-        matches(r"^archive rows total=\d+ showing=0$", listed)
-        stored = re.search(r"storedTotal=(\d+)", text)
-        if stored:
-            matches(r"^archive rows total=" + stored[1] + r" showing=0$", listed)
-        print(listed, end="")
-        # When available, P-9 inspects the imported profile through the public CLI.
+        # Archive is per Profile. The import report totals every store; the
+        # archive-list default alone cannot prove that total after a real
+        # multi-Profile import. Keep private IDs/names out of the receipt.
+        profile_refs = [None]
         usage = run(cli, quiet=True, expected=2)
         if re.search(r"[<|]profiles[|>]", usage):
-            listed = run(cli, "profiles", output, "list", quiet=True)
-            matches(r"dir=Default", listed)
-            print("importedProfiles=" + str(len(re.findall(r"^profile ", listed, re.MULTILINE))))
+            profiles = json.loads(run(cli, "profiles", output, "list", "--json", quiet=True))
+            require(any(p["dataDirectoryName"] == "Default" for p in profiles), "missing Default Profile")
+            profile_refs = [p["id"] for p in profiles]
+            print("importedProfiles=" + str(len(profiles)))
+        archive_rows = 0
+        for profile_ref in profile_refs:
+            selection = ("--profile", profile_ref) if profile_ref is not None else ()
+            listed = run(cli, "archive-list", output, "--limit", "0", *selection, quiet=True)
+            row = re.search(r"^archive rows total=(\d+) showing=0$", listed, re.MULTILINE)
+            require(row is not None, "missing per-Profile Archive count")
+            archive_rows += int(row[1])
+        print(f"archive rows total={archive_rows} showing=0")
+        print(f"archiveProfileStores={len(profile_refs)}")
+        stored = re.search(r"storedTotal=(\d+)", text)
+        if stored:
+            require(archive_rows == int(stored[1]), "per-Profile Archive total differs from import report")
         matches(r"roundtrip OK", run(cli, "roundtrip", output, quiet=True))
         print("importRoundtrip=1")
 
