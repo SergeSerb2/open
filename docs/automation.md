@@ -171,6 +171,9 @@ with synthetic data. `OPEN_E2E_IMPORT_EXT_ONLY=1` runs this block alone inside
 `firstrun`. `OPEN_E2E_IMPORT_EXT_NEGATIVE=detection` and `queue` deliberately
 change fixture ownership/classification and real actions, so the matching EI
 gates must FAIL; clear both variables for normal acceptance.
+The synthetic second Profile uses `custom._0.directoryBasename = Profile 2`.
+`EI_default_role_mapping` reimports into a live Default with a different ID;
+`EI_default_role_target` checks its actual manager and the other Profile.
 The fixture mapping may name a missing file to verify App initiation failure.
 Once a local install starts, no App timeout completes it or cancels its sheet.
 `EI_failure_reported_engine` stays BLOCKED until the engine supplies completion

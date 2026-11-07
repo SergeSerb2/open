@@ -49,12 +49,11 @@ extension AppImportRunner {
     guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito }),
       let context = factory.context(for: candidate.profileID) else { return .failed("The Profile is no longer available.") }
     let manager = context.extensions
-    let readyDeadline = ContinuousClock.now.advanced(by: .seconds(10))
-    while !manager.isReady && ContinuousClock.now < readyDeadline && !app.terminationRequested {
+    // Readiness has no deadline either: elapsed time is not an install error.
+    while !manager.isReady && !app.terminationRequested && window.isVisible {
       do { try await Task.sleep(for: .milliseconds(25)) } catch { return .skipped("cancelled") }
     }
     guard !app.terminationRequested, !Task.isCancelled, window.isVisible else { return .skipped("cancelled") }
-    guard manager.isReady else { return .failed("Extension system is not ready") }
     if manager.extension(identifier: candidate.extensionID) != nil { return .skipped("already installed") }
     let attempt = AppImportExtensionAttempt(manager: manager, identifier: candidate.extensionID, window: window)
     extensionAttempt = attempt
@@ -74,11 +73,10 @@ extension AppImportRunner {
       content.view.frame = NSRect(x: 0, y: 0, width: 1, height: 1)
       content.view.isHidden = true; window.contentView?.addSubview(content.view)
       defer { content.view.removeFromSuperview(); content.close(); browser.close() }
-      let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-      while !content.isLive && ContinuousClock.now < deadline {
-        try? await Task.sleep(for: .milliseconds(25))
+      while !content.isLive && !app.terminationRequested && window.isVisible {
+        do { try await Task.sleep(for: .milliseconds(25)) } catch { return .skipped("cancelled") }
       }
-      guard content.isLive else { return .failed("The fixture page did not become ready.") }
+      guard !app.terminationRequested, !Task.isCancelled, window.isVisible else { return .skipped("cancelled") }
       attempt.localFile = file
       return await withCheckedContinuation { continuation in
         attempt.localCompletion = { continuation.resume(returning: $0) }

@@ -952,7 +952,7 @@ Never print a full path. Print counts only. See section 5 for the ID flag rule.
 
 ### 4.3 Reinstall plan
 
-**Implementation errata (Section 14 C3b, 2026-11-06):** The App queue has
+**Implementation errata (Section 14 C3c, 2026-11-07):** The App queue has
 no install deadline. An unanswered Chromium consent sheet remains pending.
 `EI_failure_reported_app` gates offline App failure handling: a missing fixture
 is refused before `installLocalCRX`, the row retains the error, the summary
@@ -962,8 +962,11 @@ signature; the lead filed the engine need. The damaged-signature fixture stays
 in the harness for that future hook. No engine change is part of this work.
 A production Web Store request for a well-formed nonexistent ID is an INFO
 receipt, bounded to two minutes by the harness. That bound never marks a row
-failed or advances the App queue. C1's nested ProfileRef fixture and final full
-verification depend on C1 reaching `origin/main`.
+failed or advances the App queue. The merged multi-Profile mapping resolves
+Arc Default to the live Default by role, and named sources to their live
+Profiles. The synthetic second source uses the observed nested
+`custom._0.directoryBasename` shape with `Profile 2`. Readiness waits also have
+no deadline; shutdown, cancellation, or closing the report stops them.
 
 The App now detects
 extensions during import for each `sourceProfileDirectories` entry. It retains

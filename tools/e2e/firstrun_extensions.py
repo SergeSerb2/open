@@ -19,11 +19,11 @@ def run(launch, state, until, row, source, tmp, h, results):
     shutil.copytree(source, fixture, dirs_exist_ok=True)
     sidebar = json.loads((fixture/'StorableSidebar.json').read_text())
     spaces = sidebar['sidebar']['containers'][1]['spaces']
-    spaces[3]['profile'] = 'work'
+    spaces[3]['profile'] = {'custom': {'_0': {'directoryBasename': 'Profile 2',
+        'machineID': '0F085EC9-2E74-48A5-9D88-4BAFC4686164'}}}
     (fixture/'StorableSidebar.json').write_text(json.dumps(sidebar))
-    (fixture/'StorableProfiles.json').write_text(json.dumps({'profiles': [
-        'default', {'id': 'default', 'name': 'Example Personal', 'directory': 'Default'},
-        'work', {'id': 'work', 'name': 'Example Work', 'directory': 'Profile 1'}]}))
+    (fixture/'User Data/Local State').write_text(json.dumps({'profile': {'info_cache': {
+        'Default': {'name': 'Example Personal'}, 'Profile 2': {'name': 'Example Work'}}}}))
     files, identifiers = {}, {}
     for label in ('existing', 'failed', 'install'):
         crx = Path(pack_probe(h.ROOT, tmp, 'import-' + label))
@@ -44,7 +44,7 @@ def run(launch, state, until, row, source, tmp, h, results):
              'install': 'Example Installed Extension'}
     internals = ['a'*32, 'b'*32]
     for directory, labels, internal in [('Default', ('existing', 'failed'), internals[0]),
-                                        ('Profile 1', ('install',), internals[1])]:
+                                        ('Profile 2', ('install',), internals[1])]:
         target = fixture/'User Data'/directory
         target.mkdir(parents=True, exist_ok=True)
         settings = {identifiers[label]: {'path': 'Extensions/' + identifiers[label], 'from_webstore': True,
@@ -64,7 +64,7 @@ def run(launch, state, until, row, source, tmp, h, results):
     if negative == 'queue':
         # An actual source ownership fault must fail the target-manager gate.
         personal_prefs = fixture/'User Data/Default/Secure Preferences'
-        work_prefs = fixture/'User Data/Profile 1/Secure Preferences'
+        work_prefs = fixture/'User Data/Profile 2/Secure Preferences'
         a, b = json.loads(personal_prefs.read_text()), json.loads(work_prefs.read_text())
         a['extensions']['settings'][identifiers['install']] = b['extensions']['settings'].pop(identifiers['install'])
         personal_prefs.write_text(json.dumps(a)); work_prefs.write_text(json.dumps(b))
@@ -166,16 +166,35 @@ def run(launch, state, until, row, source, tmp, h, results):
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
         row('EI_finish_without_install', not state()['active'] and state()['completed']
             and not any(set(identifiers.values()) & values for values in registries().values()))
-        # Preinstall one candidate through the exact P3 fixture/consent path.
-        alpha = next(s['id'] for s in app.call('spaces') if s['title'] == 'Alpha')
-        app.call('space', space=alpha)
-        h.new_tab(app, 'about:blank')
+        # Reimport into a fresh live Default with a different ID. The source
+        # role must resolve to that context rather than its stable imported ID.
+        imported_personal = personal
         if negative != 'queue':
-            app.call('ext-manage', action='install-crx', extension='local', path=files[identifiers['existing']])
-            request = h.wait_until(pending, timeout=20)
-            assert request and request['extension'] == identifiers['existing']
-            app.call('ext-prompt', answer='accept')
-            assert h.wait_until(lambda: identifiers['existing'] in registries()[personal], timeout=20)
+            app.quit()
+            app = launch(fresh=True, directory=fixture)
+            app.call('defaults', key='open.firstRun.completed', value=None)
+            app.call('first-run', action='fresh')
+        live_default = app.call('profiles-shell')['profiles'][0]['id']
+        settings_import(fixture)
+        ext(action='fixtures', files=files)
+        rows = install_rows()
+        profile_by_space = {s['title']: s['profile'] for s in app.call('spaces')}
+        personal, work = profile_by_space['Alpha'], profile_by_space['Beta']
+        row('EI_default_role_mapping', personal == live_default and personal != imported_personal
+            and all(rows[identifiers[label]]['profile'] == live_default for label in ('existing', 'failed'))
+            and rows[identifiers['install']]['profile'] == work and work != live_default,
+            liveDefaultMapped=personal == live_default, sourceIDDiffers=personal != imported_personal)
+        # Install the Default candidate through the report itself, then check
+        # both actual managers. Its next import must skip it as already present.
+        if negative != 'queue':
+            selected({identifiers['existing']})
+            queue('accept')
+        registry = registries()
+        row('EI_default_role_target', identifiers['existing'] in registry[personal]
+            and identifiers['existing'] not in registry[work],
+            installedInLiveDefault=identifiers['existing'] in registry[personal],
+            absentInOther=identifiers['existing'] not in registry[work])
+        app.call('first-run', action='settings-done')
         # Add one tab so Settings import owns a real, independently undoable action.
         modified = json.loads((fixture/'StorableSidebar.json').read_text())
         graph = modified['sidebar']['containers'][1]
@@ -238,9 +257,9 @@ def run(launch, state, until, row, source, tmp, h, results):
                     real_counts['internal' if internal else 'candidates'] += 1
                 # This machine has zero candidates. The source preference file
                 # goes into this run's private, disposable synthetic Arc root.
-                (empty/'User Data'/directory/'Secure Preferences').write_bytes(raw)
+                (empty/'User Data'/('Profile 2' if directory == 'Profile 1' else directory)/'Secure Preferences').write_bytes(raw)
             else:
-                (empty/'User Data'/directory/'Secure Preferences').write_text('{"extensions":{"settings":{}}}')
+                (empty/'User Data'/('Profile 2' if directory == 'Profile 1' else directory)/'Secure Preferences').write_text('{"extensions":{"settings":{}}}')
         if negative == 'queue':
             prefs = empty/'User Data/Default/Secure Preferences'
             payload = json.loads(prefs.read_text())
@@ -313,7 +332,7 @@ def network_receipt(app, settings_import, ext, base, tmp, results):
     source = Path(tmp)/'arc-extension-network'
     shutil.copytree(base, source)
     identifier = 'p'*32  # Well-formed synthetic ID with no known store listing.
-    for directory in ('Default', 'Profile 1'):
+    for directory in ('Default', 'Profile 2'):
         entries = {identifier: {'path': 'Extensions/example', 'manifest': {'name': 'Example Missing Store Item'}}} if directory == 'Default' else {}
         (source/'User Data'/directory/'Secure Preferences').write_text(json.dumps({'extensions': {'settings': entries}}))
     settings_import(source)

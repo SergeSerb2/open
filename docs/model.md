@@ -353,7 +353,10 @@ The upsert skips unchanged or empty replacement titles. This preserves the speci
 Extensions are the union of Secure Preferences and installed payload folders.
 Classification uses path and payload rules. `ArcImportResult.extensionsByProfile`
 holds only in-memory metadata for the original directories recorded in
-`sourceProfileDirectories`. `ImportReport.extensions` accounts for total,
+`sourceProfileDirectories`. Candidates then use the live Profile mapping:
+Arc Default maps to the live Default by role; named sources map to their live
+Profiles. Destination directory collision suffixes never select a source.
+`ImportReport.extensions` accounts for total,
 internal, candidate, and missing-manifest records; unreadable Profiles have a
 separate count. Preference JSON is limited to 16 MiB, 4,096 records per Profile,
 256 payload versions per extension, 1 MiB per manifest, and 1,024 UTF-8 bytes
