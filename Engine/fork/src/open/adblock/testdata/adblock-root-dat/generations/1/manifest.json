@@ -1,0 +1,26 @@
+{
+  "generation": 1,
+  "files": [
+    {
+      "file": "redirect-list.txt",
+      "listID": "redirect-list",
+      "bytes": 152,
+      "sha256": "7996f50414812f26beafdee3d43a3baa14c7a636138975d8899c08e7fd30c5ef",
+      "sourceRevision": "open-test",
+      "generation": 1
+    },
+    {
+      "file": "resources.json",
+      "listID": "_resources",
+      "bytes": 128,
+      "sha256": "675e395b0ef35a9b3ce860efef1d8980a1ca206844061647389093750d18648e",
+      "sourceRevision": "open-test",
+      "generation": 1
+    }
+  ],
+  "state": {
+    "enabled": [
+      "redirect-list"
+    ]
+  }
+}

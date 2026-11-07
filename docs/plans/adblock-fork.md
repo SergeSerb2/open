@@ -1398,9 +1398,12 @@ stops blocking at once for that page's later requests.
 Rules, in order:
 
 1. **Pass through** when the matcher is disabled, the top site is
-   excluded, the URL is not `http`/`https`, or
-   `request.is_outermost_main_frame` is true (defensive; such factories
-   are not wrapped). The proxy calls the target's `CreateLoaderAndStart`
+   excluded, the URL is not `http`/`https`, or the request is a main-frame
+   document (`request.destination == kDocument`; defensive, such factories
+   are not wrapped). Corrected at Step 4: not `is_outermost_main_frame`,
+   which is true for every request the main frame makes, its subresources
+   included (`url_request.mojom`: "True if |frame_id| is the outermost main
+   frame"); the first N-1 run passed every page subresource through. The proxy calls the target's `CreateLoaderAndStart`
    with the original `receiver` and `client` and keeps nothing: the
    request then flows without Open's hop.
 2. Otherwise run `open_adblock_check`. **Block** when `matched` is true
@@ -3557,12 +3560,18 @@ Step 6 diff, stated here so nobody treats the early form as permanent.
 
 ### 13.2 Local test site (overlay `open/adblock/testdata/`)
 
-Serve with: `python3 -m http.server 8931 --bind 127.0.0.1 -d
-Engine/fork/src/open/adblock/testdata` (run from the repo; the overlay
-files are also in the tree after `engine-apply` — either copy serves).
-Third-party cases need a second origin: run a second server on
-`127.0.0.2` port 8932 serving the same directory (macOS loopback aliases
-work without configuration). The page must not reference the network.
+Serve with the throwaway server below, from the repo copy (the overlay
+files are also in the tree after `engine-apply`; either copy serves).
+**As built (Step 4):** the pages use port-free URLs (`http://127.0.0.1/…`,
+`http://127.0.0.2/…`), and `cefsimple` gets
+`--host-resolver-rules="MAP 127.0.0.1 127.0.0.1:<first>, MAP 127.0.0.2 127.0.0.1:<third>"`
+for the server's two ephemeral ports. Two reasons: macOS has no
+`127.0.0.2` without an interface alias (`bind` fails with `EADDRNOTAVAIL`),
+and the crate's `||host/path` rules need the path right after the host,
+so `||127.0.0.2/frame-ad.html` never matches `127.0.0.2:8932/frame-ad.html`
+(`check_pattern_hostname_left_anchor_filter`, `get_url_after_hostname`).
+Rules and party still see the real hosts. The page must not reference
+the network.
 
 `generations/1/testlist.txt` (include it with its size/hash in a fixture
 `manifest.json` and bind that manifest through `current.json`, §9.2; exact rules; ABP syntax; `127.0.0.1` is the
@@ -3601,7 +3610,7 @@ tests its suppression.
   replacement script runs — the resources payload for the test is a
   `resources.json` beside `testlist.txt` defining `noop.js` as a script
   containing `window.__redirLoaded = true;`),
-  `<img src="http://127.0.0.2:8932/track/pixel.gif">` (third-party
+  `<img src="http://127.0.0.2/track/pixel.gif">` (third-party
   block), `<img src="/track/pixel.gif">` (first-party allow),
 - a `fetch('/api/data.json?utm_source=x&keep=1')` whose final URL the
   page stores on `window.__lastFetchURL` via a same-origin echo
@@ -3653,11 +3662,17 @@ in the fixture manifest as `_resources`.
 ||127.0.0.1/blocked-main.html$document
 ||127.0.0.1/csp-frame.html$csp=script-src 'none'
 127.0.0.1##.style-target:style(outline: 3px solid red)
-127.0.0.1##.style-evil:style(background: url(http://127.0.0.2:8932/beacon.gif))
+127.0.0.1##.style-evil:style(background: url(http://127.0.0.2/beacon.gif))
 127.0.0.1##.proc-ad:has-text(Sponsored)
-127.0.0.1##x{} .exfil{background:url(http://127.0.0.2:8932/exfil.gif)} y
+127.0.0.1##x{} .exfil{background:url(http://127.0.0.2/exfil.gif)} y
 127.0.0.1##.remove-me:remove()
+||127.0.0.2/wt-blocked
 ```
+
+As built, the list also has `/ads/allowed-banner.js` above the
+`@@||127.0.0.1/ads/allowed-banner.js` exception. Without it the exception
+excepts nothing (`/ads/banner.js` is not a substring of
+`/ads/allowed-banner.js`), so N-1's "exception-allowed" proved nothing.
 
 `testlist.txt` is lossy (`$removeparam`), so it always builds from text.
 Its `##+js(...)`, `:style()`, `:remove()` and `:has-text()` lines are
@@ -3673,7 +3688,7 @@ New test files:
   registers `sw.js` (a service worker that fetches `/ads/sw-ad.js` on
   `install` and stores the outcome in Cache Storage). `127.0.0.1` is a
   secure context, so the service worker can register over HTTP.
-- `frames.html`: iframes `http://127.0.0.2:8932/frame-ad.html` (blocked)
+- `frames.html`: iframes `http://127.0.0.2/frame-ad.html` (blocked)
   and `/csp-frame.html` (allowed; its inline script sets
   `window.__cspInlineRan = 1`, which the list CSP must stop). It also has
   `<div class="style-target">`, `<div class="style-evil">`,
@@ -3682,11 +3697,13 @@ New test files:
   hostname rules include both `.ad-slot` and `.proc-ad:has-text(...)`.
 - `fetch.html`: `fetch('/api/xhr-only.json')` (blocked: XHR type) and
   `<script src="/api/xhr-only.json">` (allowed: script type);
-  `fetch('http://127.0.0.2:8932/ads/banner.js', {headers: {'X-Open-Test': '1'}})`
-  (a request that would need a preflight); `new WebSocket('ws://127.0.0.2:8932/ws')`
-  (blocked) and `new WebSocket('ws://127.0.0.1:8931/ws')` (allowed; fails
+  `fetch('http://127.0.0.2/ads/banner.js', {headers: {'X-Open-Test': '1'}})`
+  (a request that would need a preflight); `new WebSocket('ws://127.0.0.2/ws')`
+  (blocked) and `new WebSocket('ws://127.0.0.1/ws')` (allowed; fails
   at the server); `fetch('/api/data.json?' + 'a'.repeat(2 * 1024 * 1024))`
-  (long URL); `<script src="/redirect?to=http://127.0.0.2:8932/ads/redirect-target.js">`.
+  (long URL; as built `2 * 1024 * 1024 - 64` characters, because a URL
+  over `url::kMaxURLChars` (2 MiB) never leaves the renderer);
+  `<script src="/redirect?to=http://127.0.0.2/ads/redirect-target.js">`.
 - `blocked-main.html`: a plain page; the `$document` rule must not block it.
 - `early-hints.html` (N-21): `<script src="/ads/banner.js">`; the throwaway
   server sends it with a `103 Early Hints` response first (Python's
@@ -3710,7 +3727,7 @@ Extension fixture (N-15), throwaway under `/tmp/open-adblock-ext/`, loaded
 with `--load-extension`: an MV3 extension with `webRequest` (it records
 every `onBeforeRequest` URL in `chrome.storage.session`) and one
 declarativeNetRequest rule that redirects `/ext-redirect.js` to
-`http://127.0.0.2:8932/ads/redirect-target.js`.
+`http://127.0.0.2/ads/redirect-target.js`.
 
 ### 13.3 CDP check cases (driver in `/tmp`, never committed)
 
@@ -3745,7 +3762,7 @@ Network cases (Steps 4+; N-9…N-21 added 2026-10-26):
 | N-15 | extension fixture loaded | `/ads/banner.js` is blocked and absent from the extension's `onBeforeRequest` record (Open is outermost, §7.9); `/ext-redirect.js` is redirected by the extension and the redirect target is blocked by Open; an allowed request appears in the record |
 | N-16 | `--use-alloy-style` | N-1 and C-1 pass in an Alloy-style browser (F-36) |
 | N-17 | `fetch.html` sockets and long URL | the 127.0.0.2 WebSocket logs one block at `--v=1` and adds 1 to the count; the 127.0.0.1 one logs no block; the 2 MiB fetch adds 1 to `checks_truncated`, and no check took > 1 ms (G-3) |
-| N-18 | WebTransport | **Hook reachability only; error-object correctness unverified** (review r1 finding 15), unless the PR stands up a local HTTP/3 endpoint (then also assert the page's `WebTransport.ready` rejects and the endpoint saw no session). Default check: `new WebTransport('https://127.0.0.2:8933/x')` on a test rule `\|\|127.0.0.2:8933^` logs one block at `--v=1`. The PR template carries the bold label |
+| N-18 | WebTransport | **Hook reachability only; error-object correctness unverified** (review r1 finding 15), unless the PR stands up a local HTTP/3 endpoint (then also assert the page's `WebTransport.ready` rejects and the endpoint saw no session). Default check: `new WebTransport('https://127.0.0.2/wt-blocked')` on a test rule `\|\|127.0.0.2/wt-blocked` logs one block at `--v=1` (as built; a port-anchored rule never matches in the crate, §13.2). The PR template carries the bold label |
 | N-19 | Step 7+: `redirect-list.txt` generation, second run (DAT load) | status `engine_from_dat=1 resources_loaded ≥ 1`; `redir.js` completes from the `noop.js` stub and `window.__redirLoaded == true` (resources re-applied after deserialize, review 98-4) |
 | N-20 | Step 6+: mid-page exclusion through the CEF API (review r1 finding 15) | (1) Load `index.html`, not excluded: `fetch('/ads/banner.js')` from the page is blocked. (2) Add `127.0.0.1` with `SetOpenAdBlockExcludedDomains`; fetch again from the same page: it loads (the proxied factory re-checks per request, §7.4 rule 1). (3) Remove the exclusion; fetch again from the same page: blocked (same proxied factory). (4) Add the exclusion, navigate to `excluded-start.html` (its factory is made while excluded, so it is not proxied, §7.2 rule 2), remove the exclusion, call `window.__fetchBanner()`: it loads, because that factory stays unproxied until the next navigation. (5) Reload: blocked |
 | N-21 | `early-hints.html` after a page on the excluded `127.0.0.2` (`--open-adblock-exclude=127.0.0.2`, `--enable-features=EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`) | The server answers `early-hints.html` with `103` and `Link: </ads/banner.js>; rel=preload; as=script`, then `200`. The page's own `<script src="/ads/banner.js">` fails with `net::ERR_BLOCKED_BY_CLIENT` (its factory's top site is the new page, not the excluded previous one, §7.2). The PR records whether the server log shows the preload `GET /ads/banner.js` (expected: yes; known gap R-14, preloads never reach the hook). **Validity (review r2 N-4):** the CDP log must show `Network.responseReceivedEarlyHints` for `early-hints.html` with the `/ads/banner.js` preload (the same check as the §7.8 capture control). Without that event N-21 is **invalid**, not passed, because the `103` path never ran |
@@ -3866,17 +3883,21 @@ Engine/fork/scripts/engine-build --target open/adblock/rust:open_adblock_rust
 tools/fetch-adblock-lists.sh
 tools/fetch-adblock-lists.sh --update-pins   # reviewed pin updates only
 
-# Serve the test site (two origins)
-python3 -m http.server 8931 --bind 127.0.0.1 -d Engine/fork/src/open/adblock/testdata
-python3 -m http.server 8932 --bind 127.0.0.2 -d Engine/fork/src/open/adblock/testdata
+# Serve the test site (two origins; as built at Step 4: one throwaway
+# stdlib server on two ephemeral ports, §13.2), then map the hosts to them
+python3 /tmp/open-adblock/server.py Engine/fork/src/open/adblock/testdata /tmp/server.log
+#   prints {"ports": [<first>, <third>]}
 
-# Smoke run (after Step 6; OUT = fork-infra dev out dir)
+# Smoke run (OUT = fork-infra dev out dir); copy the fixture root first,
+# because a run writes engine.dat into it
 OUT=~/Developer/open-engine/chromium_git/chromium/src/out/Release_GN_arm64
-"$OUT/cefsimple" --user-data-dir=/tmp/open-adblock-smoke \
-  --open-adblock-dir=/tmp/open-adblock-lists \
-  --remote-debugging-port=9222 --enable-logging=stderr \
-  --url=http://127.0.0.1:8931/index.html
-python3 /tmp/open-adblock-check.py   # §13.3 driver (throwaway, in /tmp)
+cp -R Engine/fork/src/open/adblock/testdata/adblock-root /tmp/open-adblock-root
+"$OUT/cefsimple.app/Contents/MacOS/cefsimple" --use-mock-keychain \
+  --user-data-dir=/tmp/open-adblock-smoke --open-adblock-dir=/tmp/open-adblock-root \
+  --host-resolver-rules="MAP 127.0.0.1 127.0.0.1:<first>, MAP 127.0.0.2 127.0.0.1:<third>" \
+  --remote-debugging-port=0 --enable-logging=stderr --vmodule='open_adblock*=1' \
+  --url=http://127.0.0.1/index.html
+python3 /tmp/open-adblock/check.py   # §13.3 driver (throwaway, in /tmp)
 ```
 
 ## Appendix B. Evidence map (spot-check before implementing)
@@ -4260,3 +4281,100 @@ cefsimple (`--open-adblock-selftest`, in #100) and a throwaway Cargo driver.
   the same-user threat model, review 100-9).
 - **Follow-ups** (`docs/followups.md`): 100-7, 100-8, the rest of 100-9, the
   0301 build-hook patch.
+### Step 4 status (2026-10-26, checkpoint; no PR yet)
+
+Paused at the user's order (22:25): no new PRs. Branch `m6/adblock-step4`
+(main 4c40ebd merged). All numbers below are from `cefsimple` dev builds
+on an Apple M5 Pro (18 cores) with load averages of 12–24 from other jobs.
+The CDP driver, server, capture and gate scripts are throwaway files in
+`/tmp/open-adblock/` (§13.3); raw output is in `.re/adblock-corpus/`.
+
+**Built.** The proxy (`open_adblock_url_loader_factory`), the matcher
+sequence and engine registry, the factory and socket hooks, the tab counts
+(`open_adblock_tab_helper`), CEF patch 0311 (P-3, +98/−0), 0310's smoke
+switches and load line, the test site and two fixture roots
+(`testdata/adblock-root`, lossy; `testdata/adblock-root-dat`, lossless with
+`noop.js`), the bench switches, and `Engine/fork/adblock/bench/corpus-manifest.json`.
+The §5.5 shim rows owned by Step 4 had already landed in #98; Step 4 only
+verifies them (N-4, N-17, N-19).
+
+**Deviations from the plan** (each also corrected in the section named):
+
+- §7.4 rule 1 tested `is_outermost_main_frame`, which is true for every
+  request the main frame makes; the first N-1 run passed every page
+  subresource through. Now `destination == kDocument`.
+- §13.2: port-free test URLs plus `--host-resolver-rules`, because macOS has
+  no `127.0.0.2` and the crate's `||host/path` needs the path right after
+  the host. `/ads/allowed-banner.js` is added to the list (the exception
+  excepted nothing); the N-18 rule is `||127.0.0.2/wt-blocked`; the long
+  fetch is just under `url::kMaxURLChars`.
+- The service comes from `CefBrowserContext` inside the P-3 hunks, not from
+  the `BrowserContext`: the context's `Initialize()` runs before its Profile
+  exists. The top site is the full host (exclusion matching walks its labels
+  down to the registrable domain). The smoke count is printed by the libcef
+  tab helper, which the factory hook creates for every frame of an enabled
+  Profile, so a page with no stop still prints 0. `--open-adblock-exclude`
+  takes a comma list.
+- Review-checklist fixes found while testing: `ServeStub()` no longer
+  consumes the client when it refuses a stub (a refused stub now ends with
+  `ERR_BLOCKED_BY_CLIENT`, not a closed pipe); list CSP values over 8 KiB or
+  not valid as a header value are dropped, never cut; the `$removeparam`
+  redirect ignores a client-supplied `new_url`.
+
+**N-cases.** The last full run (before two counter-only changes: the
+thread-CPU busy counter and the bench's CPU column) passed every case except
+COUNT-closed-document, which then passed twice on its own once it had a
+control run. Passing: N-1…N-17,
+N-19 (DAT load with resources re-applied), N-21 (valid: the
+`responseReceivedEarlyHints` event was seen; the page's script was blocked;
+the server log shows the preload GET, the known R-14 gap), N-15
+(extension: Open is outermost; the DNR redirect target is blocked by the
+redirect re-check), N-16 (Alloy). N-18: **hook reachability only;
+error-object correctness unverified.** N-20 belongs to Step 6. Added cases,
+all PASS: COUNT-load/reload/pushState, COUNT-closed-document (three
+keepalive fetches from `pagehide` are checked and blocked, and the next
+page's count stays 0), CAP-stub (a 1 MiB stub is served, 1 MiB + 1 is
+blocked), CAP-csp (an 8,192-byte list CSP applies, 8,193 is dropped),
+LIFE-1 (five page exits with 40 loads in flight, then a quit with loads in
+flight: exit 0 in 0.3 s), NO-LEFTOVER. The early spike (Work 1) passed:
+the blocked subframe commits an error page with `unreachableUrl`, the list
+CSP stops the inline script, and its control run (site excluded) runs it.
+
+**Corpus.** 25 front pages, 20,311 URLs (`corpus_sha256` d758ee66…). The
+positive control passed in every process; no page sent a `103`
+(`early_hints_seen: false`, `http11_hints_dropped: 0`), so the R-14 trigger
+did not fire on this corpus.
+
+**Gates** (five runs, medians; caps 8 KiB and 16 KiB):
+
+| Gate | Result | Numbers |
+|---|---|---|
+| G-1 | PASS | Matcher thread `ThreadPoolForegroundWorker`; no CHECK in any N-case run, bench run or gate run |
+| G-2 | mean, p99 PASS; max **FAIL** on wall time | 8 KiB: mean 4.73 µs, p99 25.9 µs, max 1,134 µs. 16 KiB: 4.62, 26.4, 1,208 µs. Thread CPU time of the slowest check is 178–370 µs in all ten runs, nearly always the same 3,256-byte URL; the wall-time maxima of 1–29 ms fall on 85–153-byte URLs, which is time spent waiting for a core |
+| G-3 | PASS | Every long-URL max ≤ 281 µs at both caps (2 MiB: 145–245 µs) |
+| G-4 | PASS | p50 ≤ 32 µs, p99 ≤ 256 µs over 1,005 requests (5 loads) |
+| G-5 wall | PASS | On 54–61 ms, off 117–144 ms (blocked requests never reach the network) |
+| G-5 busy | **FAIL** | 9.9 ms wall, 9.0 ms thread CPU per 200-request load (budget 3 ms). Profile per load: the crate's check 3.0 ms, Mojo decoding of incoming requests 3.8 ms, client callbacks 4.9 ms, `GURL` building 1.4 ms. The plan's 5 µs per-request proxy guess is several times too low |
+| G-6 | **FAIL** | 2–4 checks over 1 ms per 1,075 (max 14.6–15.4 ms), all in load 1: first-use regex compiles (F-35), under load |
+| G-7 | PASS (within spread) | Blocking off with P-3: medians 117.4 and 144.0 ms; without P-3: 124.8 and 127.8 ms |
+| §6.6 footprint | **FAIL** | Browser `phys_footprint` +70 MiB with a DAT-loaded engine, +62 MiB after a text build (budget 40 MiB). All of it is PartitionAlloc (vmmap tag 14, +69.8 MiB dirty), unchanged at 30 s and after a simulated critical memory-pressure signal |
+
+The cap that ships stays 16 KiB: both caps give the same verdicts on the
+corpus (14,467 matched; 14 URLs cut at 8 KiB) and the same costs.
+
+**Left before a PR:**
+
+1. Lead rulings on the four FAIL rows (G-2 max on wall time, G-5 busy, G-6,
+   footprint). Nobody raised a budget.
+2. Break-and-revert proof (checklist §4): run the N-cases on a build without
+   P-3 and record the FAIL lines (two attempts were killed by T3 restarts).
+3. Docs: an engine-patches row for P-3, a `docs/followups.md` entry for N-18
+   (HTTP/3 endpoint), and the "Step 4 as built" section.
+4. Re-record the engine distribution with Step 4 when the lead asks, then
+   `tools/verify-all.sh` and the review-checklist table.
+
+**Shared tree at the checkpoint:** exactly main 4c40ebd + #93 (338c920,
+the same engine files as 65c6a780), the source state of the recorded
+distribution (stamp 5602914f…). Step 4 is not applied there. To put it
+back: copy `Engine/fork/src/open/adblock/` from this branch into the tree,
+then replace 0310 and apply 0311 from this branch's `patches/cef/`.

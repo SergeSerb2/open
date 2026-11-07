@@ -7,6 +7,7 @@
 0303-open-context-menu-submenu-commands.patch  # P1: context-menu commands of submenus with their own delegate (macOS text services) do not crash
 0304-open-extension-popups.patch  # P2: extension action popups get a CEF browser host (ChromeBrowserDelegate friend)
 0305-open-webstore-downloads.patch  # P3: permit only active manager-owned Web Store installer downloads without a CEF browser
-0310-open-adblock-service-owner.patch  # Ad-block: CefBrowserContext owns open_engine::OpenAdBlockService (none after Shutdown); selftest switches only without OFFICIAL_BUILD (adblock-fork §6.1, §13.1; review 100-3, 100-6)
+0310-open-adblock-service-owner.patch  # Ad-block: CefBrowserContext owns open_engine::OpenAdBlockService (none after Shutdown); selftest and smoke switches (--open-adblock-off, --open-adblock-exclude, the smoke load line) only without OFFICIAL_BUILD (adblock-fork §6.1, §13.1; review 100-3, 100-6)
+0311-open-adblock-network-hooks.patch  # Ad-block Step 4: the URLLoaderFactory proxy appended first in WillCreateURLLoaderFactory (outermost), WebSocket and WebTransport checks; the service comes from CefBrowserContext (adblock-fork §7.2, §7.5)
 0314-open-adblock-cefsimple-smoke.patch  # Ad-block, test only: cefsimple opens no window in --open-adblock-selftest mode (adblock-fork §13.1); keep last
 0505-page-website-color-scheme.patch  # Page platform EP-9b: a request context's website color scheme wins over Chrome's in OverrideWebPreferences and after navigation (CefSetWebsiteColorScheme, overlay cef_open_page.h); page-platform §6

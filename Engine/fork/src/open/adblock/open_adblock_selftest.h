@@ -5,8 +5,11 @@
 #ifndef OPEN_ADBLOCK_OPEN_ADBLOCK_SELFTEST_H_
 #define OPEN_ADBLOCK_OPEN_ADBLOCK_SELFTEST_H_
 
+#include <string>
+
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "open/adblock/open_adblock_types.h"
 
 namespace open_engine {
 
@@ -19,6 +22,15 @@ class OpenAdBlockService;
 void RunOpenAdBlockSelftest(OpenAdBlockService* service,
                             base::FilePath adblock_root,
                             base::OnceCallback<void(bool)> done);
+
+// One line of |status| for harness logs: names, numbers and the error, never
+// page data.
+std::string AdBlockStatusText(const AdBlockStatus& status);
+
+// The cefsimple smoke harness (§13.1): loads |adblock_root| into |service|
+// and prints "OpenAdBlockSmoke: load result=<r> <status>" when it is done.
+void LoadOpenAdBlockForSmoke(OpenAdBlockService* service,
+                             base::FilePath adblock_root);
 
 }  // namespace open_engine
 

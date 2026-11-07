@@ -11,6 +11,8 @@
 #include <utility>
 
 #include "base/files/file_util.h"
+#include "open/adblock/open_adblock_engine_registry.h"
+#include "open/adblock/open_adblock_url_loader_factory.h"
 #include "base/files/important_file_writer.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -38,6 +40,10 @@ constexpr size_t kMaxListBytes = 64 * 1024 * 1024;
 // All lists of one generation together (review 100-5; adblock-fork D-16).
 constexpr size_t kMaxInputBytes = 128 * 1024 * 1024;
 constexpr size_t kMaxDatBytes = 256 * 1024 * 1024;
+// The resources file (§6.6 caps; the uBlock Origin set is about 1 MiB).
+constexpr size_t kMaxResourcesBytes = 4 * 1024 * 1024;
+constexpr char kResourcesListId[] = "_resources";
+constexpr char kResourcesFile[] = "resources.json";
 
 constexpr char kDatName[] = "engine.dat";
 constexpr char kReceiptName[] = "engine-inputs.json";
@@ -78,13 +84,20 @@ struct Generation {
   int64_t number = 0;
   std::string manifest_sha256;
   base::FilePath dir;
-  // File name -> SHA-256, and the texts in file-name order.
+  // File name -> SHA-256 of every verified file (lists and resources).
   std::map<std::string, std::string> file_hashes;
+  // List IDs, their SHA-256 and texts, in file-name order (the build
+  // order).
+  std::vector<std::pair<std::string, std::string>> lists;
   std::vector<std::string> texts;
+  // The verified resources.json (§9.3), or empty.
+  std::string resources_json;
+  std::string resources_sha256;
 };
 
 // current.json -> generations/<n>/manifest.json -> every listed file, each
-// checked for size and SHA-256. Never enumerates the directory.
+// checked for size and SHA-256. Never enumerates the directory. One entry
+// may be the resources file (listID "_resources", file "resources.json").
 std::optional<Generation> ReadGeneration(const base::FilePath& root,
                                          std::string* error) {
   auto pointer_text = ReadBounded(root.Append("current.json"), kMaxPointerBytes);
@@ -127,10 +140,12 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
 
   struct Entry {
     std::string name;
+    std::string list_id;
     int bytes;
     std::string sha256;
   };
   std::vector<Entry> entries;
+  std::optional<Entry> resources;
   for (const base::Value& value : *files) {
     const base::DictValue* file = value.GetIfDict();
     const std::string* name = file ? file->FindString("file") : nullptr;
@@ -138,15 +153,31 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
     const std::string* sha = file ? file->FindString("sha256") : nullptr;
     std::optional<int> bytes = file ? file->FindInt("bytes") : std::nullopt;
     if (!name || !list_id || !sha || !bytes || *bytes <= 0 ||
-        static_cast<size_t>(*bytes) > kMaxListBytes ||
-        *name != *list_id + ".txt" || !IsSafeListName(*name) ||
         !IsSha256Hex(*sha) || file->FindInt("generation") != *number ||
         generation.file_hashes.contains(*name)) {
       *error = "read manifest.json: invalid file entry";
       return std::nullopt;
     }
+    if (*list_id == kResourcesListId) {
+      if (*name != kResourcesFile || resources ||
+          static_cast<size_t>(*bytes) > kMaxResourcesBytes) {
+        *error = "read manifest.json: invalid resources entry";
+        return std::nullopt;
+      }
+      resources = Entry{*name, *list_id, *bytes, *sha};
+    } else {
+      if (static_cast<size_t>(*bytes) > kMaxListBytes ||
+          *name != *list_id + ".txt" || !IsSafeListName(*name)) {
+        *error = "read manifest.json: invalid file entry";
+        return std::nullopt;
+      }
+      entries.push_back({*name, *list_id, *bytes, *sha});
+    }
     generation.file_hashes[*name] = *sha;
-    entries.push_back({*name, *bytes, *sha});
+  }
+  if (entries.empty()) {
+    *error = "read manifest.json: no lists";
+    return std::nullopt;
   }
   size_t total_bytes = 0;
   for (const Entry& entry : entries) {
@@ -165,9 +196,37 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
       *error = "read " + entry.name + ": size or SHA-256 mismatch";
       return std::nullopt;
     }
+    generation.lists.emplace_back(entry.list_id, entry.sha256);
     generation.texts.push_back(std::move(*text));
   }
+  if (resources) {
+    auto text =
+        ReadBounded(generation.dir.Append(resources->name), kMaxResourcesBytes);
+    if (!text || text->size() != static_cast<size_t>(resources->bytes) ||
+        Sha256Hex(*text) != resources->sha256) {
+      *error = "read resources.json: size or SHA-256 mismatch";
+      return std::nullopt;
+    }
+    generation.resources_json = std::move(*text);
+    generation.resources_sha256 = resources->sha256;
+  }
   return generation;
+}
+
+// The engine key of adblock-fork §6.6: content hashes only (no generation,
+// path or manifest hash), so two Profiles with the same lists share one
+// engine. Lists in build order.
+std::string EngineKey(const Generation& generation) {
+  std::string input(open_adblock::open_adblock_engine_format());
+  input += "\n";
+  for (const auto& [list_id, sha] : generation.lists) {
+    input += list_id + "\n" + sha + "\n";
+  }
+  input += "resources\n" +
+           (generation.resources_sha256.empty() ? std::string("none")
+                                                : generation.resources_sha256) +
+           "\n";
+  return Sha256Hex(input);
 }
 
 // The DAT receipt binds engine.dat to one generation, its exact inputs, and
@@ -186,6 +245,11 @@ base::DictValue MakeReceipt(const Generation& generation,
   receipt.Set("generation", static_cast<int>(generation.number));
   receipt.Set("manifestSHA256", generation.manifest_sha256);
   receipt.Set("files", std::move(files));
+  if (generation.resources_sha256.empty()) {
+    receipt.Set("resourcesSHA256", base::Value());
+  } else {
+    receipt.Set("resourcesSHA256", generation.resources_sha256);
+  }
   receipt.Set("datBytes", base::NumberToString(dat.size()));
   receipt.Set("datSHA256", Sha256Hex(dat));
   return receipt;
@@ -213,16 +277,49 @@ rust::Box<open_adblock::OpenAdblockEngine> BuildFromText(
     // Lists are untrusted: invalid UTF-8 becomes U+FFFD instead of an abort.
     texts.push_back(rust::String::lossy(text));
   }
+  // rust::Str needs UTF-8: a resources file that is not stays out.
+  rust::String resources = rust::String::lossy(generation.resources_json);
   return open_adblock::open_adblock_build(
       rust::Slice<const rust::String>(texts.data(), texts.size()),
-      rust::Str());
+      rust::Str(resources));
 }
 
-// Runs on the build runner; touches no service state.
-OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
-                                                  bool prefer_dat) {
+void FillReport(const open_adblock::OpenAdblockEngine& engine,
+                const Generation& generation,
+                OpenAdBlockService::BuildResult& result) {
+  const open_adblock::OpenBuildReport report =
+      open_adblock::open_adblock_build_report(engine);
+  result.lossless = report.lossless;
+  result.lossy_kinds.clear();
+  for (const rust::String& kind : report.lossy_kinds) {
+    result.lossy_kinds.emplace_back(kind);
+  }
+  result.resources_loaded = report.resources_loaded;
+  if (!generation.resources_sha256.empty()) {
+    result.resources_version = generation.resources_sha256.substr(0, 12);
+    if (!std::string(report.resources_error).empty()) {
+      result.error = "read resources.json: " + std::string(report.resources_error);
+    }
+  }
+}
+
+// Runs on the build runner; touches no service state. Stops at the two
+// stale checks of §6.6 when a newer load of the same service started.
+OpenAdBlockService::BuildResult BuildOnBackground(
+    base::FilePath root,
+    bool prefer_dat,
+    uint64_t load_id,
+    std::shared_ptr<std::atomic<uint64_t>> latest_load_id) {
   base::ElapsedTimer timer;
   OpenAdBlockService::BuildResult result;
+  auto is_stale = [&] {
+    if (latest_load_id->load(std::memory_order_acquire) == load_id) {
+      return false;
+    }
+    result.stale = true;
+    result.engine.reset();
+    return true;
+  };
   std::string error;
   std::optional<Generation> generation = ReadGeneration(root, &error);
   if (!generation) {
@@ -233,15 +330,28 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
   result.generation = generation->number;
   result.list_count = static_cast<uint32_t>(generation->texts.size());
 
+  // §6.6: another Profile's live engine with the same inputs.
+  const std::string key = EngineKey(*generation);
+  if (auto shared = OpenAdBlockEngineRegistry::Get().Find(key)) {
+    result.engine = std::move(shared);
+    result.shared = true;
+    FillReport(*result.engine->engine, *generation, result);
+    result.build_ms = timer.Elapsed().InMilliseconds();
+    return result;
+  }
+
   if (prefer_dat) {
     if (std::optional<std::string> dat = ReadMatchingDat(*generation)) {
       auto engine = open_adblock::open_adblock_create_empty();
-      // No resources before Step 7.
       const rust::Slice<const uint8_t> bytes(
           reinterpret_cast<const uint8_t*>(dat->data()), dat->size());
-      if (open_adblock::open_adblock_deserialize(*engine, bytes, rust::Str())) {
-        result.engine = std::make_unique<OpenAdBlockService::EngineHolder>(
-            std::move(engine));
+      // A DAT carries no resources: they are applied after the load (F-31).
+      rust::String resources = rust::String::lossy(generation->resources_json);
+      if (open_adblock::open_adblock_deserialize(*engine, bytes,
+                                                 rust::Str(resources))) {
+        FillReport(*engine, *generation, result);
+        result.lossless = true;  // only a lossless build writes a DAT
+        result.engine = MakeEngineHolder(std::move(engine));
         result.from_dat = true;
         result.dat_size_bytes = dat->size();
       } else {
@@ -254,6 +364,9 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
     }
   }
   if (!result.engine) {
+    if (is_stale()) {
+      return result;
+    }
     auto engine = BuildFromText(*generation);
     // The texts are no longer needed: free them before serializing.
     generation->texts = {};
@@ -266,40 +379,43 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
       result.build_ms = timer.Elapsed().InMilliseconds();
       return result;
     }
-    result.lossless = report.lossless;
-    if (!result.lossless) {
-      // A DAT would drop rules (F-31): no cache, and an old DAT of this
-      // generation is never read (its receipt would not match).
-      result.engine =
-          std::make_unique<OpenAdBlockService::EngineHolder>(std::move(engine));
-      result.build_ms = timer.Elapsed().InMilliseconds();
+    FillReport(*engine, *generation, result);
+    if (is_stale()) {
+      // The engine is freed here, on the build runner.
       return result;
     }
-    rust::Vec<uint8_t> serialized = open_adblock::open_adblock_serialize(*engine);
-    result.engine =
-        std::make_unique<OpenAdBlockService::EngineHolder>(std::move(engine));
-    if (serialized.empty()) {
-      result.error = "write engine.dat: serialization failed";
-    } else {
-      // Written from the Rust buffer, without a copy.
-      std::string_view dat(reinterpret_cast<const char*>(serialized.data()),
-                           serialized.size());
-      result.dat_size_bytes = dat.size();
-      // DAT first, then its receipt: a torn pair fails the receipt check
-      // and is rebuilt from text. Failure keeps the in-memory engine.
-      std::string receipt;
-      if (!base::ImportantFileWriter::WriteFileAtomically(
-              generation->dir.Append(kDatName), dat) ||
-          !base::JSONWriter::Write(MakeReceipt(*generation, dat), &receipt) ||
-          !base::ImportantFileWriter::WriteFileAtomically(
-              generation->dir.Append(kReceiptName), receipt)) {
-        result.error = "write engine.dat: failed";
+    if (result.lossless) {
+      rust::Vec<uint8_t> serialized =
+          open_adblock::open_adblock_serialize(*engine);
+      if (serialized.empty()) {
+        result.error = "write engine.dat: serialization failed";
+      } else {
+        // Written from the Rust buffer, without a copy.
+        std::string_view dat(reinterpret_cast<const char*>(serialized.data()),
+                             serialized.size());
+        result.dat_size_bytes = dat.size();
+        // DAT first, then its receipt: a torn pair fails the receipt check
+        // and is rebuilt from text. Failure keeps the in-memory engine.
+        std::string receipt;
+        if (!base::ImportantFileWriter::WriteFileAtomically(
+                generation->dir.Append(kDatName), dat) ||
+            !base::JSONWriter::Write(MakeReceipt(*generation, dat), &receipt) ||
+            !base::ImportantFileWriter::WriteFileAtomically(
+                generation->dir.Append(kReceiptName), receipt)) {
+          result.error = "write engine.dat: failed";
+        }
       }
     }
+    // A lossy set writes no DAT (F-31), and an old DAT of this generation is
+    // never read (its receipt would not match).
+    result.engine = MakeEngineHolder(std::move(engine));
   }
+  OpenAdBlockEngineRegistry::Get().Insert(key, result.engine);
   result.build_ms = timer.Elapsed().InMilliseconds();
   return result;
 }
+
+bool g_histogram_printed = false;
 
 // adblock-fork §6.3.3: lowercase, no trailing dot, no leading "*.", and
 // never a bare public suffix, a path, or an empty string. Swift stores IPv6
@@ -340,11 +456,6 @@ AdBlockStatus::AdBlockStatus(const AdBlockStatus&) = default;
 AdBlockStatus& AdBlockStatus::operator=(const AdBlockStatus&) = default;
 AdBlockStatus::~AdBlockStatus() = default;
 
-OpenAdBlockService::EngineHolder::EngineHolder(
-    rust::Box<open_adblock::OpenAdblockEngine> engine)
-    : engine(std::move(engine)) {}
-OpenAdBlockService::EngineHolder::~EngineHolder() = default;
-
 OpenAdBlockService::BuildResult::BuildResult() = default;
 OpenAdBlockService::BuildResult::BuildResult(BuildResult&&) = default;
 OpenAdBlockService::BuildResult& OpenAdBlockService::BuildResult::operator=(
@@ -353,47 +464,69 @@ OpenAdBlockService::BuildResult::~BuildResult() = default;
 
 OpenAdBlockService::OpenAdBlockService(base::FilePath profile_dir)
     : profile_dir_(std::move(profile_dir)),
-      build_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})) {}
+      matcher_(base::MakeRefCounted<OpenAdBlockMatcher>()),
+      latest_load_id_(std::make_shared<std::atomic<uint64_t>>(0)) {
+  status_.match_cap_bytes = kOpenAdBlockMatchCapBytes;
+}
 
 OpenAdBlockService::~OpenAdBlockService() {
   Shutdown();
 }
 
 void OpenAdBlockService::Shutdown() {
-  shut_down_ = true;
-  ++load_id_;
-  weak_ptr_factory_.InvalidateWeakPtrs();
-  VLOG(1) << "OpenAdBlock: shutdown";
-  std::shared_ptr<const EngineHolder> engine;
-  {
-    // Take the engine out under the lock; free it elsewhere, so a check that
-    // waits for the lock does not wait for the free.
-    std::unique_lock lock(engine_mutex_);
-    engine_.swap(engine);
+  if (shut_down_) {
+    return;
   }
-  ReleaseOnBuildRunner(std::move(engine));
+  shut_down_ = true;
+  latest_load_id_->fetch_add(1, std::memory_order_acq_rel);
+  weak_ptr_factory_.InvalidateWeakPtrs();
+  // G-3 and G-6 (§7.8): the matcher counters, read on this thread.
+  const AdBlockMatcherCounters& counters = matcher_->counters();
+  constexpr auto kRelaxed = std::memory_order_relaxed;
+  VLOG(1) << "OpenAdBlock: shutdown checks=" << counters.checks.load(kRelaxed)
+          << " checks_truncated=" << counters.checks_truncated.load(kRelaxed)
+          << " checks_over_1ms=" << counters.checks_over_1ms.load(kRelaxed)
+          << " max_check_us=" << counters.max_check_us.load(kRelaxed);
+  // The matcher answers "off" from now on; its engine reference drops on
+  // the matcher sequence and the deleter frees the engine on the build
+  // runner (§6.6). Never a free under a lock or on this thread.
+  AdBlockCosmeticsTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](scoped_refptr<OpenAdBlockMatcher> matcher) {
+                       matcher->SetEnabled(false);
+                       matcher->SetEngine(nullptr);
+                     },
+                     matcher_));
+  // G-4 (§7.8): printed here, on the UI thread, where a normal quit always
+  // runs it; a matcher task could be dropped at shutdown.
+  if (!g_histogram_printed) {
+    g_histogram_printed = true;
+    VLOG(1) << "OpenAdBlock: " << AdBlockLatencyHistogramText();
+  }
 }
 
-void OpenAdBlockService::ReleaseOnBuildRunner(
-    std::shared_ptr<const EngineHolder> engine) {
-  if (engine) {
-    // A check on another thread may still hold the engine; then the last
-    // reference frees it there.
-    build_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce([](std::shared_ptr<const EngineHolder>) {},
-                       std::move(engine)));
-  }
+void OpenAdBlockService::PostToMatcher(
+    base::OnceCallback<void(OpenAdBlockMatcher*)> update) {
+  AdBlockCosmeticsTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](scoped_refptr<OpenAdBlockMatcher> matcher,
+                        base::OnceCallback<void(OpenAdBlockMatcher*)> update) {
+                       std::move(update).Run(matcher.get());
+                     },
+                     matcher_, std::move(update)));
 }
 
 void OpenAdBlockService::SetEnabled(bool enabled) {
-  enabled_ = enabled;
-  {
-    std::lock_guard lock(status_mutex_);
-    status_.enabled = enabled;
+  if (shut_down_) {
+    return;
   }
+  enabled_ = enabled;
+  status_.enabled = enabled;
+  PostToMatcher(base::BindOnce(
+      [](bool enabled, OpenAdBlockMatcher* matcher) {
+        matcher->SetEnabled(enabled);
+      },
+      enabled));
   NotifyStatus();
 }
 
@@ -403,60 +536,30 @@ bool OpenAdBlockService::IsEnabled() const {
 
 void OpenAdBlockService::SetExcludedDomains(
     std::vector<std::string> registrable_domains) {
-  std::set<std::string> domains;
+  if (shut_down_) {
+    return;
+  }
+  std::vector<std::string> domains;
   for (std::string& entry : registrable_domains) {
     if (std::optional<std::string> domain = NormalizeDomain(std::move(entry))) {
-      domains.insert(std::move(*domain));
+      domains.push_back(std::move(*domain));
     } else {
       LOG(WARNING) << "OpenAdBlock: skipped an invalid excluded domain";
     }
   }
-  {
-    std::lock_guard lock(status_mutex_);
-    status_.excluded_domains.assign(domains.begin(), domains.end());
-  }
-  {
-    std::lock_guard lock(exclusions_mutex_);
-    excluded_domains_ = std::move(domains);
-  }
+  excluded_domains_ = base::flat_set<std::string>(std::move(domains));
+  status_.excluded_domains.assign(excluded_domains_.begin(),
+                                  excluded_domains_.end());
+  PostToMatcher(base::BindOnce(
+      [](base::flat_set<std::string> domains, OpenAdBlockMatcher* matcher) {
+        matcher->SetExclusions(std::move(domains));
+      },
+      excluded_domains_));
   NotifyStatus();
 }
 
-bool OpenAdBlockService::IsExcluded(const GURL& top_level_url) const {
-  if (!top_level_url.is_valid() || !top_level_url.has_host()) {
-    return false;
-  }
-  std::string host = base::ToLowerASCII(top_level_url.host());
-  if (base::EndsWith(host, ".")) {
-    host.pop_back();
-  }
-  std::lock_guard lock(exclusions_mutex_);
-  if (top_level_url.HostIsIPAddress()) {
-    return excluded_domains_.contains(host);
-  }
-  // The host and each parent domain, at label boundaries, down to the
-  // registrable domain (or to the last label when there is none, so a
-  // stored entry under a private suffix Chromium does not know still
-  // matches; review 100-4).
-  const std::string registrable =
-      net::registry_controlled_domains::GetDomainAndRegistry(
-          top_level_url,
-          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-  std::string_view candidate = host;
-  while (!candidate.empty()) {
-    if (excluded_domains_.contains(std::string(candidate))) {
-      return true;
-    }
-    if (!registrable.empty() && candidate == registrable) {
-      return false;
-    }
-    const size_t dot = candidate.find('.');
-    if (dot == std::string_view::npos) {
-      return false;
-    }
-    candidate.remove_prefix(dot + 1);
-  }
-  return false;
+bool OpenAdBlockService::IsExcludedOnUi(std::string_view host) const {
+  return HostIsExcluded(excluded_domains_, host);
 }
 
 void OpenAdBlockService::LoadFromDirectory(
@@ -470,10 +573,12 @@ void OpenAdBlockService::LoadFromDirectory(
     return;
   }
   adblock_root_ = adblock_root;
-  const uint64_t load_id = ++load_id_;
-  build_runner_->PostTaskAndReplyWithResult(
+  const uint64_t load_id =
+      latest_load_id_->fetch_add(1, std::memory_order_acq_rel) + 1;
+  AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&BuildOnBackground, std::move(adblock_root), prefer_dat),
+      base::BindOnce(&BuildOnBackground, std::move(adblock_root), prefer_dat,
+                     load_id, latest_load_id_),
       base::BindOnce(&OpenAdBlockService::OnBuiltReply,
                      weak_ptr_factory_.GetWeakPtr(), load_id, std::move(done)));
 }
@@ -488,16 +593,9 @@ void OpenAdBlockService::OnBuiltReply(
     service->OnBuilt(load_id, std::move(done), std::move(result));
     return;
   }
-  // Shut down or destroyed: no build runner is left, so free the engine on
-  // a pool thread, not here on the UI thread (review 100-2).
-  if (result.engine) {
-    base::ThreadPool::PostTask(
-        FROM_HERE,
-        {base::TaskPriority::BEST_EFFORT,
-         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce([](std::unique_ptr<EngineHolder>) {},
-                       std::move(result.engine)));
-  }
+  // Shut down or destroyed. Dropping the reference here is safe: the
+  // engine's deleter frees it on the build runner (§6.6).
+  result.engine.reset();
   VLOG(1) << "OpenAdBlock: load " << load_id << " cancelled";
   if (done) {
     std::move(done).Run(AdBlockLoadResult::kCancelled);
@@ -514,11 +612,11 @@ void OpenAdBlockService::OnBuilt(
     uint64_t load_id,
     base::OnceCallback<void(AdBlockLoadResult)> done,
     BuildResult result) {
-  // A newer load started: its result wins. The dropped engine is freed on
-  // the build runner.
-  if (shut_down_ || load_id != load_id_) {
+  // A newer load started: its result wins.
+  if (shut_down_ || result.stale ||
+      load_id != latest_load_id_->load(std::memory_order_acquire)) {
     VLOG(1) << "OpenAdBlock: dropped the result of load " << load_id;
-    ReleaseOnBuildRunner(std::move(result.engine));
+    result.engine.reset();
     if (done) {
       std::move(done).Run(shut_down_ ? AdBlockLoadResult::kCancelled
                                      : AdBlockLoadResult::kStale);
@@ -526,30 +624,30 @@ void OpenAdBlockService::OnBuilt(
     return;
   }
   const bool loaded = !!result.engine;
-  {
-    std::lock_guard lock(status_mutex_);
-    status_.last_build_ms = result.build_ms;
-    status_.last_error = result.error;
-    if (result.engine) {
-      status_.engine_loaded = true;
-      status_.engine_from_dat = result.from_dat;
-      status_.generation = result.generation;
-      status_.list_count = result.list_count;
-      status_.dat_size_bytes = result.dat_size_bytes;
-    }
-  }
-  if (result.engine) {
-    std::shared_ptr<const EngineHolder> engine = std::move(result.engine);
-    {
-      std::unique_lock lock(engine_mutex_);
-      engine_.swap(engine);
-    }
-    // `engine` is the old one now.
-    ReleaseOnBuildRunner(std::move(engine));
+  status_.last_build_ms = result.build_ms;
+  status_.last_error = result.error;
+  if (loaded) {
+    status_.engine_loaded = true;
+    status_.engine_from_dat = result.from_dat;
+    status_.engine_shared = result.shared;
+    status_.generation = result.generation;
+    status_.list_count = result.list_count;
+    status_.dat_size_bytes = result.dat_size_bytes;
+    status_.dat_policy = result.lossless ? "dat" : "text-only";
+    status_.lossy_kinds = result.lossy_kinds;
+    status_.resources_loaded = result.resources_loaded;
+    status_.resources_version = result.resources_version;
+    PostToMatcher(base::BindOnce(
+        [](std::shared_ptr<const EngineHolder> engine,
+           OpenAdBlockMatcher* matcher) {
+          matcher->SetEngine(std::move(engine));
+        },
+        std::move(result.engine)));
   }
   VLOG(1) << "OpenAdBlock: loaded " << result.list_count << " lists, "
-          << (result.from_dat ? "dat" : "text") << ", " << result.build_ms
-          << " ms" << (result.error.empty() ? "" : ", " + result.error);
+          << (result.shared ? "shared" : result.from_dat ? "dat" : "text")
+          << ", " << result.build_ms << " ms"
+          << (result.error.empty() ? "" : ", " + result.error);
   NotifyStatus();
   if (done) {
     std::move(done).Run(loaded ? AdBlockLoadResult::kLoaded
@@ -557,97 +655,22 @@ void OpenAdBlockService::OnBuilt(
   }
 }
 
-std::shared_ptr<const OpenAdBlockService::EngineHolder>
-OpenAdBlockService::CurrentEngine() const {
-  std::shared_lock lock(engine_mutex_);
-  return engine_;
-}
-
-open_adblock::OpenBlockerResult OpenAdBlockService::Check(
-    const GURL& url,
-    const GURL& source_url,
-    open_adblock::OpenRequestType request_type) const {
-  std::shared_ptr<const EngineHolder> holder = CurrentEngine();
-  if (!holder || !url.is_valid()) {
-    return {};
-  }
-  const GURL& source = source_url.is_valid() ? source_url : url;
-  return open_adblock::open_adblock_check(*holder->engine, url.spec(),
-                                          source.spec(), request_type,
-                                          kOpenAdBlockMatchCapBytes);
-}
-
-open_adblock::OpenCosmeticResources OpenAdBlockService::CosmeticResources(
-    const GURL& url) const {
-  std::shared_ptr<const EngineHolder> holder = CurrentEngine();
-  if (!holder || !url.is_valid()) {
-    return {};
-  }
-  open_adblock::OpenCosmeticResources resources =
-      open_adblock::open_adblock_cosmetic(*holder->engine, url.spec());
-  constexpr auto kRelaxed = std::memory_order_relaxed;
-  cosmetic_dropped_procedural_.fetch_add(resources.dropped_procedural, kRelaxed);
-  cosmetic_dropped_unsafe_.fetch_add(resources.dropped_unsafe, kRelaxed);
-  cosmetic_dropped_style_.fetch_add(resources.dropped_style, kRelaxed);
-  cosmetic_dropped_remove_.fetch_add(resources.dropped_remove, kRelaxed);
-  cosmetic_dropped_scriptlet_.fetch_add(resources.dropped_scriptlet, kRelaxed);
-  cosmetic_dropped_over_cap_.fetch_add(resources.dropped_over_cap, kRelaxed);
-  return resources;
-}
-
-std::vector<std::string> OpenAdBlockService::HiddenSelectors(
-    const std::vector<std::string>& classes,
-    const std::vector<std::string>& ids,
-    const std::vector<std::string>& exceptions) const {
-  std::shared_ptr<const EngineHolder> holder = CurrentEngine();
-  if (!holder) {
-    return {};
-  }
-  // Tokens come from pages: invalid UTF-8 becomes U+FFFD.
-  auto to_rust = [](const std::vector<std::string>& values) {
-    rust::Vec<rust::String> out;
-    for (const std::string& value : values) {
-      out.push_back(rust::String::lossy(value));
-    }
-    return out;
-  };
-  rust::Vec<rust::String> rust_classes = to_rust(classes);
-  rust::Vec<rust::String> rust_ids = to_rust(ids);
-  rust::Vec<rust::String> rust_exceptions = to_rust(exceptions);
-  open_adblock::OpenHiddenSelectors hidden =
-      open_adblock::open_adblock_hidden_selectors(
-          *holder->engine,
-          rust::Slice<const rust::String>(rust_classes.data(),
-                                          rust_classes.size()),
-          rust::Slice<const rust::String>(rust_ids.data(), rust_ids.size()),
-          rust::Slice<const rust::String>(rust_exceptions.data(),
-                                          rust_exceptions.size()));
-  // The same counters as CosmeticResources() (review R3-4).
-  constexpr auto kRelaxed = std::memory_order_relaxed;
-  cosmetic_dropped_procedural_.fetch_add(hidden.dropped_procedural, kRelaxed);
-  cosmetic_dropped_unsafe_.fetch_add(hidden.dropped_unsafe, kRelaxed);
-  cosmetic_dropped_over_cap_.fetch_add(hidden.dropped_over_cap, kRelaxed);
-  std::vector<std::string> out;
-  out.reserve(hidden.selectors.size());
-  for (const rust::String& selector : hidden.selectors) {
-    out.emplace_back(selector);
-  }
-  return out;
-}
-
 AdBlockStatus OpenAdBlockService::GetStatus() const {
-  AdBlockStatus status;
-  {
-    std::lock_guard lock(status_mutex_);
-    status = status_;
-  }
+  AdBlockStatus status = status_;
+  status.enabled = IsEnabled();
+  const AdBlockMatcherCounters& counters = matcher_->counters();
   constexpr auto kRelaxed = std::memory_order_relaxed;
-  status.cosmetic_dropped_procedural = cosmetic_dropped_procedural_.load(kRelaxed);
-  status.cosmetic_dropped_unsafe = cosmetic_dropped_unsafe_.load(kRelaxed);
-  status.cosmetic_dropped_style = cosmetic_dropped_style_.load(kRelaxed);
-  status.cosmetic_dropped_remove = cosmetic_dropped_remove_.load(kRelaxed);
-  status.cosmetic_dropped_scriptlet = cosmetic_dropped_scriptlet_.load(kRelaxed);
-  status.cosmetic_dropped_over_cap = cosmetic_dropped_over_cap_.load(kRelaxed);
+  status.checks = counters.checks.load(kRelaxed);
+  status.checks_truncated = counters.checks_truncated.load(kRelaxed);
+  status.cosmetic_dropped_procedural =
+      counters.cosmetic_dropped_procedural.load(kRelaxed);
+  status.cosmetic_dropped_unsafe = counters.cosmetic_dropped_unsafe.load(kRelaxed);
+  status.cosmetic_dropped_style = counters.cosmetic_dropped_style.load(kRelaxed);
+  status.cosmetic_dropped_remove = counters.cosmetic_dropped_remove.load(kRelaxed);
+  status.cosmetic_dropped_scriptlet =
+      counters.cosmetic_dropped_scriptlet.load(kRelaxed);
+  status.cosmetic_dropped_over_cap =
+      counters.cosmetic_dropped_over_cap.load(kRelaxed);
   return status;
 }
 

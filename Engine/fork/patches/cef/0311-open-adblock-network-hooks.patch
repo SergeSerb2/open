@@ -1,0 +1,141 @@
+diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
+index f990219e7..4c92639a3 100644
+--- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
++++ b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
+@@ -45,6 +45,7 @@
+ #include "content/public/common/content_switches.h"
+ #include "net/ssl/ssl_cert_request_info.h"
+ #include "net/ssl/ssl_private_key.h"
++#include "open/adblock/open_adblock_hooks.h"
+ #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+ #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
+ 
+@@ -185,6 +186,15 @@ HINSTANCE GetCodeModuleHandle() {
+ }
+ #endif
+ 
++// Open: the ad-block service of |frame|'s Profile, or null.
++open_engine::OpenAdBlockService* OpenAdBlockServiceFor(
++    content::RenderFrameHost* frame) {
++  CefBrowserContext* context =
++      frame ? CefBrowserContext::FromBrowserContext(frame->GetBrowserContext())
++            : nullptr;
++  return context ? context->open_adblock_service() : nullptr;
++}
++
+ }  // namespace
+ 
+ ChromeContentBrowserClientCef::ChromeContentBrowserClientCef() = default;
+@@ -510,6 +520,12 @@ void ChromeContentBrowserClientCef::WillCreateURLLoaderFactory(
+     return;
+   }
+ 
++  // Open: ad blocking, outermost interceptor (docs/plans/adblock-fork.md §7).
++  open_engine::MaybeProxyURLLoaderFactoryForAdBlock(
++      CefBrowserContext::FromProfile(profile)->open_adblock_service(), frame,
++      render_process_id, type, request_initiator, isolation_info,
++      factory_builder);
++
+   // Based on content/browser/devtools/devtools_instrumentation.cc
+   // WillCreateURLLoaderFactoryParams::Run.
+   network::mojom::URLLoaderFactoryOverridePtr cef_override(
+@@ -570,6 +586,69 @@ void ChromeContentBrowserClientCef::WillCreateURLLoaderFactory(
+       std::move(request_handler));
+ }
+ 
++bool ChromeContentBrowserClientCef::WillInterceptWebSocket(
++    content::RenderFrameHost* frame) {
++  return open_engine::AdBlockWantsWebSocket(OpenAdBlockServiceFor(frame),
++                                            frame) ||
++         ChromeContentBrowserClient::WillInterceptWebSocket(frame);
++}
++
++void ChromeContentBrowserClientCef::CreateWebSocket(
++    content::RenderFrameHost* frame,
++    WebSocketFactory factory,
++    const GURL& url,
++    const net::SiteForCookies& site_for_cookies,
++    const std::optional<std::string>& user_agent,
++    mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
++        handshake_client,
++    WebSocketOptions options) {
++  open_engine::AdBlockCreateWebSocket(
++      OpenAdBlockServiceFor(frame), frame,
++      ChromeContentBrowserClient::WillInterceptWebSocket(frame),
++      std::move(factory), url, site_for_cookies, user_agent,
++      std::move(handshake_client), std::move(options),
++      base::BindOnce(
++          [](ChromeContentBrowserClientCef* self,
++             content::RenderFrameHost* frame, WebSocketFactory factory,
++             const GURL& url, const net::SiteForCookies& site_for_cookies,
++             const std::optional<std::string>& user_agent,
++             mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
++                 handshake_client,
++             WebSocketOptions options) {
++            self->ChromeContentBrowserClient::CreateWebSocket(
++                frame, std::move(factory), url, site_for_cookies, user_agent,
++                std::move(handshake_client), std::move(options));
++          },
++          base::Unretained(this)));
++}
++
++void ChromeContentBrowserClientCef::WillCreateWebTransport(
++    int process_id,
++    int frame_routing_id,
++    const GURL& url,
++    const url::Origin& initiator_origin,
++    mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
++        handshake_client,
++    WillCreateWebTransportCallback callback) {
++  open_engine::AdBlockWillCreateWebTransport(
++      OpenAdBlockServiceFor(
++          content::RenderFrameHost::FromID(process_id, frame_routing_id)),
++      process_id, frame_routing_id, url, initiator_origin,
++      std::move(handshake_client), std::move(callback),
++      base::BindOnce(
++          [](ChromeContentBrowserClientCef* self, int process_id,
++             int frame_routing_id, const GURL& url,
++             const url::Origin& initiator_origin,
++             mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
++                 handshake_client,
++             WillCreateWebTransportCallback callback) {
++            self->ChromeContentBrowserClient::WillCreateWebTransport(
++                process_id, frame_routing_id, url, initiator_origin,
++                std::move(handshake_client), std::move(callback));
++          },
++          base::Unretained(this)));
++}
++
+ bool ChromeContentBrowserClientCef::HandleExternalProtocol(
+     const GURL& url,
+     content::WebContents::Getter web_contents_getter,
+diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
+index c7dc8039c..0487b262d 100644
+--- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
++++ b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
+@@ -89,6 +89,25 @@ class ChromeContentBrowserClientCef : public ChromeContentBrowserClient {
+       network::mojom::URLLoaderFactoryOverridePtr* factory_override,
+       scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner,
+       bool is_for_network_service) override;
++  // Open: ad blocking of frames' sockets (docs/plans/adblock-fork.md §7.1).
++  bool WillInterceptWebSocket(content::RenderFrameHost* frame) override;
++  void CreateWebSocket(
++      content::RenderFrameHost* frame,
++      WebSocketFactory factory,
++      const GURL& url,
++      const net::SiteForCookies& site_for_cookies,
++      const std::optional<std::string>& user_agent,
++      mojo::PendingRemote<network::mojom::WebSocketHandshakeClient>
++          handshake_client,
++      WebSocketOptions options) override;
++  void WillCreateWebTransport(
++      int process_id,
++      int frame_routing_id,
++      const GURL& url,
++      const url::Origin& initiator_origin,
++      mojo::PendingRemote<network::mojom::WebTransportHandshakeClient>
++          handshake_client,
++      WillCreateWebTransportCallback callback) override;
+   bool HandleExternalProtocol(
+       const GURL& url,
+       content::WebContents::Getter web_contents_getter,

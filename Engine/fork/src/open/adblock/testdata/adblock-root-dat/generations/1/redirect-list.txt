@@ -1,0 +1,4 @@
+[Adblock Plus 2.0]
+! Open ad-block test list: lossless, with a $redirect resource (N-19).
+127.0.0.1##.ad-slot
+||127.0.0.1/ads/redir.js$redirect=noop.js
