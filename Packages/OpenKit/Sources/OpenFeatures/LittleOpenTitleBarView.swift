@@ -10,6 +10,8 @@ public final class LittleOpenTitleBarView: NSView {
     private let pill = NSView()
     private let divider = NSView()
     private let profileIconButton: NSButton
+    public var profileIconText: String { profileIconButton.title }
+    public var profileIconImage: NSImage? { profileIconButton.image }
     public let profileButton: NSButton
     public let hostButton: NSButton
     public let copyButton: NSButton
@@ -88,6 +90,19 @@ public final class LittleOpenTitleBarView: NSView {
         profileButton.attributedTitle = NSAttributedString(string: name, attributes: [.font: NSFont.systemFont(ofSize: m.fontSize, weight: .medium), .foregroundColor: m.text.nsColor])
         profileButton.setAccessibilityLabel("Profile: \(name)"); profileButton.isHidden = !showsProfile
         profileIconButton.isHidden = !showsProfile
+        profileIconButton.title = ""; profileIconButton.imagePosition = .imageOnly
+        let symbol: String
+        switch profile?.icon {
+        case .emoji(let emoji):
+            profileIconButton.image=nil;profileIconButton.title=emoji;profileIconButton.imagePosition = .noImage
+            profileIconButton.font=NSFont(name:"AppleColorEmoji",size:14);symbol=""
+        case .symbol(let name):symbol=name
+        case .named(let name):symbol=NamedSpaceIcons.symbolName(for:name)
+        case nil:symbol="person.crop.circle"
+        }
+        if !symbol.isEmpty { profileIconButton.image=NSImage(systemSymbolName:symbol,accessibilityDescription:nil)?.withSymbolConfiguration(.init(paletteColors:[m.text.nsColor])) }
+        profileIconButton.setAccessibilityLabel("Profile: \(name)")
+        profileIconButton.toolTip="Profile: \(name)"
         profileWidth = showsProfile ? min(m.maximumProfileWidth, ceil(profileButton.attributedTitle.size().width) + m.profileTextX - m.profileIcon.minX) : 0
         self.spaceTitle = spaceTitle ?? ""
         let title = "Open in \(self.spaceTitle)"

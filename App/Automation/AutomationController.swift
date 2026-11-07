@@ -32,6 +32,7 @@
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
     var firstRunActionTask: Task<Void, Never>?
+    var profileIndicatorMenuTitles: [String] = []
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
 
@@ -56,6 +57,7 @@
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
@@ -89,6 +91,7 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "profiles-shell": return try await profilesShell(a)
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)

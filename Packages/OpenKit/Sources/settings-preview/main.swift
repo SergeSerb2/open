@@ -27,7 +27,8 @@ import CryptoKit
     func openMoreSettings() { record("openMoreSettings") }
     func revealOpenDataFolder() { record("revealOpenDataFolder") }
     func copyOpenInfoToPasteboard() { record("copyOpenInfoToPasteboard") }
-    func deleteProfileData(profileID: ProfileID) -> String? { record("deleteProfileData \(profileID)"); return nil }
+    func deleteProfileData(profileID: ProfileID, dataDirectoryName: String) async -> String? { record("deleteProfileData \(profileID)"); return nil }
+    func chooseProfileIcon(profileID: ProfileID, anchor: NSView) { record("chooseProfileIcon \(profileID)") }
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds) async -> String? { await clearBrowsingData(profileID: profileID, kinds: kinds, range: .all) }
     func clearBrowsingData(profileID: ProfileID, kinds: ClearDataKinds, range: ClearDataRange) async -> String? { record("clearBrowsingData \(profileID) kinds=\(kinds.rawValue) range=\(range.rawValue)"); return nil }
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage) { record("openProfileSubpage \(profileID) \(page.rawValue)") }
@@ -63,7 +64,7 @@ import CryptoKit
     }
 }
 
-@discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, active:Bool=true, to url: URL, validatePreviewControls: Bool = false) async throws -> [String] {
+@discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, active:Bool=true, to url: URL, validatePreviewControls: Bool = false, enhanceAccessibility: Bool = false) async throws -> [String] {
     let previousAppearance=NSApp.appearance
     let appearance=NSAppearance(named:dark ? .darkAqua:.aqua)!
     NSApp.appearance=appearance
@@ -79,9 +80,10 @@ import CryptoKit
     let axRead = NSSelectorFromString("accessibilityAttributeValue:")
     let axWrite = NSSelectorFromString("accessibilitySetValue:forAttribute:")
     let enhancedAX = "AXEnhancedUserInterface"
-    let previousAX = validatePreviewControls && NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: enhancedAX)?.takeUnretainedValue() : nil
-    if validatePreviewControls, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: enhancedAX) }
-    defer { if validatePreviewControls, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: enhancedAX) } }
+    let needsAX = validatePreviewControls || enhanceAccessibility
+    let previousAX = needsAX && NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: enhancedAX)?.takeUnretainedValue() : nil
+    if needsAX, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: enhancedAX) }
+    defer { if needsAX, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: enhancedAX) } }
     for _ in 0..<3 {
         host.layoutSubtreeIfNeeded(); window.displayIfNeeded()
         try await Task.sleep(for:.milliseconds(50))
@@ -132,6 +134,7 @@ import CryptoKit
         guard ["1", "2", "both"].contains(rawScale) else { throw NSError(domain: "invalid scale", code: 2) }
         let scales = rawScale == "both" ? [1,2] : [Int(rawScale)!]
         if args.contains("--first-run-only") {try await renderFirstRunScreens(output:output,scales:scales);return}
+        if args.contains("--profiles-shell-only") {try await renderProfilesShell(output:output,scales:scales);return}
         settings.selectedPane = .shortcuts
         env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
         for dark in [false,true] { for scale in scales {
@@ -144,6 +147,7 @@ import CryptoKit
             settings.selectedPane = pane
             for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: true, to: output.appendingPathComponent("\(pane == .appIcon ? "app-icon" : pane.rawValue)@\(scale)x.png")) }
         }
+        try await renderProfilesShell(output:output,scales:scales)
         for section in LibrarySection.allCases {
             library.section = section
             for scale in scales { try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: scale, dark: true, to: output.appendingPathComponent("library-\(section.rawValue)@\(scale)x.png")) }
@@ -268,6 +272,34 @@ app.run()
     try body(host)
 }
 
+@MainActor private func renderProfilesShell(output: URL, scales: [Int]) async throws {
+    // Deletion renders mutate Profiles; keep the exported dump-keys fixture intact.
+    let environment = try PreviewEnvironment(); defer { environment.close() }
+    let settings = environment.settings
+    settings.set(true,for:"open.general.searchSuggestNoticeDismissed")
+    settings.selectedPane = .profiles
+    if settings.model.profiles.count > 1 {
+        settings.profiles.setIcon(.symbol("briefcase.fill"),profileID:settings.model.profiles[1].id)
+    }
+    for scale in scales {
+        try await render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:true,to:output.appendingPathComponent("profile-icons@\(scale)x.png"))
+    }
+    _ = settings.profiles.create(name:"Example Unused Profile")
+    settings.profiles.beginDelete()
+    for scale in scales {
+        try await render(ProfileDeleteSheet(model:settings.profiles),size:CGSize(width:508,height:310),scale:scale,dark:true,to:output.appendingPathComponent("profile-delete-disabled@\(scale)x.png"))
+    }
+    settings.profiles.deleteConfirmation=settings.profiles.deleteToken
+    for scale in scales {
+        try await render(ProfileDeleteSheet(model:settings.profiles),size:CGSize(width:508,height:310),scale:scale,dark:true,to:output.appendingPathComponent("profile-delete-enabled@\(scale)x.png"))
+    }
+    settings.profiles.confirmsDelete=false;settings.profiles.beginDelete(unused:true)
+    for scale in scales {
+        try await render(ProfileDeleteSheet(model:settings.profiles),size:CGSize(width:508,height:360),scale:scale,dark:true,to:output.appendingPathComponent("profile-delete-unused@\(scale)x.png"))
+    }
+    settings.profiles.confirmsUnused=false
+}
+
 /// Presses the first accessibility element labeled `label` (the real AX press path). False when absent.
 @MainActor func pressAccessibilityElement(_ root: NSObject, label wanted: String) -> Bool {
     var visited = Set<ObjectIdentifier>()
@@ -289,8 +321,11 @@ app.run()
     var visited = Set<ObjectIdentifier>(), labels: [String] = []
     func visit(_ node: NSObject) {
         guard visited.insert(ObjectIdentifier(node)).inserted else { return }
-        let label = NSSelectorFromString("accessibilityLabel"), children = NSSelectorFromString("accessibilityChildren")
-        if node.responds(to: label), let value = node.perform(label)?.takeUnretainedValue() as? String { labels.append(value) }
+        let children = NSSelectorFromString("accessibilityChildren")
+        for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue"] {
+            let selector = NSSelectorFromString(name)
+            if node.responds(to: selector), let value = node.perform(selector)?.takeUnretainedValue() as? String { labels.append(value) }
+        }
         if node.responds(to: children), let values = node.perform(children)?.takeUnretainedValue() as? [NSObject] { values.forEach(visit) }
         if let view = node as? NSView { view.subviews.forEach(visit) }
     }
