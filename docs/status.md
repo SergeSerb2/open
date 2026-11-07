@@ -95,13 +95,13 @@ Row count by status (other areas retain their historical counts; §1.16 is refre
 | 1.12 Boosts and Zap | 1 | 1 | 5 | 1 | 1 |
 | 1.13 Site Control Center | 0 | 6 | 3 | 0 | 0 |
 | 1.14 Ad blocking | 2 | 1 | 3 | 1 | 0 |
-| 1.15 Import from Arc | 1 | 0 | 10 | 1 | 1 |
+| 1.15 Import from Arc | 7 | 0 | 4 | 1 | 1 |
 | 1.16 Extensions | 11 | 0 | 1 | 0 | 2 |
 | 1.17 Engine and platform basics | 19 | 1 | 24 | 1 | 1 |
 | 1.18 Settings and Library | 10 | 0 | 0 | 0 | 2 |
-| 1.19 First run | 0 | 0 | 4 | 0 | 0 |
+| 1.19 First run | 4 | 0 | 1 | 0 | 0 |
 | 1.20 Release | 2 | 0 | 7 | 0 | 0 |
-| **Total (mixed audit dates)** | **157** | **9** | **101** | **8** | **11** |
+| **Total (mixed audit dates)** | **167** | **9** | **92** | **8** | **11** |
 
 
 ## 1. Feature tables
@@ -383,14 +383,14 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Windows and session selection | DM §2.4, "Archive and session files" | model.md | `ArcImport.swift` | shared first-run App runner (#195) | `firstrun` selected-tab landing; real-data 2 session selections | done | Uses imported session selection in the real window. |
 | Routing rules | DM | model.md | `ArcImport.swift` | shared first-run/Settings runner (#195) | `firstrun` routing re-import; `routing` 9/9 | done | Stable-ID re-import keeps one rule. |
 | Archive | DM "Archive and session files" | model.md | `ArcImport.swift`; `ArchiveStore.importRecords` | shared App runner (#195) | `firstrun`; real-data 21 inserted, 0 on repeat; full gate | done | Duplicate-safe per-Profile store writes. |
-| History | import2 §2 | model.md "phase 2" | `OpenImport/ArcHistoryImport.swift`, `OpenStore/HistoryImport.swift` | CLI on main; App in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` WAL, 5,000 visits, browsing before commit, close, History-only repeat and E-2; real-data 75 then 0 | implemented; PR pending merge | One awaited batch ≤5,000 visits into each existing Profile store, after landing. |
+| History | import2 §2 | model.md "phase 2" | `OpenImport/ArcHistoryImport.swift`, `OpenStore/HistoryImport.swift` | CLI on main; App in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` WAL, 5,000 visits, browsing before commit, close, History-only repeat and E-2; real-data 75 then 0 | done | One awaited batch ≤5,000 visits into each existing Profile store, after landing. |
 | Read and decrypt passwords, cookies, cards, addresses (consent-gated) | import2 §3 | import2 Part A; passwords-autofill (#72) | `OpenImport/ArcSecrets.swift`, `ChromiumCrypto.swift` | CLI (synthetic fixtures only) | `openkit verify-secrets-fixture`; model.md S1/S2 | planned (counts only) | The real Keychain path was never run (lead decision). The App reports `canImportPasswordsAndCookies == false`. |
 | Write imported secrets into Open's profile | import2 §3.7 "Part B" | passwords-autofill (#72: Chromium manager in the fork) | none yet | none | none | planned | Was unplanned. The plan closes the §5.4 decision: use Chromium's built-in manager with Arc's UI. See §3, gap 2. |
 | Extensions: detect reinstall candidates | import2 §2 | model.md | `OpenImport/ArcExtensions.swift` | CLI | model.md (synthetic union) | planned (detect only) | P3 management install is on main (#177); the import reinstall workflow still needs wiring (Import owns it). |
 | Boosts | DM §2.6 | none | — | — | — | unplanned | Blocked on a sample. |
 | Multi-profile Arc installs | DM §6 item 3; profiles Q1 | profiles Q1 (lenient parser) | `ArcImport.swift` | — | — | planned | Needs a sample (§5.2). |
 | Import wizard (Settings ▸ General ▸ Import from Arc…) | — | settings §5.8 | `OpenSettings/ImportWizard.swift`; shared count probe (#66) | shared App runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `settings-preview`; final `firstrun` Settings rows | done (partial) | Live sidebar/archive merge; background History and archive-aware duplicates in this PR. |
-| Import in the first-run flow | — | first-run Steps A–F | `OpenSettings/FirstRun.swift` | native window and runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` 52/52 ×3; [receipt](first-run/steps-ef-verification.md) | implemented; PR pending merge | Functional flows pass. First-content 250 ms target remains open. |
+| Import in the first-run flow | — | first-run Steps A–F | `OpenSettings/FirstRun.swift` | native window and runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` 52/52 ×3; [receipt](first-run/steps-ef-verification.md) | done | Functional flows pass. First-content 250 ms target remains open. |
 | Top Sites, site engagement | — | import2 lead decision: skip | — | — | — | out of scope | |
 
 ### 1.16 Extensions
@@ -494,10 +494,10 @@ The context-menu receipt records final native order for page/link/mailto/image/l
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
-| First-run window: Welcome → Import → Default browser | FC §3.7 r25 | first-run Steps A–F | `OpenSettings/FirstRun.swift` | shared App actions and native window ([#195](https://github.com/SergeSerb2/open/pull/195)) | `firstrun` real-App suite; Settings/Library renders | implemented; final functional checks PASS | Temporary roots only. The default-browser service runs only on its button; system prompt remains user-only. Final M5 `firstrun` 52/52 ×3 and full verification pass in [#206](https://github.com/SergeSerb2/open/pull/206); [receipts](first-run/steps-ef-verification.md). |
-| Import counts, progress and report | — | first-run §5.4 | shared probe and wizard (#66) | `AppImportRunner` ([#195](https://github.com/SergeSerb2/open/pull/195)); background History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` F1–F10, E-2, Settings History-only repeat | implemented; final functional checks PASS | Sidebar/archive/save land first. P-3/P-5 remain live during History. Passwords are capability OFF; count-only probe, no consent or decrypt call. |
+| First-run window: Welcome → Import → Default browser | FC §3.7 r25 | first-run Steps A–F | `OpenSettings/FirstRun.swift` | shared App actions and native window ([#195](https://github.com/SergeSerb2/open/pull/195)) | `firstrun` real-App suite; Settings/Library renders | done | Temporary roots only. The default-browser service runs only on its button; system prompt remains user-only. Final M5 `firstrun` 52/52 ×3 and full verification pass in [#206](https://github.com/SergeSerb2/open/pull/206); [receipts](first-run/steps-ef-verification.md). |
+| Import counts, progress and report | — | first-run §5.4 | shared probe and wizard (#66) | `AppImportRunner` ([#195](https://github.com/SergeSerb2/open/pull/195)); background History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` F1–F10, E-2, Settings History-only repeat | done | Sidebar/archive/save land first. P-3/P-5 remain live during History. Passwords are capability OFF; count-only probe, no consent or decrypt call. |
 | Default browser step | — | first-run §3.5 | shared first-run view; App `DefaultBrowserService` | first-run actions ([#195](https://github.com/SergeSerb2/open/pull/195)) | `firstrun` offer/finish; `routing` service reads | done (system prompt user-only) | No default-browser action runs at launch or in automated verification. |
-| Re-running import adds no duplicates | — | first-run criterion 7 | stable IDs and `history_import_keys` | same runner for Settings and first run ([#206](https://github.com/SergeSerb2/open/pull/206)) | `firstrun` sidebar/archive repeat, manual archive, old Today relaunch and 5,000-visit History-only repeat | implemented; final functional checks PASS | Uses existing Profile stores, one awaited batch of at most 5,000 visits. Archived target-Profile IDs count as duplicates. Newly imported Today tabs start their activity age at import time. |
+| Re-running import adds no duplicates | — | first-run criterion 7 | stable IDs and `history_import_keys` | same runner for Settings and first run ([#206](https://github.com/SergeSerb2/open/pull/206)) | `firstrun` sidebar/archive repeat, manual archive, old Today relaunch and 5,000-visit History-only repeat | done | Uses existing Profile stores, one awaited batch of at most 5,000 visits. Archived target-Profile IDs count as duplicates. Newly imported Today tabs start their activity age at import time. |
 | First-content and imported-tab paint budgets | — | first-run F12 | kernel process start and `sidebarDrawn` / `firstRunLandingStarted` marks | Release App | five samples and interleaved normal main/branch launch | partial: Section 8 / Section 16 launch budget open | first-run first content 371 ms vs 250 ms budget: NOT MET; normal launch 382 ms on main and branch, so first run adds no cost; the 250 ms cold-launch budget is the open Section 8 item 13 / Section 16 launch budget. Imported paint 205 ms (≤700 ms); [loads and all samples](first-run/steps-ef-verification.md#release-timing). |
 
 ### 1.20 Release
