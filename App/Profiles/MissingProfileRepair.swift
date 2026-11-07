@@ -6,7 +6,7 @@ extension AppDelegate {
   func repairMissingProfiles(in model: BrowserModel) -> Bool {
     let ids = model.repairMissingProfileReferences()
     pendingMissingProfileTitles += ids.compactMap { model.space(id:$0).map { model.displayTitle(for:$0) } }
-    if !ids.isEmpty, let window = windowControllers.first?.window {
+    if !ids.isEmpty, let window = frontStandardWindowController?.window {
       // Model swaps must finish installation before their sheet is presented.
       Task { @MainActor [weak self, weak window] in self?.showMissingProfileNoticeIfNeeded(on:window) }
     }

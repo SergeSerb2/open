@@ -21,7 +21,7 @@ final class ProfileTeardown {
     for session in app.littleOpenCoordinator?.sessions.filter({ $0.profileID == profileID }) ?? [] {
       app.littleOpenCoordinator.close(sessionID: session.id, archiveReason: nil)
     }
-    for factory in app.hostFactories.values { factory.retireProfile(profileID, directory: directory) }
+    for factory in app.hostFactories.values where !factory.isIncognito { factory.retireProfile(profileID, directory: directory) }
     guard let context = OEEngine.shared.contexts.first(where: { $0.identifier == directory }) else { return true }
     guard context !== OEEngine.shared.defaultContext else { return false }
     await withCheckedContinuation { continuation in

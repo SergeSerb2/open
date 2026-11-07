@@ -169,6 +169,24 @@ def run(factory, results, tmp, api, defaults_before):
                   and two['indicators'][0]['frame'][2:] == [20, 20]
                   and all(name in menu['indicatorMenu'] for name in ('Default', 'Shell Loaded', 'New Profile…')),
             'indicators': two['indicators'], 'menu': menu['indicatorMenu']}
+        normal = next(row for row in app.call('incognito-state')['windows'] if not row['private'])
+        app.call('menu-perform', id='new-incognito-window')
+        private = wait(lambda: next((row for row in app.call('incognito-state')['windows'] if row['private']), None), timeout=5)
+        assert private, 'private window did not open'
+        try:
+            app.call('window-focus', id=private['id'], activate=True)
+            app.call('key', key='escape', route='app')
+            private_state = app.call('incognito-state', private=True)
+            private_shell = state()
+            results['shell_indicator_private_hidden'] = {
+                'ok': private_state['private'] and not private_state['modelIsNormal']
+                      and private_shell['indicators'] == []
+                      and [row['id'] for row in private_shell['profiles']] == [row['id'] for row in two['profiles']],
+                'indicators': private_shell['indicators'], 'normalProfiles': len(private_shell['profiles']),
+                'privateModelIsNormal': private_state['modelIsNormal']}
+        finally:
+            app.call('window-close')
+            app.call('window-focus', id=normal['id'], activate=True)
         # Native window evidence uses the display's real backing scale.
         # 2x hardware captures stay deferred while the M1 is on hold.
         evidence = Path(api['ROOT']) / 'docs/profiles-shell'

@@ -186,8 +186,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func computeRoot() -> [AnyObject] {
         var r: [AnyObject] = [spacer]
-        if !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
-        if !space.today.isEmpty { r.append(divider) }
+        if !context.isIncognito, !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
+        if !context.isIncognito, !space.today.isEmpty { r.append(divider) }
         r.append(newTab)
         r += space.today.map(\.object)
         return r
@@ -757,7 +757,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         case let t as Tab: return context.model.isPinned(tabID: t.id) ? menus.pinnedTab(t) : menus.todayTab(t)
         case let f as Folder: return menus.folder(f)
         case let s as Split: return menus.split(s)
-        default: return menus.space(space)
+        default: return context.isIncognito ? menus.emptyIncognito() : menus.space(space)
         }
     }
 
@@ -1166,6 +1166,7 @@ final class SpaceHeaderView: NSView {
         layer?.addSublayer(fill)
         icon.space = space
         icon.context = context
+        if context.isIncognito { icon.setAccessibilityElement(true); icon.setAccessibilityRole(.image); icon.setAccessibilityLabel("eyeglasses") }
         title.font = Typography.spaceTitle.font
         title.baseline = SpaceListMetrics.headerTitleBaselineOffset
         title.inset = SpaceListMetrics.headerTextInset
@@ -1215,14 +1216,14 @@ final class SpaceHeaderView: NSView {
         CATransaction.commit()
         icon.frame = m.headerIconFrame
         chevron.frame = m.headerIconFrame
-        icon.isHidden = hovered
-        chevron.isHidden = !hovered
+        icon.isHidden = hovered && !context.isIncognito
+        chevron.isHidden = !hovered || context.isIncognito
         chevron.glyphView.glyph = space.isPinnedCollapsed ? .disclosureRight : .disclosureDown
         let s = m.headerMoreSize
         more.frame = CGRect(x: w - m.headerMoreTrailing - s, y: (m.headerHeight - s) / 2, width: s, height: s)
-        more.isHidden = !hovered
+        more.isHidden = !hovered || context.isIncognito
         var right = hovered ? more.frame.minX - 2 : w - 17
-        let hasProfiles = tracked({ context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
+        let hasProfiles = tracked({ !context.isIncognito && context.model.profiles.count > 1 }) { [weak self] in self?.needsLayout=true }
         profileIndicator.isHidden = !hasProfiles
         if hasProfiles {
             let size = ProfileIndicatorMetrics.hitSize
@@ -1232,13 +1233,14 @@ final class SpaceHeaderView: NSView {
         title.frame = CGRect(x: m.headerTitleX, y: m.headerTitleY, width: max(0, right - m.headerTitleX), height: 18)
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? { page.map { $0.menus.space($0.space) } }
+    override func menu(for event: NSEvent) -> NSMenu? { context.isIncognito ? nil : page.map { $0.menus.space($0.space) } }
 
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2 { beginRename() }
     }
 
     func beginRename() {
+        guard !context.isIncognito else { return }
         context.suppressPreviews(.rename, true)
         let field = RenameField(frame: title.frame.insetBy(dx: -2, dy: -1))
         field.stringValue = context.title(of: space)
