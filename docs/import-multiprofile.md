@@ -88,6 +88,7 @@ The fresh off-screen receipts are:
 | Focused verifier, `roundtrip,import-arc --with-arc-data` | build/roundtrip/import-arc: 3/3 PASS | 41.89/21.47/10.96 → 53.37/37.80/19.80 |
 | Fresh copied-data CLI audit, twice + roundtrip | PASS; 46/46 nodes owned; 6 Spaces split 4/2; Favorites 6/5; Archive 9/12; stable IDs/directories; repeat 0 inserted/21 duplicates | 45.52/37.19/20.10 → 45.52/37.19/20.10 |
 | Archive checker negative proof | expected FAIL, 20 stored ≠ 21 expected | 44.34/37.20/20.31 → 44.34/37.20/20.31 |
+| Off-screen `commandbar-render check`, quiet lock | 151/151 PASS; CPU p95 3.49 ms, wall p95 3.58 ms; inline-completion p95 −0.167 ms, paired median +0.004 ms | 4.37/7.29/12.89 → 4.00/6.86/12.51 |
 
 The positive App suite waits for the foreground check to stop reporting
 UserNotificationCenter. The wait polls once per minute with no section,
