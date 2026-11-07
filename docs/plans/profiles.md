@@ -1596,6 +1596,10 @@ PRs. Steps 6–7 are engine/App PRs. Branch names follow the repo pattern
 - Q2: per-Profile download location is deferred to the downloads milestone.
 - Phasing: model, disk layout, migration, import mapping, and the `openkit profiles` CLI now; [NEEDS ENGINE] steps after the App target + engine foundation land.
 
+## Per-Profile App stores and Profile delete (Section 10, 2026-11-07)
+
+Every App-side store that writes into a Profile's folder (Boosts, passwords and autofill, ad-block lists, and later ones) conforms to `ProfileDataOwner` (`App/Profiles/ProfileTeardown.swift`) and registers once with `app.profileTeardown.register(self)` when it is created. On an in-session Profile delete, `ProfileTeardown.wipe` journals the folder, then calls every owner's `retireProfile(_:directory:)`, then flushes history and archive, deletes the engine context, and removes the folders. After `retireProfile` returns, the owner must never write for that Profile again in this process, including its save on quit; it closes its file handles and drops dirty state, and it never deletes the folder itself. Do not add store-specific calls to `ProfileTeardown`; register instead.
+
 
 ## Section 10 result
 
@@ -1607,6 +1611,7 @@ per-Profile extension UI ([#217](https://github.com/SergeSerb2/open/pull/217)),
 and native parent-Profile private sessions plus safe in-session deletion
 ([#222](https://github.com/SergeSerb2/open/pull/222), 0701–0703). Local CRX
 automation completion (0704) remains in [#223](https://github.com/SergeSerb2/open/pull/223).
+The App-store retirement registration seam shipped in [#231](https://github.com/SergeSerb2/open/pull/231).
 The final shell pass shares the Change Profile warning with Library-only
 Space Manager and uses `moveSpace(id:toProfile:)` on every sidebar path.
 
