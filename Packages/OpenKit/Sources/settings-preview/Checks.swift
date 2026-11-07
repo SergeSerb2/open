@@ -113,7 +113,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 vm.profiles.deleteConfirmation="example unused a"
                 try require(!vm.profiles.canConfirmDelete,"case-insensitive deletion allowed")
                 let labels=try await render(ProfileDeleteSheet(model:vm.profiles),size:CGSize(width:508,height:310),scale:1,dark:true,to:env.root.appendingPathComponent("delete-profile.png"),enhanceAccessibility:true)
-                try require(labels.contains("Delete this Profile") && labels.contains("Delete"),"specific delete dialog did not render")
+                try require(labels.contains("Delete this Profile") && labels.contains("Delete"),"specific delete dialog did not render: \(labels)")
                 vm.profiles.deleteConfirmation=first.name
                 try require(vm.profiles.canConfirmDelete,"exact name refused")
                 await vm.profiles.confirmDeletion()

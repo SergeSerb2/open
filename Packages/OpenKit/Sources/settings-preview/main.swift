@@ -134,7 +134,7 @@ import CryptoKit
         guard ["1", "2", "both"].contains(rawScale) else { throw NSError(domain: "invalid scale", code: 2) }
         let scales = rawScale == "both" ? [1,2] : [Int(rawScale)!]
         if args.contains("--first-run-only") {try await renderFirstRunScreens(output:output,scales:scales);return}
-        if args.contains("--profiles-shell-only") {try await renderProfilesShell(settings,output:output,scales:scales);return}
+        if args.contains("--profiles-shell-only") {try await renderProfilesShell(output:output,scales:scales);return}
         settings.selectedPane = .shortcuts
         env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
         for dark in [false,true] { for scale in scales {
@@ -147,7 +147,7 @@ import CryptoKit
             settings.selectedPane = pane
             for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: true, to: output.appendingPathComponent("\(pane == .appIcon ? "app-icon" : pane.rawValue)@\(scale)x.png")) }
         }
-        try await renderProfilesShell(settings,output:output,scales:scales)
+        try await renderProfilesShell(output:output,scales:scales)
         for section in LibrarySection.allCases {
             library.section = section
             for scale in scales { try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: scale, dark: true, to: output.appendingPathComponent("library-\(section.rawValue)@\(scale)x.png")) }
@@ -272,7 +272,11 @@ app.run()
     try body(host)
 }
 
-@MainActor private func renderProfilesShell(_ settings: SettingsViewModel, output: URL, scales: [Int]) async throws {
+@MainActor private func renderProfilesShell(output: URL, scales: [Int]) async throws {
+    // Deletion renders mutate Profiles; keep the exported dump-keys fixture intact.
+    let environment = try PreviewEnvironment(); defer { environment.close() }
+    let settings = environment.settings
+    settings.set(true,for:"open.general.searchSuggestNoticeDismissed")
     settings.selectedPane = .profiles
     if settings.model.profiles.count > 1 {
         settings.profiles.setIcon(.symbol("briefcase.fill"),profileID:settings.model.profiles[1].id)
@@ -317,8 +321,11 @@ app.run()
     var visited = Set<ObjectIdentifier>(), labels: [String] = []
     func visit(_ node: NSObject) {
         guard visited.insert(ObjectIdentifier(node)).inserted else { return }
-        let label = NSSelectorFromString("accessibilityLabel"), children = NSSelectorFromString("accessibilityChildren")
-        if node.responds(to: label), let value = node.perform(label)?.takeUnretainedValue() as? String { labels.append(value) }
+        let children = NSSelectorFromString("accessibilityChildren")
+        for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue"] {
+            let selector = NSSelectorFromString(name)
+            if node.responds(to: selector), let value = node.perform(selector)?.takeUnretainedValue() as? String { labels.append(value) }
+        }
         if node.responds(to: children), let values = node.perform(children)?.takeUnretainedValue() as? [NSObject] { values.forEach(visit) }
         if let view = node as? NSView { view.subviews.forEach(visit) }
     }
