@@ -351,27 +351,26 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app` after merging main `d54dc5e0`, fresh M5 Debug,
-automation Release and CLI builds pass. SCC has 23 PASS rows, S2/S4 BLOCKED,
-and S11/S12 FAIL at unchanged limits under the lead's interim ruling.
-P1 is 6.067 ms p95; all three native phase negatives are rejected. The heavy
-page builds zero snapshots with the panel closed, one with it open, and zero
-for 250 title changes. X-13 passes in `extensions-ui` (72/72).
-The forced Advanced Settings failure restores saved defaults, closes both
-owned windows and leaves no process. Native `sitecontrol-render` passes
-1549/1549, including F24/F25. M5 App suites pass: extensions-ui 72, toolbar 10,
-features 19, page 85 (4 blocked and 1 deferred), commandbar 77, split 40, and
-space-editor 167. Window has 83 PASS rows and two startup budget FAIL rows;
-pixel rows pass. Every suite has clean cleanup and no focus interruption.
-Startup qualification and the final full gate remain pending. Interrupted,
-M1 and superseded receipts do not count toward acceptance.
+On `s12/scc-app`, App source `6af1eacf` includes main `eaa70c28` (#222).
+Fresh M5 Debug/automation Release and engine fingerprint checks pass against
+`2ecaeada`. SCC records 23 PASS, S2/S4/S10 matching-row coverage BLOCKED,
+and S11/S12 FAIL under the lead's interim ruling. Real private context and
+Boost action refusals pass; matching-row coverage waits for the shared runtime.
+P1 p95 is 4.788 ms; three native phase negatives are rejected. Heavy page
+snapshot counts are closed0/open1, with0 for250 title changes. Cleanup
+restores defaults and closes both owned windows without a focus interruption.
+Quiet commandbar passes151/151 on main and branch. Remaining M5 App/native
+suites, startup and final full gate are pending. A native F25 attempt lost
+focus to UserNotificationCenter PID29564 three times; no native rows count.
+The screen hold is restored. Older-engine, interrupted
+and M1 receipts do not qualify. The PR will record every count and load.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
-| Popover from the URL pill button | FA SC-1 | site-control-boost-editor Step 3 | `OpenSiteControl`, `BrowserSiteControl`, URL/pane glyphs | `AppSiteControlSource`, factory/window hooks (`s12/scc-app`) | M5 Release `sitecontrol`: 23 PASS, 2 BLOCKED, S11/S12 FAIL; compiled owner/route negatives rejected | implemented; visual acceptance pending | URL, floating-card, pane and toolbar anchors; closes on tab/Space/window changes and Peek; unavailable in Little Open. Lead interim ruling: S1 verifies the unavailable ad-block row and its Settings action. S11/S12 remain FAIL. |
+| Popover from the URL pill button | FA SC-1 | site-control-boost-editor Step 3 | `OpenSiteControl`, `BrowserSiteControl`, URL/pane glyphs | `AppSiteControlSource`, factory/window hooks (`s12/scc-app`) | M5 Release `sitecontrol`: 23 PASS, 3 BLOCKED, S11/S12 FAIL; compiled owner/route negatives rejected | implemented; visual acceptance pending | URL, floating-card, pane and toolbar anchors; closes on tab/Space/window changes and Peek; unavailable in Little Open. Lead interim ruling: S1 verifies the unavailable ad-block row and its Settings action. S11/S12 remain FAIL. |
 | Site permissions rows | FA SC-2 | site-control-boost-editor §3.8 | `SiteControlRow` | Existing `SitePermissionStore`; token-based change notification | e2e `sitecontrol` S3 | implemented | Only non-Ask permission decisions appear; toggle writes through the engine owner. Prompt anchor hook uses the visible SCC button. |
-| Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | Weak `SiteControlBoostProvider` seam | S4 blocked: boost runtime | partial | No second BoostStore. Nil provider gives no Boost rows and disables New Boost. The source reads the factory private flag, omits private-window matches and disables/refuses Boost actions. S10 passes with a real private window and ephemeral page context. The lead wires the runtime provider. |
-| Extensions section (pin, site access) | FA SC-4 | extensions-ui §3.9 | Shared `OpenExtensionsUI` items; empty SCC Add tile | Per-window context and Cmd+E picker | M5 Release `extensions-ui` 72/72, including X-13 | implemented on branch | Same context as the window's strips. Picker focuses the first current item; second Cmd+E closes and third reopens. Arrows and type-select move, Return runs, Esc closes; empty picker focuses Add Extension. |
+| Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | Weak `SiteControlBoostProvider` seam | S4 blocked: boost runtime; S10 matching-row proof waits for the provider | partial | No second BoostStore. Nil provider gives no Boost rows and disables New Boost. The source reads `factory.isIncognito`, keeps matching private-window rows disabled, suppresses the boosted glyph and refuses Boost actions. S10 checks a real private window and ephemeral page context; it reports absent matching-row coverage as blocked. The lead wires the runtime provider. |
+| Extensions section (pin, site access) | FA SC-4 | extensions-ui §3.9 | Shared `OpenExtensionsUI` items; empty SCC Add tile | Per-window context and Cmd+E picker | Current-engine X-13 pending screen clear; previous-engine receipts excluded | implemented on branch | Same context as the window's strips. Picker focuses the first current item; second Cmd+E closes and third reopens. Arrows and type-select move, Return runs, Esc closes; empty picker focuses Add Extension. |
 | Share and two Capture actions; Copy URL shortcut | FA SC-5 | site-control-boost-editor §3.4 | Four action buttons | Existing App commands | e2e `sitecontrol` S6; `page` | implemented | Fourth action is Capture Full Page. Copy URL stays on ⇧⌘C and the URL field; no SCC Copy button. |
 | Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor §3.8 | `OpenAdBlock.setExcluded`, `didChange` | Reads the shared App store | S2 blocked: Section 13 ad-block adapter | blocked | The App does not bind the store engine events. Opening a Profile in Settings alone does not make blocking available. Unavailable row opens Settings ▸ Advanced and changes no blocking setting. |
 | Security state (secure or not) | FA SC-7 | site-control-boost-editor §3.9 | Static footer label | HTTPS Secure; HTTP Insecure; other schemes hide | S1/S9 | partial | Certificate viewer waits for E3. |

@@ -1474,49 +1474,48 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-07; PR pending): source head
-`97b3a8e7` has merged main `d54dc5e0`. Fresh M5 Debug, automation Release
-and all release CLIs build against main's engine. The automation dictionary
-has 45 unique keys, including one left and one right. The embedded engine
-code matches distribution `d94583ef`. Older and M1 receipts do not qualify
-this source.
+Step 3 verification (child A, 2026-11-07; PR pending): App source
+`6af1eacf` has merged main `eaa70c28` (#222). Fresh M5 Debug and automation
+Release build with `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
+The 45 automation keys are unique, including one left and one right.
+Embedded engine code matches main distribution `2ecaeada`. Older-engine,
+interrupted and M1 receipts are excluded.
 
-SCC records 23 PASS, S2/S4 BLOCKED, and S11/S12 FAIL. S1 verifies the actual
-“Block Ads & Trackers” unavailable row; its tap calls `openAdBlockSettings`
-once and `toggle` zero times. This differs from the initial On state in the
-plan (lead ruling 2026-11-06 14:41). S2 remains `blocked: section 13 ad-block
+SCC records 23 PASS, three BLOCKED rows, and S11/S12 FAIL. S1 checks the
+actual “Block Ads & Trackers” unavailable row: one `openAdBlockSettings`
+call and zero `toggle` calls. This differs from the plan's initial On state
+(lead ruling 2026-11-06 14:41). S2 remains `blocked: section 13 ad-block
 adapter`; its real exclusion, persistence, reload and request-blocking flow
 must pass when Section 13 binds the existing `AdBlockStore` hooks. S4 waits
 for the shared Boost provider. No second store or engine adapter was added.
 Both Section 12 suites share `fixture_server(tmp)` in
 `tools/e2e/sitecontrol_fixtures.py`.
 
-The source reads `EngineWebContentHostFactory.isIncognito`. S10 passes with
-a real private window and ephemeral page context. Private windows omit Boost
-matches and the boosted glyph, disable New Boost, and refuse edit/toggle.
-Three fresh compiled real-App negatives reject eager pre-engine store
-creation, a wrong unavailable-row action, and a false private-window flag.
-The required cleanup read-back rerun passes after the M5 clear: specific
-Advanced Settings visible at the intentional failure, identical saved and
-restored persistent defaults, two owned windows reduced to zero, no owned
-process left and no focus interruption. Earlier interrupted attempts remain
-excluded.
+The source reads `EngineWebContentHostFactory.isIncognito`. The real private
+window and ephemeral page context pass S10, including disabled/refused
+New/Edit/Legacy/View Boost menus and SCC New Boost menu/tap actions. Matching
+Boost rows stay disabled and the boosted glyph is suppressed. Separate
+`S10_boost_rows` is BLOCKED until the shared runtime supplies matching rows;
+it is never counted as a vacuous PASS. Three compiled real-App negatives
+reject eager pre-engine store creation, a wrong unavailable-row action and
+a false private flag. The fresh cleanup read-back passes: specific Advanced
+Settings at the intentional failure, saved/restored persistent defaults
+identical, two owned windows reduced to zero, no process or focus loss.
 
 R1-1 keeps signposts and gates forced layout/display/`CATransaction.flush()`
-on `onFirstDraw`, which only automation installs. P1 passes at 6.067 ms p95
-(6.152 ms including cold; first cold sample 15.511 ms). Separate native 12 ms
-layout/display/flush controls measure 53.516/26.784/28.291 ms and are rejected;
-each callback samples native call counts 3/1/1. This is native submission
-timing, not physical display scanout. Shipping presentation keeps normal
-AppKit scheduling.
+on `onFirstDraw`, which only automation installs. P1 passes at 4.788 ms p95
+(5.030 ms including cold; first cold sample 17.274 ms). Separate native
+12 ms layout/display/flush controls measure 60.967/33.760/31.346 ms and are
+rejected; each callback samples native call counts 3/1/1. These are native
+submission timings. Shipping presentation keeps normal AppKit scheduling.
 
 R1-2 uses a light button query, filtered source notifications and coalesced
 window refreshes. The 2000-card page builds zero full snapshots closed and
-one open (four/three light reads closed/open and one source delivery per load). A burst
-of 250 title changes builds zero snapshots, with five light reads and zero
+one open, with four light reads and one source delivery per load. A burst
+of 250 title changes builds zero snapshots, with six light reads and zero
 source deliveries. Full snapshot cost is O(1) per commit. R1-3 follows
-§3.6.1: empty Cmd+E focuses + and Return runs Add Extension. S1's empty case
-and X-13 pass; `extensions-ui` is 72/72 on the M5.
+§3.6.1: empty Cmd+E focuses + and Return runs Add Extension. S1's real empty
+picker flow passes. Remaining App regressions and X-13 are held on M5.
 
 S11/S12 remain **open: material, R-7 follow-up (lead ruling)**. The shipped
 `.hudWindow` and dark #686881 at 0.32 are **interim (lead 2026-11-06)**.
@@ -1529,27 +1528,25 @@ a borderless child window with `.behindWindow` blending (§11.1); it is not
 implemented here. These new-suite visual FAIL rows are not regressions and
 do not block the interim merge under the lead ruling.
 
-P2 observes zero native SCC activity across all ten counters, and detects
-then clears its timer canary. S13 closed/open scroll p95 is 4.500/4.400 ms,
-with zero dropped frames in either case; the slow-frame negative is rejected.
-Native `sitecontrol-render` passes 1549/1549, including F24/F25. The App
-regressions pass: extensions-ui 72, toolbar 10, features 19, page 85 (four
-blocked, one deferred), commandbar 77, split 40, and space-editor 167. Window
-has 83 PASS rows and two startup budget FAIL rows; its pixel rows pass. All
-suites have clean cleanup and no focus interruption. Startup qualification
-and the final full gate remain pending. The PR records every count and load.
+P2 observes zero native SCC activity across all ten counters and detects then
+clears its timer canary. S13 closed/open scroll p95 is 4.900/4.800 ms, with
+zero dropped frames; its 13.500 ms slow-frame control is rejected. The PR
+records every load and suite count. The native attempt is INTERRUPTED: F25
+lost focus to UserNotificationCenter PID29564 in all three attempts (load1
+12.64/13.71/17.73). Its raw code-keystroke timing is 2.023 ms against 2 ms at
+load1 37.54. No native rows are accepted from that attempt. Native cleanup
+completed; queued extensions and startup jobs stopped before App launch.
+The M5 screen hold is restored until an explicit clear. Remaining App suites,
+startup qualification and the final full gate are pending. The final gate
+waits for #224 to merge or
+17:55 Vancouver on November 7, then a main merge, Debug build and key grep.
 
-The historical offscreen commandbar comparison met TANDEM §4c after a
-30-minute quiet wait: main/branch CPU p95 medians 10.88/9.39 ms and inline
-medians 0.509/0.223 ms. Those pre-merge timings are excluded from current
-acceptance. The fresh current-head quiet branch run passes 151/151 at
-CPU p95 4.09 ms and inline overhead +0.089 ms; unchanged main passes 150/151
-at 6.82 ms and +0.313 ms (the inline row fails). Both start at load1 ≤12.
-All 149 non-timing rows passed in all six historical runs. The PR
-includes all six runs, their raw timing failures and start/end loads. The
-lead's load ruling permits builds and functional suites at any load; timing
-misses keep their loads and are not waived as strict PASS. Add final receipts
-and the actual PR link after validation.
+The historical commandbar comparison met TANDEM §4c after a 30-minute quiet
+wait, with CPU p95 medians main/branch 10.88/9.39 ms. It remains in the PR's
+six-run history and is excluded from current acceptance. Fresh current-engine
+quiet runs pass 151/151 on both binaries: main/branch CPU p95 3.910/5.704 ms,
+inline cycle p95 overhead +0.087/+0.147 ms, at start load1 7.310/11.601.
+The unchanged limits are 8 ms and +0.3 ms. Timing misses retain their loads.
 
 
 ## 11. Risks and open questions
