@@ -284,8 +284,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] {
-    guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito }),
-          let context = factory.context(for: profileID) else { return [] }
+    guard app.engineReady, let profile = app.model.profile(id: profileID),
+          let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return [] }
     return app.extensionPrompts.table(context.extensions).conflicts
   }
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }

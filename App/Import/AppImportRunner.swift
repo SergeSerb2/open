@@ -60,7 +60,7 @@ final class AppImportRunner {
       lastOutcome = outcome; return outcome
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
-    let imported: ArcImportResult
+    var imported: ArcImportResult
     do {
       // File decoding is already a Sendable seam in OpenImport. Build the live
       // graph on the main actor, once the progress view has been displayed.
@@ -96,8 +96,11 @@ final class AppImportRunner {
     var profileMapping: [ProfileID: ProfileID] = [:]
     if !firstRun || !plan.spaces || !hasSidebarData {
       for profile in imported.model.profiles {
-        if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
-        else if profile.dataDirectoryName == "Default", let live = app.model.defaultProfile { profileMapping[profile.id] = live.id }
+        // Arc Default keeps the live Default context, including its logins.
+        // Resolve the source role before stable IDs; names and paths are not identity.
+        if profile.id == imported.sourceDefaultProfileID, let live = app.model.defaultProfile {
+          profileMapping[profile.id] = live.id
+        } else if let live = app.model.profile(id: profile.id) { profileMapping[profile.id] = live.id }
       }
     }
     func mapExtensions() {
@@ -117,32 +120,14 @@ final class AppImportRunner {
     }
     // Even an empty sidebar can have extensions for an existing destination.
     mapExtensions()
-    if plan.archive {
-      progress("Importing your archive…")
-      for (sourceID, records) in Dictionary(grouping: imported.archiveRecords, by: \.profileID) {
-        guard let source = sourceID.flatMap({ imported.model.profile(id: $0) }) ?? imported.model.defaultProfile else { continue }
-        let targetID = profileMapping[source.id] ?? source.id
-        let profile = app.model.profile(id: targetID) ?? source
-        do {
-          try app.directories.ensureProfileDirectories(for: profile)
-          let store = ArchiveStore(fileURL: app.directories.archiveFileURL(for: profile))
-          let mapped = records.map { record in
-            var row = record
-            // Existing Space profile assignments are authoritative on re-import.
-            row.profileID = row.spaceID.flatMap { app.model.space(id: $0)?.profileID } ?? targetID
-            return row
-          }
-          // Route each record by its actual target Profile, including reassigned Spaces.
-          for (id, batch) in Dictionary(grouping: mapped, by: \.profileID) {
-            let destination = id.flatMap { app.model.profile(id: $0) } ?? profile
-            let sink = destination.id == profile.id ? store : ArchiveStore(fileURL: app.directories.archiveFileURL(for: destination))
-            let write = try await sink.importRecords(batch, checking: true)
-            counts[ImportOutcomeKeys.archive, default: 0] += write.inserted
-            counts["Archive duplicates", default: 0] += write.duplicates
-            counts["Duplicates", default: 0] += write.duplicates
-          }
-        } catch { failures["Archive"] = "Could not be read" }
-      }
+    if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history) {
+      do {
+        _ = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
+          spaces: false, tabs: false, favorites: false, folders: false, searchSettings: false,
+          profiles: true, saving: {
+            for profile in app.model.profiles { try app.directories.ensureProfileDirectories(for: profile) }
+          })
+      } catch { return result("Open could not create the imported Profiles.") }
     }
     // Phase 4 remains capability OFF. No consent token or secret API is called.
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
@@ -158,10 +143,12 @@ final class AppImportRunner {
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
-      guard ImportOutcome(counts: counts).didImportAnything || plan.history else {
+      guard ImportOutcome(counts: counts).didImportAnything || plan.history || (plan.archive && report.archiveImported > 0) else {
         return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
       }
       if plan.spaces && hasSidebarData {
+        do { imported.model = try materializeProfiles(in: imported.model) }
+        catch { return result("Open could not create the imported Profiles.") }
         if !plan.searchSettings { for profile in imported.model.profiles { profile.settings = ProfileSettings() } }
         let importedAt = Date()
         for space in imported.model.spaces {
@@ -186,25 +173,21 @@ final class AppImportRunner {
         if plan.tabs || plan.favorites {
           let candidates = Set(imported.model.profiles.flatMap { $0.favorites.map(\.id) }
             + imported.model.spaces.flatMap { importTabs($0.pinned + $0.today).map(\.id) })
-          var targets = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0) })
-          if plan.spaces || plan.favorites {
-            for profile in imported.model.profiles where targets[profileMapping[profile.id] ?? profile.id] == nil {
-              targets[profile.id] = profile
-            }
-          }
+          let targets = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0) })
           // The sink's queue also owns pending manual archives. Await one batch
           // per Profile before the synchronous, ID-preserving model merge.
           for profile in targets.values {
-            let store = app.model.profile(id: profile.id) == nil
-              ? ArchiveStore(fileURL: app.directories.archiveFileURL(for: profile))
-              : app.archiveSink.store(for: profile.id)
+            let store = app.archiveSink.store(for: profile.id)
             archivedIDs[profile.id] = try await store.existingIDs(in: candidates)
           }
         }
         let merged = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings, archivedIDsByProfile: archivedIDs,
-          importedAt: Date(), saving: { try app.snapshotStore.saveNow(model: app.model) })
+          searchSettings: plan.searchSettings, profiles: plan.archive || plan.history, archivedIDsByProfile: archivedIDs,
+          importedAt: Date(), saving: {
+            for profile in app.model.profiles { try app.directories.ensureProfileDirectories(for: profile) }
+            try app.snapshotStore.saveNow(model: app.model)
+          })
         counts[ImportOutcomeKeys.spaces] = merged.spaces
         counts["Pinned and Today tabs"] = merged.tabs
         counts["Favorites"] = merged.favorites; counts["Folders"] = merged.folders
@@ -220,6 +203,35 @@ final class AppImportRunner {
     // Resolve metadata only after the live model has landed. Destination
     // directory collision suffixes must never be used to read the Arc source.
     mapExtensions()
+    if plan.archive {
+      progress("Importing your archive…")
+      for (sourceID, records) in Dictionary(grouping: imported.archiveRecords, by: \.profileID) {
+        guard let source = sourceID.flatMap({ imported.model.profile(id: $0) }) ?? imported.model.defaultProfile else { continue }
+        let targetID = profileMapping[source.id] ?? source.id
+        guard let profile = app.model.profile(id: targetID) else {
+          failures["Archive"] = "Could not be read"; continue
+        }
+        do {
+          try app.directories.ensureProfileDirectories(for: profile)
+          let store = ArchiveStore(fileURL: app.directories.archiveFileURL(for: profile))
+          let mapped = records.map { record in
+            var row = record
+            // Existing Space profile assignments are authoritative on re-import.
+            row.profileID = row.spaceID.flatMap { app.model.space(id: $0)?.profileID } ?? targetID
+            return row
+          }
+          // Route each record by its actual target Profile, including reassigned Spaces.
+          for (id, batch) in Dictionary(grouping: mapped, by: \.profileID) {
+            let destination = id.flatMap { app.model.profile(id: $0) } ?? profile
+            let sink = destination.id == profile.id ? store : ArchiveStore(fileURL: app.directories.archiveFileURL(for: destination))
+            let write = try await sink.importRecords(batch, checking: true)
+            counts[ImportOutcomeKeys.archive, default: 0] += write.inserted
+            counts["Archive duplicates", default: 0] += write.duplicates
+            counts["Duplicates", default: 0] += write.duplicates
+          }
+        } catch { failures["Archive"] = "Could not be read" }
+      }
+    }
     // The snapshot and window are ready. Ordinary browser saves are now free
     // to run; the separate runner guard still refuses overlapping imports.
     app.importInProgress = false
@@ -295,6 +307,37 @@ final class AppImportRunner {
       }
     }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
+  }
+
+  /// Source Profiles are DTOs. Live Profiles use the same allocator and
+  /// initialization hook as Settings creation, retaining the stable import ID.
+  private func materializeProfiles(in source: BrowserModel) throws -> BrowserModel {
+    let destination = BrowserModel()
+    destination.unavailableProfileDirectoryNames = app.model.unavailableProfileDirectoryNames
+      .union(try app.directories.unavailableDirectoryNames())
+    // First run already owns the bootstrap Default context in this fresh root.
+    // Named source directories are never adopted, even when their names match.
+    if app.model.defaultProfile?.dataDirectoryName == "Default" {
+      destination.unavailableProfileDirectoryNames.remove("default")
+    }
+    let ordered = source.profiles.sorted { $0.id == source.defaultProfile?.id && $1.id != source.defaultProfile?.id }
+    for profile in ordered {
+      var name = profile.name, suffix = 2
+      while destination.profiles.contains(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+        name = profile.name + " (" + String(suffix) + ")"; suffix += 1
+      }
+      guard let live = destination.createProfile(name: name, icon: profile.icon, settings: profile.settings, id: profile.id) else {
+        throw BrowserModel.ProfileImportError.invalidProfile
+      }
+      live.favorites = profile.favorites
+      try app.directories.ensureProfileDirectories(for: live)
+    }
+    destination.spaces = source.spaces
+    destination.windows = source.windows
+    destination.routingRules = source.routingRules
+    destination.defaultDestination = source.defaultDestination
+    destination.rebuildIndex()
+    return destination
   }
 
   private func importTabs(_ nodes: [SidebarNode]) -> [Tab] {

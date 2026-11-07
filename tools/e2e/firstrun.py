@@ -72,6 +72,8 @@ def fixture(root):
 
 
 def run(factory, results, tmp, h):
+    if os.environ.get('OPEN_E2E_FIRSTRUN_MULTIPROFILE_ONLY') == '1':
+        return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['run'](factory, results, tmp, h)
     source = Path(tmp) / 'arc-synthetic'
     shutil.rmtree(source, ignore_errors=True)
     ids = fixture(source)
@@ -433,6 +435,7 @@ def run(factory, results, tmp, h):
         app.quit()
         runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_history.py"))["run"](launch, state, until, row, source, tmp, h)
         runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_extensions.py"))["run"](launch, state, until, row, source, tmp, h, results)
+        runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun_multiprofile.py'))['run'](factory, results, tmp, h)
         timings = []
         for _ in range(5):
             app = launch(fresh=True)
