@@ -1,0 +1,55 @@
+diff --git a/cef/libcef/browser/browser_info.cc b/cef/libcef/browser/browser_info.cc
+index 77193c8..4778256 100644
+--- a/cef/libcef/browser/browser_info.cc
++++ b/cef/libcef/browser/browser_info.cc
+@@ -51,6 +51,26 @@ CefBrowserInfo::~CefBrowserInfo() {
+   DCHECK(frame_info_set_.empty());
+ }
+ 
++CefRefPtr<CefDictionaryValue> CefBrowserInfo::extra_info() const {
++  base::AutoLock lock_scope(lock_);
++  return extra_info_;
++}
++
++bool CefBrowserInfo::SetExtraInfo(CefRefPtr<CefDictionaryValue> extra_info) {
++  CEF_REQUIRE_UIT_RETURN(false);
++  auto copy = extra_info ? extra_info->Copy(/*exclude_empty_children=*/false)
++                         : nullptr;
++  if (extra_info && !copy) {
++    return false;
++  }
++  if (copy) {
++    static_cast<CefDictionaryValueImpl*>(copy.get())->MarkReadOnly();
++  }
++  base::AutoLock lock_scope(lock_);
++  extra_info_ = copy;
++  return true;
++}
++
+ CefRefPtr<CefBrowserHostBase> CefBrowserInfo::browser() const {
+   base::AutoLock lock_scope(lock_);
+   return browser_;
+diff --git a/cef/libcef/browser/browser_info.h b/cef/libcef/browser/browser_info.h
+index 8a96baf..3be3fad 100644
+--- a/cef/libcef/browser/browser_info.h
++++ b/cef/libcef/browser/browser_info.h
+@@ -46,7 +46,10 @@ class CefBrowserInfo : public base::RefCountedThreadSafe<CefBrowserInfo> {
+   int browser_id() const { return browser_id_; }
+   bool is_popup() const { return is_popup_; }
+   const cef::BrowserConfig& config() const { return config_; }
+-  CefRefPtr<CefDictionaryValue> extra_info() const { return extra_info_; }
++  // Replacement renderers read this snapshot on their request sequence.
++  CefRefPtr<CefDictionaryValue> extra_info() const;
++  // UI thread only. Store a read-only copy; nullptr clears the snapshot.
++  bool SetExtraInfo(CefRefPtr<CefDictionaryValue> extra_info);
+ 
+   // May return nullptr if the browser has not yet been created (before
+   // SetBrowser) or if the browser has been destroyed (after BrowserDestroyed).
+@@ -202,6 +205,7 @@ class CefBrowserInfo : public base::RefCountedThreadSafe<CefBrowserInfo> {
+   const int browser_id_;
+   const bool is_popup_;
+   const cef::BrowserConfig config_;
++  // Protected by |lock_|, including reads from renderer request sequences.
+   CefRefPtr<CefDictionaryValue> extra_info_;
+ 
+   // Navigation will be blocked while |navigation_lock_| exists.

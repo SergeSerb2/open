@@ -421,6 +421,20 @@ CEF patch `0601-open-script-world.patch` confines queued-context actions and
 release notifications to the main world; isolated-world creation must not
 flush or invalidate the main frame's queue.
 
+CEF patch `0602-open-browser-extra-info.patch` makes the browser's stored
+extra-info snapshot replaceable. Its getter and setter share `CefBrowserInfo`'s
+lock; the setter stores a read-only copy on the UI thread. The experimental
+`cef_open_browser_info.h` API is implemented in `open/browser/page/open_browser_info.cc`.
+`oe_broadcastScripts` updates the snapshot before sending the existing renderer
+message. `OnRenderViewReady` keeps its resend as a second path.
+
+Handoff precheck: CEF `libcef/browser/browser_info_manager.cc:374–394` resolves
+an existing browser for `OnGetNewBrowserInfo`; `SendNewBrowserInfoResponse` at
+lines 810–845 uses the request's sequence and copies `browser_info->extra_info()`
+into the renderer reply. `OEApp.mm`'s `OnBrowserCreated` reads `oe.scripts`
+before `OnContextCreated`. Updating that stored value therefore reaches a
+replacement process before its first document-start script.
+
 The overlay API `cef_open_world.h` creates or gets that world's context using
 Blink's `ExecuteScriptInIsolatedWorld` and `GetScriptContextFromWorldId`.
 `OEApp::OnContextCreated` filters to the main world, then runs matching Open
@@ -446,7 +460,8 @@ Section 13's work.
 
 Evidence: real-App `features` rows `open_world_document_start`,
 `open_world_extension_isolation`, `open_world_messages`, `open_world_limits`,
-plus the existing `user_scripts` row. Build and suite receipts are recorded in
+`open_world_non_json_result`, `open_world_replacement_renderer`, plus the
+existing `user_scripts` row. Build and suite receipts are recorded in
 the PR. This transport adds no App UI.
 
 ## P8. Native ad-block engine

@@ -39,3 +39,4 @@ _cef_is_page_script_context
 _cef_get_open_script_context
 _cef_is_open_script_context
 _cef_get_script_document_identifier
+_cef_set_browser_extra_info

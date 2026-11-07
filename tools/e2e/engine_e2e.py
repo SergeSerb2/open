@@ -2185,8 +2185,7 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
-    import engine_activation
-    engine_activation.run(app_factory, results)
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
     sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     window_material_checks(app_factory, results, tmp)

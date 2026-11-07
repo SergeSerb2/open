@@ -24,3 +24,5 @@ paths: cef/tests/cefsimple/simple_app.cc
 paths: cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
 # 0601-open-script-world.patch
 paths: cef/libcef/renderer/render_frame_observer.cc
+# 0602-open-browser-extra-info.patch
+paths: cef/libcef/browser/browser_info.cc cef/libcef/browser/browser_info.h

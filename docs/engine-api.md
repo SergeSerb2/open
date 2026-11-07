@@ -385,10 +385,18 @@ before adding it to a context; the context copies the script. Open scripts
 always run at document start in the main frame, using the existing match
 patterns. Page scripts keep their injection time and frame options.
 
+CEF patch `0602-open-browser-extra-info.patch` adds the experimental UI-thread
+`CefSetBrowserExtraInfo(browser, extraInfo)` entry point. It stores a read-only
+copy for future renderer processes (null clears it). Script changes update this
+snapshot before notifying the current renderer, so scripts added after a tab
+exists run at document start after a renderer replacement too. The existing
+`OnRenderViewReady` resend remains in place.
+
 `evaluateJavaScript(_:inWorld:)` evaluates in the current document. The Open
 world shares the DOM, with separate globals and DOM wrappers. It grants no
-user gesture, awaits promises, returns JSON-compatible values (undefined is
-null), and reports exceptions. Open evaluation limits: 1 MiB source (UTF-16
+user gesture, awaits promises, returns JSON-compatible values (undefined and
+values whose JSON serialization is undefined become null), and reports
+exceptions. Open evaluation limits: 1 MiB source (UTF-16
 units), 1 MiB UTF-8 result, 64 pending calls, 10-second completion deadline.
 Open source containing NUL or malformed Unicode is refused before conversion.
 Page evaluation keeps its existing behavior.

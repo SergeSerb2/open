@@ -2,6 +2,7 @@
 
 #include <mutex>
 
+#include "include/cef_open_browser_info.h"
 #include "include/cef_request_context_handler.h"
 #include "include/cef_resource_request_handler.h"
 #include "include/wrapper/cef_helpers.h"
@@ -563,13 +564,14 @@ class OENotificationListCallback : public CefNotificationListCallback {
   return list;
 }
 
-// Sends the script list to the current renderer of every web content. New
-// renderers get it from extra_info (creation) or OnRenderViewReady.
+// Update the stored snapshot before notifying current renderers. Replacement
+// renderers receive it before document start; OnRenderViewReady also resends it.
 - (void)oe_broadcastScripts {
   for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
     if (webContent.context != self || !webContent.oe_browser) {
       continue;
     }
+    CefSetBrowserExtraInfo(webContent.oe_browser, [webContent oe_extraInfo]);
     CefRefPtr<CefProcessMessage> msg =
         CefProcessMessage::Create(kOEMsgScriptsUpdate);
     msg->GetArgumentList()->SetList(0, [self oe_scriptsValue]);
