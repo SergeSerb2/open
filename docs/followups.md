@@ -86,7 +86,7 @@ Small items found during review and verification. Each line: area — issue — 
 - Extensions X-13 (Section 12) — BLOCKED: Cmd+E needs the App Site Control Center presenter/data source (`.showSiteControls` remains a stub). Shared Extensions UI context and refresh hooks are ready in [#175](https://github.com/SergeSerb2/open/pull/175) / [#189](https://github.com/SergeSerb2/open/pull/189). Wire the real presenter, then prove arrows/Return/toggle in `extensions-ui`.
 - ~~Extensions X-19 (Section 9) — run/popup/activeTab/tabs.query need Chrome-style Little Open pages as tabs of their own `OEBrowser` (lead ruling A).~~ Completed in [#192](https://github.com/SergeSerb2/open/pull/192): nine real-App rows PASS, including Profile re-attach and extra-tab routing to main Today; wrong-target, skipped re-attach and discarded-extra-tab negative proofs fail. Arc parity for extra-tab routing still needs a capture.
 - Extensions capture session — user-owned Arc captures [S-1…S-12](plans/extensions-ui.md#12-screenshots-needed-from-the-user-arc-their-own-machine), plus toolbar C1, remain open: hover, slot fit/order, popup, prompts, SCC, menus, Little Open, toast, page-menu placement, Split View, Cmd+E and badges. Store raw captures in `.re/`; no Arc assets or personal data in git. Existing Open-only renders/e2e do not settle these guesses. — Section 6, 2026-11-06
-- Extensions per-Profile UI — Section 10 owns the remaining Profile UI gaps. Extension managers/actions/commands follow the Profile's own context; P3 non-default-profile install proves isolation, not complete per-Profile UI acceptance. `chrome.sidePanel` is out of v1 (Q6), not a pending Section 6 implementation.
+- Extensions per-Profile UI — Section 10's real-App `extensions-ui P10_*` covers two-Profile/two-window strips, key-window menus/shortcuts, Work popups/management, context reuse, Little Open and a Profile without a Space. [Receipt and exact native 2x rerun](profiles-memory.md). Cmd+E remains Section 12; global OS shortcut delivery and packed permission-increase updates retain their separate gaps above. `chrome.sidePanel` is out of v1 (Q6).
 - Shell (P1) — pin and unpin requests extract a tab from its folder or split, and unpin puts it at the end of Today (Chrome puts it right after the pinned tabs). Refuse pin changes when the direct parent is a folder or split pane; insert an unpinned direct tab at the top of Today. — PR #53 shell review 5, 2026-10-26
 - Shell (P1) — requests for a tab whose page lives in another Open window return silently (no window raise); add a two-window check and either raise that window or document the refusal. A two-profile check waits for the profile layout fix. — PR #53 shell review 6, 2026-10-26
 - Shell (P1) — undo and redo of extension changes: redo of a removed tab creates a new page with a new `chrome.tabs` id and no `onCreated`. State the rule in the P1 docs and run one manual pass for undo of remove and pin. — PR #53 shell review 7, 2026-10-26
@@ -290,3 +290,34 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 ## Section 10: Air Traffic Control capture gaps
 
 User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps.
+
+
+## Section 14: multi-profile import boundaries
+
+- Import Undo removes created Profiles and sidebar/routing changes from the
+  model. Main's Profile deletion path needs typed confirmation and defers loaded
+  context data until restart. Undo does not erase Archive/History stores or
+  engine directories. Complete this through Section 10's in-session deletion
+  path (0702); do not bypass its teardown boundary.
+- Session Favorite keys contain a Profile and window but no Space. When a source
+  window focuses another Profile, import uses the Favorite owner's first Space.
+  This is an accepted, marked guess. Settings keeps its current windows and selections and
+  imports selections only for newly added Spaces; it does not recreate Arc
+  window layout. User-operated Arc evidence is needed for exact inactive-Profile
+  session behavior. See [multi-profile import](import-multiprofile.md).
+
+- C1c review-fix App validation (2026-11-07): 12 `MP_*` positives, all 11
+  fixture-negative proofs, the Default-role code-break proof, forced dialog
+  cleanup, full `firstrun` (64/64), counts-only real-App audit, `routing`,
+  `sidebar`, and `settings-preview` passed. The existing sidebar durable-cookie
+  row remains SKIP because `profiles` owns it. The final full verifier table
+  is recorded in draft PR #221 on its final head. See [current receipts](import-multiprofile.md).
+
+- Directory-limit boundary flows (255-byte acceptance and 256-byte refusal)
+  and general decoded-memory bounds for the inherited JSON parser remain
+  follow-ups. They are outside PR #221's review fix. No boundary-flow or
+  worst-allocation acceptance is claimed.
+
+The lead decided against provenance migration for earlier Settings imports:
+only pre-release development builds made them. Arc Default maps by role to the
+live Open Default; named Profiles still match stable import IDs only.
