@@ -163,7 +163,7 @@ def run(h, factory, results, tmp):
                 script = '''(async () => {
                   if (!chrome.passwordsPrivate?.addPassword) return {status:'api-unavailable'};
                   return await Promise.race([
-                    new Promise(resolve => chrome.passwordsPrivate.addPassword(%s, () => resolve({status:chrome.runtime.lastError ? 'backend-error' : 'added'}))),
+                    new Promise(resolve => chrome.passwordsPrivate.addPassword(%s, success => resolve({status:chrome.runtime.lastError ? 'backend-error' : success === false ? 'backend-refused' : 'added'}))),
                     new Promise(resolve => setTimeout(() => resolve({status:'timeout'}), 2000))]);
                 })()''' % json.dumps({'url': urls['login'], 'username': fixtures['USERNAME'], 'password': fixtures['PASSWORD'], 'note': '', 'useAccountStore': False})
                 try:
