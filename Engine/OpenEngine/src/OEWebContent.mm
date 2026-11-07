@@ -486,7 +486,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 }
 
 - (void)oe_createBrowserNow {
-  if (_closeRequested || _browser) {
+  if (_closeRequested || _browser || !self.context.oe_isReady ||
+      !self.context.oe_requestContext) {
     _creating = NO;
     return;
   }
