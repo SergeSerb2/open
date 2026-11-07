@@ -94,7 +94,11 @@ public final class ScriptSetCommand: NSSetCommand {
     }
 
     private func setProperty() -> Any? {
-        let requested = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
+        // NSSetCommand splits the property off receiversSpecifier. Keep the
+        // original event's complete path when identifying a transient write.
+        let requested = appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d)
+            .flatMap { NSScriptObjectSpecifier(descriptor: $0) }
+            ?? directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
         guard let (reference, id) = ScriptTransientTarget.reference(in: requested) else {
             return super.performDefaultImplementation()
         }
