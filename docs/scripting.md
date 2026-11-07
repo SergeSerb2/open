@@ -333,6 +333,13 @@ for property reads, setters and every verb, including a second close. Little Ope
 references are not persisted across launches. Application `tabs` enumeration and
 count remain write-only (1004); only unique-ID reference resolution is available.
 
+Cocoa checks write-only access before resolving both reads and command receivers.
+`ScriptGetCommand` reads the named transient tab's supported properties directly.
+`ScriptTransientTabCommand` resolves only an application unique-ID receiver; normal
+receivers keep Cocoa's path. `ScriptSetCommand` handles transient URL writes and
+delegates normal writes to NSSetCommand. Registration preserves each dictionary
+command's argument names, types and event codes. The dictionary stays unchanged.
+
 `tools/e2e/applescript_littleopen.py` runs these flows through the actual bundled
 dictionary and Cocoa Apple events within `applescript`, on warm and cold launches.
 It checks the specific native window through `little-open-state`, page values,

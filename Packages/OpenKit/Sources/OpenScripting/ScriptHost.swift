@@ -20,7 +20,7 @@ public protocol LittleTabProviding: AnyObject {
 @MainActor
 public final class ScriptHost {
     public static let shared = ScriptHost()
-    private init() { ScriptGetCommand.install() }
+    private init() { ScriptGetCommand.install(); ScriptTransientTarget.install() }
 
     public var modelProvider: (() -> BrowserModel?)?
     public var engineBridge: (any ScriptEngineBridge)?

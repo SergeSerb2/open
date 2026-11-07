@@ -8,6 +8,9 @@ import OpenModel
 enum ScriptTarget {
     private static func resolve<T>(_ command: NSScriptCommand, receiver: T?) -> T? {
         if let specifier = command.directParameter as? NSScriptObjectSpecifier {
+            if let (_, id) = ScriptTransientTarget.reference(in: specifier), T.self == ScriptTab.self {
+                return NSApplication.shared.valueInAppleScriptTabsWithUniqueID(id) as? T
+            }
             let value = specifier.objectsByEvaluatingSpecifier
             if let value = value as? T { return value }
             if let values = value as? [T], let receiver, values.contains(where: { ($0 as AnyObject) === (receiver as AnyObject) }) { return receiver }
