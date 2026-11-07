@@ -170,7 +170,7 @@ def run(factory, results, tmp, root, wait):
             page=popup_page, runtime=popup_runtime)
         app.call('popup-close')
         app.call('ext-ui-menu', kind='bar', select='Manage Extensions…')
-        manage = wait(lambda: next((t for t in app.call('tabs') if t['url'] == 'chrome://extensions' and t['selected']), None), timeout=15)
+        manage = wait(lambda: next((t for t in app.call('tabs') if t['url'] in ('chrome://extensions', 'chrome://extensions/') and t['selected']), None), timeout=15)
         assert manage, 'Manage Extensions did not open a Work tab'
         app.call('wait', tab=manage['id'])
         assert wait(lambda: app.eval(manage['id'], 'typeof chrome.developerPrivate?.getExtensionsInfo') == 'function', timeout=10)

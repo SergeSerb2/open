@@ -457,9 +457,17 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         forced=hover(False)
         results["X3_popup_forces_visible"]={"ok":forced["visible"] and app.call("ext-popup-state")["open"],"strip":forced}
         close()
-        for _ in range(2): app.call("command", id="manage-extensions")
-        manage = [t for t in app.call("tabs") if t["url"] == "chrome://extensions"]
-        results["X17_manage_singleton"] = {"ok": len(manage) == 1 and manage[0]["selected"], "tabs": len(manage)}
+        management_tabs = []
+        for _ in range(2):
+            app.call("command", id="manage-extensions")
+            # Chromium commits the root WebUI with a trailing slash. Match the
+            # requested/committed forms, then require the same selected tab.
+            management_tabs.append([t for t in app.call("tabs")
+                                    if t["url"] in ("chrome://extensions", "chrome://extensions/")])
+        results["X17_manage_singleton"] = {
+            "ok": all(len(tabs) == 1 and tabs[0]["selected"] for tabs in management_tabs)
+                  and management_tabs[0][0]["id"] == management_tabs[1][0]["id"],
+            "tabs": len(management_tabs[-1]), "states": management_tabs}
         app.call("select", tab=control)
         app.call("split")
         app.call("command", id="next-split-pane")
