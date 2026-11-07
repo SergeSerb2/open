@@ -83,6 +83,7 @@ public struct RoutingWindowSnapshot: Hashable, Sendable {
 /// evaluation uses the first occurrence if the caller supplies duplicates.
 public struct RoutingSnapshot: Sendable {
     public var spaces: [RoutingSpaceSnapshot]
+    public var profiles: [ProfileID]
     public var windows: [RoutingWindowSnapshot]
     public var rules: [RoutingRule]
     public var defaultDestination: DefaultDestination
@@ -92,8 +93,9 @@ public struct RoutingSnapshot: Sendable {
 
     public init(spaces: [RoutingSpaceSnapshot], windows: [RoutingWindowSnapshot],
                 rules: [RoutingRule], defaultDestination: DefaultDestination,
-                externalLinksInLittleOpen: Bool, mostRecentOverride: SpaceID? = nil) {
+                externalLinksInLittleOpen: Bool, mostRecentOverride: SpaceID? = nil, profiles: [ProfileID]? = nil) {
         self.spaces = spaces; self.windows = windows; self.rules = rules
+        self.profiles = profiles ?? Array(Set(spaces.map(\.profileID)))
         self.defaultDestination = defaultDestination
         self.externalLinksInLittleOpen = externalLinksInLittleOpen
         self.mostRecentOverride = mostRecentOverride
@@ -104,6 +106,7 @@ public enum RoutingVia: Hashable, Sendable, Codable {
     case rule(index: Int, id: RuleID)
     case defaultDestination
     case fallbackMissingSpace(requested: SpaceID)
+    case fallbackMissingProfile(requested: ProfileID)
     case defaultSuppressedByToggle
     case noSpaces
     case rejectedNonHTTP(scheme: String?)
@@ -118,7 +121,7 @@ public struct RuleTrace: Hashable, Sendable, Codable {
     public var index: Int
     public var ruleID: RuleID
     public enum Outcome: Hashable, Sendable, Codable {
-        case matched, hostMismatch, sourceMismatch, sourceUnknown, targetSpaceMissing
+        case matched, hostMismatch, sourceMismatch, sourceUnknown, targetSpaceMissing, targetProfileMissing
     }
     public var outcome: Outcome
     /// A value copy makes the shared formatter independent of mutable rule lists.

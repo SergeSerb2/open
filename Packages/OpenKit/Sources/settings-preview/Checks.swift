@@ -88,7 +88,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["profile-icon-button", "profile-delete-dialogs", "extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
+    let names = ["profile-icon-button", "profile-delete-dialogs", "extension-shortcuts", "essential-shortcuts", "shortcuts-callout", "general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-destination-picker", "links-profile-issues", "links-profile-destinations", "links-test-automatic", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -501,6 +501,111 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(vm.links.drafts[0].pattern.isEmpty && disk.routingRules.first?.match == .hostEquals("example.com"), "invalid draft reached disk or disappeared")
                 vm.links.drafts[0].pattern = "example.com"; vm.links.spaces.removeAll { $0.id == vm.model.spaces[2].id }; vm.links.runTest()
                 try require(vm.links.testDecision?.resolved == .space(spaceID: vm.model.spaces[0].id, profileID: vm.model.profiles[0].id), "stale target did not fall through")
+            case "links-destination-picker":
+                @MainActor func destinationMenu(_ view: NSView) -> NSPopUpButton? {
+                    if let button = view as? NSPopUpButton, button.accessibilityLabel() == "Destination" { return button }
+                    return view.subviews.lazy.compactMap { destinationMenu($0) }.first
+                }
+                // Inspect the actual native menu in the real rule sheet, not a second picker.
+                try await withAccessibleHost(LinkRuleSheet(root: vm, draft: vm.links.drafts[0]), size: CGSize(width: 520, height: 380)) { host in
+                    guard let menu = destinationMenu(host)?.menu else { throw CheckFailure(description: "two-Profile destination menu missing") }
+                    let expected = ["Little Open", "Most Recent Space", "", "Personal", "Little Open – Personal",
+                                    "Most Recent Space – Personal", "Home", "Reading", "", "Work",
+                                    "Little Open – Work", "Most Recent Space – Work", "Office"]
+                    try require(menu.items.map(\.title) == expected, "two-Profile menu order/grouping: \(menu.items.map(\.title))")
+                    try require(menu.items[2].isSeparatorItem && menu.items[8].isSeparatorItem
+                                && !menu.items[3].isEnabled && !menu.items[9].isEnabled,
+                                "Profile section labels selectable or separators absent")
+                }
+                vm.links.profiles = [vm.links.profiles[0]]
+                vm.links.spaces.removeAll { $0.profileID == work }
+                try await withAccessibleHost(LinkRuleSheet(root: vm, draft: vm.links.drafts[0]), size: CGSize(width: 520, height: 380)) { host in
+                    guard let menu = destinationMenu(host)?.menu else { throw CheckFailure(description: "one-Profile menu missing") }
+                    try require(menu.items.map(\.title) == ["Little Open", "Most Recent Space", "", "Home", "Reading"],
+                                "one-Profile menu differs from original list")
+                }
+            case "links-profile-issues":
+                @MainActor func issueText(_ root: NSObject) -> [String] {
+                    var seen = Set<ObjectIdentifier>(), text: [String] = []
+                    func walk(_ node: NSObject) {
+                        guard seen.insert(ObjectIdentifier(node)).inserted, seen.count <= 4096 else { return }
+                        for name in ["accessibilityLabel", "accessibilityValue"] {
+                            let selector = NSSelectorFromString(name)
+                            if node.responds(to: selector), let value = node.perform(selector)?.takeUnretainedValue() as? String { text.append(value) }
+                        }
+                        let children = NSSelectorFromString("accessibilityChildren")
+                        if node.responds(to: children), let values = node.perform(children)?.takeUnretainedValue() as? [NSObject] { values.forEach(walk) }
+                        if let view = node as? NSView { view.subviews.forEach(walk) }
+                    }
+                    walk(root); return text
+                }
+                var draft = vm.links.drafts[0]
+                let missing = ProfileID()
+                draft.destination = .mostRecentSpace(profile: missing)
+                vm.links.drafts = [draft]
+                try require(vm.links.issues().contains(.missingProfile(ruleID: draft.id, hasNoSpaces: false)),
+                            "missing Profile has no error")
+                try require(vm.links.currentRouting().rules.isEmpty, "missing Profile draft reached routing")
+                try await withAccessibleHost(LinkRuleSheet(root: vm, draft: draft), size: CGSize(width: 520, height: 380)) { host in
+                    let text = issueText(host)
+                    try require(text.contains(where: { $0.contains("This Profile is no longer available.") }), "missing Profile copy absent: \(text)")
+                }
+                vm.links.spaces.removeAll { $0.profileID == work }
+                draft.destination = .littleOpen(profile: work); vm.links.drafts = [draft]
+                try require(vm.links.issues().contains(.missingProfile(ruleID: draft.id, hasNoSpaces: true)),
+                            "Profile with no Spaces has no error")
+                try await withAccessibleHost(LinkRuleSheet(root: vm, draft: draft), size: CGSize(width: 520, height: 380)) { host in
+                    let text = issueText(host)
+                    try require(text.contains(where: { $0.contains("This Profile has no Spaces.") }), "no Spaces copy absent: \(text)")
+                }
+                vm.links.defaultRoutingDestination = .mostRecentSpace(profile: missing)
+                try require(vm.links.issues().contains(.missingProfile(ruleID: LinksSettingsModel.defaultDestinationIssueID, hasNoSpaces: false)),
+                            "default missing Profile has no error")
+            case "links-profile-destinations":
+                var draft = vm.links.drafts[0]
+                draft.destination = .mostRecentSpace(profile: work)
+                vm.links.drafts = [draft]
+                vm.links.defaultRoutingDestination = .littleOpen(profile: work)
+                try require(vm.links.destinationLabel(draft.destination) == "Most Recent Space – Work"
+                            && vm.links.destinationLabel(vm.links.defaultRoutingDestination) == "Little Open – Work",
+                            "Profile destination labels differ")
+                try require(vm.commitLinks(), "Profile destinations did not save")
+                let disk = try env.diskModel()
+                try require(disk.routingRules[0].destination == .mostRecentSpace(profile: work)
+                            && disk.defaultDestination == .littleOpen(profile: work), "Profile destinations lost on disk")
+                vm.refreshLinks()
+                try require(vm.links.drafts[0].profileID == work && vm.links.defaultProfileID == work, "Profile drafts lost on refresh")
+            case "links-test-automatic":
+                vm.links.drafts = []
+                vm.links.defaultRoutingDestination = .mostRecentSpace(profile: nil)
+                vm.links.testURLString = "https://automatic.example/"
+                var focused = vm.model.spaces[2].id
+                var calls = 0
+                vm.routingSnapshotProvider = {
+                    calls += 1
+                    return RoutingSnapshot(spaces: vm.routingSpaces,
+                        windows: [RoutingWindowSnapshot(id: WindowID(), kind: .standard, focusedSpaceID: focused)],
+                        rules: vm.model.routingRules, defaultDestination: vm.model.defaultDestination,
+                        externalLinksInLittleOpen: true, profiles: vm.model.profiles.map(\.id))
+                }
+                try require(vm.links.testMostRecentSpaceID == nil, "Automatic initially overridden")
+                vm.links.runTest()
+                try require(vm.links.testDecision?.resolved == .space(spaceID: focused, profileID: work), "Automatic ignored live front window")
+                focused = vm.model.spaces[1].id
+                vm.links.runTest()
+                try require(vm.links.testDecision?.resolved == .space(spaceID: focused, profileID: personal) && calls == 2,
+                            "Automatic snapshot did not refresh on each run")
+                vm.links.testMostRecentSpaceID = vm.model.spaces[2].id
+                vm.links.runTest()
+                try require(vm.links.testDecision?.resolved == .space(spaceID: vm.model.spaces[2].id, profileID: work),
+                            "explicit test override lost")
+                vm.routingSnapshotProvider = {
+                    RoutingSnapshot(spaces: vm.routingSpaces, windows: [], rules: [], defaultDestination: .mostRecentSpace(profile: nil),
+                                    externalLinksInLittleOpen: true, profiles: vm.model.profiles.map(\.id))
+                }
+                vm.links.testMostRecentSpaceID = nil; vm.links.runTest()
+                try require(vm.links.testDecision?.resolved == .space(spaceID: vm.model.spaces[0].id, profileID: personal),
+                            "Automatic no-window fallback differs from live evaluator")
             case "links-toggles":
                 vm.links.externalLinksInLittleOpen = false; vm.links.littleOpenHotkeyEnabled = false; vm.commitLinks()
                 let disk = try env.diskDefaults()
