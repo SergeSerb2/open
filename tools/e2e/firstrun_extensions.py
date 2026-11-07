@@ -92,6 +92,8 @@ def run(launch, state, until, row, source, tmp, h, results):
         while time.monotonic() < deadline:
             p = pending()
             if p:
+                if negative == 'abort-sheet':
+                    raise RuntimeError('deliberate early failure with ExtensionPromptSheet open')
                 if hold_consent:
                     started = time.monotonic()
                     # Cross the removed 45 s timeout while the real sheet stays
