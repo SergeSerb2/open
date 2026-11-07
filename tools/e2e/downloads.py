@@ -93,6 +93,8 @@ def checks(factory, results, tmp, config, harness):
         before = {v['id'] for v in state()['items']}
         source_tab = source_tab or tab
         app.call('select', tab=source_tab)
+        if not wait(lambda: app.eval(source_tab, 'Boolean(document.body) && document.readyState !== "loading"')):
+            raise RuntimeError('download source document is not ready')
         app.eval(source_tab, '(() => {let a=document.createElement("a"); a.href=%s; a.id="download"; a.textContent="download";document.body.replaceChildren(a)})()' % json.dumps(base + route))
         app.call('click', tab=source_tab, selector='#download')
         value = wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None))
@@ -300,6 +302,7 @@ def checks(factory, results, tmp, config, harness):
         check('quit_empty', not empty['running'] and not empty['quitAlerts'] and no_alert_exit)
 
     def clear_flow():
+        nonlocal tab
         original_space = next(s['id'] for s in app.call('spaces') if s['focused'])
         app.call('space-create', profile='Clear downloads other', title='Clear downloads other')
         other_profile = next(s['profile'] for s in app.call('spaces') if s['focused'])
@@ -307,7 +310,7 @@ def checks(factory, results, tmp, config, harness):
         app.call('download-settings', profile=other_profile, directory=str(first), ask=False)
         other = start('/fast', other_tab); wait(lambda: item(other).get('state') == 'completed')
         app.call('space', space=original_space)
-        app.call('select', tab=tab)
+        tab = E.new_tab(app, base + '/')
         running = start('/slow'); paused = start('/slow')
         library(); wait(lambda: bool(row(paused)))
         app.call('download-row', id=paused, action='Pause')
