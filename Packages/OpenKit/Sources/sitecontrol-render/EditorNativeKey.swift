@@ -4,7 +4,7 @@ import OpenDesign
 /// A registered harness app is required for a real activating browser window.
 /// The CLI process cannot acquire that state merely by overriding isKeyWindow.
 @MainActor enum EditorNativeKey {
-    static func run() -> [Flows.Check] {
+    static func run(review: Bool = false) -> [Flows.Check] {
         let competing = NSApp.windows.filter { $0 is EditorParentWindow && $0.isVisible }.count
         guard competing == 0 else {
             return [.init(name:"F25 native key suite has no competing editor parent windows (found \(competing))",pass:false)]
@@ -20,7 +20,7 @@ import OpenDesign
         } else { base = fm.temporaryDirectory }
         var retained: [Flows.Check] = []
         for attempt in 1...3 {
-            let checks = runAttempt(base: base,attempt: attempt)
+            let checks = runAttempt(base: base,attempt: attempt,review: review)
             let interruptions = checks.filter(\.interrupted)
             if interruptions.isEmpty || checks.contains(where: { !$0.pass && !$0.interrupted && !$0.info }) || attempt == 3 { return retained+checks }
             // A fresh registered app, model and window per attempt, as in e2e.
@@ -29,7 +29,7 @@ import OpenDesign
         }
         return retained
     }
-    private static func runAttempt(base: URL,attempt: Int) -> [Flows.Check] {
+    private static func runAttempt(base: URL,attempt: Int,review: Bool) -> [Flows.Check] {
         let fm = FileManager.default
         let root = base.appendingPathComponent("open-editor-native-"+UUID().uuidString),app = root.appendingPathComponent("EditorHarness.app")
         let id = "org.open.harness.editor."+UUID().uuidString.lowercased(),result = root.appendingPathComponent("result.json")
@@ -46,6 +46,7 @@ import OpenDesign
             let info: [String: Any] = ["CFBundleExecutable":"sitecontrol-render","CFBundleIdentifier":id,"CFBundleName":"Open Editor Harness","CFBundlePackageType":"APPL","NSHighResolutionCapable":true]
             try PropertyListSerialization.data(fromPropertyList: info,format: .xml,options: 0).write(to: app.appendingPathComponent("Contents/Info.plist"))
             let process = Process();process.executableURL = URL(fileURLWithPath: "/usr/bin/open");process.arguments = ["-W","-n",app.path,"--args","editor-native-key","--out",result.path,"--renderer-pid",String(ProcessInfo.processInfo.processIdentifier),"--focus-attempt",String(attempt)]
+            if review { process.arguments?.append("--review");if CommandLine.arguments.contains("--fail-sheet") { process.arguments?.append("--fail-sheet") } }
             process.standardOutput = FileHandle.nullDevice;process.standardError = FileHandle.nullDevice;try process.run()
             let deadline = Date().addingTimeInterval(20)
             while process.isRunning && Date()<deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
@@ -54,23 +55,31 @@ import OpenDesign
             var checks: [Flows.Check] = rows.compactMap { row in guard let name = row["name"] as? String,let pass = row["pass"] as? Bool else { return nil };return .init(name:name,pass:pass,interrupted: row["interrupted"] as? Bool ?? false) }
             guard checks.count == rows.count else { return [.init(name:"F25 native result schema is complete",pass:false)] }
             let interrupted = checks.contains(where: \.interrupted)
-            checks.append(.init(name:interrupted ? "F25 native attempt \(attempt) exits after foreground interruption" : "F25 native suite completes all nine checks and exits",pass:(interrupted || rows.count == 9) && process.terminationStatus == 0));return checks
+            if review {
+                guard rows.count == 2,process.terminationStatus == 0 else { return [.init(name:"R1 registered native app completes both review flows and exits",pass:false)] }
+                return checks
+            }
+            checks.append(.init(name:interrupted ? "F25 native attempt \(attempt) exits after foreground interruption" : "F25 native suite completes all ten checks and exits",pass:(interrupted || rows.count == 10) && process.terminationStatus == 0));return checks
         } catch { return [.init(name:"F25 registered native harness launch: \(error)",pass:false)] }
     }
     private static var focusAttempt = 1
     private static var ownedPIDs: Set<Int32> = [ProcessInfo.processInfo.processIdentifier]
-    static func enterAppLoop(out: String,rendererPID: Int32?,attempt: Int) {
+    static func enterAppLoop(out: String,rendererPID: Int32?,attempt: Int,review: Bool) {
         focusAttempt = attempt
         if let rendererPID,rendererPID > 1 { ownedPIDs.insert(rendererPID) }
         let timer = Timer(timeInterval: 0,repeats: false) { _ in MainActor.assumeIsolated {
-            do { try runHere(out: out) } catch { FileHandle.standardError.write(Data("native editor harness: \(error)\n".utf8)) }
+            do { try runHere(out: out,review: review) } catch { FileHandle.standardError.write(Data("native editor harness: \(error)\n".utf8)) }
             NSApp.stop(nil)
             if let wake = NSEvent.otherEvent(with: .applicationDefined,location: .zero,modifierFlags: [],timestamp: ProcessInfo.processInfo.systemUptime,windowNumber: 0,context: nil,subtype: 0,data1: 0,data2: 0) { NSApp.postEvent(wake,atStart: true) }
         } }
         RunLoop.main.add(timer,forMode: .default)
         NSApp.run()
     }
-    static func runHere(out: String) throws {
+    static func runHere(out: String,review: Bool) throws {
+        if review {
+            let checks = CodeFlows.reviewFlows().map { focusCheck($0.name,pass:$0.pass) }
+            try write(checks,out:out);return
+        }
         NSApp.setActivationPolicy(.regular)
         var checks: [Flows.Check] = []
         func check(_ name: String,_ pass: Bool) { checks.append(focusCheck(name,pass: pass)) }
@@ -98,8 +107,21 @@ import OpenDesign
             p.alert("Cancel");p.panel.makeKey();p.settle()
             check("F25 native floating-window key entry focuses Done",p.panel.isKeyWindow && p.panel.firstResponder === p.view.control(id:"editor.done"))
             p.key(48,"\t");check("F25 Tab follows Done with the name menu",p.panel.firstResponder === p.view.control(id:"editor.name"))
+            p.tap("editor.tool.code");p.settle(0.3)
+            if let code = p.view.codeView {
+                p.parent.makeKeyAndOrderFront(nil)
+                let point = code.editor.convert(CGPoint(x:80,y:20),to:nil)
+                let up = NSEvent.mouseEvent(with:.leftMouseUp,location:point,modifierFlags:[],timestamp:CACurrentMediaTime(),windowNumber:p.panel.windowNumber,context:nil,eventNumber:1,clickCount:1,pressure:0)!
+                NSApp.postEvent(up,atStart:false)
+                p.mouse(.leftMouseDown,point:CGPoint(x:80,y:20),in:code.editor);p.settle()
+                check("F25 click into code makes the native editor key",p.panel.isKeyWindow && !p.parent.isKeyWindow && p.panel.firstResponder === code.editor)
+            } else { check("F25 code view exists",false) }
+            p.controller.setCodeMode(false,animated:false);p.panel.makeKey();p.settle()
             checks.append(checkDoneKeyReturn(first: p))
         }
+        try write(checks,out:out)
+    }
+    private static func write(_ checks: [Flows.Check],out: String) throws {
         let rows = checks.map { ["name":$0.name,"pass":$0.pass,"interrupted":$0.interrupted] as [String:Any] }
         try JSONSerialization.data(withJSONObject:rows,options:[.sortedKeys]).write(to:URL(fileURLWithPath:out),options:.atomic)
     }
@@ -122,7 +144,7 @@ import OpenDesign
     private static func focusCheck(_ name: String,pass: Bool,foreground fg: Foreground? = nil) -> Flows.Check {
         let fg = fg ?? foreground()
         var loads = [Double](repeating: 0,count: 3);_ = getloadavg(&loads,3)
-        let interrupted = name.hasPrefix("F25") && !fg.owned
+        let interrupted = !fg.owned
         let status = interrupted ? "INTERRUPTED (foreground lost to \(fg.label))" : "foreground=\(fg.label)"
         return .init(name:"\(name) — attempt \(focusAttempt) \(status); load1 \(String(format:"%.2f",loads[0]))",pass:pass && !interrupted,interrupted:interrupted)
     }
