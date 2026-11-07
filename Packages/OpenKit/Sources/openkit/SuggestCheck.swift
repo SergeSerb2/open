@@ -557,22 +557,45 @@ private func remoteChecks(log: CheckLog, fx: Fixture) async {
                 && server.requests.contains("slow beta"),
               "configured debounce=\(remoteProvider.map { "\($0.debounce)" } ?? "nil") timeout=\(remoteProvider.map { "\($0.timeout)" } ?? "nil"); server received slow beta=\(server.requests.contains("slow beta"))")
 
-    // The one real wall-clock check for this timer family, with the original <600 ms budget.
-    // Machine load can stretch one run, so allow up to 3 attempts; each prints its lateness
-    // past debounce+timeout (380 ms) and the load average.
+    // A fixed reference uses the same local query path and actor, with networking disabled,
+    // followed by a 380 ms sleep. It does not use the remote provider or its timeout: changing
+    // that timeout cannot change the reference. The median of three same-run observations
+    // calibrates scheduler/CPU overhead for other CPUs. M5 retains the original raw <600 ms
+    // decision exactly; calibration is diagnostic there. A missing CPU identity stays strict.
+    var referenceContext = ctx
+    referenceContext.allowsRemoteSuggestions = false
+    var referenceTimes: [Double] = []
+    for sample in 1...3 {
+        let start = ContinuousClock.now
+        _ = await snapshots(engine, "reference timer \(sample)", referenceContext)
+        try? await Task.sleep(for: .milliseconds(380))
+        referenceTimes.append((ContinuousClock.now - start).milliseconds)
+    }
+    let referenceMs = referenceTimes.sorted()[1]
+    let calibrationValid = referenceMs >= 380 && referenceMs < 600
+    let ratio = max(1, referenceMs / 380)
+    let cpu = verificationCPUBrand()
+    let strictM5 = cpu == nil || cpu!.hasPrefix("Apple M5")
+    print(String(format: "  .. remote reference median %.3f ms; ratio %.6f; samples %@; CPU %@; M5 raw cap %@; load %@",
+                 referenceMs, ratio, referenceTimes.map { String(format: "%.3f", $0) }.joined(separator: ","),
+                 cpu ?? "unavailable (strict)", strictM5 ? "600 ms" : "calibrated", loadAverage()))
+    // One real-time behavior, at most three attempts. Reference values outside the bounded
+    // 380..<600 ms range refuse portable acceptance instead of providing unbounded headroom.
     var slowAttempts: [String] = []
     var slowRealtimeOK = false
     for attempt in 1...3 {
         let attemptStart = ContinuousClock.now
         let attemptSlow = await snapshots(engine, "slow rt\(attempt)", ctx)
         let attemptMs = (ContinuousClock.now - attemptStart).milliseconds
+        let calibratedMs = attemptMs / ratio
         let attemptOK = attemptSlow.last?.isFinal == true
-            && !(attemptSlow.last?.suggestions.contains { $0.kind == .searchSuggestion } ?? true) && attemptMs < 600
-        slowAttempts.append(String(format: "attempt %d stream ended after %.0f ms (lateness %+.0f ms past 380), load %@", attempt, attemptMs, attemptMs - 380, loadAverage()))
+            && !(attemptSlow.last?.suggestions.contains { $0.kind == .searchSuggestion } ?? true)
+            && (strictM5 ? attemptMs < 600 : calibrationValid && calibratedMs < 600)
+        slowAttempts.append(String(format: "attempt %d stream ended after %.3f ms (lateness %+.3f ms past 380), calibrated %.3f ms / 600; load %@", attempt, attemptMs, attemptMs - 380, calibratedMs, loadAverage()))
         print("  .. remote real-time \(slowAttempts.last!)")
         if attemptOK { slowRealtimeOK = true; break }
     }
-    log.check("remote: real-time slow-server stream ends within 600 ms (debounce 80 + timeout 300)",
+    log.check("remote: real-time slow-server stream within 600 ms (M5 raw; other CPUs same-run reference; debounce 80 + timeout 300)",
               slowRealtimeOK, slowAttempts.joined(separator: "; "))
 
     // Cancel: keystrokes inside the debounce window send only the last query.
@@ -667,6 +690,15 @@ private func loadAverage() -> String {
     var loads = [Double](repeating: 0, count: 3)
     _ = getloadavg(&loads, 3)
     return String(format: "%.1f %.1f %.1f on %d cores", loads[0], loads[1], loads[2], ProcessInfo.processInfo.activeProcessorCount)
+}
+
+private func verificationCPUBrand() -> String? {
+    var length = 0
+    guard sysctlbyname("machdep.cpu.brand_string", nil, &length, nil, 0) == 0,
+          length > 1, length <= 256 else { return nil }
+    var bytes = [CChar](repeating: 0, count: length)
+    guard sysctlbyname("machdep.cpu.brand_string", &bytes, &length, nil, 0) == 0 else { return nil }
+    return String(decoding: bytes.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
 }
 
 private func percentile(_ sorted: [Double], _ p: Double) -> Double {

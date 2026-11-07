@@ -114,7 +114,8 @@ def build_main(out, ref):
     source = out / "main-source"
     source.mkdir()
     # This is a disposable source export, not a worktree or a copy of private data.
-    archive = subprocess.Popen(["git", "archive", ref, "Packages/OpenKit"], cwd=ROOT, stdout=subprocess.PIPE)
+    repository = subprocess.check_output(["git", "rev-parse", "--show-toplevel"], cwd=ROOT, text=True).strip()
+    archive = subprocess.Popen(["git", "archive", ref, "Packages/OpenKit"], cwd=repository, stdout=subprocess.PIPE)
     try:
         subprocess.run(["tar", "-x", "-C", str(source)], stdin=archive.stdout, check=True)
     finally:
