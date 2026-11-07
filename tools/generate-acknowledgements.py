@@ -11,7 +11,6 @@ import html.parser
 from pathlib import Path
 import plistlib
 import re
-import shutil
 import subprocess
 import sys
 from urllib.parse import urlsplit
@@ -272,8 +271,10 @@ def main():
     for name, text in texts:
         paragraphs.extend([name, text.rstrip(), ''])
     complete = False
+    cef_bytes = None
     if a.cef_credits.is_file():
-        raw = read_text(a.cef_credits, 32 * MIB)
+        cef_bytes = read_bytes(a.cef_credits, 32 * MIB)
+        raw = cef_bytes.decode('utf-8')
         complete = len(raw) > 10000 and 'This is sample credits page' not in raw
         if complete:
             parser = CreditsParser()
@@ -303,11 +304,11 @@ def main():
     twin.write_text(text, encoding='utf-8')
     # Keep the exact distribution HTML next to each text output, including
     # previews. A sample twin is labelled incomplete above, never accepted.
-    if a.cef_credits.is_file():
+    if cef_bytes is not None:
         for directory in {a.output.parent, twin.parent}:
             target = directory / 'CREDITS.html'
             if target.resolve() != a.cef_credits.resolve():
-                shutil.copyfile(a.cef_credits, target)
+                target.write_bytes(cef_bytes)
     print(f'Generated {a.output} and {twin}')
     print(f"Component paragraphs: {len(shipped)}; conditional GPL: {'included' if gpl else 'omitted (assets not shipped)'}; Chromium credits: {'complete' if complete else 'INCOMPLETE PREVIEW'}")
     if needs_source:
