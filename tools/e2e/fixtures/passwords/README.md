@@ -30,3 +30,9 @@ its crash-safety check passes. Missing saved data makes refill and re-auth
 observations inconclusive. Process death, lost automation or a new Open crash
 report stops the suite without retry. No acceptance `passwords` or
 `secrets-import` suite is added here.
+
+For the real-dialog cleanup proof, set
+`OPEN_E2E_PASSWORDS_PROBE_ABORT_DIALOG=1` on the same locked command. It exits
+with failure while WebAuthn is open. The App's normal `finally` cleanup must
+report no remaining owned process or window. Preserve that expected-failure
+receipt separately, then run the normal probe for the committed observations.
