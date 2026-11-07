@@ -51,7 +51,6 @@ def run(factory, results, tmp, h):
             failures = state.get('failures') or {}
             return counts.get('Boosts found') == 2 and counts.get('Boosts') == 0 and counts.get('Boosts malformed') == 1 and failures.get('Boosts') == 'Not imported in this build' and not list(Path(app.user_data).glob('Profiles/*/Boosts/boosts.json'))
         negative_report = report_seam(app.call('first-run'))  # before import
-        app.call('first-run', action='import')
         app.call('first-run', action='continue')
         assert h.wait_until(lambda: app.call('first-run')['step'] == 'report', timeout=30, step=.05)
         state = app.call('first-run')
