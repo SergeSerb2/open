@@ -10,10 +10,10 @@ extension AutomationController {
   ]
 
   /// The context of the window's focused Space (its profile's notifications).
-  private func notificationContext() throws -> OEBrowserContext {
+  private func notificationContext(create: Bool = false) throws -> OEBrowserContext? {
     let w = try window
-    guard let space = w.focusedSpace, let context = w.context(for: space.profileID) else { throw Failure(message: "no profile context") }
-    return context
+    guard let profile = w.focusedProfile else { return nil }
+    return w.context(for: profile.id, create: create)
   }
 
   func runNotificationCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
@@ -28,16 +28,19 @@ extension AutomationController {
       let status = await authorization.readStatus()
       let delivered = await Self.deliveredNotifications()
       // EP-7: Chromium's own displayed list (engine switch --open-automation).
-      let context = try notificationContext()
-      let engine = await withCheckedContinuation { (done: CheckedContinuation<[[String: String]], Never>) in
-        context.displayedNotifications { done.resume(returning: $0) }
-      }
+      let context = try notificationContext(create: a["create"] as? Bool ?? false)
+      let engine: [[String: String]]
+      if let context {
+        engine = await withCheckedContinuation { (done: CheckedContinuation<[[String: String]], Never>) in
+          context.displayedNotifications { done.resume(returning: $0) }
+        }
+      } else { engine = [] }
       return ["authorization": status.rawValue, "delivered": delivered, "engine": engine,
               "clicks": NotificationClickRouter.shared.log] as [String: Any]
     case "notification-click":
       // EP-7: the same click path as macOS's response; `id` from `notifications`.engine.
       guard let id = a["id"] as? String else { throw Failure(message: "missing id") }
-      return ["clicked": try notificationContext().simulateClickOnNotification(identifier: id)]
+      return ["clicked": try notificationContext(create: a["create"] as? Bool ?? false)?.simulateClickOnNotification(identifier: id) ?? false]
     case "notification-authorization":
       let status = await authorization.readStatus()
       return ["status": status.rawValue, "denied": authorization.isDenied, "requests": authorization.requestLog,

@@ -12,7 +12,7 @@ QUICK=0
 ONLY=
 ARC=0
 KEEP=0
-NAMES='commands-demo roundtrip space-legacy space-editor space-pad-compare suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render sidebar-compare commandbar-render features-render extensions-render sitecontrol-render boosts import-arc'
+NAMES='commands-demo roundtrip space-legacy space-editor space-pad-compare suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render sidebar-compare commandbar-render features-render extensions-render sitecontrol-render boosts import-arc verify-secrets-fixture'
 
 usage() {
     cat <<EOF

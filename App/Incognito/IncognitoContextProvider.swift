@@ -13,15 +13,13 @@ enum IncognitoContextProvider {
         userInfo: [NSLocalizedDescriptionKey: "The parent Profile is unavailable."]))
       return
     }
-    let original = parent.id == app.model.defaultProfile?.id ? OEEngine.shared.defaultContext :
-      OEEngine.shared.context(identifier: parent.dataDirectoryName,
-        directory: app.directories.engineDirectory(dataDirectoryName: parent.dataDirectoryName))
+    let original = EngineWebContentHostFactory.createRegularContext(
+      profileID: parent.id, directory: parent.dataDirectoryName, app: app)
     guard let original else {
       completion(nil, NSError(domain: "Open.Incognito", code: 1,
         userInfo: [NSLocalizedDescriptionKey: "The parent Profile is unavailable."]))
       return
     }
-    app.profileTeardown.didLoad(parent)
     OEEngine.shared.makeIncognitoContext(for: original, completion: completion)
   }
 }
