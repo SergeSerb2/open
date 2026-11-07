@@ -10,6 +10,12 @@ struct LittleOpenRequest {
 }
 
 extension AppDelegate {
+  /// guess S10: the Arc no-Space destination is unverified. The lead requires
+  /// a fresh Little Open window on this exact Profile, without URL-only reuse.
+  func openProfilePage(_ url: URL, profileID: ProfileID) {
+    littleOpenCoordinator.create(url:url,profile:profileID,focus:false)
+    NSApp.activate()
+  }
   func openLittleOpen(url: URL, profileHint: ProfileID?) {
     lastLittleOpenRequest = LittleOpenRequest(url: url, profileHint: profileHint)
     littleOpenCoordinator.open(url: url, profileHint: profileHint)

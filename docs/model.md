@@ -303,6 +303,16 @@ Implemented from [import-phase2.md](plans/import-phase2.md), with its Lead decis
 
 `ArcHistoryReader` copies History and its WAL, or the rollback journal in rollback mode, into a private mode-700 directory. It never copies SHM; SQLite rebuilds that file. Copy destinations are created exclusively with mode 600 before any bytes are written. The CLI removes user-owned import directories older than one hour at startup. SQLite opens and recovers only the private copy. A failed quick check gets one fresh-copy retry after 200 ms. The reader deletes its copy on success and failure. It accepts History meta versions 65–75, converts Chromium microseconds with integer epoch subtraction, keeps http/https/file visits, and filters internal schemes, subframes, invalid times, and times more than 24 hours ahead. It maps transition core bits and counts typed visits only for core 1. No source aggregate count overrides visit rows.
 
+`ArcImportResult.sourceProfileDirectories` maps each imported Profile ID to its original Chromium directory, before Open destination collision suffixes. The App uses that mapping for background History imports through its shared Profile stores.
+
+An App import starts each added Today tab's `lastActiveAt` at the import time,
+so startup auto-archive does not immediately remove old source tabs. Pinned tabs
+and Favorites keep their source activity times. Settings re-import also treats
+a stable tab/Favorite ID already in the target Profile's ArchiveStore as a
+duplicate. The App awaits one batched ID lookup per Profile on the archive
+queue, then passes the ID sets into the synchronous model merge. Live-ID
+deduplication stays unchanged. Neither rule changes Arc's source files.
+
 The reader retains the plan's array-returning API and adds an awaited batch-consumer overload. The CLI uses that overload to keep at most one 5,000-visit batch in flight, plus the source URL map. `HistoryStore(fileURL:)` accepts a full destination path. The writer uses one checked transaction per batch, reuses prepared statements, and rolls back all changes on failure. `history_import_keys` deduplicates by source profile directory and Chromium visit ID. The new `(url_id, time)` index supports count recomputation. A result success flag also detects a bad destination for an empty import.
 
 The upsert skips unchanged or empty replacement titles. This preserves the specified title result and avoids redundant FTS trigger work. The first F2 run, before this guard, failed the timing gate at 3.307 s. The final streaming implementation passed at 1.443 s. Re-import updates no visit count by hand and inserts no duplicate visit.
@@ -372,11 +382,11 @@ No real Keychain item was read or created. No real Login Data, Cookies, or Web D
 
 ## Profiles (M5 core)
 
-Implemented the non-engine steps of [profiles.md](plans/profiles.md), including its Lead decisions. The App and engine steps remain deferred. The model performs no I/O. No snapshot DTO changed; `schemaVersion` remains 1.
+Implemented the model steps of [profiles.md](plans/profiles.md), including its Lead decisions. The App now repairs missing Profile references before host creation and on model installation, saves repairs, and reports the affected Space titles once. The model performs no I/O. No snapshot DTO changed; `schemaVersion` remains 1.
 
 `createProfile` trims and validates names, rejects case-insensitive duplicates, and creates `Default` for the first Profile when that directory is available, or a unique `Profile-<8 uppercase hex>` name. Bootstrap reserves every existing `Profiles/` entry and every name in `State/retired-profile-dirs.json`, without case sensitivity. The deletion sink durably records that tombstone before removing the Profile. Undo and disk wipes retain the tombstone. Names have a 64-grapheme limit and reject path separators, colons, control characters, `.` and `..`. Rename never changes the directory. Default identity is the Profile whose directory is exactly `Default`, else the first Profile. Display order is array order.
 
-`deleteProfile` refuses the default Profile and any Profile with assigned Spaces. It calls the throwing `archiveForProfileDeletion` path and waits for the FULL-synchronous SQLite commit before removing any model entries. An archive failure throws and keeps the Profile, Favorites, events, and undo stack unchanged. Redo failures reach `onArchiveError`. Undo restores the same Profile and Favorites and discards their archive rows. The model never deletes disk data. An explicit disk wipe is separate; after engine teardown, the App can call `ProfileDirectories.deleteProfileData`. Undo after a wipe restores the sidebar, with empty browsing data.
+`deleteProfile` refuses the default Profile and any Profile with assigned Spaces. It calls the throwing `archiveForProfileDeletion` path and waits for the FULL-synchronous SQLite commit before removing any model entries. An archive failure throws and keeps the Profile, Favorites, events, and undo stack unchanged. Redo failures reach `onArchiveError`. The model/CLI command remains undoable. Settings uses an irreversible flow: exact typed confirmation, directory capture, model removal with undo disabled, context release, disk cleanup, and `SnapshotStore.saveNow`. Older Undo actions are cleared. Open-owned files disappear at once. Loaded engine directories wait in the bounded, atomic, synced pending-wipe journal until the next launch, before the engine starts. Never-loaded engine/cache folders are removed immediately. Local State edits always wait for launch. `releaseContext` does not prove Chromium Profile destruction; see [profiles-shell.md](profiles-shell.md).
 
 `moveSpace(id:toProfile:)` changes only the Space's Profile reference. Tabs keep their IDs, URLs and pinned URLs; Favorites remain with their owner Profile. It emits one `.spaceProfileChanged`, with an inverse event on undo. The combined `updateSpace` editor emits the same event and retains one undo step for all four edited values. A missing target Profile refuses the entire edit, with no event or undo step. `createSpace` falls back to the default for a missing Profile. `repairMissingProfileReferences` repairs dangling references in Space order, emits each change, and registers no undo. Snapshot mapping stays lossless; bootstrap/CLI maintenance owns repair.
 
@@ -388,13 +398,15 @@ The per-Profile layout is:
 <root>/State/browser.json                  global snapshot
 <root>/State/favicons.sqlite3              global cache, deliberately shared
 <root>/Profiles/<dataDirectoryName>/
-  Engine/                                 future engine context
   State/history.sqlite3
   State/archive.sqlite3
   State/sleep.sqlite3                      SleepStore(fileURL:)
   Boosts/boosts.json
   AdBlock/lists/                          future ad-block data
 ```
+
+Chromium data lives separately at `<root>/Engine/<dataDirectoryName>/`.
+Pending engine cleanup is recorded at `<root>/Profiles/.pending-wipe.json`.
 
 `ProfileDirectories` owns these paths and creates empty directories. `OpenDataRoot.prepare()` runs migration before any store opens. Each history/archive/sleep SQLite set is copied into a staging `State` directory on the destination volume, flushed with `fsync`, and published with one atomic macOS directory swap. The JSON journal at `State/profile-migration.json` plus a commit marker resolves each interrupted step. Source cleanup follows durable publication and checks file identity, size, and modification time. Missing destination mains permit migration; destination orphan sidecars are retained under `State/.quarantine/`. A legacy WAL/SHM left by an older interrupted migration joins its destination main. Conflicting mains refuse store opens and retain the entire legacy set. Legacy symlinks are never moved: only regular targets inside the root are eligible; unsafe or dangling targets refuse the store and preserve the sources. This is a **ONE-WAY** disk-layout change: older builds ignore `Profiles/` and would open empty legacy-path databases. The favicon cache stays global and can disclose that some Profile visited an origin; no favicon isolation is claimed.
 

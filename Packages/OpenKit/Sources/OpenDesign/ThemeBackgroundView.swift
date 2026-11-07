@@ -24,8 +24,34 @@ public final class ThemeBackgroundView: NSView {
     public var targetStyle: SpaceThemeStyle { incoming?.theme ?? current.theme }
 
     public var isWindowActive: Bool = true {
-        didSet { if isWindowActive != oldValue { refresh() } }
+        didSet {
+            guard isWindowActive != oldValue else { return }
+            // The key change and the new field land in one transaction: no display-tick wait.
+            // A 64×64 field (or one solid color) is cheap; a live resize still defers it.
+            if inLiveResize || resizing || bounds.isEmpty { refresh() } else { rebuildFields() }
+        }
     }
+
+    /// What lies under the theme (`WindowMaterial`).
+    public enum Material: Sendable, Equatable {
+        /// The window background: the active field, or the inactive one.
+        case window
+        /// The hover-reveal card: the theme tint at `1 − w` over the blurred page under it.
+        case overPage
+    }
+    /// `.overPage` falls back to `.window` where no backdrop layer exists.
+    public var material: Material = .window {
+        didSet { if material != oldValue { applyMaterial() } }
+    }
+    /// Where the field lies in this view, when it is a window's field seen through a
+    /// smaller view (the hover-reveal card shows the window's own field at its place,
+    /// as Arc's card matches the anchored sidebar). Nil: the field fills the view.
+    public var fieldFrame: CGRect? {
+        didSet { if fieldFrame != oldValue { refresh() } }
+    }
+    private var fieldRect: CGRect { fieldFrame ?? bounds }
+    /// True while a page blur sits under the theme (`.overPage` and the backdrop exists).
+    public var drawsPageBlur: Bool { pageBlur?.superlayer != nil }
     /// Scale used for the grain tile. Set by renderers without a window.
     public var renderScale: CGFloat? { didSet { refresh() } }
     /// Editor fills blend in the destination's space (§17). `false` restores
@@ -35,6 +61,9 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private var current = ThemeLayer(style: .defaultTheme(system: .light))
+    /// Holds the theme layers. Its opacity is `1 − w` over the page blur, else 1.
+    private let themeHost = CALayer()
+    private var pageBlur: CALayer?
     private var incoming: ThemeLayer?
     private var displayLink: CADisplayLink?
     private var displayTarget: ThemeDisplayTarget?
@@ -47,7 +76,27 @@ public final class ThemeBackgroundView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .never
-        layer?.addSublayer(current)
+        themeHost.anchorPoint = .zero
+        themeHost.allowsGroupOpacity = true
+        themeHost.addSublayer(current)
+        layer?.addSublayer(themeHost)
+    }
+
+    private func applyMaterial() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if material == .overPage, let blur = pageBlur ?? PageBlurLayer.make() {
+            pageBlur = blur
+            blur.frame = bounds
+            if blur.superlayer == nil { layer?.insertSublayer(blur, below: themeHost) }
+            themeHost.opacity = Float(1 - WindowMaterial.backdropWeight)
+        } else {
+            pageBlur?.removeFromSuperlayer()
+            themeHost.opacity = 1
+        }
+        CATransaction.commit()
+        [current, incoming].compactMap { $0 }.forEach { $0.invalidateField() }
+        refresh()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -83,9 +132,11 @@ public final class ThemeBackgroundView: NSView {
         // Stretch the existing field while resizing. Rebuild only on a display tick.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        themeHost.frame = bounds
+        pageBlur?.frame = bounds
         for layer in [current, incoming].compactMap({ $0 }) {
-            layer.frame = bounds
-            layer.resize(to: bounds.size)
+            layer.frame = fieldRect
+            layer.resize(to: fieldRect.size)
         }
         CATransaction.commit()
         guard !inLiveResize, !resizing, displayLink == nil, bounds.width > 0, bounds.height > 0 else { return }
@@ -112,8 +163,8 @@ public final class ThemeBackgroundView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for l in [current, incoming].compactMap({ $0 }) {
-            l.frame = bounds
-            if l.update(size: bounds.size, active: isWindowActive, scale: scale, displaySpace: composesInDisplaySpace) { fieldRebuildCount += 1 }
+            l.frame = fieldRect
+            if l.update(size: fieldRect.size, active: isWindowActive, cardTint: drawsPageBlur, scale: scale, displaySpace: composesInDisplaySpace) { fieldRebuildCount += 1 }
         }
         CATransaction.commit()
     }
@@ -124,7 +175,7 @@ public final class ThemeBackgroundView: NSView {
         incoming?.removeFromSuperlayer()
         let l = ThemeLayer(style: style)
         l.opacity = 0
-        layer?.addSublayer(l)
+        themeHost.addSublayer(l)
         incoming = l
         refresh()
     }
@@ -187,6 +238,35 @@ public final class ThemeBackgroundView: NSView {
     }
 }
 
+/// The blurred page under the hover-reveal card: a backdrop layer with a Gaussian
+/// blur (σ = `WindowMaterial.pageBlurSigma`), rendered by the window server from
+/// whatever the window draws below it, including the engine's page layers. It does
+/// work only while it is visible and the content under it changes.
+/// CoreAnimation has no public backdrop layer; `NSVisualEffectView` adds its own
+/// material tint and saturation, which would break the fitted 0.115 page share.
+/// Returns nil (the card stays opaque) if the classes or keys are missing.
+@MainActor
+enum PageBlurLayer {
+    /// Downsampling of the backdrop before the blur (cheaper; the blur hides it).
+    static let scale: CGFloat = 0.25
+
+    static func make() -> CALayer? {
+        guard let layerClass = NSClassFromString("CABackdropLayer") as? CALayer.Type,
+              let filterClass = NSClassFromString("CAFilter") as? NSObject.Type else { return nil }
+        let make = NSSelectorFromString("filterWithType:")
+        guard filterClass.responds(to: make),
+              let blur = filterClass.perform(make, with: "gaussianBlur")?.takeUnretainedValue() as? NSObject else { return nil }
+        let layer = layerClass.init()
+        guard layer.responds(to: NSSelectorFromString("setScale:")) else { return nil }
+        blur.setValue(WindowMaterial.pageBlurSigma, forKey: "inputRadius")
+        blur.setValue(true, forKey: "inputNormalizeEdges")
+        layer.filters = [blur]
+        layer.setValue(scale, forKey: "scale")
+        layer.anchorPoint = .zero
+        return layer
+    }
+}
+
 /// The display link retains this target, which holds the view weakly.
 @MainActor
 private final class ThemeDisplayTarget: NSObject {
@@ -210,7 +290,7 @@ final class ThemeLayer: CALayer {
     private var fieldKey: FieldKey?
     private var grainKey: GrainKey?
 
-    private struct FieldKey: Equatable { var active: Bool; var aspect: Int; var displaySpace: Bool }
+    private struct FieldKey: Equatable { var active: Bool; var cardTint: Bool; var aspect: Int; var displaySpace: Bool }
     private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat; var texture: SpaceStyleTexture }
 
     init(style: SpaceThemeStyle) {
@@ -255,15 +335,16 @@ final class ThemeLayer: CALayer {
         grainColumns.instanceTransform = CATransform3DMakeTranslation(t, 0, 0)
     }
 
-    @MainActor func update(size: CGSize, active: Bool, scale: CGFloat, displaySpace: Bool) -> Bool {
+    @MainActor func update(size: CGSize, active: Bool, cardTint: Bool, scale: CGFloat, displaySpace: Bool) -> Bool {
         guard size.width > 0, size.height > 0 else { return false }
         resize(to: size)
         // Rebuild when the aspect ratio moves by more than 0.5 %.
-        let key = FieldKey(active: active, aspect: Int((size.width / size.height * 200).rounded()), displaySpace: displaySpace)
+        // The card tint does not depend on the window's active state.
+        let key = FieldKey(active: active || cardTint, cardTint: cardTint, aspect: Int((size.width / size.height * 200).rounded()), displaySpace: displaySpace)
         let rebuilt = key != fieldKey
         if rebuilt {
             fieldKey = key
-            if displaySpace, let c = ThemeField.composition(style: theme, windowSize: size, isActive: active) {
+            if displaySpace, !cardTint, let c = ThemeField.composition(style: theme, windowSize: size, isActive: active) {
                 underlay.backgroundColor = c.underlay
                 underlay.isHidden = false
                 field.backgroundColor = c.solid
@@ -272,7 +353,7 @@ final class ThemeLayer: CALayer {
                 underlay.isHidden = true
                 underlay.backgroundColor = nil
                 field.backgroundColor = nil
-                field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
+                field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: key.active, cardTint: cardTint)
             }
         }
         let noise = theme.noiseFactor

@@ -98,7 +98,7 @@ func runImportArc(args: [String]) async throws {
     for name in report.namedSpaceIcons.keys.sorted() {
         print("  namedSpaceIcon \(name) count=\(report.namedSpaceIcons[name]!) symbol=\(NamedSpaceIcons.symbolName(for: name))")
     }
-    print("  orphans=\(report.orphans) skippedRoutingRules=\(report.skippedRoutingRules)")
+    print("  orphans=\(report.orphans) skippedRoutingRules=\(report.skippedRoutingRules) routingDestinationFallbacks=\(report.routingDestinationFallbacks)")
     print("  archive: \(report.archiveStatus)")
     if report.archiveFilePresent {
         print("  archive filePresent=true total=\(report.archiveTotal) imported=\(report.archiveImported) storedNew=\(report.archiveStoredNew) storedDuplicates=\(report.archiveStoredDuplicates) storedTotal=\(archiveTotalStored)")

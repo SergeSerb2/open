@@ -1,5 +1,29 @@
 # Profiles — implementation plan for Open
 
+Section 10 shell errata (2026-11-06): the App deletion flow supersedes the
+separate wipe and undo wording in §3.4, §5.5, §6.5 and §7.1. Settings asks
+for the exact Profile name, or `DELETE` for unused Profiles. It captures the
+directory, deletes the model with undo registration disabled, tears down the
+context, wipes Open-owned files, then calls `saveNow`. It clears older Undo
+actions so create/redo cannot restore the deleted identity. The model/CLI
+command remains undoable when used outside that irreversible App flow.
+
+`releaseContext` proves page closure only. An engine directory loaded during
+this launch stays on disk until the next launch. A bounded, atomic, synced
+`Profiles/.pending-wipe.json` journal records cleanup. Before engine startup,
+the App removes those engine/cache directories and their `Local State`
+`profile.info_cache`, `last_used`, and `last_active_profiles` references.
+Never-loaded engine/cache directories are removed in-session; their Local
+State cleanup still waits for launch. No restart prompt is shown.
+
+App bootstrap and every `installModel` path repair missing Profile refs and
+save repairs. The first standard window shows one informational sheet with
+the affected Space titles. Settings rows use Section 4's shared icon picker.
+Header geometry and the more-than-one-Profile visibility rule are **guess
+S10-I1**; editable Profile icons and a new Little Open page for a Profile
+without a Space are also guesses. See [profiles-shell.md](../profiles-shell.md)
+for the acceptance receipt and evidence limits.
+
 Status: plan for implementation. Implementer: follow this file top to bottom.
 Do not spawn subagents (AGENTS.md rule 8). Do not write unit tests (rule 6).
 Verify end to end only: real `swift build`, real `openkit` CLI on real
@@ -169,7 +193,7 @@ changes are confined to store file locations (§5.4) and one new
 | D-P5 | Archive becomes **one SQLite file per Profile** (`Profiles/<dir>/State/archive.sqlite3`). A composite sink routes by `ArchiveEntry.profileID` | Keep one global `archive.sqlite3` filtered by `profile_id` | Task scope and Arc isolation both point per-Profile; the global file would be the one store that survives a Profile disk-delete (§5.5), leaking its tab titles/URLs. The `profile_id` column stays (restore + import dedupe use it) |
 | D-P6 | History becomes **one SQLite file per Profile**. Favicons stay **one global file** | Per-Profile favicons | History is private browsing data (isolated in Arc, proven). Favicon bytes are public site icons keyed by origin (`FaviconStore` has no Profile key) and the sidebar draws icons for every Space at once; splitting it would duplicate fetches per Profile. The accepted leak is stated in §5.3, not hidden |
 | D-P7 | Request contexts load **lazily**: a Profile's `CefRequestContext` is created when a Space of that Profile is first shown (or a Little Open window first hints it), never for all Profiles at launch. Loaded contexts stay loaded until quit in v1 | Load all at launch; evict idle contexts | Arc evidence points lazy (`shouldLoadAllProfilesAtStartup`, [features-core.md](../re/features-core.md) §5.2 rule 6, marked Guess). Each loaded context costs a Chrome Profile in the browser process (§6.4); eviction correctness (live browsers, extensions) is a follow-up, not v1 |
-| D-P8 | Incognito is an **ephemeral Profile**: an in-memory request context (`cache_path` empty) keyed by window, never inserted into `BrowserModel.profiles`, never written to any Open store | A hidden persisted `Profile` row | Arc: incognito cookies are never seeded and nothing persists (§5.2 rule 6, §8.1 rule 3). A model row would leak into Settings, the snapshot, and `openkit profiles list` |
+| D-P8 | Incognito is an **ephemeral Profile**: an in-memory request context (`cache_path` empty) shared by windows of one requested parent; a synthetic Profile lives only in each private window's separate model, never in `app.model.profiles` or an Open store (Section 10 lead erratum, 2026-11-06) | A hidden persisted `Profile` row | Arc: incognito cookies are never seeded and nothing persists (§5.2 rule 6, §8.1 rule 3). A model row would leak into Settings, the snapshot, and `openkit profiles list` |
 | D-P9 | One new `TreeChange` case, `.spaceProfileChanged(spaceID:from:to:)`. `updateSpace(profileID:)` keeps its combined-edit undo but emits the same case | Emit only `.reload` and let the engine diff `profileID` | The engine must destroy/recreate web contents on a Profile change; a diff-on-reload rule is implicit and easy to miss. One explicit case, two existing switch sites to update (§3.6) |
 | D-P10 | No DTO/schema change. `schemaVersion` stays 1; old snapshots load unchanged; `repairMissingProfileReferences()` runs explicitly at App/CLI load, not inside the mapper | Bump to schema 2; auto-repair inside `SnapshotMapper` | Every Profile field already persists. Hidden mapper repair would make `roundtrip` compare a repaired tree against its file and hide data loss |
 
@@ -829,9 +853,12 @@ ProfileID, either `.global` or a created context handle, and answers
 browsers accordingly.
 
 Incognito (D-P8): `CefRequestContextSettings` with **empty** `cache_path`
-and `persist_session_cookies` = false, one context per incognito window,
-created when the window opens and released when it closes (§6.5). Never
-seed it from the default Profile (Arc §5.2 rule 6).
+and `persist_session_cookies` = false. Section 10 lead erratum (2026-11-06):
+private windows of one requested parent share a session context; each window
+has a separate in-memory model. The last private window releases the context.
+The current `IncognitoContextProvider` uses Default OTR until 0701 supplies
+per-parent OTR creation. No cookies are seeded (Open privacy requirement;
+the Arc hidden-profile assertion alone does not prove every general window).
 
 ### 6.3 What "Profile switch" means in one window
 

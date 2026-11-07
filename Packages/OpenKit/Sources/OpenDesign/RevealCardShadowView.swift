@@ -7,6 +7,9 @@ import AppKit
 @MainActor
 public final class RevealCardShadowView: NSView {
     private let shadowLayer = CALayer()
+    /// Keeps the shadow outside the card: the card's page blur samples what lies under
+    /// it, and the shadow's own fill there would darken the page it blurs.
+    private let shadowMask = CAShapeLayer()
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
@@ -16,6 +19,8 @@ public final class RevealCardShadowView: NSView {
         shadowLayer.shadowOpacity = WindowMetrics.revealCardShadowOpacity
         shadowLayer.shadowRadius = WindowMetrics.revealCardShadowRadius
         shadowLayer.shadowOffset = .zero
+        shadowMask.fillRule = .evenOdd
+        shadowLayer.mask = shadowMask
         layer?.addSublayer(shadowLayer)
         updateShadow()
     }
@@ -33,7 +38,13 @@ public final class RevealCardShadowView: NSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let r = WindowMetrics.revealCardRadius
         shadowLayer.frame = bounds
-        shadowLayer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: r, cornerHeight: r, transform: nil)
+        let shape = CGPath(roundedRect: bounds, cornerWidth: r, cornerHeight: r, transform: nil)
+        shadowLayer.shadowPath = shape
+        let outside = CGMutablePath()
+        outside.addRect(bounds.insetBy(dx: -24, dy: -24))
+        outside.addPath(shape)
+        shadowMask.frame = bounds
+        shadowMask.path = outside
         CATransaction.commit()
     }
 }

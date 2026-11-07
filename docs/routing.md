@@ -29,7 +29,7 @@ A rule that explicitly selects Little Open still wins when the external-links to
 
 Empty patterns, literal spaces, malformed explicit URL prefixes, and missing Space targets are errors. Invalid drafts remain visible but are excluded from evaluation/save output. Duplicate rules and host-substring semantics are warnings. A missing default Space produces an issue under the stable `defaultDestinationIssueID` and degrades to most recent Space. `moveRule(from:to:)` uses the final list index; `to == count` means the end.
 
-`runTest()` builds one synthetic standard window, evaluates with the same logger-less evaluator, and stores `testDecision`. Invalid input clears the prior result and makes `testInputIsValid` false. It never opens a URL or changes rules. Recreate the settings model when the App adds Spaces or changes their profile assignments, so its input snapshot retains the correct profile mapping. The App hydrates `littleOpenAutoArchiveAfter` from the current profile; its initial value is six hours.
+`runTest()` obtains a fresh App snapshot on each click, evaluates with the same logger-less evaluator, and stores `testDecision`. Automatic uses the same live standard-window order as external-link intake. An explicit override prepends a synthetic standard window. With no windows, the normal first-Space fallback applies. Invalid input clears the prior result and makes `testInputIsValid` false. It never opens a URL or changes rules. Recreate the settings model when the App adds Spaces or changes their profile assignments, so its input snapshot retains the correct profile mapping. The App hydrates `littleOpenAutoArchiveAfter` from the current profile; its initial value is six hours.
 
 Persistence ownership remains:
 
@@ -43,9 +43,37 @@ Persistence ownership remains:
 
 The model reads the two shortcut toggles and uses the snapshot's external-links toggle. It does not write UserDefaults. The CLI reads the same external-links key with the same fallback. Phase B owns defaults registration and App save wiring.
 
+## Profile-aware Air Traffic Control (Section 10)
+
+Rules and the default destination support a specific Space, Most Recent Space with an optional Profile, and Little Open with an optional Profile. A nil Profile keeps the existing behavior.
+
+A Profile-scoped Most Recent Space chooses the frontmost standard window whose focused Space uses that Profile, then the first Space in model order for that Profile. A missing or empty Profile rule is skipped. A stale scoped default falls back to the most recent Space overall. Little Open uses an explicit Profile when it exists; a deleted Profile falls back to the normal most-recent Profile hint. A valid Profile can host Little Open without a Space.
+
+Little Open resurfaces an existing page only when both its canonical URL and resolved Profile match. The same URL in another Profile creates a separate window and engine context.
+
+With one Profile, both destination pickers keep Little Open, Most Recent Space, a separator, then Spaces. With two or more Profiles, they group Profile-specific destinations and Spaces under disabled Profile-name labels. Missing Profile copy is “This Profile is no longer available.”; a Profile without Spaces shows “This Profile has no Spaces.” Rule rows use the same destination labels.
+
+Synthetic Open rule-sheet renders show the Work destination at [1x](routing-atc/profile-destination@1x.png) and [2x](routing-atc/profile-destination@2x.png). The preview check inspects the native menu's item order, separators, and disabled Profile labels. These renders are review evidence, not Arc comparisons.
+
+The Air Traffic Control command opens Settings ▸ Links and targets the rules section. Its search aliases are Link Routing, Link Preferences, and Air Traffic Controller. The section heading uses the shared Settings heading style.
+
+[Section 10 acceptance and regression proofs](routing-atc/verification.md) record the real CLI, Settings preview, and App results.
+
+### Arc import: facts and explicit guesses
+
+Arc's reflected stored enums contain matches/contains, and destinations space/littleArc carrying profile/space/mostRecent (local research: `.re/s10/arc-routing-fields.tsv:16-20,24-34`; schema: `docs/re/data-model.md` §2.7). These names and shapes do not prove Arc's comparison behavior.
+
+The matches mapping is a **guess**: a pattern that parses as a bare host with HostNormalizer becomes hostEquals; other patterns become urlPrefix. contains still becomes hostContains. Components remain separate Open rules in source order with the same destination; the assumed **OR semantics are a guess**.
+
+Nested space(mostRecent), space(profile), and space(space) become an unscoped most-recent target, a Profile-scoped most-recent target, and a specific Space. Nested littleArc(mostRecent), littleArc(profile), and littleArc(space) become an unscoped Little Open target, an explicit Profile, and that Space's mapped Profile. Unknown contexts preserve the old most-recent fallback; routingDestinationFallbacks counts each default/rule destination that loses context.
+
+The source-app picker is an **Open extra, Arc unverified**. The reflected Arc ComponentType contains urlMatch only (`.re/s10/arc-routing-fields.tsv:18,26`). Test a Link, invalid drafts, empty state, and the exact Arc editor layout also need user-operated Arc captures. Open's own settings renders do not prove Arc UI parity.
+
+Section 10 keeps schemaVersion 1. The four live/DTO destination enums add an optional nested `profile` value under littleOpen/mostRecentSpace. Nil still encodes as `{}`. The pre-Section-10 decoder ignores these payloads. The separate real old-CLI acceptance check uses `OPEN_ROUTE_OLD_CLI` to confirm load compatibility; it does not undo the older littleArc-to-littleOpen migration.
+
 ## Snapshot compatibility
 
-This is a **ONE-WAY migration** from `littleArc` to `littleOpen`. New snapshots do not load in builds before this PR. This is acceptable because Open has no released users. `schemaVersion` stays **1**.
+The original Phase A rename was a **ONE-WAY migration** from `littleArc` to `littleOpen`: its snapshots do not load in builds from before that rename. Open had no released users. The Section 10 Profile payload addition is readable by current main's decoder, as described above. `schemaVersion` stays **1**.
 
 The four live/DTO routing destination enums accept legacy `littleArc` and new `littleOpen`, and encode only the new spelling. Unknown keys and multiple destination keys throw. String-passthrough coding keys keep unknown keys visible to this validation.
 

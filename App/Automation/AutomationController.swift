@@ -32,6 +32,7 @@
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
     var firstRunActionTask: Task<Void, Never>?
+    var profileIndicatorMenuTitles: [String] = []
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
 
@@ -56,6 +57,7 @@
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
@@ -89,6 +91,9 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "profiles-shell": return try await profilesShell(a)
+      case "incognito-state": return try incognitoState(a)
+      case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -180,6 +185,7 @@
         return ["pane": adapter.settings.selectedPane.rawValue, "selectedProfile": adapter.settings.selectedProfileID.description,
           "settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
           "settingsVisible": adapter.settingsPresenter.window?.isVisible ?? false,
+          "scrollTarget": adapter.settings.scrollTarget ?? "",
           "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
@@ -668,7 +674,11 @@
 
       // Pages (any live web content).
       case "pages":
-        return OEEngine.shared.allWebContents.map { describe($0, in: w) }
+        return OEEngine.shared.allWebContents.filter { content in
+          a["private"] as? Bool == true || !app.hostFactories.values.contains {
+            $0.isIncognito && $0.incognitoSession?.context === content.context
+          }
+        }.map { describe($0, in: w) }
       case "eval":
         guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
         // Through the OpenWeb protocol, as OpenKit features will call it.
@@ -1003,6 +1013,10 @@
           "confirmation": controller.pendingConfirmation.map { ["title": $0.messageText, "text": $0.informativeText,
             "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? NSNull(),
           "sidebarResizeActive": controller.sidebarResizeActive,
+          "sidebarResizeHandleDragging": controller.sidebarResizeHandleDragging,
+          "sidebarResizeHandleVisible": controller.sidebarResizeHandleVisible,
+          "sidebarResizeHasStart": controller.sidebarResizeHasStart,
+          "sidebarWidthOverride": controller.context.sidebarWidthOverride.map { $0 as Any } ?? NSNull(),
           "sidebarWidthCommits": controller.sidebarWidthCommits, "sidebarGestureHides": controller.sidebarGestureHides,
           "sidebarGeometryChanges": controller.sidebarGeometryChanges,
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
@@ -1035,7 +1049,7 @@
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
-            "card": rect(reveal.card)] as [String: Any],
+            "card": rect(reveal.card), "pageBlur": controller.cardDrawsPageBlur] as [String: Any],
           "chrome": ["urlField": inRoot(chrome.urlField), "urlFieldHovered": chrome.urlFieldHovered, "favorites": inRoot(chrome.favorites),
             "header": inRoot(chrome.header), "headerTitle": inRoot(chrome.headerTitle),
             "headerTitleBaseline": chrome.headerTitleBaseline.map { Double(root.convert(CGPoint(x: 0, y: $0), from: sidebar).y) } ?? NSNull(),
@@ -1059,6 +1073,24 @@
         default: NSApp.appearance = nil
         }
         return NSApp.effectiveAppearance.name.rawValue
+      case "undo-state":
+        if a["clear"] as? Bool == true { app.undoManager.removeAllActions() }
+        return ["generation": app.model.undoGeneration, "canUndo": app.undoManager.canUndo,
+          "canRedo": app.undoManager.canRedo] as [String: Any]
+      case "window-interrupt":
+        guard let win = w.window else { throw Failure(message: "no window") }
+        switch a["kind"] as? String {
+        case "key": win.orderOut(nil)
+        case "sheet":
+          // Native sheet lifecycle, with no tracking loop or external input.
+          let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+          sheet.isReleasedWhenClosed = false
+          win.beginSheet(sheet, completionHandler: { _ in })
+        case "end-sheet":
+          if let sheet = win.attachedSheet { win.endSheet(sheet); sheet.orderOut(nil) }
+        default: throw Failure(message: "expected key, sheet, or end-sheet")
+        }
+        return true
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
         let readinessTimeout = a["readinessTimeout"] as? Double ?? 5
@@ -1220,7 +1252,7 @@
 
     private func modelTab(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Tab {
       if let s = a["tab"] as? String {
-        guard let uuid = UUID(uuidString: s), let tab = app.model.tab(id: ItemID(rawValue: uuid)) else {
+        guard let uuid = UUID(uuidString: s), let tab = w.model.tab(id: ItemID(rawValue: uuid)) else {
           throw Failure(message: "no tab \(s)")
         }
         return tab
@@ -1267,7 +1299,7 @@
       let section: String
       if w.focusedProfile?.favorites.contains(where: { $0.id == tab.id }) == true {
         section = "favorites"
-      } else if app.model.isPinned(tabID: tab.id) {
+      } else if w.model.isPinned(tabID: tab.id) {
         section = "pinned"
       } else {
         section = "today"
@@ -1317,7 +1349,7 @@
       }
       let pageColor = w.hosts.values.first { $0.content === c }?.pageBackgroundColor
       return [
-        "identifier": c.identifier, "kind": kind, "live": c.isLive, "url": c.url?.absoluteString ?? "",
+        "identifier": c.identifier, "kind": kind, "live": c.isLive, "ephemeral": c.context.isEphemeral, "url": c.url?.absoluteString ?? "",
         "title": c.title, "loading": c.isLoading, "style": c.runtimeStyle == .chrome ? "chrome" : "alloy",
         "audible": c.isAudible, "muted": c.isMuted, "crash": c.crashState.rawValue, "fullscreen": c.isFullscreen,
         "favicon": c.favicon != nil, "context": c.context.identifier, "canGoBack": c.canGoBack,
