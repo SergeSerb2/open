@@ -152,3 +152,67 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
   }
   #endif
 }
+
+extension EngineWebContentHostFactory {
+  @discardableResult
+  func showRenameSpaceDialog() -> Bool {
+    guard !isClosing, pendingRenameAlert == nil, let space = focusedSpace, let window,
+          window.attachedSheet == nil else { return false }
+    let alert = NSAlert(); alert.messageText = "Rename Space"
+    alert.addButton(withTitle: "Rename"); alert.addButton(withTitle: "Cancel")
+    let field = NSTextField(string: space.title ?? "")
+    field.frame = NSRect(x: 0, y: 0, width: 260, height: 24); field.placeholderString = "Space name"
+    // A single-line field consumes Return to send its action. Forward that
+    // native action to the alert's Rename button so Return confirms the sheet.
+    field.cell?.sendsActionOnEndEditing = false
+    field.target = alert.buttons[0]; field.action = #selector(NSButton.performClick(_:))
+    alert.accessoryView = field; pendingRenameAlert = alert
+    alert.window.initialFirstResponder = field
+    alert.beginSheetModal(for: window) { [weak self] response in
+      guard let self else { return }; self.pendingRenameAlert = nil
+      guard !self.isClosing, !self.app.terminationRequested, response == .alertFirstButtonReturn,
+            let current = self.model.space(id: space.id) else { return }
+      let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard current.title != (trimmed.isEmpty ? nil : trimmed) else { return }
+      self.app.undoManager.beginUndoGrouping()
+      self.model.renameSpace(id: space.id, title: field.stringValue)
+      self.app.undoManager.setActionName("Rename Space"); self.app.undoManager.endUndoGrouping()
+      self.app.scheduleSave()
+    }
+    return true
+  }
+}
+
+extension EngineWebContentHostFactory {
+  @discardableResult
+  func requestSpaceProfileChange(spaceID: SpaceID, profileID: ProfileID) -> Bool {
+    guard let request = ChangeProfileRequest(spaceID: spaceID, toProfile: profileID, in: model),
+          pendingSpaceProfileAlert == nil, let window, window.attachedSheet == nil else { return false }
+    let apply: @MainActor () -> Void = { [weak self] in
+      guard let self, !self.isClosing, !self.app.terminationRequested,
+        self.model.space(id: spaceID)?.profileID == request.fromProfileID,
+        self.model.profile(id: profileID) != nil else { return }
+      self.app.undoManager.beginUndoGrouping()
+      self.model.moveSpace(id: spaceID, toProfile: profileID)
+      self.app.undoManager.setActionName("Change Profile")
+      self.app.undoManager.endUndoGrouping()
+      self.app.scheduleSave(); self.app.scheduleMenuRebuild()
+    }
+    let preferences = UserDefaults.standard
+    if preferences.object(forKey: request.dontShowAgainKey) != nil && !preferences.bool(forKey: request.dontShowAgainKey) {
+      apply(); return true
+    }
+    let alert = NSAlert(); alert.alertStyle = .warning
+    alert.messageText = "Change Profile?"; alert.informativeText = request.warning
+    alert.addButton(withTitle: "Change Profile"); alert.addButton(withTitle: "Cancel")
+    alert.showsSuppressionButton = true; alert.suppressionButton?.title = "Don't show again"
+    pendingSpaceProfileAlert = alert
+    alert.beginSheetModal(for: window) { [weak self] response in
+      guard let self else { return }; self.pendingSpaceProfileAlert = nil
+      guard response == .alertFirstButtonReturn else { return }
+      if alert.suppressionButton?.state == .on { preferences.set(false, forKey: request.dontShowAgainKey) }
+      apply()
+    }
+    return true
+  }
+}

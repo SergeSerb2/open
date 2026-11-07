@@ -137,7 +137,9 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         case "delete": return "\u{7F}"
         default:
             if key.hasPrefix("f"),let number=Int(key.dropFirst()),(1...35).contains(number),let scalar=UnicodeScalar(0xF704+number-1) {return String(scalar)}
-            if key.count == 1 { return key.lowercased() }
+            // AppKit matches the shifted letter's case even when Shift is
+            // also present in keyEquivalentModifierMask (for example Redo).
+            if key.count == 1 { return modifiers.contains(.shift) ? key.uppercased() : key.lowercased() }
             return key
         }
     }

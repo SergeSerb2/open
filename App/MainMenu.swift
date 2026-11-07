@@ -178,6 +178,9 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    #if OPEN_AUTOMATION
+    AutomationShortcutTrace.record(id)
+    #endif
     if isIncognito && !isAppCommandEnabled(id, payload: payload) { return false }
     // Find owns its pane even when AppKit's field editor implements the native selector.
     if let tag = ["find": 1, "find-next": 2, "find-previous": 3, "find-and-replace": 12, "use-selection-to-find": 7][id] {
@@ -253,7 +256,7 @@ extension EngineWebContentHostFactory {
     // docs/commands.md lists all four entries with “—”.
     case "rename-space":
       guard let controller else { return false }
-      if windowState.sidebarMode == .hidden { controller.toggleSidebar() }
+      if windowState.sidebarMode == .hidden { return showRenameSpaceDialog() }
       controller.sidebar.layoutSubtreeIfNeeded()
       controller.sidebar.beginRename(nodeID: nil)
     case "change-profile":
@@ -263,7 +266,7 @@ extension EngineWebContentHostFactory {
       return showSpaceProfileMenu()
     case "clear-archive":
       app.settingsPresenter.requestClearArchive()
-    case "new-space": if let profile = focusedProfile { focus(space: model.createSpace(title: "Space", profileID: profile.id)) }
+    case "new-space": return controller?.beginSpaceCreation() == true
     case "new-folder": if let space = focusedSpace { _ = model.createFolder(in: .spacePinned(space.id)) }
     case "reload": selectedContent?.reload()
     case "force-reload": selectedContent?.reloadIgnoringCache()

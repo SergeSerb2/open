@@ -1750,13 +1750,8 @@ public final class BrowserModel {
     @discardableResult
     public func createProfile(name: String, icon: SpaceIcon? = nil, settings: ProfileSettings = ProfileSettings(), id: ProfileID = ProfileID()) -> Profile? {
         guard profile(id: id) == nil, Self.profileNameIssue(name, in: profiles) == nil else { return nil }
-        var directory = "Default"
-        if !profiles.isEmpty || unavailableProfileDirectoryNames.contains("default") {
-            repeat { directory = "Profile-" + UUID().uuidString.prefix(8).uppercased() }
-            while unavailableProfileDirectoryNames.contains(directory.lowercased()) || profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame }
-        }
-        let profile = Profile(id: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, settings: settings, dataDirectoryName: directory)
-        unavailableProfileDirectoryNames.insert(directory.lowercased())
+        let profile = makeProfile(name: name, icon: icon, settings: settings, id: id)
+        unavailableProfileDirectoryNames.insert(profile.dataDirectoryName.lowercased())
         let slot = profiles.count
         insertProfile(profile, at: slot)
         registerUndo({ model in model.removeProfile(profile.id); return true }, reapply: { model in
@@ -1766,8 +1761,17 @@ public final class BrowserModel {
         return profile
     }
 
-    private func insertProfile(_ profile: Profile, at slot: Int) {
-        onProfileCreated?(profile)
+    private func makeProfile(name: String, icon: SpaceIcon? = nil, settings: ProfileSettings = ProfileSettings(), id: ProfileID = ProfileID()) -> Profile {
+        var directory = "Default"
+        if !profiles.isEmpty || unavailableProfileDirectoryNames.contains("default") {
+            repeat { directory = "Profile-" + UUID().uuidString.prefix(8).uppercased() }
+            while unavailableProfileDirectoryNames.contains(directory.lowercased()) || profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame }
+        }
+        return Profile(id: id, name: name.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, settings: settings, dataDirectoryName: directory)
+    }
+
+    private func insertProfile(_ profile: Profile, at slot: Int, notify: Bool = true) {
+        if notify { onProfileCreated?(profile) }
         profiles.insert(profile, at: min(slot, profiles.count))
         profileByIDCache[profile.id] = profile
         for tab in profile.favorites { register(.tab(tab), under: .favorites(profile.id)) }
@@ -1881,23 +1885,55 @@ public final class BrowserModel {
         return space
     }
 
+    public enum SpaceCreationPlacement: Sendable { case pinned, today, preserveSection }
+
     /// Use for IDs supplied by data, import, automation, or restored state.
-    /// Unknown Profile or invalid placement returns nil without writes, undo, events, or save.
+    /// The complete transaction refuses without writes, undo, events, or save.
     @discardableResult
     public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?, theme: SpaceTheme,
-                            at index: Int?, moving nodeIDs: [ItemID]) -> Space? {
-        guard profile(id: profileID) != nil, validSpaceCreation(index: index, moving: nodeIDs) else { return nil }
-        let space = Space(title: title, icon: icon, theme: theme, profileID: profileID)
+                            at index: Int?, moving nodeIDs: [ItemID],
+                            placement: SpaceCreationPlacement = .pinned, removingEmptyFolder: ItemID? = nil,
+                            creatingProfileNamed: String? = nil) -> Space? {
+        guard creatingProfileNamed.map({ Self.profileNameIssue($0, in: profiles) == nil }) ?? (profile(id: profileID) != nil),
+              canCreateSpace(at: index, moving: nodeIDs, removingEmptyFolder: removingEmptyFolder) else { return nil }
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newProfile = creatingProfileNamed.map { makeProfile(name: $0) }
+        let profileSlot = profiles.count
+        let space = Space(title: title.isEmpty ? nil : title, icon: icon, theme: theme, profileID: newProfile?.id ?? profileID)
         let i = index ?? spaces.count
-        guard let revert = insertSpaceMoving(space, at: i, moving: nodeIDs) else { return nil }
-        registerUndo(revert, reapply: { $0.insertSpaceMoving(space, at: i, moving: nodeIDs) ?? Self.noRevert })
+        func insert(_ model: BrowserModel) -> Revert? {
+            guard model.canCreateSpace(at: i, moving: nodeIDs, removingEmptyFolder: removingEmptyFolder) else { return nil }
+            if let newProfile {
+                guard model.profile(id: newProfile.id) == nil else { return nil }
+                model.insertProfile(newProfile, at: profileSlot, notify: false)
+            }
+            guard let revert = model.insertSpaceMoving(space, at: i, moving: nodeIDs, placement: placement,
+                removingEmptyFolder: removingEmptyFolder, beforePublishing: {
+                    if let newProfile { model.onProfileCreated?(newProfile) }
+                }) else {
+                if let newProfile { model.removeProfile(newProfile.id) }
+                return nil
+            }
+            if let newProfile { model.unavailableProfileDirectoryNames.insert(newProfile.dataDirectoryName.lowercased()) }
+            return { model in
+                guard revert(model) else { return false }
+                if let newProfile { model.removeProfile(newProfile.id) }
+                return true
+            }
+        }
+        guard let revert = insert(self) else { return nil }
+        registerUndo(revert, reapply: { insert($0) ?? Self.noRevert })
         return space
     }
 
-    private func validSpaceCreation(index insertion: Int?, moving ids: [ItemID]) -> Bool {
+    public func canCreateSpace(at insertion: Int? = nil, moving ids: [ItemID], removingEmptyFolder: ItemID? = nil) -> Bool {
         guard insertion.map({ (0...spaces.count).contains($0) }) ?? true,
               Set(ids).count == ids.count else { return false }
-        // The destination is a fresh Space, so it cannot be a source node's descendant.
+        if let folderID = removingEmptyFolder {
+            guard let folder = index[folderID]?.folder, let parent = parentByID[folderID],
+                  owner(of: parent).space != nil, folder.children.map(\.id) == ids,
+                  !ids.contains(folderID) else { return false }
+        }
         let moving = Set(ids)
         for id in ids {
             guard index[id] != nil, let parent = parentByID[id], position(of: id, in: parent) != nil else { return false }
@@ -1911,10 +1947,23 @@ public final class BrowserModel {
         return true
     }
 
-    private func insertSpaceMoving(_ space: Space, at i: Int, moving ids: [ItemID]) -> Revert? {
-        guard self.space(id: space.id) == nil, validSpaceCreation(index: i, moving: ids) else { return nil }
-        // Buffer structural events until all relocations succeed. Rollback uses the
-        // same primitives, and discards both their forward and inverse events.
+    private func insertSpaceMoving(_ space: Space, at i: Int, moving ids: [ItemID],
+                                   placement: SpaceCreationPlacement, removingEmptyFolder folderID: ItemID?,
+                                   beforePublishing: () -> Void) -> Revert? {
+        guard self.space(id: space.id) == nil, profile(id: space.profileID) != nil,
+              canCreateSpace(at: i, moving: ids, removingEmptyFolder: folderID) else { return nil }
+        let previousFocus = windows.map { ($0.id, $0.focusedSpaceID) }
+        let originalParents = ids.compactMap { parentByID[$0] }
+        let folder = folderID.flatMap { index[$0]?.folder }
+        let folderParent = folderID.flatMap { parentByID[$0] }
+        let folderPosition = folderID.flatMap { id in folderParent.flatMap { position(of: id, in: $0) } }
+        // Resolve section kinds before any relocation, including children of folders.
+        let destinations = ids.map { id -> NodeParent in
+            if case .today = placement { return .spaceToday(space.id) }
+            if case .preserveSection = placement,
+               let parent = parentByID[id], case .spaceToday? = section(of: parent) { return .spaceToday(space.id) }
+            return .spacePinned(space.id)
+        }
         spaceCreationEvents = []
         insertSpace(space, at: i)
         var moves: [Revert] = []
@@ -1922,24 +1971,43 @@ public final class BrowserModel {
             for revert in moves.reversed() { _ = revert(self) }
             removeSpace(space.id); spaceCreationEvents = nil
         }
-        for id in ids {
-            // Every source was validated before the first mutation. The fresh pinned
-            // section accepts tabs, folders (with children), and whole splits.
+        for (id, destination) in zip(ids, destinations) {
             #if DEBUG
             if diagnosticRollbackFailureAtMove == moves.count { rollback(); return nil }
             #endif
-            guard let revert = relocate(id, to: .spacePinned(space.id), at: nil) else { rollback(); return nil }
+            guard let revert = relocate(id, to: destination, at: nil) else { rollback(); return nil }
             moves.append(revert)
         }
+        if let folderID, detach(folderID) == nil { rollback(); return nil }
+        // Announce an inline Profile only after the last failable relocation,
+        // and before consumers receive this Space's buffered tree events.
+        beforePublishing()
         emit(.reload(parent: .spaceToday(space.id)))
-        let committedEvents = spaceCreationEvents ?? []
-        spaceCreationEvents = nil
+        let committedEvents = spaceCreationEvents ?? []; spaceCreationEvents = nil
         for event in committedEvents { emit(event) }
         let reverts = moves
+        let committedPinned = space.pinned.map(\.id), committedToday = space.today.map(\.id)
         return { model in
-            guard model.space(id: space.id) != nil else { return false }
-            for revert in reverts.reversed() { _ = revert(model) }
+            // A Today sweep can dissolve a moved split into its surviving tab.
+            // Refuse stale Undo before restoring the folder or moving anything;
+            // removing the Space after a failed relocation would lose survivors.
+            guard model.space(id: space.id) === space,
+                  space.pinned.map(\.id) == committedPinned, space.today.map(\.id) == committedToday,
+                  zip(ids, destinations).allSatisfy({ model.index[$0.0] != nil && model.parentByID[$0.0] == $0.1 }),
+                  originalParents.allSatisfy({ parent in
+                      if let folderID, parent == .folder(folderID) { return true }
+                      return model.parentExists(parent)
+                  }) else { return false }
+            if let folder, let folderParent, let folderPosition {
+                guard model.index[folder.id] == nil, model.parentExists(folderParent) else { return false }
+                guard model.attach(.folder(folder), to: folderParent, at: folderPosition) != nil else { return false }
+            }
+            for revert in reverts.reversed() { guard revert(model) else { return false } }
+            let focused = Set(model.windows.filter { $0.focusedSpaceID == space.id }.map(\.id))
             model.removeSpace(space.id)
+            for (id, old) in previousFocus where focused.contains(id) && model.space(id: old) != nil {
+                model.windows.first { $0.id == id }?.focusedSpaceID = old
+            }
             model.emit(.reload(parent: .spaceToday(space.id)))
             return true
         }

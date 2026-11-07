@@ -106,7 +106,7 @@
       }
     }
 
-    private static func windowServerImage(_ window: NSWindow) -> CGImage? {
+    static func windowServerImage(_ window: NSWindow) -> CGImage? {
       guard let lib = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY),
         let sym = dlsym(lib, "CGWindowListCreateImageFromArray")
       else { return nil }
