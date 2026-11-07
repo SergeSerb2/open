@@ -2334,6 +2334,8 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
+    import engine_activation
+    engine_activation.run(app_factory, results)
     sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     window_material_checks(app_factory, results, tmp)
@@ -11921,6 +11923,7 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "passwords-probe"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
@@ -11940,6 +11943,8 @@ def main():
             ap.error('require 1 <= row-timeout <= 120 and row-timeout <= suite-timeout <= 3600')
         _ROW_TIMEOUT = opts.row_timeout
         signal.signal(signal.SIGALRM, row_timeout)
+    if opts.firstrun_boosts_only and opts.only != "firstrun":
+        ap.error("--firstrun-boosts-only requires --only firstrun")
     # Startup itself may migrate legacy Peek choices before the socket answers.
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
@@ -12051,14 +12056,15 @@ def main():
     tracker = FocusTracker()
     _ACTIVE_FOCUS_TRACKER = tracker
 
-    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=()):
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        app = Open(opts.config, opts.style, user_data, extra + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
+        launch_args = [arg for arg in extra if load_extensions or not arg.startswith("--load-extension=")]
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
@@ -12153,8 +12159,12 @@ def main():
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
             # sys.path. Load this owned sibling by its exact repository path.
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
-                factory, results["firstrun"], tmp, sys.modules[__name__])
+            if not opts.firstrun_boosts_only:
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
+            if os.environ.get("OPEN_E2E_IMPORT_EXT_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun_boosts.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui

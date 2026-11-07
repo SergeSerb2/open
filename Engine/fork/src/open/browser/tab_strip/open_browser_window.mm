@@ -8,20 +8,25 @@
 #include "open/browser/autofill/open_autofill_hooks.h"
 #include "content/public/browser/web_contents.h"
 
+#include <limits>
+
 #import <AppKit/AppKit.h>
 
 #include <algorithm>
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cef/include/internal/cef_types_mac.h"
+#include "cef/libcef/browser/thread_util.h"
 #include "chrome/browser/contextual_tasks/location_bar_stub.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_active_state_manager/browser_active_state_manager.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
@@ -43,6 +48,27 @@
 namespace open_engine {
 
 namespace {
+
+int g_invalid_activation_requests = 0;
+
+bool IsRegisteredBrowser(Browser* browser) {
+  return browser && GlobalBrowserCollection::GetInstance()->FindBrowserWithID(
+                        browser->GetSessionID()) == browser;
+}
+
+// Keep negative real-App proofs safe: count the call that would reach
+// Chromium's collection CHECK, then refuse it only in automation. Normal
+// launches never enable or update this diagnostic.
+bool RefuseUnsafeActivationForAutomation(Browser* browser) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("open-automation") &&
+      !IsRegisteredBrowser(browser)) {
+    if (g_invalid_activation_requests < std::numeric_limits<int>::max()) {
+      ++g_invalid_activation_requests;
+    }
+    return true;
+  }
+  return false;
+}
 
 // Browser's FindBarController needs a FindBar for every tab change once find
 // was used. The embedder draws its own find UI (CefBrowserHost::Find and
@@ -185,7 +211,10 @@ OpenBrowserWindow::~OpenBrowserWindow() {
 void OpenBrowserWindow::SetBrowser(Browser* browser) {
   browser_ = browser;
   autofill_handler_->SetBrowser(browser_);
-  if (browser_ && IsActive()) {
+  if (CanActivateBrowser() && IsActive()) {
+    if (RefuseUnsafeActivationForAutomation(browser_)) {
+      return;
+    }
     BrowserActiveStateManager::From(browser_)->DidBecomeActive();
   }
 }
@@ -193,6 +222,10 @@ void OpenBrowserWindow::SetBrowser(Browser* browser) {
 void OpenBrowserWindow::SetHostView(CefWindowHandle handle) {
   NSView* view = CAST_CEF_WINDOW_HANDLE_TO_NSVIEW(handle);
   host_->view = view;
+  if (closing_) {
+    host_->StopObserving();
+    return;
+  }
   NSWindow* window = view.window;
   if (window == host_->observed_window) {
     return;
@@ -234,19 +267,34 @@ void OpenBrowserWindow::SetHostView(CefWindowHandle handle) {
 }
 
 void OpenBrowserWindow::OnHostWindowKeyChanged(bool key) {
-  if (!browser_) {
+  if (!CanActivateBrowser()) {
     return;
   }
   // The most recently activated Browser is chrome.windows' "current" and
   // "focused" window.
   if (key) {
+    if (RefuseUnsafeActivationForAutomation(browser_)) {
+      return;
+    }
     BrowserActiveStateManager::From(browser_)->DidBecomeActive();
   } else {
     BrowserActiveStateManager::From(browser_)->DidBecomeInactive();
   }
 }
 
+bool OpenBrowserWindow::CanActivateBrowser() const {
+  return !closing_ && IsRegisteredBrowser(browser_);
+}
+
+void OpenBrowserWindow::OnBrowserClosing() {
+  closing_ = true;
+  host_->StopObserving();
+}
+
 void OpenBrowserWindow::Show() {
+  if (!CanActivateBrowser()) {
+    return;
+  }
   [host_->window() makeKeyAndOrderFront:nil];
 }
 
@@ -287,11 +335,18 @@ void OpenBrowserWindow::Close() {
     strip->RequestClose();
     return;
   }
+  // A refused embedder close request above must keep observing. A real
+  // close must detach now: popup teardown can make the host key before
+  // Chromium deletes the Browser on a later turn.
+  OnBrowserClosing();
   UnloadController::From(browser_)->set_force_skip_warning_user_on_close(true);
   UnloadController::From(browser_)->OnWindowClosing();
 }
 
 void OpenBrowserWindow::Activate() {
+  if (!CanActivateBrowser()) {
+    return;
+  }
   if (auto* strip = OpenTabStrip::FromBrowser(browser_)) strip->RequestFrame(GetBounds(), true);
   NSWindow* window = host_->window();
   if (!window) {
@@ -305,7 +360,7 @@ void OpenBrowserWindow::Deactivate() {}
 
 bool OpenBrowserWindow::IsActive() const {
   NSWindow* window = host_->window();
-  return window && window.isKeyWindow;
+  return !closing_ && window && window.isKeyWindow;
 }
 
 ui::ZOrderLevel OpenBrowserWindow::GetZOrderLevel() const {
@@ -612,3 +667,19 @@ void OpenBrowserWindow::DeleteBrowserWindow() {
 }
 
 }  // namespace open_engine
+
+CefRefPtr<CefDictionaryValue> CefGetOpenBrowserActivationDiagnostics(bool reset) {
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch("open-automation")) {
+    return nullptr;
+  }
+  if (reset) {
+    open_engine::g_invalid_activation_requests = 0;
+  }
+  auto state = CefDictionaryValue::Create();
+  state->SetInt("invalidActivationRequests",
+                open_engine::g_invalid_activation_requests);
+  auto* active = GlobalBrowserCollection::GetInstance()->GetActiveBrowser();
+  state->SetInt("activeChromeWindowID", active ? active->GetSessionID().id() : -1);
+  return state;
+}

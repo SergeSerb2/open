@@ -47,6 +47,9 @@ class OpenBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
   void SetInitialBounds(const gfx::Rect& bounds) { pending_bounds_ = bounds; }
   // The embedder view whose NSWindow this window stands for (may be null).
   void SetHostView(CefWindowHandle view);
+  // Stop native key notifications before close callbacks tear down popups.
+  // The Browser and this window can remain alive until the next run-loop turn.
+  void OnBrowserClosing();
 
   // ui::BaseWindow:
   void Show() override;
@@ -200,6 +203,7 @@ class OpenBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
   struct HostState;  // ObjC state (host view, window observers).
 
   void OnHostWindowKeyChanged(bool key);
+  bool CanActivateBrowser() const;
   void NotifyFullscreenStateChanged();
 
   const raw_ptr<Profile> profile_;
@@ -209,6 +213,7 @@ class OpenBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
   std::unique_ptr<OpenAutofillBubbleHandler> autofill_handler_;
   std::unique_ptr<web_modal::WebContentsModalDialogHost> dialog_host_;
   bool html_fullscreen_ = false;
+  bool closing_ = false;
   gfx::Rect pending_bounds_;
 
   base::WeakPtrFactory<OpenBrowserWindow> weak_ptr_factory_{this};

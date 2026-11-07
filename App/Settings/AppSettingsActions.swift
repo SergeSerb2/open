@@ -284,13 +284,16 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] {
-    guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito }),
-          let context = factory.context(for: profileID) else { return [] }
+    guard app.engineReady, let profile = app.model.profile(id: profileID),
+          let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return [] }
     return app.extensionPrompts.table(context.extensions).conflicts
   }
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
   func openEssentialShortcuts() { app.performCommand("keyboard-shortcuts-edu", payload: nil) }
   func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: false) }
+  func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
+    await app.importRunner.installExtension(candidate, window: settingsPresenter.window)
+  }
   func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }

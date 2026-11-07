@@ -59,11 +59,11 @@ def run(h, factory, results, tmp, row_ids=None,
     evidence = {'started': timestamp(), 'featureAssertions': False, 'load': os.getloadavg(), 'rows': results,
                 'isolation': 'fresh App/profile per row; saved-data refill and cookie relaunch stay inside their row',
                 'requestedRows': row_ids or ['PR-%d' % n for n in range(1, 10)]}
-    root_readme = Path(os.environ['OPEN_ENGINE_ROOT']) / 'README.txt'
-    hashes = re.findall(r'framework SHA-256 ([0-9a-f]{64})', root_readme.read_text())
-    if not hashes:
-        raise RuntimeError('main engine root README has no distribution hash')
-    evidence['recordedDistributionSHA256'] = hashes[-1]
+    # Same default as tools/fetch-engine.sh; the M1 builds from it without the variable.
+    root_readme = Path(os.environ.get('OPEN_ENGINE_ROOT') or os.path.expanduser('~/Developer/open-engine')) / 'README.txt'
+    hashes = re.findall(r'framework SHA-256 ([0-9a-f]{64})', root_readme.read_text()) if root_readme.is_file() else []
+    # No recorded hash only keeps PR-7 blocked below; it never enables the crash path.
+    evidence['recordedDistributionSHA256'] = hashes[-1] if hashes else None
     evidence['distributionHashSource'] = 'OPEN_ENGINE_ROOT/README.txt (last framework SHA-256)'
     pr7_enabled = False  # Read the engine capability only after safe App startup.
     evidence['pr7EngineFixReceipt'] = {'enabled': None,

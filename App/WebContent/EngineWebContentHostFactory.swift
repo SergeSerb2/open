@@ -412,12 +412,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     isIncognito ? (context === incognitoSession?.context ? model.profiles.first : nil)
       : (context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier })
   }
-  func context(for profileID: ProfileID) -> OEBrowserContext? {
+  func context(for profileID: ProfileID, create: Bool = true) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
     if isIncognito {
       guard let context = incognitoSession?.context else { return nil }
       app.extensionPrompts.register(context.extensions)
       return WebsiteAppearance.prepare(context)
+    }
+    if !create {
+      return OEEngine.shared.contexts.first { $0.identifier == profile.dataDirectoryName }
     }
     // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
     if profile.id == model.defaultProfile?.id {
@@ -446,9 +449,24 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
+    focusedBrowser(create: false)
+  }
+  /// A real focus change may attach this window to an already loaded Profile.
+  /// This never creates a request context for an empty, unvisited Profile.
+  func prepareFocusedExtensionBrowser() -> OEBrowser? {
+    if standaloneBrowser != nil || littleOpenController != nil || standaloneSurface != nil { return focusedBrowser }
+    guard app.engineReady, let profile = focusedProfile else { return nil }
+    return mirror.browser(for: profile.id, loadContext: false)
+  }
+  /// Focus, menu validation and read-only automation must not load a Profile.
+  /// Explicit extension interactions opt in; focus attaches loaded contexts separately.
+  func focusedBrowser(create: Bool) -> OEBrowser? {
     if let standaloneBrowser { return standaloneBrowser }
     if littleOpenController != nil || standaloneSurface != nil { return nil }
-    guard app.engineReady, let profile = focusedProfile else { return nil }; return mirror.browser(for: profile.id)
+    guard app.engineReady, let profile = focusedProfile else { return nil }
+    let browser = mirror.browser(for: profile.id, create: create)
+    if create { extensions.focusChanged() }
+    return browser
   }
   func tabID(for content: OEWebContent) -> ItemID? { hosts.first { $0.value.content === content }?.key }
   private func withoutUndo(_ body: () -> Void) {

@@ -594,6 +594,8 @@ Checks Open owns: the popup must not open behind the command bar, a Peek, or the
 
 Placement rule (guess; Arc's exact rule is unknown): select an existing tab with the same URL path in the target Space; else open a new Today tab at the top (Arc placement, `open` command). Target Space: the focused Space if it uses the target profile; else the most recently focused Space of that profile, which then gets focus. If no Space uses the profile, the Settings row is disabled and its tooltip reads "Assign this Profile to a Space to manage its passwords." (Open text).
 
+The shell's Manage routing uses `AutofillPages.swift`: it searches the explicit target Space's pinned and Today trees (folders and split panes included), matches scheme/host/path, selects the existing tab, or inserts at Today index 0. Private factories refuse the route, and private command bars exclude Manage Passwords. Settings Passwords and Credit Cards call the same helper through the existing Section 10 adapter. That adapter currently chooses the first Space for the selected Profile and retains its no-Space `openProfilePage` fallback; the target-priority and disabled-row behavior above remain planned. Engine dropdown callbacks and save/fill integration remain separate work.
+
 The pages are Chromium's WebUI in a hosted tab (they need a Chrome style page). Open does not restyle them. Two dependencies:
 
 - Branding: Chromium strings say "Chromium" on these pages (`chrome/app/chromium_strings.grd`, `IDS_PRODUCT_NAME`). The product name must read "Open" before release (Q-5).
@@ -708,6 +710,8 @@ Threading: the importer runs on the main actor. A batch reader (`ArcSecretsBatch
 - One Keychain read serves all Arc profiles: Chromium uses one key per app.
 - Batches: at most 256 records; after the sink returns, the importer zeroes every record of the batch and drops it. One file set in memory at a time (import-phase2 §7).
 
+**Section 15 implementation erratum (2026-11-06):** `SecretsImportSink` adds an optional `openProfileID: UUID?` property with a default `nil` implementation. The App can supply its opaque Open profile ID for the ledger without changing `run(key:consent:sinks:)`. The required `runSyntheticFixture(sinks:)` entry remains. A second synthetic overload accepts a destination ledger and `stopAfter` step for CLI recovery verification; it accepts no source path, key, or ciphertext. Its fixed synthetic scenarios also cover batching, field-size boundaries, an empty source, and nonlocal address filtering.
+
 ### 8.2 Reader changes (`ArcSecrets.swift`)
 
 | Record | Add |
@@ -718,6 +722,8 @@ Threading: the importer runs on the main actor. A batch reader (`ArcSecretsBatch
 | `ImportedCardRecord` | `nickname`, `useCount`, `useDate`; CVCs are not read |
 
 Columns missing in an older source DB read as defaults. The synthetic fixture (§9.3) covers each new column.
+
+**Section 15 implementation erratum (2026-11-06):** Cookie expiry is a lifetime, so a valid future expiry is not subject to the activity timestamp limit of now + 24 hours used by the earlier reader. A zero expiry remains a session cookie. Only activity timestamps use that limit. Batches visit at most 256 source rows as well as returning at most 256 records, so a file of skipped rows also yields between reads. Selected fields are limited to 16 KiB each, 64 KiB per row, and address token values to 64 KiB per address (512 tokens maximum); oversized input is refused before copying it into Swift records.
 
 ### 8.3 Write order and durability
 
@@ -765,6 +771,8 @@ The wizard Report (`ImportWizard.swift`) replaces the single "Passwords and cook
 ### 8.7 CLI
 
 `openkit import-arc-secrets` keeps `--dry-run` (counts, no Keychain without `--allow-keychain-access`). It gains no write mode: writes need the engine and run only in the App. `openkit verify-secrets-fixture` runs `ArcSecretsImporter` with a counting sink over the extended fixture and prints per-kind counts, so the reader changes in §8.2 have a CLI check.
+
+**Section 15 implementation erratum (2026-11-06):** The CLI adds `--stop-after logins|webData|cookies`. It stops after the first profile's selected durable step, checks the unfinished ledger, and repeats all steps with a new run ID against the same sinks and ledger. `tools/verify-all.sh --only verify-secrets-fixture` runs the normal and three recovery commands plus the external consent compile check. These are OpenKit sink-contract checks; engine durability, App relaunch, and wizard wiring still need the engine acceptance in §9.3.
 
 ## 9. Verification (end to end; no unit tests)
 
