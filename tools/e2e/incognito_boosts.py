@@ -61,6 +61,8 @@ def check_boosts_private(app, normal, base, wait, results, harness):
         customize = editor('customize')
         for enabled in (False, True):
             app.call('defaults', key='open.advanced.enableBoosts', value=enabled)
+            target = editor()['refreshCount']
+            assert wait(lambda: editor()['completedRefreshCount'] >= target, timeout=10, step=.02)
         after = probe(private_tab)
         empty = {'js': None, 'style': False, 'runtime': 'undefined', 'filter': 'none'}
         results['boosts_disabled'] = dict(
