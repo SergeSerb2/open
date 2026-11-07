@@ -2180,7 +2180,10 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config, chrome_only=False):
+def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False):
+    if material_only:
+        window_material_checks(app_factory, results, tmp)
+        return
     sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     window_material_checks(app_factory, results, tmp)
@@ -4203,7 +4206,10 @@ def page_commands_checks(factory, results, tmp):
 
 def sidebar_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
+    confirm_key = 'open.profiles.confirmInterProfileMove'
+    saved = {confirm_key: app.call('defaults', key=confirm_key)}
     try:
+        app.call('defaults', key=confirm_key, value=True)
         results["empty"] = {"ok": app.call("tabs") == [] and app.call("window-state")["shownPages"] == []}
         a = new_tab(app, fixture("Sidebar A"))
         b = app.call("open", url=fixture("Sidebar B"), background=True)["id"]
@@ -4278,6 +4284,9 @@ def sidebar_checks(factory, results, tmp):
         app.call("select", tab=e)
         previous = app.page(e)["identifier"]
         changed = app.call("space-profile", space=s2, profile="Work New")
+        warning = app.call('alert')
+        results['profile_change_warning'] = {'ok': 'Change Profile?' in warning['texts'], 'alert': warning}
+        app.call('alert', button='Change Profile')
         selected_auto_created = app.tab(e)["loaded"]
         live_page = check_page(app, e, "Sidebar E")
         reset = app.call("tab-state", tab=background)
@@ -4319,6 +4328,7 @@ def sidebar_checks(factory, results, tmp):
             and app.call("host-counts")["retained"] <= 9, "retained_before_wake": retained}
         results["window_png"] = {"ok": True, "file": shot(app, "sidebar-window.png")}
     finally:
+        _restore_defaults(app, saved)
         app.quit()
     static_window_comparison(factory, results, tmp, "sidebar")
 
@@ -9282,7 +9292,9 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     require('A3_move_existing_space_order_unread', roots('today') == abc and all(app.tab(n)['unread'] for n in abc), tree=tree())
     undo(); app.call('space', space=space); select(abc); spaces_before = len(app.call('spaces'))
     app.call('sidebar-menu', node=a, item='Move to/New Space…')
-    require('A3_move_new_space_atomic', len(app.call('spaces')) == spaces_before + 1 and roots('pinned') == abc and roots('today') == [] and selection() == [], tree=tree(), selection=selection())
+    app.call('type', text='Space'); app.call('key', key='return', route='app')
+    wait_until(lambda: not app.call('creation-state')['open'], timeout=5)
+    require('A3_move_new_space_atomic', len(app.call('spaces')) == spaces_before + 1 and roots('today') == abc and roots('pinned') == [] and selection() == [], tree=tree(), selection=selection())
     undo(); app.call('space', space=space)
     require('A3_move_new_space_one_undo', len(app.call('spaces')) == spaces_before and roots('today') == abc + [control])
     # E4: noncontiguous move, same-parent pre-removal index, invalid descendant.
@@ -9631,7 +9643,10 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         except RuntimeError as error:
             if 'no attached alert sheet' not in str(error): raise
     browser = state()['id']
+    confirm_key = 'open.profiles.confirmInterProfileMove'
+    saved_defaults = {confirm_key: app.call('defaults', key=confirm_key)}
     try:
+        app.call('defaults', key=confirm_key, value=True)
         # Same-profile conversion, with nested descendants, preserved order and live host.
         source = app.call('space-create', title='Intents Source', profile='Intents Profile')
         a, b, c = [opened('Convert %s' % name, True) for name in ('A', 'B', 'C')]
@@ -9652,6 +9667,7 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
             actual = app.call('pasteboard').splitlines()
             require('I9_copy_folder_' + ('markdown' if markdown else 'plain'), actual == expected, actual=actual, expected=expected, tree=tree())
         menu(folder, 'Turn “Converted Folder” into Space')
+        app.call('key', key='return', route='app'); wait_until(lambda: not app.call('creation-state')['open'], timeout=5)
         created = current_space()
         require('I9_folder_into_space_today_same_profile', len(spaces()) == count + 1 and created['title'] == 'Converted Folder'
                 and created['profile'] == profile and roots('pinned') == [] and roots('today') == [a, nested]
@@ -9666,14 +9682,17 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         # A folder with no children is also a valid conversion, with one undo.
         empty = app.call('folder-create', title='Empty Conversion'); before_empty = tree()
         menu(empty, 'Turn “Empty Conversion” into Space')
+        app.call('key', key='return', route='app'); wait_until(lambda: not app.call('creation-state')['open'], timeout=5)
         require('I9_empty_folder_conversion', current_space()['title'] == 'Empty Conversion' and tree() == {'pinned': [], 'today': []})
         undo(); app.call('space', space=source)
         require('I9_empty_folder_conversion_undo', tree() == before_empty)
-        # Single-item Move to uses A3's plain New Space helper (Pinned placement).
+        # Single-item Move to preserves Today through the creation form.
         single = opened('Move Single'); before_move = tree(); count = len(spaces())
-        menu(single, 'Move to/New Space…'); moved = current_space()
+        menu(single, 'Move to/New Space…')
+        app.call('type', text='Space'); app.call('key', key='return', route='app')
+        wait_until(lambda: not app.call('creation-state')['open'], timeout=5); moved = current_space()
         require('I9_move_single_to_new_space', len(spaces()) == count + 1 and moved['title'] == 'Space' and moved['profile'] == profile
-                and roots('pinned') == [single] and roots('today') == [], space=moved)
+                and roots('today') == [single] and roots('pinned') == [], space=moved)
         undo(); app.call('space', space=source)
         # A3's fallback-Space undo can unload background pages; compare the
         # complete saved structure, not that transient loaded flag.
@@ -9698,11 +9717,11 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         finally:
             app.call('key', key='escape', route='app')
         undo(); require('I10_rename_space_undo', current_space()['title'] == original)
-        # Hidden-sidebar entry still starts the same inline editor, by revealing it.
+        # Hidden-sidebar rename uses the dialog and keeps the sidebar hidden.
         app.call('menu-perform', id='toggle-sidebar'); app.call('menu-perform', id='rename-space')
         try:
-            require('I10_rename_hidden_sidebar_reveals', state()['sidebarMode'] == 'anchored')
-            app.call('key', text='Cancelled Rename'); app.call('key', key='escape', route='app')
+            require('I10_rename_hidden_sidebar_dialog', state()['sidebarMode'] == 'hidden' and 'Rename' in app.call('alert')['buttons'])
+            app.call('alert', button='Cancel')
             require('I10_rename_cancel_unchanged', current_space()['title'] == original)
         finally:
             app.call('key', key='escape', route='app')
@@ -9722,6 +9741,7 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
         try:
             app.call('menu-perform', id='change-profile')
             chosen = app.call('profile-menu', waitClosed=True)
+            app.call('alert', button='Change Profile')
             require('I10_change_profile_choice_dispatches', chosen and chosen.get('chosen') == 'Default' and chosen.get('shown') and chosen.get('trackingBegan') and chosen.get('closed') and not chosen['pending'] and current_space()['profile'] != profile, menu=chosen)
         finally:
             app.call('profile-menu', close=True)
@@ -9774,11 +9794,14 @@ def sidebar_intents_menu_checks(app, results, require, tmp):
     finally:
         # Run even after a failed assertion, so no tracked menu, share picker,
         # rename field, or confirmation can hold the next suite open.
-        if app.call('shell-windows'):
-            app.call('sidebar-share', close=True, dismiss=False)
-            app.call('profile-menu', close=True)
-            app.call('key', key='escape', route='app')
-        cancelled_alert(); app.call('library-close')
+        try:
+            if app.call('shell-windows'):
+                app.call('sidebar-share', close=True, dismiss=False)
+                app.call('profile-menu', close=True)
+                app.call('key', key='escape', route='app')
+            cancelled_alert(); app.call('library-close')
+        finally:
+            _restore_defaults(app, saved_defaults)
 
 
 def library_capture_checks(app, require, root, evidence):
@@ -10419,6 +10442,386 @@ def _blocked(reason, **evidence):
     return dict(evidence, status="BLOCKED", reason=reason)
 
 
+def space_editor_creation_checks(factory, results, tmp):
+    """Section 4 C1/A5/A7: real form, native keys, menus, model and engine."""
+    app = factory(urls=(), fresh=True)
+    saved = {}
+    def require(name, condition, **details):
+        results[name] = dict(details, ok=bool(condition))
+        if not condition: raise AssertionError(name)
+    def spaces(): return app.call('spaces')
+    def focused(): return next(s for s in spaces() if s['focused'])
+    def state(): return app.call('creation-state')
+    def key(name, mods=()): return app.call('key', key=name, modifiers=list(mods), route='app')
+    def finish():
+        key('return')
+        require('creation_submit_finishes_' + str(len(results)),
+                wait_until(lambda: not state()['open'], timeout=5), state=state())
+    def undo(): return key('z', ['cmd'])
+    def pick_emoji():
+        app.call('editor-act', action='click', control='icon')
+        require('A5_draft_icon_picker_opens', bool(wait_until(lambda: app.call('editor-state').get('count', 0) > 0, timeout=5)))
+        app.call('editor-act', action='key', key='grinning face')
+        require('A5_draft_icon_search', bool(wait_until(lambda: app.call('editor-state').get('search') == 'grinning face'
+                and app.call('editor-state')['count'] < 20, timeout=3)))
+        app.call('editor-act', action='key', key='down')
+        app.call('editor-act', action='key', key='return')
+        require('A5_draft_icon_pick', bool(wait_until(lambda: not app.call('editor-state')['open'], timeout=3))
+                and state()['icon'] == {'type': 'emoji', 'value': '😀'})
+    def tree(): return app.call('sidebar-tree')
+    def shape(value):
+        if isinstance(value, dict): return {k: shape(v) for k, v in value.items() if k != 'loaded'}
+        if isinstance(value, list): return [shape(v) for v in value]
+        return value
+    def node_list():
+        # Compare the full persisted tree, including invisible nodes in other
+        # Spaces/Profiles. Runtime loading and access times are not tree state.
+        snapshot = json.loads(Path(app.call('save')).read_text())
+        rows = []
+        def collect(nodes, parent):
+            for index, encoded in enumerate(nodes):
+                kind, payload = next(iter(encoded.items()))
+                node = payload['_0']
+                rows.append(dict(id=node['id'], kind=kind, parent=parent, index=index))
+                if kind == 'folder': collect(node['children'], node['id'])
+                elif kind == 'split':
+                    collect([dict(tab=dict(_0=pane)) for pane in node['panes']], node['id'])
+        for profile in snapshot['profiles']:
+            collect(profile['favorites'], profile['id'] + '/favorites')
+        for space in snapshot['spaces']:
+            for section in ('pinned', 'today'):
+                collect(space[section], space['id'] + '/' + section)
+        return rows
+    try:
+        app.call('window-frame', frame=[80, 60, 1120, 800])
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        pref = 'open.profiles.confirmInterProfileMove'
+        for pref_key in (pref, 'open.sidebar.hideHintShown'):
+            saved[pref_key] = app.call('defaults', key=pref_key)
+        app.call('defaults', key=pref, value=True)
+        app.call('defaults', key='open.sidebar.hideHintShown', value=True)
+        source = app.call('space-create', title='Creation Source', profile='Creation Profile')
+        previous = focused()
+        original_window = app.call('window-state')['id']
+        app.call('menu-perform', id='blank-window')
+        app.call('space', space=source)
+        app.call('window-focus', id=original_window, activate=True)
+        full_tab = app.call('open', url=white_fixture('Space creation page fullscreen'))['id']
+        app.call('wait', tab=full_tab)
+        request = app.eval(full_tab, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+        entered = wait_until(lambda: app.call('window-state')['pageFullscreen']
+                             and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        full_before = spaces()
+        full_generation = state()['modelUndoGeneration']
+        app.call('menu-perform', id='new-space')
+        visible = wait_until(lambda: state().get('open') and state().get('visible') and state().get('nameFocused')
+                             and not app.call('window-state')['pageFullscreen']
+                             and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        presented_form, presented_window = state(), app.call('window-state')
+        key('escape')
+        cancelled = not state()['open'] and spaces() == full_before and state()['modelUndoGeneration'] == full_generation
+        # Restore the fixture even on old code, where Escape only cancels the invisible form.
+        if app.call('window-state')['pageFullscreen']: app.call('fullscreen-exit', tab=full_tab)
+        wait_until(lambda: not app.call('window-state')['pageFullscreen']
+                   and not app.call('window-state')['fullscreenTransition'], timeout=15, step=.1)
+        results['A5_page_fullscreen_new_space_visible_focused'] = dict(ok=request == 'ok' and bool(entered)
+            and bool(visible) and presented_window['sidebarVisible'] and cancelled,
+            entered=bool(entered), form=presented_form, window=presented_window, cancelled=cancelled)
+        before = spaces()
+        app.call('menu-perform', id='new-space')
+        require('A5_form_focused_default_profile_no_theme', state()['open'] and state()['nameFocused']
+                and state()['profile'] == previous['profile'] and state()['style'] is None, state=state())
+        icon_generation = state()['modelUndoGeneration']
+        pick_emoji()
+        require('A5_draft_icon_has_no_model_write', spaces() == before and state()['modelUndoGeneration'] == icon_generation)
+        app.call('editor-open', kind='create'); undo()
+        require('A5_draft_icon_native_undo', state()['icon'] is None and spaces() == before)
+        key('z', ['cmd', 'shift'])
+        require('A5_draft_icon_native_redo', state()['icon'] == {'type': 'emoji', 'value': '😀'} and spaces() == before)
+        app.call('type', text='Created Space')
+        app.call('command', id='new-space')
+        require('A5_second_entry_keeps_draft', state()['name'] == 'Created Space' and spaces() == before)
+        for shortcut in ('t', 'l'):
+            key(shortcut, ['cmd'])
+            require('A5_form_cmd_' + shortcut, bool(wait_until(lambda: app.call('commandbar-state')['presented'], timeout=5)) and state()['open'])
+            if shortcut == 't':
+                app.call('key', text='word', route='app'); key('z', ['cmd'])
+                require('A5_bar_text_undo_keeps_form_draft', app.call('commandbar-state')['text'] == ''
+                        and state()['name'] == 'Created Space' and spaces() == before)
+                key('z', ['cmd', 'shift'])
+                require('A5_bar_text_native_redo_keeps_form_draft', app.call('commandbar-state')['text'] == 'word'
+                        and state()['name'] == 'Created Space' and spaces() == before)
+                key('z', ['cmd'])
+            key('escape')
+            after_bar = app.call('commandbar-state'); after_form = state()
+            require('A5_bar_escape_keeps_form_' + shortcut, not after_bar['presented'] and after_form['open'], bar=after_bar, form=after_form)
+            app.call('editor-open', kind='create')
+            require('A5_form_refocus_' + shortcut, state()['nameFocused'] and state()['name'] == 'Created Space' and spaces() == before)
+        # Theme input goes through the actual card and panel swatch, local undo.
+        app.call('editor-act', action='click', control='theme')
+        app.call('editor-act', action='preset', index=2)
+        draft = state()['style']
+        require('A5_theme_is_local_draft', draft is not None and spaces() == before and state()['previewMatches'] and state()['otherWindowsMatchModel'], state=state())
+        app.call('editor-close')
+        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+        # The draft panel takes key, but its owning window must keep the active
+        # material just like Edit Theme. Compare the actual right-margin pixels.
+        owner_state = app.call('window-state')
+        active_png, panel_png = (os.path.join(tmp, 'creation-theme-' + name + '.png') for name in ('active', 'panel'))
+        time.sleep(.3)
+        app.call('snapshot', path=active_png, window=owner_state['number'])
+        app.call('editor-open', kind='theme')
+        panel_key = wait_until(lambda: state().get('themeKey'), timeout=3)
+        panel_state = state()
+        time.sleep(.3)
+        app.call('snapshot', path=panel_png, window=owner_state['number'])
+        def margin_rgb(path):
+            width, height, pixel = read_image(path)
+            sx, sy = width / owner_state['frame'][2], height / owner_state['frame'][3]
+            return [statistics.mean(pixel(int(x * sx), int(y * sy))[c]
+                    for x in range(int(owner_state['frame'][2]) - 8, int(owner_state['frame'][2]) - 2)
+                    for y in range(400, 440, 4)) for c in range(3)]
+        active_rgb, panel_rgb = margin_rgb(active_png), margin_rgb(panel_png)
+        app.call('editor-close')
+        app.call('window-focus', id=original_window, activate=True)
+        require('A5_draft_theme_panel_keeps_active_material', bool(panel_key) and panel_state['windowActive']
+                and panel_state['backgroundActive'] and max(abs(a - b) for a, b in zip(active_rgb, panel_rgb)) <= 2,
+                state=panel_state, activeRGB=active_rgb, panelRGB=panel_rgb)
+        app.call('editor-open', kind='create')
+        key('z', ['cmd'])
+        require('A5_form_local_theme_undo', state()['style'] is None and spaces() == before, state=state())
+        key('z', ['cmd', 'shift'])
+        require('A5_form_local_theme_redo', state()['style'] == draft and spaces() == before, state=state())
+        # The shared controller's lifecycle closes dismiss only the draft panel.
+        # Keep the form, its local history and the model unchanged until Create.
+        close_rows = []
+        for trigger in ('outside', 'deactivate', 'space'):
+            app.call('editor-open', kind='theme')
+            local_manager = state()['themeUndoMatches']
+            if trigger == 'outside':
+                owner_number = next(w['number'] for w in app.call('shell-windows') if w['id'] == original_window)
+                app.call('mouse', window=owner_number, action='click', x=700, y=650, queued=True)
+            elif trigger == 'deactivate':
+                peer = app.foreground_peer()
+                try:
+                    app.accept_owned_handoff(peer)
+                    wait_until(lambda: not state().get('themeOpen', False), timeout=3)
+                finally: peer.quit()
+                app.call('window-focus', id=original_window, activate=True)
+            else:
+                other_space = next(s['id'] for s in spaces() if s['id'] != source)
+                app.call('space', space=other_space)
+                wait_until(lambda: not state().get('themeOpen', False), timeout=3)
+                app.call('space', space=source)
+            closed = bool(wait_until(lambda: not state().get('themeOpen', False), timeout=3))
+            form = state()
+            ok = closed and local_manager and form['open'] and form['name'] == 'Created Space' \
+                and form['style'] == draft and form['icon'] == {'type': 'emoji', 'value': '😀'} \
+                and form['localUndo'] and spaces() == before
+            close_rows.append(dict(trigger=trigger, ok=ok, form=form))
+            if not form['open']: break
+        require('A5_draft_editor_close_keeps_form', len(close_rows) == 3 and all(r['ok'] for r in close_rows), triggers=close_rows)
+        app.call('editor-open', kind='create')
+        finish(); created = focused()
+        require('A5_return_creates_at_end_with_profile', created['title'] == 'Created Space' and created['profile'] == previous['profile']
+                and len(spaces()) == len(before) + 1 and spaces()[-1]['id'] == created['id']
+                and app.call('theme-get')['style'] == draft and created['icon'] == {'type': 'emoji', 'value': '😀'}, spaces=spaces())
+        undo()
+        require('A5_create_one_undo_restores_previous_focus', spaces() == before and focused()['id'] == source, spaces=spaces())
+        app.call('split', op='plus', item='New Space…')
+        require('A5_plus_menu_opens_form', state()['open'] and state()['nameFocused'])
+        key('escape'); require('A5_plus_cancel_no_change', spaces() == before)
+        cancel_icon_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create'); pick_emoji()
+        app.call('editor-open', kind='create'); key('escape')
+        require('A5_draft_icon_escape_no_space_or_model_step', spaces() == before and not state()['open']
+                and state()['modelUndoGeneration'] == cancel_icon_generation)
+        # Escape discards the theme stack and text, and never registers model undo.
+        cancel_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create')
+        app.call('type', text='Cancelled')
+        app.call('editor-act', action='click', control='theme')
+        app.call('editor-act', action='preset', index=3)
+        app.call('editor-close')
+        app.call('editor-open', kind='create')
+        key('escape')
+        require('A5_cancel_changes_nothing', spaces() == before and not state()['open']
+                and state()['modelUndoGeneration'] == cancel_generation)
+        app.call('editor-open', kind='create'); app.call('type', text='   '); finish()
+        require('A5_blank_is_untitled_no_theme', focused()['title'] == '' and app.call('theme-get')['style'] is None)
+        undo(); require('A5_blank_one_undo', spaces() == before)
+        # Native field typing is session-local. Its Undo falls back to the
+        # form's persistent draft stack after the typing steps are exhausted.
+        app.call('editor-open', kind='create')
+        app.call('editor-act', action='click', control='theme')
+        app.call('editor-act', action='preset', index=2)
+        typing_theme = state()['style']
+        app.call('editor-close'); app.call('editor-open', kind='create')
+        app.call('type', text='abc')
+        require('A5_text_typing_after_theme', state()['name'] == 'abc' and state()['style'] == typing_theme)
+        key('z', ['cmd'])
+        require('A5_text_undo_before_theme', state()['name'] == '' and state()['style'] == typing_theme, state=state())
+        key('z', ['cmd'])
+        require('A5_theme_undo_after_typing', state()['name'] == '' and state()['style'] is None, state=state())
+        key('z', ['cmd', 'shift'])
+        require('A5_theme_redo_before_typing', state()['name'] == '' and state()['style'] == typing_theme, state=state())
+        key('z', ['cmd', 'shift'])
+        require('A5_text_theme_redo_keeps_both_steps', state()['name'] == 'abc' and state()['style'] == typing_theme
+                and spaces() == before, state=state())
+        pick_emoji()
+        app.call('editor-open', kind='create')
+        existing_profile, existing_title = state()['profile'], state()['profileMenuTitle']
+        app.call('editor-act', action='profile', name='New Profile…')
+        app.call('type', text='Draft typing')
+        profile_menu_visible = state()['profilePopupVisible']
+        if profile_menu_visible:
+            app.call('editor-act', action='profile', name=existing_title)
+        returned = state()
+        require('A5_inline_profile_returns_without_losing_draft', profile_menu_visible
+                and not returned['creatingProfile'] and returned['profile'] == existing_profile
+                and returned['name'] == 'abc' and returned['style'] == typing_theme
+                and returned['icon'] == {'type': 'emoji', 'value': '😀'}
+                and returned['localUndo'] and spaces() == before, state=returned)
+        app.call('editor-act', action='profile', name='New Profile…')
+        app.call('type', text='Draft typing')
+        app.call('editor-open', kind='create')
+        require('A5_draft_survives_name_and_profile_field_sessions', state()['style'] == typing_theme
+                and state()['localUndo'] and state()['nameFocused'] and spaces() == before, state=state())
+        key('escape')
+        # A hidden sidebar is temporarily shown without a persisted mode change.
+        app.call('menu-perform', id='toggle-sidebar')
+        require('A5_hidden_sidebar_fixture', app.call('window-state')['sidebarMode'] == 'hidden')
+        cancel_generation = state()['modelUndoGeneration']
+        app.call('editor-open', kind='create')
+        require('A5_hidden_form_has_focus', state()['nameFocused'] and app.call('window-state')['sidebarMode'] == 'hidden')
+        key('escape')
+        require('A5_hidden_cancel_keeps_mode_and_undo', not state()['open']
+                and app.call('window-state')['sidebarMode'] == 'hidden' and state()['modelUndoGeneration'] == cancel_generation)
+        app.call('menu-perform', id='rename-space')
+        require('rename_hidden_specific_dialog', 'Rename Space' in app.call('alert')['texts'] and 'Rename' in app.call('alert')['buttons'])
+        rename_window = app.call('window-state')['attachedSheet']
+        app.call('key', key='a', modifiers=['cmd'], window=rename_window, route='app')
+        app.call('key', text='Renamed Source', window=rename_window, route='app')
+        app.call('key', key='return', window=rename_window, route='app')
+        require('rename_hidden_return_keeps_sidebar_hidden', bool(wait_until(lambda: focused()['title'] == 'Renamed Source', timeout=5))
+                and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces(), window=app.call('window-state'))
+        # Showing the sidebar is itself undoable. Undo Rename while the
+        # sidebar is still hidden, before adding that window-mode action.
+        undo()
+        require('rename_hidden_one_undo', spaces() == before
+                and app.call('window-state')['sidebarMode'] == 'hidden', spaces=spaces())
+        app.call('menu-perform', id='toggle-sidebar')
+        # Create an inline Profile in the same one-step transaction.
+        app.call('editor-open', kind='create')
+        app.call('editor-act', action='profile', name='New Profile…')
+        key('return')
+        require('A5_invalid_profile_keeps_form', state()['open'] and state()['creatingProfile'] and spaces() == before)
+        app.call('type', text='Inline Creation Profile')
+        finish()
+        require('A5_inline_profile_creates', focused()['profile'] != previous['profile'])
+        undo(); require('A5_inline_profile_one_undo', spaces() == before)
+
+        # Single and multiple moves preserve source section kinds.
+        path = Path(tmp) / 'creation.html'; path.write_text('<title>Creation Fixture</title>')
+        a = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=a)
+        app.call('pin', tab=a)
+        b = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=b)
+        for ids in ([a], [b], [a, b]):
+            app.call('space', space=source)
+            app.call('sidebar-click', node=ids[0])
+            for node in ids[1:]: app.call('sidebar-click', node=node, modifiers=['cmd'])
+            old = shape(tree()); count = len(spaces())
+            app.call('sidebar-menu', node=ids[0], item='Move to/New Space…')
+            require('move_form_no_early_mutation_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'), len(spaces()) == count and shape(tree()) == old)
+            app.call('type', text='Moved Space'); finish()
+            moved = tree()
+            require('move_preserves_sections_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'),
+                    [n['id'] for n in moved['today']] == ([b] if b in ids else [])
+                    and [n['id'] for n in moved['pinned']] == ([a] if a in ids else []), tree=moved)
+            undo(); app.call('space', space=source)
+            require('move_one_undo_' + ('pinned' if ids == [a] else 'today' if ids == [b] else 'mixed'), len(spaces()) == count and shape(tree()) == old)
+            app.call('sidebar-key', key='escape')
+        folder = app.call('folder', tabs=[a], title='Turned Space', section='pinned')
+        app.call('sidebar-drop', nodes=[b], parent=dict(kind='folder', id=folder), index=1)
+        left = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=left); app.call('pin', tab=left)
+        right = app.call('open', url=path.as_uri())['id']; app.call('wait', tab=right); app.call('pin', tab=right)
+        app.call('sidebar-drop', nodes=[left], parent=dict(kind='pinned', id=source), index=0)
+        old = shape(tree()); count = len(spaces())
+        old_nodes = node_list()
+        require('turn_folder_position_fixture', [n['id'] for n in old['pinned']] == [left, folder, right])
+        app.call('sidebar-menu', node=folder, item='Turn “Turned Space” into Space')
+        require('turn_form_prefill_no_early_mutation', state()['name'] == 'Turned Space' and shape(tree()) == old,
+                form=state(), before=old, after=shape(tree()))
+        finish()
+        require('turn_children_today_in_order', [n['id'] for n in tree()['today']] == [a, b] and tree()['pinned'] == []
+                and all(app.tab(n)['section'] == 'today' and not app.tab(n)['pinnedURL'] for n in (a, b)), tree=tree())
+        turned_space = focused()['id']
+        turned_nodes = node_list()
+        app.call('sidebar-key', key='z', modifiers=['cmd'])
+        restored_nodes = node_list()
+        require('turn_one_undo_restores_folder_sections', focused()['id'] == source and len(spaces()) == count and shape(tree()) == old
+                and restored_nodes == old_nodes
+                and len({n['id'] for n in restored_nodes}) == len(restored_nodes)
+                and sum(n['id'] == folder for n in restored_nodes) == 1,
+                before=old_nodes, after=restored_nodes, tree=tree())
+        redo_menu = _menu_row(app, 'redo')
+        redo_event = app.call('sidebar-key', key='z', modifiers=['cmd', 'shift'], observeCommands=True)
+        redone_nodes = node_list()
+        require('turn_redo_recreates_space_today_without_duplicates', len(spaces()) == count + 1
+                and any(s['id'] == turned_space for s in spaces()) and redone_nodes == turned_nodes
+                and len({n['id'] for n in redone_nodes}) == len(redone_nodes)
+                and not any(n['id'] == folder for n in redone_nodes)
+                and [n['id'] for n in redone_nodes if n['parent'] == turned_space + '/today'] == [a, b],
+                before=turned_nodes, after=redone_nodes, menu=redo_menu, event=redo_event, spaces=spaces())
+        app.call('sidebar-key', key='z', modifiers=['cmd']); app.call('space', space=source)
+        # A7 uses the header menu, warning text, Cancel, then confirmation.
+        app.call('profile-menu', response='Default')
+        app.call('menu-perform', id='change-profile')
+        app.call('profile-menu', waitClosed=True)
+        alert = app.call('alert')
+        require('A7_warning_precedes_change', 'Change Profile?' in alert['texts']
+                and any('you might get logged out or lose your progress' in t for t in alert['texts'])
+                and focused()['profile'] == previous['profile'], alert=alert)
+        app.call('alert', button='Cancel')
+        require('A7_cancel_no_change', focused()['profile'] == previous['profile'])
+        app.call('profile-menu', close=True)
+        for entry in ('command', 'space_menu'):
+            if entry == 'command':
+                app.call('profile-menu', response='Default')
+                app.call('menu-perform', id='change-profile'); app.call('profile-menu', waitClosed=True)
+            else:
+                app.call('sidebar-menu', item='Set Profile/Default')
+            require('A7_' + entry + '_specific_warning', 'Change Profile?' in app.call('alert')['texts'])
+            app.call('alert', button='Change Profile')
+            require('A7_' + entry + '_confirm_changes_profile', bool(wait_until(lambda: focused()['profile'] != previous['profile'], timeout=5)))
+            changed_profile = focused()['profile']
+            undo_item = _menu_row(app, 'undo')
+            require('A7_' + entry + '_undo_named', state().get('modelUndoName') == 'Change Profile', menu=undo_item, state=state())
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
+            require('A7_' + entry + '_profile_undo', bool(wait_until(lambda: focused()['profile'] == previous['profile'], timeout=5)), space=focused())
+            redo_item = _menu_row(app, 'redo')
+            require('A7_' + entry + '_redo_named', state().get('modelRedoName') == 'Change Profile', menu=redo_item, state=state())
+            app.call('sidebar-key', key='z', modifiers=['cmd', 'shift'])
+            require('A7_' + entry + '_profile_redo', bool(wait_until(lambda: focused()['profile'] == changed_profile, timeout=5)), space=focused())
+            app.call('sidebar-key', key='z', modifiers=['cmd'])
+        windows = app.call('shell-windows')
+        app.call('menu-perform', id='blank-window'); key('escape')
+        new_window = app.call('window-state')['id']; before_close_key = spaces()
+        app.call('editor-open', kind='create'); key('w', ['cmd'])
+        require('A5_form_cmd_w_does_not_submit', spaces() == before_close_key)
+        if any(w['id'] == new_window for w in app.call('shell-windows')):
+            app.call('window-focus', id=new_window, activate=True); app.call('window-close')
+        require('A5_window_close_discards_form', len(app.call('shell-windows')) == len(windows))
+    finally:
+        try:
+            _try(lambda: app.call('editor-close', timeout=3))
+            _try(lambda: app.call('profile-menu', close=True, timeout=3))
+            _try(lambda: app.call('alert', button='Cancel', timeout=3))
+        finally:
+            _restore_defaults(app, saved)
+            app.quit()
+
+
 def _menu_checks_row(menu, expected):
     """Checkmarks (or hidden flags) as the validated menu shows them, one entry per step."""
     return {"ok": menu == expected, "menu": menu, "expected": expected}
@@ -10784,7 +11187,7 @@ def _restore_defaults(app, saved):
         restored = False
         if app is not None and not app.closed:
             try:
-                app.call("defaults", key=key, value=value)
+                app.call("defaults", key=key, value=value, timeout=3)
                 restored = True
             except Exception:
                 pass
@@ -11371,6 +11774,7 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -11590,6 +11994,13 @@ def main():
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "space-editor":
+            results[opts.only] = CheckedResults(tracker)
+            space_editor_creation_checks(factory, results[opts.only], tmp)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/menu_shift_checks.py'))['run'](
+                sys.modules[__name__], factory, results[opts.only], tmp)
+            import space_editor
+            space_editor.checks(factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "sidebar-completion":
             results[opts.only] = CheckedResults(tracker)
             space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
@@ -11624,10 +12035,6 @@ def main():
         elif opts.only == "media":
             results["media"] = CheckedResults(tracker)
             media_checks(factory, results["media"], tmp)
-        elif opts.only == "space-editor":
-            import space_editor
-            results["space-editor"] = CheckedResults(tracker)
-            space_editor.checks(factory, results["space-editor"], tmp, sys.modules[__name__])
         elif opts.only == "downloads":
             import downloads
             results["downloads"] = CheckedResults(tracker)
@@ -11651,7 +12058,8 @@ def main():
             routing_checks(factory, results["routing"], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
-            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
+            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
+                          material_only=opts.window_material_only)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
