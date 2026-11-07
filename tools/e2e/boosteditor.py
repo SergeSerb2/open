@@ -113,7 +113,8 @@ def run(factory, results, tmp, env):
                     assert negative
                     tap("editor.code.run");app.call("wait",tab=tab)
                     assert wait_until(lambda: call()["loadedJS"] == first and not call()["refreshToRun"],timeout=5,step=.02)
-                    assert app.eval(tab,"window.boostEditorJSVersion") == "one" and app.eval(tab,"window.boostEditorJSRuns") == 1
+                    execution=app.eval(tab,"({version:window.boostEditorJSVersion??null,runs:window.boostEditorJSRuns??0,href:location.href})")
+                    assert execution["version"] == "one" and execution["runs"] == 1, "document-start JS mismatch: "+json.dumps(execution)
                     call("type",text=second)
                     assert wait_until(lambda: call()["boost"]["js"] == second and call()["refreshToRun"],timeout=5,step=.02)
                     # A store/script refresh must not claim that the current
@@ -121,7 +122,8 @@ def run(factory, results, tmp, env):
                     assert call()["loadedJS"] == first and app.eval(tab,"window.boostEditorJSVersion") == "one" and app.eval(tab,"window.boostEditorJSRuns") == 1
                     tap("editor.code.run");app.call("wait",tab=tab)
                     assert wait_until(lambda: call()["loadedJS"] == second and not call()["refreshToRun"],timeout=5,step=.02)
-                    assert app.eval(tab,"window.boostEditorJSVersion") == "two" and app.eval(tab,"window.boostEditorJSRuns") == 1
+                    execution=app.eval(tab,"({version:window.boostEditorJSVersion??null,runs:window.boostEditorJSRuns??0,href:location.href})")
+                    assert execution["version"] == "two" and execution["runs"] == 1, "document-start JS mismatch: "+json.dumps(execution)
                     app.eval(tab,"history.pushState({},'',location.pathname+'#code')")
                     assert call()["loadedJS"] == second and not call()["refreshToRun"]
                     return dict(positive=True,negative=negative,cssApplied=True,refreshAppearedAfterEdit=True,refreshDisappearedAfterReload=True,jsRunsPerDocument=1,sameDocumentKeptLoadedJS=True)
