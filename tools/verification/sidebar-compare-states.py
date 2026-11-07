@@ -304,10 +304,11 @@ def main():
                         "arcLimits": LIMITS, "selectedColorLimits": color_limits, "sha": "informational"},
                "environment": environment, "envKey": key, "baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
                "baselineBinarySHA256": hashlib.sha256(baseline.read_bytes()).hexdigest(),
-               "branchBinarySHA256": hashlib.sha256(renderer.read_bytes()).hexdigest(),
                "snapshotSHA256": {name: hashlib.sha256((root / name / "State/browser.json").read_bytes()).hexdigest()
                                   for name in ("snap-static", "snap-real")},
                "captureSHA256": {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in captures.items()}, "states": []}
+    if not args.record_limits:
+        receipt["branchBinarySHA256"] = hashlib.sha256(renderer.read_bytes()).hexdigest()
     combined = {"main": {}, "branch": {}}
     failed = []
     data = private_roots(root)
