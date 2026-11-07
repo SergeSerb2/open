@@ -353,6 +353,8 @@ key, recomputes aggregates, and drops only newly created empty URL rows.
 Changed titles are restored only while the imported value still owns them.
 Existing imported visits and ordinary visits with equal URL/time/transition
 remain. Redo imports the receipt and keeps its new row IDs for the next Undo.
+Each native Undo/Redo handler retains its receipt until that action leaves the
+stack. A no-op repeat creates no action and does not release earlier receipts.
 No SQLite schema migration is needed. Model Undo includes imported Profiles;
 physical directories and loaded engine contexts remain Section 10's boundary.
 An Undo during an awaited batch stops later batches. Store Undo/Redo waits
