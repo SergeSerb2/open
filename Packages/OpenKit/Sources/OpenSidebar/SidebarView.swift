@@ -150,7 +150,7 @@ public final class SidebarView: NSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        if presentation == .floatingCard { cardBackground?.frame = bounds }
+        if presentation == .floatingCard { cardBackground?.frame = bounds; cardBackground?.fieldFrame = cardFieldFrame }
         toolbar.frame = CGRect(x: 0, y: 0, width: w, height: URLFieldMetrics.y)
         urlField.frame = CGRect(x: URLFieldMetrics.insetX, y: URLFieldMetrics.y, width: w - 2 * URLFieldMetrics.insetX, height: URLFieldMetrics.height)
         // With the content toolbar, the URL field hides and Favorites move up to its place (§4.6.3; layout guess, §9 item 1).
@@ -287,10 +287,20 @@ public final class SidebarView: NSView {
     /// Builds the card's own theme background before the card shows, so its first frame
     /// is never empty: a new `ThemeBackgroundView` only fills its field on the next display
     /// tick. The view is kept (hidden) between reveals; only a theme or size change rebuilds it.
+    /// The window's bounds in the card's coordinates: the card shows the window's own
+    /// theme field at its place (`ThemeBackgroundView.fieldFrame`). Nil: the card's size.
+    /// True while the card shows and its background draws over the page blur.
+    public var cardDrawsPageBlur: Bool { presentation == .floatingCard && cardBackground?.drawsPageBlur == true }
+    public var cardFieldFrame: CGRect? {
+        didSet { if cardFieldFrame != oldValue, presentation == .floatingCard { cardBackground?.fieldFrame = cardFieldFrame } }
+    }
+
     public func prepareFloatingCard(size: CGSize) {
         let bg: ThemeBackgroundView
         if let cardBackground { bg = cardBackground } else {
             bg = ThemeBackgroundView(frame: CGRect(origin: .zero, size: size))
+            // Arc's card is translucent: its tint over the blurred page (WindowMaterial).
+            bg.material = .overPage
             bg.isHidden = presentation != .floatingCard
             addSubview(bg, positioned: .below, relativeTo: nil)
             cardBackground = bg
@@ -298,6 +308,7 @@ public final class SidebarView: NSView {
         if let space = context.focusedSpace, bg.targetStyle != context.style(for: space) { bg.style = context.style(for: space) }
         bg.isWindowActive = context.isWindowActive
         bg.frame = CGRect(origin: .zero, size: size)
+        bg.fieldFrame = cardFieldFrame
         bg.layoutSubtreeIfNeeded()
         bg.prepareForSnapshot()
     }

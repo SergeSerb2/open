@@ -67,6 +67,7 @@ final class RenderScene: NSView {
         CATransaction.commit()
         if options.revealCard {
             sidebar.frame = WindowMetrics.revealCardFrame(windowSize: bounds.size, sidebarWidth: w)
+            sidebar.cardFieldFrame = CGRect(x: -sidebar.frame.minX, y: -sidebar.frame.minY, width: bounds.width, height: bounds.height)
             cardShadow.frame = sidebar.frame
             lights.frame = CGRect(x: 0, y: 0, width: 80, height: 40)
         } else {

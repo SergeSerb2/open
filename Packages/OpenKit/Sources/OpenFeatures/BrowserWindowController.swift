@@ -398,6 +398,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let oldOffset = animate ? (sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? modelOffset) : modelOffset
         if cardState != .off {
             let card = WindowMetrics.revealCardFrame(windowSize: size, sidebarWidth: width)
+            sidebar.cardFieldFrame = CGRect(x: -card.minX, y: -card.minY, width: size.width, height: size.height)
             if sidebar.frame != card { sidebar.frame = card }
             if cardShadow.frame != card { cardShadow.frame = card }
             if container.frame != panelFrame { container.frame = panelFrame }
@@ -653,6 +654,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             anchoredSliding = false
             sidebarAnimationGeneration += 1
             cardState = .shown
+            sidebar.cardFieldFrame = CGRect(x: -card.minX, y: -card.minY, width: size.width, height: size.height)
             sidebar.prepareFloatingCard(size: card.size)
             sidebar.presentation = .floatingCard
             sidebar.frame = card
@@ -838,6 +840,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var sidebarResizeHandleDragging: Bool { resizeHandle.dragging }
     public var sidebarResizeHandleVisible: Bool { !resizeHandle.isHidden }
     public var sidebarResizeHasStart: Bool { dragStartWidth != nil || dragStartMode != nil }
+    /// True while the hover-reveal card draws its tint over the blurred page (automation).
+    public var cardDrawsPageBlur: Bool { cardState != .off && sidebar.cardDrawsPageBlur }
     /// Pointer location in root coordinates (also left of the window while it is key).
     public func trackSidebarPointer(_ point: CGPoint) { reveal.pointerMoved(to: point) }
     /// Hides the hover-reveal card (a tab selection, the command bar) with its slide.
