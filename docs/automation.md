@@ -71,12 +71,16 @@ Build Debug, then run the real-App `updater` suite:
 
 Check the shared priority flag before acquiring the screen lock. The suite tests
 placeholder/malformed keys, the ad-hoc signing gate, one menu item, command-ID
-dispatch, a signed local `file://` feed, stable/beta filtering, and live automatic
+dispatch, a signed loopback HTTP feed, stable/beta filtering, and live automatic
 flags. A loopback canary proves the off paths make no feed requests. It generates
 throwaway Ed25519 keys with OpenSSL in TMPDIR and uses Sparkle 2.10.1
 `sign_update --ed-key-file`. `generate_keys -h` confirms its `-f` option imports
 into Keychain, so the suite never uses it. It only changes and re-signs a temporary
-App copy. It resets touched defaults before launch and restores their original
+App copy. The server binds only to `127.0.0.1` on an ephemeral port and stops in
+`finally`. No ATS exception is added. Sparkle 2.10.1 rejects `file://` feeds with
+error 2001: “The download request URL must use http or https” (`SPUDownloader.m`).
+The loopback fixture replaces the plan's file feed with the lead's approval.
+It resets touched defaults before launch and restores their original
 plist types in `finally`, including Sparkle's `SU*` preferences.
 
 `--force-failure` exits 1 with the real update window open to prove process/window
