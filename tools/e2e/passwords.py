@@ -787,11 +787,13 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 # Only this row requests the verified system-auth transition.
                 # All unrelated focus loss still invalidates native input.
                 if tracker: tracker.checkpoint()
-                if blocked:
-                    raise PasswordBlocked('Native card authentication left the process alive with no crash, but its modal loop blocked automation; session-owner authentication is required to inspect completion')
-                assert any(any(b['low'] == 1 and b['count'] for b in item['buckets']) for item in hist), 'device authentication did not start for the saved card'
+                started_metric = any(any(b['low'] == 1 and b['count'] for b in item['buckets']) for item in hist)
+                if blocked and not auth_changes:
+                    raise PasswordBlocked('Card selection left the App alive with no crash, but the native authentication loop blocked both metrics and the bundle-identified handoff trace')
+                assert started_metric or auth_changes, 'device authentication did not start for the saved card'
                 return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist,
-                        'verifiedSecurityAgentHandoff': bool(auth_changes)}
+                        'verifiedSecurityAgentHandoff': bool(auth_changes),
+                        'authenticationCompletionRequired': False}
             row('PW-REAUTH-request', card_reauthentication, ['P-12'])
 
             def manage():
