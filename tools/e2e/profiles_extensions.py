@@ -203,8 +203,12 @@ def run(factory, results, tmp, root, wait):
         from engine_e2e import scheduled_spring
         focus(window_a)
         app.call('space', space=work_space)
-        attached = wait(lambda: (lambda s: s if s['ids'] == [work_id] else None)(strip_ids()), timeout=10) or strip_ids()
-        row('loaded_empty_space_actions', attached['ids'] == [work_id] and context_ids() == contexts, strip=attached, contexts=context_ids())
+        attached = strip_ids()
+        # A window without a selected page keeps its strip hidden. Its action
+        # context still follows Work; selecting the page below reveals it.
+        row('loaded_empty_space_binding', attached['contextIDs'] == [work_id]
+            and attached['pinnedIDs'] == [work_id] and not attached['hasPage']
+            and not attached['visible'] and context_ids() == contexts, strip=attached, contexts=context_ids())
         app.call('select', tab=work_tab)
         same_space = app.call('space-create', title='Default Second', profile='Default')
         same_tab = opened()
