@@ -749,7 +749,10 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
 
             def card_reauthentication():
                 assert app.call('credentials-prefs')['cardReauthentication'] is True
-                tab = load(urls['card']); assert popup(tab, '#number'); choose()
+                tab = load(urls['card']); assert popup(tab, '#number')
+                authenticating = app
+                tracker = app.focus_tracker
+                choose()
                 import socket
                 blocked = False
                 hist = []
@@ -768,10 +771,27 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 # later row. It does not send input to the system dialog.
                 relaunch()
                 assert app.call('credentials-prefs')['cardReauthentication'] is True
+                losses = tracker.loss() if tracker else []
+                auth_changes = [e for e in losses if e.get('event') == 'frontmostChanged'
+                                and e.get('frontmostBundleID') == 'com.apple.SecurityAgent'
+                                and e.get('openPID') == authenticating.pid]
+                def expected_auth_loss(event):
+                    if event in auth_changes: return True
+                    return (event.get('event') == 'NSApplicationDidResignActiveNotification'
+                            and event.get('openPID') == authenticating.pid
+                            and any(abs(event['uptime'] - change['uptime']) < 2
+                                    and event.get('frontmostPID') in [authenticating.pid, change['frontmostPID']]
+                                    for change in auth_changes))
+                if any(not expected_auth_loss(event) for event in losses):
+                    raise h['FocusInterruption']('unrelated foreground loss during device authentication', losses)
+                # Only this row requests the verified system-auth transition.
+                # All unrelated focus loss still invalidates native input.
+                if tracker: tracker.checkpoint()
                 if blocked:
                     raise PasswordBlocked('Native card authentication left the process alive with no crash, but its modal loop blocked automation; session-owner authentication is required to inspect completion')
                 assert any(any(b['low'] == 1 and b['count'] for b in item['buckets']) for item in hist), 'device authentication did not start for the saved card'
-                return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist}
+                return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist,
+                        'verifiedSecurityAgentHandoff': bool(auth_changes)}
             row('PW-REAUTH-request', card_reauthentication, ['P-12'])
 
             def manage():
