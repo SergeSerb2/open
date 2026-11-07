@@ -510,7 +510,7 @@ The context-menu receipt records final native order for page/link/mailto/image/l
 | Notarization and DMG | — | release §3 | — | — | — | planned | Needs U-3. |
 | Sparkle updates with an appcast on GitHub Pages | — | release §6; Step 7 | Sparkle pinned and copied in Release (#83); placeholder key (#79) | — | Release build copies Sparkle (#83) | planned (partial) | The feed location needs U-8. The key-match proof is still weak (`docs/followups.md`). |
 | English-only locales | engine-patches P5 | release §2.7 | `tools/embed-cef.sh` (`OPEN_KEEP_LOCALES`); `tools/release-locales.txt` (#54, merged) | — | — | planned (partial) | The pipeline is on `main` (#57). A public release build still needs U-1…U-7. |
-| License inventory and acknowledgements | `docs/followups.md` | release §7, Step 9 | `docs/release/licenses.md`, `tools/generate-acknowledgements.py` (#55, merged) | — | — | planned (partial) | Crate checksums joined P8 in #97. The review itself needs U-6. |
+| License inventory and acknowledgements | `docs/followups.md` | release §7, Step 9 | `docs/release/licenses.md`, upstream texts, build-time RTF/TXT/HTML credits in Debug and Release | — | `docs/release/license-audit.md` | planned (partial) | Individual Rust/data/Sparkle notices audited; uBO assets excluded (§7.3(b)). Official-engine blocker: recorded CREDITS.html is a sample. Public source location (U-8) and written license/patent/security review (U-6) remain open. |
 | Crash symbol archive (dSYMs kept on this Mac) | — | release §2.5 | — | — | — | planned | |
 | `tools/release.sh --dry-run` | — | release §11, Step 11 | `tools/release.sh` (#57, merged) | — | Stamped dry run (#57, #79) | done | A real signed release still needs §5.1. |
 
