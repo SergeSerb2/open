@@ -23,6 +23,7 @@ def run(factory, results, tmp, h):
             app.call('defaults', key=key, value=None)
         app.call('first-run', action='focus')
         assert h.wait_until(lambda: app.call('first-run').get('probeReady'), timeout=20, step=.05)
+        app.call('first-run', action='import')
         # A source without a cache must fail the same count predicate; restore
         # the populated synthetic source before the import.
         empty = Path(tmp) / 'arc-boosts-empty'

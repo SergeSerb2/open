@@ -143,9 +143,11 @@ Only exact `projects/bcny-arc-server/databases/(default)/documents/boosts/ID`
 documents can become Boosts. Other collections are counted only. Query targets,
 snapshots, mutations and deletion markers never become imported content.
 
-The preliminary private-copy scan found **0 live Boost documents and 1
-no_document marker**. A string containing a Boost path in a query target is not
-a Boost document. The production CLI receipt is counts only; no names, hosts,
+The production `openkit import-arc --counts-only` private-copy flow on 2026-11-06
+found **0 live Boost documents, 1 no_document marker, 11 other-collection records,
+and 0 malformed records**. Mapped/dropped field counts were both 0. A string
+containing a Boost path in a query target is not a Boost document. The receipt
+in `.re/s14/boosts/real-counts.json` is counts only; no names, hosts,
 CSS, JS, creator IDs or source document IDs may appear in it.
 
 Limits: 256 source files, 32 MiB per file, 64 MiB total source bytes, 8 MiB per
