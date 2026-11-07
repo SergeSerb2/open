@@ -14,6 +14,7 @@ final class BoostEngineAdapter {
   private struct Registration {
     weak var context: OEBrowserContext?
     let profile: ProfileID
+    var prepared = false
     var scripts: [UserScript] = []
     var documentStartMatcher = BoostMatcher(boosts: [])
   }
@@ -32,11 +33,23 @@ final class BoostEngineAdapter {
   private(set) var applyFailureCount = 0
   init(boosts: AppBoosts) { self.boosts = boosts }
 
-  func prepare(_ context: OEBrowserContext, profile: ProfileID) {
+  /// Context creation only records identity. File I/O and script compilation
+  /// belong immediately before this context creates its first web content.
+  func record(_ context: OEBrowserContext, profile: ProfileID) {
     let key = ObjectIdentifier(context)
     guard registrations[key]?.context !== context else { return }
     registrations[key] = Registration(context: context, profile: profile)
+  }
+  func prepare(_ context: OEBrowserContext, profile: ProfileID) {
+    record(context, profile: profile)
+    let key = ObjectIdentifier(context)
+    guard registrations[key]?.prepared == false else { return }
+    #if OPEN_AUTOMATION
+    LaunchTiming.shared.mark("boostScriptsPrepareBegin")
+    defer { LaunchTiming.shared.mark("boostScriptsPrepareEnd") }
+    #endif
     replaceScripts(context, profile: profile)
+    registrations[key]?.prepared = true
   }
   func committed(_ host: EngineWebContentHost, url: URL, newDocument: Bool) {
     prepare(host.content.context, profile: host.profileID)

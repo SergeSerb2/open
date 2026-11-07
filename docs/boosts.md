@@ -79,7 +79,15 @@ A page-invented nonce cannot pass the native session check.
 
 ## App runtime and editor (Section 12, Step 5)
 
-`AppBoosts` owns one store per loaded Profile. Editor commits, undo, Library
+`AppBoosts` owns one store per loaded Profile. The editor, Library and matching
+pages share it. Context creation only records identity;
+the host factory loads and installs scripts before that context creates its
+first `OEWebContent`, including a restored tab. Menu validation before engine
+readiness does not initialize Boost services. A missing Boosts file takes one
+existence check, with no directory scan or JSON decode. Reading an unchanged
+store does not create an empty Boosts file on quit.
+
+Editor commits, undo, Library
 switches, rename and delete rebuild two cached matchers at the same boundary:
 an enabled-only runtime matcher, and a matcher that also returns disabled Boosts
 for Site Control and Edit Boost. The latter returns the original stored flags.

@@ -1040,7 +1040,10 @@ document's installed script, or null) and `refreshToRun`. The `boosteditor` suit
 B1–B3, B5 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
 Edit Boost for a disabled saved Boost, discard/wake refresh, Library metadata
 reconciliation, Undo/Redo preservation, and Library Delete. The ten-page timing
-row requires ten live matching pages with nine hidden pages. B4 is blocked by P7.
+row requires ten live matching pages with nine hidden pages. B26 saves a Boost,
+restores the selected matching tab without a launch URL, and checks CSS and JS
+from that document's first inline script. Global off is its negative control.
+B4 is blocked by P7.
 B5 proves that CSS applies live, JS waits for reload, and Refresh to Run follows
 the loaded document rather than the latest stored text. Every row includes a real negative control. The suite restores all
 preference keys in `finally` and uses

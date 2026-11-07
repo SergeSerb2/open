@@ -414,7 +414,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     // Website appearance is app-wide (page-platform §4.8): every context gets it at creation.
     if profile.id == model.defaultProfile?.id {
       let context = WebsiteAppearance.prepare(OEEngine.shared.defaultContext)
-      app.extensionPrompts.register(context.extensions); app.stores.boosts.adapter.prepare(context, profile: profileID); return context
+      app.extensionPrompts.register(context.extensions); app.stores.boosts.adapter.record(context, profile: profileID); return context
     }
     guard app.engine.result.layout == .engine else {
       // The old layout has no disk folder for other profiles (CEF refused
@@ -428,7 +428,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     let context = OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
       .map(WebsiteAppearance.prepare)
-    if let context { app.profileTeardown.didLoad(profile); app.extensionPrompts.register(context.extensions); app.stores.boosts.adapter.prepare(context, profile: profileID) }; return context
+    if let context { app.profileTeardown.didLoad(profile); app.extensionPrompts.register(context.extensions); app.stores.boosts.adapter.record(context, profile: profileID) }; return context
   }
   func retireProfile(_ id: ProfileID, directory: String) {
     for (tab, host) in hosts where host.content.context.identifier == directory {
@@ -474,6 +474,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return nil
     }
     if let host = hosts[tabID], !host.closed { return host }
+    // Synchronous before OEWebContent creation, including restored tabs. This
+    // preserves the first document's document-start scripts without delaying
+    // the snapshot-backed sidebar or loading Boosts merely for a context.
+    app.stores.boosts.adapter.prepare(context, profile: profileID)
     let config = OEWebContentConfiguration(context: context)
     // Sidebar and Little Open pages attach to a hidden Chrome window (P1).
     // Other non-model hosts (Peek) remain Alloy.

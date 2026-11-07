@@ -188,6 +188,33 @@ def run(factory, results, tmp, env):
                 call("open",boost=boost["id"])
                 return dict(positive=first["style"] and "hue-rotate" in first["filter"] and call()["boost"]["id"] == boost["id"],negative=negative,documentStart=first)
             row("B9_restart_document_start",b9)
+            def b26():
+                nonlocal app,tab
+                boost=items()[0]
+                tap("code");tap("editor.code.js")
+                call("type",text="window.boostRestoredFirstDocument='saved-before-launch';")
+                assert wait_until(lambda: call()["boost"]["js"] == "window.boostRestoredFirstDocument='saved-before-launch';",timeout=5,step=.02)
+                close()
+                restored=new_tab(app,origin+"/boost-first.html")
+                app.call("select",tab=restored);app.call("save")
+                app.call("defaults",key="open.advanced.enableBoosts",value=False)
+                app.quit();app=factory(urls=())
+                selected=next(t for t in app.call("tabs") if t["selected"])
+                assert selected["id"] == restored
+                app.call("wait",tab=restored)
+                off=app.eval(restored,"window.boostAtFirstScript")
+                negative=not off["style"] and off["filter"] == "none" and off["js"] is None
+                app.call("defaults",key="open.advanced.enableBoosts",value=True)
+                app.quit();app=factory(urls=())
+                selected=next(t for t in app.call("tabs") if t["selected"])
+                assert selected["id"] == restored
+                app.call("wait",tab=restored)
+                first=app.eval(restored,"window.boostAtFirstScript")
+                tab=restored;call("open",boost=boost["id"])
+                tap("code");tap("editor.code.js");call("type",text=boost["js"]);tap("editor.code.back")
+                return dict(positive=first["style"] and "hue-rotate" in first["filter"] and first["js"] == "saved-before-launch",negative=negative,
+                            restoredTab=restored,firstDocumentFirstScript=first,disabledFirstDocument=off)
+            row("B26_restored_first_document",b26)
             def b10():
                 nonlocal app,tab
                 negative=call()["globallyEnabled"]

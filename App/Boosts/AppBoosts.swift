@@ -15,12 +15,14 @@ final class AppBoosts: BoostsProvider {
     let store: BoostStore
     var matcher: BoostMatcher
     var allBoostsMatcher: BoostMatcher
+    var needsSave = false
     init(store: BoostStore, values: [Boost]) {
       self.store = store
       matcher = BoostMatcher(boosts: values)
       allBoostsMatcher = BoostMatcher(boosts: Self.enabledCopies(values))
     }
     mutating func rebuild(values: [Boost]) {
+      needsSave = true
       matcher.rebuild(boosts: values)
       allBoostsMatcher.rebuild(boosts: Self.enabledCopies(values))
     }
@@ -39,6 +41,10 @@ final class AppBoosts: BoostsProvider {
   @ObservationIgnored private var pendingEditors: [ItemID: BoostID] = [:]
 
   init(app: AppDelegate) {
+    #if OPEN_AUTOMATION
+    LaunchTiming.shared.mark("boostOwnerInitBegin")
+    defer { LaunchTiming.shared.mark("boostOwnerInitEnd") }
+    #endif
     self.app = app
     boostsGloballyEnabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
     defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -61,6 +67,10 @@ final class AppBoosts: BoostsProvider {
     // Callers resolve a loaded Profile before entering this mutation boundary.
     guard let profile = app.model.profile(id: id) else { preconditionFailure("Boost Profile is not loaded") }
     let store = BoostStore(root: app.directories.root, profileID: id, fileURL: app.directories.boostsFileURL(for: profile))
+    #if OPEN_AUTOMATION
+    LaunchTiming.shared.mark("boostStoreLoadBegin")
+    defer { LaunchTiming.shared.mark("boostStoreLoadEnd") }
+    #endif
     let values = store.load() // Exactly once, before editor or Library mutations.
     profiles[id] = State(store: store, values: values)
     return store
@@ -156,6 +166,11 @@ final class AppBoosts: BoostsProvider {
     factory.focus(space: space)
     if let tab = factory.openNewTab(url: url, background: false) { pendingEditors[tab.id] = id }
   }
-  func saveNow() { for state in profiles.values { state.store.saveNow() } }
+  func saveNow() {
+    // Merely displaying a page must not create an empty Boosts file on quit.
+    for id in Array(profiles.keys) where profiles[id]?.needsSave == true {
+      profiles[id]?.store.saveNow(); profiles[id]?.needsSave = false
+    }
+  }
   func stop() { adapter.stop(); saveNow() }
 }

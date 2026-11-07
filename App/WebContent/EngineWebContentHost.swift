@@ -59,7 +59,6 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     historyRecorder = AppHistoryRecorder(stores: owner.app.stores, profileID: profileID)
     spaceID = owner.space(for: tabID)?.id ?? owner.focusedSpace?.id
     super.init(); content.delegate = self
-    owner.app.stores.boosts.adapter.prepare(content.context, profile: profileID)
     // Tab pages draw Open's own swipe indicator (page-platform §4.4.3), not Chromium's arrow.
     content.drawsEngineHistorySwipeOverlay = false
     content.historySwipeEnabled = owner.historySwipeAllowed

@@ -37,13 +37,19 @@ public final class BoostStore: @unchecked Sendable {
     /// Pass ProfileDirectories.boostsFileURL(for:) for the current per-Profile layout.
     /// The nil default retains the original constructor for existing standalone callers.
     public init(root: URL? = nil, profileID: ProfileID, fileURL: URL? = nil) {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        self.root = root ?? base.appendingPathComponent("Open", isDirectory: true)
+        self.root = root ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("Open", isDirectory: true)
         self.profileID = profileID
         self.fileURL = fileURL ?? self.root.appendingPathComponent("Boosts/\(profileID.rawValue.uuidString).json")
     }
 
     public func load() -> [Boost] {
+        // The common never-Boosted Profile needs one existence check, without
+        // a directory scan, queue hop, file read or JSON decoder.
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            lock.withLock { boosts = [:]; sorted = nil; loadedSchemaVersion = 1 }
+            return []
+        }
         // load precedes mutation. Only our abandoned atomic-write files are removed.
         queue.sync {
             let directory = fileURL.deletingLastPathComponent(), prefix = fileURL.lastPathComponent + ".tmp-"
@@ -52,10 +58,6 @@ public final class BoostStore: @unchecked Sendable {
                 let values = try? sibling.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
                 if values?.isRegularFile == true && values?.isSymbolicLink != true { try? FileManager.default.removeItem(at: sibling) }
             }
-        }
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            lock.withLock { boosts = [:]; sorted = nil; loadedSchemaVersion = 1 }
-            return []
         }
         do {
             let data = try Data(contentsOf: fileURL)
