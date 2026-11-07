@@ -11,3 +11,4 @@
 0311-open-adblock-network-hooks.patch  # Ad-block Step 4: the URLLoaderFactory proxy appended first in WillCreateURLLoaderFactory (outermost), WebSocket and WebTransport checks; the service comes from CefBrowserContext (adblock-fork §7.2, §7.5)
 0314-open-adblock-cefsimple-smoke.patch  # Ad-block, test only: cefsimple opens no window in --open-adblock-selftest mode (adblock-fork §13.1); keep last
 0505-page-website-color-scheme.patch  # Page platform EP-9b: a request context's website color scheme wins over Chrome's in OverrideWebPreferences and after navigation (CefSetWebsiteColorScheme, overlay cef_open_page.h); page-platform §6
+0701-open-profile-lifecycle.patch  # Profiles: primary OTR lifetime and safe initialized-context lookup (07xx APIs live in the overlay)
