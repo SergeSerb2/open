@@ -554,7 +554,33 @@ cookies wait for FlushCookieStore. Secret source buffers and bridge-owned
 binary buffers are cleared on acceptance and rejection. No new LOG, VLOG,
 or os_log statement contains a credential value.
 
-Build and real-App receipts will be recorded here after verification.
+Offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
+
+- The interrupted, unchanged `c5a7c4be` baseline resumed and built
+  `cefsimple cefclient` successfully in 448 seconds. Its inherited reset
+  audit matched 478 Chromium and 21 CEF tracked files, with no overlay
+  mismatch. The lead waived a separate unchanged-App launch.
+- `engine-apply --all` applied 0801–0806 and regenerated the CEF API.
+  The patched `engine-build --target 'cefsimple cefclient'` passed after
+  fixing a checked-observer list and the cookie completion value type.
+  The first two attempts failed compilation; no runtime flow ran in them.
+- `engine-distrib --run --skip-build` produced the distribution under
+  `$HOME/Developer/open-engine-s15`. Its framework SHA-256 is
+  `3baedcd6e50ba56a02bc2aa295f0e12cf5ceda81af92dbf5f8b9467bd4f5b67a`.
+  `engine-status` passed 8/8: 28 active patches, 63 matching overlays,
+  27 expected symbols, and 117/117 CEF patches.
+- `tools/build.sh Debug` passed with `OPEN_ENGINE_ROOT` set to that s15
+  root. Engine jobs used `/usr/bin/lockf -k /tmp/open-engine-build.lock`
+  and the scripts' ten-worker limit. The App build used heavy letter `b`.
+- `tools/verify-all.sh --only commands-dump` passed its release build
+  (zero warnings and errors) and command check under heavy letter `b`.
+
+The M5 screen hold still blocks real-App acceptance: save delegates and
+counts, card/address prompts, null Credential Management completion,
+HTTPS warning buttons, mock-key prompt suppression, and the `features`,
+`page`, and `extensions-ui` suites are unverified. No Open process or e2e
+suite was launched for this receipt. The engine PR remains pending those
+checks.
 
 ## Tab sleeping (memory fork, Section 8 PR #158)
 
