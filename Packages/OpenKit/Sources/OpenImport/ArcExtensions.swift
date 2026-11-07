@@ -64,7 +64,9 @@ public struct ArcExtensionsReader: Sendable {
             settings = (json["extensions"] as? [String: Any])?["settings"] as? [String: Any] ?? [:]
             guard settings.count <= 4096 else { throw ArcExtensionsReadError.exceedsLimit }
         }
-        let payloadRoot = profileDirectory.appendingPathComponent("Extensions", isDirectory: true)
+        // Resolve the existing Profile first: a missing child can otherwise
+        // keep a different /private/var alias from its resolved parent.
+        let payloadRoot = profileDirectory.resolvingSymlinksInPath().appendingPathComponent("Extensions", isDirectory: true)
         let rootPath = payloadRoot.resolvingSymlinksInPath().path + "/"
         guard rootPath.hasPrefix(profilePath) else { throw ArcHistoryImportError.schemaMismatch }
         func safeDirectory(_ url: URL) -> Bool {
