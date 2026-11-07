@@ -55,6 +55,20 @@ public final class ScriptTransientTabCommand: NSScriptCommand {
 @MainActor
 @objc(ScriptSetCommand)
 public final class ScriptSetCommand: NSSetCommand {
+    public override var evaluatedReceivers: Any? {
+        guard ScriptThread.isMainThread else { return nil }
+        nonisolated(unsafe) let command = self
+        nonisolated(unsafe) var result: Any?
+        var transient = false
+        MainActor.assumeIsolated {
+            if let (_, id) = ScriptTransientTarget.reference(in: command.receiversSpecifier) {
+                transient = true
+                result = NSApplication.shared.valueInAppleScriptTabsWithUniqueID(id)
+            }
+        }
+        return transient ? result : super.evaluatedReceivers
+    }
+
     public override func execute() -> Any? {
         guard ScriptThread.isMainThread else { return nil }
         nonisolated(unsafe) let command = self
