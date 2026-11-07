@@ -103,6 +103,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard url.scheme != "about", !url.absoluteString.isEmpty else { return nil }
     return SiteControlContext(tabID: tabID, profileID: host.profileID, url: url,
       displayHost: url.host() ?? url.absoluteString,
+      isIncognito: factory.isIncognito,
       security: url.scheme == "https" ? .secure : url.scheme == "http" ? .insecure : .unknown)
   }
   func buttonState(for tabID: ItemID) -> (available: Bool, boosted: Bool) {
@@ -110,7 +111,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     buttonReadCount += 1
     #endif
     guard let context = context(for: tabID) else { return (false, false) }
-    let boosted = context.isWebsite && boostProvider?.boostsGloballyEnabled == true
+    let boosted = context.isWebsite && !context.isIncognito && boostProvider?.boostsGloballyEnabled == true
       && boostProvider?.matchingBoosts(url: context.url, profileID: context.profileID).contains(where: \.isEnabled) == true
     return (true, boosted)
   }
@@ -140,11 +141,11 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
         }
       }
     }
-    let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: profileID) ?? [] : []
+    let boosts = context.isWebsite && !context.isIncognito ? boostProvider?.matchingBoosts(url: url, profileID: profileID) ?? [] : []
     return SiteControlSnapshot(context: context, tiles: tiles, boosts: boosts,
       boostsGloballyEnabled: boostProvider?.boostsGloballyEnabled ?? true,
       capabilities: factory.extensions.host == nil ? [] : [.extensionPinning],
-      commandsEnabled: ["new-boost": boostProvider != nil, "share-page": true,
+      commandsEnabled: ["new-boost": boostProvider != nil && !context.isIncognito, "share-page": true,
         "capture-page": context.isWebsite, "capture-full-page": context.isWebsite])
   }
   func toggle(_ tile: SiteSettingTile, tabID: ItemID) {

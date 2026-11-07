@@ -212,9 +212,34 @@ def run(factory, results, tmp, env, functional_only=False):
             internal=new_tab(app,'chrome://version'); s=opened()
             acts=[c for c in s['controls'] if c['id'].startswith('action.')]
             record('S9_empty_internal',no_site and s['presented'] and s['extensionsVisible'] and [c['id'] for c in acts if c['enabled']]==['action.share'] and not s['security'].get('visible'),state=s,negativeNoSite=no_site)
-            try: private_window=app.call('command',id='new-incognito-window')
-            except RuntimeError: private_window=False
-            blocked('S10_incognito','incognito: main refuses private window creation', commandResult=private_window)
+            normal_window=app.call('window-state')['id']
+            normal_context=s
+            private_windows=app.call('incognito-state')['windows']
+            existing_private={w['id'] for w in private_windows if w['private']}
+            app.call('menu-perform',id='new-incognito-window')
+            private_window=wait(lambda:next((w for w in app.call('incognito-state')['windows']
+                if w['private'] and w['id'] not in existing_private),None),timeout=5,step=.05)
+            if not private_window:
+                raise RuntimeError('main has private windows, but New Incognito Window did not create one')
+            try:
+                app.call('window-focus',id=private_window['id'],activate=True)
+                private_tab=app.call('open',url=origin+'/boost.html')['id']
+                app.call('wait',tab=private_tab)
+                private_state=opened()
+                private_context=app.call('incognito-state',private=True)
+                boost_controls=[c for c in private_state['controls'] if c['id'].startswith('boost.')]
+                record('S10_incognito',private_context.get('private') is True and private_context.get('ephemeral') is True
+                    and private_state['isIncognito'] is True and not normal_context['isIncognito']
+                    and not private_state['canCreateBoost'] and not control(private_state,'action.newBoost')['enabled']
+                    and not any(c['enabled'] for c in boost_controls)
+                    and private_state['urlButtonState'] not in ('boosted','openBoosted')
+                    and refused(action='tap',id='action.newBoost'),
+                    state=private_state,privateContext=private_context,
+                    negativeNormalContext=normal_context['isIncognito'],negativeDisabledTap=True)
+            finally:
+                app.call('window-focus',id=private_window['id'],activate=True)
+                app.call('menu-perform',id='close-window')
+                app.call('window-focus',id=normal_window,activate=True)
             if functional_only:
                 for key in ['S11_material', 'S12_elements', 'S13_scroll', 'P1_first_draw', 'P2_idle']:
                     results[key]=dict(status='DEFERRED', reason='M5 display/performance receipt required (TANDEM §4M)')

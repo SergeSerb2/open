@@ -101,6 +101,8 @@ extension AutomationController {
     let tip = scc.view.visibleArrowTip
     return ["presented": scc.isPresented, "tab": scc.tabID?.description ?? "", "host": snapshot?.context.displayHost ?? "",
       "mode": scc.mode == .extensionPicker ? "extensionPicker" : "standard",
+      "isIncognito": snapshot?.context.isIncognito ?? false,
+      "canCreateBoost": snapshot?.canCreateBoost ?? false,
       "rows": rows, "controls": controls, "items": menu,
       "extensionsVisible": scc.isPresented && panel.extensionsSectionVisible,
       "boostsVisible": scc.isPresented && panel.boostsSectionVisible,
