@@ -37,7 +37,6 @@ with failure while WebAuthn is open. The App's normal `finally` cleanup must
 report no remaining owned process or window. Preserve that expected-failure
 receipt separately, then run the normal probe for the committed observations.
 
-After a crash, stop all on-screen work. Once the user has cleared any system
-crash dialog, `--passwords-probe-rows PR-8,PR-9` can run remaining rows without
+After a crash, stop all on-screen work. Only after the lead says "M5 clear", `--passwords-probe-rows PR-8,PR-9` can run remaining rows without
 replaying the crashed row. Unrequested rows are `NOT_REQUESTED`, not passes.
 Each selected run still has its own engine/source fingerprint and timestamps.
