@@ -112,7 +112,11 @@ def snappy(data):
                 else:
                     result += bytes([((count - 1) << 2) | 3, 1, 0, 0, 0])
                 remaining -= count
-            at += run - remaining
+            while remaining:
+                count = min(64, remaining)
+                result += bytes([((count - 1) << 2) | 2, 1, 0])
+                remaining -= count
+            at += run
             continue
         end = min(len(data), at + 256)
         for index in range(at + 1, end):

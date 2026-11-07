@@ -42,3 +42,10 @@ No raw command output enters the JSON receipt. `firstrun_boosts.py` is the
 separate real-App block in the `firstrun` suite; it proves source counts, the
 report-only seam and refusal of an App-held data root. App runtime/Undo rows
 remain explicitly BLOCKED until Section 12 AppBoosts merges.
+
+`tools/e2e/import_boosts_boundaries.py --cli PATH --report FILE` exercises the
+public command at and just above 20 input limits: strings, documents, map/array
+counts, selectors, fonts, hosts, IDs, keys, depth, node counts, protobuf fields,
+Snappy blocks, current records, source files/bytes and local enablement. Each
+pair proves that removing the refusal makes the same assertion fail. Large
+repeated fixture data uses the own generator's linear Snappy copy writer.
