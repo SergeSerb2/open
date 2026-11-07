@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Read-only LevelDB format reader. No LevelDB API, lock, recovery, or write is used.
 /// Limits bound decoded allocations too: the largest single byte buffer is 32 MiB;
@@ -132,11 +133,19 @@ enum ArcLevelDB {
     }
 
     static func file(_ url: URL, limit: Int) throws -> [UInt8] {
-        let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
-        guard values.isRegularFile == true, values.isSymbolicLink != true else { throw ArcCacheError.unsafeCopy }
-        guard let size = values.fileSize, size <= limit else { throw ArcCacheError.limit }
-        let data = try Data(contentsOf: url)
-        guard data.count == size, data.count <= limit else { throw ArcCacheError.invalid }
+        let fd = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { throw ArcCacheError.unsafeCopy }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        defer { try? handle.close() }
+        var info = stat()
+        guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { throw ArcCacheError.unsafeCopy }
+        guard info.st_size >= 0, info.st_size <= limit else { throw ArcCacheError.limit }
+        // Bound the read itself, including the live enablement file. A file
+        // growing after fstat must not cause an unbounded Foundation allocation.
+        let size = Int(info.st_size)
+        let data = try handle.read(upToCount: size) ?? Data()
+        let extra = try handle.read(upToCount: 1) ?? Data()
+        guard data.count == size, extra.isEmpty else { throw ArcCacheError.invalid }
         return Array(data)
     }
 

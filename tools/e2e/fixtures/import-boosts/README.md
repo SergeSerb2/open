@@ -23,3 +23,21 @@ field; deletion and unknown-document markers; another collection; obsolete
 manifest table; WAL deletion; torn WAL tail; Snappy literal/copy forms and key
 prefix compression. Color and integer zoom inputs are counted as dropped until
 an evidence-backed conversion to Open's different model exists.
+
+Run the public CLI flow after building `openkit`:
+
+```sh
+python3 tools/e2e/import_boosts_cli.py \
+  --cli Packages/OpenKit/.build/release/openkit \
+  --report /tmp/open-boosts-cli-flows.json
+```
+
+For old-code negative proofs, also pass `--negative-cli` with the unchanged
+parent's release binary in its original resource directory. Every positive row
+then records `negativeProof: FAIL`: initial mapping/count rows fail on the old
+CLI; later predicates fail with the required state removed, then pass after it
+is restored. The privacy negative uses `--show-titles` on synthetic data only.
+No raw command output enters the JSON receipt. `firstrun_boosts.py` is the
+separate real-App block in the `firstrun` suite; it proves source counts, the
+report-only seam and refusal of an App-held data root. App runtime/Undo rows
+remain explicitly BLOCKED until Section 12 AppBoosts merges.
