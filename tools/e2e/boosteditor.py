@@ -136,9 +136,15 @@ def run(factory, results, tmp, env):
                         assert wait_until(lambda: call()["mode"] == "simple",timeout=5,step=.02)
             row("B5_code",b5)
             def b6():
-                negative=items()[0].get("textTransform") != None
+                # Code mode has its own undo steps. Create this row's text
+                # change now so it verifies the editor's current undo owner.
+                before=items()[0].get("textTransform")
+                liveBefore=probe(tab)["transform"]
+                tap("case")
+                assert wait_until(lambda: items()[0].get("textTransform") != before,timeout=5,step=.02)
+                negative=items()[0].get("textTransform") != before
                 call("key", key="z", modifiers=["cmd"])
-                ok=wait_until(lambda: items()[0].get("textTransform") is None and probe(tab)["transform"] == "none", timeout=5, step=.02)
+                ok=wait_until(lambda: items()[0].get("textTransform") == before and probe(tab)["transform"] == liveBefore, timeout=5, step=.02)
                 return dict(positive=bool(ok),negative=negative,state=call(),live=probe(tab))
             row("B6_undo_app_key", b6)
             def b7():
