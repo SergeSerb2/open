@@ -251,6 +251,8 @@ def run(factory, results, tmp, api, defaults_before):
         launch()
         # A named Profile was Chromium's last-used Profile at quit. Default
         # must still use its own native storage after CEF initializes again.
+        default_space = next(s['id'] for s in app.call('spaces') if s['profile'] == profile('Default')['id'])
+        app.call('space', space=default_space)
         default_page = api['new_tab'](app, origin + '/default-after-relaunch')
         default_cookie = app.eval(default_page, 'document.cookie')
         results['shell_default_after_named_profile_relaunch'] = {

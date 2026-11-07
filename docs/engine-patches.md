@@ -549,6 +549,15 @@ and hashes. Swift calls only OpenEngine. New implementation lives in
 `open/open_libcef_sources.gni`; neither `cef/BUILD.gn` nor 0310's files gain
 another manifest owner.
 
+OpenEngine pins Chromium startup to `--profile-directory=Default`. On macOS,
+`GetStartupProfilePath` otherwise selects `ProfileManager::GetLastUsedProfileDir`
+(`chrome/browser/ui/startup/startup_browser_creator.cc:1756`), and CEF retains
+that initial Profile as its global request context
+(`cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.cc:40–55`). A
+named Profile used before quit must not become the process context on relaunch:
+that would mix Default storage and keep the named Profile alive at deletion.
+Named Profiles still load lazily through their own request contexts.
+
 | Number | Change and reason | Files | Risk |
 |---|---|---|---|
 | 0701 | Chosen-parent primary OTR; observe native closure before CEF detaches it, and let a retained CEF wrapper report unavailable. Normal last-Browser cleanup stays with Chrome's ProfileDestroyer. A session released before its first Browser also goes through ProfileDestroyer. | `cef/0701-open-profile-lifecycle.patch`: `chrome/chrome_browser_context.cc`, `request_context_impl.h`; profile overlay and `cef_open_profile.h` | Primary OTR initializes before CEF adopts it. Native teardown can precede the shell's retained wrappers; they must become inert before another request. |

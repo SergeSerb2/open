@@ -792,9 +792,12 @@ Source: `~/Developer/open-engine/chromium_git/chromium/src/cef/include/`
    must get a `cache_path` **different** from the global one.
 3. `CefSettings.cache_path` has the same under-`root_cache_path` rule; any
    child-directory value for the *global* context is ignored and the
-   "default" profile is used (`cef_types.h:285–296`). Therefore set the
-   global context to the default Open Profile explicitly (below) instead
-   of relying on a child path being honoured.
+   initial startup Profile is used (`cef_types.h:285–296`). On macOS,
+   Chromium can choose `profile.last_used`, so OpenEngine also passes
+   `--profile-directory=Default` (`OEApp.mm`). CEF retains that initial
+   Profile for the whole process; a named Profile must never become the
+   global context on relaunch. The real-App Profile deletion and storage
+   isolation rows cover a named Profile being last used before quitting.
 4. "Browser objects with different request contexts will never be hosted in
    the same render process." Same-context browsers may share one
    (`cef_request_context.h:100–107`). Isolation is at the context, not the
