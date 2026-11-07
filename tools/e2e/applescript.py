@@ -4,6 +4,7 @@ import http.server
 import json
 import os
 import plistlib
+import runpy
 import subprocess
 import threading
 import time
@@ -245,8 +246,8 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
                 results[prefix+'error_'+str(number)] = script.error(body,number,message,unavailable)
             results[prefix+'error_1011'] = script.error('make new tab', 1011,
                 'Little windows are not available yet.', unavailable='little')
-            from applescript_littleopen import run as little_open_checks
-            little_open_checks(app, script, results, wait_until, prefix)
+            runpy.run_path(os.path.join(os.path.dirname(__file__), 'applescript_littleopen.py'))['run'](
+                app, script, results, wait_until, quote, KEY, OFF, prefix)
             # Refused split-pane move uses the real Split View model and production creation.
             app.call('space',space=research)
             split_peer=app.call('open',url=origin+'/split-peer')['id']

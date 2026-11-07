@@ -3,12 +3,10 @@ import http.server
 import threading
 import time
 
-from applescript import KEY, OFF, quote
-
 NUX = 'open.links.littleOpenNUXSeen'
 
 
-def run(app, script, results, wait_until, prefix=''):
+def run(app, script, results, wait_until, quote, key, off_message, prefix=''):
     requests = []
     release = threading.Event()
 
@@ -34,7 +32,7 @@ def run(app, script, results, wait_until, prefix=''):
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
-    saved = {key: app.call('defaults', key=key) for key in (KEY, NUX)}
+    saved = {name: app.call('defaults', key=name) for name in (key, NUX)}
     original = {row['id'] for row in app.call('little-open-state')['sessions']}
     model_ids = {row['id'] for row in app.call('tabs')}
 
@@ -47,8 +45,12 @@ def run(app, script, results, wait_until, prefix=''):
             and not row['loading'] and row['title'] == 'Little script '+path else None), timeout=15, step=.1)
 
     try:
-        app.call('defaults', key=KEY, value=None)
+        app.call('defaults', key=key, value=None)
         app.call('defaults', key=NUX, value=True)
+        invalid = script.error('make new tab with properties {URL:"invalid text"}', 1001,
+            '"invalid text" is not a valid URL.')
+        record('invalid_URL', invalid['ok'] and {row['id'] for row in sessions()} == original,
+            **error_without_ok(invalid))
         try:
             tab = script('set t to make new tab with properties {URL:'+quote(origin+'/a')+'}\nreturn id of t')
         except RuntimeError as error:
@@ -64,8 +66,8 @@ def run(app, script, results, wait_until, prefix=''):
         record('fresh_window', duplicate != tab and state(duplicate) is not None)
         script('close '+target(duplicate))
 
-        off = script.error('execute '+target(tab)+' javascript "document.title"', 1013, OFF)
-        app.call('defaults', key=KEY, value=True)
+        off = script.error('execute '+target(tab)+' javascript "document.title"', 1013, off_message)
+        app.call('defaults', key=key, value=True)
         value = script('return execute '+target(tab)+' javascript "document.title"')
         nested = script.error('execute '+target(tab)+' javascript '+quote("eval('1+1')"), 1013)
         record('javascript_gate_CSP', off['ok'] and value == 'Little script /a'
@@ -143,7 +145,7 @@ def run(app, script, results, wait_until, prefix=''):
                     app.call('little-open-action', id=row['id'], action='close')
         finally:
             try:
-                for key, value in saved.items(): app.call('defaults', key=key, value=value)
+                for name, value in saved.items(): app.call('defaults', key=name, value=value)
             finally:
                 server.shutdown(); server.server_close()
 

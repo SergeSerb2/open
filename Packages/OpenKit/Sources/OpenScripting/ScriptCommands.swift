@@ -19,6 +19,7 @@ enum ScriptTarget {
     }
 
     static func tab(from command: NSScriptCommand, receiver: ScriptTab? = nil) -> ScriptTab? {
+        guard ScriptHost.shared.model != nil else { command.fail(ScriptError.notReady, "Open is not ready."); return nil }
         guard let wrapper: ScriptTab = resolve(command, receiver: receiver) else {
             command.fail(ScriptError.objectNotFound, "The tab \(receiver?.tabID.rawValue.uuidString ?? command.directParameter.map { String(describing: $0) } ?? "") does not exist.")
             return nil
@@ -214,10 +215,23 @@ public final class ScriptGetCommand: NSGetCommand {
         if directParameter == nil, let descriptor = appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) {
             directParameter = NSScriptObjectSpecifier(descriptor: descriptor)
         }
-        var specifier = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
+        let requested = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
+        var specifier = requested
         while let current = specifier {
-            if current.key == "appleScriptTabs", current.container == nil, !(current is NSUniqueIDSpecifier) {
-                return fail(ScriptError.writeOnly, "tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.")
+            if current.key == "appleScriptTabs", current.container == nil {
+                guard let unique = current as? NSUniqueIDSpecifier, let id = unique.uniqueID as? String else {
+                    return fail(ScriptError.writeOnly, "tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.")
+                }
+                guard let tab = NSApplication.shared.valueInAppleScriptTabsWithUniqueID(id) else { return nil }
+                if requested === current { return tab.objectSpecifier }
+                // NSGetCommand rejects even a unique-ID reference through a
+                // write-only element before calling its accessor. Read only the
+                // supported tab properties here; never enumerate application tabs.
+                guard let property = requested as? NSPropertySpecifier, property.container === current,
+                      ["id", "URL", "title", "loading", "location"].contains(property.key) else {
+                    return fail(ScriptError.makeSpaceUnsupported, "This property is not supported for Little Open tabs.")
+                }
+                return tab.value(forKey: property.key)
             }
             specifier = current.container
         }
