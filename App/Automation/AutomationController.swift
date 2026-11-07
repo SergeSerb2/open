@@ -210,6 +210,7 @@
           "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
           "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
       case "settings-profile": return try settingsProfile(a)
+      case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
