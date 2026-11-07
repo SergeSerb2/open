@@ -85,4 +85,39 @@ engine and Local State cleanup, never-loaded engine/cache removal, no Undo
 restoration, same-name cookie isolation, bulk deletion, native indicators,
 the shared icon picker, and Passwords for a Profile without a Space.
 Settings preview renders both deletion states and the bulk dialog at 1x/2x.
-Final results and the negative proof are recorded here after verification.
+The merged Debug/Chrome runs pass Profiles 41/41 (27 shell rows), Sidebar
+19 rows, Little Open 39/39, Features 19/19, Window 76 rows and Incognito
+26 rows. Sidebar's durability row is covered by Profiles. Window's two
+Release timing rows are skipped in Debug; its existing card-material row
+and Incognito's engine/display follow-ups retain their recorded status.
+Every suite's owned-process cleanup passes. The startup cleanup checks pass
+all 14 boundary/recovery cases. See [acceptance.json](profiles-shell/acceptance.json).
+
+Removing both App repair calls makes the repair row fail. Restoring the old
+Passwords URL makes both Passwords rows fail with `chrome://settings/` as
+the final URL; the other six page rows pass. An intentional failure with
+the delete sheet open leaves zero owned windows and processes, without
+forced termination. All temporary source breaks were restored before the
+final builds.
+
+The merged full gate passes 23 of 24 checks. Its command-bar timing rows
+150/151 need the focused quiet rerun: CPU p95 8.63 ms (8 ms budget), inline
+increment 0.471 ms (0.3 ms budget), load 19.5 / 30.9 / 35.5. The lead's
+18:01 quiet-window ruling holds that rerun until "quiet window over".
+
+Native light/dark 1x captures cover the header at rest/hover, Space Manager
+and Little Open's custom Profile icon. `header-render-*@1x.png` and
+`header-render-*@2x.png` are offscreen two-Profile renders. The Profile icon
+pane and all three deletion states also have offscreen 1x/2x renders.
+
+## Display reruns (2x, lead)
+
+The M5 exposes only a native 1x display; the M1 is held. On a native 2x
+display, rerun the command below for `header-{light,dark}-{rest,hover}-2x.png`,
+`manager-{light,dark}-2x.png`, and `little-open-profile-{light,dark}-2x.png`.
+The harness checks the captured pixel/window-point ratio; it never upscales.
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \
+  python3 tools/e2e/engine_e2e.py --style chrome --only profiles --profiles-shell-only --keep
+```

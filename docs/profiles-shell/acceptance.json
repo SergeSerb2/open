@@ -1,83 +1,11 @@
 {
-  "focused": {
-    "shell_cleanup_input_bounds": true,
-    "shell_delete_exact_name": true,
-    "shell_delete_loaded_immediate": true,
-    "shell_delete_loaded_relaunch": true,
-    "shell_delete_never_loaded": true,
-    "shell_delete_return": true,
-    "shell_delete_unused": true,
-    "shell_header_captures": true,
-    "shell_indicator_assigned_profile": true,
-    "shell_indicator_one_profile": true,
-    "shell_indicator_two_profiles": true,
-    "shell_manager_indicators": true,
-    "shell_missing_profile_repair": true,
-    "shell_owned_window_cleanup": true,
-    "shell_page_little_notifications": true,
-    "shell_page_little_passwords": true,
-    "shell_page_little_paymentMethods": true,
-    "shell_page_little_privacy": true,
-    "shell_page_tab_notifications": true,
-    "shell_page_tab_passwords": true,
-    "shell_page_tab_paymentMethods": true,
-    "shell_page_tab_privacy": true,
-    "shell_page_without_space": true,
-    "shell_profile_icon_pixels": true,
-    "shell_repair_notice_once": true,
-    "shell_same_name_cookie_isolation": true
-  },
-  "pages": {
-    "shell_page_little_notifications": {
-      "requestedURL": "chrome://settings/content/notifications",
-      "committedURL": "chrome://settings/content/notifications",
-      "nativeURL": "chrome://settings/content/notifications",
-      "profileMatches": true
-    },
-    "shell_page_little_passwords": {
-      "requestedURL": "chrome://password-manager/passwords",
-      "committedURL": "chrome://password-manager/passwords",
-      "nativeURL": "chrome://password-manager/passwords",
-      "profileMatches": true
-    },
-    "shell_page_little_paymentMethods": {
-      "requestedURL": "chrome://settings/payments",
-      "committedURL": "chrome://settings/payments",
-      "nativeURL": "chrome://settings/payments",
-      "profileMatches": true
-    },
-    "shell_page_little_privacy": {
-      "requestedURL": "chrome://settings/privacy",
-      "committedURL": "chrome://settings/privacy",
-      "nativeURL": "chrome://settings/privacy",
-      "profileMatches": true
-    },
-    "shell_page_tab_notifications": {
-      "requestedURL": "chrome://settings/content/notifications",
-      "committedURL": "chrome://settings/content/notifications",
-      "nativeURL": "chrome://settings/content/notifications",
-      "profileMatches": true
-    },
-    "shell_page_tab_passwords": {
-      "requestedURL": "chrome://password-manager/passwords",
-      "committedURL": "chrome://password-manager/passwords",
-      "nativeURL": "chrome://password-manager/passwords",
-      "profileMatches": true
-    },
-    "shell_page_tab_paymentMethods": {
-      "requestedURL": "chrome://settings/payments",
-      "committedURL": "chrome://settings/payments",
-      "nativeURL": "chrome://settings/payments",
-      "profileMatches": true
-    },
-    "shell_page_tab_privacy": {
-      "requestedURL": "chrome://settings/privacy",
-      "committedURL": "chrome://settings/privacy",
-      "nativeURL": "chrome://settings/privacy",
-      "profileMatches": true
-    }
-  },
   "cleanup_input_boundaries": [
+    {
+      "cleanupComplete": true,
+      "exit": 0,
+      "expected": 0,
+      "name": "interrupted-wipe"
+    },
     {
       "exit": 0,
       "expected": 0,
@@ -129,6 +57,11 @@
       "name": "trailing-JSON"
     },
     {
+      "exit": 1,
+      "expected": 1,
+      "name": "local-state-trailing-JSON"
+    },
+    {
       "exit": 0,
       "expected": 0,
       "name": "local-state-at-16MiB"
@@ -139,76 +72,372 @@
       "name": "local-state-over-16MiB"
     }
   ],
+  "focused": {
+    "shell_cleanup_input_bounds": true,
+    "shell_delete_exact_name": true,
+    "shell_delete_loaded_immediate": true,
+    "shell_delete_loaded_relaunch": true,
+    "shell_delete_never_loaded": true,
+    "shell_delete_return": true,
+    "shell_delete_unused": true,
+    "shell_header_captures": true,
+    "shell_indicator_assigned_profile": true,
+    "shell_indicator_one_profile": true,
+    "shell_indicator_private_hidden": true,
+    "shell_indicator_two_profiles": true,
+    "shell_manager_indicators": true,
+    "shell_missing_profile_repair": true,
+    "shell_owned_window_cleanup": true,
+    "shell_page_little_notifications": true,
+    "shell_page_little_passwords": true,
+    "shell_page_little_paymentMethods": true,
+    "shell_page_little_privacy": true,
+    "shell_page_tab_notifications": true,
+    "shell_page_tab_passwords": true,
+    "shell_page_tab_paymentMethods": true,
+    "shell_page_tab_privacy": true,
+    "shell_page_without_space": true,
+    "shell_profile_icon_pixels": true,
+    "shell_repair_notice_once": true,
+    "shell_same_name_cookie_isolation": true
+  },
   "forced_dialog_failure": {
     "expectedError": "intentional early dialog failure for cleanup proof",
+    "forcedTermination": false,
     "ownedWindowsAfterQuit": 0,
-    "remainingProcesses": 0,
-    "forcedTermination": false
+    "remainingProcesses": 0
   },
   "negative_proofs": {
+    "old_passwords_route": {
+      "shell_page_little_notifications": {
+        "committedURL": "chrome://settings/content/notifications",
+        "nativeURL": "chrome://settings/content/notifications",
+        "ok": true,
+        "profileMatches": true,
+        "requestedURL": "chrome://settings/content/notifications"
+      },
+      "shell_page_little_passwords": {
+        "committedURL": "chrome://settings/",
+        "nativeURL": "chrome://settings/",
+        "ok": false,
+        "profileMatches": true,
+        "requestedURL": "chrome://password-manager/passwords"
+      },
+      "shell_page_little_paymentMethods": {
+        "committedURL": "chrome://settings/payments",
+        "nativeURL": "chrome://settings/payments",
+        "ok": true,
+        "profileMatches": true,
+        "requestedURL": "chrome://settings/payments"
+      },
+      "shell_page_little_privacy": {
+        "committedURL": "chrome://settings/privacy",
+        "nativeURL": "chrome://settings/privacy",
+        "ok": true,
+        "profileMatches": true,
+        "requestedURL": "chrome://settings/privacy"
+      },
+      "shell_page_tab_notifications": {
+        "committedURL": "chrome://settings/content/notifications",
+        "nativeURL": "chrome://settings/content/notifications",
+        "ok": true,
+        "profileMatches": true,
+        "requestedURL": "chrome://settings/content/notifications"
+      },
+      "shell_page_tab_passwords": {
+        "committedURL": "chrome://settings/",
+        "nativeURL": "chrome://settings/",
+        "ok": false,
+        "profileMatches": true,
+        "requestedURL": "chrome://password-manager/passwords"
+      },
+      "shell_page_tab_paymentMethods": {
+        "committedURL": "chrome://settings/payments",
+        "nativeURL": "chrome://settings/payments",
+        "ok": true,
+        "profileMatches": true,
+        "requestedURL": "chrome://settings/payments"
+      },
+      "shell_page_tab_privacy": {
+        "committedURL": "chrome://settings/privacy",
+        "nativeURL": "chrome://settings/privacy",
+        "ok": true,
+        "profileMatches": true,
+        "requestedURL": "chrome://settings/privacy"
+      }
+    },
     "repair_calls_removed": {
       "noticeShown": 0,
       "ok": false,
       "savedDefault": false,
       "titles": []
-    },
-    "old_passwords_route": {
-      "shell_page_little_notifications": {
-        "ok": true,
-        "requestedURL": "chrome://settings/content/notifications",
-        "committedURL": "chrome://settings/content/notifications",
-        "nativeURL": "chrome://settings/content/notifications",
-        "profileMatches": true
-      },
-      "shell_page_little_passwords": {
-        "ok": false,
-        "requestedURL": "chrome://password-manager/passwords",
-        "committedURL": "chrome://settings/",
-        "nativeURL": "chrome://settings/",
-        "profileMatches": true
-      },
-      "shell_page_little_paymentMethods": {
-        "ok": true,
-        "requestedURL": "chrome://settings/payments",
-        "committedURL": "chrome://settings/payments",
-        "nativeURL": "chrome://settings/payments",
-        "profileMatches": true
-      },
-      "shell_page_little_privacy": {
-        "ok": true,
-        "requestedURL": "chrome://settings/privacy",
-        "committedURL": "chrome://settings/privacy",
-        "nativeURL": "chrome://settings/privacy",
-        "profileMatches": true
-      },
-      "shell_page_tab_notifications": {
-        "ok": true,
-        "requestedURL": "chrome://settings/content/notifications",
-        "committedURL": "chrome://settings/content/notifications",
-        "nativeURL": "chrome://settings/content/notifications",
-        "profileMatches": true
-      },
-      "shell_page_tab_passwords": {
-        "ok": false,
-        "requestedURL": "chrome://password-manager/passwords",
-        "committedURL": "chrome://settings/",
-        "nativeURL": "chrome://settings/",
-        "profileMatches": true
-      },
-      "shell_page_tab_paymentMethods": {
-        "ok": true,
-        "requestedURL": "chrome://settings/payments",
-        "committedURL": "chrome://settings/payments",
-        "nativeURL": "chrome://settings/payments",
-        "profileMatches": true
-      },
-      "shell_page_tab_privacy": {
-        "ok": true,
-        "requestedURL": "chrome://settings/privacy",
-        "committedURL": "chrome://settings/privacy",
-        "nativeURL": "chrome://settings/privacy",
-        "profileMatches": true
-      }
     }
+  },
+  "pages": {
+    "shell_page_little_notifications": {
+      "committedURL": "chrome://settings/content/notifications",
+      "context": "Profile-18F978B8",
+      "nativeURL": "chrome://settings/content/notifications",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://settings/content/notifications"
+    },
+    "shell_page_little_passwords": {
+      "committedURL": "chrome://password-manager/passwords",
+      "context": "Profile-18F978B8",
+      "nativeURL": "chrome://password-manager/passwords",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://password-manager/passwords"
+    },
+    "shell_page_little_paymentMethods": {
+      "committedURL": "chrome://settings/payments",
+      "context": "Profile-18F978B8",
+      "nativeURL": "chrome://settings/payments",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://settings/payments"
+    },
+    "shell_page_little_privacy": {
+      "committedURL": "chrome://settings/privacy",
+      "context": "Profile-18F978B8",
+      "nativeURL": "chrome://settings/privacy",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://settings/privacy"
+    },
+    "shell_page_tab_notifications": {
+      "committedURL": "chrome://settings/content/notifications",
+      "context": "Default",
+      "nativeURL": "chrome://settings/content/notifications",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://settings/content/notifications"
+    },
+    "shell_page_tab_passwords": {
+      "committedURL": "chrome://password-manager/passwords",
+      "context": "Default",
+      "nativeURL": "chrome://password-manager/passwords",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://password-manager/passwords"
+    },
+    "shell_page_tab_paymentMethods": {
+      "committedURL": "chrome://settings/payments",
+      "context": "Default",
+      "nativeURL": "chrome://settings/payments",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://settings/payments"
+    },
+    "shell_page_tab_privacy": {
+      "committedURL": "chrome://settings/privacy",
+      "context": "Default",
+      "nativeURL": "chrome://settings/privacy",
+      "ok": true,
+      "profileMatches": true,
+      "requestedURL": "chrome://settings/privacy"
+    }
+  },
+  "private_window": {
+    "indicators": [],
+    "normalProfiles": 2,
+    "ok": true,
+    "privateModelIsNormal": false
+  },
+  "runtime": "Chromium 156, Chrome style, Debug, M5 native 1x",
+  "verification": {
+    "full": [
+      {
+        "name": "build",
+        "result": "PASS",
+        "seconds": 112
+      },
+      {
+        "name": "commands-demo",
+        "result": "PASS",
+        "seconds": 3
+      },
+      {
+        "name": "roundtrip",
+        "result": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "space-legacy",
+        "result": "PASS",
+        "seconds": 2
+      },
+      {
+        "name": "space-editor",
+        "result": "PASS",
+        "seconds": 44
+      },
+      {
+        "name": "space-pad-compare",
+        "result": "PASS",
+        "seconds": 3
+      },
+      {
+        "name": "suggest-check",
+        "result": "PASS",
+        "seconds": 36
+      },
+      {
+        "name": "commands-dump",
+        "result": "PASS",
+        "seconds": 0
+      },
+      {
+        "name": "route",
+        "result": "PASS",
+        "seconds": 6
+      },
+      {
+        "name": "favicons",
+        "result": "PASS",
+        "seconds": 2
+      },
+      {
+        "name": "media-demo",
+        "result": "PASS",
+        "seconds": 0
+      },
+      {
+        "name": "sleep-demo",
+        "result": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "adblock-perf",
+        "result": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "adblock-catalog",
+        "result": "PASS",
+        "seconds": 0
+      },
+      {
+        "name": "profiles",
+        "result": "PASS",
+        "seconds": 2
+      },
+      {
+        "name": "settings-preview",
+        "result": "PASS",
+        "seconds": 93
+      },
+      {
+        "name": "sidebar-render",
+        "result": "PASS",
+        "seconds": 115
+      },
+      {
+        "name": "sidebar-compare",
+        "result": "PASS",
+        "seconds": 151
+      },
+      {
+        "name": "commandbar-render",
+        "result": "FAIL",
+        "seconds": 44
+      },
+      {
+        "name": "features-render",
+        "result": "PASS",
+        "seconds": 104
+      },
+      {
+        "name": "extensions-render",
+        "result": "PASS",
+        "seconds": 10
+      },
+      {
+        "name": "sitecontrol-render",
+        "result": "PASS",
+        "seconds": 105
+      },
+      {
+        "name": "boosts",
+        "result": "PASS",
+        "seconds": 5
+      },
+      {
+        "name": "import-arc",
+        "result": "PASS",
+        "seconds": 1
+      }
+    ],
+    "suites": {
+      "features": {
+        "cleanup": true,
+        "failed": 0,
+        "passed": 19,
+        "statusRows": {}
+      },
+      "incognito": {
+        "cleanup": true,
+        "failed": 0,
+        "passed": 26,
+        "statusRows": {
+          "boosts_disabled": {
+            "reason": "Lead ruling 16:12: Section 12 consumes factory.isIncognito when its App presenter lands.",
+            "status": "DEFERRED"
+          },
+          "native_2x_captures": {
+            "reason": "Lead ruling 16:28: M5 exposes 1x only; M1 held. Run OPEN_INCOGNITO_CAPTURE_SCALE=2 under the same lock on a native 2x display. No upscaling.",
+            "status": "DEFERRED"
+          },
+          "parent_profiles_after_0701": {
+            "reason": "0701 has not merged: per-parent OTR ancestry, per-parent extensions and cross-parent cookie isolation need the engine API. Current provider requests Default OTR and records the requested parent.",
+            "status": "SKIP"
+          }
+        }
+      },
+      "littleopen": {
+        "cleanup": true,
+        "failed": 0,
+        "passed": 39,
+        "statusRows": {}
+      },
+      "profiles": {
+        "cleanup": true,
+        "failed": 0,
+        "passed": 41,
+        "statusRows": {}
+      },
+      "sidebar": {
+        "cleanup": true,
+        "failed": 0,
+        "passed": 19,
+        "statusRows": {
+          "durable_profile_storage": {
+            "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)",
+            "status": "SKIP"
+          }
+        }
+      },
+      "window": {
+        "cleanup": true,
+        "failed": 0,
+        "passed": 76,
+        "statusRows": {
+          "chrome_card_material": {
+            "reason": "Part B: card material and inactive theme are explicitly excluded from Part A",
+            "status": "DEFERRED"
+          },
+          "cold_fresh_profile": {
+            "reason": "Release timing budgets are not evaluated in Debug",
+            "status": "SKIP"
+          },
+          "warm_existing_profile": {
+            "reason": "Release timing budgets are not evaluated in Debug",
+            "status": "SKIP"
+          }
+        }
+      }
+    },
+    "timingRerun": "HELD by lead quiet window 18:01"
   }
 }
