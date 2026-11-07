@@ -3,7 +3,8 @@
 This audit implements release §7 and extends §5.3 so normal Debug and
 Release builds also generate acknowledgements. It does not authorize a
 public release. The official engine's complete Chromium credits, U-8's
-public source location and U-6's written review remain open.
+public source location and U-6's written review remain open. The repository
+is still PRIVATE (`gh repo view --json visibility`, 2026-11-07).
 
 ## Source evidence
 
@@ -20,7 +21,8 @@ public source location and U-6's written review remain open.
 - The adblock dependency walk follows the pinned Chromium GN files after
   `Engine/fork/patches/rust/0001-adblock-vendor.patch`: 70 crate/version
   entries, of which 57 are runtime dependencies and 13 are host-only tools.
-  Each has its own inventory row. The 23 added crate archive SHA-256 values
+  Each has its own inventory row. `nm -m` on the shipped CEF binary also shows Open adblock and
+  regex-automata symbols. The 23 added crate archive SHA-256 values
   in `docs/engine-patches.md` all match the local crates.io cache: **23/23**.
   No engine source tree was edited or built.
 - The vendored adblock source attributes a json-rust string-escaping
@@ -72,14 +74,23 @@ The real generator command was run against the inventory and recorded
 engine distribution. Preview mode returned 0 and emitted RTF, TXT and an
 HTML twin byte-identical to the input. Release mode returned 1 for the
 sample credits and unset public source location, with no new RTF output.
-A changed license hash returned 1. A temporary GPL inventory row without
-source input returned 1. These are command-line flows, not unit tests.
+A changed license hash returned 1. An empty inventory returned 1 with no
+output. Temporary GPL rows without source input or full license text
+returned 1. An output path that would overwrite the HTML twin returned 1. These are command-line flows, not unit tests.
 
 Before/after proof: the old generator run against the new inventory omitted
 the full Apache terms and acknowledged excluded aho-corasick. The changed
 generator includes the terms and omits that nonshipped row. The native
 `/usr/bin/textutil -convert txt -stdout Credits.rtf` conversion exactly
 matches Acknowledgements.txt, including Unicode characters.
+
+The build-tool input limits are 2 MiB / 2,048 inventory rows, 4 MiB per
+license / 16 MiB total / 256 distinct texts, and 32 MiB for Chromium HTML.
+A future uBO source input is capped at 16 MiB per file, 64 MiB total,
+8,192 paths and 64 directory levels. Reads stop at the limit plus one byte,
+before decoding. The real CLI accepted an inventory at 2,097,152 bytes and
+refused 2,097,153 bytes (load 28.28 / 32.77 / 26.28). These are build inputs;
+there is no new runtime page, file or network parser in the app.
 
 ## About panel load contract
 

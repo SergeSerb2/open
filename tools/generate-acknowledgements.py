@@ -18,12 +18,27 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ['Component', 'Version', 'License', 'How Open uses it', 'Source / offer']
+MIB = 1024 * 1024
+
+
+def read_bytes(path, limit):
+    # Build inputs only. Bound reads before decoding or creating RTF objects;
+    # the largest individual input is the 32 MiB Chromium credits document.
+    with path.open('rb') as source:
+        data = source.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f'input exceeds {limit} bytes: {path.name}')
+    return data
+
+
+def read_text(path, limit):
+    return read_bytes(path, limit).decode('utf-8')
 
 
 def inventory(path):
     rows = []
     inside = False
-    for line in path.read_text(encoding='utf-8').splitlines():
+    for line in read_text(path, 2 * MIB).splitlines():
         if not line.startswith('|'):
             if inside:
                 break
@@ -37,6 +52,8 @@ def inventory(path):
         if len(cells) != 5 or any(not c for c in cells):
             raise ValueError('inventory row needs all five columns: ' + line)
         rows.append(cells)
+        if len(rows) > 2048:
+            raise ValueError('inventory exceeds 2048 components')
     names = [r[0] for r in rows]
     if not rows or len(names) != len(set(names)):
         raise ValueError('missing inventory table or duplicate component')
@@ -44,13 +61,13 @@ def inventory(path):
 
 
 def versions():
-    spec = (ROOT / 'project.yml').read_text(encoding='utf-8')
+    spec = read_text(ROOT / 'project.yml', MIB)
     def setting(name):
         m = re.search(r'^\s+' + name + r':\s*"?([0-9.]+)"?\s*$', spec, re.M)
         if not m:
             raise ValueError('missing ' + name + ' in project.yml')
         return m[1]
-    app = plistlib.loads((ROOT / 'App/Info.plist').read_bytes())
+    app = plistlib.loads(read_bytes(ROOT / 'App/Info.plist', MIB))
     stamp = app.get('OpenEngineStamp')
     if not stamp:
         pins = subprocess.check_output(
@@ -73,11 +90,11 @@ def check_versions(rows):
         raise ValueError('Chromium/CEF inventory versions differ from VERSIONS')
     if pins[0] not in by_name['FFmpeg (Chromium bundled)'][1]:
         raise ValueError('FFmpeg inventory must name the current Chromium pin')
-    psl = (ROOT / 'Packages/OpenKit/Sources/OpenSuggest/Resources/public_suffix_list.dat').read_text()
+    psl = read_text(ROOT / 'Packages/OpenKit/Sources/OpenSuggest/Resources/public_suffix_list.dat', 2 * MIB)
     commit = re.search(r'^// COMMIT: (\w+)$', psl, re.M)
     if not commit or commit[1] not in by_name['Public Suffix List'][1]:
         raise ValueError('PSL inventory commit differs from the shipped source header')
-    spec = (ROOT / 'project.yml').read_text()
+    spec = read_text(ROOT / 'project.yml', MIB)
     if re.search(r'^\s+Sparkle:', spec, re.M):
         pin = re.search(r'exactVersion:\s*["\']?([0-9.]+)', spec)
         if not pin or by_name['Sparkle'][1] != pin[1]:
@@ -86,7 +103,7 @@ def check_versions(rows):
 
 def public_source_location(path):
     matches = re.findall(r'^Public MPL source location:[ \t]*(\S+)[ \t]*$',
-                         path.read_text(encoding='utf-8'), re.M)
+                         read_text(path, 2 * MIB), re.M)
     if len(matches) != 1:
         return None
     location = matches[0]
@@ -109,21 +126,27 @@ def license_texts(path, rows):
     # omit its notice. Identical upstream bytes share one committed file.
     directory = (path.parent / 'licenses').resolve()
     pins = dict(re.findall(r'^\| licenses/([\w.-]+\.txt) \| [^|]+ \| `([a-f0-9]{64})` \|$',
-                           path.read_text(encoding='utf-8'), re.M))
+                           read_text(path, 2 * MIB), re.M))
     names = set()
     for row in rows:
         refs = set(re.findall(r'licenses/([\w.-]+\.txt)', row[4]))
         if not refs and row[2] != 'Open-owned':
             raise ValueError('included component needs committed license text: ' + row[0])
         names.update(refs)
+        if len(names) > 256:
+            raise ValueError('inventory exceeds 256 distinct license texts')
     priority = ['MPL-2.0.txt', 'GPL-3.0.txt', 'MIT-Sparkle.txt', 'BSD-CEF.txt']
     ordered = [name for name in priority if name in names] + sorted(names - set(priority))
     result = []
+    total = 0
     for name in ordered:
         source = directory / name
         if source.resolve().parent != directory:
             raise ValueError('license path leaves inventory directory: ' + name)
-        data = source.read_bytes()
+        data = read_bytes(source, 4 * MIB)
+        total += len(data)
+        if total > 16 * MIB:
+            raise ValueError('license texts exceed 16 MiB total')
         if name not in pins or hashlib.sha256(data).hexdigest() != pins[name]:
             raise ValueError('license text differs from inventory SHA-256: ' + name)
         if len(data) < 100:
@@ -195,7 +218,7 @@ def main():
     a = p.parse_args()
     marketing, build, stamp = versions()
     if a.app_info_plist:
-        app = plistlib.loads(a.app_info_plist.read_bytes())
+        app = plistlib.loads(read_bytes(a.app_info_plist, MIB))
         marketing, build, stamp = (app[key] for key in
                                    ('CFBundleShortVersionString', 'CFBundleVersion', 'OpenEngineStamp'))
     marketing, build, stamp = a.marketing_version or marketing, a.build_number or build, a.engine_stamp or stamp
@@ -224,11 +247,21 @@ def main():
             raise ValueError('uBlock assets need the full committed GPL-3.0.txt text')
         if not a.ubo_source or not a.ubo_source.is_dir():
             raise ValueError('uBlock assets require --ubo-source containing bundled source text')
-        files = [f for f in a.ubo_source.rglob('*') if f.is_file()]
+        files = []
+        for index, f in enumerate(a.ubo_source.rglob('*')):
+            if index >= 8192 or len(f.relative_to(a.ubo_source).parts) > 64:
+                raise ValueError('uBlock source exceeds 8192 paths or 64 directory levels')
+            if f.is_file():
+                files.append(f)
         if not files:
             raise ValueError('uBlock corresponding-source directory is empty')
+        total = 0
         for f in files:
-            f.read_text(encoding='utf-8')
+            data = read_bytes(f, 16 * MIB)
+            total += len(data)
+            if total > 64 * MIB:
+                raise ValueError('uBlock corresponding source exceeds 64 MiB')
+            data.decode('utf-8')
 
     paragraphs = [f'Open {marketing} ({build})', stamp, '']
     for name, version, license_name, use, offer in shipped:
@@ -240,7 +273,7 @@ def main():
         paragraphs.extend([name, text.rstrip(), ''])
     complete = False
     if a.cef_credits.is_file():
-        raw = a.cef_credits.read_text(encoding='utf-8')
+        raw = read_text(a.cef_credits, 32 * MIB)
         complete = len(raw) > 10000 and 'This is sample credits page' not in raw
         if complete:
             parser = CreditsParser()
