@@ -244,6 +244,10 @@ class OECountsCallback final : public CefOpenCountsCallback {
 - (void)setCreditCardsSavingEnabled:(BOOL)enabled {
   if (!enabled || self.canEnableCreditCardsSaving) SetPreference(self, "autofill.credit_card_enabled", enabled);
 }
+- (BOOL)creditCardReauthenticationEnabled { return Preference(self, "autofill.payment_methods_mandatory_reauth"); }
+- (void)setCreditCardReauthenticationEnabled:(BOOL)enabled {
+  SetPreference(self, "autofill.payment_methods_mandatory_reauth", enabled);
+}
 - (BOOL)addressesSavingEnabled { return Preference(self, "autofill.profile_enabled"); }
 - (void)setAddressesSavingEnabled:(BOOL)enabled { SetPreference(self, "autofill.profile_enabled", enabled); }
 - (void)fetchCredentialCountsWithCompletion:(void (^)(OECredentialCounts*))completion {
