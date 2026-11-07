@@ -160,14 +160,7 @@ public struct ArcImporter {
         let boosts: ArcBoostsReadResult
     }
     public func readSidebar() throws -> ParsedSidebar {
-        let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
-        let data: Data
-        do { data = try Data(contentsOf: url) }
-        catch {
-            if (error as NSError).code == NSFileReadNoSuchFileError { throw ImportError.missingSidebar }
-            throw ImportError.unreadableSidebar
-        }
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.malformedSidebar }
+        let root = try readSidebarRoot()
         var files: [String: Any] = [:]
         var present = Set<String>()
         for name in ["StorableProfiles.json", "StorableProfileContainers.json", "User Data/Local State",
@@ -177,6 +170,17 @@ public struct ArcImporter {
             if let bytes = try? Data(contentsOf: file), let object = try? JSONSerialization.jsonObject(with: bytes) { files[name] = object }
         }
         return ParsedSidebar(root: root, files: files, present: present, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
+    }
+    private func readSidebarRoot() throws -> [String: Any] {
+        let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
+        let data: Data
+        do { data = try Data(contentsOf: url) }
+        catch {
+            if (error as NSError).code == NSFileReadNoSuchFileError { throw ImportError.missingSidebar }
+            throw ImportError.unreadableSidebar
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.malformedSidebar }
+        return root
     }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
     static func profileReferenceKey(_ raw:Any?)->String {

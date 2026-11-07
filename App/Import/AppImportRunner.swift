@@ -98,12 +98,21 @@ final class AppImportRunner {
       // File decoding is already a Sendable seam in OpenImport. Build the live
       // graph on the main actor, once the progress view has been displayed.
       let directory = plan.directory
+      #if OPEN_AUTOMATION
+      watchdog.beginPhase("readSidebar")
+      #endif
       let parsed = try await Task.detached(priority: .utility) { try ArcImporter(arcDirectory: directory).readSidebar() }.value
+      #if OPEN_AUTOMATION
+      watchdog.beginPhase("buildSidebar")
+      #endif
       let started = CACurrentMediaTime()
       imported = try ArcImporter(arcDirectory: directory).importAll(sidebar: parsed,
         directoryNamesToAvoid: app.model.unavailableProfileDirectoryNames,
         existingDirectories: Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, $0.dataDirectoryName) }), includeArchive: false)
       importAllMilliseconds = (CACurrentMediaTime() - started) * 1_000
+      #if OPEN_AUTOMATION
+      watchdog.beginPhase("readArchive")
+      #endif
       if plan.archive, let firstSpace = imported.model.spaces.first {
         let profiles = Dictionary(uniqueKeysWithValues: imported.model.spaces.map { ($0.id, $0.profileID) })
         let initial = imported.report, defaultSpaceID = firstSpace.id
@@ -120,6 +129,9 @@ final class AppImportRunner {
       for kind in ["Spaces", "Pinned and Today tabs", "Favorites", "Folders", "Archive"] { failures[kind] = value }
       return result("Open could not read your Arc data.")
     }
+    #if OPEN_AUTOMATION
+    watchdog.beginPhase("landSidebar")
+    #endif
     let report = imported.report
     let hasSidebarData = report.sourceSpaces > 0 || report.importedTabNodes > 0 || report.folders > 0
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
@@ -235,6 +247,9 @@ final class AppImportRunner {
         return result("Open could not save your data. The previous browser state was kept. Try again.")
       }
     }
+    #if OPEN_AUTOMATION
+    watchdog.beginPhase("writeArchive")
+    #endif
     if plan.archive {
       guard !undo.cancelled else { return result() }
       progress("Importing your archive…")
@@ -269,8 +284,14 @@ final class AppImportRunner {
     }
     // The snapshot and window are ready. Ordinary browser saves are now free
     // to run; the separate runner guard still refuses overlapping imports.
+    #if OPEN_AUTOMATION
+    watchdog.beginPhase("browserReady")
+    #endif
     app.importInProgress = false
     if plan.directory != ArcImporter().arcDirectory { UserDefaults.standard.set(plan.directory.path, forKey: "open.import.lastArcDir") }
+    #if OPEN_AUTOMATION
+    watchdog.beginPhase("writeHistory")
+    #endif
     if plan.history {
       guard !undo.cancelled else { return result() }
       let historyStarted = CACurrentMediaTime()
