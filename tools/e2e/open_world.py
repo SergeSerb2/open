@@ -1,5 +1,6 @@
 """P7 through the real App's OpenWeb automation path and a local page."""
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 import runpy
 from pathlib import Path
@@ -138,6 +139,18 @@ def run(app, results, tmp, new_tab, wait_until):
         evaluate("for(let i=0;i<201;i++)__openNative.postMessage('p7:flood','{}')")
         after = messages()["statistics"]
         delta = {k: after[k] - boundary[k] for k in after}
+        # Non-JSON values must reply with null, before the 10 s request timeout.
+        non_json = {"ok": False}
+        started = time.monotonic()
+        try:
+            value = evaluate("() => 1")
+            non_json.update(ok=value is None, result=value)
+        except Exception as error:
+            non_json["error"] = str(error)
+        elapsed = time.monotonic() - started
+        results["open_world_non_json_result"] = {
+            **non_json, "ok": non_json["ok"] and elapsed < 2,
+            "elapsedMS": round(elapsed * 1000, 2), "load": list(os.getloadavg())}
         source_limit = evaluate("17" + " " * (1024 * 1024 - 2)) == 17
         refused_source = refused_result = False
         try: evaluate("17" + " " * (1024 * 1024 - 1))
