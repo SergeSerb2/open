@@ -183,6 +183,8 @@ class CheckedResults(dict):
         self.tracker = tracker
 
     def __setitem__(self, key, value):
+        if isinstance(value, dict) and ("ok" in value or "status" in value):
+            value.setdefault("load", os.getloadavg())
         if isinstance(value, dict) and "ok" in value:
             interruptions = self.tracker.loss()
             if interruptions:
