@@ -219,7 +219,67 @@ def checks(factory, results, tmp, harness):
         app.quit()
         check('quit_private_no_prompt_no_records', clean_exit and fingerprint() == quit_before)
         results['native_2x_captures'] = dict(status='DEFERRED', reason='Lead ruling 16:28: M5 exposes 1x only; M1 held. Run OPEN_INCOGNITO_CAPTURE_SCALE=2 under the same lock on a native 2x display. No upscaling.')
-        results['parent_profiles_after_0701'] = dict(status='SKIP', reason='0701 has not merged: per-parent OTR ancestry, per-parent extensions and cross-parent cookie isolation need the engine API. Current provider requests Default OTR and records the requested parent.')
+        # Exercise the product's provider, session registry and native menu path.
+        # These rows use real parent Profiles and Chrome's extension opt-in.
+        app = factory(urls=(base + '/parent-default',), fresh=True)
+        normal = windows(False)[0]
+        home_space = next(s['id'] for s in app.call('spaces') if s['focused'])
+        default_tab = app.call('tabs')[0]['id']; app.call('wait', tab=default_tab)
+        app.eval(default_tab, "document.cookie='parentDefault=1;path=/';true")
+        default_private = private_window('menu'); default_private_tab = open_page('/parent-default-private')
+        default_state = state()
+        app.eval(default_private_tab, "document.cookie='privateDefault=1;path=/';true")
+        focus(normal)
+        work_space = app.call('space-create', title='Private Work', profile='Private Work')
+        work_tab = open_page('/parent-work')
+        work_directory = app.page(work_tab)['context']
+        app.eval(work_tab, "document.cookie='parentWork=1;path=/';true")
+        work_private = private_window('menu'); work_private_tab = open_page('/parent-work-private')
+        work_state = state(); initial_cookie = app.eval(work_private_tab, 'document.cookie')
+        check('parent_work_ancestry', work_state['originalContext'] == work_directory
+              and default_state['originalContext'] == 'Default'
+              and work_state['context'] != default_state['context'], work=work_state, default=default_state)
+        check('parent_no_seeding', not initial_cookie, cookie=initial_cookie)
+        app.eval(work_private_tab, "document.cookie='privateWork=1;path=/';true")
+        focus(normal)
+        work_cookie = app.eval(work_tab, 'document.cookie')
+        app.call('space', space=home_space); app.call('select', tab=default_tab); app.call('wait', tab=default_tab)
+        default_cookie = app.eval(default_tab, 'document.cookie')
+        focus(default_private)
+        default_private_cookie = app.eval(default_private_tab, 'document.cookie')
+        check('parent_cross_profile_isolation', 'privateWork' not in work_cookie
+              and 'privateWork' not in default_cookie and 'privateWork' not in default_private_cookie
+              and 'privateDefault=1' in default_private_cookie,
+              work=work_cookie, default=default_cookie, default_private=default_private_cookie)
+        focus(normal)
+        app.call('space', space=work_space); app.call('select', tab=work_tab); app.call('wait', tab=work_tab)
+        extension = wait(lambda: next((e['id'] for e in app.call('extensions')['installed']
+                    if e['name'] == 'Section 10 profile probe'), None), timeout=30)
+        assert extension, 'parent extension fixture did not load'
+        focus(work_private)
+        before_allow = app.eval(work_private_tab, 'document.documentElement.dataset.s10Extension || ""')
+        focus(normal); management = open_page('/management-placeholder')
+        app.call('navigate', tab=management, url='chrome://extensions'); app.call('wait', tab=management)
+        wait(lambda: app.eval(management, 'typeof chrome.developerPrivate') == 'object', timeout=20)
+        developer_mode = app.eval(management, 'new Promise(done=>chrome.developerPrivate.updateProfileConfiguration('
+                                  '{inDeveloperMode:true},()=>done(!chrome.runtime.lastError)))')
+        grant = app.eval(management, 'new Promise(done=>chrome.developerPrivate.updateExtensionConfiguration('
+                        '{extensionId:%s,incognitoAccess:true},()=>done(chrome.runtime.lastError?'
+                        'chrome.runtime.lastError.message:"ok")))' % json.dumps(extension))
+        app.call('close', tab=management)
+        app.call('navigate', tab=work_tab, url=base + '/parent-extension-ready'); app.call('wait', tab=work_tab)
+        regular_ready = wait(lambda: app.eval(work_tab, 'document.documentElement.dataset.s10Extension || ""') == 'regular', timeout=20)
+        focus(work_private)
+        app.call('navigate', tab=work_private_tab, url=base + '/parent-allowed'); app.call('wait', tab=work_private_tab)
+        ran = wait(lambda: app.eval(work_private_tab, 'document.documentElement.dataset.s10Extension || ""') == 'private', timeout=20)
+        focus(default_private)
+        app.call('navigate', tab=default_private_tab, url=base + '/parent-not-allowed'); app.call('wait', tab=default_private_tab)
+        default_script = app.eval(default_private_tab, 'document.documentElement.dataset.s10Extension || ""')
+        check('parent_extension_opt_in', developer_mode is True and not before_allow and grant == 'ok'
+              and bool(regular_ready) and bool(ran) and not default_script,
+              before=before_allow, grant=grant, work_script=bool(ran), default_script=default_script)
+        focus(work_private); app.call('window-close')
+        focus(default_private); app.call('window-close')
         results['boosts_disabled'] = dict(status='DEFERRED', reason='Lead ruling 16:12: Section 12 consumes factory.isIncognito when its App presenter lands.')
     finally:
         if saved: harness._restore_defaults(app, saved)

@@ -201,6 +201,11 @@ class OEDefaultClient : public CefClient,
     OEBrowserContext* context =
         [engine oe_contextForRequestContext:browser->GetHost()
                                                 ->GetRequestContext()];
+    if (!context) {
+      CefRefPtr<CefBrowser> doomed = browser;
+      dispatch_async(dispatch_get_main_queue(), ^{ doomed->GetHost()->CloseBrowser(true); });
+      return true;
+    }
     OEOpenRequest* open = [[OEOpenRequest alloc]
         initOEWithURL:url
           disposition:OEOpenDispositionNewForegroundTab
@@ -241,6 +246,25 @@ class OEDefaultClient : public CefClient,
     }
   }
 
+  void CloseForContext(CefRefPtr<CefRequestContext> context) {
+    if (!context) return;
+    auto copy = browsers_;
+    for (auto& browser : copy) {
+      if (browser->GetHost()->GetRequestContext()->IsSharingWith(context))
+        browser->GetHost()->CloseBrowser(true);
+    }
+  }
+
+  bool HasBrowsersForContext(CefRefPtr<CefRequestContext> context) const {
+    if (!context) return false;
+    for (const auto& browser : browsers_) {
+      if (browser->GetHost()->GetRequestContext()->IsSharingWith(context)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   size_t Count() const { return browsers_.size(); }
   const std::vector<CefRefPtr<CefBrowser>>& Browsers() const {
     return browsers_;
@@ -267,6 +291,30 @@ class OEEndTracingCallback : public CefEndTracingCallback {
 
 }  // namespace
 
+class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
+ public:
+  OEProfileDeletionHandler(dispatch_block_t ready, void (^done)(NSError*))
+      : ready_([ready copy]), done_([done copy]) {}
+  ~OEProfileDeletionHandler() override {
+    if (auto done = done_) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        done([NSError errorWithDomain:OEErrorDomain code:OEErrorProfileDeletionFailed
+            userInfo:@{NSLocalizedDescriptionKey: @"profile-deletion-interrupted"}]);
+      });
+    }
+  }
+  void OnReadyToRelease() override { auto ready = ready_; ready_ = nil; if (ready) ready(); }
+  void OnComplete(const CefString& error) override {
+    auto done = done_; done_ = nil; ready_ = nil;
+    if (done) done(error.empty() ? nil : [NSError errorWithDomain:OEErrorDomain
+        code:OEErrorProfileDeletionFailed userInfo:@{NSLocalizedDescriptionKey: OEString(error)}]);
+  }
+ private:
+  dispatch_block_t ready_;
+  void (^done_)(NSError*);
+  IMPLEMENT_REFCOUNTING(OEProfileDeletionHandler);
+};
+
 #pragma mark - OEEngine
 
 @implementation OEEngine {
@@ -275,12 +323,18 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   NSPointerArray* _webContents;  // weak, creation order
   NSPointerArray* _browsers;     // weak, creation order
   NSMutableDictionary<NSString*, OEBrowserContext*>* _contexts;
+  NSPointerArray* _allContexts;  // weak, includes retired and private wrappers
+  NSMutableDictionary<NSString*, OEBrowserContext*>* _privateContexts;
+  NSMutableSet<NSString*>* _closingDirectories;
+  NSMutableDictionary<NSString*, NSMutableArray*>* _deletionCompletions;
   OEBrowserContext* _defaultContext;
   CefRefPtr<OEDefaultClient> _defaultClient;
   BOOL _terminating;
+  BOOL _quitAtDeadline;
+  BOOL _quitDeadlineFired;
   NSUInteger _ephemeralCount;
   NSURL* _defaultContextDirectory;  // resolved
-  NSMutableArray<dispatch_block_t>* _pendingReleases;
+  NSMutableDictionary<NSUUID*, dispatch_block_t>* _pendingReleases;
   BOOL _tracing;        // CefBeginTracing succeeded; no end requested yet
   BOOL _tracingEnding;  // CefEndTracing runs; its callback is pending
 }
@@ -299,6 +353,10 @@ class OEEndTracingCallback : public CefEndTracingCallback {
     _webContents = [NSPointerArray weakObjectsPointerArray];
     _browsers = [NSPointerArray weakObjectsPointerArray];
     _contexts = [NSMutableDictionary dictionary];
+    _allContexts = [NSPointerArray weakObjectsPointerArray];
+    _privateContexts = [NSMutableDictionary dictionary];
+    _closingDirectories = [NSMutableSet set];
+    _deletionCompletions = [NSMutableDictionary dictionary];
   }
   return self;
 }
@@ -442,6 +500,11 @@ class OEEndTracingCallback : public CefEndTracingCallback {
     return;
   }
   _terminating = YES;
+  // Automation can exercise the existing deadline with cooperative renderers,
+  // without hanging or crashing a helper process.
+  NSArray<NSString*>* switches = _configuration.additionalSwitches;
+  _quitAtDeadline = [switches containsObject:@"--open-automation"] &&
+      [NSProcessInfo.processInfo.environment[@"OPEN_AUTOMATION_QUIT_AT_DEADLINE"] isEqualToString:@"1"];
   for (OEBrowser* browser in self.browsers) {
     [browser closeExtensionPopup];
   }
@@ -455,6 +518,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   // Do not hang the user's quit if a renderer never answers.
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC),
                  dispatch_get_main_queue(), ^{
+                   self->_quitDeadlineFired = YES;
                    [self oe_quit];
                  });
 }
@@ -464,6 +528,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
 }
 
 - (void)oe_quitIfDone {
+  if (_quitAtDeadline) return;
   if (!_running || !_defaultClient) {
     return;  // Already shut down (browsers can close during CefShutdown).
   }
@@ -492,7 +557,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
 
 - (void)oe_browserDidClose {
   if (_pendingReleases.count) {
-    NSArray<dispatch_block_t>* checks = [_pendingReleases copy];
+    NSArray<dispatch_block_t>* checks = [_pendingReleases.allValues copy];
     dispatch_async(dispatch_get_main_queue(), ^{
       for (dispatch_block_t check in checks) {
         check();
@@ -510,6 +575,19 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   if (!_running) {
     return;
   }
+  // Also cover retained retired wrappers and private sessions, on both normal
+  // quit and the three-second renderer timeout path.
+  for (OEBrowser* browser in self.browsers) [browser close];
+  NSArray<OEBrowserContext*>* retained = [self oe_allContexts];
+  for (OEBrowserContext* context in retained) [context oe_invalidate];
+  if ([_configuration.additionalSwitches containsObject:@"--open-automation"]) {
+    NSUInteger closed = 0;
+    for (OEBrowserContext* context in retained)
+      if (context.state == OEBrowserContextStateClosed && !context.oe_requestContext) closed++;
+    fprintf(stderr, "OpenEngine: shutdown contexts=%lu inert=%lu deadline=%d deadlineSeconds=3\n",
+            (unsigned long)retained.count, (unsigned long)closed, _quitDeadlineFired);
+  }
+  [_privateContexts removeAllObjects];
   [_contexts removeAllObjects];
   _defaultContext = nil;
   _defaultClient = nullptr;
@@ -526,6 +604,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
 #pragma mark Browser contexts
 
 - (OEBrowserContext*)defaultContext {
+  if (!_running || _terminating) return _defaultContext;
   if (!_defaultContext) {
     _defaultContext =
         [[OEBrowserContext alloc] initOEWithIdentifier:@"Default"
@@ -545,6 +624,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
 
 - (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
                                  directory:(NSURL*)directory {
+  if (!_running || _terminating) return nil;
   // CEF loads a disk profile only when cache_path's parent is
   // root_cache_path, compared as strings (ChromeBrowserContext::
   // InitializeAsync); anything else silently becomes an off-the-record
@@ -568,11 +648,16 @@ class OEEndTracingCallback : public CefEndTracingCallback {
   // Already resolved: no URLByStandardizingPath, which drops /private and
   // would no longer match userDataDirectory.
   NSString* path = directory.path;
+  if ([_closingDirectories containsObject:path]) return nil;
   if ([identifier isEqualToString:@"Default"] ||
       [path isEqualToString:_defaultContextDirectory.path]) {
     return self.defaultContext;
   }
   OEBrowserContext* context = _contexts[identifier];
+  if (context && (context.state == OEBrowserContextStateClosed || context.oe_closing)) return nil;
+  for (OEBrowserContext* existing in _contexts.allValues) {
+    if ([existing.directory.path isEqualToString:path]) return existing;
+  }
   if (!context) {
     context = [[OEBrowserContext alloc] initOEWithIdentifier:identifier
                                                     directory:directory
@@ -589,6 +674,7 @@ class OEEndTracingCallback : public CefEndTracingCallback {
     return;
   }
   [_contexts removeObjectForKey:context.identifier];
+  if (context.ephemeral) context.oe_closing = YES;
   for (OEBrowser* browser in self.browsers) {
     if (browser.context == context) {
       [browser close];
@@ -599,14 +685,13 @@ class OEEndTracingCallback : public CefEndTracingCallback {
       [webContent close];
     }
   }
-  if (!completion) {
-    return;
-  }
+  if (_defaultClient) _defaultClient->CloseForContext(context.oe_requestContext);
   // Done when no live web content uses the context any more; re-checked
   // after every browser close (-oe_browserDidClose).
   __weak OEBrowserContext* weakContext = context;
   void (^done)(void) = [completion copy];
   __block BOOL finished = NO;
+  NSUUID* token = NSUUID.UUID;
   dispatch_block_t check = ^{
     if (finished) {
       return;
@@ -616,23 +701,137 @@ class OEEndTracingCallback : public CefEndTracingCallback {
         return;
       }
     }
+    if (self->_defaultClient &&
+        self->_defaultClient->HasBrowsersForContext(weakContext.oe_requestContext)) {
+      return;
+    }
     finished = YES;
-    done();
+    [self->_pendingReleases removeObjectForKey:token];
+    if (weakContext.ephemeral) [weakContext oe_invalidate];
+    if (done) done();
   };
   if (!_pendingReleases) {
-    _pendingReleases = [NSMutableArray array];
+    _pendingReleases = [NSMutableDictionary dictionary];
   }
-  [_pendingReleases addObject:[check copy]];
+  _pendingReleases[token] = [check copy];
   check();
 }
 
-- (OEBrowserContext*)makeEphemeralContext {
-  NSString* identifier =
-      [NSString stringWithFormat:@"Ephemeral-%lu", (unsigned long)++_ephemeralCount];
-  // Not stored in _contexts: it lives as long as the shell keeps it.
-  return [[OEBrowserContext alloc] initOEWithIdentifier:identifier
-                                              directory:nil
-                                                 global:NO];
+- (void)makeIncognitoContextForContext:(OEBrowserContext*)original
+                          completion:(void (^)(OEBrowserContext*, NSError*))completion {
+  void (^fail)(void) = ^{
+    completion(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorContextClosed
+        userInfo:@{NSLocalizedDescriptionKey: @"The parent profile is unavailable or incognito is disabled."}]);
+  };
+  if (!_running || _terminating || !original || original.ephemeral ||
+      original.state == OEBrowserContextStateClosed || original.oe_closing ||
+      ![[self oe_allContexts] containsObject:original]) { fail(); return; }
+  [original oe_whenReady:^{
+    if (!original.oe_isReady || self->_terminating) { fail(); return; }
+    OEBrowserContext* context = self->_privateContexts[original.identifier];
+    if (context.state == OEBrowserContextStateClosed) context = nil;
+    if (!context) {
+      NSString* identifier = [NSString stringWithFormat:@"Private-%lu", (unsigned long)++self->_ephemeralCount];
+      context = [[OEBrowserContext alloc] initOEIncognitoWithIdentifier:identifier original:original];
+      if (!context) { fail(); return; }
+      self->_privateContexts[original.identifier] = context;
+    }
+    [context oe_whenReady:^{
+      if (context.oe_isReady && original.oe_isReady) completion(context, nil);
+      else fail();
+    }];
+  }];
+}
+
+- (void)deleteContext:(OEBrowserContext*)context completion:(void (^)(NSError*))completion {
+  NSMutableArray* callbacks = context ? _deletionCompletions[context.identifier] : nil;
+  if (callbacks) { [callbacks addObject:[completion copy]]; return; }
+  if (!_running || _terminating || !context || context == _defaultContext ||
+      context.ephemeral || context.state == OEBrowserContextStateClosed || context.oe_closing ||
+      ![[self oe_allContexts] containsObject:context]) {
+    completion([NSError errorWithDomain:OEErrorDomain code:OEErrorProfileDeletionFailed
+        userInfo:@{NSLocalizedDescriptionKey: @"profile-deletion-refused"}]);
+    return;
+  }
+  _deletionCompletions[context.identifier] = [NSMutableArray arrayWithObject:[completion copy]];
+  void (^done)(NSError*) = ^(NSError* error) {
+    NSArray* waiting = [self->_deletionCompletions[context.identifier] copy];
+    [self->_deletionCompletions removeObjectForKey:context.identifier];
+    for (void (^callback)(NSError*) in waiting) callback(error);
+  };
+  // Wait for native initialization before marking the wrapper closing. Other
+  // work is blocked by the directory exclusion as soon as delete is requested.
+  [_closingDirectories addObject:context.directory.path];
+  [context oe_whenReady:^{
+    if (!context.oe_isReady) {
+      done([NSError errorWithDomain:OEErrorDomain code:OEErrorProfileDeletionFailed
+          userInfo:@{NSLocalizedDescriptionKey: @"profile-not-initialized"}]);
+      return;
+    }
+    NSMutableArray<OEBrowserContext*>* doomed = [NSMutableArray arrayWithObject:context];
+    for (OEBrowserContext* other in [self oe_allContexts]) {
+      if (other.originalContext == context) [doomed addObject:other];
+    }
+    for (OEBrowserContext* item in doomed) {
+      item.oe_closing = YES;
+      [item.extensions oe_contextClosed];
+      for (OEDownload* download in item.downloads) [download cancel];
+    }
+    for (OEBrowser* browser in self.browsers) {
+      if ([doomed containsObject:browser.context]) [browser close];
+    }
+    for (OEWebContent* content in self.allWebContents) {
+      if ([doomed containsObject:content.context]) [content close];
+    }
+    // Chromium can restore/create pages handled by the default client before
+    // the shell adopts them. They hold the native context too, even though no
+    // OEBrowser/OEWebContent wrapper owns them.
+    if (self->_defaultClient) {
+      for (OEBrowserContext* item in doomed)
+        self->_defaultClient->CloseForContext(item.oe_requestContext);
+    }
+    __block BOOL started = NO;
+    NSUUID* token = NSUUID.UUID;
+    dispatch_block_t check = ^{
+      if (started) return;
+      for (OEWebContent* content in self.allWebContents) {
+        if ([doomed containsObject:content.context] && content.live) return;
+      }
+      if (self->_defaultClient) {
+        for (OEBrowserContext* item in doomed)
+          if (self->_defaultClient->HasBrowsersForContext(item.oe_requestContext)) {
+            return;
+          }
+      }
+      started = YES;
+      [self->_pendingReleases removeObjectForKey:token];
+      for (OEBrowserContext* item in doomed) {
+        if (item != context) [item oe_invalidate];
+      }
+      CefRefPtr<OEProfileDeletionHandler> handler = new OEProfileDeletionHandler(^{
+        // Track independently of the ordinary registry so retained aliases and
+        // private children are invalidated too.
+        for (OEBrowserContext* item in [self oe_allContexts]) {
+          if (item == context || item.originalContext == context ||
+              [item.directory.path isEqualToString:context.directory.path]) [item oe_invalidate];
+        }
+        [self->_contexts removeObjectForKey:context.identifier];
+      }, done);
+      if (!CefDeleteOpenProfile(context.oe_requestContext, handler))
+        handler->OnComplete("profile-deletion-refused");
+    };
+    if (!self->_pendingReleases) self->_pendingReleases = [NSMutableDictionary dictionary];
+    self->_pendingReleases[token] = [check copy];
+    check();
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+      if (!started) {
+        started = YES;
+        [self->_pendingReleases removeObjectForKey:token];
+        done([NSError errorWithDomain:OEErrorDomain code:OEErrorProfileDeletionFailed
+            userInfo:@{NSLocalizedDescriptionKey: @"profile-pages-still-live"}]);
+      }
+    });
+  }];
 }
 
 - (NSArray<OEBrowserContext*>*)contexts {
@@ -646,13 +845,31 @@ class OEEndTracingCallback : public CefEndTracingCallback {
 - (OEBrowserContext*)oe_contextForRequestContext:
     (CefRefPtr<CefRequestContext>)requestContext {
   if (requestContext) {
-    for (OEBrowserContext* context in _contexts.allValues) {
-      if (context.oe_requestContext->IsSharingWith(requestContext)) {
+    for (OEBrowserContext* context in [self oe_allContexts]) {
+      auto native = context.oe_requestContext;
+      if (native && context.state == OEBrowserContextStateLive && !context.oe_closing &&
+          native->IsSharingWith(requestContext)) {
         return context;
       }
     }
   }
-  return self.defaultContext;
+  return nil;
+}
+
+- (void)oe_registerContext:(OEBrowserContext*)context {
+  [_allContexts addPointer:(__bridge void*)context];
+}
+
+- (NSArray<OEBrowserContext*>*)oe_allContexts {
+  [_allContexts compact];
+  NSMutableArray* contexts = [NSMutableArray array];
+  for (OEBrowserContext* context in _allContexts) if (context) [contexts addObject:context];
+  return contexts;
+}
+
+- (void)oe_contextClosed:(OEBrowserContext*)context {
+  if (context.originalContext && _privateContexts[context.originalContext.identifier] == context)
+    [_privateContexts removeObjectForKey:context.originalContext.identifier];
 }
 
 - (void)oe_extensionsChangedInContext:(OEBrowserContext*)context {
