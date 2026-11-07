@@ -206,6 +206,8 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
+| `window-interrupt` | `kind`: `key`, `sheet`, `end-sheet` | Own window only: order out the browser for native key loss, begin a small native sheet, or end that sheet. Used after tagged down/drag events without mouse-up to exercise resize cancellation. No system input. |
+| `undo-state` | `clear` (optional bool) | Model undo generation, `canUndo`, and `canRedo`. `clear=true` clears this isolated App's undo stack before a gesture proof. Undo itself uses `sidebar-key` Cmd+Z (focuses the outline, then the App key path). |
 | `window-focus` | `id`, `activate`, `readinessTimeout` | Make that own window key; optional own-app activation. Native readiness timeout: 0–5 seconds, default 5. |
 | `window-motion` | `reduced` (optional bool), `sampleCard` (optional bool) | Motion tokens and actual animations read back from the sidebar, panel, card, shadow, and Space-pager layers when scheduled; retained after completion. Response and damping come from the scheduled spring's physical values; `mass`, `stiffness`, `physicalDamping`, and `settlingDuration` expose those values and the CA settling estimate. The scheduled `duration` must equal `settlingDuration`; response is not the animation lifetime (Space response 0.20 s, visibly settled ≈ 0.27 s in S2 §20.12). `scheduledDelay` is the scheduled begin time minus its explicit scheduling reference in the layer's clock. `cardCurve` evaluates `Motion.springProgress` in the app. `sampleCard` records the real visible card's presentation offset every 4 ms for 0.32 s; it is off by default. `reduced` overrides only this process, without changing macOS settings. `window-state` also reports the live/model widths, resize-active state, width-commit and gesture-notification counts, geometry changes, and `spaceSwitcherFrames` in root coordinates for native switcher clicks. |
 | `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
@@ -1043,3 +1045,14 @@ and keeps a previously discarded shell beyond the 24 h destroy deadline.
 These suites save/reset/restore touched keys in the shared defaults domain. The runner also saves canonical Peek values before the first App launch, so startup migration and later Find/Escape launches cannot change the original stored values after cleanup.
 Launch marks `appIconRestoreStarted` and `appIconRestored` report deferred icon
 work after `windowShown` and first content paint (or the no-paint fallback).
+
+Sidebar resize interruption proof (`window` suite): `resize_lost_up_key` and
+`resize_lost_up_sheet_hides` inspect the held drag, native interruption, stale
+drag/up rejection, edge-hover recovery, and a new drag. `window-state` exposes
+`sidebarResizeHandleDragging`, `sidebarResizeHandleVisible`, `sidebarResizeHasStart`,
+and nullable `sidebarWidthOverride` for complete cleanup evidence. `drag_undo_single`
+checks three live crossings and two Cmd+Z events through the outline and App key path; `drag_undo_same_mode`
+checks that returning to the start mode adds no action. Width commits and the
+hidden-gesture notification remain mouse-up effects. The `window` and `sidebar`
+suites set the hide-hint flag to a fixed value at each attempt and restore its
+pre-launch value (including absence) in `finally`.
