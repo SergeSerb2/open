@@ -96,7 +96,8 @@ unset open_sparkle_backup
 
 Production uses that Keychain account by default. For a private file supplied by
 the user instead, set `OPEN_SPARKLE_KEY_FILE` to its absolute path outside the
-checkout and use `chmod 600` on it. Leave this variable unset for Keychain use.
+checkout and use `chmod 600` on it. The file must be at most 4096 bytes.
+Leave this variable unset for Keychain use.
 Both pinned tools support `--ed-key-file`; the pipeline checks their help first.
 The file contains the base64 private seed exported by the tool. Never put it
 under `build/release`.
@@ -144,9 +145,10 @@ Agent verification after the approved feed publish:
 
 ```bash
 curl --fail --silent --show-error --head "$OPEN_RELEASE_FEED_URL" > /dev/null
+curl --fail --silent --show-error "$OPEN_RELEASE_FEED_URL" | xmllint --noout -
 ```
 
-Also fetch and validate the XML. Verify the current enclosure's URL and signature.
+Verify the current enclosure's URL and signature with the U-7 command below.
 A successful web page redirect does not prove a feed exists.
 
 ## U-6: License, patent and security review
@@ -186,9 +188,51 @@ curl --fail --silent --show-error --head "${OPEN_RELEASE_DOWNLOAD_PREFIX%/}/Open
 curl --fail --silent --show-error "$OPEN_RELEASE_FEED_URL" | xmllint --noout -
 ```
 
-The agent compares downloaded bytes with the approved checksum and verifies the
-Ed25519 signature with `SUPublicEDKey`. The real predecessor-update check remains
-a separate acceptance row. The first release records no shipped predecessor.
+For the exact approved build, the agent also runs the command below. Replace
+`<marketing>-<build>` with the reviewed version and build. The generated verifier
+uses the source plist public key. It reads no private key or Keychain account.
+
+```bash
+python3 - 'build/release/<marketing>-<build>' <<'PYVERIFY'
+from pathlib import Path
+import hashlib, os, plistlib, subprocess, sys, tempfile, urllib.request
+import xml.etree.ElementTree as ET
+release = Path(sys.argv[1]).resolve()
+ns = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+with urllib.request.urlopen(os.environ['OPEN_RELEASE_FEED_URL'], timeout=20) as source:
+    xml = source.read(4194305)
+assert len(xml) <= 4194304
+feed = ET.fromstring(xml)
+local = ET.parse(release / 'appcast.xml').getroot()
+build = local.findtext('./channel/item/' + ns + 'version')
+item, = [x for x in feed.iter('item') if x.findtext(ns + 'version') == build]
+enclosure = item.find('enclosure')
+name = 'Open-' + item.findtext(ns + 'shortVersionString') + '.dmg'
+assert enclosure.get('url') == os.environ['OPEN_RELEASE_DOWNLOAD_PREFIX'].rstrip('/') + '/' + name
+checksum = (release / (name + '.sha256')).read_text().split()[0]
+expected_length = (release / name).stat().st_size
+assert int(enclosure.get('length')) == expected_length
+public = plistlib.loads(Path('App/Info.plist').read_bytes())['SUPublicEDKey']
+with tempfile.TemporaryDirectory(prefix='open-published-verify-') as temp:
+    archive = Path(temp) / name
+    digest = hashlib.sha256()
+    count = 0
+    with urllib.request.urlopen(enclosure.get('url'), timeout=30) as source, archive.open('wb') as output:
+        for chunk in iter(lambda: source.read(1048576), b''):
+            count += len(chunk)
+            assert count <= expected_length
+            output.write(chunk)
+            digest.update(chunk)
+    assert digest.hexdigest() == checksum
+    assert archive.stat().st_size == int(enclosure.get('length'))
+    subprocess.run([str(release / '.staging/verify-ed25519'), public,
+                    enclosure.get(ns + 'edSignature'), str(archive)], check=True)
+print('Published DMG checksum and public-key signature: PASS')
+PYVERIFY
+```
+
+The real predecessor-update check remains a separate acceptance row. The first
+release records no shipped predecessor.
 
 ## U-8: Public source and download location
 

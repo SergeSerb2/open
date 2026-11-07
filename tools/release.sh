@@ -274,7 +274,7 @@ print(p)
 PY
 ) || die 'OPEN_SPARKLE_KEY_ACCOUNT / OPEN_SPARKLE_KEY_FILE: U-4 public key missing or invalid; see docs/release-user-steps.md U-4'
     if [[ -n "$KEY_FILE" ]]; then
-        python3 - "$KEY_FILE" "$ROOT" <<'PY' || die 'OPEN_SPARKLE_KEY_FILE must be a mode-600 private file outside the checkout; see docs/release-user-steps.md U-4'
+        python3 - "$KEY_FILE" "$ROOT" <<'PY' || die 'OPEN_SPARKLE_KEY_FILE must be a mode-600 private file of at most 4096 bytes outside the checkout; see docs/release-user-steps.md U-4'
 from pathlib import Path
 import stat,sys
 p=Path(sys.argv[1]).resolve();root=Path(sys.argv[2]).resolve()
@@ -706,7 +706,7 @@ for arg in sys.argv[2:]:
   if sys.argv[1]!='1':raise SystemExit('FAIL: size exceeds 320 MB hard limit')
   print('mode-SKIP: dev-engine dry run exceeds 320 MB; production limit is unchanged')
  if mb>285:print('WARN: size exceeds 285 MB warning threshold')
- if mb>300:print('WARN: above the 300 MB target; within hard limit')
+ if 300<mb<=320:print('WARN: above the 300 MB target; within hard limit')
 PY
 }
 dmg() {
@@ -788,6 +788,28 @@ PY
         public=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$ROOT/App/Info.plist")
     fi
     "$TOOLS/generate_appcast" "${args[@]}" "$archives"
+    if [[ $DRY == 1 ]]; then
+        # The dry archive retains the source public-key placeholder. The pinned
+        # generator emitted its item without a signature in the real run.
+        # Sign the actual enclosures explicitly; never change the archived app.
+        python3 - "$archives/$FEED" "$BUILD" "$archives" "$TOOLS/sign_update" "$KEY_DIR/seed" <<'PY'
+from pathlib import Path
+import subprocess,sys,urllib.parse,xml.etree.ElementTree as E
+feed,build,archives,signer,key_file=sys.argv[1:];ns='http://www.andymatuschak.org/xml-namespaces/sparkle'
+E.register_namespace('sparkle',ns)
+tree=E.parse(feed)
+items=[i for i in tree.iter('item') if i.findtext('{'+ns+'}version')==build]
+if len(items)!=1:raise SystemExit('dry feed must contain one current item before enclosure signing')
+for enclosure in items[0].iter('enclosure'):
+ name=Path(urllib.parse.unquote(urllib.parse.urlsplit(enclosure.get('url','')).path)).name
+ archive=Path(archives)/name
+ if not archive.is_file():raise SystemExit('dry enclosure has no local archive')
+ signature=subprocess.check_output([signer,'--ed-key-file',key_file,'-p',str(archive)],text=True).strip()
+ enclosure.set('{'+ns+'}edSignature',signature)
+tree.write(feed,encoding='utf-8',xml_declaration=True)
+print('Dry-run enclosures signed explicitly with sign_update (throwaway file key)')
+PY
+    fi
     [[ -z "$KEY_DIR" ]] || { rm -rf "$KEY_DIR"; KEY_DIR=; }
     xmllint --noout "$archives/$FEED"
     python3 - "$archives/$FEED" "$BUILD" "$VERSION" "$CHANNEL" "$DMG" "$download_prefix" "$public" "$STAGE/verify-ed25519" <<'PY'
