@@ -31,6 +31,7 @@ extension AutomationController {
         "maxContrast": hex(p.maxContrast), "cutout": hex(p.cutout)]
     }
     switch cmd {
+    case "creation-state": return try await runSpaceEditorCommand(cmd, args)
     case "theme-get":
       let space = try targetSpace()
       let style = SpaceThemeStyle(theme: space.theme, system: owner.context.systemAppearance)
@@ -53,9 +54,15 @@ extension AutomationController {
       if changed { app.scheduleSave() }
       return true
     case "editor-open":
-      switch args["kind"] as? String {
+      switch args["kind"] as? String ?? "theme" {
+      case "create":
+        owner.closeThemeEditor(); factory.iconPicker?.close()
+        return try await runSpaceEditorCommand("creation-open", args)
       case "theme":
         factory.iconPicker?.close()
+        if let creation = owner.spaceCreationController {
+          creation.openThemeEditor(); return creation.themeEditor != nil
+        }
         return owner.editSpaceTheme(try targetSpace().id)
       case "icon":
         owner.closeThemeEditor()
@@ -65,10 +72,14 @@ extension AutomationController {
         return factory.openSpaceIconPicker(try targetSpace().id)
       default: return false
       }
-    case "editor-close": owner.closeThemeEditor(); factory.iconPicker?.close(); return true
+    case "editor-close":
+      if let picker = factory.iconPicker { picker.close(); return true }
+      if owner.themeEditor != nil { owner.closeThemeEditor(); return true }
+      if owner.spaceCreationController != nil { return try await runSpaceEditorCommand("creation-close", args) }
+      return true
     case "editor-state":
       if factory.iconPicker != nil { return try await runIconEditorCommand(cmd, args) }
-      guard let editor = owner.themeEditor else {
+      guard let editor = owner.spaceCreationController?.themeEditor ?? owner.themeEditor else {
         return ["open": false, "displayLinks": ThemeEditorController.activeDisplayLinkCount] as [String: Any]
       }
       let frame = editor.panel.frame
@@ -93,6 +104,7 @@ extension AutomationController {
         "space": editor.session?.spaceID.description ?? ""] as [String: Any]
     case "editor-act":
       if factory.iconPicker != nil { return try await runIconEditorCommand(cmd, args) }
+      if owner.spaceCreationController != nil { return try await runSpaceEditorCommand("creation-act", args) }
       guard let editor = owner.themeEditor, !editor.isClosed else { return false }
       var eventArgs = args
       eventArgs["window"] = editor.panel.windowNumber
