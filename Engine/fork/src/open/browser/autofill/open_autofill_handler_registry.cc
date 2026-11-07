@@ -69,6 +69,15 @@ void WithdrawSavePrompt(content::WebContents* contents) {
   auto found = State().prompts.find(contents);
   if (found != State().prompts.end() && found->second) found->second->Withdraw();
 }
+void WithdrawPasswordSavePrompt(content::WebContents* contents) {
+  auto found = State().prompts.find(contents);
+  // Password UI state changes also run after address/payment submissions.
+  // Only that UI's own offers belong to its show/hide lifecycle.
+  if (found != State().prompts.end() && found->second &&
+      found->second->GetKind() <= 1) {
+    found->second->Withdraw();
+  }
+}
 void ShowSavePrompt(CefRefPtr<OpenSavePrompt> prompt) {
   auto* contents = prompt->web_contents();
   WithdrawSavePrompt(contents);
