@@ -1,0 +1,370 @@
+{
+  "cleanup": {
+    "ok": true,
+    "processes": [
+      {
+        "error": "[Errno 2] No such file or directory",
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          68680,
+          68688,
+          68689,
+          68690,
+          68693,
+          68700,
+          68701,
+          68735,
+          68757,
+          68758,
+          68762,
+          68765
+        ],
+        "remaining_processes": [],
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
+      }
+    ]
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionCodeSHA256": "49529fd0e9fcab132dcd741c7276e9d1b7190a10cd62bf547673d40069771e66",
+    "distributionSHA256": "af4b3cc3ad1b42439b229d79c8f7a869b13b0d3165733fba6c023e202340d1a5",
+    "distributionUUID": "4C4C4483-5555-3144-A118-B2FC582D5923",
+    "embeddedCodeSHA256": "49529fd0e9fcab132dcd741c7276e9d1b7190a10cd62bf547673d40069771e66",
+    "embeddedSHA256": "52608c56cdff1ab875219e3d6896a147e51a4b533bbc533616d65b6c1317bc19",
+    "embeddedUUID": "4C4C4483-5555-3144-A118-B2FC582D5923",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine-s8-main/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793975938"
+  },
+  "incognito": {
+    "boosts_disabled": {
+      "reason": "Lead ruling 16:12: Section 12 consumes factory.isIncognito when its App presenter lands.",
+      "status": "DEFERRED"
+    },
+    "command_l_private": {
+      "ok": true
+    },
+    "command_n_normal": {
+      "ok": true
+    },
+    "command_t_private": {
+      "ok": true
+    },
+    "context_menu_private_link": {
+      "ok": true
+    },
+    "cookie_normal_absent_private": {
+      "ok": true
+    },
+    "cookie_private_absent_normal": {
+      "ok": true
+    },
+    "last_window_ends_session": {
+      "ok": true
+    },
+    "menu_private_chrome": {
+      "ok": true,
+      "state": {
+        "appearance": "NSAppearanceNameDarkAqua",
+        "chrome": {
+          "eyeglasses": true,
+          "favoritesHidden": true,
+          "headerCollapseHidden": true,
+          "headerMoreHidden": true,
+          "libraryHidden": true,
+          "switcherEmpty": true
+        },
+        "context": "",
+        "downloads": 0,
+        "ephemeral": false,
+        "extensions": [],
+        "header": "Incognito",
+        "historyWrites": 2,
+        "modelArchiveSink": false,
+        "modelIsNormal": false,
+        "normalProfiles": 1,
+        "normalSpaces": 1,
+        "normalTabs": 1,
+        "normalWindows": 1,
+        "parent": "5C98BD52-2C69-4034-9BE9-1AA8AC44E044",
+        "private": true,
+        "snapshotSchedules": 9,
+        "tabs": [],
+        "windows": [
+          {
+            "id": "2C6C00E7-BD0D-49A1-B033-A3BC9D754E70",
+            "number": 387003,
+            "private": false,
+            "title": "Private fixture /normal"
+          },
+          {
+            "id": "9EE654D8-D9ED-4DEA-A87F-19F90C711F28",
+            "number": 387015,
+            "private": true,
+            "title": "Incognito"
+          }
+        ]
+      }
+    },
+    "native_2x_captures": {
+      "reason": "Lead ruling 16:28: M5 exposes 1x only; M1 held. Run OPEN_INCOGNITO_CAPTURE_SCALE=2 under the same lock on a native 2x display. No upscaling.",
+      "status": "DEFERRED"
+    },
+    "no_download_history": {
+      "ok": true
+    },
+    "no_recently_closed": {
+      "ok": true
+    },
+    "no_snapshot_history_change": {
+      "after": {
+        "snapshot": "a8886c101ef7fff089dcc7444d0401d82c24f28801d70bcd2761cbdd8443a183",
+        "tables": {
+          "Profiles/Default/State/archive.sqlite3": {
+            "archived_tabs": 0
+          },
+          "Profiles/Default/State/history.sqlite3": {
+            "history_fts": 1,
+            "history_fts_config": 1,
+            "history_fts_data": 4,
+            "history_fts_docsize": 1,
+            "history_fts_idx": 2,
+            "history_import_keys": 0,
+            "urls": 1,
+            "visits": 1
+          },
+          "Profiles/Default/State/sleep.sqlite3": {
+            "sleep_history": 0,
+            "sleep_meta": 0
+          },
+          "State/favicons.sqlite3": {
+            "favicons": 1
+          }
+        },
+        "thumbnails": []
+      },
+      "before": {
+        "snapshot": "a8886c101ef7fff089dcc7444d0401d82c24f28801d70bcd2761cbdd8443a183",
+        "tables": {
+          "Profiles/Default/State/archive.sqlite3": {
+            "archived_tabs": 0
+          },
+          "Profiles/Default/State/history.sqlite3": {
+            "history_fts": 1,
+            "history_fts_config": 1,
+            "history_fts_data": 4,
+            "history_fts_docsize": 1,
+            "history_fts_idx": 2,
+            "history_import_keys": 0,
+            "urls": 1,
+            "visits": 1
+          },
+          "Profiles/Default/State/sleep.sqlite3": {
+            "sleep_history": 0,
+            "sleep_meta": 0
+          },
+          "State/favicons.sqlite3": {
+            "favicons": 1
+          }
+        },
+        "thumbnails": []
+      },
+      "ok": true
+    },
+    "normal_dump_excludes_live_private": {
+      "ok": true
+    },
+    "normal_model_dump_private_free": {
+      "ok": true
+    },
+    "normal_tab_switcher_private_free": {
+      "items": [],
+      "ok": true
+    },
+    "off_the_record_context": {
+      "context": "Ephemeral-1",
+      "ok": true
+    },
+    "option_command_link_stays_private": {
+      "ok": true
+    },
+    "parent_profiles_after_0701": {
+      "reason": "0701 has not merged: per-parent OTR ancestry, per-parent extensions and cross-parent cookie isolation need the engine API. Current provider requests Default OTR and records the requested parent.",
+      "status": "SKIP"
+    },
+    "peek_private": {
+      "ok": true
+    },
+    "private_ax_header": {
+      "ok": true,
+      "text": [
+        "Close Little Open",
+        "Collapse Pinned",
+        "Command Bar Help",
+        "Command Bar Input",
+        "Contact the Team",
+        "Copy URL",
+        "Dismiss",
+        "Go back",
+        "Go forward",
+        "Hide sidebar",
+        "Incognito",
+        "Library",
+        "More",
+        "More Extensions",
+        "More options",
+        "New Tab",
+        "New\u2026",
+        "Reload this page",
+        "Search Settings\u2026",
+        "Search or Enter URL",
+        "Search or Enter URL\u2026",
+        "Search suggestions privacy",
+        "Site Controls",
+        "Space options",
+        "Suggestions",
+        "We talk to your search engine to help us suggest results.",
+        "eyeglasses",
+        "here",
+        "selected"
+      ]
+    },
+    "private_download_allowed": {
+      "ok": true
+    },
+    "quit_private_no_prompt_no_records": {
+      "ok": true
+    },
+    "session_survives_one_close": {
+      "ok": true
+    },
+    "shortcut_shared_private_session": {
+      "ok": true,
+      "state": {
+        "appearance": "NSAppearanceNameDarkAqua",
+        "chrome": {
+          "eyeglasses": true,
+          "favoritesHidden": true,
+          "headerCollapseHidden": true,
+          "headerMoreHidden": true,
+          "libraryHidden": true,
+          "switcherEmpty": true
+        },
+        "context": "Ephemeral-1",
+        "downloads": 0,
+        "ephemeral": true,
+        "extensions": [],
+        "header": "Incognito",
+        "historyWrites": 2,
+        "modelArchiveSink": false,
+        "modelIsNormal": false,
+        "normalProfiles": 1,
+        "normalSpaces": 1,
+        "normalTabs": 1,
+        "normalWindows": 1,
+        "parent": "5C98BD52-2C69-4034-9BE9-1AA8AC44E044",
+        "private": true,
+        "snapshotSchedules": 9,
+        "tabs": [
+          {
+            "id": "C83D05DC-DF04-4284-9457-6FE7C955D31A",
+            "url": "http://127.0.0.1:59202/two"
+          }
+        ],
+        "windows": [
+          {
+            "id": "2C6C00E7-BD0D-49A1-B033-A3BC9D754E70",
+            "number": 387003,
+            "private": false,
+            "title": "Private fixture /normal"
+          },
+          {
+            "id": "9EE654D8-D9ED-4DEA-A87F-19F90C711F28",
+            "number": 387015,
+            "private": true,
+            "title": "Private fixture /one"
+          },
+          {
+            "id": "E940E065-E5A8-41F5-9D51-130DDF0DD0EF",
+            "number": 387024,
+            "private": true,
+            "title": "Private fixture /two"
+          }
+        ]
+      }
+    },
+    "snapshot_dark_1x": {
+      "ok": true,
+      "path": "docs/engine-spike/incognito/private-dark-1x.png",
+      "pixels": [
+        [
+          37,
+          36,
+          43
+        ],
+        [
+          39,
+          35,
+          43
+        ],
+        [
+          37,
+          36,
+          44
+        ]
+      ],
+      "scale": 1,
+      "size": [
+        1000,
+        700
+      ]
+    },
+    "snapshot_light_1x": {
+      "ok": true,
+      "path": "docs/engine-spike/incognito/private-light-1x.png",
+      "pixels": [
+        [
+          37,
+          36,
+          43
+        ],
+        [
+          39,
+          35,
+          43
+        ],
+        [
+          37,
+          36,
+          44
+        ]
+      ],
+      "scale": 1,
+      "size": [
+        1000,
+        700
+      ]
+    },
+    "split_private": {
+      "ok": true
+    }
+  },
+  "interrupted_attempts": [],
+  "load": [
+    34.38623046875,
+    35.7470703125,
+    34.0537109375
+  ],
+  "source": {
+    "clean": false,
+    "diffSHA256": "4c7131781dc03a2727913812597476e633f2ff88fba40026cca1e2b22c5b2825",
+    "head": "a008d0490418a58dc4998a8e1f121eae1a2e2fa7"
+  },
+  "started": "2026-11-06 17:15:37",
+  "style": "chrome"
+}

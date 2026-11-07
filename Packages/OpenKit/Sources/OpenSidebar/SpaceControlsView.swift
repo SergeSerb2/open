@@ -13,10 +13,12 @@ public final class SpaceControlsView: NSView {
     private let title = TextLabel()
     private let profile = TextLabel()
     private let more = PlateButton(glyph: .spaceMore)
+    private let profileIndicator: ProfileIndicatorButton
     var onGrab: (@MainActor (NSEvent) -> Void)?
 
     public init(context: SidebarContext, space: Space) {
         self.context = context; self.space = space
+        profileIndicator = ProfileIndicatorButton(context:context,space:space)
         let grip = SpaceGrabber(); self.grip = grip; grabber = grip
         super.init(frame: .zero)
         wantsLayer = true
@@ -36,7 +38,12 @@ public final class SpaceControlsView: NSView {
         more.glyphTint = { [unowned context, space] _ in SidebarRole.spaceTitle.resolved(context.appearance(for: space)).nsColor }
         more.tooltip = { [unowned context, space] in Tooltip(title: "More options", style: context.style(for: space)) }
         more.menuProvider = { [weak self] in self?.makeMenu() }
-        for view in [grip, icon, title, profile, more] { addSubview(view) }
+        profileIndicator.setAccessibilityIdentifier("spaceManagerSpaceHeaderIndicator")
+        profileIndicator.menuProvider = { [weak self] in
+            guard let self else {return nil}
+            return SidebarMenus(context:self.context,beginRename:{_ in}).profile(self.space)
+        }
+        for view in [grip, icon, title, profile, more, profileIndicator] { addSubview(view) }
         setAccessibilityElement(true); setAccessibilityRole(.group)
         setAccessibilityLabel(context.title(of: space))
     }
@@ -54,6 +61,13 @@ public final class SpaceControlsView: NSView {
         more.frame = CGRect(x: bounds.width - 32, y: 10, width: 24, height: 24)
         title.frame = CGRect(x: 41, y: hasProfiles ? 1 : 9, width: max(0, bounds.width - 103), height: 26)
         title.baseline = 18
+        profileIndicator.isHidden = !hasProfiles
+        if hasProfiles {
+            let size = ProfileIndicatorMetrics.hitSize
+            let x = min(title.frame.minX + title.textWidth + ProfileIndicatorMetrics.gap, grip.frame.minX - size - ProfileIndicatorMetrics.gap)
+            profileIndicator.frame=CGRect(x:x,y:4,width:size,height:size)
+            title.frame.size.width=max(0,x-ProfileIndicatorMetrics.gap-title.frame.minX)
+        }
         profile.isHidden = !hasProfiles
         profile.frame = CGRect(x: 41, y: 23, width: min(max(0, bounds.width - 103), profile.textWidth + 6), height: 18)
         profile.layer?.backgroundColor = GrayScale.a(4).cgColor(context.appearance(for: space))

@@ -142,13 +142,13 @@ public final class SidebarView: NSView {
 
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
-        FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
+        context.isIncognito ? 0 : FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
     }
 
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        if presentation == .floatingCard { cardBackground?.frame = bounds }
+        if presentation == .floatingCard { cardBackground?.frame = bounds; cardBackground?.fieldFrame = cardFieldFrame }
         toolbar.frame = CGRect(x: 0, y: 0, width: w, height: URLFieldMetrics.y)
         urlField.frame = CGRect(x: URLFieldMetrics.insetX, y: URLFieldMetrics.y, width: w - 2 * URLFieldMetrics.insetX, height: URLFieldMetrics.height)
         // With the content toolbar, the URL field hides and Favorites move up to its place (§4.6.3; layout guess, §9 item 1).
@@ -160,6 +160,7 @@ public final class SidebarView: NSView {
         if statusShown || urlStatusButtonIfMade != nil { urlStatusButton.frame = URLStatusMetrics.frame(sidebarWidth: w) }
         let favTop = toolbarShown ? URLFieldMetrics.y : FavoritesMetrics.sectionTop + (statusShown ? URLStatusMetrics.pushDown : 0)
         let favH = favoritesHeight
+        favorites.isHidden = context.isIncognito
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
         let mediaHeight = mediaControls.requiredHeight
@@ -278,10 +279,20 @@ public final class SidebarView: NSView {
     /// Builds the card's own theme background before the card shows, so its first frame
     /// is never empty: a new `ThemeBackgroundView` only fills its field on the next display
     /// tick. The view is kept (hidden) between reveals; only a theme or size change rebuilds it.
+    /// The window's bounds in the card's coordinates: the card shows the window's own
+    /// theme field at its place (`ThemeBackgroundView.fieldFrame`). Nil: the card's size.
+    /// True while the card shows and its background draws over the page blur.
+    public var cardDrawsPageBlur: Bool { presentation == .floatingCard && cardBackground?.drawsPageBlur == true }
+    public var cardFieldFrame: CGRect? {
+        didSet { if cardFieldFrame != oldValue, presentation == .floatingCard { cardBackground?.fieldFrame = cardFieldFrame } }
+    }
+
     public func prepareFloatingCard(size: CGSize) {
         let bg: ThemeBackgroundView
         if let cardBackground { bg = cardBackground } else {
             bg = ThemeBackgroundView(frame: CGRect(origin: .zero, size: size))
+            // Arc's card is translucent: its tint over the blurred page (WindowMaterial).
+            bg.material = .overPage
             bg.isHidden = presentation != .floatingCard
             addSubview(bg, positioned: .below, relativeTo: nil)
             cardBackground = bg
@@ -289,6 +300,7 @@ public final class SidebarView: NSView {
         if let space = context.focusedSpace, bg.targetStyle != context.style(for: space) { bg.style = context.style(for: space) }
         bg.isWindowActive = context.isWindowActive
         bg.frame = CGRect(origin: .zero, size: size)
+        bg.fieldFrame = cardFieldFrame
         bg.layoutSubtreeIfNeeded()
         bg.prepareForSnapshot()
     }
@@ -704,6 +716,13 @@ extension SidebarView {
 
     /// The text the URL field shows: the current page's host or the placeholder.
     public var displayedURLText: String { urlField.displayedText }
+    /// Read actual private-window view visibility for real-App acceptance.
+    public var incognitoChrome: [String: Bool] {
+        ["favoritesHidden": favorites.isHidden, "libraryHidden": bottomBar.home.isHidden,
+         "switcherEmpty": bottomBar.items.isEmpty, "headerMoreHidden": pager.currentPage?.header.more.isHidden == true,
+         "headerCollapseHidden": pager.currentPage?.header.chevron.isHidden == true,
+         "eyeglasses": pager.currentPage?.space.icon == .symbol("eyeglasses")]
+    }
 
     /// Chrome geometry in sidebar coordinates, for host checks: the URL field and its hover
     /// state, and the focused Space header band, its title frame and baseline, and its hover state.

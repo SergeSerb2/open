@@ -1,0 +1,58 @@
+[
+  {
+    "cleanup": true,
+    "exit": 0,
+    "failed": {
+      "suite": "tabs probe popup did not open"
+    },
+    "interruptions": 0,
+    "load": [
+      18.41259765625,
+      19.92138671875,
+      29.04296875
+    ],
+    "reason": "Initial invocation used Alloy; extension-popup and native Chromium menu rows require Chrome. Rerun uses --style chrome.",
+    "style": "alloy",
+    "suite": "profiles"
+  },
+  {
+    "cleanup": true,
+    "exit": 1,
+    "failed": {
+      "cm_extension_limits": "assertion failed",
+      "cm_image_background": "",
+      "cm_order_image": "assertion failed",
+      "cm_order_linked_image": "assertion failed",
+      "cm_order_mailto": "assertion failed",
+      "cm_order_page": "assertion failed"
+    },
+    "interruptions": 0,
+    "load": [
+      42.12890625,
+      25.88427734375,
+      30.2236328125
+    ],
+    "reason": "Initial invocation used Alloy; extension-popup and native Chromium menu rows require Chrome. Rerun uses --style chrome.",
+    "style": "alloy",
+    "suite": "context-menus"
+  },
+  {
+    "cleanup": true,
+    "exit": 1,
+    "failed": {
+      "suite": {
+        "error": "eval: no page for 3",
+        "ok": false
+      }
+    },
+    "interruptions": 0,
+    "load": [
+      20.6005859375,
+      30.39453125,
+      32.1572265625
+    ],
+    "reason": "A queued tab/focus change closed the initial popup. Added explicit window readiness and the existing tabstrip bounded reopen policy. Isolation assertions unchanged.",
+    "style": "chrome",
+    "suite": "profiles"
+  }
+]

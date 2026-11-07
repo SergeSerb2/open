@@ -38,6 +38,7 @@ public enum RoutingDecisionFormatter {
                 case .sourceMismatch: outcome = "source mismatch"
                 case .sourceUnknown: outcome = "source unknown (rule needs \(rule.sourceBundleID ?? "—"))"
                 case .targetSpaceMissing: outcome = "target Space missing — skipped"
+                case .targetProfileMissing: outcome = "target Profile missing or has no Spaces — skipped"
                 }
                 lines.append("  #\(trace.index + 1) \(matchDescription(rule.match)) [source: \(rule.sourceBundleID ?? "any")] -> \(ruleDestination(rule.destination, titles: titles)) … \(outcome)")
             }
@@ -65,8 +66,8 @@ public enum RoutingDecisionFormatter {
     private static func ruleDestination(_ destination: RoutingDestination, titles: [SpaceID: String]) -> String {
         switch destination {
         case .space(let id): return space(id, titles: titles)
-        case .littleOpen: return "Little Open"
-        case .mostRecentSpace: return "Most Recent Space"
+        case .littleOpen(let profile): return "Little Open" + (profile.map { " – Profile \($0.description.prefix(8))" } ?? "")
+        case .mostRecentSpace(let profile): return "Most Recent Space" + (profile.map { " – Profile \($0.description.prefix(8))" } ?? "")
         }
     }
 
@@ -75,6 +76,7 @@ public enum RoutingDecisionFormatter {
         case .rule(let index, _): return "rule #\(index + 1)"
         case .defaultDestination: return "default destination"
         case .fallbackMissingSpace: return "fallback (target Space is gone)"
+        case .fallbackMissingProfile: return "fallback (target Profile missing or has no Spaces)"
         case .defaultSuppressedByToggle: return "default (Little Open off → most recent Space)"
         case .noSpaces: return "no Spaces"
         case .rejectedNonHTTP: return "rejected (not http/https)"

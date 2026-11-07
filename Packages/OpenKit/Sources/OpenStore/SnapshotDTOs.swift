@@ -165,8 +165,8 @@ public enum RoutingMatchDTO: Codable, Sendable {
 /// Legacy destination spellings decode explicitly; new saves use `littleOpen`.
 public enum RoutingDestinationDTO: Codable, Sendable {
     case space(String)
-    case littleOpen
-    case mostRecentSpace
+    case littleOpen(profile: String?)
+    case mostRecentSpace(profile: String?)
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: RoutingDestinationDTOCodingKey.self)
@@ -179,9 +179,11 @@ public enum RoutingDestinationDTO: Codable, Sendable {
             let nested = try container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: key)
             self = .space(try nested.decode(String.self, forKey: .value))
         case "littleOpen", "littleArc": // Legacy snapshots, decode only.
-            self = .littleOpen
+            let nested = try container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: key)
+            self = .littleOpen(profile: try nested.decodeIfPresent(String.self, forKey: .profile))
         case "mostRecentSpace":
-            self = .mostRecentSpace
+            let nested = try container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: key)
+            self = .mostRecentSpace(profile: try nested.decodeIfPresent(String.self, forKey: .profile))
         default:
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
                 debugDescription: "RoutingDestinationDTO: unknown key \(key.stringValue)"))
@@ -194,10 +196,12 @@ public enum RoutingDestinationDTO: Codable, Sendable {
         case .space(let id):
             var nested = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .space)
             try nested.encode(id, forKey: .value)
-        case .littleOpen:
-            _ = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .littleOpen)
-        case .mostRecentSpace:
-            _ = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .mostRecentSpace)
+        case .littleOpen(let profile):
+            var nested = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .littleOpen)
+            try nested.encodeIfPresent(profile, forKey: .profile)
+        case .mostRecentSpace(let profile):
+            var nested = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .mostRecentSpace)
+            try nested.encodeIfPresent(profile, forKey: .profile)
         }
     }
 }
@@ -213,12 +217,12 @@ private struct RoutingDestinationDTOCodingKey: CodingKey {
     static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
 }
 
-private enum RoutingDestinationDTOSpaceKey: String, CodingKey { case value = "_0" }
+private enum RoutingDestinationDTOSpaceKey: String, CodingKey { case value = "_0", profile }
 
 public enum DefaultDestinationDTO: Codable, Sendable {
     case space(String)
-    case littleOpen
-    case mostRecentSpace
+    case littleOpen(profile: String?)
+    case mostRecentSpace(profile: String?)
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DefaultDestinationDTOCodingKey.self)
@@ -231,9 +235,11 @@ public enum DefaultDestinationDTO: Codable, Sendable {
             let nested = try container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: key)
             self = .space(try nested.decode(String.self, forKey: .value))
         case "littleOpen", "littleArc": // Legacy snapshots, decode only.
-            self = .littleOpen
+            let nested = try container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: key)
+            self = .littleOpen(profile: try nested.decodeIfPresent(String.self, forKey: .profile))
         case "mostRecentSpace":
-            self = .mostRecentSpace
+            let nested = try container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: key)
+            self = .mostRecentSpace(profile: try nested.decodeIfPresent(String.self, forKey: .profile))
         default:
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
                 debugDescription: "DefaultDestinationDTO: unknown key \(key.stringValue)"))
@@ -246,10 +252,12 @@ public enum DefaultDestinationDTO: Codable, Sendable {
         case .space(let id):
             var nested = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .space)
             try nested.encode(id, forKey: .value)
-        case .littleOpen:
-            _ = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .littleOpen)
-        case .mostRecentSpace:
-            _ = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .mostRecentSpace)
+        case .littleOpen(let profile):
+            var nested = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .littleOpen)
+            try nested.encodeIfPresent(profile, forKey: .profile)
+        case .mostRecentSpace(let profile):
+            var nested = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .mostRecentSpace)
+            try nested.encodeIfPresent(profile, forKey: .profile)
         }
     }
 }
@@ -265,7 +273,7 @@ private struct DefaultDestinationDTOCodingKey: CodingKey {
     static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
 }
 
-private enum DefaultDestinationDTOSpaceKey: String, CodingKey { case value = "_0" }
+private enum DefaultDestinationDTOSpaceKey: String, CodingKey { case value = "_0", profile }
 
 public struct RoutingRuleDTO: Codable, Sendable {
     public var id: String
@@ -416,8 +424,8 @@ public enum SnapshotMapper {
         let d: RoutingDestinationDTO
         switch r.destination {
         case .space(let id): d = .space(id.rawValue.uuidString)
-        case .littleOpen: d = .littleOpen
-        case .mostRecentSpace: d = .mostRecentSpace
+        case .littleOpen(let profile): d = .littleOpen(profile: profile.map { $0.description })
+        case .mostRecentSpace(let profile): d = .mostRecentSpace(profile: profile.map { $0.description })
         }
         return RoutingRuleDTO(id: r.id.rawValue.uuidString, match: m, destination: d, sourceBundleID: normalizedSourceBundleID(r.sourceBundleID))
     }
@@ -432,24 +440,24 @@ public enum SnapshotMapper {
         let d: RoutingDestination
         switch dto.destination {
         case .space(let s): d = .space(SpaceID(uuidString: s))
-        case .littleOpen: d = .littleOpen
-        case .mostRecentSpace: d = .mostRecentSpace
+        case .littleOpen(let profile): d = .littleOpen(profile: profile.map { ProfileID(uuidString: $0) })
+        case .mostRecentSpace(let profile): d = .mostRecentSpace(profile: profile.map { ProfileID(uuidString: $0) })
         }
         return RoutingRule(id: RuleID(uuidString: dto.id), match: m, destination: d, sourceBundleID: normalizedSourceBundleID(dto.sourceBundleID))
     }
 
     static func defaultDestinationDTO(_ d: DefaultDestination) -> DefaultDestinationDTO {
         switch d {
-        case .mostRecentSpace: return .mostRecentSpace
-        case .littleOpen: return .littleOpen
+        case .mostRecentSpace(let profile): return .mostRecentSpace(profile: profile.map { $0.description })
+        case .littleOpen(let profile): return .littleOpen(profile: profile.map { $0.description })
         case .space(let id): return .space(id.rawValue.uuidString)
         }
     }
 
     static func defaultDestination(from dto: DefaultDestinationDTO) -> DefaultDestination {
         switch dto {
-        case .mostRecentSpace: return .mostRecentSpace
-        case .littleOpen: return .littleOpen
+        case .mostRecentSpace(let profile): return .mostRecentSpace(profile: profile.map { ProfileID(uuidString: $0) })
+        case .littleOpen(let profile): return .littleOpen(profile: profile.map { ProfileID(uuidString: $0) })
         case .space(let s): return .space(SpaceID(uuidString: s))
         }
     }
