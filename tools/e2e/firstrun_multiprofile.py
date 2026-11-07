@@ -54,7 +54,9 @@ def fixture(root, h, negative=False):
 
 
 def run(factory, results, tmp, h):
-    source = Path(tmp)/'arc-multiprofile'; negative = os.environ.get('OPEN_E2E_IMPORT_NEGATIVE') == '1'
+    source = Path(tmp)/'arc-multiprofile'
+    shutil.rmtree(source, ignore_errors=True)
+    negative = os.environ.get('OPEN_E2E_IMPORT_NEGATIVE') == '1'
     ids = fixture(source, h, negative)
     saved, details = {}, {}
     app = None
