@@ -151,7 +151,7 @@ final class WindowExtensions {
   }
   func focusChanged() {
     guard !factory.isClosing else { return }
-    let browser = factory.focusedBrowser
+    let browser = factory.prepareFocusedExtensionBrowser()
     if host?.browser !== browser {
       host?.closePopup(); host?.onActionsChanged = nil; host?.onActionChanged = nil
       host = browser.map(EngineExtensionHost.init)
