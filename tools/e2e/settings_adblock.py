@@ -1,5 +1,6 @@
 """Settings warning through the real App, live registry and native AX text."""
 import json
+import os
 from pathlib import Path
 import shutil
 
@@ -63,6 +64,8 @@ def run(factory, results, tmp, root, wait):
         app.call('ext-manage', extension=KNOWN, action='uninstall')
         prompt = wait(lambda: (lambda p: p if p.get('pending') else None)(app.call('ext-prompt')), timeout=10)
         assert prompt and prompt['type'] == 'uninstall'
+        if os.environ.get('OPEN_E2E_ADBLOCK_FAIL_IN_UNINSTALL') == '1':
+            raise AssertionError('forced failure with the real uninstall prompt open')
         app.call('ext-prompt', answer='accept')
         assert wait(lambda: not any(e['id'] == KNOWN for e in installed()), timeout=10)
         row('uninstalled_live', False)
