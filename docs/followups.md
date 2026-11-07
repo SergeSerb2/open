@@ -283,5 +283,6 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   engine lane's Step 4R; filters can affect images/video/canvas.
 - Code mode and its CSS/JS text surface remain Step 7. New Legacy Boost opens
   the simple editor until then; Gallery stays disabled.
-- Incognito planner application is wired for ephemeral contexts. A real
-  incognito browser-window flow needs the App-shell window entry point.
+- Incognito planning is available in the package. Private-window presenter
+  integration remains deferred (lead, 2026-11-06 16:12); private windows have
+  no persistent Boost store and receive no plan from this App adapter.

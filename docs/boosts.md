@@ -101,9 +101,10 @@ Profile scripts stay current, so a slept tab takes the current plan at document
 start when it wakes or reloads. A close racing an engine reply is also ignored.
 
 Global off removes scripts and clears live pages. Global on rebuilds scripts and
-refreshes pages. Ephemeral contexts use the incognito planner policy; existing
-Boosts apply, while editor commands refuse ephemeral and non-http(s) pages.
-The browser's incognito window UI remains a separate App-shell gap.
+refreshes pages. Editor commands refuse ephemeral and non-http(s) pages.
+The planner supports incognito, but the private-window presenter integration is
+deferred (lead, 2026-11-06 16:12). Private windows use local Profile identities,
+which never load a persistent Boost store or receive a plan from this adapter.
 
 The simple editor is bound to one tab and one window. Tab, Space, Profile and
 window changes close it; navigation outside scope keeps it open with the native
