@@ -11974,8 +11974,9 @@ def main():
             if not opts.firstrun_boosts_only:
                 runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun.py"))["run"](
                     factory, results["firstrun"], tmp, sys.modules[__name__])
-            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun_boosts.py"))["run"](
-                factory, results["firstrun"], tmp, sys.modules[__name__])
+            if os.environ.get("OPEN_E2E_IMPORT_EXT_ONLY") != "1":
+                runpy.run_path(os.path.join(ROOT, "tools", "e2e", "firstrun_boosts.py"))["run"](
+                    factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
             import extensions_ui
