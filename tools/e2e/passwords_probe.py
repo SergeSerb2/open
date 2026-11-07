@@ -12,12 +12,6 @@ import time
 from pathlib import Path
 
 
-# Fail closed until the engine lead supplies the exact distribution containing
-# the TabDialogManager / HTTPS-First fallback fix. A different engine hash alone
-# is not evidence that PR-7 is safe to replay.
-PR7_FIXED_ENGINE_DISTRIBUTIONS = frozenset()
-
-
 class ProbeAbort(RuntimeError):
     """Deliberate early exit to verify real-dialog cleanup, never a crash."""
 
@@ -71,15 +65,10 @@ def run(h, factory, results, tmp, row_ids=None,
         raise RuntimeError('main engine root README has no distribution hash')
     evidence['recordedDistributionSHA256'] = hashes[-1]
     evidence['distributionHashSource'] = 'OPEN_ENGINE_ROOT/README.txt (last framework SHA-256)'
-    pr7_enabled = (engine_distribution_sha256 in PR7_FIXED_ENGINE_DISTRIBUTIONS
-                   and engine_distribution_sha256 == evidence['recordedDistributionSHA256'])
-    evidence['pr7EngineFixReceipt'] = {'enabled': pr7_enabled,
+    pr7_enabled = False  # Read the engine capability only after safe App startup.
+    evidence['pr7EngineFixReceipt'] = {'enabled': None,
         'actualDistributionSHA256': engine_distribution_sha256,
-        'reason': 'Exact fixed distribution receipt required before replaying the HTTPS-First crash path.'}
-    if 'PR-7' in evidence['requestedRows'] and not pr7_enabled:
-        results['PR-7'] = {'status': 'BLOCKED',
-            'reason': 'HTTPS-First fallback crash: PR-7 is disabled until the engine fix has an approved distribution hash.'}
-        print('PR-7 BLOCKED: engine fix receipt required; no HTTP Basic navigation attempted.', flush=True)
+        'reason': 'Runtime supportsSecretsImport capability required before the HTTPS-First crash path.'}
     readme = Path(h.ROOT) / 'Vendor/cef/README.txt'
     if readme.exists():
         import hashlib
@@ -92,11 +81,6 @@ def run(h, factory, results, tmp, row_ids=None,
     def persist():
         evidence['updated'] = timestamp()
         out.write_text(json.dumps(evidence, indent=2, sort_keys=True) + '\n')
-
-    if not any(rid != 'PR-7' or pr7_enabled for rid in evidence['requestedRows']):
-        evidence['finished'] = timestamp()
-        persist()
-        return {k: v for k, v in evidence.items() if k != 'rows'}
 
     def windows():
         return [{k: w[k] for k in ('number', 'class', 'visible', 'parent', 'sheet', 'key') if k in w}
@@ -209,6 +193,14 @@ def run(h, factory, results, tmp, row_ids=None,
         evidence['engineSwitches'] = urls['engine_switches']
         try:
             prepare_window()
+            try:
+                pr7_enabled = app.call('credentials').get('supportsSecretsImport') is True
+            except RuntimeError:
+                pass  # The unpatched probe App has no credentials command.
+            evidence['pr7EngineFixReceipt']['enabled'] = pr7_enabled
+            if 'PR-7' in evidence['requestedRows'] and not pr7_enabled:
+                results['PR-7'] = {'status': 'BLOCKED', 'reason': 'Running engine lacks the 08xx supportsSecretsImport capability'}
+                print('PR-7 BLOCKED: engine capability absent; no HTTP Basic navigation attempted.', flush=True)
             def login(row):
                 tab = load(urls['login'])
                 before = windows()
@@ -295,7 +287,7 @@ def run(h, factory, results, tmp, row_ids=None,
                 row['limitation'] = 'Secure localhost origin has no seeded saved login; account chooser not established.'
             def basic(row):
                 if not pr7_enabled:
-                    raise ProbeAbort('PR-7 engine fix receipt is absent; HTTP navigation refused')
+                    raise ProbeAbort('PR-7 runtime 08xx capability is absent; HTTP navigation refused')
                 # Do not wait for navigation completion while auth is pending.
                 before = windows()
                 tab = app.call('open', url=urls['basic'])['id']

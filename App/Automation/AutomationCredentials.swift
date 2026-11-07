@@ -25,7 +25,7 @@ extension AutomationController {
     if let value = args["addressesSaving"] as? Bool { context.addressesSavingEnabled = value }
     return ["passwordSaving": context.passwordSavingEnabled, "cardsSaving": context.creditCardsSavingEnabled,
       "addressesSaving": context.addressesSavingEnabled, "canEnablePasswordSaving": context.canEnablePasswordSaving,
-      "canEnableCardsSaving": context.canEnableCreditCardsSaving, "canEnableAddressesSaving": !context.isEphemeral]
+      "canEnableCardsSaving": context.canEnableCreditCardsSaving, "canEnableCreditCardsSaving": context.canEnableCreditCardsSaving]
   }
 
   /// Counts and capability flags only. The existing factory creates profile

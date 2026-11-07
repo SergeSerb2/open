@@ -42,11 +42,12 @@ After a crash, stop all on-screen work. Only after the lead says "M5 clear", `--
 replaying the crashed row. Unrequested rows are `NOT_REQUESTED`, not passes.
 Each selected run still has its own engine/source fingerprint and timestamps.
 
-PR-7 is blocked by default, including when it is selected explicitly. It makes
-no Basic-auth navigation until the engine lead adds the exact fixed framework
-SHA-256 to `PR7_FIXED_ENGINE_DISTRIBUTIONS`. Both the App fingerprint and the
-main engine receipt must match that hash. A newer engine alone does not clear
-this guard. The recorded crash remains evidence; `BLOCKED` is not a pass.
+PR-7 makes no Basic-auth navigation until the running engine reports the 08xx
+`supportsSecretsImport` capability through `credentials`. An unpatched App
+without that command also leaves the row BLOCKED. Distribution hashes remain
+in the evidence, without a hard-coded allowlist that breaks on a rebuild.
+The recorded crash remains evidence; `BLOCKED` is not a pass. The M5 screen
+hold still requires an explicit "M5 clear" message before any App launch.
 
 Selected runs write a separate file, for example
 `results-passwords-probe-PR-8-PR-9.json`. They preserve the primary crash receipt

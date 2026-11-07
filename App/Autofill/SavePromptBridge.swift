@@ -99,7 +99,10 @@ extension EngineWebContentHostFactory {
         let overlay = ToastOverlayView(frame: view.bounds)
         overlay.autoresizingMask = [.width, .height]
         view.addSubview(overlay)
-        autofillToastCenter = ToastCenter(overlay: overlay) { .defaultTheme(system: .dark) }
+        autofillToastCenter = ToastCenter(overlay: overlay) { [weak view] in
+          let name = view?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+          return .defaultTheme(system: name == .aqua ? .light : .dark)
+        }
       }
       autofillToastCenter?.show(message)
     }

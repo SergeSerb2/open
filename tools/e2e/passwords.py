@@ -16,11 +16,22 @@ def autofill_child_windows(app):
 
 
 def show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5):
-    """Click the actual field; return newly visible native child metadata."""
+    """Click the actual field; identify the native popup by its Manage footer."""
+    import re
     before = {w['number'] for w in autofill_child_windows(app)}
     app.call('focus', tab=tab)
     app.call('click', tab=tab, selector=selector)
-    return wait_until(lambda: [w for w in autofill_child_windows(app) if w['number'] not in before], timeout=timeout, step=.05)
+
+    def specific_popup():
+        candidates = [w for w in autofill_child_windows(app) if w['number'] not in before]
+        if not candidates:
+            return None
+        text = {w['number']: w.get('text', []) for w in app.call('windows', accessibility=True)}
+        # Inspect only for public footer copy. Do not return usernames, masked
+        # passwords, payment labels or addresses from the accessibility tree.
+        return [w for w in candidates if any(re.search(r'manage (?:passwords|addresses|payment methods)', label, re.I)
+                                             for label in text.get(w['number'], []))]
+    return wait_until(specific_popup, timeout=timeout, step=.05)
 
 
 def fill_from_dropdown(app, tab, wait_until, selector='#username', down=1):
@@ -441,7 +452,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         except Exception as error:
             guard.check()
             # No arbitrary exception payloads (a browser error can echo input).
-            results[name] = {'ok': False, 'reason': 'flow assertion failed', 'errorType': type(error).__name__}
+            reason = str(error) if isinstance(error, AssertionError) and error.args else 'flow assertion failed: ' + flow.__name__
+            results[name] = {'ok': False, 'reason': reason, 'errorType': type(error).__name__}
         finally:
             if app and not app.closed:
                 try:
@@ -550,6 +562,25 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         launch(fresh=True)
         identity = {}
         try:
+            def preference_inputs():
+                initial = app.call('credentials-prefs')
+                for invalid in [dict(profile='missing'), dict(passwordSaving=1), dict(cardsSaving='true'),
+                                dict(addressesSaving=None), dict(unknown=True), dict(profile='x'*4097)]:
+                    try:
+                        app.call('credentials-prefs', **invalid)
+                        raise AssertionError('invalid credentials-prefs input was accepted')
+                    except RuntimeError:
+                        pass
+                    assert app.call('credentials-prefs') == initial, 'rejected preference input changed preferences'
+                for invalid in ['unknown', 1, None]:
+                    try:
+                        app.call('policy', savePrompt=invalid)
+                        raise AssertionError('invalid savePrompt policy was accepted')
+                    except RuntimeError:
+                        pass
+                return {'invalidInputsRejected': 9, 'preferencesUnchanged': True}
+            row('PW-PREFS-input', preference_inputs)
+
             def first():
                 tab, value = prompt('password', urls['login'])
                 assert value['title'] == 'Save password for login.example.com?'
@@ -683,7 +714,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 paths = list((Path(app.user_data)/'Engine').rglob('Login Data'))
                 assert paths
                 import re
-                fixture = re.search(r'id="password"[^>]*data-fixture="([^"]+)"', (fixture_root/'login.html').read_text()).group(1).encode()
+                fixture_bytes = [re.search(r'id="password"[^>]*data-fixture="([^"]+)"', (fixture_root/name).read_text()).group(1).encode()
+                                 for name in ['login.html', 'change.html']]
                 checked = 0
                 for index, path in enumerate(paths):
                     assert path.parent.stat().st_mode & 0o777 == 0o700
@@ -694,7 +726,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                         blobs = database.execute('select password_value from logins where blacklisted_by_user=0').fetchall()
                         assert all(bytes(b[0]).startswith(b'v10') for b in blobs)
                         checked += len(blobs)
-                    source.close(); assert fixture not in copy.read_bytes()
+                    source.close(); assert all(value not in copy.read_bytes() for value in fixture_bytes)
                 assert checked >= 1
                 return {'encryptedLogins': checked, 'profileMode': '0700', 'fixtureBytesAbsent': True}
             row('P-18', at_rest, ['P-2'])
@@ -713,7 +745,8 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 try:
                     for operation in ['create', 'get']:
                         app.call('click', tab=tab, selector='#'+operation)
-                        assert wait(lambda: app.eval(tab, 'document.querySelector("#result").textContent') == 'resolved', timeout=5, step=.05)
+                        script = 'document.querySelector("#result").dataset.operation === %s && document.querySelector("#result").textContent === "resolved"' % json.dumps(operation)
+                        assert wait(lambda: app.eval(tab, script), timeout=5, step=.05)
                 finally:
                     dev(tab, 'WebAuthn.removeVirtualAuthenticator', authenticatorId=auth)
                     dev(tab, 'WebAuthn.disable')
@@ -727,6 +760,9 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 if not child:
                     raise PasswordBlocked('H-7 WebAuthn native dialog is unavailable in this engine distribution')
                 try:
+                    labels = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == child['number'])
+                    import re
+                    assert any(re.search(r'passkey|security key|another device', text, re.I) for text in labels), 'new child was not a WebAuthn dialog'
                     app.call('snapshot', window=child['number'], path=os.path.join(tmp, 'P-21-webauthn.png'))
                     key('escape', window=child['number'])
                     assert wait(lambda: app.eval(tab, 'document.querySelector("#result").textContent') == 'NotAllowedError', timeout=5, step=.05)
@@ -736,7 +772,10 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
 
             def credential_manager():
                 app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
-                tab = load(urls['login']); before = len(children())
+                # Credential Management requires a secure context. Localhost
+                # is the fixture's secure origin; save through its real form.
+                prompt('password', urls['local_login'], 'save')
+                tab = load(urls['local_login']); before = len(children())
                 value = app.eval(tab, '''Promise.race([navigator.credentials.get({password:true}).then(x=>x===null?'null':'unexpected'),new Promise(r=>setTimeout(()=>r('timeout'),2000))])''')
                 assert value == 'null' and len(children()) == before
                 return {'result': 'null', 'dialogVisible': False}
