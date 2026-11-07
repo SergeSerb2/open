@@ -4,6 +4,23 @@ import OpenModel
 import OpenStore
 import Darwin
 
+/// An App-side store that keeps data in a Profile's folder (Boosts, passwords,
+/// ad-block lists, ...). Register once with `ProfileTeardown.register(_:)`.
+///
+/// Contract for `retireProfile`:
+/// - Called once per deleted Profile, after the Profile left the model and
+///   before any of its folders are removed (in-session delete), on the main actor.
+/// - Stop all work for that Profile and DISCARD its unsaved state: after this
+///   returns, the owner never creates, writes or saves anything for that Profile
+///   or directory again in this process (including the save on quit).
+/// - Close open file handles/databases in that folder before returning.
+/// - Must be idempotent and must not throw; also called for a Profile that the
+///   owner never loaded. Do not delete the folder yourself: ProfileTeardown does.
+@MainActor
+protocol ProfileDataOwner: AnyObject {
+  func retireProfile(_ profileID: ProfileID, directory: String) async
+}
+
 /// Deletion waits for native Profile destruction before removing its folders.
 /// The pending list covers interrupted or failed cleanup only.
 @MainActor
@@ -11,7 +28,19 @@ final class ProfileTeardown {
   unowned let app: AppDelegate
   private var loaded: [ProfileID: String] = [:]
   private var unloaded: Set<ProfileID> = []
+  private var owners: [WeakOwner] = []
+  private struct WeakOwner { weak var owner: (any ProfileDataOwner)? }
   init(app: AppDelegate) { self.app = app }
+
+  /// The single registration point for per-Profile App stores (weakly held).
+  func register(_ owner: any ProfileDataOwner) {
+    owners.removeAll { $0.owner == nil || $0.owner === owner }
+    owners.append(WeakOwner(owner: owner))
+  }
+  private func retireOwners(profileID: ProfileID, directory: String) async {
+    for entry in owners { await entry.owner?.retireProfile(profileID, directory: directory) }
+    owners.removeAll { $0.owner == nil }
+  }
 
   func didLoad(_ profile: Profile) { didLoad(profileID: profile.id, directory: profile.dataDirectoryName) }
   func didLoad(profileID: ProfileID, directory: String) { loaded[profileID] = directory }
@@ -39,6 +68,8 @@ final class ProfileTeardown {
     // Journal before teardown so any engine or filesystem failure remains
     // recoverable. Errors preserve all folders until a later safe launch.
     try Self.enqueue(directory, directories: app.directories)
+    // Registered App stores stop and drop dirty state before any folder goes.
+    await retireOwners(profileID: profileID, directory: directory)
     await app.stores.flushHistory()
     app.archiveSink.flushAll()
     // An unopened Profile may still have native data/attributes from a prior
