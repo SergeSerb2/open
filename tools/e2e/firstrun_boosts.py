@@ -3,6 +3,7 @@ import os
 import json
 import http.server
 import threading
+import time
 from contextlib import contextmanager
 import runpy
 import shutil
@@ -188,14 +189,20 @@ def run(factory, results, tmp, h):
             def style():
                 return app.eval(tab, "({outline:getComputedStyle(document.body).outlineColor,"
                     "outlineWidth:getComputedStyle(document.body).outlineWidth,"
-                    "border:getComputedStyle(document.body).borderTopWidth})")
+                    "border:getComputedStyle(document.body).borderTopWidth,documentID:window.exampleDocumentID,"
+                    "boostStyle:document.getElementById('open-boosts-style')?.textContent??null})")
             def boosted(value):
                 return value['outline'] == 'rgb(1, 2, 3)' and value['outlineWidth'] == '3px'
             def cleared(value):
-                return value['outlineWidth'] == '0px' and value['border'] == '0px'
+                return value['outline'] == 'rgb(4, 5, 6)' and value['outlineWidth'] == '0px' \
+                    and value['border'] == '0px' and value['boostStyle'] is None
             def reload():
-                app.call('devtools', tab=tab, method='Page.reload'); app.call('wait', tab=tab)
+                before = style()['documentID']
+                app.call('select', tab=tab)
+                app.call('command', id='reload'); app.call('wait', tab=tab)
+                assert h.wait_until(lambda: style()['documentID'] != before, timeout=10, step=.05), style()
             baseline = style()
+            assert cleared(baseline), baseline
             first = settings_import()
             assert h.wait_until(lambda: boosted(style()), timeout=10, step=.05)
             initial = items()
@@ -226,9 +233,9 @@ def run(factory, results, tmp, h):
             native_undo()
             gate('boost_app_undo', len(items()) == 0, undo_broken, stored=len(items()))
             reload()
-            assert h.wait_until(lambda: cleared(style()), timeout=10, step=.05)
+            h.wait_until(lambda: cleared(style()), timeout=10, step=.05)
             after_undo = style()
-            gate('boost_app_page_cleared', cleared(after_undo), cleared_broken, computed=after_undo)
+            gate('boost_app_page_cleared', cleared(after_undo), cleared_broken, computed=after_undo, boostCount=len(items()))
             redo_broken = len(items()) == 2 and boosted(style())
             native_undo(redo=True)
             reload()
@@ -261,9 +268,13 @@ def fixture_server():
     """An example.com page served only from an ephemeral loopback socket."""
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            body = b'<!doctype html><title>Example import Boost</title><body><h1>Example</h1><div id="example-promo">Example promo</div></body>'
+            body = ('<!doctype html><title>Example import Boost</title>'
+                '<style>:where(body){outline:0 none rgb(4,5,6);border-top:0}</style><body><h1>Example</h1>'
+                '<div id="example-promo">Example promo</div><script>window.exampleDocumentID="%d"</script></body>'
+                % time.time_ns()).encode()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
             self.send_header('Content-Length', str(len(body)))
             self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
