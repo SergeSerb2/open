@@ -132,7 +132,9 @@ def run(app, script, results, wait_until, quote, key, off_message, prefix=''):
         # Navigate immediately, including before the deferred Browser exists.
         script('set URL of '+target(blank_id)+' to '+quote(origin+'/blank-nav'))
         immediate = script('return execute '+target(blank_id)+' javascript "document.title"')
-        record('blank_navigate_execute', immediate == 'Little script /blank-nav' and bool(ready(blank_id, '/blank-nav')), value=immediate)
+        navigated_blank = ready(blank_id, '/blank-nav')
+        record('blank_navigate_execute', immediate == 'Little script /blank-nav'
+            and bool(navigated_blank and navigated_blank['state'] == 'page'), value=immediate, state=navigated_blank)
         # Hold the exact make result through closure in the same AppleScript evaluation.
         retained = script.error('set t to '+target(blank_id)+'\nclose t\nget id of t', 1000)
         record('retained_closed', retained['ok'], **error_without_ok(retained))
