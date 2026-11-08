@@ -145,6 +145,34 @@ lists are empty (`extensions.loaded` is false); mutations that need a Browser
 return a not-loaded error. Notification reads likewise use an existing context.
 A pending Little Open window never borrows a standard window's Browser.
 
+`settings-adblock-engine` reads the applied ad-block configuration without
+opening Settings, a store, or a native context. `profiles` contains the store's
+`storeReady` (`AdBlockStore.isProfileOpen`), enabled state and excluded domains,
+plus each existing regular and OTR context's
+`adBlockEnabled`, `listDirectorySet`, `listDirectoryMatchesProfile`,
+`excludedDomains`, and `adBlockStatus`. Directory checks are booleans; this query
+never returns paths or page URLs. Excluded domains are available only through
+automation; copyable debug info contains their count instead.
+
+`settings-adblock` uses the real Settings actions. It accepts `enabled`, or
+`host` with `excluded`, and `copyDebug: true` exercises Copy Debug Info while
+restoring the clipboard before returning `copiedDebugInfo`. The OpenEngine
+ad-block API is currently a placeholder: `adBlockStatus.engine` is `pending`
+and no requests are blocked until the Section 13 E2 engine binding lands.
+`OEBrowserContext.adBlockSupported` is false, so the store's engine callback stays
+nil and launch opens no Profile in the store or starts its update schedule.
+Command-service Settings initialization also leaves the store unattached when
+the engine is unsupported; showing Settings attaches it on demand.
+Opening Settings → Advanced still opens the selected Profile (`ready: true`).
+The placeholder row checks this after first paint and a 5 s observation.
+Settings reports that blocking is not active. The query also returns
+`nativeSupported`, `adapterSupported`, and `bindingInstalled`. Automation builds
+in Debug alone accept `OPEN_ADBLOCK_AUTOMATION_FORCE_SUPPORTED=1` to exercise the adapter
+against the placeholder. This does not change the engine's support property and
+has no effect in any Release build.
+Run these flows with `OPEN_E2E_EXTENSIONS_UI_SCOPE=adblock
+tools/e2e/engine_e2e.py --only extensions-ui` under the on-screen lock.
+
 The real-App `extensions-ui` suite includes `P10_*` rows for empty-Space focus,
 Settings/read laziness, two-window Profile actions, key-window menus and
 shortcuts, Work popups/management, context reuse, Little Open, unloaded
