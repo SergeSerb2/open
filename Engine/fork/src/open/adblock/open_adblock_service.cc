@@ -137,7 +137,7 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
   auto manifest = base::JSONReader::ReadDict(*manifest_text, base::JSON_PARSE_RFC);
   const base::ListValue* files =
       manifest ? manifest->FindList("files") : nullptr;
-  if (!files || manifest->FindInt("generation") != *number || files->empty()) {
+  if (!files || manifest->FindInt("generation") != *number) {
     *error = "read manifest.json: invalid";
     return std::nullopt;
   }
@@ -179,7 +179,10 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
     }
     generation.file_hashes[*name] = *sha;
   }
-  if (entries.empty()) {
+  // Settings can publish an empty generation when every list is disabled.
+  // Load an empty engine so the previous rules stop applying. A resources-only
+  // manifest is still invalid; resources do not count as an enabled list.
+  if (entries.empty() && !files->empty()) {
     *error = "read manifest.json: no lists";
     return std::nullopt;
   }
