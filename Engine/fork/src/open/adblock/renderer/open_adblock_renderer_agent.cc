@@ -293,20 +293,26 @@ void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
   const uint32_t id_count =
       std::min(id_array->Length(), kMaxTokens - class_count);
   // Array getters can execute script and detach the frame. Do not read
-  // another member after either conversion unless the observer survived.
+  // another member after either conversion unless this document survived.
   const auto alive = weak_ptr_factory_.GetWeakPtr();
+  const auto epoch = document_epoch_;
   auto classes = ReadTokens(context, class_array, class_count);
-  if (!alive) {
+  if (!alive || epoch != document_epoch_) {
     args->Return(-1);
     return;
   }
   auto ids = ReadTokens(context, id_array, id_count);
-  if (!alive) {
+  if (!alive || epoch != document_epoch_) {
     args->Return(-1);
     return;
   }
   if (classes.empty() && ids.empty()) {
     args->Return(1);
+    return;
+  }
+  // A getter can also report recursively and reserve the remaining slots.
+  if (generic_sheets_ + generic_pending_ >= kMaxGenericSheets) {
+    args->Return(generic_sheets_ >= kMaxGenericSheets ? -1 : 0);
     return;
   }
   ++generic_pending_;
