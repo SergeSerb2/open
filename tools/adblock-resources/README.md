@@ -30,3 +30,13 @@ For a pin refresh, update the fixed uBO archive URL/hash and per-input hashes,
 run this driver in `/tmp`, inspect its kind counts, then update the output
 hash in both the engine pins file and its SwiftPM mirror. Never hand-convert
 resources, accept a mismatching output, or change the runtime download path.
+
+## Machines without Cargo
+
+`tools/fetch-adblock-resources.py` first looks for a pinned output in the
+machine-wide cache `~/Library/Caches/OpenRE/adblock-resources/<output sha256>/resources.json`
+(and in `Vendor/adblock/`). Every successful run writes that cache, so fresh
+worktrees on the same machine never need Cargo. A machine without Cargo (the
+M1) needs the cache seeded once: copy the file from a machine that built it;
+the output pin verifies it, and a mismatching file is ignored and rebuilt or
+refused. Seeded on the M1 on 2026-11-08 (Section 13 lead).

@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parent.parent
 CAP = 4 * 1024 * 1024
 
 
+MACHINE_CACHE = Path.home() / "Library/Caches/OpenRE/adblock-resources"
+
+
 def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -41,10 +44,15 @@ def main():
     if not match:
         raise ValueError("resources require an immutable official uBlock source")
     output_hash = pins["resources.json"][1]
-    cached = (args.cache or args.dest) / "resources.json"
     # Reject symlink cache entries and rehash the copied output below. The Swift
     # runtime also uses O_NOFOLLOW and bounded reads before publication/on open.
-    valid = cached.is_file() and not cached.is_symlink() and 0 < cached.stat().st_size <= CAP and sha(cached) == output_hash
+    # A machine-wide cache, keyed by the output pin, lets fresh worktrees and
+    # machines without Cargo (the M1) build: seed it once per machine.
+    machine = MACHINE_CACHE / output_hash / "resources.json"
+    def usable(path):
+        return path.is_file() and not path.is_symlink() and 0 < path.stat().st_size <= CAP and sha(path) == output_hash
+    cached = next((path for path in ((args.cache or args.dest) / "resources.json", machine) if usable(path)), None)
+    valid = cached is not None
     args.dest.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="open-adblock-resources-", dir="/tmp") as work:
         work = Path(work)
@@ -93,7 +101,7 @@ def main():
             if cargo is None and (Path.home() / ".cargo/bin/cargo").is_file():
                 cargo = str(Path.home() / ".cargo/bin/cargo")
             if cargo is None:
-                raise ValueError("Cargo is required to rebuild resources; supply a verified Vendor/adblock/resources.json cache")
+                raise ValueError("Cargo is required to rebuild resources; seed the machine cache " + str(machine) + " with the pinned resources.json (copy it from a machine that built it; the pin verifies it)")
             driver = work / "driver"
             shutil.copytree(ROOT / "tools/adblock-resources", driver)
             # Fetch checksum-locked crates first. The assembler itself runs offline.
@@ -129,6 +137,15 @@ def main():
             with os.fdopen(fd, "wb") as dest:
                 dest.write(output.read_bytes())
             os.replace(name, args.dest / "resources.json")
+        finally:
+            Path(name).unlink(missing_ok=True)
+    if not usable(machine):
+        machine.parent.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(prefix=".resources-", dir=machine.parent)
+        try:
+            with os.fdopen(fd, "wb") as dest:
+                dest.write((args.dest / "resources.json").read_bytes())
+            os.replace(name, machine)
         finally:
             Path(name).unlink(missing_ok=True)
     print(f"resources.json: bytes={(args.dest / 'resources.json').stat().st_size} sha256={output_hash}")
