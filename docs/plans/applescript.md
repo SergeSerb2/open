@@ -384,6 +384,8 @@ Generate this table from the file above. Every row must match §10. If a row dif
 | Kind | Name | Code (in quotes; `_` shows a space) | Access / notes |
 |---|---|---|---|
 | suite | Standard Suite | `core` | — |
+| command | set | `coresetd` | Standard Cocoa setter; explicit `ScriptSetCommand` binding since 2026-11-07 |
+| parameter | to | `data` | set value; Cocoa key `Value` |
 | command | make | `corecrel` | `NSCreateCommand` |
 | command | count | `corecnte` | `NSCountCommand` |
 | command | close | `coreclos` | via `close:` on window/tab |
@@ -1724,6 +1726,8 @@ returns a `ScriptTab` with that session tab ID; no URL opens the blank bar with
 and execute are supported. Select, location and Space/window containment return
 the existing not-supported number 1009 with a clear Little Open message. Closed
 references return 1000. Application tabs stays write-only for enumeration/count.
+The existing standard `set` event is bound explicitly in the sdef to preserve
+Cocoa's specifier-receiver metadata; it is not reconstructed at runtime.
 The App adapter alone imports both OpenScripting and OpenEngine; JavaScript keeps
 #174's gate, CSP-safe path and shared ten-second deadline. See [the scripting
 guide](../scripting.md#little-open-tab-references-2026-11-07) for acceptance.

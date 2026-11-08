@@ -17,22 +17,6 @@ enum ScriptTransientTarget {
         }
         return nil
     }
-
-    static func install() {
-        // Open.sdef binds the explicit commands, preserving Cocoa's receiver
-        // metadata. Only implicit core/setd needs registration, using the
-        // system NSCoreSuite's exact Value declaration.
-        let registry = NSScriptSuiteRegistry.shared()
-        guard let original = registry.commandDescription(withAppleEventClass: 0x636f7265, andAppleEventCode: 0x73657464),
-              let replacement = NSScriptCommandDescription(suiteName: original.suiteName,
-                commandName: original.commandName, dictionary: ["AppleEventClassCode": "core", "AppleEventCode": "setd",
-                    "CommandClass": "ScriptSetCommand",
-                    "UnnamedArgument": ["Type": "NSScriptObjectSpecifier"],
-                    "Arguments": ["Value": ["AppleEventCode": "data", "Type": "NSObject"]]]) else { return }
-        registry.register(replacement)
-        NSLog("Open scripting set registration class=%@ arguments=%@", replacement.commandClassName,
-            replacement.argumentNames as NSArray)
-    }
 }
 
 @MainActor
@@ -58,21 +42,6 @@ public final class ScriptTransientTabCommand: NSScriptCommand {
 @MainActor
 @objc(ScriptSetCommand)
 public final class ScriptSetCommand: NSSetCommand {
-    public override var isWellFormed: Bool {
-        guard ScriptThread.isMainThread else { return false }
-        nonisolated(unsafe) let command = self
-        MainActor.assumeIsolated { command.restoreDirectParameter() }
-        let valid = super.isWellFormed
-        #if DEBUG
-        NSLog("Open scripting set metadata valid=%d direct=%d receiver=%d eventDirect=%d eventValue=%d arguments=%@", valid,
-            directParameter != nil, receiversSpecifier != nil,
-            appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) != nil,
-            appleEvent?.paramDescriptor(forKeyword: 0x64617461) != nil,
-            (arguments?.keys.sorted() ?? []) as NSArray)
-        #endif
-        return valid
-    }
-
     public override var evaluatedReceivers: Any? {
         guard ScriptThread.isMainThread else { return nil }
         nonisolated(unsafe) let command = self
@@ -87,28 +56,12 @@ public final class ScriptSetCommand: NSSetCommand {
         return transient ? result : super.evaluatedReceivers
     }
 
-    public override func execute() -> Any? {
-        guard ScriptThread.isMainThread else { return nil }
-        nonisolated(unsafe) let command = self
-        MainActor.assumeIsolated { command.restoreDirectParameter() }
-        return super.execute()
-    }
-
     public override func performDefaultImplementation() -> Any? {
         guard ScriptThread.isMainThread else { return nil }
         nonisolated(unsafe) let command = self
         nonisolated(unsafe) var result: Any?
         MainActor.assumeIsolated { result = command.setProperty() }
         return result
-    }
-
-    private func restoreDirectParameter() {
-        // NSSetCommand validates its required receiver before it calls the
-        // default implementation. Restore Cocoa's omitted implicit parameter
-        // before that validation, including for ordinary model/window writes.
-        if directParameter == nil, let descriptor = appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) {
-            directParameter = NSScriptObjectSpecifier(descriptor: descriptor)
-        }
     }
 
     private func setProperty() -> Any? {

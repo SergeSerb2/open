@@ -169,7 +169,7 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
         with open(os.path.join(tmp, 'Open.sdef'), 'w') as f: f.write(extracted)
         root = ET.fromstring(extracted)
         command_codes = [e.get('code') for e in root.iter('command')]
-        expected = ['corecrel','corecnte','coreclos','CrSelect','CrSuBack','CrSuFwd ','CrSuRlod','CrSustop','CrSuExJa','SpaFocus']
+        expected = ['coresetd','corecrel','corecnte','coreclos','CrSelect','CrSuBack','CrSuFwd ','CrSuRlod','CrSustop','CrSuExJa','SpaFocus']
         with open(os.path.join(app.bundle, 'Contents/Info.plist'),'rb') as f: info=plistlib.load(f)
         classes=[(e.get('name'),e.get('code')) for e in root.iter('class')]
         results['H3_H4_dictionary'] = {'ok': os.path.isfile(bundle_sdef) and command_codes == expected
@@ -217,7 +217,9 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
             script('set URL of %s to %s' % (target,quote(origin+'/nav-b')))
             wait_until(lambda: app.call('tab-state',tab=nid).get('url') == origin+'/nav-b' or None, timeout=10,step=.1)
             app.call('wait',tab=nid)
-            check('A11_URL_set', 'return URL of '+target, origin+'/nav-b')
+            # Regression: a rebuilt core/setd description rejected this event;
+            # an explicit specifier argument also crashed Cocoa before dispatch.
+            check('A11_set_description_round_trip', 'return URL of '+target, origin+'/nav-b')
             script('go back '+target)
             at_a = wait_until(lambda: script('return URL of '+target) == origin+'/nav-a' or None,timeout=10,step=.1)
             script('go forward '+target)

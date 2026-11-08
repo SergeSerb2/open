@@ -13,7 +13,8 @@ third-party dependencies were added.
 
 ## API summary
 
-The dictionary has one `Standard Suite` (`core`), four classes, and ten commands.
+The dictionary has one `Standard Suite` (`core`), four classes, ten browser commands,
+and an explicit binding for Cocoa's standard `set` command.
 Application responds to `quit` without a separate command declaration.
 
 | Object | Read API | Write API / verbs |
@@ -42,9 +43,9 @@ pane cannot become a favorite (1003). The model also refuses direct pin/unpin mo
 of individual split panes; the wrapper retains that model restriction rather than
 separating panes implicitly. `make new space` is unsupported (1009).
 
-Tab creation defaults to `about:blank`, appends to Today, and selects the real new
+Sidebar-tab creation defaults to `about:blank`, appends to Today, and selects the real new
 tab. The insertion path never inserts the blank Cocoa wrapper into the model.
-Initial title is ignored by the creation helper. `close` archives through
+Initial title is ignored by the creation helper. Sidebar-tab `close` archives through
 `BrowserModel.closeTab`; window close calls `NSWindow.close` and leaves model-window
 removal to the App observer. Back/forward without history and stop while idle are no-ops.
 
@@ -300,7 +301,7 @@ These checks remain BLOCKED by macOS Automation consent (-1744) in [#174](https:
 
 1. In Script Editor, choose File ▸ Open Dictionary and select the built
    `build/Debug/Open.app`. Confirm Standard Suite, window/tab/space, and all ten
-   commands, including execute/javascript and go forward.
+   browser commands and standard set, including execute/javascript and go forward.
 2. Launch a separate instance with a fresh data directory. In Script Editor use
    `tell application "/absolute/path/to/build/Debug/Open.app"` and run A1–A14,
    A16–A18 and R1–R3 from plan §11. Allow the macOS Automation prompt if desired.
@@ -339,7 +340,15 @@ Cocoa checks write-only access before resolving both reads and command receivers
 receivers keep Cocoa's path. `ScriptSetCommand` handles transient URL writes and
 delegates normal writes to NSSetCommand. The dictionary binds the seven tab verbs
 to that receiver class; terms, argument types and event codes stay unchanged.
-Only the implicit set command needs runtime registration.
+Cocoa's existing `core/setd` command is declared explicitly in the sdef so its
+receiver metadata survives decoding. Rebuilding that description at runtime can
+reject ordinary setters before dispatch, or crash while coercing the direct
+argument. No custom runtime registration is used for `set`.
+
+Automation builds also accept `OPEN_AUTOMATION_SCRIPTING_PREFLIGHT=/absolute/receipt.json`.
+With an isolated `--user-data-dir`, this runs real self-sent Apple events against
+the App's model before creating a native window or starting Chromium. It checks a
+location round trip, invalid URL/index errors, and a stale transient URL write.
 
 `tools/e2e/applescript_littleopen.py` runs these flows through the actual bundled
 dictionary and Cocoa Apple events within `applescript`, on warm and cold launches.
@@ -507,6 +516,8 @@ relationships or `responds-to`, whose target supplies the code.
 | Kind | Container | Name | Code (`_` = space) | Access |
 |---|---|---|---|---|
 | suite | dictionary | Standard Suite | `core` | — |
+| command | Standard Suite | set | `coresetd` | — |
+| parameter | set | to | `data` | — |
 | command | Standard Suite | make | `corecrel` | — |
 | parameter | make | new | `kocl` | — |
 | parameter | make | with properties | `prdt` | — |
