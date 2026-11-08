@@ -26,7 +26,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
     if !app.isFirstRun || app.firstRunSaved {
-      if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
+      if let store = app.stores.adBlock { vm.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
       else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
     }
     app.defaultBrowserService.onChange = { [weak vm, weak app] state in
@@ -38,8 +38,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return vm
   }
   func modelWasInstalled() { settingsStorage = nil }
+  // Registry callbacks never instantiate Settings or open another Profile.
+  func refreshAdBlockWarning() { settingsStorage?.adBlock?.refreshOtherBlocker() }
+  func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool {
+    guard app.engineReady, let profile = app.model.profile(id: profileID),
+      let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return false }
+    return context.extensions.installedExtensions.contains {
+      $0.isEnabled && AdBlockKnownBlockers.extensionIDs.contains($0.identifier)
+    }
+  }
   func attachBrowserStores() {
-    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store) }
+    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
@@ -66,6 +75,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)
+    if let library, (section ?? library.section) == .history,
+      libraryPresenter?.window?.isVisible != true {
+      library.historyProfileID = app.frontStandardWindowController?.context.focusedSpace?.profileID
+        ?? app.model.defaultProfile?.id ?? library.historyProfileID
+    }
     libraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
   }
   /// Use the Library button's view model and confirmation dialog unchanged.
@@ -75,6 +89,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
   @ObservationIgnored private var spaceManager: SpaceManagerView?
+  @ObservationIgnored private var pendingManagerProfileAlert: NSAlert?
   /// No persistent preference writes: this context never arms hover previews.
   @ObservationIgnored private let managerPreferences: UserDefaults = SpaceManagerPreferences()
   func makeSpaceManagerView() -> NSView? {
@@ -97,6 +112,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       }
       let factory = self.app.hostFactories[context.windowID]
       switch intent {
+      case .setSpaceProfile(let space, let profile):
+        if let factory { return factory.performSidebar(intent) ?? false }
+        return self.confirmManagerProfileChange(spaceID: space, profileID: profile)
       case .openURL(let url, let parent, let index):
         // The Manager shows every Space: create the tab in the column it was
         // dropped on, not in the browser's focused Space, then select it there.
@@ -140,6 +158,35 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     spaceManager = manager
     return manager
+  }
+  private func confirmManagerProfileChange(spaceID: SpaceID, profileID: ProfileID) -> Bool {
+    guard let model = app.model,
+      let request = ChangeProfileRequest(spaceID: spaceID, toProfile: profileID, in: model),
+      pendingManagerProfileAlert == nil, let window = libraryPresenter?.window,
+      window.attachedSheet == nil else { return false }
+    let apply: @MainActor () -> Void = { [weak self] in
+      guard let self, !self.app.terminationRequested, self.app.model === model,
+        model.space(id: spaceID)?.profileID == request.fromProfileID,
+        model.profile(id: profileID) != nil else { return }
+      self.app.undoManager.beginUndoGrouping()
+      model.moveSpace(id: spaceID, toProfile: profileID)
+      self.app.undoManager.setActionName("Change Profile")
+      self.app.undoManager.endUndoGrouping()
+      self.app.scheduleSave(); self.app.scheduleMenuRebuild()
+    }
+    let preferences = UserDefaults.standard
+    if preferences.object(forKey: request.dontShowAgainKey) != nil && !preferences.bool(forKey: request.dontShowAgainKey) {
+      apply(); return true
+    }
+    let alert = makeSpaceProfileChangeAlert(request)
+    pendingManagerProfileAlert = alert
+    alert.beginSheetModal(for: window) { [weak self] response in
+      guard let self else { return }; self.pendingManagerProfileAlert = nil
+      guard response == .alertFirstButtonReturn else { return }
+      if alert.suppressionButton?.state == .on { preferences.set(false, forKey: request.dontShowAgainKey) }
+      apply()
+    }
+    return true
   }
   private func confirmManagerDelete(_ intent: SidebarIntent, context: SidebarContext, factory: EngineWebContentHostFactory?) -> Bool {
     guard let model = app.model, let window = libraryPresenter?.window else { return false }
@@ -229,7 +276,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     return nil
   }
-  func checkForUpdates() { status("An update feed is not available yet.", pane: .general); show(pane: .general) }
+  func checkForUpdates() {
+    if let updater = app.updater { updater.checkForUpdates() }
+    else { app.checkForUpdatesAfterPaint = true }
+  }
+  func showUpdatesUnavailable() { status(UpdaterController.unavailableStatus, pane: .general); show(pane: .general) }
   func openMoreSettings() { openURL(URL(string: "chrome://settings")!, profileID: settings.selectedProfileID) }
   // One source with Help ▸ Troubleshooting (page-platform §4.11.3–4).
   func revealOpenDataFolder() { TroubleshootingActions.shared.revealOpenData() }
@@ -276,12 +327,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     if let context {
       let nativeKinds = OEBrowsingDataKinds(rawValue: UInt32(kinds.rawValue))
-      return await withCheckedContinuation { continuation in
+      let error: String? = await withCheckedContinuation { continuation in
         context.clearBrowsingData(nativeKinds, from: begin, to: end) { error in
           continuation.resume(returning: error?.localizedDescription)
         }
       }
+      if let error { return error }
     }
+    if kinds.contains(.downloads) { app.downloadsCenter.clearHistory(profileID: profileID, since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {
@@ -306,10 +359,20 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
     await app.importRunner.installExtension(candidate, window: settingsPresenter.window)
   }
-  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
+  // The store has already persisted and emitted the engine event.
+  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) {
+    if !app.adBlockEngineAdapter.isSupported {
+      status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced)
+    }
+  }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
-  func adBlockDebugInfo(profileID: ProfileID) -> String { "App engine filter adapter: pending Step D" }
+  func adBlockDebugInfo(profileID: ProfileID) -> String {
+    guard let profile = app.model.profile(id: profileID),
+      let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return "" }
+    let status = context.adBlockStatus
+    return status.keys.sorted().map { "\($0): \(status[$0]!)" }.joined(separator: "\n")
+  }
   func setTabSleepMode(_ mode: TabSleepMode) {
     app.tabSleep.reconcileSettingsPolicy()
   }

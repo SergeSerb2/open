@@ -1,5 +1,6 @@
 import AppKit
 import OpenEngine
+import OpenFeatures
 import OpenModel
 import OpenScripting
 
@@ -13,8 +14,19 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
   init(app: AppDelegate) { self.app = app }
 
   private func content(tabID: ItemID) async -> OEWebContent? {
-    guard let app, app.engineReady, !app.shutdownPrepared, !app.terminationRequested,
-          let tab = app.model?.tab(id: tabID) else { return nil }
+    guard let app, app.engineReady, !app.shutdownPrepared, !app.terminationRequested else { return nil }
+    if let controller = littleController(tabID) {
+      // Browser creation follows the native first frame. Wait only for this active
+      // execute request; its existing ten-second reply deadline cancels this task.
+      while !Task.isCancelled && !app.shutdownPrepared && !app.terminationRequested {
+        guard littleController(tabID) === controller else { return nil }
+        if let surface = littleHost(tabID)?.view as? LittleOpenSurfaceView,
+           let page = surface.owner?.surfacePage { return page }
+        do { try await Task.sleep(for: .milliseconds(20)) } catch { return nil }
+      }
+      return nil
+    }
+    guard let tab = app.model?.tab(id: tabID) else { return nil }
     if let host = app.hostFactories.values.compactMap({ $0.hosts[tabID] }).first(where: { !$0.closed }) {
       if host.content.isPageFrozen { _ = host.content.setPageFrozen(false) }
       if host.content.isDiscarded { host.content.reload() }
@@ -33,21 +45,48 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
     return page
   }
 
+  private func littleController(_ id: ItemID) -> LittleOpenWindowController? {
+    guard let app, !app.shutdownPrepared, !app.terminationRequested,
+          let session = app.littleOpenCoordinator?.sessions.first(where: { $0.tab.id == id }) else { return nil }
+    return app.littleOpenCoordinator.controllers[session.id]
+  }
+  private func littleHost(_ id: ItemID) -> (any WebContentHost)? {
+    littleController(id)?.container.host(for: id)
+  }
+
   private func perform(tabID: ItemID, _ operation: @escaping @MainActor (OEWebContent) -> Void) {
     Task { @MainActor [weak self] in
       guard let page = await self?.content(tabID: tabID) else { return }
       operation(page)
     }
   }
-  func navigate(tabID: ItemID, to url: URL) { perform(tabID: tabID) { $0.load(url) } }
-  func goBack(tabID: ItemID) { perform(tabID: tabID) { $0.goBack() } }
-  func goForward(tabID: ItemID) { perform(tabID: tabID) { $0.goForward() } }
-  func reload(tabID: ItemID) { perform(tabID: tabID) { $0.reload() } }
-  func stopLoading(tabID: ItemID) { perform(tabID: tabID) { $0.stopLoading() } }
+  func navigate(tabID: ItemID, to url: URL) {
+    if let host = littleHost(tabID) { host.load(url); return }
+    perform(tabID: tabID) { $0.load(url) }
+  }
+  func goBack(tabID: ItemID) {
+    if let host = littleHost(tabID) { host.goBack(); return }
+    perform(tabID: tabID) { $0.goBack() }
+  }
+  func goForward(tabID: ItemID) {
+    if let host = littleHost(tabID) { host.goForward(); return }
+    perform(tabID: tabID) { $0.goForward() }
+  }
+  func reload(tabID: ItemID) {
+    if let host = littleHost(tabID) { host.reload(); return }
+    perform(tabID: tabID) { $0.reload() }
+  }
+  func stopLoading(tabID: ItemID) {
+    if let host = littleHost(tabID) { host.stop(); return }
+    perform(tabID: tabID) { $0.stopLoading() }
+  }
 
   private func owns(_ page: OEWebContent, tabID: ItemID) -> Bool {
-    guard let app, app.engineReady, !app.shutdownPrepared, !app.terminationRequested,
-          app.model?.tab(id: tabID) != nil else { return false }
+    guard let app, app.engineReady, !app.shutdownPrepared, !app.terminationRequested else { return false }
+    if let surface = littleHost(tabID)?.view as? LittleOpenSurfaceView {
+      return surface.owner?.surfacePage === page
+    }
+    guard app.model?.tab(id: tabID) != nil else { return false }
     return app.hostFactories.values.contains { factory in
       guard let host = factory.hosts[tabID] else { return false }
       return !host.closed && host.content === page
@@ -84,6 +123,35 @@ final class AppScriptEngineBridge: ScriptEngineBridge {
     // Cocoa ignores the immediate handler result while suspended. The sender still waits
     // synchronously for the final text or plan error supplied by ScriptJavaScriptReply.
     return ""
+  }
+}
+
+/// Scripting sees the coordinator's transient session tab, never a sidebar Tab.
+/// Page operations stay in AppScriptEngineBridge, the sole engine boundary.
+@MainActor
+private final class AppScriptLittleTabs: LittleTabProviding {
+  private weak var app: AppDelegate?
+  init(app: AppDelegate) { self.app = app }
+  private func controller(_ id: ItemID) -> LittleOpenWindowController? {
+    guard let app, !app.shutdownPrepared, !app.terminationRequested,
+          let session = app.littleOpenCoordinator?.sessions.first(where: { $0.tab.id == id }) else { return nil }
+    return app.littleOpenCoordinator.controllers[session.id]
+  }
+  func make(url: URL?) -> ItemID? {
+    guard let app, app.engineReady, !app.shutdownPrepared, !app.terminationRequested else { return nil }
+    let id = app.littleOpenCoordinator?.create(url: url ?? URL(string: "about:blank")!, focus: url == nil)
+    if id != nil { NSApp.activate() }
+    return id
+  }
+  func exists(_ id: ItemID) -> Bool { controller(id) != nil }
+  func url(_ id: ItemID) -> URL? { controller(id).map { $0.currentURL ?? $0.session.tab.url } }
+  func title(_ id: ItemID) -> String { controller(id)?.session.tab.displayTitle ?? "" }
+  func loading(_ id: ItemID) -> Bool { controller(id)?.container.host(for: id)?.isLoading ?? false }
+  func canGoBack(_ id: ItemID) -> Bool { controller(id)?.container.host(for: id)?.canGoBack ?? false }
+  func canGoForward(_ id: ItemID) -> Bool { controller(id)?.container.host(for: id)?.canGoForward ?? false }
+  func close(_ id: ItemID) {
+    guard let controller = controller(id) else { return }
+    app?.littleOpenCoordinator.close(sessionID: controller.session.id, archiveReason: nil)
   }
 }
 
@@ -256,9 +324,7 @@ extension AppDelegate {
       guard !incognito else { return nil }
       return self?.makeWindow()?.windowID
     }
-    // Standalone Little Open sessions are not model tabs. S11 still needs a
-    // standalone ScriptTab lookup before its app-level creation hook can return one.
-    host.makeLittleTab = nil
+    host.littleTab = AppScriptLittleTabs(app: self)
     refreshScriptingEngine()
     host.purgeRemovedWrappers()
   }

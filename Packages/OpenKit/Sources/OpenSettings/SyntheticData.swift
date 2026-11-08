@@ -37,8 +37,8 @@ extension SyntheticData {
         try KeyBindingStore(bindings: ["new-tab": .init(shortcuts: [.ctrl("t")]), "zoom-in": .init(shortcuts: [])]).save(to: root.appendingPathComponent("State/keybindings.json"))
         let lists = ["EasyList", "EasyPrivacy"]
         for profile in model.profiles {
-            let directory = root.appendingPathComponent("Profiles/\(profile.id.description)/adblock")
-            let generation = directory.appendingPathComponent("generations/1")
+            let directory = ProfileDirectories(root: root).adBlockDirectory(dataDirectoryName: profile.dataDirectoryName)
+            let generation = directory.appendingPathComponent("lists/generations/1")
             try FileManager.default.createDirectory(at: generation, withIntermediateDirectories: true)
             var receipts: [String: Any] = [:], files: [[String: Any]] = []
             for id in lists {
@@ -52,7 +52,7 @@ extension SyntheticData {
             let manifest = try JSONSerialization.data(withJSONObject: ["generation": 1, "files": files, "state": state], options: .sortedKeys)
             try manifest.write(to: generation.appendingPathComponent("manifest.json"))
             let hash = SHA256.hash(data: manifest).map { String(format: "%02x", $0) }.joined()
-            try JSONSerialization.data(withJSONObject: ["live": ["generation": 1, "manifestSHA256": hash]], options: .sortedKeys).write(to: directory.appendingPathComponent("current.json"))
+            try JSONSerialization.data(withJSONObject: ["live": ["generation": 1, "manifestSHA256": hash]], options: .sortedKeys).write(to: directory.appendingPathComponent("lists/current.json"))
             try JSONSerialization.data(withJSONObject: state, options: .sortedKeys).write(to: directory.appendingPathComponent("catalog-state.json"))
             try JSONEncoder().encode(profile.id == model.profiles.first?.id ? ["example.com"] : []).write(to: directory.appendingPathComponent("exclusions.json"))
         }

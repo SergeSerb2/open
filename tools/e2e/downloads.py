@@ -89,11 +89,14 @@ def checks(factory, results, tmp, config, harness):
         print('downloads %-26s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
     def menu(key, select=None):
         return app.call('download-menu', id=key, **({'select': select} if select else {}))
-    def start(route):
+    def start(route, source_tab=None):
         before = {v['id'] for v in state()['items']}
-        app.call('select', tab=tab)
-        app.eval(tab, '(() => {let a=document.createElement("a"); a.href=%s; a.id="download"; a.textContent="download";document.body.replaceChildren(a)})()' % json.dumps(base + route))
-        app.call('click', tab=tab, selector='#download')
+        source_tab = source_tab or tab
+        app.call('select', tab=source_tab)
+        if not wait(lambda: app.eval(source_tab, 'Boolean(document.body) && document.readyState !== "loading"')):
+            raise RuntimeError('download source document is not ready')
+        app.eval(source_tab, '(() => {let a=document.createElement("a"); a.href=%s; a.id="download"; a.textContent="download";document.body.replaceChildren(a)})()' % json.dumps(base + route))
+        app.call('click', tab=source_tab, selector='#download')
         value = wait(lambda: next((v for v in state()['items'] if v['id'] not in before), None))
         if not value: raise RuntimeError('download callback missing for ' + route)
         return value['id']
@@ -275,10 +278,12 @@ def checks(factory, results, tmp, config, harness):
         nonlocal app
         running = start('/slow'); wait(lambda: item(running).get('received', 0) > 0)
         app.call('download-policy', quit='keep')
-        before_quit = item(running)['received']
-        app.call('quit')
-        alerts = wait(lambda: state()['quitAlerts'] if item(running).get('received', 0) > before_quit else None)
-        check('quit_keep', alerts and alerts[-1] == {'title': 'Downloads in progress', 'body': 'There are downloads in progress. Closing the application will cancel them.', 'buttons': ['Close Open', 'Keep browsing']} and item(running)['state'] == 'inProgress', alerts=alerts)
+        for warn in (True, False):
+            app.call('defaults', key='open.general.warnBeforeQuitting', value=warn)
+            before_quit = item(running)['received']; count = len(state()['quitAlerts'])
+            app.call('quit')
+            alerts = wait(lambda: state()['quitAlerts'] if item(running).get('received', 0) > before_quit and len(state()['quitAlerts']) > count else None)
+            check('quit_keep_warn_%s' % str(warn).lower(), alerts and alerts[-1] == {'title': 'Downloads in progress', 'body': 'There are downloads in progress. Closing the application will cancel them.', 'buttons': ['Close Open', 'Keep browsing']} and item(running)['state'] == 'inProgress', alerts=alerts)
         E._restore_defaults(app, saved); saved.clear()
         app.call('download-policy', quit='close')
         app.activation_trace = app.call('activation-events')
@@ -296,11 +301,67 @@ def checks(factory, results, tmp, config, harness):
         app.quit()
         check('quit_empty', not empty['running'] and not empty['quitAlerts'] and no_alert_exit)
 
+    def clear_flow():
+        nonlocal tab
+        original_space = next(s['id'] for s in app.call('spaces') if s['focused'])
+        app.call('space-create', profile='Clear downloads other', title='Clear downloads other')
+        other_profile = next(s['profile'] for s in app.call('spaces') if s['focused'])
+        other_tab = E.new_tab(app, base + '/')
+        app.call('download-settings', profile=other_profile, directory=str(first), ask=False)
+        other = start('/fast', other_tab); wait(lambda: item(other).get('state') == 'completed')
+        app.call('space', space=original_space)
+        tab = E.new_tab(app, base + '/')
+        running = start('/slow'); paused = start('/slow')
+        library(); wait(lambda: bool(row(paused)))
+        app.call('download-row', id=paused, action='Pause')
+        wait(lambda: item(paused).get('state') == 'paused')
+        for label, seconds in [('Last hour', 3600), ('Last 24 hours', 86400), ('Last 7 days', 604800), ('Last 4 weeks', 2419200), ('All time', None)]:
+            dismiss_library()
+            inside = start('/fast'); outside = start('/fast')
+            failed = start('/fail'); cancelled = start('/slow')
+            library(); wait(lambda: bool(row(cancelled)))
+            app.call('download-row', id=cancelled, action='Cancel')
+            if not wait(lambda: all(item(k).get('state') == s for k, s in [(inside, 'completed'), (outside, 'completed'), (failed, 'failed'), (cancelled, 'cancelled')])):
+                raise RuntimeError('terminal download fixture did not finish')
+            for k in (inside, failed, cancelled): app.call('download-start-age', id=k, seconds=(seconds / 2 if seconds else 600))
+            app.call('download-start-age', id=outside, seconds=(seconds * 2 if seconds else 20 * 86400))
+            paths = [Path(item(k)['path']) for k in (inside, outside, other)]
+            hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
+            before_items = state()['items']
+            before = {v['id'] for v in before_items}
+            history_before = app.call('history-state', profile=profile)['rows']
+            invalid = app.call('settings-clear-data', profile=profile, kinds=0, range=label)
+            check('clear_validate_before_mutation_' + label, invalid['status'] != 'Done'
+                  and {v['id'] for v in state()['items']} == before
+                  and app.call('history-state', profile=profile)['rows'] == history_before, response=invalid)
+            response = app.call('settings-clear-data', profile=profile, kinds=(15 if seconds is None else 8), range=label)
+            removed = {v['id'] for v in before_items if v['profile'] == profile
+                       and v['state'] in ('completed', 'failed', 'cancelled')
+                       and (seconds is None or time.time() - v['startedAt'] <= seconds)}
+            cleared = wait(lambda: not (removed & {v['id'] for v in state()['items']})
+                           and not (removed & {v['id'] for v in state()['rows']}))
+            retained = {v['id']: v for v in state()['items']}
+            check('clear_downloads_' + label, response['status'] == 'Done' and cleared
+                  and set(retained) == before - removed
+                  and retained.get(running, {}).get('state') == 'inProgress'
+                  and retained.get(paused, {}).get('state') == 'paused' and other in retained
+                  and (seconds is None or outside in retained)
+                  and all(p.exists() and hashlib.sha256(p.read_bytes()).hexdigest() == hashes[str(p)] for p in paths),
+                  response=response, removed=sorted(removed), retained=sorted(retained), files=hashes)
+            if seconds is None:
+                check('clear_combined_history_downloads', bool(history_before) and not app.call('history-state', profile=profile)['rows'] and other in retained,
+                      historyBefore=len(history_before))
+        app.call('download-row', id=running, action='Cancel')
+        app.call('download-row', id=paused, action='Cancel')
+        wait(lambda: not state()['running'])
+        dismiss_library()
+
 
     try:
         # The cloned bundle has its own domain; reset/restore every key this suite owns.
-        for key, value in {'open.general.warnBeforeQuitting': True}.items():
-            saved[key] = app.call('defaults', key=key)
+        for key, value in {'open.general.warnBeforeQuitting': True, 'open.library.lastSection': None,
+                           'open.settings.lastPane': None, 'open.settings.selectedProfileID': None}.items():
+            saved[key] = app.call('defaults', key=key, persistent=True)
             app.call('defaults', key=key, value=value)
         app.call('download-policy', quit='keep', recordFiles=True)
         with server() as base:
@@ -310,7 +371,7 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "quit": quit_flow}
+                     "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow, "quit": quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
             selected = set(selection.split(',')) if selection else set(flows)
             flows['cancel-sheet'] = cancel_sheet_flow

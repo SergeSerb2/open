@@ -4,6 +4,7 @@ import http.server
 import json
 import os
 import plistlib
+import runpy
 import subprocess
 import threading
 import time
@@ -137,7 +138,7 @@ class Scripts:
 def javascript_gate_checks(app, results):
     """D4 through actual Apple events, including the normal settings/menu command."""
     script = Scripts(app)
-    old = app.call('defaults', key=KEY)
+    old = app.call('defaults', key=KEY, persistent=True)
     try:
         app.call('defaults', key=KEY, value=None)
         tab = app.call('tabs')[0]['id']
@@ -158,7 +159,7 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
     """A1–A18/R1–R3 on a new App instance; repeat after cold relaunch with stable IDs."""
     server, origin = fixture_server('AppleScript')
     app = factory(urls=(origin + '/research-pinned',), fresh=True)
-    saved = {key: app.call('defaults', key=key) for key in (KEY,MODE_KEY)}
+    saved = {key: app.call('defaults', key=key, persistent=True) for key in (KEY,MODE_KEY)}
     try:
         for key in saved: app.call('defaults', key=key, value=None)
         script = Scripts(app)
@@ -168,7 +169,7 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
         with open(os.path.join(tmp, 'Open.sdef'), 'w') as f: f.write(extracted)
         root = ET.fromstring(extracted)
         command_codes = [e.get('code') for e in root.iter('command')]
-        expected = ['corecrel','corecnte','coreclos','CrSelect','CrSuBack','CrSuFwd ','CrSuRlod','CrSustop','CrSuExJa','SpaFocus']
+        expected = ['coresetd','corecrel','corecnte','coreclos','CrSelect','CrSuBack','CrSuFwd ','CrSuRlod','CrSustop','CrSuExJa','SpaFocus']
         with open(os.path.join(app.bundle, 'Contents/Info.plist'),'rb') as f: info=plistlib.load(f)
         classes=[(e.get('name'),e.get('code')) for e in root.iter('class')]
         results['H3_H4_dictionary'] = {'ok': os.path.isfile(bundle_sdef) and command_codes == expected
@@ -216,7 +217,9 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
             script('set URL of %s to %s' % (target,quote(origin+'/nav-b')))
             wait_until(lambda: app.call('tab-state',tab=nid).get('url') == origin+'/nav-b' or None, timeout=10,step=.1)
             app.call('wait',tab=nid)
-            check('A11_URL_set', 'return URL of '+target, origin+'/nav-b')
+            # Regression: a rebuilt core/setd description rejected this event;
+            # an explicit specifier argument also crashed Cocoa before dispatch.
+            check('A11_set_description_round_trip', 'return URL of '+target, origin+'/nav-b')
             script('go back '+target)
             at_a = wait_until(lambda: script('return URL of '+target) == origin+'/nav-a' or None,timeout=10,step=.1)
             script('go forward '+target)
@@ -235,8 +238,7 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
                 (1008,'set mode of window 1 to "incognito"','mode can be set only once during creation of the window.'),
                 (1008,'set incognito of window 1 to true','mode can be set only once during creation of the window.'),
                 (1009,'make new space','Making a new space is not supported. Create a Space in the sidebar.'),
-                (1010,'make new window with properties {mode:"incognito"}','Incognito windows are not available in this build.'),
-                (1011,'make new tab','Little windows are not available yet.')]
+                (1010,'make new window with properties {mode:"incognito"}','Incognito windows are not available in this build.')]
             for i,(number,body,message) in enumerate(negatives):
                 results[prefix+'error_%d_%d'%(number,i)] = script.error(body,number,message)
             for number,unavailable,body,message in [
@@ -244,6 +246,10 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
                 (1006,'engine','reload '+target,'The page engine is not ready.'),
                 (1012,'window','make new window','There is no browser window.')]:
                 results[prefix+'error_'+str(number)] = script.error(body,number,message,unavailable)
+            results[prefix+'error_1011'] = script.error('make new tab', 1011,
+                'Little windows are not available yet.', unavailable='little')
+            runpy.run_path(os.path.join(os.path.dirname(__file__), 'applescript_littleopen.py'))['run'](
+                app, script, results, wait_until, quote, KEY, OFF, prefix)
             # Refused split-pane move uses the real Split View model and production creation.
             app.call('space',space=research)
             split_peer=app.call('open',url=origin+'/split-peer')['id']

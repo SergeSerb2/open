@@ -155,6 +155,8 @@ public final class BrowserWindowState {
     /// The optional content toolbar (View ▸ Show Toolbar, Cmd+Shift+D; commandbar-completion §4.6).
     /// Window chrome like `sidebarMode`; Little Open windows never show it.
     public var showsToolbar: Bool
+    /// Standard-window focus recency, retained in the existing session snapshot.
+    public var lastFocusedAt: Date?
 
     public init(id: WindowID = WindowID(), focusedSpaceID: SpaceID, selectedNodeBySpace: [SpaceID: ItemID] = [:], sidebarWidth: Double = 228, sidebarMode: SidebarMode = .anchored, frameX: Double = 100, frameY: Double = 100, frameWidth: Double = 1280, frameHeight: Double = 800, style: WindowStyle = .standard, stayOnTop: Bool = false, showsToolbar: Bool = false) {
         self.id = id; self.focusedSpaceID = focusedSpaceID

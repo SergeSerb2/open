@@ -1,0 +1,358 @@
+# Open.app Release bundle file/symlink inventory, 2026-11-07
+# Paths relative to Open.app; generated from the real built app.
+Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework
+Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libcef_sandbox.dylib
+Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libvk_swiftshader.dylib
+Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/libvulkan.dylib
+Contents/Frameworks/Chromium Embedded Framework.framework/Libraries/vk_swiftshader_icd.json
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/Info.plist
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/af.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/af_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/af_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/af_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/am.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/am_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/am_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/am_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar_XB.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar_XB_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar_XB_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ar_XB_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bg.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bg_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bg_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bg_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bn.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bn_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bn_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/bn_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ca.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ca_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ca_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ca_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/chrome_100_percent.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/chrome_200_percent.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/cs.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/cs_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/cs_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/cs_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/da.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/da_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/da_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/da_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/de.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/de_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/de_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/de_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/el.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/el_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/el_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/el_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_GB.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_GB_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_GB_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_GB_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_XA.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_XA_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_XA_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/en_XA_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es_419.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es_419_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es_419_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es_419_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/es_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/et.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/et_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/et_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/et_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fa.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fa_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fa_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fa_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fi.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fi_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fi_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fi_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fil.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fil_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fil_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fil_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fr.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fr_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fr_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/fr_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/gpu_shader_cache.bin
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/gu.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/gu_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/gu_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/gu_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/he.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/he_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/he_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/he_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hi.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hi_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hi_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hi_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hr.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hr_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hr_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hr_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hu.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hu_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hu_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/hu_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/icudtl.dat
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/id.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/id_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/id_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/id_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/it.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/it_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/it_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/it_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ja.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ja_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ja_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ja_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/kn.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/kn_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/kn_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/kn_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ko.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ko_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ko_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ko_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lt.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lt_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lt_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lt_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lv.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lv_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lv_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/lv_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ml.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ml_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ml_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ml_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/mr.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/mr_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/mr_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/mr_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ms.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ms_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ms_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ms_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nb.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nb_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nb_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nb_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nl.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nl_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nl_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/nl_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pl.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pl_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pl_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pl_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_BR.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_BR_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_BR_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_BR_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_PT.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_PT_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_PT_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/pt_PT_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/resources.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ro.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ro_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ro_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ro_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ru.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ru_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ru_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ru_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sk.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sk_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sk_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sk_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sl.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sl_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sl_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sl_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sr.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sr_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sr_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sr_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sv.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sv_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sv_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sv_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sw.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sw_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sw_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/sw_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ta.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ta_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ta_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ta_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/te.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/te_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/te_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/te_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/th.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/th_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/th_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/th_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/tr.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/tr_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/tr_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/tr_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/uk.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/uk_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/uk_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/uk_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ur.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ur_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ur_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/ur_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/v8_context_snapshot.arm64.bin
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/vi.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/vi_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/vi_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/vi_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_CN.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_CN_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_CN_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_CN_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_TW.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_TW_FEMININE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_TW_MASCULINE.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/Resources/zh_TW_NEUTER.lproj/locale.pak
+Contents/Frameworks/Chromium Embedded Framework.framework/_CodeSignature/CodeResources
+Contents/Frameworks/Open Helper (Alerts).app/Contents/Info.plist
+Contents/Frameworks/Open Helper (Alerts).app/Contents/MacOS/Open Helper (Alerts)
+Contents/Frameworks/Open Helper (Alerts).app/Contents/PkgInfo
+Contents/Frameworks/Open Helper (Alerts).app/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/Open Helper (GPU).app/Contents/Info.plist
+Contents/Frameworks/Open Helper (GPU).app/Contents/MacOS/Open Helper (GPU)
+Contents/Frameworks/Open Helper (GPU).app/Contents/PkgInfo
+Contents/Frameworks/Open Helper (GPU).app/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/Open Helper (Plugin).app/Contents/Info.plist
+Contents/Frameworks/Open Helper (Plugin).app/Contents/MacOS/Open Helper (Plugin)
+Contents/Frameworks/Open Helper (Plugin).app/Contents/PkgInfo
+Contents/Frameworks/Open Helper (Plugin).app/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/Open Helper (Renderer).app/Contents/Info.plist
+Contents/Frameworks/Open Helper (Renderer).app/Contents/MacOS/Open Helper (Renderer)
+Contents/Frameworks/Open Helper (Renderer).app/Contents/PkgInfo
+Contents/Frameworks/Open Helper (Renderer).app/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/Open Helper.app/Contents/Info.plist
+Contents/Frameworks/Open Helper.app/Contents/MacOS/Open Helper
+Contents/Frameworks/Open Helper.app/Contents/PkgInfo
+Contents/Frameworks/Open Helper.app/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/OpenEngine.framework/OpenEngine
+Contents/Frameworks/OpenEngine.framework/Resources
+Contents/Frameworks/OpenEngine.framework/Versions/A/OpenEngine
+Contents/Frameworks/OpenEngine.framework/Versions/A/Resources/Info.plist
+Contents/Frameworks/OpenEngine.framework/Versions/A/_CodeSignature/CodeResources
+Contents/Frameworks/OpenEngine.framework/Versions/Current
+Contents/Frameworks/Sparkle.framework/Autoupdate
+Contents/Frameworks/Sparkle.framework/Resources
+Contents/Frameworks/Sparkle.framework/Sparkle
+Contents/Frameworks/Sparkle.framework/Updater.app
+Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Base.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/Info.plist
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ReleaseNotesColorStyle.css
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/SUUpdateAlert.nib
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/SUUpdatePermissionPrompt.nib
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ar.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ca.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/cs.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/da.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/de.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/el.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/es.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/fa.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/fi.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/fr.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/he.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/hr.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/hu.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/is.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/it.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ja.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ko.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/nb.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/nl.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/nn.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/pl.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/pt-BR.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/pt-PT.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ro.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/ru.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/sk.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/sl.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/sv.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/th.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/tr.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/uk.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/vi.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/zh_CN.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/zh_HK.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Resources/zh_TW.lproj/Sparkle.strings
+Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle
+Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/Info.plist
+Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/MacOS/Updater
+Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/PkgInfo
+Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/Info.plist
+Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader
+Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/Info.plist
+Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer
+Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/_CodeSignature/CodeResources
+Contents/Frameworks/Sparkle.framework/Versions/B/_CodeSignature/CodeResources
+Contents/Frameworks/Sparkle.framework/Versions/Current
+Contents/Frameworks/Sparkle.framework/XPCServices
+Contents/Info.plist
+Contents/MacOS/Open
+Contents/PkgInfo
+Contents/Resources/Acknowledgements.txt
+Contents/Resources/CREDITS.html
+Contents/Resources/Credits.rtf
+Contents/Resources/Open.sdef
+Contents/Resources/OpenKit_OpenAdBlock.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenAdBlock.bundle/Contents/Resources/Resources/catalog.json
+Contents/Resources/OpenKit_OpenAdBlock.bundle/Contents/Resources/Resources/list-pins.txt
+Contents/Resources/OpenKit_OpenAdBlock.bundle/Contents/Resources/Resources/public_suffix_list.dat
+Contents/Resources/OpenKit_OpenBoosts.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenBoosts.bundle/Contents/Resources/boost-applier.js
+Contents/Resources/OpenKit_OpenBoosts.bundle/Contents/Resources/zap-picker.js
+Contents/Resources/OpenKit_OpenCommands.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenCommands.bundle/Contents/Resources/expected-menu.json
+Contents/Resources/OpenKit_OpenFeatures.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenFeatures.bundle/Contents/Resources/Sounds/open-capture.caf
+Contents/Resources/OpenKit_OpenFeatures.bundle/Contents/Resources/Sounds/open-event.caf
+Contents/Resources/OpenKit_OpenMedia.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenMedia.bundle/Contents/Resources/pip-site-rules.json
+Contents/Resources/OpenKit_OpenSleep.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenSleep.bundle/Contents/Resources/keep-alive-sites.json
+Contents/Resources/OpenKit_OpenSpaceEditor.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenSpaceEditor.bundle/Contents/Resources/emoji-index.json
+Contents/Resources/OpenKit_OpenSuggest.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenSuggest.bundle/Contents/Resources/public_suffix_list.dat
+Contents/Resources/OpenKit_OpenTranslate.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenTranslate.bundle/Contents/Resources/translate-runtime.js
+Contents/_CodeSignature/CodeResources

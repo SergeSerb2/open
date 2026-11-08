@@ -1,0 +1,36 @@
+diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
+index 2486722112a44252997c7e8416178ca8078a8f23..332adff3eaa85db14421b6ec2223a192a2e142c9 100644
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -100,6 +100,10 @@
+ #include "ui/aura/window.h"
+ #endif
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/media/open_media_hooks.h"
++#endif
++
+ #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+ #include "components/captive_portal/content/captive_portal_tab_helper.h"
+ #endif
+@@ -752,6 +756,20 @@ base::WeakPtr<content::NavigationHandle> NavigateImpl(
+       return nullptr;
+     }
+ 
++#if BUILDFLAG(IS_MAC)
++    // Open (patch 0403): the embedder's own window when the opener's media
++    // handler hosts Picture in Picture (media-pip EM-7). Like the standalone
++    // path below, Open's host takes the child and no Browser is created.
++    if (auto* host =
++            open_engine::GetMediaHooks().host_document_picture_in_picture) {
++      if (params->contents_to_insert &&
++          host(params->source_contents, params->contents_to_insert)) {
++        params->browser = nullptr;
++        return nullptr;
++      }
++    }
++#endif
++
+     // When the standalone Document PiP window is enabled, route to the
+     // DocumentPipHost-backed path instead of creating a Browser. The manager
+     // takes ownership of the child WebContents and shows the window itself, so
