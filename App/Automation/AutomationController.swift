@@ -34,6 +34,7 @@
     var firstRunActionTask: Task<Void, Never>?
     var importExtensionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
+    var savePromptEvents: [[String: Any]] = []
     static weak var savePromptOwner: AutomationController?
     var savePromptPolicy = "hold"
     var realSavePromptAnswers = NSMapTable<OESavePrompt, NSString>.weakToStrongObjects()
@@ -115,7 +116,10 @@
         } else {
           owner = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
         }
-        return owner?.drainEvents() ?? []
+        let number = a["window"] as? Int ?? owner?.window?.windowNumber
+        let completions = savePromptEvents.filter { number == nil || $0["window"] as? Int == number }
+        savePromptEvents.removeAll { number == nil || $0["window"] as? Int == number }
+        return (owner?.drainEvents() ?? []) + completions
       case "credentials": return try await credentialCounts(a)
       case "credentials-prefs": return try credentialPreferences(a)
       case "engine-contexts":

@@ -69,7 +69,8 @@ extension EngineWebContentHostFactory {
   func webContent(_ page: OEWebContent, openAutofillPage destination: OEAutofillPage) {
     guard let target = AutofillPage(rawValue: destination.rawValue) else { return }
     #if OPEN_AUTOMATION
-    record("autofillPage", page, ["page": target == .passwords ? "passwords" : target == .paymentMethods ? "paymentMethods" : "addresses"])
+    AutomationController.savePromptOwner?.recordAutofillEvent("autofillPage", owner: self, page: page,
+      info: ["page": target == .passwords ? "passwords" : target == .paymentMethods ? "paymentMethods" : "addresses"])
     #endif
     // Peek hosts retain their source Space even though they are not model tabs.
     let host = hosts.values.first { $0.content === page }

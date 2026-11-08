@@ -53,8 +53,20 @@ extension AutomationController {
     realSavePromptAnswers.setObject(answer as NSString, forKey: prompt)
     if let owner { realSavePromptFactories.setObject(owner, forKey: prompt) }
     if let page { realSavePromptPages.setObject(page, forKey: prompt) }
-    realSavePromptFactories.object(forKey: prompt)?.record("savePrompt", realSavePromptPages.object(forKey: prompt),
-      ["kind": prompt.openSavePromptKind.automationName, "displayHost": prompt.displayHost, "answer": answer])
+    guard let factory = realSavePromptFactories.object(forKey: prompt) else { return }
+    recordAutofillEvent("savePrompt", owner: factory, page: realSavePromptPages.object(forKey: prompt),
+      info: ["kind": prompt.openSavePromptKind.automationName, "displayHost": prompt.displayHost, "answer": answer])
+  }
+
+  // Keep only bounded metadata, so final window-close answers survive factory
+  // teardown without retaining a window, page or request. Explicit window drains
+  // never consume another factory's queue, including a Little Open queue.
+  func recordAutofillEvent(_ type: String, owner: EngineWebContentHostFactory, page: OEWebContent?, info: [String: Any]) {
+    guard let number = owner.window?.windowNumber else { return }
+    var event = info
+    event["type"] = type; event["window"] = number; event["content"] = page?.identifier ?? 0
+    savePromptEvents.append(event)
+    if savePromptEvents.count > 2000 { savePromptEvents.removeFirst(savePromptEvents.count - 2000) }
   }
 
   func savePromptDidPresent(_ sheet: SavePromptSheet) {
@@ -83,8 +95,9 @@ extension AutomationController {
             host.utf8.count <= SavePromptSheet.maximumHostBytes,
             !host.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
             let page = factory.selectedContent else { throw Failure(message: "invalid mock kind/host or no focused page (host limit 4096 UTF-8 bytes)") }
-      let request = MockSavePrompt(kind: kind, displayHost: host) { [weak factory, weak page] answer in
-        factory?.record("savePrompt", page, ["kind": kind.automationName, "displayHost": host, "answer": answer])
+      let request = MockSavePrompt(kind: kind, displayHost: host) { [weak self, weak factory, weak page] answer in
+        guard let factory else { return }
+        self?.recordAutofillEvent("savePrompt", owner: factory, page: page, info: ["kind": kind.automationName, "displayHost": host, "answer": answer])
       }
       presenter.enqueue(request, page: AnyHashable(page.identifier))
     } else if let answer = args["answer"] as? String {
