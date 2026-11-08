@@ -189,8 +189,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     }
     if step == .ready {
       let shuffle = button("Shuffle card pattern") { [weak self] in self?.shuffleCard() }
+      shuffle.usesLightInk = true
       shuffle.image = NSImage(systemSymbolName: "shuffle", accessibilityDescription: "Shuffle card pattern"); shuffle.imagePosition = .imageOnly
       let save = button("Save card image…") { [weak self] in self?.saveCard() }
+      save.usesLightInk = true
       save.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: "Save card image…"); save.imagePosition = .imageOnly
       cardButtons = [shuffle, save]; cardButtons.forEach { view.addSubview($0) }
       statusLabel = NSTextField(wrappingLabelWithString: firstRun.errorText ?? ""); if let statusLabel { statusLabel.textColor = .systemRed; controls.addSubview(statusLabel) }
@@ -402,6 +404,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
 @MainActor class OnboardingButton: NSButton {
   let prominent: Bool
   let reduceMotion: Bool
+  var usesLightInk = false
   private let press: @MainActor () -> Void
   private var hovered = false
   init(_ title: String, primary: Bool, reduceMotion: Bool, action: @escaping @MainActor () -> Void) {
@@ -422,7 +425,11 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private func animateScale(_ value: Double) { guard !reduceMotion, isEnabled else { return }; let spring = CASpringAnimation(keyPath: "transform.scale"); spring.fromValue = layer?.presentation()?.value(forKeyPath: "transform.scale") ?? 1; spring.toValue = value; spring.mass = 1; spring.stiffness = pow(2 * .pi / 0.3, 2); spring.damping = 2*0.45*sqrt(spring.stiffness); spring.duration = spring.settlingDuration; spring.fillMode = .forwards; spring.isRemovedOnCompletion = false; layer?.add(spring, forKey: "button-scale") }
   override func draw(_ dirtyRect: NSRect) {
     if prominent { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: isEnabled ? 1:0.4).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 20, yRadius: 20).fill() }
-    if imagePosition == .imageOnly, let image { image.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: isEnabled ? 1:0.4) }
+    if title == "Back" { NSColor.quaternaryLabelColor.withAlphaComponent(0.12).setFill(); NSBezierPath(ovalIn: bounds).fill() }
+    if imagePosition == .imageOnly, let image {
+      let tinted = image.withSymbolConfiguration(.init(paletteColors: [usesLightInk || prominent ? .white:.labelColor])) ?? image
+      tinted.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: isEnabled ? 1:0.4)
+    }
     else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: prominent ? NSColor.white : NSColor.secondaryLabelColor, .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
     if window?.firstResponder === self { NSColor.keyboardFocusIndicatorColor.setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 18, yRadius: 18); path.lineWidth = 2; path.stroke() }
   }
