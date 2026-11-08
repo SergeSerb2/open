@@ -4501,12 +4501,22 @@ are measurements for optimization, not final gate acceptance.
 ### Step 4 as built (2026-11-08, integrated engine)
 
 Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
-It integrates main `cdd147ca` (0403, Section 12's 06xx and native Profile
-0701) and App adapter `cf700584`. The CEF series preserves every main entry,
-plus ad-block 0310/0311/0314; 0601/0602 precede 0701 in numeric order.
-The integrated dev build of `cefsimple cefclient` passes. Built-artifact
-engine-status reports 8 PASS, 0 FAIL, 0 WARN: 28 patches, 109 overlays,
-47 required exports. Distribution and App acceptance are separate gates.
+Source now includes main `d26300e6` (Section 15's Chromium 0801–0810),
+the final App adapter `fcd1ef25`, and Step 7 resources. Every main patch
+is retained. The engine applies Chromium's 08xx before the CEF series,
+including ad-block 0310/0311/0314; 0601/0602 precede 0701 within CEF.
+There are no Section 15 08xx entries in the CEF series.
+
+The earlier integrated dev build of `cefsimple cefclient` passed
+built-artifact engine-status: 8 PASS, 0 FAIL, 0 WARN, with 28 patches,
+109 overlays and 47 required exports. The runtime receipts below precede
+Section 15's merge and must be rerun on the merged engine. The root is
+read-only during the lead's clone hold. After release: apply/build,
+headless/API/N/COUNT/footprint/G-2/G-6, zero-list proof, then distribution
+and App acceptance. Before distribution and again before the done report,
+fetch main and check `Engine/fork` changes since the last merged main.
+Any new engine change requires merge, rebuild and engine reproof first.
+The distribution receipt must identify its main commit and framework SHA.
 
 **Request path and lifetime.** Open's outermost factory proxy checks
 subresources and redirects on one matcher sequence. Main documents pass
