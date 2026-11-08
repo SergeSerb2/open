@@ -36,8 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   // model opens one group per command; multi-operation UI actions may nest.
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
   private(set) var engineReady = false
-  /// The first-frame menu carries every effective key. AppKit's launch
-  /// callback installs the full contents and native Services/Font menus once.
+  /// The first-frame menu carries every effective key and native menu registration.
+  /// AppKit's launch callback adds the remaining commands in one full build.
   private(set) var initialMainMenuCompleted = false
   private(set) var terminationRequested = false
   private var faviconShutdownTask: Task<Void, Never>?
