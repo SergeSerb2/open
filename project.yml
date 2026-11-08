@@ -92,7 +92,7 @@ targets:
         SKIP_INSTALL: YES
         HEADER_SEARCH_PATHS: $(CEF_ROOT) $(SRCROOT)/Engine/OpenEngine/include
         GCC_PREPROCESSOR_DEFINITIONS: CEF_USE_SANDBOX=1 __STDC_CONSTANT_MACROS __STDC_FORMAT_MACROS $(inherited)
-        OTHER_LDFLAGS: $(CEF_WRAPPER_LIB) -framework AppKit -framework IOSurface -framework QuartzCore
+        OTHER_LDFLAGS: $(CEF_WRAPPER_LIB) -framework AppKit -framework IOSurface -framework QuartzCore -framework Security
         WARNING_CFLAGS: -Wno-unused-parameter -Wno-shorten-64-to-32 -Wno-comma
         CLANG_WARN_DOCUMENTATION_COMMENTS: NO
 
@@ -149,11 +149,11 @@ targets:
       - package: OpenKit
         product: OpenStore
       - package: OpenKit
-        product: OpenBoosts
-      - package: OpenKit
         product: OpenWeb
       - package: OpenKit
         product: OpenExtensionsUI
+      - package: OpenKit
+        product: OpenBoosts
       - package: OpenKit
         product: OpenSiteControl
       - package: OpenKit

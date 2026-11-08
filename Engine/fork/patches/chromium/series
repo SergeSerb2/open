@@ -19,3 +19,4 @@
 0805-open-autofill-defaults.patch  # Fill on select; no autosignin/leak prompts; card reauth on without opt-in promo
 0806-open-https-fallback-dialog-host.patch  # Use the native modal host for HTTPS fallback; cancel when detached
 0807-open-hosted-autofill-popup.patch
+0601-open-script-world.patch  # P7: reserve Open world; keep queued frame actions in the main context

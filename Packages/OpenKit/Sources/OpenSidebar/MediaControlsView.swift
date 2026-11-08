@@ -24,6 +24,8 @@ import OpenModel
     public private(set) var isExpanded = false
     public private(set) var stackHeight: CGFloat = 0
     public var onUpdateHeight: (() -> Void)?
+    /// Automation receipt at the actual insertion; nil outside automated App runs.
+    public var onCardInserted: ((ItemID) -> Void)?
     public var requiredHeight: CGFloat { stackHeight == 0 ? 0 : MiniPlayerMetrics.gapAbove + stackHeight }
     public var cards: [MiniPlayerCardView] { ordered.compactMap { byID[$0] } }
     public var pendingCollapseCount: Int { collapseWork == nil ? 0 : 1 }
@@ -64,6 +66,7 @@ import OpenModel
                 let card = MiniPlayerCardView(source: source, context: context)
                 card.onHeightChange = { [weak self] in self?.measure(.drawer) }
                 byID[id] = card; addSubview(card)
+                onCardInserted?(id)
                 if animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion {
                     let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 0; a.toValue = 1
                     a.duration = Motion.miniPlayerReveal

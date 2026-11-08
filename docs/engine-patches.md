@@ -113,7 +113,7 @@ unsafe `MovePinnedAction` call. No Chromium debugger was used.
 | P4 | Proprietary codecs (Widevine is out of v1) | H.264/AAC sites | 0: already in the fork's GN args; verify on the first fork build | — |
 | P5 | Trim the Chrome layer (Google services, components, locales) | Less network chatter, smaller bundle, faster first launch | 1–2 weeks | — |
 | P6 | Audible state callback (done 2026-11-02, part of "Media" below) | Correct speaker icon (Web Audio too); OpenSleep needs every audio change | 1–2 days | — |
-| P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
+| P7 | Isolated-world scripts for Open's page runtimes (implemented, Section 12) | Zap picker and Boost applier out of the page's reach | done | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 | P9 | Passwords and autofill | Save prompt routing, local stores and bounded import API | Section 15 | P1 |
 
@@ -466,7 +466,63 @@ Verification: see "Media verification" below.
 
 ## P7. Isolated-world scripts for Open's page runtimes
 
-User Boost JavaScript runs in the main world on purpose (docs/boosts.md). Open's own page runtimes (the Zap picker, the Boost applier internals) must run in an isolated world so pages cannot reach them (docs/followups.md, PR #23 review). OpenEngine injects at V8 context creation (`OnContextCreated` in `OEApp.mm`), which is document-start but main world only. Patch: run the same document-start hook in an isolated world through `blink::WebLocalFrame::ExecuteScriptInIsolatedWorld`, using the queued-context path in `cef/libcef/renderer/frame_impl.cc` that adblock-fork F-10 describes for cosmetic filtering. Coordinate with that plan's `cef.mojom` change so both use one mechanism.
+User Boost JavaScript keeps the page world. Open's applier and picker use
+`OEScriptWorldOpen`. Chromium patch `0601-open-script-world.patch` reserves
+`ISOLATED_WORLD_ID_OPEN` (6 on macOS) immediately below the extension range.
+CEF patch `0601-open-script-world.patch` confines queued-context actions and
+release notifications to the main world; isolated-world creation must not
+flush or invalidate the main frame's queue.
+
+CEF patch `0602-open-browser-extra-info.patch` makes the browser's stored
+extra-info snapshot replaceable. Its getter and setter share `CefBrowserInfo`'s
+lock; the setter stores a read-only copy on the UI thread. The experimental
+`cef_open_browser_info.h` API is implemented in `open/browser/page/open_browser_info.cc`.
+`oe_broadcastScripts` updates the snapshot before sending the existing renderer
+message. `OnRenderViewReady` keeps its resend as a second path.
+
+Handoff precheck: CEF `libcef/browser/browser_info_manager.cc:374–394` resolves
+an existing browser for `OnGetNewBrowserInfo`; `SendNewBrowserInfoResponse` at
+lines 810–845 uses the request's sequence and copies `browser_info->extra_info()`
+into the renderer reply. `OEApp.mm`'s `OnBrowserCreated` reads `oe.scripts`
+before `OnContextCreated`. Updating that stored value therefore reaches a
+replacement process before its first document-start script.
+
+The broadcast includes OTR browsers owned by the changed `OEBrowserContext`,
+using exact context identity and each web content's own script list. It does
+not inherit scripts from the parent Profile. The real-App
+`open_world_private_renderer` row installs page/Open scripts after a private
+tab exists, checks both at document start after a process swap, and checks
+normal/private script isolation in both directions. CEF 0601 and 0602 follow
+main's 0701 in the series, as directed for this stack; their numbers stay fixed.
+
+The overlay API `cef_open_world.h` creates or gets that world's context using
+Blink's `ExecuteScriptInIsolatedWorld` and `GetScriptContextFromWorldId`.
+`OEApp::OnContextCreated` filters to the main world, then runs matching Open
+scripts there at document start, main frame only. Creation is lazy: pages with
+no Open scripts and no Open evaluation create no Open context.
+
+`OEOpenWorld.mm` installs `__openNative.postMessage(type, payloadJSON)` only in
+that context. The native handler checks the current world and document token.
+It drops messages above 64 KiB (type plus payload, UTF-8), and messages beyond
+200 in any sliding second per page, before IPC. Counters are read on demand.
+Main-thread delivery includes Chromium's `DocumentToken` as `documentID`.
+Native evaluation uses the same context without a user gesture, awaits
+promises, bounds results to 1 MiB and pending calls to 64, and times out after
+10 seconds. The old page-world evaluation is unchanged.
+
+Ad-block cosmetics can reuse the per-frame `CefGetOpenScriptContext` from
+their renderer hook. OpenEngine limits its user scripts and native channel
+to the main frame; the CEF primitive also supports child-frame cosmetics. The current adblock-fork plan supersedes the old F-10 frame-pipe push:
+`cef.mojom` connects after commit (F-27); process-level renderer pull supplies
+cosmetic data (D-13). P7 adds no second browser-to-renderer document-start
+pipe. Both runtimes can use this fixed world; cosmetic data delivery remains
+Section 13's work.
+
+Evidence: real-App `features` rows `open_world_document_start`,
+`open_world_extension_isolation`, `open_world_messages`, `open_world_limits`,
+`open_world_non_json_result`, `open_world_replacement_renderer`, plus the
+existing `user_scripts` row. Build and suite receipts are recorded in
+the PR. This transport adds no App UI.
 
 ## P8. Native ad-block engine
 
@@ -807,6 +863,26 @@ service observer's set, independent of native macOS delivery. It adds no series
 entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
 clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
 [#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
+
+
+### Site Control E1/E2/E3 overlays (Section 12)
+
+`cef/include/cef_site_control.h` and `open/browser/page/open_site_control.cc`
+expose the complete scalar content-settings registry, origin-filtered
+BrowsingDataRemover cache/storage removal, canonical host-cookie deletion, and
+visible SSL security state. The existing `cef_open_page.h` / `OpenPageState`
+observer forwards visible-security changes. No extra patch number is needed;
+these files use P1's existing overlay source list. See `engine-api.md` for
+cookie scope, supported states, completion behavior and bounds. Four C API
+entry points are required by `verification/expected-symbols.txt`.
+
+The engine and Debug App compile with these overlays. The real-App `sitedata`
+suite passes all ten settings, data and security rows. Temporarily disabling
+the bridge backends and native security observer makes all ten rows fail;
+production source is restored and rebuilt afterwards. Cache proof uses server
+hit counters: clearing origin A changes hits from [1, 1] to [2, 1], while
+origin B remains cached. Mixed-content and malicious-page classifications
+have source support but no dedicated runtime fixtures in this receipt.
 
 ## Passwords Step 0 probe (2026-11-06; remaining rows 2026-11-07)
 

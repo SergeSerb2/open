@@ -48,3 +48,5 @@ paths: chrome/browser/ssl/ask_before_http_dialog_controller.cc
 
 # 0807-open-hosted-autofill-popup.patch
 paths: chrome/browser/ui/views/autofill/popup/popup_base_view.cc
+# 0601-open-script-world.patch
+paths: chrome/common/chrome_isolated_world_ids.h

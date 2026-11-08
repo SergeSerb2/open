@@ -42,6 +42,7 @@
     private var revealedURLs: [URL] = []
     var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
     var profileProofContexts: [String: OEBrowserContext] = [:]
+    var recordedOpenWorldCallbacks: [[String: Any]] = []
 
     init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
 
@@ -66,6 +67,7 @@
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
+        if cmd == "boost-editor", ["key", "type", "tap", "drag"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -576,6 +578,8 @@
         guard let profile = app.model.profiles.first(where: { $0.name == name }) ?? app.model.createProfile(name: name) else { throw Failure(message: "unknown Profile") }
         try app.directories.ensureProfileDirectories(for: profile)
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
+      case "boost-editor", "boosts", "boost-library":
+        return try await runBoostCommand(cmd, a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
       case "peek-open":
@@ -711,11 +715,13 @@
             $0.isIncognito && $0.incognitoSession?.context === content.context
           }
         }.map { describe($0, in: w) }
+      case "site-settings", "site-setting", "site-data-clear", "security-state":
+        return try await runSiteDataCommand(cmd, a, page: try content(a, w))
       case "eval":
         guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
         // Through the OpenWeb protocol, as OpenKit features will call it.
         let page: any WebContent = try content(a, w)
-        return try await page.evaluateJavaScript(js)
+        return try await page.evaluateJavaScript(js, in: try scriptWorld(a))
       case "devtools":
         guard let method = a["method"] as? String else { throw Failure(message: "missing method") }
         return try await content(a, w).sendDevToolsMethod(method, parameters: a["params"] as? [String: Any])
@@ -937,6 +943,15 @@
 
       // Windows and pixels (Open's own windows only).
       case "windows":
+        let enhanced = a["accessibility"] as? Bool == true
+        let axRead = NSSelectorFromString("accessibilityAttributeValue:"), axWrite = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+        let previousAX = enhanced && NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: "AXEnhancedUserInterface")?.takeUnretainedValue() : nil
+        if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
+        defer { if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: "AXEnhancedUserInterface") } }
+        if enhanced {
+          for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
+          try? await Task.sleep(for: .milliseconds(50))
+        }
         return NSApp.windows.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
@@ -1221,6 +1236,7 @@
         }
         let store = SitePermissionStore.forContext(browser.context)
         return ["ready": store.indexReady, "decisions": store.allDecisions().map { ["origin": $0.origin.absoluteString, "kind": $0.kind.rawValue, "state": $0.state.rawValue] }]
+      case "open-world-messages": return try await openWorldMessages(try content(a, w), factory: w, clear: a["clear"] as? Bool == true, subscribe: a["subscribe"] as? Bool)
       case "script-add":
         let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.addUserScript(
@@ -1229,7 +1245,7 @@
             kind: a["css"] as? Bool == true ? .styleSheet : .javaScript,
             injectionTime: a["end"] as? Bool == true ? .documentEnd : .documentStart,
             matchPatterns: a["matches"] as? [String] ?? ["<all_urls>"],
-            mainFrameOnly: !(a["allFrames"] as? Bool ?? false)))
+            mainFrameOnly: !(a["allFrames"] as? Bool ?? false), world: try scriptWorld(a)))
         return profile.userScripts.map(\.id)
       case "script-remove":
         let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
