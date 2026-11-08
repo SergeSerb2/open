@@ -678,6 +678,25 @@ void OpenAdBlockService::OnBuiltReply(
   }
 }
 
+void OpenAdBlockService::SetListDirectory(base::FilePath adblock_root) {
+  if (shut_down_ || adblock_root == adblock_root_) {
+    return;
+  }
+  if (!adblock_root.empty()) {
+    LoadFromDirectory(std::move(adblock_root), /*prefer_dat=*/true);
+    return;
+  }
+  adblock_root_.clear();
+  latest_load_id_->fetch_add(1, std::memory_order_acq_rel);
+  status_ = AdBlockStatus();
+  status_.excluded_domains.assign(excluded_domains_.begin(),
+                                  excluded_domains_.end());
+  PostToMatcher(base::BindOnce([](OpenAdBlockMatcher* matcher) {
+    matcher->SetEngine(nullptr);
+  }));
+  NotifyStatus();
+}
+
 void OpenAdBlockService::ReloadLists() {
   if (!adblock_root_.empty()) {
     LoadFromDirectory(adblock_root_, /*prefer_dat=*/true);

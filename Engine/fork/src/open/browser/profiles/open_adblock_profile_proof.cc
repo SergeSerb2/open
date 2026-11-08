@@ -4,6 +4,7 @@
 #include "open/adblock/open_adblock_profile_proof.h"
 #include <cstdio>
 #include <utility>
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -221,6 +222,10 @@ class AdBlockProfileProof final : public CefRequestContextHandler,
 
 void RunOpenAdBlockProfileProof(base::FilePath root,
                                base::OnceCallback<void(bool)> done) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("open-adblock-api-proof")) {
+    RunOpenAdBlockApiProof(std::move(root), std::move(done));
+    return;
+  }
   CefRefPtr<AdBlockProfileProof> proof =
       new AdBlockProfileProof(std::move(root), std::move(done));
   proof->Start();

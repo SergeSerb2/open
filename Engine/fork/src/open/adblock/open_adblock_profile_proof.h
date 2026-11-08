@@ -6,6 +6,8 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 namespace open_engine {
+void RunOpenAdBlockApiProof(base::FilePath root,
+                            base::OnceCallback<void(bool)> done);
 void RunOpenAdBlockProfileProof(base::FilePath root,
                                base::OnceCallback<void(bool)> done);
 }

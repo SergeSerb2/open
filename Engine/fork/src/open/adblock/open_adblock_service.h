@@ -68,6 +68,9 @@ class OpenAdBlockService {
       base::FilePath adblock_root,
       bool prefer_dat,
       base::OnceCallback<void(AdBlockLoadResult)> done = {});
+  // Production control path: same directory is a no-op; empty unloads and
+  // invalidates pending loads without changing enabled/exclusions.
+  void SetListDirectory(base::FilePath adblock_root);
   // Loads the root of the last LoadFromDirectory() again, with no |done|.
   void ReloadLists();
 

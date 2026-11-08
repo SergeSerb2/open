@@ -3133,140 +3133,51 @@ the lane is built) + the P-6 switches + overlay files +
 otherwise the PR states that it verified the #98 form). One PR. The PR
 quotes the sanitizer rules as implemented (security callout, 98-2).
 
-### Step 6 — CEF C API + translator (patch P-5)
+### Step 6 — CEF control API + translator (overlay, revised 2026-11-07)
 
-New API (all guarded `CEF_API_ADDED(CEF_API_VERSION_EXPERIMENTAL)`,
-F-12; `/*--cef()--*/` annotations so the translator emits the C API):
+The binding Section 13 design uses free functions in
+`Engine/fork/src/cef/include/cef_open_adblock.h`, guarded by
+`CEF_API_ADDED(CEF_EXPERIMENTAL)` and annotated for the CEF translator.
+No virtual methods are added to `cef_request_context.h` or `cef_browser.h`.
 
-In `cef/include/cef_request_context.h` (per-Profile control; impl in
-`CefRequestContextImpl`, forwarding to
-`browser_context()->open_adblock_service()` — `browser_context()` exists,
-F-13):
+- `CefSetOpenAdBlockEnabled(context, enabled)` sets the context's switch.
+- `CefSetOpenAdBlockListDirectory(context, list_dir)` starts an asynchronous
+  load from the root holding current.json. The same path is a no-op; an
+  empty path unloads and invalidates pending loads.
+- `CefReloadOpenAdBlockLists(context)` re-reads the last directory.
+- `CefSetOpenAdBlockExcludedDomains(context, domains)` replaces exclusions.
+- `CefGetOpenAdBlockStatus(context)` returns enabled, engine_loaded,
+  engine_from_dat, engine_shared, dat_policy, list_count, resources_loaded,
+  last_build_ms, last_error, excluded_count and load_generation. No URLs,
+  paths or exclusion names enter the dictionary. Errors use a fixed summary.
+- `CefGetOpenAdBlockBlockedCount(browser)` reads the existing current-document
+  helper's blocked plus redirected count, or zero without a helper. There
+  is no manual reset API; navigation owns resets.
 
-```cpp
-///
-/// Open: enable or disable native ad blocking for this request context
-/// (one Open Profile). Takes effect on the next navigation; no restart.
-/// The default is disabled until SetOpenAdBlockListDirectory has loaded
-/// an engine. Can be called on any CEF thread; marshals to the UI thread.
-///
-/*--cef()--*/
-virtual void SetOpenAdBlockEnabled(bool enabled) = 0;
+All calls run on the browser-process UI thread. Mutators return false for
+an unavailable or uninitialized context; status returns null. They never
+wait for an engine build and never fall back to Default. The implementation
+is a libcef overlay in `open/browser/profiles/open_adblock_api.cc`, compiled
+through `open_libcef_sources.gni`. The existing translator generates C API,
+wrapper, dylib and build-file entries when engine-apply copies the header;
+no new upstream wiring patch is required.
 
-/*--cef()--*/
-virtual bool IsOpenAdBlockEnabled() = 0;
-
-///
-/// Point the ad-block service at the adblock root and load current.json
-/// asynchronously. Verify only manifest-listed generation inputs and use
-/// a DAT only with its matching generation/input receipt (§9.2).
-///
-/*--cef(optional_param=list_dir)--*/
-virtual void SetOpenAdBlockListDirectory(const CefString& list_dir) = 0;
-
-///
-/// Re-read the directory from the last SetOpenAdBlockListDirectory call
-/// (use after the client has written updated list files). No-op if no
-/// directory was set.
-///
-/*--cef()--*/
-virtual void ReloadOpenAdBlockLists() = 0;
-
-///
-/// Replace the per-site exclusion set (registrable domains, e.g.
-/// "example.com"). Excluded top-level sites skip network blocking and
-/// cosmetic filtering after the next navigation.
-///
-/*--cef()--*/
-virtual void SetOpenAdBlockExcludedDomains(
-    const std::vector<CefString>& domains) = 0;
-
-/*--cef()--*/
-virtual void GetOpenAdBlockExcludedDomains(
-    std::vector<CefString>& domains) = 0;
-
-///
-/// Snapshot of ad-block state for this context as a dictionary with
-/// keys: enabled (bool), engine_loaded (bool), engine_from_dat (bool),
-/// list_count (int), dat_size_bytes (int), last_build_ms (int),
-/// last_error (string), excluded_domains (list of strings). Suitable
-/// for a "copy debug info" action. Contains no page URLs.
-/// Added 2026-10-26: engine_shared (bool, §6.6), dat_policy ("dat" |
-/// "text-only"), lossy_kinds (list of strings), resources_version
-/// (first 12 hex digits), resources_loaded (int), cosmetic_dropped_procedural
-/// (int), cosmetic_dropped_unsafe (int), cosmetic_dropped_style (int),
-/// cosmetic_dropped_remove (int), cosmetic_dropped_scriptlet (int),
-/// match_cap_bytes (int), checks_truncated (int, §7.7).
-///
-/*--cef()--*/
-virtual CefRefPtr<CefDictionaryValue> GetOpenAdBlockStatus() = 0;
-```
-
-In `cef/include/cef_browser.h`, class `CefBrowserHost` (per-tab counts;
-impl in `CefBrowserHostBase`, reading
-`open::OpenAdBlockTabHelper::FromWebContents(GetWebContents())`,
-creating nothing — absent helper means 0):
-
-```cpp
-/*--cef()--*/
-virtual int GetOpenAdBlockBlockedCount() = 0;   // blocked + redirected, current load
-/*--cef()--*/
-virtual void ResetOpenAdBlockBlockedCount() = 0;
-```
-
-Implementation + regeneration procedure (exact):
-
-1. Edit the two headers. Run the translator from `cef/`:
-   `cef/tools/translator.sh` (it runs
-   `python3 translator.py --root-dir ..`; pass no extra flags for the
-   default run). Expect regenerated: `cef/include/capi/cef_request_context_capi.h`,
-   `cef/include/capi/cef_browser_capi.h`, the `*_versions` headers,
-   `cef/libcef_dll/cpptoc/request_context_cpptoc.cc`,
-   `cef/libcef_dll/cpptoc/browser_host_cpptoc.cc` (names per the
-   translator's class mapping — accept what it emits), and
-   `cef/include/cef_api_versions.h` / hash updates if the tool writes
-   them. **Never hand-edit generated files.** If the translator emits
-   `AUTO-GENERATED CONTENT - DELETE THIS COMMENT` stubs in impl files,
-   that is the signal for step 2.
-2. Implement the C++ methods: `CefRequestContextImpl` (in
-   `cef/libcef/browser/request_context_impl.{h,cc}` — add the overrides
-   to the header's public section; bodies marshal to the UI thread with
-   the file's existing `CEF_REQUIRE_UIT` / post-task pattern and call
-   the service). `CefBrowserHostBase` (in
-   `cef/libcef/browser/browser_host_base.{h,cc}` — it already owns
-   `GetWebContents()`, F-13). Status dictionary: build with
-   `CefDictionaryValue::Create()` and the service's `AdBlockStatus`
-   (§6.2) field-for-field.
-3. API version bookkeeping: new methods compile only under the
-   experimental API (default). Do **not** run `version_manager.py` and
-   do not assign a numbered version — numbered assignment happens at
-   CEF upstream-merge time, which Open does not do (F-12).
-4. Add the new exported symbols to
-   `Engine/fork/verification/expected-symbols.txt` (fork-infra §10.2)
-   from real `nm -gU` output on the built framework (expect C symbols
-   like `_cef_request_context_set_open_ad_block_enabled` — copy the
-   real spellings, mangled C++ listed with a `# demangled:` comment
-   where applicable). `engine-status` S-7 must pass with them.
-5. Capture as P-5 via `engine-refresh-patches` (paths per §3.3). The
-   generated translator files are in-tree files and **do** belong in
-   the patch.
+Each OTR context has its own service, switch and exclusions. The App supplies
+its parent's list directory, allowing the registry to share the engine.
+Native close shuts down the OTR service before its parent and all setters
+reject a retained closed OTR wrapper.
 
 Acceptance:
 
-- [ ] Translator run is clean (no `not implemented` warnings left in
-      generated impls); re-running it produces no further diff
-      (`git -C "$SRC_DIR" status --short` stable across a second run).
-- [ ] Build green; `engine-status` all PASS including S-7 with the new
-      symbols.
-- [ ] §13.3 cases still pass, now driven **only** through the new CEF
-      API from the P-6 harness (the harness switches call
-      `SetOpenAdBlock*`, never `//open` headers directly).
-- [ ] N-20 (mid-page exclusion through `SetOpenAdBlockExcludedDomains`,
-      review r1 finding 15) passes.
-- [ ] Round-trip: revert P-5 in the tree, `engine-apply`, diff matches
-      the captured patch (fork-infra §8 step 5).
+- [ ] Engine build and engine-status PASS; generated C API has all six
+  functions and the framework exports their C symbols.
+- [ ] Headless real-CEF control flow: defaults/status schema, enable/off/on,
+  exclusions, same-path no-op, generation reload, failed load, unload during
+  a pending load, OTR settings isolation/sharing and closed-context refusal.
+- [ ] Real App integration after the recorded distribution: §12.1 and Step 8.
 
-PR: P-5 + `expected-symbols.txt`. One PR.
+Step 4, Step 6 and Step 8 ship as one engine milestone under the lead's
+integration gate. Smoke switches remain non-official only.
 
 ### Step 7 — Bundled lists, catalog, resources (§9.1, §9.3, §9.4)
 
@@ -3315,11 +3226,9 @@ it verified the #98 form) + the Swift manifest change. One PR.
 
 ### Step 8 — OpenEngine ObjC API + Swift contract (§12)
 
-Work: `Engine/OpenEngine/Sources/OpenEngine/{include/OpenEngineAdBlock.h,
-OpenEngineAdBlock.mm}`. Swift `AdBlockStore` lands either here (if the
-`OpenFeatures` target exists) or as the contract in §12.3 that the M6 UI
-PR implements — decide by whether the target exists at Step 8 start and
-state it. Do not create the whole `OpenFeatures` library from this plan.
+Work: the `OEAdBlock.h` categories and `OEAdBlock.mm` in §12.1, plus the
+App adapter to the existing `OpenAdBlock.AdBlockStore`. This ships with
+Step 6 under the Section 13 integration gate.
 
 Acceptance:
 
@@ -3330,7 +3239,7 @@ Acceptance:
       that as the evidence level (do not claim an app run).
 - [ ] End-to-end through the real app when it exists (else through
       `cefsimple` + a 20-line ObjC test host in `/tmp`): enable →
-      load test page → `blockedResourceCount` > 0 → exclude site →
+      load test page → `adBlockBlockedCount` > 0 → exclude site →
       reload → count 0 and ads visible → re-include → blocked again.
 - [ ] Per-Profile isolation: two request contexts, different list
       dirs/exclusions, counts and blocking independent (test host or
@@ -3393,74 +3302,49 @@ capturing; P-1 regeneration is fork-infra §12 step 5.
 CEF types never cross into Swift (architecture rule). OpenEngine is the
 only layer that includes CEF headers.
 
-### 12.1 ObjC++ API (new files, exact)
+### 12.1 ObjC++ API (categories, revised 2026-11-07)
 
-`Engine/OpenEngine/Sources/OpenEngine/include/OpenEngineAdBlock.h`:
+Public header `Engine/OpenEngine/include/OpenEngine/OEAdBlock.h`, imported
+by `OpenEngine.h`; implementation `Engine/OpenEngine/src/OEAdBlock.mm`.
+No CEF type or opaque handle crosses into Swift. Main thread only.
 
 ```objc
-#import <Foundation/Foundation.h>
-
-NS_ASSUME_NONNULL_BEGIN
-
-/// Per-Profile ad-block control. One instance per CEF request context.
-/// All methods are callable from any queue; they marshal to the CEF UI
-/// thread internally. No CEF types appear in this header.
-@interface OEAdBlockController : NSObject
-
-/// Designated initializer. |requestContext| is the opaque handle the
-/// existing OpenEngine browser layer already wraps (the same object
-/// its other per-context APIs take). If OpenEngine has no such wrapper
-/// yet, this initializer takes the CefRequestContext* as void* inside
-/// the .mm only — the header must still expose no CEF type.
-- (instancetype)initWithRequestContextHandle:(void *)requestContext NS_DESIGNATED_INITIALIZER;
-- (instancetype)init NS_UNAVAILABLE;
-
-/// Master toggle (Arc key nativeAdBlockEnabled at the Swift layer).
-@property (nonatomic) BOOL enabled;
-
-/// Point at <profile>/AdBlock/lists and load (async). Call once at
-/// Profile open (seed the directory from bundled lists first, §9.2),
-/// then rely on -reloadLists after updates.
-- (void)setListDirectory:(NSString *)path;
-- (void)reloadLists;
-
-/// Replace per-site exclusions (registrable domains, e.g. @"example.com").
-- (void)setExcludedDomains:(NSArray<NSString *> *)domains;
-- (NSArray<NSString *> *)excludedDomains;
-- (BOOL)isExcludedForHost:(NSString *)host;   // registrable-domain match, Swift-side mirror for instant UI
-
-/// Per-tab blocked count (blocked + redirected, current load). The
-/// |browserHandle| is OpenEngine's existing per-browser opaque handle.
-/// Returns 0 when no count exists yet. Poll on panel open and on load
-/// end; there is no change callback in v1 (D-10).
-- (NSInteger)blockedResourceCountForBrowser:(void *)browserHandle;
-- (void)resetBlockedResourceCountForBrowser:(void *)browserHandle;
-
-/// "Copy AdBlock debug info" payload (AD-8): the §11 Step 6 status
-/// dictionary rendered as sorted "key: value" lines, plus list IDs and
-/// ETags from the Swift store appended by the caller. No page URLs.
-- (NSDictionary<NSString *, id> *)statusDictionary;
-
+@interface OEBrowserContext (OEAdBlock)
+@property(class, nonatomic, readonly) BOOL adBlockSupported;
+@property(nonatomic, getter=isAdBlockEnabled) BOOL adBlockEnabled;
+@property(nonatomic, copy, nullable) NSURL* adBlockListDirectory;
+- (void)reloadAdBlockLists;
+@property(nonatomic, copy) NSArray<NSString*>* adBlockExcludedDomains;
+@property(nonatomic, readonly, copy) NSDictionary<NSString*, id>* adBlockStatus;
 @end
 
-NS_ASSUME_NONNULL_END
+@interface OEWebContent (OEAdBlock)
+@property(nonatomic, readonly) NSInteger adBlockBlockedCount;
+@end
 ```
 
-`OpenEngineAdBlock.mm` implementation: each method forwards to the
-corresponding `CefRequestContext` / `CefBrowserHost` method from §11
-Step 6 (`SetOpenAdBlockEnabled`, `SetOpenAdBlockListDirectory`, …).
-String conversion uses the existing OpenEngine `CefString` helpers; if
-none exist, convert via `std::string([s UTF8String])`. Thread marshaling
-uses the existing OpenEngine CEF-thread helper; if none exists, use
-`CefPostTask(TID_UI, ...)` in the `.mm` only. The count getter resolves
-the browser handle to `CefBrowserHost` the same way sibling OpenEngine
-APIs do.
+`adBlockSupported` is YES only with the native implementation. The App binds
+its store events only when it is supported. Before context initialization,
+the category remembers values and queues one weak callback through
+`oe_whenReady`. It applies exclusions, directory and enabled in that order
+using the final remembered values. A pending reload follows configuration.
+A closing/closed context ignores setters and returns defaults. Status maps
+the CEF snapshot's scalar values to NSNumber/NSString; count comes directly
+from `CefGetOpenAdBlockBlockedCount`.
+
+The App adapter (`App/AdBlock/AdBlockEngineAdapter.swift`) configures every
+regular context and its OTR children, and reapplies the parent's config to
+contexts created later. Profile opening/list updates run after first paint.
+Profile retirement drains the store and closes native state before deleting
+its folder. Section 12 owns the existing Site Control tile. The tile is
+unavailable unless the adapter is bound, that Profile is open and global
+blocking is enabled. No blocked count appears in the UI.
 
 ### 12.2 What the Site Control Center and Settings read (contract)
 
 - Panel toggle state: `enabled && !isExcludedForHost(currentHost)`.
-- Panel count: `blockedResourceCountForBrowser` at panel open + on the
-  engine's existing load-end event. No live ticking in v1.
+- No blocked count in the panel (Section 13 lead decision 4). The engine
+  count is for tests and debug only.
 - Toggle action: Swift updates its exclusion set (§12.3), calls
   `setExcludedDomains`, then offers the reload follow-up (SC-6) — the
   engine itself needs no reload for the toggle to be correct on the

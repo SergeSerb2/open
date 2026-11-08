@@ -32,6 +32,7 @@ open_libcef_mac_sources = [
   "//open/browser/page/open_page_state.h",
   "//open/browser/page/open_website_color_scheme.cc",
   "//open/browser/page/open_website_color_scheme.h",
+  "//open/browser/profiles/open_adblock_api.cc",
   "//open/browser/profiles/open_profile_context.cc",
   "//open/browser/profiles/open_profile_context.h",
   "//open/browser/tab_strip/hidden_browser.h",
@@ -60,5 +61,8 @@ open_libcef_deps = [
 
 # Headless native Profile/OTR receipt path; absent in official builds.
 if (!is_official_build) {
-  open_libcef_mac_sources += [ "//open/browser/profiles/open_adblock_profile_proof.cc" ]
+  open_libcef_mac_sources += [
+    "//open/browser/profiles/open_adblock_profile_proof.cc",
+    "//open/browser/profiles/open_adblock_api_proof.cc",
+  ]
 }
