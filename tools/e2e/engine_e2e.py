@@ -11949,6 +11949,8 @@ def main():
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     startup_peek = {key: domain_before.get(key) for key in
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
+    if opts.only in ('firstrun', 'onboarding', 'import-robust', 'welcome'):
+        startup_peek['open.onboarding.name'] = domain_before.get('open.onboarding.name')
     if opts.only in ('window', 'sidebar'):
         startup_peek['open.sidebar.hideHintShown'] = domain_before.get('open.sidebar.hideHintShown')
     if opts.only == 'passwords-probe':
@@ -12327,6 +12329,8 @@ def main():
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
+            if opts.only in ('firstrun', 'onboarding', 'import-robust', 'welcome'):
+                _restore_defaults(None, {'open.onboarding.name': None})
             if opts.only == 'passwords-probe':
                 _restore_defaults(None, {'open.links.littleOpenNUXSeen': True,
                                          'open.general.searchSuggestNoticeDismissed': True})
