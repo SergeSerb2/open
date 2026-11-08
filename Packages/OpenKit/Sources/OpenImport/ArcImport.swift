@@ -95,8 +95,9 @@ public struct ArcImportResult {
     public var boostsByProfile: [ProfileID: [Boost]] = [:]
 }
 
-public enum ImportError: Error {
+public enum ImportError: Error, Equatable {
     case missingSidebar
+    case unreadableSidebar
     case malformedSidebar
 }
 
@@ -158,15 +159,31 @@ public struct ArcImporter {
     /// only the model construction that consumes them runs on the main actor.
     public struct ParsedSidebar: @unchecked Sendable {
         let root: [String: Any]
+        let files: [String: Any]
+        let present: Set<String>
         let boosts: ArcBoostsReadResult
     }
     public func readSidebar() throws -> ParsedSidebar {
         let root = try readSidebarRoot()
-        return ParsedSidebar(root: root, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
+        var files: [String: Any] = [:]
+        var present = Set<String>()
+        for name in ["StorableProfiles.json", "StorableProfileContainers.json", "User Data/Local State",
+                     "StorableWindows.json", "StorableLinkRouting.json", "StorableArchiveItems.json", "StorableSessionRestorationData.json"] {
+            let file = arcDirectory.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: file.path) { present.insert(name) }
+            if let bytes = try? Data(contentsOf: file), let object = try? JSONSerialization.jsonObject(with: bytes) { files[name] = object }
+        }
+        return ParsedSidebar(root: root, files: files, present: present, boosts: ArcBoostsReader(arcDirectory: arcDirectory).read())
     }
     private func readSidebarRoot() throws -> [String: Any] {
         let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
-        guard let data = try? Data(contentsOf: url), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.missingSidebar }
+        let data: Data
+        do { data = try Data(contentsOf: url) }
+        catch {
+            if (error as NSError).code == NSFileReadNoSuchFileError { throw ImportError.missingSidebar }
+            throw ImportError.unreadableSidebar
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.malformedSidebar }
         return root
     }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
@@ -203,7 +220,7 @@ public struct ArcImporter {
     }
     struct ArcSourceProfile {let id:ProfileID;let name:String;let dataDirectoryName:String;let sourceDirectory:String}
     struct ArcSourceProfiles {let profiles:[ArcSourceProfile];let spaceOwners:[String:ProfileID];let refOwners:[String:ProfileID];let defaultID:ProfileID}
-    func sourceProfiles(spacesRaw:[(id:String,obj:[String:Any])],holder:[String:Any],itemsByID:[String:[String:Any]],directoryNamesToAvoid:Set<String>=[],existingDirectories:[ProfileID:String]=[:],report:inout ImportReport)->ArcSourceProfiles {
+    func sourceProfiles(spacesRaw:[(id:String,obj:[String:Any])],holder:[String:Any],itemsByID:[String:[String:Any]],directoryNamesToAvoid:Set<String>=[],existingDirectories:[ProfileID:String]=[:],files:[String:Any]?=nil,report:inout ImportReport)->ArcSourceProfiles {
         // StorableProfiles/ProfileContainers metadata shapes remain inferred.
         // Local State info_cache and custom._0.directoryBasename are confirmed.
         struct ProfileMetadata {
@@ -211,6 +228,7 @@ public struct ArcImporter {
             var directory: String?
         }
         func readJSON(_ path: String) -> Any? {
+            if let files { return files[path] }
             guard let data = try? Data(contentsOf: arcDirectory.appendingPathComponent(path)) else { return nil }
             return try? JSONSerialization.jsonObject(with: data)
         }
@@ -408,7 +426,7 @@ public struct ArcImporter {
                 return candidates
     }
     @MainActor
-    public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
+    public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:], includeArchive: Bool = true) throws -> ArcImportResult {
         let parsed = try parsed ?? readSidebar()
         let root = parsed.root
         guard let sidebar = root["sidebar"] as? [String: Any],
@@ -444,7 +462,7 @@ public struct ArcImporter {
         }
         report.sourceSpaces = spacesRaw.count
 
-        let sourceProfiles=sourceProfiles(spacesRaw:spacesRaw,holder:holder,itemsByID:itemsByID,directoryNamesToAvoid:directoryNamesToAvoid,existingDirectories:existingDirectories,report:&report)
+        let sourceProfiles=sourceProfiles(spacesRaw:spacesRaw,holder:holder,itemsByID:itemsByID,directoryNamesToAvoid:directoryNamesToAvoid,existingDirectories:existingDirectories,files:parsed.files,report:&report)
         let profiles=sourceProfiles.profiles.map {Profile(id:$0.id,name:$0.name,dataDirectoryName:$0.dataDirectoryName)}
         let defaultProfileID=sourceProfiles.defaultID
         // Icon / theme helpers.
@@ -750,8 +768,7 @@ public struct ArcImporter {
         var windows: [BrowserWindowState] = []
         var windowByArcID: [String: BrowserWindowState] = [:]
         let arcSpaceIDToOpen: [String: SpaceID] = Dictionary(uniqueKeysWithValues: zip(spacesRaw.map { $0.id }, spaces.map { $0.id }))
-        if let winData = try? Data(contentsOf: arcDirectory.appendingPathComponent("StorableWindows.json")),
-           let winRoot = try? JSONSerialization.jsonObject(with: winData) as? [String: Any],
+        if let winRoot = parsed.files["StorableWindows.json"] as? [String: Any],
            let winArr = winRoot["windows"] as? [[String: Any]] {
             let front = winArr.first { window in
                 let style = window["style"] as? [String: Any] ?? [:]
@@ -822,8 +839,7 @@ public struct ArcImporter {
             return result.destination
         }
         var defaultDestination: DefaultDestination = .littleOpen(profile: nil)
-        if let routeData = try? Data(contentsOf: arcDirectory.appendingPathComponent("StorableLinkRouting.json")),
-           let routeRoot = try? JSONSerialization.jsonObject(with: routeData) as? [String: Any] {
+        if let routeRoot = parsed.files["StorableLinkRouting.json"] as? [String: Any] {
             defaultDestination = destination(routeRoot["defaultDestination"]) ?? .littleOpen(profile: nil)
             for rawRule in (routeRoot["rules"] as? [[String: Any]]) ?? [] {
                 guard let components = rawRule["sourceComponents"] as? [[String: Any]] else { report.skippedRoutingRules += 1; continue }
@@ -869,59 +885,10 @@ public struct ArcImporter {
         // folder is lost in Arc's file, so the restore target is the source
         // Space's Today section (today:<spaceID>).
         var archiveRecords: [ArchivedTabRecord] = []
-        let archiveURL = arcDirectory.appendingPathComponent("StorableArchiveItems.json")
-        if FileManager.default.fileExists(atPath: archiveURL.path) {
-            report.archiveFilePresent = true
-            if let archiveData = try? Data(contentsOf: archiveURL),
-               let archiveRoot = try? JSONSerialization.jsonObject(with: archiveData) as? [String: Any],
-               let flat = archiveRoot["items"] as? [Any] {
-                for candidate in Self.archiveCandidates(flat,liveArcIDs:Set(nodeByArcID.keys),report:&report) {
-                    let entry=candidate.entry,sidebarItem=candidate.item,td=candidate.data,kind=candidate.kind,arcID=candidate.arcID,arcSpaceID=candidate.spaceID,url=candidate.url,reason=candidate.reason
-                    let openSpaceID = arcSpaceIDToOpen[arcSpaceID] ?? spaces[0].id
-                    let ownerSpace = spaces.first(where: { $0.id == openSpaceID }) ?? spaces[0]
-                    let savedTitle = td["savedTitle"] as? String ?? (kind == "welcomeToArc" ? (sidebarItem["title"] as? String ?? "Getting Started") : "")
-                    let itemTitle = sidebarItem["title"] as? String
-                    let customTitle = (itemTitle != nil && itemTitle != savedTitle) ? itemTitle : nil
-                    let tab = Tab(
-                        id: Self.itemID(forArcID: arcID),
-                        url: url, title: savedTitle, customTitle: customTitle,
-                        iconOverride: tabCustomIcon(from: td),
-                        createdAt: Self.date(from2001: (sidebarItem["createdAt"] as? NSNumber)?.doubleValue),
-                        lastActiveAt: Self.date(from2001: (td["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (sidebarItem["createdAt"] as? NSNumber)?.doubleValue),
-                        isMuted: (td["savedMuteStatus"] as? String) == "mute",
-                        isUnread: (sidebarItem["isUnread"] as? Bool) ?? false
-                    )
-                    let archivedAt = Self.date(from2001: (entry["archivedAt"] as? NSNumber)?.doubleValue ?? (sidebarItem["createdAt"] as? NSNumber)?.doubleValue)
-                    var payload: [String: Any] = [
-                        "id": tab.id.rawValue.uuidString,
-                        "url": tab.url.absoluteString,
-                        "title": tab.title,
-                        "createdAt": tab.createdAt.timeIntervalSince1970,
-                        "lastActiveAt": tab.lastActiveAt.timeIntervalSince1970,
-                        "isMuted": tab.isMuted,
-                        "isUnread": tab.isUnread,
-                    ]
-                    if let customTitle { payload["customTitle"] = customTitle }
-                    if let icon = tab.iconOverride {
-                        payload["iconOverride"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(icon))
-                    }
-                    let payloadData = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
-                    let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
-                    let location = "today:\(openSpaceID.rawValue.uuidString)"
-                    if kind == "welcomeToArc" { report.archiveImportedWelcome += 1 }
-                    archiveRecords.append(ArchivedTabRecord(
-                        id: tab.id, url: tab.url, title: tab.customTitle ?? tab.title,
-                        spaceID: openSpaceID, profileID: ownerSpace.profileID,
-                        archivedAt: archivedAt, reason: reason,
-                        originalLocation: location, payloadJSON: payloadJSON
-                    ))
-                }
-                archiveRecords.sort { $0.archivedAt < $1.archivedAt }
-                report.archiveImported = archiveRecords.count
-                report.archiveStatus = "imported \(archiveRecords.count) of \(report.archiveTotal)"
-            } else {
-                report.archiveStatus = "present but unreadable"
-            }
+        if includeArchive {
+            let archive = readArchive(sidebar: parsed, spaceProfiles: Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0.profileID) }),
+                                      defaultSpaceID: spaces[0].id, report: report)
+            archiveRecords = archive.records; report = archive.report
         }
 
         // MARK: Session restoration (StorableSessionRestorationData.json)
@@ -931,11 +898,9 @@ public struct ArcImporter {
         // profile/context detail beyond the incognito check, pair order
         // beyond the tie-break, windows absent from StorableWindows.json,
         // and items absent from the sidebar (archived or deleted items).
-        let sessionURL = arcDirectory.appendingPathComponent("StorableSessionRestorationData.json")
-        if FileManager.default.fileExists(atPath: sessionURL.path) {
+        if parsed.present.contains("StorableSessionRestorationData.json") {
             report.sessionFilePresent = true
-            if let sessionData = try? Data(contentsOf: sessionURL),
-               let sessionRoot = try? JSONSerialization.jsonObject(with: sessionData) as? [String: Any],
+            if let sessionRoot = parsed.files["StorableSessionRestorationData.json"] as? [String: Any],
                let mapping = sessionRoot["mapping"] as? [String: Any],
                let flat = mapping["keysToValues"] as? [Any] {
                 report.sessionTotalPairs = flat.count / 2
@@ -1050,6 +1015,87 @@ public struct ArcImporter {
             sourceProfileDirectories: sourceProfileDirectories,
             extensionsByProfile: extensionsByProfile,
             boostsByProfile: parsed.boosts.boosts.isEmpty ? [:] : [defaultProfileID: parsed.boosts.boosts])
+    }
+
+    public struct ArchiveReadResult: Sendable {
+        public var records: [ArchivedTabRecord]
+        public var report: ImportReport
+    }
+
+    /// Immutable parsed input and value records make Archive preparation safe
+    /// on a utility worker. No live model, file I/O or JSON encoding is needed
+    /// on the App's main actor for these records.
+    public func readArchive(sidebar parsed: ParsedSidebar, spaceProfiles: [SpaceID: ProfileID],
+                            defaultSpaceID: SpaceID, report initial: ImportReport) -> ArchiveReadResult {
+        var report = initial
+        var archiveRecords: [ArchivedTabRecord] = []
+        let holder = ((parsed.root["sidebar"] as? [String: Any])?["containers"] as? [Any])?.dropFirst().first as? [String: Any]
+        let items = holder?["items"] as? [Any] ?? []
+        var liveArcIDs = Set<String>()
+        for index in stride(from: 0, to: max(0, items.count - 1), by: 2) {
+            if let id = items[index] as? String, let object = items[index+1] as? [String: Any], Self.buildsSidebarNode(object) { liveArcIDs.insert(id) }
+        }
+        func tabCustomIcon(from tabData: [String: Any]) -> SpaceIcon? {
+            guard let customInfo = tabData["customInfo"] as? [String: Any], let icon = customInfo["iconType"] as? [String: Any] else { return nil }
+            if let emoji = icon["emoji_v2"] as? String, !emoji.isEmpty { return .emoji(emoji) }
+            if let number = icon["emoji"] as? NSNumber, let scalar = UnicodeScalar(number.intValue) { return .emoji(String(scalar)) }
+            if let named = icon["icon"] as? String {
+                if NamedSpaceIcons.symbols[named] != nil { report.namedSpaceIcons[named, default: 0] += 1 }
+                else { report.unknownNamedSpaceIcons += 1 }
+                return .named(named)
+            }
+            return nil
+        }
+        if parsed.present.contains("StorableArchiveItems.json") {
+            report.archiveFilePresent = true
+            if let archiveRoot = parsed.files["StorableArchiveItems.json"] as? [String: Any],
+               let flat = archiveRoot["items"] as? [Any] {
+                for candidate in Self.archiveCandidates(flat,liveArcIDs:liveArcIDs,report:&report) {
+                    let entry=candidate.entry,sidebarItem=candidate.item,td=candidate.data,kind=candidate.kind,arcID=candidate.arcID,arcSpaceID=candidate.spaceID,url=candidate.url,reason=candidate.reason
+                    let candidateSpaceID = Self.spaceID(forArcID: arcSpaceID)
+                    let openSpaceID = spaceProfiles[candidateSpaceID] != nil ? candidateSpaceID : defaultSpaceID
+                    let savedTitle = td["savedTitle"] as? String ?? (kind == "welcomeToArc" ? (sidebarItem["title"] as? String ?? "Getting Started") : "")
+                    let itemTitle = sidebarItem["title"] as? String
+                    let customTitle = (itemTitle != nil && itemTitle != savedTitle) ? itemTitle : nil
+                    let id = Self.itemID(forArcID: arcID)
+                    let createdAt = Self.date(from2001: (sidebarItem["createdAt"] as? NSNumber)?.doubleValue)
+                    let lastActiveAt = Self.date(from2001: (td["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (sidebarItem["createdAt"] as? NSNumber)?.doubleValue)
+                    let iconOverride = tabCustomIcon(from: td)
+                    let archivedAt = Self.date(from2001: (entry["archivedAt"] as? NSNumber)?.doubleValue ?? (sidebarItem["createdAt"] as? NSNumber)?.doubleValue)
+                    var payload: [String: Any] = [
+                        "id": id.rawValue.uuidString,
+                        "url": url.absoluteString,
+                        "title": savedTitle,
+                        "createdAt": createdAt.timeIntervalSince1970,
+                        "lastActiveAt": lastActiveAt.timeIntervalSince1970,
+                        "isMuted": (td["savedMuteStatus"] as? String) == "mute",
+                        "isUnread": (sidebarItem["isUnread"] as? Bool) ?? false,
+                    ]
+                    if let customTitle { payload["customTitle"] = customTitle }
+                    if let icon = iconOverride, let encoded = try? JSONEncoder().encode(icon),
+                       let value = try? JSONSerialization.jsonObject(with: encoded) {
+                        payload["iconOverride"] = value
+                    }
+                    let payloadData = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
+                    let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
+                    let location = "today:\(openSpaceID.rawValue.uuidString)"
+                    if kind == "welcomeToArc" { report.archiveImportedWelcome += 1 }
+                    archiveRecords.append(ArchivedTabRecord(
+                        id: id, url: url, title: customTitle ?? savedTitle,
+                        spaceID: openSpaceID, profileID: spaceProfiles[openSpaceID],
+                        archivedAt: archivedAt, reason: reason,
+                        originalLocation: location, payloadJSON: payloadJSON
+                    ))
+                }
+                archiveRecords.sort { $0.archivedAt < $1.archivedAt }
+                report.archiveImported = archiveRecords.count
+                report.archiveStatus = "imported \(archiveRecords.count) of \(report.archiveTotal)"
+            } else {
+                report.archiveStatus = "present but unreadable"
+            }
+        }
+
+        return ArchiveReadResult(records: archiveRecords, report: report)
     }
 
     private static func routingMatchForArcMatches(_ pattern: String) -> RoutingMatch {
