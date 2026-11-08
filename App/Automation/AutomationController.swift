@@ -220,6 +220,7 @@
       case "settings-profile": return try settingsProfile(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
+      case "settings-adblock": return try settingsAdBlock(a)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
         if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }
@@ -1019,6 +1020,8 @@
           "firstResponder": win.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
           "activationPolicy": NSApp.activationPolicy().rawValue,
           "screenFrame": win.screen.map { rect($0.frame) } ?? [],
+          "mainScreenVisibleFrame": NSScreen.main.map { rect($0.visibleFrame) } ?? [],
+          "mainScreenName": NSScreen.main?.localizedName ?? "", "mainScreenScale": NSScreen.main?.backingScaleFactor ?? 0,
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           // The optional content toolbar (commandbar-completion §4.6).
