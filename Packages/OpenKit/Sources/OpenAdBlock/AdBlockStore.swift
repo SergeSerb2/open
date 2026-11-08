@@ -47,7 +47,6 @@ private final class TemporaryRoot {
 @MainActor
 public final class AdBlockStore {
     public static let didChange = Notification.Name("OpenAdBlockStoreDidChange")
-    public func isProfileOpen(_ profile: ProfileID) -> Bool { states[profile] != nil }
     public let root: URL
     public let catalog: AdBlockCatalog
     public var onScheduledUpdate: (@MainActor (_ outcome: String, _ nextDelay: TimeInterval) -> Void)?
