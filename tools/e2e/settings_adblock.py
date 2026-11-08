@@ -298,6 +298,7 @@ def real_engine(factory, results, wait):
         body = (repo / 'Vendor/adblock' / name).read_bytes()
         assert hashlib.sha256(body).hexdigest() == digest, 'fixture must match the official bundled pin'
         pinned[name] = body
+    assert b'##.ad-slot' in pinned['easylist.txt'].splitlines(), 'cosmetic control must use a pinned EasyList rule'
     synthetic_lists = threading.Event()
     hold_lists, list_started, release_lists = (threading.Event() for _ in range(3))
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -322,7 +323,8 @@ def real_engine(factory, results, wait):
                 body = b'''<!doctype html><title>Open ad-block acceptance</title>
 <link rel="icon" href="data:,"><script>window.__done=0;</script>
 <script src="http://demand.supply/ad.js" onload="__done++" onerror="__done++"></script>
-<script src="/control.js" onload="__done++" onerror="__done++"></script>'''
+<script src="/control.js" onload="__done++" onerror="__done++"></script>
+<div class="ad-slot">Open cosmetic acceptance</div>'''
                 mime = 'text/html'
             self.send_response(200)
             self.send_header('Content-Type', mime)
@@ -359,6 +361,24 @@ def real_engine(factory, results, wait):
         results['AD3_' + name] = dict(ok=bool(ok), **evidence)
         print('AD3_' + name, 'PASS' if ok else 'FAIL', flush=True)
     observations = {}
+    cosmetic_observations = {}
+    cosmetic_state = '''(() => ({
+        display: getComputedStyle(document.querySelector('.ad-slot')).display,
+        sheets: document.styleSheets.length,
+        globals: Object.getOwnPropertyNames(window).filter(n => n.startsWith('__openAdBlock'))
+    }))()'''
+    def cosmetic_verdict(state, hidden):
+        return ((state['display'] == 'none') == hidden
+                and state['sheets'] == 0 and state['globals'] == [])
+    def cosmetic(tab, name, hidden):
+        if hidden:
+            wait(lambda: app.call('eval', tab=tab, js=cosmetic_state)['display'] == 'none', timeout=10)
+        else:
+            # Observe after the generic observer's 100 ms batching interval.
+            app.call('eval', tab=tab, js='new Promise(resolve => setTimeout(resolve, 300))')
+        state = app.call('eval', tab=tab, js=cosmetic_state)
+        cosmetic_observations[name] = state
+        row('cosmetic_' + name, cosmetic_verdict(state, hidden), **state)
     def request_verdict(evidence, blocked):
         state = evidence['scriptState']
         return (state['control'] and state['ad'] == (not blocked)
@@ -459,16 +479,28 @@ def real_engine(factory, results, wait):
             expectedResources=resource_count, status=status(original['id']), manifest=manifest)
         tab = app.call('open', url='about:blank')['id']
         visit(tab, 'enabled_blocks', True)
+        cosmetic(tab, 'enabled_hides', True)
         app.call('settings-adblock', host='open-adblock.test', excluded=True)
         visit(tab, 'excluded_allows', False)
+        cosmetic(tab, 'excluded_visible', False)
         app.call('settings-adblock', host='open-adblock.test', excluded=False)
         next_request(tab, 'reincluded_next_request_same_document', True)
         visit(tab, 'reincluded_blocks', True)
         app.call('settings-adblock', enabled=False)
         visit(tab, 'global_off_allows', False)
+        cosmetic(tab, 'global_off_visible', False)
         app.call('settings-adblock', enabled=True)
         next_request(tab, 'global_on_next_request_same_document', True)
         visit(tab, 'global_on_blocks_same_process', True)
+        cosmetic(tab, 'global_on_hides_again', True)
+        cosmetic_pairs = [('enabled_hides', 'excluded_visible'),
+                          ('global_on_hides_again', 'global_off_visible')]
+        row('cosmetic_gates_reject_inverse_controls', all(
+            cosmetic_verdict(cosmetic_observations[positive], True)
+            and cosmetic_verdict(cosmetic_observations[negative], False)
+            and not cosmetic_verdict(cosmetic_observations[negative], True)
+            and not cosmetic_verdict(cosmetic_observations[positive], False)
+            for positive, negative in cosmetic_pairs), pairs=cosmetic_pairs)
         app.call('settings-adblock', enabled=False)
         next_request(tab, 'global_off_next_request_same_document', False)
         app.call('settings-adblock', enabled=True)
