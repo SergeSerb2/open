@@ -25,6 +25,7 @@ public final class BoostStore: @unchecked Sendable {
     public let root: URL
     public let profileID: ProfileID
     public let fileURL: URL
+    private let usesProfileLayout: Bool
 
     private let queue = DispatchQueue(label: "open.boosts", qos: .utility)
     private let lock = NSLock()
@@ -42,13 +43,16 @@ public final class BoostStore: @unchecked Sendable {
             .appendingPathComponent("Open", isDirectory: true)
         self.profileID = profileID
         self.fileURL = fileURL ?? self.root.appendingPathComponent("Boosts/\(profileID.rawValue.uuidString).json")
+        usesProfileLayout = fileURL != nil
     }
 
     public func load() -> [Boost] {
         guard !lock.withLock({ retired }) else { return [] }
-        // The common never-Boosted Profile needs one existence check, without
-        // a directory scan, queue hop, file read or JSON decoder.
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+        // The App's never-Boosted Profile needs one existence check, without
+        // a directory scan, queue hop, file read or JSON decoder. Standalone
+        // legacy stores retain abandoned-write cleanup even without a JSON file.
+        let exists = FileManager.default.fileExists(atPath: fileURL.path)
+        guard exists || !usesProfileLayout else {
             lock.withLock { boosts = [:]; sorted = nil; loadedSchemaVersion = 1 }
             return []
         }
@@ -60,6 +64,10 @@ public final class BoostStore: @unchecked Sendable {
             for sibling in siblings where sibling.lastPathComponent.hasPrefix(prefix) {
                 let values = try? sibling.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
                 if values?.isRegularFile == true && values?.isSymbolicLink != true { try? FileManager.default.removeItem(at: sibling) }
+            }
+            guard exists else {
+                lock.withLock { boosts = [:]; sorted = nil; loadedSchemaVersion = 1 }
+                return []
             }
             do {
                 let data = try Data(contentsOf: fileURL)
