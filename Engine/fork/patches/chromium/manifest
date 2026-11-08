@@ -27,3 +27,5 @@ paths: chrome/browser/notifications/mac/notification_platform_bridge_mac.cc
 paths: chrome/browser/ui/views/extensions/extension_install_dialog_view.cc chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc
 # 0306-open-extension-windows-tabs.patch
 paths: chrome/browser/extensions/api/tabs/tabs_api.cc
+# 0601-open-script-world.patch
+paths: chrome/common/chrome_isolated_world_ids.h

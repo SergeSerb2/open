@@ -875,12 +875,14 @@ def main():
         profiles(cli)
     elif name == "settings-preview":
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
-        all_passed(run(preview, "check"))
+        # Every Settings preview launch takes the shared screen lock.
+        locked = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", preview]
+        all_passed(run(*locked, "check", timeout=None, interrupted_exit=2))
         output = Path("settings-panes").resolve()
-        rendered = run(preview, "render", "--out", str(output))
+        rendered = run(*locked, "render", "--out", str(output), timeout=None, interrupted_exit=2)
         require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
                 "missing rendered Previews control evidence")
-        dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
+        dump = run(*locked, "dump-keys", "--root", str(output / "fixture"), timeout=None, interrupted_exit=2)
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
