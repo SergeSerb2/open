@@ -153,7 +153,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var promptText: String?
   var contextMenuPolicy: String?
   var pageContextMenu: PageContextMenuBuilder?
-  var pageContextMenuHooks = PageContextMenuHooks()
+  lazy var pageContextMenuHooks = PageContextMenuHooks { [weak self] in
+    _ = self?.performAppCommand("manage-extensions")
+  }
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
