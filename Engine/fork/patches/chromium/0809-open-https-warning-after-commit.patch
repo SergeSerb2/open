@@ -1,0 +1,99 @@
+--- a/chrome/browser/ssl/https_only_mode_tab_helper.cc
++++ b/chrome/browser/ssl/https_only_mode_tab_helper.cc
+@@ -5,6 +5,9 @@
+ #include "chrome/browser/ssl/https_only_mode_tab_helper.h"
+
+ #include "base/feature_list.h"
++#include "base/functional/bind.h"
++#include "base/task/single_thread_task_runner.h"
++#include "build/build_config.h"
+ #include "chrome/browser/ssl/ask_before_http_dialog_controller.h"
+ #include "components/security_interstitials/core/features.h"
+ #include "components/tabs/public/tab_interface.h"
+@@ -14,10 +17,18 @@
+ #include "content/public/browser/web_contents.h"
+ #include "url/gurl.h"
+
++#if !BUILDFLAG(IS_ANDROID)
++#include "open/browser/autofill/open_autofill_hooks.h"
++#endif
++
+ HttpsOnlyModeTabHelper::~HttpsOnlyModeTabHelper() = default;
+
+ void HttpsOnlyModeTabHelper::DidStartNavigation(
+     content::NavigationHandle* navigation_handle) {
++  if (navigation_handle->IsInPrimaryMainFrame() &&
++      !navigation_handle->IsSameDocument()) {
++    ++navigation_generation_;
++  }
+   if (base::FeatureList::IsEnabled(
+           security_interstitials::features::kHttpsFirstDialogUi)) {
+     // Close the Ask-before-HTTP dialog if a new navigation begins in the
+@@ -86,9 +97,41 @@
+     }
+     ukm::SourceId ukm_source_id = ukm::ConvertToSourceId(
+         navigation_handle->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
+-    dialog_controller->ShowDialog(navigation_handle->GetWebContents(),
+-                                  navigation_handle->GetURL(), ukm_source_id,
+-                                  fallback_reason());
++#if !BUILDFLAG(IS_ANDROID)
++    auto& open_hooks = open_engine::GetAutofillHooks();
++    if (open_hooks.is_open &&
++        open_hooks.is_open(navigation_handle->GetWebContents())) {
++      // The native web-modal manager closes dialogs during a cross-site
++      // commit. Register this warning after that commit has notified every
++      // observer, as TabDialogManager's close_on_navigate=false does in Chrome.
++      // A second navigation or tab destruction invalidates the deferred show.
++      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE,
++          base::BindOnce(
++              [](base::WeakPtr<HttpsOnlyModeTabHelper> helper,
++                 uint64_t generation, GURL url, ukm::SourceId source_id,
++                 security_interstitials::https_only_mode::FallbackReason reason) {
++                if (!helper || helper->navigation_generation_ != generation) {
++                  return;
++                }
++                auto* tab = tabs::TabInterface::MaybeGetFromContents(
++                    helper->web_contents());
++                auto* controller = tab ? AskBeforeHttpDialogController::From(tab)
++                                       : nullptr;
++                if (controller) {
++                  controller->ShowDialog(helper->web_contents(), url, source_id,
++                                         reason);
++                }
++              },
++              weak_ptr_factory_.GetWeakPtr(), navigation_generation_,
++              navigation_handle->GetURL(), ukm_source_id, fallback_reason()));
++    } else
++#endif
++    {
++      dialog_controller->ShowDialog(navigation_handle->GetWebContents(),
++                                    navigation_handle->GetURL(), ukm_source_id,
++                                    fallback_reason());
++    }
+     // Make sure that the security indicator shows the correct icon.
+     // TODO(crbug.com/351990829): Add the new icon and integration.
+     navigation_handle->GetWebContents()->DidChangeVisibleSecurityState();
+--- a/chrome/browser/ssl/https_only_mode_tab_helper.h
++++ b/chrome/browser/ssl/https_only_mode_tab_helper.h
+@@ -5,7 +5,10 @@
+ #ifndef CHROME_BROWSER_SSL_HTTPS_ONLY_MODE_TAB_HELPER_H_
+ #define CHROME_BROWSER_SSL_HTTPS_ONLY_MODE_TAB_HELPER_H_
+
++#include <cstdint>
+ #include <map>
++
++#include "base/memory/weak_ptr.h"
+
+ #include "components/security_interstitials/core/https_only_mode_metrics.h"
+ #include "content/public/browser/web_contents_observer.h"
+@@ -131,6 +134,9 @@
+
+   bool is_typed_schemeless_upgrade_ = false;
+
++  uint64_t navigation_generation_ = 0;
++  base::WeakPtrFactory<HttpsOnlyModeTabHelper> weak_ptr_factory_{this};
++
+   WEB_CONTENTS_USER_DATA_KEY_DECL();
+ };
+
