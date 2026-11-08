@@ -55,7 +55,9 @@ early-quit, missing-engine, and migration launches do the same. All suite
 modules, peer launches, and benchmarks use that launcher. `tools/run.sh` and
 the release smoke launch also pass the switch. `tools/openctl` connects to
 an existing socket and never launches the App. `verify-all.sh` runs package
-CLIs, not the App. Only the `firstrun` suite opts into first run.
+CLIs, not the App. The `firstrun` and `onboarding` suites opt into first run.
+The former uses the intro's real skip/Get Started actions before its existing
+Section 7 assertions. Both always pass silent audio unless explicitly off.
 
 The dev launcher `tools/run.sh` always passes `--skip-first-run`. To see first
 run by hand, launch the built App binary directly with a disposable data root,
@@ -130,6 +132,33 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 - No `tab`: the selected tab.
 
 ## Commands
+
+`onboarding action=state` reports `active`, `moduleActive`, `screen`, intro
+`phase` (`introAnimation`, `sellIntro`, `sellCompleted`), elapsed time,
+Reduce Motion, scheduled audio/animation host times, sound decision/events,
+player lifetime flags, opt-in frame stats, and resident deltas at 3 s and
+after hand-off. `action=skip-intro` completes the visual tracks;
+`action=get-started` uses the native button action and refuses before ready.
+`action=replay-intro` overlays a running browser without writing data.
+Unknown actions/arguments are refused. The dim child window is reported
+only inside `onboarding` state; window lists and PNG snapshots exclude it.
+
+Launch options: `--intro-sound=off|silent`; automation-only
+`--intro-sound=fail-device`, `--reduce-motion`, `--measure-intro-frames`.
+`--replay-onboarding` requires an explicit `--user-data-dir` under the OS
+temporary directory or `/tmp`; the default root is refused before preparation.
+Debug Help ▸ Troubleshooting contains Replay Intro. Automated runs must use
+`--intro-sound=silent` (real player, volume zero) or `off` (no player).
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only onboarding
+```
+
+The suite uses a synthetic Arc-shaped source and disposable Open roots,
+restores preference keys in `finally`, checks cleanup, and records a negative
+proof for each gate using contrasting real App states. Frame statistics
+include p50/p95/max, drops and load1. The strict high-refresh row is INFO
+unless it runs on the M5 at load1 ≤12 and a display at 120 Hz or faster.
 
 `first-run` returns `{active, step, completed}` even when there is no browser
 window. Optional `action` drives the same view-model methods as the buttons:

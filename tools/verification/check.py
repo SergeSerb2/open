@@ -927,6 +927,10 @@ def main():
         matches(r"extensions-render check: [1-9]\d* passed, 0 failed", text)
         require(not re.search(r"^FAIL\b", text, re.MULTILINE), "extensions check failure")
         run(renderer, "menus", "--out", str(Path("extensions-menus")))
+    elif name == "onboarding-render":
+        run(sys.executable, str(root / "tools/generate-intro-sound.py"), "--check")
+        decoded = json.loads(run(str(root / "Packages/OpenKit/.build/release/onboarding-render"), "--check-sound"))
+        require(decoded["ok"], "committed intro failed decoded PCM curve comparison")
     elif name == "features-render":
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")

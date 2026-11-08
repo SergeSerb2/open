@@ -28,11 +28,21 @@ enum MainMenu {
       troubleshooting.addItem(archive)
     }
     #endif
+    #if DEBUG
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu {
+      let replay = ClosureMenuItem(title: "Replay Intro") { [weak app] in app?.showOnboarding(replay: true) }
+      replay.identifier = NSUserInterfaceItemIdentifier("replay-intro")
+      help.items.first(where: { $0.title == "Troubleshooting" })?.submenu?.addItem(replay)
+    }
+    #endif
     return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
+    // Native intro responder/default button owns unmodified keys. Do not load
+    // browser command services while the first-run welcome is on screen.
+    if event.window === app.onboardingWindowController?.window { return false }
     if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
       if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before
