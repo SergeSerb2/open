@@ -304,13 +304,17 @@ def rows_from(receipt, fail_demo=False):
                 source='docs/status.md F12; docs/first-run/steps-ef-verification.md Release timing')
             rows[-1]['measured']['p95'] = max(values) if values else None
     elif group.startswith('idle-'):
-        # architecture.md / idle-cpu.md: ≈0%, with NO approved nonzero tolerance.
+        # architecture.md / idle-cpu.md: ≈0%, with NO numeric tolerance.
+        # A qualitative target cannot define a numeric PASS/FAIL comparison.
         cpu = data.get('cpu', {})
-        add(group + ' ten pages', 0, cpu.get('total_cpu_percent'), unit='%', metric='mean',
+        add(group + ' ten pages', None, cpu.get('total_cpu_percent'), unit='%', metric='mean',
             samples='1 × 60 s; settle 90 s', ok=cpu.get('complete', False),
             source='docs/architecture.md; docs/idle-cpu.md; docs/s8-speed-gates.md',
             evidence=cpu)
-        rows[-1]['budget_label'] = '≈0% (no numeric tolerance)'
+        rows[-1]['budget_label'] = '≈0% target (no numeric budget)'
+        rows[-1]['operator'] = None
+        if rows[-1]['status'] == 'PASS':
+            rows[-1]['status'] = 'NO NUMERIC BUDGET'
     elif group == 'sitecontrol':
         source = 'Packages/OpenKit/Sources/sitecontrol-render/'
         # Bench.swift / docs/plans/site-control.md §8: strict CPU target <8 ms.
@@ -647,6 +651,7 @@ def main():
     parser.add_argument('--only', choices=GROUPS, help='diagnostic subset; omitted runs every workload once')
     parser.add_argument('--fail-demo', action='store_true', help='copy the cold command-open limit to 1 ms in this receipt only')
     parser.add_argument('--preflight', action='store_true', help='check paths, sockets, signatures and helpers; launch no App or measurement CLI')
+    parser.add_argument('--report', type=Path, help='render saved worker receipts using current budget reporting; launch nothing')
     parser.add_argument('--quiet-start', action='store_true', help='refuse above --max-load or with an Open, release CLI, xcodebuild or siso process; never wait')
     parser.add_argument('--max-load', type=float, default=4,
                         help='quiet-start load1 ceiling, recorded in the table and JSON (default 4)')
@@ -661,6 +666,8 @@ def main():
         parser.error('--max-load must be finite and positive')
     if args.data_root is not None and not args.worker:
         parser.error('--data-root is internal to --worker')
+    if args.report and (args.worker or args.only or args.fail_demo or args.preflight or args.quiet_start):
+        parser.error('--report cannot be combined with measurement or preflight selectors')
     for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(number, interrupt)
     app = args.app.resolve()
@@ -674,7 +681,7 @@ def main():
     started = time.monotonic()
     deadline = started + args.max_seconds
     result = dict(schema=1, app=str(app), groups=groups, partial=bool(args.only), fail_demo=args.fail_demo,
-                  mode='preflight' if args.preflight else 'measure', max_seconds=args.max_seconds,
+                  mode='report' if args.report else 'preflight' if args.preflight else 'measure', max_seconds=args.max_seconds,
                   max_load=args.max_load, quiet_start_enabled=args.quiet_start,
                   revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                   host=os.uname().nodename, rows=[], receipts=[], complete=False)
@@ -686,10 +693,30 @@ def main():
         return 1
     data_root = None
     try:
-        if args.quiet_start:
+        if args.report:
+            source = args.report.resolve()
+            if source.stat().st_size > LIMIT:
+                raise RuntimeError('saved receipt exceeds 16 MiB')
+            encoded = source.read_bytes()
+            saved = json.loads(encoded)
+            receipts = saved.get('receipts')
+            if not isinstance(receipts, list) or not 1 <= len(receipts) <= len(GROUPS):
+                raise RuntimeError('saved receipt must contain 1–21 worker receipts')
+            result.update(app=saved['app'], groups=saved['groups'], partial=saved['partial'],
+                          fail_demo=saved['fail_demo'], max_load=saved['max_load'],
+                          quiet_start_enabled=saved['quiet_start_enabled'], receipts=receipts,
+                          complete=saved['complete'], artifact_sha256=saved['artifact_sha256'])
+            result['reported_from'] = dict(path=str(source), sha256=hashlib.sha256(encoded).hexdigest(),
+                                           revision=saved['revision'], source_sha256=saved['source_sha256'],
+                                           elapsed_seconds=saved['elapsed_seconds'])
+            result['reporter_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+            result['rows'] = [row for receipt in receipts for row in rows_from(receipt, saved['fail_demo'])]
+        elif args.quiet_start:
             result['quiet_start'] = quiet_start(args.max_load)
         # Never derive a Unix socket path from --out or the caller's TMPDIR.
         # mkdtemp creates a private (0700) root; logs remain beside --out.
+        if args.report:
+            return 0 if result['complete'] and all(row['status'] in ('PASS', 'NO NUMERIC BUDGET') for row in result['rows']) else 1
         data_root = Path(tempfile.mkdtemp(prefix='ob.', dir='/tmp'))
         result['data_root'] = str(data_root)
         result['socket_paths'] = socket_preflight(groups, data_root)
@@ -741,10 +768,10 @@ def main():
                     result['preflight'] = 'FAIL'
         result['elapsed_seconds'] = round(time.monotonic() - started, 3)
         atomic_json(output, result)
-        print_table(result['rows'], args.max_load, args.quiet_start)
+        print_table(result['rows'], result['max_load'], result['quiet_start_enabled'])
     if args.preflight:
         return 0 if result.get('preflight') == 'PASS' and not result.get('error') else 1
-    return 0 if result['complete'] and all(r['status'] == 'PASS' for r in result['rows']) else 1
+    return 0 if result['complete'] and all(r['status'] in ('PASS', 'NO NUMERIC BUDGET') for r in result['rows']) else 1
 
 
 if __name__ == '__main__':

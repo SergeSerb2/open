@@ -1198,6 +1198,13 @@ limit. JSON records the paths, the longest path, `mode: preflight`,
 `preflight: PASS`, empty measurement rows and executable hashes. This is
 preparation evidence only.
 
+`--report <saved.json> --out <new.json>` renders the saved worker receipts with
+the current reporting rules and launches nothing. It preserves the original
+values, sample counts, loads, guard settings, executable hashes and source
+provenance. The original receipt stays unchanged. The derived JSON records its
+source receipt hash and the reporter hash. This mode can update a report label
+without repeating a measurement.
+
 For a lead-granted stopped-machine window, add `--quiet-start`. It refuses
 immediately if load1 exceeds `--max-load N` (default 4) or an Open/App helper,
 release CLI, `xcodebuild` or `siso` process exists. The table header and JSON
@@ -1231,7 +1238,7 @@ Budget inventory (the Python source cites each numeric limit):
 |---|---|
 | Existing-profile launch | `engine_e2e.py` `warm_existing_profile`, extracted from S16 `run_launch.py`: seven launches; sidebar median ≤250 ms, first paint median ≤700 ms. Also main ≤50 ms and modelLoaded ≤120 ms intermediate marks from the app-shell plan. Kernel process birth and a confirmed sidebar frame are required. Process-cold, warm file caches. |
 | First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh Welcome roots, median first content ≤250 ms, selected imported-tab paint from `firstRunLandingStarted` ≤700 ms. Uses the existing synthetic import fixture with local deterministic saved pages. |
-| Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. The target is ≈0%, with no approved numeric tolerance. The runner uses zero as a conservative bound and labels it explicitly. |
+| Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. The target is ≈0%, with no numeric tolerance. Valid measurements show `NO NUMERIC BUDGET` and their measured CPU; JSON has no numeric ceiling. Missing data or failed cleanup still fails. |
 | Site Control | Full `sitecontrol-render check`: cold-open CPU p95 <8 ms; simple-editor CPU p95 <12 ms using the required full-check procedure; both instruction gates; idle <10 ms CPU/2 s; ten-page refresh <100 ms; pad CPU p95 <2 ms; off-main hue <15 ms; ≤61 previews/120 inputs; code highlight CPU p95 <2 ms. Unknown instruction baselines fail closed. |
 | SM6 and mini-player | `sidebar-render check`: one declared warm-up and five fresh processes, accepted instruction ceiling, first-layout wall median ≤120 ms, structural gates, MC8 paused idle CPU ≤0.5%. |
 | Command bar keystrokes | `commandbar-render check` (#132/#135/#136, now 150/151): CPU p95 <8 ms, completion added p95 ≤0.3 ms, ≤1 panel layout pass. Retains the full combined gate. |
@@ -1265,8 +1272,9 @@ real run. Product thresholds and files do not change:
 /usr/bin/lockf -k /tmp/open-m5-quiet.lock tools/budgets.sh --only command-open --fail-demo --out .re/budgets/fail-demo.json
 ```
 
-The row is labelled `FAIL DEMO`. A budget failure exits 1; a complete all-PASS
-run exits 0. `--only <workload>` is for diagnosis and marks JSON `partial`.
+The row is labelled `FAIL DEMO`. A budget or harness failure exits 1. A complete
+run exits 0 when all numeric gates pass; `NO NUMERIC BUDGET` rows do not assert
+acceptance and do not cause failure. `--only <workload>` is for diagnosis and marks JSON `partial`.
 Default invocation runs the complete inventory once. No unit tests, desktop
 input, cache purge, threshold edits or engine-tree builds are involved.
 
