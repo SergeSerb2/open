@@ -4610,8 +4610,14 @@ all 32 rows (`integrated-N-r2.results.json`), including the native/server
 count predicate, limits, workers, sockets, extension ordering, DAT reload
 and in-flight close/driver-failure cleanup.
 
+**Unicode/IDN page edges.** All 16 cases pass against both the saved
+pre-ASCII build and the integrated build (32 rows). CDP observes the
+actual canonical ASCII specs, and allow/block verdicts remain identical
+for IDN hosts, escaped UTF-8 paths, separators, end anchors and user regex
+ASCII classes. Receipt: `.re/s13/e3/ascii-edge-page-results.json`.
+
 **Remaining delivery gates.** G-4 after idle, page G-5
-(<=9 ms CPU and blocking-on wall faster than off), CDP URL edges,
+(<=9 ms CPU and blocking-on wall faster than off),
 recorded distribution, real App acceptance and the full verify gate remain
 pending in E3. N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
