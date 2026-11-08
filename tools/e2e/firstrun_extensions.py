@@ -7,10 +7,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import time
 
-from extensions_p3 import pack_probe
+# The engine harness uses Python's isolated mode, which omits sibling modules.
+pack_probe = runpy.run_path(str(Path(__file__).with_name('extensions_p3.py')))['pack_probe']
 
 
 def run(launch, state, until, row, source, tmp, h, results):

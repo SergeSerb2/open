@@ -315,11 +315,13 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   damaged-signature error, result count and next queue item. No install timeout
   or delegate error event is used. — Section 14 C5, 2026-11-07.
 
-- Import Undo removes created Profiles and sidebar/routing changes from the
-  model. Main #222 now provides typed deletion and awaited native teardown
-  with in-session data removal (0702). Import Undo still does not erase
-  Archive/History stores or engine directories. Owner Section 14: integrate
-  that completed teardown path; do not bypass its boundary.
+- Import Undo (#224) removes created Profiles and sidebar/routing changes from the
+  model, and the Archive rows and History visits/keys that the import inserted
+  ([verification](import-robustness.md)). Main #222 now provides typed Profile
+  deletion and awaited native teardown with in-session data removal (0702).
+  Import Undo still does not remove Profile directories or loaded engine
+  contexts. Owner Section 14: integrate that completed teardown path; do not
+  bypass its typed confirmation or context teardown.
 - Session Favorite keys contain a Profile and window but no Space. When a source
   window focuses another Profile, import uses the Favorite owner's first Space.
   This is an accepted, marked guess. Settings keeps its current windows and selections and
