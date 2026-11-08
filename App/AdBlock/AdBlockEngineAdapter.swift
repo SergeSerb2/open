@@ -49,7 +49,9 @@ final class AdBlockEngineAdapter {
   }
 
   private func openAfterPaint(_ profile: Profile) {
-    guard started, !app.shutdownPrepared, let store, !store.isRetired(profile.id),
+    // Without engine support, launch opens nothing (no list update schedule);
+    // Settings still opens the Profile it shows, as before.
+    guard isSupported, started, !app.shutdownPrepared, let store, !store.isRetired(profile.id),
       openings[profile.id] == nil, !store.isProfileOpen(profile.id) else { return }
     openings[profile.id] = Task { [weak self] in
       guard let self else { return }
