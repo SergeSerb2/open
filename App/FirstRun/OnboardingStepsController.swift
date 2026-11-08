@@ -33,6 +33,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private(set) var defaultResolved = false
   private(set) var finishing = false
   private(set) var confettiPlayed = false
+  private var confettiWasBehindCard = false
+  private var confettiLifetime = 0.0
   private var confetti: CAEmitterLayer?
   private var entered: [Step] = []
   private var tasks: [Task<Void, Never>] = []
@@ -99,10 +101,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     skipButton?.frame = NSRect(x: step == .name ? 0:44, y: 0, width: 130, height: 40)
     primary?.frame = NSRect(x: footer.bounds.width-120, y: 0, width: 120, height: 40)
     preview.frame = NSRect(x: width, y: 0, width: view.bounds.width-width, height: view.bounds.height)
-    let cardWidth = min(620, preview.frame.width-96)
+    let cardFrame = preview.convert(preview.cardRect, to: view)
     for (index, button) in cardButtons.enumerated() {
-      button.frame = NSRect(x: preview.frame.midX-46+CGFloat(index)*52,
-        y: view.bounds.midY+cardWidth*0.625/2+24, width: 40, height: 40)
+      button.frame = NSRect(x: cardFrame.midX-38+CGFloat(index)*44,
+        y: cardFrame.maxY+16, width: 32, height: 32)
     }
     host?.view.frame = controls.bounds
     statusLabel?.frame = NSRect(x: 0, y: 150, width: controls.bounds.width, height: 90)
@@ -197,10 +199,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     }
     if step == .ready {
       let shuffle = button("Shuffle card pattern") { [weak self] in self?.shuffleCard() }
-      shuffle.usesLightInk = true
+      shuffle.usesLightInk = true; shuffle.circular = true
       shuffle.image = NSImage(systemSymbolName: "shuffle", accessibilityDescription: "Shuffle card pattern"); shuffle.imagePosition = .imageOnly
       let save = button("Save card image…") { [weak self] in self?.saveCard() }
-      save.usesLightInk = true
+      save.usesLightInk = true; save.circular = true
       save.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: "Save card image…"); save.imagePosition = .imageOnly
       cardButtons = [shuffle, save]; cardButtons.forEach { view.addSubview($0) }
       statusLabel = NSTextField(wrappingLabelWithString: firstRun.errorText ?? ""); if let statusLabel { statusLabel.textColor = .systemRed; controls.addSubview(statusLabel) }
@@ -366,13 +368,21 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private func updatePreview() { preview.update(step: step.rawValue, name: name, favorites: selectedFavorites.sorted().map { Self.sites[$0].name }, count: firstRun.outcome?.importedCount("Imported tabs") ?? firstRun.probe?.sidebarItems ?? 0, report: firstRun.step == .report, blocker: blocker, card: card, reduceMotion: reduceMotion) }
   private func celebrate() {
     confettiPlayed = true
-    let emitter = CAEmitterLayer(); emitter.frame = preview.bounds; emitter.emitterPosition = CGPoint(x: preview.bounds.midX, y: preview.bounds.height); emitter.emitterSize = CGSize(width: 300, height: 1); emitter.emitterShape = .line
+    let emitter = CAEmitterLayer(); emitter.emitterShape = .line
     emitter.emitterCells = [NSColor.systemBlue, .systemOrange, .systemPink, .white].map { color in
-      let cell = CAEmitterCell(); cell.birthRate = 28; cell.lifetime = 3; cell.velocity = 160; cell.velocityRange = 70; cell.emissionLongitude = -.pi/2; cell.emissionRange = .pi/2; cell.yAcceleration = -100; cell.spinRange = 3
+      let cell = CAEmitterCell(); cell.birthRate = 28; cell.lifetime = 0.6; cell.velocity = 160; cell.velocityRange = 70; cell.emissionLongitude = -.pi/2; cell.emissionRange = .pi/2; cell.yAcceleration = -100; cell.spinRange = 3
       let image = NSImage(size: NSSize(width: 8, height: 5), flipped: false) { rect in color.setFill(); rect.fill(); return true }; cell.contents = image.cgImage(forProposedRect: nil, context: nil, hints: nil); return cell
     }
-    preview.layer?.addSublayer(emitter); confetti = emitter
-    tasks.append(Task { [weak self, weak emitter] in try? await Task.sleep(for: .milliseconds(250)); emitter?.birthRate = 0; try? await Task.sleep(for: .seconds(4)); emitter?.removeFromSuperlayer(); self?.confetti = nil })
+    preview.showConfetti(emitter); confetti = emitter
+    confettiWasBehindCard = preview.confettiBehindCard
+    confettiLifetime = Double(emitter.emitterCells?.first?.lifetime ?? 0)
+    let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
+    fade.beginTime = emitter.convertTime(CACurrentMediaTime(), from: nil)+0.45; fade.duration = 0.15
+    fade.fillMode = .forwards; fade.isRemovedOnCompletion = false; emitter.add(fade, forKey: "confetti-fade")
+    tasks.append(Task { [weak self, weak emitter] in
+      try? await Task.sleep(for: .milliseconds(600)); emitter?.birthRate = 0
+      emitter?.removeFromSuperlayer(); self?.confetti = nil
+    })
   }
   private func fetchIcons() {
     guard iconTasks.isEmpty else { return }
@@ -395,7 +405,16 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       })
     }
   }
-  var state: [String: Any] { ["screen": step.rawValue, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
+  private var cardState: [String: Any] {
+    let rect = preview.convert(preview.cardRect, to: view)
+    return ["luminance": card.backgroundLuminance, "darkText": card.usesDarkText,
+      "frame": [rect.minX, rect.minY, rect.width, rect.height],
+      "buttons": cardButtons.map { button -> [String: Any] in
+        ["label": button.accessibilityLabel() ?? "", "circle": button.circular,
+          "frame": [button.frame.minX, button.frame.minY, button.frame.width, button.frame.height]]
+      }]
+  }
+  var state: [String: Any] { ["screen": step.rawValue, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
     var result: [[String: String]] = []
     if root is NSButton || root is NSSwitch || (root as? NSTextField)?.isEditable == true || root is ThemeEditorButton || root is PresetSwatchView || root is OpenSpaceEditor.ColorPadView { result.append(["role": root.accessibilityRole()?.rawValue ?? "", "label": root.accessibilityLabel() ?? (root as? NSButton)?.title ?? ""]) }
@@ -431,8 +450,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   let prominent: Bool
   let reduceMotion: Bool
   var usesLightInk = false
+  var circular = false
   private let press: @MainActor () -> Void
   private var hovered = false
+  private var circularGlyph: NSImage?
   init(_ title: String, primary: Bool, reduceMotion: Bool, action: @escaping @MainActor () -> Void) {
     prominent = primary; self.reduceMotion = reduceMotion; press = action
     super.init(frame: .zero); self.title = title; isBordered = false; target = self; self.action = #selector(invoke)
@@ -446,16 +467,26 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   @objc private func invoke() { guard isEnabled else { return }; press() }
   override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; invoke(); return true }
   override func updateTrackingAreas() { super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea); addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)) }
-  override func mouseEntered(with event: NSEvent) { hovered = true; animateScale(1.02) }
-  override func mouseExited(with event: NSEvent) { hovered = false; animateScale(1) }
+  override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true; animateScale(1.02) }
+  override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true; animateScale(1) }
   override func mouseDown(with event: NSEvent) { animateScale(0.98); super.mouseDown(with: event); animateScale(hovered ? 1.02:1) }
   private func animateScale(_ value: Double) { guard !reduceMotion, isEnabled else { return }; let spring = CASpringAnimation(keyPath: "transform.scale"); spring.fromValue = layer?.presentation()?.value(forKeyPath: "transform.scale") ?? 1; spring.toValue = value; spring.mass = 1; spring.stiffness = pow(2 * .pi / 0.3, 2); spring.damping = 2*0.45*sqrt(spring.stiffness); spring.duration = spring.settlingDuration; spring.fillMode = .forwards; spring.isRemovedOnCompletion = false; layer?.add(spring, forKey: "button-scale") }
   override func draw(_ dirtyRect: NSRect) {
+    if circular { NSColor.white.withAlphaComponent(hovered ? 0.24:0.16).setFill(); NSBezierPath(ovalIn: bounds).fill() }
     if prominent { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: isEnabled ? 1:0.4).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 20, yRadius: 20).fill() }
     if title == "Back" { NSColor.quaternaryLabelColor.withAlphaComponent(0.12).setFill(); NSBezierPath(ovalIn: bounds).fill() }
     if imagePosition == .imageOnly, let image {
-      let tinted = image.withSymbolConfiguration(.init(paletteColors: [usesLightInk || prominent ? .white:.labelColor])) ?? image
-      tinted.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: isEnabled ? 1:0.4)
+      let tinted: NSImage
+      if circular {
+        if circularGlyph == nil {
+          let glyph = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            image.draw(in: rect); NSColor.white.setFill(); rect.fill(using: .sourceIn); return true
+          }
+          glyph.isTemplate = false; circularGlyph = glyph
+        }
+        tinted = circularGlyph ?? image
+      } else { tinted = image.withSymbolConfiguration(.init(paletteColors: [usesLightInk || prominent ? .white:.labelColor])) ?? image }
+      tinted.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: (isEnabled ? 1:0.4)*(circular ? 0.9:1))
     }
     else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: prominent ? NSColor.white : NSColor.secondaryLabelColor, .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
     if window?.firstResponder === self { NSColor.keyboardFocusIndicatorColor.setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 18, yRadius: 18); path.lineWidth = 2; path.stroke() }

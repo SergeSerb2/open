@@ -64,6 +64,23 @@ def run(factory, results, tmp, h):
                 until(lambda: state()['screen']=='ready' or not state()['defaultPending'])
         raise AssertionError(state())
     def snapshot(): return Path(app.user_data)/'State/browser.json'
+    def export_card(path):
+        path.unlink(missing_ok=True)
+        action('save-card'); until(lambda: state()['savePanel'])
+        action('card-save', path=str(path))
+        until(lambda: path.is_file() and not state()['savePanel'])
+    def card_ink(path, s):
+        _, _, pixel = h.read_image(str(path), srgb=True)
+        observed = dict(luminance=s['card']['luminance'], darkText=s['card']['darkText'])
+        # These are the name/date areas of the real 1200 x 750 export. Compare
+        # each row with clear background left of the text, beyond grain/pattern
+        # variation. Opposite-color exports provide the negative proofs below.
+        for label, top, bottom in [('name',525,625), ('date',625,658)]:
+            deltas = [h.luma(pixel(x,y))-h.luma(pixel(48,y))
+                for y in range(top,bottom) for x in range(76,490)]
+            observed[label+'DarkPixels'] = sum(delta < -45 for delta in deltas)
+            observed[label+'LightPixels'] = sum(delta > 45 for delta in deltas)
+        return observed
     try:
         h._restore_defaults(None, {key: None for key in keys})
         initial = launch()
@@ -108,15 +125,24 @@ def run(factory, results, tmp, h):
         gate('no_default_prompt_before_click', lambda s: s['screen']=='defaultBrowser' and not s['defaultAttempted'], default, off)
         action('choose-default', yes=False); app.call('key', key='return'); ready = screen('ready'); shot('ready-light')
         gate('name_greeting', lambda s: s.get('title')=='Welcome to Open, Example.', ready, initial)
-        gate('confetti', lambda s: s.get('confettiPlayed') is True, ready, initial)
+        gate('confetti', lambda s: s.get('confettiPlayed') is True and s.get('confettiBehindCard') is True
+            and abs(s.get('confettiLifetime',0)-0.6)<0.000001, ready, initial)
+        def card_buttons(s):
+            card = s.get('card',{}); buttons = card.get('buttons',[])
+            if len(buttons)!=2: return False
+            left,right = (b['frame'] for b in buttons); frame = card['frame']
+            return all(b['circle'] and b['label'] for b in buttons) and left[2:]==right[2:]==[32,32] \
+                and abs(right[0]-left[0]-44)<0.01 and abs(left[1]-frame[1]-frame[3]-16)<0.01 \
+                and abs((left[0]+right[0]+32)/2-frame[0]-frame[2]/2)<0.01
+        gate('card_buttons', card_buttons, ready, initial)
         action('shuffle-card'); shuffled = state(); shot('ready-shuffled-light')
         gate('shuffle', lambda s: s.get('cardPattern')==1, shuffled, ready)
         # Real NSSavePanel service response reaches its production completion.
         action('save-card'); until(lambda: state()['savePanel'])
         action('card-cancel'); until(lambda: not state()['savePanel'])
         card_path = evidence/'open-card.png'
-        action('save-card'); until(lambda: state()['savePanel'])
-        action('card-save', path=str(card_path)); until(lambda: card_path.is_file())
+        export_card(card_path)
+        yellow_ink = card_ink(card_path, state())
         width, height, pixel = h.read_image(str(card_path))
         screenshot_width, screenshot_height, _ = h.read_image(str(evidence/'ready-light.png'))
         gate('card_png', lambda s: s['size']==[1200,750] and s['nonflat'],
@@ -198,9 +224,18 @@ def run(factory, results, tmp, h):
         action('skip'); screen('favorites'); action('skip'); screen('theme'); action('skip'); screen('blocker'); action('skip'); screen('defaultBrowser')
         action('choose-default', yes=False); action('next'); blank = screen('ready')
         results['steps_every_skip'] = dict(ok=blank['name']=='' and blank['favorites']==[] and blank['blocker'] is False and blank['title']=='Welcome to Open.', state=blank, load=os.getloadavg())
+        blue_path = evidence/'open-card-blue.png'
+        export_card(blue_path)
+        blue_ink = card_ink(blue_path, state())
+        gate('card_yellow_ink', lambda s: s['darkText'] and s['luminance']>0.55
+            and s['nameDarkPixels']>200 and s['dateDarkPixels']>30
+            and s['nameLightPixels']<20 and s['dateLightPixels']<20, yellow_ink, blue_ink)
+        gate('card_blue_ink', lambda s: not s['darkText'] and s['luminance']<=0.55
+            and s['nameLightPixels']>200 and s['dateLightPixels']>30
+            and s['nameDarkPixels']<20 and s['dateDarkPixels']<20, blue_ink, yellow_ink)
         # A real write failure keeps Ready open and D3 unset; retry reuses choices.
         for _ in range(4): action('back')
-        screen('favorites'); action('toggle-favorite', index=0); action('toggle-favorite', index=6)
+        screen('favorites'); action('toggle-favorite', index=1); action('toggle-favorite', index=6)
         for _ in range(3): action('next')
         screen('defaultBrowser'); action('choose-default', yes=False); action('next'); screen('ready')
         snapshot().mkdir(); action('get-started'); failure = state()
@@ -210,6 +245,8 @@ def run(factory, results, tmp, h):
         retried_tabs = app.call('tabs')
         results['steps_save_retry_no_duplicates'] = dict(ok=len([t for t in retried_tabs if t['section']=='favorites'])==2
             and len([t for t in retried_tabs if t['url']=='open://welcome'])==1, load=os.getloadavg())
+        gate('calendar_favorite', lambda ts: any(t['section']=='favorites' and t['title']=='Google Calendar'
+            and t['url']=='https://calendar.google.com/' for t in ts), retried_tabs, tabs)
         # Already default is a read-only automation outcome. No system prompt runs.
         launch(directory=empty, OPEN_AUTOMATION_DEFAULT_BROWSER='already'); skip_to_ready()
         already = state(); action('back'); offered = screen('defaultBrowser'); shot('already-default-light')
@@ -225,9 +262,8 @@ def run(factory, results, tmp, h):
             until(lambda: state()['screen']=='ready')
             gate('default_'+outcome, lambda s: s['defaultPending'] and s['defaultAttempted'] and bool(s['defaultOutcome']), during, default)
         # Reduced motion has no offset or emitter, including after back/forward.
-        launch(directory=empty, flags=['--reduce-motion']); reduced = skip_to_ready(); shot('ready-reduce-motion')
+        launch(directory=empty, flags=['--reduce-motion']); reduced = skip_to_ready(); shot('ready-reduce-motion-light')
         gate('reduced', lambda s: s['reduceMotion'] and s['offset']==0 and not s['confettiPlayed'] and not s['confettiActive'], reduced, ready)
-        action('set-appearance', appearance='dark'); shot('ready-dark')
         # Replay exercises all setup choices over the saved browser. None may
         # reach the importer, model, preferences, blocker or default service.
         action('get-started'); until(lambda: not state()['active'] and not state()['dim']['exists'])

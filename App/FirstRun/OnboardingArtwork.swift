@@ -2,6 +2,7 @@ import AppKit
 import QuartzCore
 import OpenDesign
 import OpenModel
+import OpenOnboarding
 import ImageIO
 
 /// One original drawing is used for the live card and its exact 1200 x 750 PNG.
@@ -10,16 +11,31 @@ import ImageIO
   let theme: SpaceTheme
   let date: Date
   let pattern: Int
+  private var palette: [NSColor] {
+    let style = SpaceThemeStyle(theme: theme, system: .dark)
+    let colors: [RGBA] = switch style.fill { case .blended(let base, let overlay): base + overlay.filter { $0.alpha > 0 }; case .corners(let values): values }
+    let fallback = [NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1), NSColor(srgbRed: 11/255, green: 26/255, blue: 92/255, alpha: 1)]
+    let values = theme.style == nil && theme.importedArcThemeJSON == nil ? fallback:colors.map(\.nsColor)
+    return values.count > 1 ? values:Array(repeating: values.first ?? fallback[0], count: 2)
+  }
+  private static func luminance(of gradient: NSGradient?) -> Double {
+    guard let color = gradient?.interpolatedColor(atLocation: 0.5).usingColorSpace(.sRGB) else { return 0 }
+    func linear(_ component: CGFloat) -> Double {
+      let value = min(1, max(0, Double(component)))
+      return value <= 0.04045 ? value/12.92 : pow((value+0.055)/1.055, 2.4)
+    }
+    return 0.2126*linear(color.redComponent) + 0.7152*linear(color.greenComponent) + 0.0722*linear(color.blueComponent)
+  }
+  var backgroundLuminance: Double { Self.luminance(of: NSGradient(colors: palette)) }
+  var usesDarkText: Bool { backgroundLuminance > 0.55 }
   func draw(in rect: CGRect) {
     guard let context = NSGraphicsContext.current?.cgContext else { return }
     context.saveGState(); defer { context.restoreGState() }
     context.translateBy(x: rect.minX, y: rect.minY); context.scaleBy(x: rect.width/1200, y: rect.height/750)
     let bounds = CGRect(x: 0, y: 0, width: 1200, height: 750)
     NSBezierPath(roundedRect: bounds, xRadius: 36, yRadius: 36).addClip()
-    let style = SpaceThemeStyle(theme: theme, system: .dark)
-    let colors: [RGBA] = switch style.fill { case .blended(let base, let overlay): base + overlay.filter { $0.alpha > 0 }; case .corners(let values): values }
-    let palette = theme.style == nil && theme.importedArcThemeJSON == nil ? [NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1), NSColor(srgbRed: 11/255, green: 26/255, blue: 92/255, alpha: 1)] : colors.map(\.nsColor)
-    NSGradient(colors: palette)?.draw(in: bounds, angle: 35)
+    let gradient = NSGradient(colors: palette)
+    gradient?.draw(in: bounds, angle: 35)
     // Six deterministic patterns. No external art or random data is used.
     for index in 0..<9 {
       let seed = (index*173 + pattern*97 + 31)%997
@@ -33,22 +49,14 @@ import ImageIO
       for y in stride(from: 0, to: 750, by: grain.height) { for x in stride(from: 0, to: 1200, by: grain.width) { context.draw(grain, in: CGRect(x: x, y: y, width: grain.width, height: grain.height)) } }
       context.restoreGState()
     }
-    Self.door(in: CGRect(x: 785, y: 80, width: 480, height: 650), alpha: 0.10)
-    Self.door(in: CGRect(x: 72, y: 535, width: 78, height: 110), alpha: 1)
-    NSColor(srgbRed: 1, green: 0.62, blue: 0.18, alpha: 1).setFill(); NSBezierPath(ovalIn: CGRect(x: 115, y: 600, width: 18, height: 18)).fill()
-    ((name.isEmpty ? "Open":name) as NSString).draw(in: CGRect(x: 72, y: 130, width: 1040, height: 90), withAttributes: [.font: NSFont.systemFont(ofSize: 64, weight: .semibold), .foregroundColor: NSColor.white])
+    OnboardingBrandMark.draw(in: CGRect(x: 785, y: 80, width: 480, height: 650), opacity: 0.10)
+    OnboardingBrandMark.draw(in: CGRect(x: 72, y: 535, width: 78, height: 110))
+    let darkText = Self.luminance(of: gradient) > 0.55
+    let nameColor = darkText ? NSColor.black.withAlphaComponent(0.82):NSColor.white
+    let dateColor = darkText ? NSColor.black.withAlphaComponent(0.55):NSColor.white.withAlphaComponent(0.72)
+    ((name.isEmpty ? "Open":name) as NSString).draw(in: CGRect(x: 72, y: 130, width: 1040, height: 90), withAttributes: [.font: NSFont.systemFont(ofSize: 64, weight: .semibold), .foregroundColor: nameColor])
     let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US"); formatter.dateFormat = "MMMM d, yyyy"
-    (("Since " + formatter.string(from: date)) as NSString).draw(at: CGPoint(x: 76, y: 100), withAttributes: [.font: NSFont.systemFont(ofSize: 15), .foregroundColor: NSColor.white.withAlphaComponent(0.7)])
-  }
-  static func door(in rect: CGRect, alpha: CGFloat) {
-    let path = NSBezierPath()
-    let r = rect.width/2, k: CGFloat = 0.55228475, shoulder = rect.maxY-r
-    path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-    path.line(to: CGPoint(x: rect.minX, y: shoulder))
-    path.curve(to: CGPoint(x: rect.midX, y: rect.maxY), controlPoint1: CGPoint(x: rect.minX, y: shoulder+r*k), controlPoint2: CGPoint(x: rect.midX-r*k, y: rect.maxY))
-    path.curve(to: CGPoint(x: rect.maxX, y: shoulder), controlPoint1: CGPoint(x: rect.midX+r*k, y: rect.maxY), controlPoint2: CGPoint(x: rect.maxX, y: shoulder+r*k))
-    path.line(to: CGPoint(x: rect.maxX, y: rect.minY)); path.lineCapStyle = .round
-    NSColor.white.withAlphaComponent(alpha).setStroke(); path.lineWidth = rect.width*0.07; path.stroke()
+    (("Since " + formatter.string(from: date)) as NSString).draw(at: CGPoint(x: 76, y: 100), withAttributes: [.font: NSFont.systemFont(ofSize: 17), .foregroundColor: dateColor])
   }
   func png() throws -> Data {
     // Largest explicitly requested bitmap: 1200 * 750 * 4 = 3,600,000 bytes.
@@ -64,17 +72,20 @@ import ImageIO
   private var step = "name", name = ""
   private var favorites: [String] = []
   private var count = 0, report = false, blocker = true, reduced = false
-  private var card: OpenCardDrawing?
   private var scene = CALayer()
   private let theme = ThemeBackgroundView()
+  private let miniBrowser = OnboardingMiniBrowser()
+  private let readyCard = OnboardingReadyCard()
   private let link = CALayer()
   private var linkStarted = false
   private var ads: [CALayer] = []
   override init(frame: NSRect) {
     super.init(frame: frame); wantsLayer = true; layer?.addSublayer(scene)
     theme.isHidden = true; theme.wantsLayer = true; theme.layer?.cornerRadius = 14; theme.layer?.masksToBounds = true
-    let chrome = OnboardingMiniBrowser(frame: CGRect(x: 0, y: 0, width: 420, height: 280)); chrome.autoresizingMask = [.width, .height]; theme.addSubview(chrome)
+    miniBrowser.frame = CGRect(x: 0, y: 0, width: 420, height: 280)
+    miniBrowser.autoresizingMask = [.width, .height]; theme.addSubview(miniBrowser)
     addSubview(theme)
+    addSubview(readyCard); readyCard.isHidden = true; readyCard.layer?.zPosition = 1
     link.backgroundColor = NSColor.systemBlue.cgColor; link.cornerRadius = 5
     for _ in 0..<3 { let ad = CALayer(); ad.backgroundColor = NSColor(white: 0.7, alpha: 1).cgColor; ad.cornerRadius = 5; ads.append(ad) }
     setAccessibilityElement(true); setAccessibilityRole(.image)
@@ -83,13 +94,19 @@ import ImageIO
   override func layout() {
     super.layout(); scene.frame = bounds
     theme.frame = CGRect(x: bounds.midX-210, y: bounds.midY-140, width: 420, height: 280)
+    readyCard.frame = cardRect
     if step == "defaultBrowser" { layoutLink() }
   }
   func update(step: String, name: String, favorites: [String], count: Int, report: Bool, blocker: Bool, card: OpenCardDrawing, reduceMotion: Bool) {
     let changed = self.step != step
-    self.step = step; self.name = name; self.favorites = favorites; self.count = min(8, max(0, count)); self.report = report; self.blocker = blocker; self.card = card; reduced = reduceMotion
+    self.step = step; self.name = name; self.favorites = favorites; self.count = min(8, max(0, count)); self.report = report; self.blocker = blocker; reduced = reduceMotion
     theme.isHidden = step != "theme"
-    if step == "theme" { theme.style = SpaceThemeStyle(theme: card.theme, system: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark:.light); theme.material = .window }
+    readyCard.isHidden = step != "ready"; readyCard.card = card
+    if step == "theme" {
+      let style = SpaceThemeStyle(theme: card.theme, system: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark:.light)
+      theme.style = style; theme.material = .window
+      miniBrowser.tint = style.accent?.nsColor ?? style.tintedLightAccent?.nsColor ?? .systemBlue
+    }
     link.isHidden = step != "defaultBrowser"; if changed { linkStarted = false; link.removeAllAnimations(); link.removeFromSuperlayer(); ads.forEach { $0.removeFromSuperlayer() } }
     if step == "defaultBrowser" && changed { scene.addSublayer(link); layoutLink() }
     if step == "blocker" {
@@ -99,6 +116,21 @@ import ImageIO
     }
     setAccessibilityLabel(step == "ready" ? "Open card for \(name.isEmpty ? "Open":name)": "\(step) preview")
     needsDisplay = true
+  }
+  var cardRect: CGRect {
+    let width = max(1, min(620, bounds.width-96))
+    return CGRect(x: bounds.midX-width/2, y: bounds.midY-width*0.625/2, width: width, height: width*0.625)
+  }
+  func showConfetti(_ emitter: CAEmitterLayer) {
+    emitter.frame = bounds
+    emitter.emitterPosition = CGPoint(x: cardRect.midX, y: cardRect.maxY+12)
+    emitter.emitterSize = CGSize(width: cardRect.width*0.85, height: 1)
+    // The scene is below the readyCard subview's layer, including all its text.
+    scene.addSublayer(emitter)
+  }
+  var confettiBehindCard: Bool {
+    guard let emitter = scene.sublayers?.first(where: { $0 is CAEmitterLayer }) else { return false }
+    return !readyCard.isHidden && emitter.superlayer === scene && scene.zPosition < (readyCard.layer?.zPosition ?? 0)
   }
   private func layoutLink() {
     guard link.superlayer != nil else { return }
@@ -115,8 +147,7 @@ import ImageIO
     let center = CGPoint(x: bounds.midX, y: bounds.midY)
     switch step {
     case "name":
-      OpenCardDrawing.door(in: CGRect(x: center.x-44, y: center.y, width: 88, height: 120), alpha: 1)
-      NSColor.orange.setFill(); NSBezierPath(ovalIn: CGRect(x: center.x+10, y: center.y+72, width: 22, height: 22)).fill()
+      OnboardingBrandMark.draw(in: CGRect(x: center.x-44, y: center.y, width: 88, height: 120))
       text(name.isEmpty ? "Hello":"Hello, \(name)", in: CGRect(x: center.x-300, y: center.y-75, width: 600, height: 44), size: 28)
     case "import", "favorites":
       let rect = CGRect(x: center.x-170, y: center.y-230, width: 340, height: 460)
@@ -133,22 +164,38 @@ import ImageIO
       NSColor.white.withAlphaComponent(0.16).setFill(); NSBezierPath(roundedRect: CGRect(x: center.x-220, y: center.y-10, width: 160, height: 110), xRadius: 16, yRadius: 16).fill()
       text("A link for you", in: CGRect(x: center.x-215, y: center.y+30, width: 150, height: 25), size: 17)
       NSColor.white.withAlphaComponent(0.22).setFill(); NSBezierPath(roundedRect: CGRect(x: center.x+50, y: center.y-120, width: 200, height: 150), xRadius: 14, yRadius: 14).fill()
-      OpenCardDrawing.door(in: CGRect(x: center.x+130, y: center.y-90, width: 40, height: 60), alpha: 1)
-    case "ready":
-      let width = min(620, bounds.width-96); let rect = CGRect(x: center.x-width/2, y: center.y-width*0.625/2, width: width, height: width*0.625)
-      NSGraphicsContext.saveGraphicsState(); let shadow = NSShadow(); shadow.shadowBlurRadius = 35; shadow.shadowOffset = NSSize(width: 0, height: -12); shadow.shadowColor = NSColor.black.withAlphaComponent(0.25); shadow.set(); NSColor.black.setFill(); NSBezierPath(roundedRect: rect, xRadius: 20, yRadius: 20).fill(); NSGraphicsContext.restoreGraphicsState()
-      card?.draw(in: rect)
+      OnboardingBrandMark.draw(in: CGRect(x: center.x+130, y: center.y-90, width: 40, height: 60))
+    case "ready": break // Separate foreground layer keeps confetti behind the card.
     default: break
     }
   }
 }
 
+@MainActor private final class OnboardingReadyCard: NSView {
+  var card: OpenCardDrawing? { didSet { needsDisplay = true } }
+  override init(frame: NSRect) {
+    super.init(frame: frame); wantsLayer = true
+    layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = 0.25
+    layer?.shadowRadius = 35; layer?.shadowOffset = CGSize(width: 0, height: -12)
+  }
+  required init?(coder: NSCoder) { nil }
+  override func layout() {
+    super.layout()
+    let radius = bounds.width*36/1200
+    layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil)
+  }
+  override func draw(_ dirtyRect: NSRect) { card?.draw(in: bounds) }
+}
+
 @MainActor private final class OnboardingMiniBrowser: NSView {
+  var tint = NSColor.systemBlue { didSet { needsDisplay = true } }
+  override var isFlipped: Bool { true }
   override func draw(_ dirtyRect: NSRect) {
-    for (index, color) in [NSColor.systemRed, .systemYellow, .systemGreen].enumerated() { color.withAlphaComponent(0.8).setFill(); NSBezierPath(ovalIn: CGRect(x: 12+index*15, y: 258, width: 8, height: 8)).fill() }
+    for (index, color) in [NSColor.systemRed, .systemYellow, .systemGreen].enumerated() { color.withAlphaComponent(0.8).setFill(); NSBezierPath(ovalIn: CGRect(x: 12+index*15, y: 12, width: 8, height: 8)).fill() }
     NSColor.white.withAlphaComponent(0.9).setFill(); NSBezierPath(roundedRect: CGRect(x: 120, y: 8, width: bounds.width-128, height: bounds.height-16), xRadius: 8, yRadius: 8).fill()
-    for index in 0..<6 { NSColor.white.withAlphaComponent(index == 1 ? 0.4:0.15).setFill(); NSBezierPath(roundedRect: CGRect(x: 12, y: 218-index*29, width: 96, height: 20), xRadius: 5, yRadius: 5).fill() }
-    NSColor.gray.withAlphaComponent(0.15).setFill(); CGRect(x: 145, y: 218, width: 215, height: 12).fill()
-    for index in 0..<4 { CGRect(x: 145, y: 184-index*20, width: 210-index*17, height: 7).fill() }
+    for index in 0..<4 { tint.withAlphaComponent(index == 1 ? 0.4:0.15).setFill(); NSBezierPath(roundedRect: CGRect(x: 12, y: 52+index*34, width: 96, height: 20), xRadius: 5, yRadius: 5).fill() }
+    NSColor.gray.withAlphaComponent(0.14).setFill(); NSBezierPath(roundedRect: CGRect(x: 140, y: 18, width: 250, height: 18), xRadius: 6, yRadius: 6).fill()
+    NSColor.gray.withAlphaComponent(0.18).setFill()
+    for index in 0..<3 { NSBezierPath(roundedRect: CGRect(x: 145, y: 64+index*22, width: 220-index*20, height: 9), xRadius: 4, yRadius: 4).fill() }
   }
 }
