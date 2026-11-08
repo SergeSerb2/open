@@ -48,6 +48,35 @@ enum MainMenu {
         "tag": item.tag, "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
     }
   }
+  /// Resolve native events through the App's real router at the first frame.
+  /// This records routing only; it does not execute Quit, Print or other commands.
+  static func registryShortcutRoutes(_ app: AppDelegate) -> [[String: Any]] {
+    let carriers = shortcutSnapshot(NSApp.mainMenu)
+    return CommandRegistry.active.flatMap { command in
+      app.keyBindings.effectiveShortcuts(for: command).map { shortcut -> [String: Any] in
+        let context = RoutingContext(isAppActive: command.scope != .global,
+          isCommandBarOpen: command.scope == .commandBar,
+          isSidebarFocused: command.scope == .sidebarFocused)
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero,
+          modifierFlags: shortcut.keyEquivalentModifierMask,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: NSApp.keyWindow?.windowNumber ?? 0, context: nil,
+          characters: shortcut.keyEquivalent, charactersIgnoringModifiers: shortcut.keyEquivalent,
+          isARepeat: false, keyCode: UInt16(shortcut.carbonKeyCode ?? 0))
+        var routed = ""
+        if let event, case .browserCommand(let id)? = app.fallbackKeyboard.route(
+          event: event, context: context, overrides: app.keyBindings) { routed = id }
+        let hasCarrier = carriers.contains { item in
+          item["id"] as? String == command.id && item["key"] as? String == shortcut.keyEquivalent
+            && item["modifierMask"] as? UInt == shortcut.keyEquivalentModifierMask.rawValue
+        }
+        return ["id": command.id, "key": shortcut.keyEquivalent,
+          "modifierMask": shortcut.keyEquivalentModifierMask.rawValue, "scope": command.scope.rawValue,
+          "routedCommand": routed, "menuCarrier": hasCarrier,
+          "routable": routed == command.id && (command.menuPath == nil || hasCarrier)]
+      }
+    }
+  }
   #endif
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }

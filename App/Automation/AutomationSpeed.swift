@@ -4,6 +4,20 @@ import OpenEngine
 import Darwin
 
 extension AutomationController {
+  /// Whole native tree for settled main/branch parity, including AppKit additions.
+  func speedMenuTree(_ menu: NSMenu?) -> [[String: Any]] {
+    (menu?.items ?? []).map { item in
+      ["id": item.identifier?.rawValue ?? "", "title": item.title,
+        "separator": item.isSeparatorItem, "key": item.keyEquivalent,
+        "modifierMask": item.keyEquivalentModifierMask.rawValue,
+        "checked": item.state.rawValue, "hidden": item.isHidden,
+        "targetNil": item.target == nil, "tag": item.tag,
+        "action": item.action.map(NSStringFromSelector) ?? "",
+        "payload": (item.representedObject as? [String: String])?["payload"] ?? "",
+        "children": speedMenuTree(item.submenu)]
+    }
+  }
+
   /// Measurement only. The bare engine trace avoids the recording toast's
   /// once-per-second UI updates. The optional observer is harness-injected.
   func speedTrace(_ args: [String: Any]) async throws -> Any {

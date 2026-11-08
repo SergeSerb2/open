@@ -176,6 +176,9 @@
           "uptime": ProcessInfo.processInfo.systemUptime,
           "frontmostApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown",
           "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0] as [String: Any]
+      case "menu-tree":
+        NSApp.mainMenu?.update()
+        return speedMenuTree(NSApp.mainMenu)
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)

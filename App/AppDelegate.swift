@@ -339,6 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     #if OPEN_AUTOMATION
     if ProcessInfo.processInfo.environment["OPEN_SPEED_MENU_PROBE"] == "1" {
       startupEvidence["firstFrameMenuShortcuts"] = MainMenu.shortcutSnapshot(NSApp.mainMenu)
+      startupEvidence["firstFrameRegistryRoutes"] = MainMenu.registryShortcutRoutes(self)
       if ProcessInfo.processInfo.environment["OPEN_SPEED_EARLY_MENU_PROBE"] == "1" {
         // Exercise the callback AppKit uses before opening this native menu.
         if let menu = NSApp.mainMenu?.items.first(where: { $0.title == "File" })?.submenu {
