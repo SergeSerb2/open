@@ -22,7 +22,8 @@ extension AutomationController {
       vm.confirmsDelete=false;vm.confirmsUnused=false;vm.showsCreate=false;vm.showsSuggestNotice=false
       adapter.profileIconPicker?.close()
     case "press":
-      guard let label=args["label"] as? String, let owner=adapter.settingsPresenter.window,
+      let owner = args["library"] as? Bool == true ? adapter.libraryPresenter?.window : adapter.settingsPresenter.window
+      guard let label=args["label"] as? String, let owner,
         let control=profileAX(owner.attachedSheet ?? owner,label:label) else { throw Failure(message:"Profile control not found") }
       let press=NSSelectorFromString("accessibilityPerformPress")
       guard control.responds(to:press) else { throw Failure(message:"Profile control has no press action") }
@@ -48,7 +49,12 @@ extension AutomationController {
       guard let raw=args["url"] as? String,raw.utf8.count <= 8192,let url=URL(string:raw) else {throw Failure(message:"invalid Profile URL")}
       adapter.openURL(url,profileID:adapter.settings.selectedProfileID)
     case "indicator-menu":
-      guard let view=profileIndicatorViews().first else {throw Failure(message:"no visible Profile indicator")}
+      let views = args["library"] as? Bool == true
+        ? profileIndicatorViews(in:adapter.libraryPresenter?.window?.contentView,identifier:"spaceManagerSpaceHeaderIndicator")
+        : profileIndicatorViews()
+      guard let view=views.first else {throw Failure(message:"no visible Profile indicator")}
+      let selection = args["item"] as? String
+      guard (selection?.utf8.count ?? 0) <= 1024 else {throw Failure(message:"Profile menu title too long")}
       profileIndicatorMenuTitles=[]
       let observer=NotificationCenter.default.addObserver(forName:NSMenu.didBeginTrackingNotification,object:nil,queue:.main) { [weak self] note in
         // NotificationCenter guarantees this observer's delivery on .main.
@@ -59,7 +65,12 @@ extension AutomationController {
           self?.profileIndicatorMenuTitles=menu.items.map(\.title)
           nonisolated(unsafe) let trackingMenu=menu
           let timer=Timer(timeInterval:0.05,repeats:false) { _ in
-            MainActor.assumeIsolated { trackingMenu.cancelTrackingWithoutAnimation() }
+            MainActor.assumeIsolated {
+              if let selection, let index=trackingMenu.items.firstIndex(where:{$0.title == selection && $0.isEnabled}) {
+                trackingMenu.performActionForItem(at:index)
+              }
+              trackingMenu.cancelTrackingWithoutAnimation()
+            }
           }
           RunLoop.main.add(timer,forMode:.eventTracking)
         }
@@ -68,10 +79,12 @@ extension AutomationController {
       // service an ordinary main-queue async block on this AppKit version.
       defer {NotificationCenter.default.removeObserver(observer)}
       _=view.accessibilityPerformPress()
+      if let selection, !profileIndicatorMenuTitles.contains(selection) {throw Failure(message:"Profile menu item not found")}
     default:throw Failure(message:"unknown Profiles shell action")
     }
     await Task.yield()
     let owner=adapter.settingsPresenter.window, sheet=owner?.attachedSheet
+    let managerSheet = adapter.libraryPresenter?.window?.attachedSheet
     let delete=sheet.flatMap {profileAX($0,label:"Delete")}
     let enabled:Bool?=delete.flatMap {object in
       if let element=object as? any NSAccessibilityProtocol { return element.isAccessibilityEnabled() }
@@ -90,6 +103,9 @@ extension AutomationController {
       "deleteAXClass":delete.map {String(reflecting:type(of:$0))} ?? "",
       "deleteText":vm.deleteConfirmation,"deleteNames":vm.deletionProfiles.map(\.name),
       "sheet":sheet?.windowNumber ?? 0,"sheetText":sheet.map(windowText) ?? [],"settings":owner?.windowNumber ?? 0,
+      "managerSheet":managerSheet?.windowNumber ?? 0,"managerSheetText":managerSheet.map(windowText) ?? [],
+      "managerSheetParent":managerSheet?.sheetParent?.windowNumber ?? 0,
+      "undoName":app.undoManager.undoActionName,
       "error":vm.errorText,"canUndo":app.undoManager.canUndo,
       "noticeShown":app.missingProfileNoticeCount,"noticeTitles":app.missingProfileNoticeTitles,
       "noticeVisible":app.missingProfileNotice?.window.isVisible ?? false,

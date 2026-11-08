@@ -115,7 +115,7 @@ public struct ModelSidebarActions {
         case .moveSpace(let id, let index):
             model.moveSpace(id: id, to: index)
         case .setSpaceProfile(let space, let profile):
-            model.updateSpace(id: space, profileID: profile)
+            return model.moveSpace(id: space, toProfile: profile)
         case .openURL(let url, let parent, let index):
             switch parent {
             case .spacePinned(let s), .spaceToday(let s):
