@@ -484,8 +484,11 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         return app.call('events')
 
     def load(url):
+        from urllib.parse import urlsplit, urlunsplit
         tab = h['new_tab'](app, url)
-        ready = 'location.href === %s && document.readyState === "complete"' % json.dumps(url)
+        parts = urlsplit(url)
+        expected = urlunsplit(parts._replace(path=parts.path or '/'))
+        ready = 'location.href === %s && document.readyState === "complete"' % json.dumps(expected)
         assert wait(lambda: app.eval(tab, ready), timeout=15, step=.1), 'fixture document did not finish navigation'
         return tab
 
