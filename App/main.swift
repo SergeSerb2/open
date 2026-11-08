@@ -24,6 +24,11 @@ appDelegate.options = options
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
+#if OPEN_AUTOMATION
+if let receipt = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SCRIPTING_PREFLIGHT"] {
+  AutomationScriptingPreflight.run(app: appDelegate, receipt: URL(fileURLWithPath: receipt))
+}
+#endif
 // Finish AppKit launch and draw the snapshot-backed sidebar before loading
 // Chromium. The same sidebar survives engine readiness; no page exists yet.
 app.setActivationPolicy(.regular)

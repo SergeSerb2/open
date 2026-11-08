@@ -181,6 +181,13 @@ Both modes reset and restore their shared defaults keys in `finally`.
 
 ## Protocol
 
+Automation builds can run the Cocoa setter preflight without creating native
+windows or starting Chromium. Set `OPEN_AUTOMATION_SCRIPTING_PREFLIGHT` to an
+absolute JSON receipt path and launch the built App with an isolated
+`--user-data-dir`. The App sends actual Apple events to itself, records setter
+round trips/errors and `nativeWindows: 0`, then exits. This launch still takes
+the on-screen lock. See [scripting](scripting.md#little-open-tab-references-2026-11-07).
+
 One JSON object per line in each direction.
 
 ```text
@@ -281,7 +288,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | Command | Args | Result |
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
-| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
+| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`, `little`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
 | `tabs` | optional `sidebar:true` | Plain response is an array; `sidebar:true` adds `{tabs,rows,folders,selectedNode}` native row/state readback. Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
 | `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
 | `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
