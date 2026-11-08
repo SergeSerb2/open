@@ -71,6 +71,11 @@ def run(factory, results, tmp, h):
         app.call('key', key='return'); imported = screen('import'); shot('import-light')
         gate('same_window', lambda s: s['screen']=='import' and s['window']==initial['window'] and s['dim']['exists'], imported, initial)
         action('skip'); favorites = screen('favorites'); shot('favorites-empty-light')
+        action('toggle-favorite', index=11); last_site = state(); action('toggle-favorite', index=11)
+        refused = False
+        try: action('toggle-favorite', index=12)
+        except RuntimeError: refused = True
+        results['steps_favorite_limits'] = dict(ok=last_site['favorites']==[11] and refused and state()['favorites']==[], load=os.getloadavg())
         app.call('key', key='space'); spaced = state()
         gate('keyboard_space', lambda s: s.get('favorites')==[0], spaced, favorites)
         app.call('key', key='tab'); tabbed = state()
@@ -79,7 +84,14 @@ def run(factory, results, tmp, h):
         action('toggle-favorite', index=6)
         selected = state(); shot('favorites-selected-light')
         gate('favorite_selection', lambda s: s.get('favorites')==[0,6], selected, favorites)
-        app.call('key', key='return'); theme = screen('theme'); action('set-theme', preset=5); themed = state(); shot('theme-light')
+        app.call('key', key='return'); theme = screen('theme')
+        action('set-theme', preset=44); last_preset = state()
+        refused = []
+        for index in (-1,45):
+            try: action('set-theme', preset=index); refused.append(False)
+            except RuntimeError: refused.append(True)
+        results['steps_theme_limits'] = dict(ok=last_preset['theme']!=theme['theme'] and all(refused), load=os.getloadavg())
+        action('set-theme', preset=5); themed = state(); shot('theme-light')
         gate('theme_choice', lambda s: s['theme']!=theme['theme'], themed, theme)
         app.call('key', key='return'); screen('blocker'); action('set-blocker', on=False); off = state(); shot('blocker-off-light')
         gate('blocker_choice', lambda s: s.get('blocker') is False, off, initial)
@@ -153,6 +165,7 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='continue')
         until(lambda: app.call('first-run')['step']=='report')
         report = app.call('first-run'); shot('import-report-light')
+        app.call('window-reopen')
         prepared = [w for w in app.call('windows') if w['class']=='BrowserWindow']
         hidden_browser = lambda windows: bool(windows) and all((not w['visible'] or w['alpha']==0)
             and not w['key'] and not w['main'] for w in windows)
