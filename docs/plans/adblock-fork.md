@@ -4872,3 +4872,122 @@ The document-ID metadata from `22a692be` also builds in the owned root
 stimulus, its allowed and wrong-document negative controls, G-4 after idle,
 full N, CDP URL edges and quiet G-5 remain pending screen clearance. Main
 integration and distribution remain on the Section 13 lead's hold.
+
+**Idle purge: equal six-second point and following burst (2026-11-07 22:05).**
+
+Updated 2026-11-07 22:05, local lead time. Branch `s13/step4-engine`.
+Production idle source is `e12d3554`; the following-burst diagnostic is built
+from `4bfa64b8`, and the blocking-off CPU control from `58d97845`.
+The latter adds no production policy change. Both builds passed; engine-status
+8 PASS, 0 FAIL, 0 WARN. No distribution or full-series integration was done.
+
+Working, load1 9.23–22.73, no quiet lock. Five interleaved rounds,
+same binary, alternating purge-off/on order, both inputs and both caps.
+Each condition observes memory at corpus +6 s, with no retained corpus vector
+or verdict buffer. It then reads fresh inputs and runs another full corpus.
+All 80 dumps have 20,311 rows and match the prior baseline byte for byte.
+Purge counts are exactly 0 in all 20 controls and 1 in all 20 enabled runs.
+
+| Gate, working median of 5 | 16 KiB text / DAT | 8 KiB text / DAT | Budget and limit |
+|---|---:|---:|---|
+| G-2 following-burst first CPU max, µs | 136.667 / 140.709 | 136.250 / 141.208 | Recorded separately from warm max; quiet final pending. |
+| G-2 following-burst warm CPU max, µs | 135.291 / 131.750 | 140.208 / 135.750 | ≤500 µs; working PASS. |
+| G-2 following-burst warm wall max, µs | 135.167 / 134.583 | 147.459 / 135.500 | Recorded; final quiet wall row pending. |
+| G-6 added request compiles | 0 / 0 | 0 / 0 | Zero in every initial and following burst. |
+| Steady browser phys delta, MiB | 55.344 / 51.453 | 55.266 / 51.406 | ≤57 MiB, ruling 4a. |
+| Corpus +6 s, one idle purge, phys delta, MiB | 57.188 / 53.328 | 57.078 / 53.360 | ≤60 MiB, ruling 4a. |
+| G-5 busy CPU /200 requests | 8.576 ms, pre-idle repair, load1 40.60–42.34 | Not remeasured | ≤9 ms, ruling 2a; quiet receipt and wall hard gate pending. |
+| G-4 after idle; full N; CDP URL edges | Pending screen clearance | Pending screen clearance | No acceptance claim. |
+
+
+| Same-binary control and purge | Cap / input | Purge off | Purge on |
+|---|---|---:|---:|
+| Initial first CPU max, µs | 16384 / text | 157.750 | 154.125 |
+| Following first CPU max, µs | 16384 / text | 134.750 | 136.667 |
+| Following warm CPU max, µs | 16384 / text | 153.250 | 135.291 |
+| Corpus +6 s phys delta, MiB | 16384 / text | 65.188 | 57.188 |
+| Initial first CPU max, µs | 16384 / dat | 168.708 | 151.709 |
+| Following first CPU max, µs | 16384 / dat | 140.292 | 140.709 |
+| Following warm CPU max, µs | 16384 / dat | 143.417 | 131.750 |
+| Corpus +6 s phys delta, MiB | 16384 / dat | 62.485 | 53.328 |
+| Initial first CPU max, µs | 8192 / text | 167.250 | 154.084 |
+| Following first CPU max, µs | 8192 / text | 138.500 | 136.250 |
+| Following warm CPU max, µs | 8192 / text | 138.834 | 140.208 |
+| Corpus +6 s phys delta, MiB | 8192 / text | 65.469 | 57.078 |
+| Initial first CPU max, µs | 8192 / dat | 156.625 | 165.667 |
+| Following first CPU max, µs | 8192 / dat | 138.125 | 141.208 |
+| Following warm CPU max, µs | 8192 / dat | 132.292 | 135.750 |
+| Corpus +6 s phys delta, MiB | 8192 / dat | 62.235 | 53.360 |
+
+
+At 16 KiB, the purge itself releases 8.172 / 8.391
+MiB physical in 0.934 / 1.016 ms thread CPU;
+wall duration 0.923 / 1.000 ms. Median paired
+physical savings at the common six-second point are
+7.859 / 8.937 MiB.
+CPU results remain working comparisons; they do not replace quiet acceptance.
+Every individual first/warm CPU maximum, initial or resumed, is
+≤208.250 µs in these runs. No material CPU-max regression is observed.
+The purge CPU scope includes its first diagnostic log; wall timing ends
+before that log, so those scopes differ slightly.
+The earlier before/after G-2 values below were measured before the idle purge.
+
+| PA allocated component, 16 KiB | Text MiB | DAT MiB |
+|---|---:|---:|
+| Rules/index/build residual | 36.810 | 36.493 |
+| Exact immutable regex programs | 6.941 | 6.941 |
+| Regex cache/metadata/rounding residual | 6.500 | 6.572 |
+| Other to settled | -0.166 | -0.212 |
+| Settled allocated delta | 50.080 | 49.807 |
+| Postidle allocated delta | 51.003 | 50.738 |
+
+
+PA rows sum all current and original roots. Phase differences include other
+browser allocations and rounding. Only the immutable program counter is exact
+ownership accounting. The cache residual is not an exact cache allocation tag.
+Separate component medians need not sum to the median total.
+`MemoryReclaimer::ReclaimAll()` uses aggressive reclaim, thread-cache purge,
+empty-span decommit and unused-page discard (the tree's
+`partition_alloc/memory_reclaimer.cc`, lines 43–48 and 67–80).
+
+Text service load is 416 ms, including parse 152.868, serialize 63.300, deserialize/replace/free 134.142, compile 47.299 and build reclaim 2.119 ms. DAT service load is 166 ms, including deserialize 109.053, compile 45.155 and build reclaim 1.133 ms. These are phase medians; their sum need not equal the median total. The text path reuses the existing serialization bytes and adds one decode/replace/free phase.
+
+| 60 s no-activity control, 3 rounds | Browser CPU median, ms | % of one core | Extra purge runs | Load1 band |
+|---|---:|---:|---:|---|
+| no-engine | 113.418 | 0.1890 | 0 | 7.52–20.15 |
+| text | 86.103 | 0.1435 | 0 | 6.01–17.92 |
+| dat | 88.604 | 0.1477 | 0 | 6.01–17.11 |
+
+
+The off process has blocking disabled, no engine and zero matcher checks.
+Enabled text/DAT windows start after the first real purge. All three enabled
+windows per input keep first=1, last=1, extra=0. All off windows keep 0/0/0.
+Whole-browser CPU includes other Chromium work and observer overhead; it is
+not zero, and these working controls do not establish a precise causal delta.
+No further ad-block purge runs during idle, and no task remains after the
+purge until activity arms another one. The production task is rate-limited
+to once per minute and holds no Profile/engine reference.
+
+Receipts: `idle-resume-build.json/.log`, `idle-resume-paired.json/.log`,
+`idle-resume-off/on-diag-runs.json`, `idle-resume-off/on-summary.json`,
+`idle-resume-off/on-pa-phases.json`, `idle-resume-proof.json`,
+`idle-resume-verdict-identity.json`, `idle-resume-inputs.json`,
+`idle-cpu-control-build.json/.log`,
+`idle-cpu-paired.json/.log`, `idle-cpu-paired-proof.json` and
+`idle-cpu-verdict-identity.json` (all six additional dumps also match baseline).
+
+| Completed command (job receipt) | Result / wrapper seconds | Load averages, start → end |
+|---|---|---|
+| `/usr/bin/lockf -k /tmp/open-engine-build.lock /bin/bash /tmp/open-adblock/idle-build.sh` (`idle-resume-build.json`) | PASS / 51.126 s | 19.73/14.97/17.87 → 22.10/16.60/18.30 |
+| `python3 -u /tmp/open-adblock/paired-idle-resume.py` (`idle-resume-paired.json`) | PASS / 460.820 s | 14.78/15.24/17.50 → 16.61/16.72/17.34 |
+| `/usr/bin/lockf -k /tmp/open-engine-build.lock /bin/bash /tmp/open-adblock/idle-build.sh` (`idle-cpu-control-build.json`) | PASS / 51.364 s | 16.39/16.64/17.30 → 22.44/18.48/17.95 |
+| `python3 -u /tmp/open-adblock/idle-cpu-paired.py` (`idle-cpu-paired.json`) | PASS / 625.969 s | 20.15/18.17/17.85 → 6.43/9.42/13.44 |
+
+
+Screen hold remains active. G-4, page G-5, real pagehide/document-ID positive
+and both negative controls, the counted full N rerun and actual CDP Unicode
+edges remain pending. The 21:12 N run does not count. Main/root update and
+distribution await the lead's word. Final quiet G-5 is pending; route the
+loaded row through the lead if no permitted quiet run fits before 23:35.
+No jobs may run during the 23:45–01:15 M5 window. Budgets remain exactly
+those in lead rulings 2a and 4a; original ruling text remains unchanged.
