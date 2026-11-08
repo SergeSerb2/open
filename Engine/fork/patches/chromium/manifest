@@ -46,3 +46,6 @@ paths: chrome/browser/ssl/ask_before_http_dialog_controller.cc
 
 # 0807-open-hosted-autofill-popup.patch
 paths: chrome/browser/ui/views/autofill/popup/popup_base_view.cc
+
+# 0808-open-hosted-modal-dialog.patch
+paths: components/constrained_window/native_web_contents_modal_dialog_manager_views.cc

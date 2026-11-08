@@ -18,3 +18,4 @@
 0805-open-autofill-defaults.patch  # Fill on select; no autosignin/leak prompts; card reauth on without opt-in promo
 0806-open-https-fallback-dialog-host.patch  # Use the native modal host for HTTPS fallback; cancel when detached
 0807-open-hosted-autofill-popup.patch
+0808-open-hosted-modal-dialog.patch  # H-7: attach and position Views web-modal dialogs in their AppKit parent
