@@ -140,7 +140,8 @@ document, independently of store changes and same-document navigation. Real
 document commits update that snapshot and notify the editor. Main currently
 loses updated script registrations when a renderer is replaced, so prompt
 removal alone does not prove execution. B5 remains **BLOCKED: engine defect,
-fixed by #202 patch 0602** (lead, 2026-11-07); engine child E owns the fix and
+targeted by #202 patch 0602** (lead, 2026-11-07). The strict B5/B28 reload
+checks still fail on main engine `7a90e70e…`; engine child E owns the fix and
 its page-execution proof. Color uses the documented interim
 filter math until the paint-time remap lands. The existing isolated-world harness
 receipts below do not prove the App's current world isolation.
