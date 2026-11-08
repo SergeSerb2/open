@@ -70,7 +70,7 @@ extension AutomationController {
           guard let steps = app.onboardingWindowController?.steps, steps.step == .name else { throw Failure(message: "not on Name") }
           if flow.probe == nil { await flow.refreshProbe() }; steps.next()
         case "fresh":
-          guard [.welcome, .importChoices, .failed].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() }
+          guard [.welcome, .importChoices, .failed, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() }
         case "back":
           guard [.importChoices, .failed].contains(flow.step) else { throw Failure(message: "Back is unavailable") }
           if let steps = app.onboardingWindowController?.steps { steps.back() }

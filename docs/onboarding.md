@@ -53,16 +53,12 @@ hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
 0.08 s; sound preparation deadline 0.3 s; frame measurement 0–8 s;
 resident measurement 3 s; orb periods 18/22/26 s.
 
-Continue hides the 1280×800 intro window and opens Section 7's existing
-560×520 first-run window. The existing shared importer, source probe, guarded
-save and Start Fresh behavior remain its owners. The intro never writes a
-snapshot. A small screen (both width ≤1280 and height ≤800) uses its full
-screen size minus 72 pt in each dimension. The mouse-transparent dim child
-window covers that screen at 85% black. It is excluded from automation window
-lists and snapshots and transfers to the existing first-run window. Music keeps playing through Continue.
-Only completion or closing fades the music over 0.8 s and the dim over 2.5 s.
-`OnboardingWindowController.show(content:)` replaces the foreground above the
-shared room for later setup screens, without changing the music clock.
+Continue replaces the foreground inside the same 1280×800 onboarding window.
+The room, dim child and music keep their clocks through the setup steps below.
+The intro never writes a snapshot. A small screen (both width ≤1280 and height
+≤800) uses its full screen size minus 72 pt in each dimension. The mouse-transparent
+dim child covers that screen at 85% black, and is excluded from ordinary window
+lists and snapshots. Only final completion or closing fades music and the dim.
 
 Esc or a scene click completes the visual tracks and enables Continue.
 The music continues on its original clock. Return and Space cannot advance
@@ -97,3 +93,15 @@ The renderer samples the same scene tracks as the real view at 0.5, 1.5,
 2.6, 3.5, 5.0, 6.5, 8.0 and 10.2 s, plus the Reduce Motion final frame,
 at 2x. It creates an unshown window for AppKit backing; it never orders it
 front. Real-window acceptance is the separate `onboarding` e2e suite.
+
+## Setup in the same window
+
+Continue replaces only the foreground with Name → Import (when source data exists) → Favorites (unless import brought Favorites) → Theme → Blocker → Default browser → Ready. The shared room, dim overlay and music keep their clocks. Name is optional, trimmed and limited to 40 characters. Every selection stays in memory until Get Started. Closing the window quits without applying those selections.
+
+`OnboardingStepsController` hosts Section 7's `FirstRunView(embeddedImport: true)` and the same `FirstRunViewModel` / `ImportWizardViewModel`. Settings ▸ Import keeps its existing wizard. Consent tokens, import idempotency, progress, reports and save errors stay in the shared implementation. The import landing save is a checkpoint; final setup owns the completed flag.
+
+Favorites use direct site favicon requests (2 seconds, 256 KiB, 64-pixel thumbnail, no cookies and no redirects). A monogram is visible immediately. Theme uses `OpenSpaceEditor`'s preset strip, color pad, state reducer and appearance bar. The selected style is applied to the focused Space at finish. Blocker uses the existing `AdBlockStore.setEnabled` global `nativeAdBlockEnabled` setting in `adblock-settings.json`, the same setting as Advanced.
+
+The Ready card uses one original drawing routine for the screen and 1200 × 750 PNG output. Save opens `NSSavePanel`; Shuffle cycles six deterministic patterns. Confetti emits once, then removes its layer. Reduce Motion uses cross-fades and no confetti. The default-browser service runs only on Next with Yes selected. Automation sockets always use a bounded outcome stub (`OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed`, default declined); they never invoke the system prompt.
+
+Get Started applies choices and uses Section 7's `finishFirstRun`: save first, then completion. A failure keeps Ready open for retry. The browser is ordered below onboarding and above the dim overlay. Onboarding rises 24 points over 0.4 seconds and fades over 0.6 seconds; dim fades over 2.5 seconds. Reduce Motion cross-fades both over 0.3 seconds. Music fades over 0.8 seconds if still playing. Replay uses the same screens but performs no import, model, preference or default-browser writes.

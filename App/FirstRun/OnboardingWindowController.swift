@@ -109,6 +109,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     content.view.frame = intro.bounds; content.view.autoresizingMask = [.width, .height]
     intro.addSubview(content.view)
     window?.makeFirstResponder(content.view)
+    (content as? OnboardingStepsController)?.didAttach()
   }
   func finish() {
     guard !finishing else { return }; finishing = true

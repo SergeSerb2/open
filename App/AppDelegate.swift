@@ -508,6 +508,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func finishFirstRun(imported: Bool) {
     guard firstRunWindowController != nil else { return }
     assert(imported || model === firstRunDefaultModel, "A fresh finish must keep the original default model")
+    let priorBlocker = stores.adBlock?.isEnabled
     do {
       try onboardingWindowController?.steps?.applyChoices()
       try snapshotStore.saveNow(model: model)
@@ -517,6 +518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       firstRunSaved = true
       UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
     } catch {
+      if let priorBlocker { try? stores.adBlock?.setEnabled(priorBlocker) }
       firstRunWindowController?.model.reportSaveFailure(imported: imported)
       return
     }

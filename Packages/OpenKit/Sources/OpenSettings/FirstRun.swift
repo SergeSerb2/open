@@ -265,6 +265,7 @@ public struct FirstRunView:View {
                     Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? secondary:Color.primary)
                 }}
             }}
+            if embeddedImport, model.outcome?.errorText != nil, !model.wizard.hasImportedData {Button("Try Again") {model.showImport()}}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
             if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}

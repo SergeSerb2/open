@@ -1211,3 +1211,13 @@ PR-7 stays blocked pending an approved engine-fix distribution hash. After the
 lead clears a prior crash dialog, resume remaining rows with
 `--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
 write a separate receipt so the primary crash evidence survives.
+
+### Setup steps (`onboarding`)
+
+`onboarding action=state` includes `screen` (`intro`, `name`, `import`, `favorites`, `theme`, `blocker`, `defaultBrowser`, `ready`, `handoff`, `done`), the name, Favorite indexes, theme, blocker, default choice/outcome, card pattern, Reduce Motion, confetti, native control labels and dim state. Invalid stages and unknown arguments fail.
+
+Actions: `next`, `back`, `skip`, `set-name name=…` (at most 40 characters), `toggle-favorite index=0…11`, `set-theme preset=…`, `set-blocker on=true|false`, `choose-default yes=true|false`, `shuffle-card`, and `get-started` on Ready. Intro actions remain `skip-intro`, `get-started` (Continue), and `replay-intro`.
+
+Automation-only screenshot/export hooks: `set-appearance appearance=light|dark` changes only the onboarding window; `save-card` opens its real save panel, `card-cancel` cancels it, and `card-save path=/absolute/file.png` supplies the native panel service response to the production completion. No desktop input is used. Tests use temporary roots, synthetic `--arc-dir`, and `--intro-sound=silent|off`.
+
+The `first-run` API remains the importer verification seam. Its compatibility actions walk setup's real navigation; the `screen` field names the new screen while `step` names Section 7's import state. No legacy first-run window is shown.

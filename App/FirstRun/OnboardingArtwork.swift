@@ -41,9 +41,14 @@ import ImageIO
     (("Since " + formatter.string(from: date)) as NSString).draw(at: CGPoint(x: 76, y: 100), withAttributes: [.font: NSFont.systemFont(ofSize: 15), .foregroundColor: NSColor.white.withAlphaComponent(0.7)])
   }
   static func door(in rect: CGRect, alpha: CGFloat) {
-    let path = NSBezierPath(roundedRect: rect, xRadius: rect.width/2, yRadius: rect.width/2)
+    let path = NSBezierPath()
+    let r = rect.width/2, k: CGFloat = 0.55228475, shoulder = rect.maxY-r
+    path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+    path.line(to: CGPoint(x: rect.minX, y: shoulder))
+    path.curve(to: CGPoint(x: rect.midX, y: rect.maxY), controlPoint1: CGPoint(x: rect.minX, y: shoulder+r*k), controlPoint2: CGPoint(x: rect.midX-r*k, y: rect.maxY))
+    path.curve(to: CGPoint(x: rect.maxX, y: shoulder), controlPoint1: CGPoint(x: rect.midX+r*k, y: rect.maxY), controlPoint2: CGPoint(x: rect.maxX, y: shoulder+r*k))
+    path.line(to: CGPoint(x: rect.maxX, y: rect.minY)); path.lineCapStyle = .round
     NSColor.white.withAlphaComponent(alpha).setStroke(); path.lineWidth = rect.width*0.07; path.stroke()
-    // Open sill in our doorway mark, created from geometry.
   }
   func png() throws -> Data {
     guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1200, pixelsHigh: 750, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 4800, bitsPerPixel: 32), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { throw CocoaError(.fileWriteUnknown) }
@@ -62,10 +67,13 @@ import ImageIO
   private var scene = CALayer()
   private let theme = ThemeBackgroundView()
   private let link = CALayer()
+  private var linkStarted = false
   private var ads: [CALayer] = []
   override init(frame: NSRect) {
     super.init(frame: frame); wantsLayer = true; layer?.addSublayer(scene)
-    theme.isHidden = true; addSubview(theme)
+    theme.isHidden = true; theme.wantsLayer = true; theme.layer?.cornerRadius = 14; theme.layer?.masksToBounds = true
+    let chrome = OnboardingMiniBrowser(frame: CGRect(x: 0, y: 0, width: 420, height: 280)); chrome.autoresizingMask = [.width, .height]; theme.addSubview(chrome)
+    addSubview(theme)
     link.backgroundColor = NSColor.systemBlue.cgColor; link.cornerRadius = 5
     for _ in 0..<3 { let ad = CALayer(); ad.backgroundColor = NSColor(white: 0.7, alpha: 1).cgColor; ad.cornerRadius = 5; ads.append(ad) }
     setAccessibilityElement(true); setAccessibilityRole(.image)
@@ -81,7 +89,7 @@ import ImageIO
     self.step = step; self.name = name; self.favorites = favorites; self.count = min(8, max(0, count)); self.report = report; self.blocker = blocker; self.card = card; reduced = reduceMotion
     theme.isHidden = step != "theme"
     if step == "theme" { theme.style = SpaceThemeStyle(theme: card.theme, system: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark:.light); theme.material = .window }
-    link.isHidden = step != "defaultBrowser"; if changed { link.removeAllAnimations(); link.removeFromSuperlayer(); ads.forEach { $0.removeFromSuperlayer() } }
+    link.isHidden = step != "defaultBrowser"; if changed { linkStarted = false; link.removeAllAnimations(); link.removeFromSuperlayer(); ads.forEach { $0.removeFromSuperlayer() } }
     if step == "defaultBrowser" && changed { scene.addSublayer(link); layoutLink() }
     if step == "blocker" {
       CATransaction.begin(); CATransaction.setAnimationDuration(reduceMotion || changed ? 0:0.4)
@@ -95,7 +103,7 @@ import ImageIO
     guard link.superlayer != nil else { return }
     let start = CGPoint(x: bounds.midX-140, y: bounds.midY+30), end = CGPoint(x: bounds.midX+125, y: bounds.midY-40)
     link.bounds = CGRect(x: 0, y: 0, width: 36, height: 10); link.position = end
-    guard !reduced, link.animation(forKey: "link-travel") == nil else { return }
+    guard !reduced, !linkStarted else { return }; linkStarted = true
     let motion = CAKeyframeAnimation(keyPath: "position"); motion.values = [NSValue(point: start), NSValue(point: start), NSValue(point: end), NSValue(point: end)]; motion.keyTimes = [0, 0.2, 0.7, 1]; motion.duration = 3; motion.repeatCount = 2; motion.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut); link.add(motion, forKey: "link-travel")
   }
   private func text(_ value: String, in rect: CGRect, size: CGFloat = 15, color: NSColor = .white) {
@@ -131,5 +139,15 @@ import ImageIO
       card?.draw(in: rect)
     default: break
     }
+  }
+}
+
+@MainActor private final class OnboardingMiniBrowser: NSView {
+  override func draw(_ dirtyRect: NSRect) {
+    for (index, color) in [NSColor.systemRed, .systemYellow, .systemGreen].enumerated() { color.withAlphaComponent(0.8).setFill(); NSBezierPath(ovalIn: CGRect(x: 12+index*15, y: 258, width: 8, height: 8)).fill() }
+    NSColor.white.withAlphaComponent(0.9).setFill(); NSBezierPath(roundedRect: CGRect(x: 120, y: 8, width: bounds.width-128, height: bounds.height-16), xRadius: 8, yRadius: 8).fill()
+    for index in 0..<6 { NSColor.white.withAlphaComponent(index == 1 ? 0.4:0.15).setFill(); NSBezierPath(roundedRect: CGRect(x: 12, y: 218-index*29, width: 96, height: 20), xRadius: 5, yRadius: 5).fill() }
+    NSColor.gray.withAlphaComponent(0.15).setFill(); CGRect(x: 145, y: 218, width: 215, height: 12).fill()
+    for index in 0..<4 { CGRect(x: 145, y: 184-index*20, width: 210-index*17, height: 7).fill() }
   }
 }

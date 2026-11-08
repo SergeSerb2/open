@@ -1,7 +1,7 @@
 # First run
 
 True first launch now shows [Open's intro](onboarding.md) before this flow.
-Get Started closes that window and opens the existing first-run steps below.
+Continue shows the setup steps in the same 1280 × 800 window. The Import step hosts the existing choices, consent, progress and report views. Get Started on Ready uses the same save-first completion path described below.
 
 Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C/D now add the App window, startup detection, guarded completion save, shared import runner, model landing and Settings merge. Background History uses the same runner and Profile stores for first run and Settings. Passwords and cookies remain capability OFF. The default-browser offer uses the existing App service only on its button click.
 

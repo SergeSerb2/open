@@ -105,6 +105,7 @@ def run(factory, results, tmp, h):
         all_copy.append(text)
         return text
     def row(name, ok, **detail): results[name] = dict(ok=bool(ok), load=os.getloadavg(), **detail)
+    def user_tabs(): return [t for t in app.call('tabs') if t['url'] != 'open://welcome']
     def snapshot_path(): return Path(app.user_data) / 'State/browser.json'
     def saved_tab_ids():
         found = []
@@ -129,10 +130,10 @@ def run(factory, results, tmp, h):
             saved[key] = app.call('defaults', key=key, persistent=True)
             app.call('defaults', key=key, value=None)
         s = state(); welcome = shot('welcome'); welcome_copy = copy()
-        row('window_size', s['frameSize'] == [560, 520] and s['key'], size=s['frameSize'])
+        row('window_size', s['frameSize'] == [1280, 800] and s['key'], size=s['frameSize'])
         row('F1_welcome', s['active'] and s['step'] == 'welcome' and not s['completed']
             and not app.call('shell-windows') and not snapshot_path().exists()
-            and any(w['number'] == s['window'] and w['class'] == 'FirstRunNativeWindow' for w in app.call('windows')), state=s, png=welcome)
+            and any(w['number'] == s['window'] and w['class'] == 'NSWindow' for w in app.call('windows')), state=s, png=welcome)
         assert h.wait_until(lambda: state().get('probeReady'), timeout=10, step=.05)
         s = state()
         row('F2_probe', s['counts'].get('Spaces') == 2 and s['counts'].get('Archive') == 2
@@ -154,11 +155,11 @@ def run(factory, results, tmp, h):
         row('automation_limits', 'unknown first-run action' in limits[0]
             and all('exceeds limit' in error for error in limits[1:]), results=limits)
         imported_png = shot('import'); import_copy = copy()
-        row('F2_import_choices', not state()['secretsEnabled'] and 'Import from Arc' in import_copy,
+        row('F2_import_choices', not state()['secretsEnabled'] and 'Bring your tabs with you.' in import_copy,
             png=imported_png, text=import_copy)
         geometry = app.call('first-run', action='inspect', timeout=180)
         ocr_retries.append(geometry['ocrRetries'])
-        heading = [r for r in geometry['renderedText'] if 'Import from Arc' in r['text']]
+        heading = [r for r in geometry['renderedText'] if 'Bring your tabs' in r['text']]
         light_bottom = max(r[1]+r[3] for r in geometry['trafficLights'])
         heading_top = min((r['frame'][1] for r in heading), default=0)
         row('titlebar_clearance', heading_top >= 36 and heading_top > light_bottom,
@@ -172,7 +173,7 @@ def run(factory, results, tmp, h):
         row('N9_indeterminate_animation', changed > 0, changedPixels=changed, pngs=[progress1,progress2])
         s = until('report'); report_png = shot('report'); copy()
         counts = s['outcome']
-        tabs = app.call('tabs')
+        tabs = user_tabs()
         row('F3_import', counts.get('Imported Spaces') == 2 and counts.get('Imported tabs') == 7
             and counts.get('Imported Archive') == 2 and counts.get('Folders') == 1
             and counts.get('Sidebar accounted') == counts.get('Sidebar total')
@@ -183,9 +184,9 @@ def run(factory, results, tmp, h):
             and archives()['count'] == 2, counts=counts, png=report_png)
         app.call('first-run', action='continue'); s = until('defaultBrowser')
         default_png = shot('default-browser'); default_copy = copy()
-        row('F4_default_offer', not s['defaultAttempted'] and 'Make Open your default browser' in default_copy
-            and ('Start Browsing' in default_copy if s['defaultBrowser'] else
-                 'Make Open your default' in default_copy and 'Not Now' in default_copy), png=default_png, text=default_copy)
+        row('F4_default_offer', not s['defaultAttempted'] and 'Make Open your default browser?' in default_copy
+            and ('Open is your default browser.' in default_copy if s['defaultBrowser'] else
+                 'Yes, make Open my default.' in default_copy and 'Not yet.' in default_copy), png=default_png, text=default_copy)
         app.call('first-run', action='finish')
         row('F4_finish', not state()['active'] and state()['completed'] and len(app.call('shell-windows')) == 1)
         # Never invoke the system-default action. No stub replaces the service.
@@ -211,14 +212,14 @@ def run(factory, results, tmp, h):
             and never_reloaded == never_after
             and app.call('defaults', key='open.advanced.tabSleepMode') == 'never',
             before=never_before, after=never_after, reloaded=never_reloaded)
-        before_tabs = {t['id'] for t in app.call('tabs')}
+        before_tabs = {t['id'] for t in user_tabs()}
         app.call('first-run', action='settings-import', directory=str(source))
         if os.environ.get('OPEN_E2E_FIRSTRUN_FORCE_FAILURE') == 'settings-sheet':
             raise RuntimeError('forced failure with the real Settings sheet open (cleanup proof)')
         app.call('first-run', action='settings-next')
         app.call('first-run', action='settings-run')
         assert h.wait_until(lambda: state().get('settingsStep') == 'Report', timeout=15, step=.05), state()
-        again = state()['settingsOutcome']; now_tabs = app.call('tabs')
+        again = state()['settingsOutcome']; now_tabs = user_tabs()
         row('F5_settings_reimport', again.get('Imported Archive', 0) == 0
             and again.get('Duplicates') == 12 and again.get('Imported Spaces') == 0
             and again.get('Imported tabs') == 0 and archives()['count'] == 2
@@ -248,7 +249,7 @@ def run(factory, results, tmp, h):
         settings_import(expanded)
         row('settings_merge_live', state()['settingsOutcome'].get('Imported tabs') == 1
             and {s['title'] for s in app.call('spaces')} == {'Alpha', 'Beta'}
-            and new_id in {t['id'] for t in app.call('tabs')}, outcome=state()['settingsOutcome'])
+            and new_id in {t['id'] for t in user_tabs()}, outcome=state()['settingsOutcome'])
         app.call('first-run', action='settings-done')
         browser_id = app.call('shell-windows')[0]['id']
         app.call('window-focus', id=browser_id, activate=True)
@@ -256,7 +257,7 @@ def run(factory, results, tmp, h):
         # Focus the sidebar before the native App key path. A page owns its
         # own Undo action while its RenderWidgetHostViewCocoa is first responder.
         undo_key = app.call('sidebar-key', key='z', modifiers=['command'])
-        undone_tabs = {t['id'] for t in app.call('tabs')}
+        undone_tabs = {t['id'] for t in user_tabs()}
         row('settings_merge_one_undo', undone_tabs == before_tabs,
             before=undo_before, key=undo_key, after=app.call('space-manager-state'),
             expected=sorted(before_tabs), actual=sorted(undone_tabs))
@@ -265,7 +266,7 @@ def run(factory, results, tmp, h):
         snapshot_path().unlink(); snapshot_path().mkdir()
         settings_import(expanded)
         row('settings_merge_save_rollback', 'previous browser state was kept' in state()['settingsError']
-            and {t['id'] for t in app.call('tabs')} == undone_tabs, error=state()['settingsError'])
+            and {t['id'] for t in user_tabs()} == undone_tabs, error=state()['settingsError'])
         snapshot_path().rmdir(); snapshot_path().write_bytes(previous)
         app.call('first-run', action='settings-done')
         app.quit()
@@ -289,7 +290,7 @@ def run(factory, results, tmp, h):
         app = launch()
         landed_rename = next(s for s in app.call('spaces') if s['id'] == rename_space)
         row('R1_settings_import_quit_save', landed_rename['title'] == 'Renamed During Import'
-            and new_id not in {t['id'] for t in app.call('tabs')}
+            and new_id not in {t['id'] for t in user_tabs()}
             and not import_quit.get('forced'), space=landed_rename,
             duringImport=during_import, cleanup=import_quit)
         app.quit()
@@ -316,45 +317,39 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='finish')
         row('R2_empty_sidebar_continue', not state()['active'] and state()['completed']
             and [s['id'] for s in app.call('spaces')] == [s['id'] for s in default_spaces]
-            and app.call('tabs') == []
+            and user_tabs() == []
             and snapshot_path().is_file())
         app.quit()
-        # Cmd+W cancels the pending probe. The actual Dock-reopen delegate must
-        # restart it after display, without changing the Welcome step.
+        # Closing setup now quits rather than leaving an old first-run panel.
+        # Restart a new process on the same unsaved root while counting is pending.
         app = launch(fresh=True, OPEN_AUTOMATION_PROBE_DELAY_MS='5000')
         app.call('defaults', key='open.firstRun.completed', value=None)
-        counting = state()
-        assert not counting['probeReady'], counting
-        app.call('key', key='w', modifiers=['command'])
-        closed = state()
-        assert not closed['active'] and not closed['probeReady'], closed
-        app.call('window-reopen'); app.call('first-run', action='focus')
+        counting = state(); assert not counting['probeReady'], counting
+        app.quit(); app = launch()
         assert h.wait_until(lambda: state().get('probeReady'), timeout=15, step=.05), state()
         reopened = state()
-        row('R3_reopen_restarts_probe', reopened['active'] and reopened['step'] == 'welcome'
+        row('R3_restart_restarts_probe', reopened['active'] and reopened['screen']=='name'
             and reopened['counts'].get('Spaces') == 2 and reopened['counts'].get('Archive') == 2
             and not snapshot_path().exists() and not app.call('shell-windows'), state=reopened)
         app.quit()
         app = launch(fresh=True)
         app.call('defaults', key='open.firstRun.completed', value=None)
         app.call('first-run', action='fresh')
-        row('F6_start_fresh', not state()['active'] and len(app.call('spaces')) == 1 and app.call('tabs') == [])
+        row('F6_start_fresh', not state()['active'] and len(app.call('spaces')) == 1 and user_tabs() == [])
         app.quit(); app = launch()
         row('F6_relaunch', not state()['active'] and len(app.call('spaces')) == 1)
         app.quit()
         empty = Path(tmp) / 'empty-arc'; empty.mkdir(exist_ok=True)
         app = launch(fresh=True, directory=empty)
         assert h.wait_until(lambda: state().get('probeReady'), timeout=10, step=.05)
-        app.call('first-run', action='import'); text = copy()
-        row('F7_no_data', not state()['sidebarFound'] and 'No Arc data found' in text and 'Start Fresh' in text, text=text)
-        app.call('first-run', action='choose-dir', directory=str(source))
-        row('F7_choose_folder', state()['sidebarFound'] and state()['counts'].get('Spaces') == 2)
-        app.call('first-run', action='back'); app.call('first-run', action='fresh')
+        app.call('onboarding', action='next'); text = copy()
+        row('F7_no_data', not state()['sidebarFound'] and state()['screen']=='favorites' and 'Choose the sites' in text, text=text)
+        app.call('onboarding', action='back'); app.call('first-run', action='fresh')
         app.quit()
         app = launch(fresh=True)
         app.call('defaults', key='open.firstRun.completed', value=None)
         app.call('first-run', action='import'); app.call('save')
-        app.call('key', key='w', modifiers=['command']); app.quit()
+        app.quit()
         row('F11_save_guard', not (Path(app.user_data)/'State/browser.json').exists())
         app = launch()
         row('F11_relaunch', state()['step'] == 'welcome' and not state()['completed'])
@@ -386,7 +381,7 @@ def run(factory, results, tmp, h):
         snapshot_path().mkdir()
         app.call('first-run', action='import'); app.call('first-run', action='continue')
         s = until('report')
-        pending = {t['id'] for t in app.call('tabs')}
+        pending = {t['id'] for t in user_tabs()}
         row('N4_import_save_failure', not s['completed'] and s['active']
             and 'browser window behind this panel' in s['error'] and pending == before_tabs
             and len(app.call('shell-windows')) == 1, error=s['error'], pendingTabs=len(pending),
@@ -395,7 +390,7 @@ def run(factory, results, tmp, h):
         snapshot_path().rmdir()
         app.call('first-run', action='retry')
         row('N4_import_save_retry', not state()['active'] and state()['completed'] and snapshot_path().is_file()
-            and pending == {t['id'] for t in app.call('tabs')})
+            and pending == {t['id'] for t in user_tabs()})
         app.quit()
         app = launch(fresh=True)
         app.call('defaults', key='open.firstRun.completed', value=None)
@@ -403,7 +398,7 @@ def run(factory, results, tmp, h):
         s = state()
         row('notnow_offer', s['step'] == 'defaultBrowser' and not s['completed'] and not s['defaultAttempted'])
         app.call('first-run', action='notnow')
-        row('notnow_finish', not state()['active'] and state()['completed'] and app.call('tabs') == [])
+        row('notnow_finish', not state()['active'] and state()['completed'] and user_tabs() == [])
         app.quit()
         partial = Path(tmp) / 'arc-partial'
         shutil.rmtree(partial, ignore_errors=True); shutil.copytree(source, partial)
@@ -412,7 +407,7 @@ def run(factory, results, tmp, h):
         app.call('defaults', key='open.firstRun.completed', value=None)
         app.call('first-run', action='import'); app.call('first-run', action='continue')
         s = until('report')
-        row('partial_archive_failure', s['completed'] and s['outcome'].get('Imported Spaces') == 2
+        row('partial_archive_failure', not s['completed'] and s['outcome'].get('Imported Spaces') == 2
             and s['failures'].get('Archive') == 'Could not be read' and archives()['count'] == 0,
             failures=s['failures'], outcome=s['outcome'])
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
@@ -425,13 +420,13 @@ def run(factory, results, tmp, h):
         text = copy(); shot('report-all-failed')
         row('all_failed_unsaved', not s['completed'] and not snapshot_path().exists()
             and not app.call('shell-windows') and s['failures'].get('Archive') == 'Could not be read'
-            and 'Try Again' in text and 'Continue' in text, text=text)
+            and 'Try Again' in text and 'Next' in text, text=text)
         app.call('first-run', action='retry')
         row('all_failed_retry', state()['step'] == 'importChoices' and not snapshot_path().exists())
         app.call('first-run', action='continue'); until('report')
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
         row('all_failed_continue', state()['completed'] and not state()['active']
-            and len(app.call('spaces')) == 1 and app.call('tabs') == [])
+            and len(app.call('spaces')) == 1 and user_tabs() == [])
         app.quit()
         runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_history.py"))["run"](launch, state, until, row, source, tmp, h)
         runpy.run_path(str(Path(h.ROOT)/"tools/e2e/firstrun_extensions.py"))["run"](launch, state, until, row, source, tmp, h, results)
@@ -448,7 +443,7 @@ def run(factory, results, tmp, h):
         import re
         forbidden = [text for text in all_copy if re.search(r'\b(?:sign in|account|Little Arc)\b', text, re.I)]
         row('F13_copy', not forbidden and 'Arc' not in welcome_copy.replace('Import from Arc', '')
-            and 'Open is a fast, private browser' in binary_strings, checkedScreens=len(all_copy), ocrRetries=sum(ocr_retries))
+            and 'What should we call you?' in binary_strings, checkedScreens=len(all_copy), ocrRetries=sum(ocr_retries))
     finally:
         if app is not None:
             h._restore_defaults(app, saved)

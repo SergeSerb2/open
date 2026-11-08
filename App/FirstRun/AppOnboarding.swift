@@ -18,6 +18,7 @@ extension AppDelegate {
     }
     controller.onRelease = { [weak self, weak controller] receipt, baseline in
       guard let self, let controller, onboardingWindowController === controller else { return }
+      onboardingReceipt = receipt
       onboardingWindowController?.stop(); onboardingWindowController = nil
       // Drop the window, bitmap backing and scene before the post-hand-off
       // resident read. Retain only a small value receipt for automation.

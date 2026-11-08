@@ -20,6 +20,7 @@ def run(factory, results, tmp, h):
     saved = {key: domain.get(key) for key in keys}
     app = None
     negatives = {}
+    ax_steps = {}
     def state(): return app.call('onboarding', action='state')
     def until(predicate, timeout=20):
         assert h.wait_until(predicate, timeout=timeout, step=.025), state()
@@ -27,14 +28,21 @@ def run(factory, results, tmp, h):
     def launch(directory=source, fresh=True, flags=(), **env):
         nonlocal app
         if app and not app.closed: app.quit()
+        if fresh: h._restore_defaults(None, {keys[0]: None, keys[1]: None})
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(directory), '--intro-sound=off', *flags], extra_env=env)
         if state().get('active') and state()['screen']=='intro':
             app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started'); screen('name')
         return state()
-    def action(name, **args): app.call('onboarding', action=name, **args)
+    def action(verb, **args): app.call('onboarding', action=verb, **args)
     def shot(name):
+        if name.endswith('-light'): action('set-appearance', appearance='light')
         time.sleep(.4)
+        ax_steps[state()['screen']] = state()['controls']
         app.call('snapshot', path=str(evidence/(name+'.png')))
+        if name.endswith('-light'):
+            action('set-appearance', appearance='dark'); time.sleep(.2)
+            app.call('snapshot', path=str(evidence/(name[:-6]+'-dark.png')))
+            action('set-appearance', appearance='light')
     def gate(name, predicate, good, bad):
         results['steps_'+name] = dict(ok=bool(predicate(good)), load=os.getloadavg(), observed=good)
         rejected = not bool(predicate(bad))
@@ -69,6 +77,14 @@ def run(factory, results, tmp, h):
         gate('confetti', lambda s: s.get('confettiPlayed') is True, ready, initial)
         action('shuffle-card'); shuffled = state(); shot('ready-shuffled-light')
         gate('shuffle', lambda s: s.get('cardPattern')==1, shuffled, ready)
+        # Real NSSavePanel service response reaches its production completion.
+        action('save-card'); until(lambda: state()['savePanel'])
+        action('card-cancel'); until(lambda: not state()['savePanel'])
+        card_path = evidence/'open-card.png'
+        action('save-card'); until(lambda: state()['savePanel'])
+        action('card-save', path=str(card_path)); until(lambda: card_path.is_file())
+        width, height, pixel = h.read_image(str(card_path))
+        results['steps_card_png'] = dict(ok=(width,height)==(1200,750) and pixel(600,375)!=pixel(1,1), size=[width,height], load=os.getloadavg())
         # No model, name or global blocker write before Get Started.
         pending = dict(snapshot=snapshot().exists(), name=app.call('defaults', key=keys[0], persistent=True))
         results['steps_pending_no_writes'] = dict(ok=not pending['snapshot'] and pending['name'] is None, state=pending, load=os.getloadavg())
@@ -119,6 +135,15 @@ def run(factory, results, tmp, h):
         # Reduced motion has no offset or emitter, including after back/forward.
         launch(directory=empty, flags=['--reduce-motion']); reduced = skip_to_ready(); shot('ready-reduce-motion')
         gate('reduced', lambda s: s['reduceMotion'] and s['offset']==0 and not s['confettiPlayed'] and not s['confettiActive'], reduced, ready)
+        action('set-appearance', appearance='dark'); shot('ready-dark')
+        # Native Cmd+W reaches the window delegate and quits without completion.
+        launch(directory=empty, OPEN_AUTOMATION_PROBE_DELAY_MS='5000')
+        root = snapshot(); pid = app.pid
+        app.call('key', key='w', modifiers=['command'])
+        quit_ok = h.wait_until(lambda: not app.process_path(pid), timeout=20, step=.05)
+        app.quit()
+        results['steps_close_quits_unsaved'] = dict(ok=quit_ok and not root.exists() and app.quit_report.get('ok'), load=os.getloadavg())
+        launch(directory=empty, flags=['--reduce-motion']); skip_to_ready()
         # Wrong-stage and boundary requests must be rejected by the real server.
         rejected = []
         for args in [dict(action='set-name',name='x'), dict(action='toggle-favorite',index=12), dict(action='set-theme',preset=-1), dict(action='next'), dict(action='skip'), dict(action='state', extra=True)]:
@@ -127,8 +152,8 @@ def run(factory, results, tmp, h):
         results['steps_invalid_actions'] = dict(ok=all(rejected), rejected=rejected, load=os.getloadavg())
         # Every native step's controls have a role and a label. The shared SwiftUI
         # host retains its existing AX labels; native controls are dumped here.
-        controls = ready['controls']
-        results['steps_accessibility_labels'] = dict(ok=all(c['label'] for c in controls) and any(c['label']=='Get Started' for c in controls), controls=controls, load=os.getloadavg())
+        controls = [c for step_controls in ax_steps.values() for c in step_controls]
+        results['steps_accessibility_labels'] = dict(ok=len(ax_steps)==7 and all(c['label'] for c in controls) and any(c['label']=='Get Started' for c in controls), controls=ax_steps, load=os.getloadavg())
         (evidence/'negative-proofs.json').write_text(json.dumps(negatives, indent=2))
     finally:
         if app and not app.closed: app.quit()

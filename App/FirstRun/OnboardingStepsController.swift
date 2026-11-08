@@ -40,6 +40,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var siteImages: [Int: NSImage] = [:]
   private var themeState = ThemeEditorState()
   private var themeBaseline: SpaceTheme = .init()
+  private var themeChanged = false
   private var observationGeneration = 0
   private let panel = OnboardingPanel()
   private let titleLabel = NSTextField(wrappingLabelWithString: "")
@@ -57,6 +58,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var colorPad: OpenSpaceEditor.ColorPadView?
   private var modeBar: AppearanceModeBar?
   private var statusLabel: NSTextField?
+  private(set) var savePanel: NSSavePanel?
   private let started = Date()
   var focusedSpace: Space? { app.model.windows.first.flatMap { app.model.space(id: $0.focusedSpaceID) } ?? app.model.spaces.first }
   init(app: AppDelegate, firstRun: FirstRunViewModel, replay: Bool, reduceMotion: Bool) {
@@ -77,6 +79,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     descriptionLabel.maximumNumberOfLines = 3
     render(direction: 0); observeImport()
   }
+  func didAttach() { render(direction: 0) }
+  @objc private func acceptName(_ sender: Any?) { if step == .name { next() } }
   override func viewDidLayout() {
     super.viewDidLayout()
     let width = min(520, view.bounds.width * 0.48)
@@ -132,7 +136,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     }
     if step == .name {
       let field = NSTextField(string: name); field.placeholderString = "Your name"; field.font = .systemFont(ofSize: 20)
-      field.setAccessibilityLabel("Your name"); field.delegate = self
+      field.setAccessibilityLabel("Your name"); field.delegate = self; field.target = self; field.action = #selector(acceptName(_:))
       field.frame = NSRect(x: 0, y: 0, width: 380, height: 40); controls.addSubview(field); nameField = field
     }
     if step == .favorites {
@@ -188,14 +192,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       let back = button("Back") { [weak self] in self?.back() }; back.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Back"); back.imagePosition = .imageOnly
       footer.addSubview(back); backButton = back; back.isEnabled = !firstRun.busy && !defaultPending && !finishing
     }
-    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: firstRun.step == .secretsConsent ? PasswordsImportCopy.skipButton:"Start fresh"; case .theme: "Do this later"; case .blocker: "Not now"; default: nil }
+    let skip: String? = switch step { case .name, .favorites: "Skip for now"; case .importData: [.report, .importing].contains(firstRun.step) ? nil:firstRun.step == .secretsConsent ? PasswordsImportCopy.skipButton:"Start fresh"; case .theme: "Do this later"; case .blocker: "Not now"; default: nil }
     if let skip { let b = button(skip) { [weak self] in self?.skip() }; footer.addSubview(b); skipButton = b; b.isEnabled = !firstRun.busy && !finishing }
     var text = "Next"
     if step == .importData { text = firstRun.step == .secretsConsent ? PasswordsImportCopy.allowButton : firstRun.step == .report ? "Next" : firstRun.step == .failed ? "Try Again" : "Import" }
     if step == .ready { text = "Get Started" }
     let next = button(text, primary: true) { [weak self] in self?.next() }; next.keyEquivalent = "\r"
     next.isEnabled = !firstRun.busy && !defaultPending && !finishing && (step != .importData || firstRun.step == .report || firstRun.hasSelection)
-    footer.addSubview(next); primary = next
+    footer.addSubview(next); primary = next; view.window?.defaultButtonCell = next.cell as? NSButtonCell
     updatePreview(); view.needsLayout = true; view.layoutSubtreeIfNeeded()
     // Native AppKit key loop includes every control and the shared import host.
     view.window?.recalculateKeyViewLoop()
@@ -224,14 +228,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     switch step {
     case .name:
       setName(nameField?.stringValue ?? name)
-      if let probe = firstRun.probe { go(probe.sidebarFound || probe.historyFound || probe.archiveFound || probe.secretsFound ? .importData:.favorites); if step == .importData { firstRun.showImport(); render(direction: 0) } }
+      if let probe = firstRun.probe { go(probe.sidebarFound || probe.historyFound || probe.archiveFound || probe.secretsFound ? .importData:.favorites); if step == .importData { if firstRun.outcome == nil { firstRun.showImport() }; render(direction: 0) } }
       else {
         primary?.isEnabled = false
         tasks.append(Task { [weak self] in guard let self else { return }; await firstRun.refreshProbe(); guard !Task.isCancelled, step == .name else { return }; next() })
       }
     case .importData:
       if replay { go(.favorites); return }
-      if firstRun.step == .report { resetTheme(); go(firstRun.wizard.reportCount("Favorites") > 0 ? .theme:.favorites) }
+      if firstRun.step == .report { resetTheme(); if firstRun.wizard.reportCount("Favorites") > 0 { selectedFavorites.removeAll() }; go(firstRun.wizard.reportCount("Favorites") > 0 ? .theme:.favorites) }
       else { tasks.append(Task { [weak self] in guard let self else { return }; if firstRun.step == .secretsConsent { await firstRun.allowPasswords() } else { await firstRun.continueImport() } }) }
     case .favorites: go(.theme)
     case .theme: go(.blocker)
@@ -275,10 +279,11 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     switch step {
     case .name: setName(""); next()
     case .importData:
+      guard ![.report, .importing].contains(firstRun.step) else { return }
       if firstRun.step == .secretsConsent { tasks.append(Task { [weak self] in await self?.firstRun.skipPasswords() }) }
       else { go(firstRun.wizard.reportCount("Favorites") > 0 ? .theme:.favorites) }
     case .favorites: selectedFavorites.removeAll(); go(.theme)
-    case .theme: themeState = ThemeEditorState(style: SpaceStyle.seed(from: themeBaseline)); go(.blocker)
+    case .theme: themeChanged = false; themeState = ThemeEditorState(style: SpaceStyle.seed(from: themeBaseline)); go(.blocker)
     case .blocker: blocker = false; go(.defaultBrowser)
     default: break
     }
@@ -298,16 +303,17 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   func chooseDefault(_ yes: Bool) { defaultYes = yes; render(direction: 0) }
   @objc private func defaultChanged(_ sender: NSButton) { chooseDefault(sender.tag == 0) }
   private var defaultOutcome: String { firstRun.errorText ?? (firstRun.defaultWasAttempted ? (firstRun.isDefaultBrowser ? "Open is your default browser.":"Open is not your default browser yet. You can set it later in Settings."):"") }
-  private func resetTheme() { themeBaseline = focusedSpace?.theme ?? .init(); themeState = ThemeEditorState(style: SpaceStyle.seed(from: themeBaseline)) }
-  func editTheme(_ action: ThemeEditorAction) { themeState.apply(action); updateThemeControls(); updatePreview() }
+  private func resetTheme() { themeChanged = false; themeBaseline = focusedSpace?.theme ?? .init(); themeState = ThemeEditorState(style: SpaceStyle.seed(from: themeBaseline)) }
+  func editTheme(_ action: ThemeEditorAction) { let old = themeState.style; themeState.apply(action); if old != themeState.style { themeChanged = true }; updateThemeControls(); updatePreview() }
   private func updateThemeControls() { presetStrip?.apply(page: themeState.presetPage); colorPad?.apply(themeState); modeBar?.mode = themeState.appearance }
   func shuffleTheme() { editTheme(.selectPreset(index: Int.random(in: SpaceStylePresets.all.indices))) }
   func shuffleCard() { cardPattern = (cardPattern+1)%6; updatePreview() }
-  var card: OpenCardDrawing { .init(name: name, theme: SpaceTheme(style: themeState.style), date: started, pattern: cardPattern) }
+  var card: OpenCardDrawing { .init(name: name, theme: themeChanged ? SpaceTheme(style: themeState.style):themeBaseline, date: started, pattern: cardPattern) }
   func saveCard() {
-    guard let window = view.window else { return }
-    let save = NSSavePanel(); save.allowedContentTypes = [.png]; save.nameFieldStringValue = "Open card.png"; save.canCreateDirectories = true
+    guard let window = view.window, savePanel == nil else { return }
+    let save = NSSavePanel(); savePanel = save; save.allowedContentTypes = [.png]; save.nameFieldStringValue = "Open card.png"; save.canCreateDirectories = true
     save.beginSheetModal(for: window) { [weak self] response in
+      self?.savePanel = nil
       guard response == .OK, let self, let url = save.url else { return }
       do { try self.card.png().write(to: url, options: .atomic) }
       catch { self.statusLabel?.stringValue = "Open could not save the card image. Try again." }
@@ -322,7 +328,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
         _ = app.model.addFavorite(tabID: tab.id, to: profile.id); addedFavorites.insert(index)
       }
     }
-    app.model.updateSpace(id: space.id, theme: SpaceTheme(style: themeState.style))
+    if themeChanged { app.model.updateSpace(id: space.id, theme: SpaceTheme(style: themeState.style)) }
     // This is the same store and global setting used by Settings > Advanced.
     guard let store = app.stores.adBlock else { throw CocoaError(.fileWriteUnknown) }
     try store.setEnabled(blocker)
@@ -366,10 +372,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       })
     }
   }
-  var state: [String: Any] { ["screen": step.rawValue, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "controls": accessibleControls(view)] }
+  var state: [String: Any] { ["screen": step.rawValue, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
     var result: [[String: String]] = []
-    if root is NSControl || root is ThemeEditorButton || root is PresetSwatchView || root is OpenSpaceEditor.ColorPadView { result.append(["role": root.accessibilityRole()?.rawValue ?? "", "label": root.accessibilityLabel() ?? (root as? NSButton)?.title ?? ""]) }
+    if root is NSButton || root is NSSwitch || (root as? NSTextField)?.isEditable == true || root is ThemeEditorButton || root is PresetSwatchView || root is OpenSpaceEditor.ColorPadView { result.append(["role": root.accessibilityRole()?.rawValue ?? "", "label": root.accessibilityLabel() ?? (root as? NSButton)?.title ?? ""]) }
     for child in root.subviews { result += accessibleControls(child) }; return result
   }
 }

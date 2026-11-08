@@ -15,6 +15,8 @@ import time
 
 
 def run(factory, results, tmp, h):
+    if os.environ.get('OPEN_E2E_ONBOARDING_STEPS_ONLY') == '1':
+        return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/onboarding_steps.py'))['run'](factory, results, tmp, h)
     source = Path(tmp)/'intro-arc-synthetic'
     shutil.rmtree(source, ignore_errors=True)
     runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
@@ -118,7 +120,7 @@ def run(factory, results, tmp, h):
         until(lambda: app.call('first-run')['active'])
         gate('native_return_handoff', lambda s: s.get('active') and s.get('step')=='welcome', app.call('first-run'), escaped)
         music_after_continue = state()
-        gate('music_continues_after_continue', lambda s: s.get('sound', {}).get('playerCreated') and s['sound']['decision']=='played' and s.get('screen')=='first-run', music_after_continue, skipped_launch)
+        gate('music_continues_after_continue', lambda s: s.get('sound', {}).get('playerCreated') and s['sound']['decision']=='played' and s.get('screen')=='name', music_after_continue, skipped_launch)
         app.call('first-run', action='fresh')
         until(lambda: state().get('sound', {}).get('playerCreated') is False)
         gate('finish_releases_player', lambda s: not s.get('sound', {}).get('playerCreated') and s.get('sound', {}).get('decision')=='played', state(), music_after_continue)

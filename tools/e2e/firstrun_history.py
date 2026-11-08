@@ -85,12 +85,12 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
             and not before['importInProgress'] and browsing['historyInProgress'] and bool(loaded)
             and 'https://example.org' in json.dumps(saved), before=before, after=browsing,
             importedVisitsWhileBrowsing=pending_visits)
-        # Close the real progress window, then let its already-owned import finish.
+        # Setup now quits on close. Keep its real progress surface open while
+        # the existing background import completes; the onboarding suite proves quit.
         app.call('first-run', action='focus')
-        app.call('key', key='w', modifiers=['command'])
         closed = state()
         result = until('report')
-        row('F9_close_keeps_history', not closed['active'] and closed['historyInProgress']
+        row('F9_progress_keeps_history', closed['active'] and closed['historyInProgress']
             and result['outcome'].get('History') == 5000 and imports() == 5000,
             outcome=result['outcome'], visits=imports())
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
