@@ -294,6 +294,8 @@ def negative_gates(factory, results, tmp, api):
     def state(): return app.call('welcome')
     def visible(): return api.wait_until(lambda: state() if state()['visible'] else None, timeout=5, step=.1)
     def record(name, rejected, **details):
+        if name != 'N_owned_window_cleanup_after_failure':
+            print('EXPECTED FAIL: %s production gate; detected=%s' % (name, bool(rejected)), flush=True)
         results[name] = dict(ok=bool(rejected), expected='production assertion rejects deliberately broken gate',
                              loadAverage=list(os.getloadavg()), **details)
     try:
