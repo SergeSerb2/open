@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public struct AdBlockListReceipt: Codable, Sendable, Equatable {
     public var sha256: String
@@ -57,38 +58,54 @@ actor ListRepository {
         try Task.checkCancellation()
         guard files.fileExists(atPath: old.path) else { return }
         let staging = directory.deletingLastPathComponent().appendingPathComponent(".adblock-migration-\(UUID().uuidString)")
+        let backup = directory.deletingLastPathComponent().appendingPathComponent(".adblock-legacy-\(UUID().uuidString)")
+        var sameDirectory = false
         defer { try? files.removeItem(at: staging) }
         do {
             let values = try old.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
             guard values.isDirectory == true, values.isSymbolicLink != true else { return }
+            var oldInfo = stat(), newInfo = stat()
+            sameDirectory = lstat(old.path, &oldInfo) == 0 && lstat(directory.path, &newInfo) == 0
+                && oldInfo.st_dev == newInfo.st_dev && oldInfo.st_ino == newInfo.st_ino
             // ProfileDirectories may already have made an empty AdBlock/lists directory.
             let entries = files.fileExists(atPath: directory.path) ? try files.contentsOfDirectory(atPath: directory.path) : []
-            guard entries.allSatisfy({ $0 == "lists" }) else { return }
+            if !sameDirectory { guard entries.allSatisfy({ $0 == "lists" }) else { return } }
             let existingLists = directory.appendingPathComponent("lists")
             if files.fileExists(atPath: existingLists.path),
                !(try files.contentsOfDirectory(atPath: existingLists.path)).isEmpty { return }
             try Task.checkCancellation()
             try files.createDirectory(at: staging.appendingPathComponent("lists"), withIntermediateDirectories: true)
             for name in try files.contentsOfDirectory(atPath: old.path) {
+                if sameDirectory && name == "lists" { continue } // Existing empty canonical folder.
                 try Task.checkCancellation()
                 let parent = ["exclusions.json", "catalog-state.json"].contains(name) ? staging : staging.appendingPathComponent("lists")
                 try files.copyItem(at: old.appendingPathComponent(name), to: parent.appendingPathComponent(name))
             }
             try Task.checkCancellation()
-            // Removing only empty directories preserves the no-state condition checked above.
-            let lists = directory.appendingPathComponent("lists")
-            if files.fileExists(atPath: lists.path) { try files.removeItem(at: lists) }
-            if files.fileExists(atPath: directory.path) { try files.removeItem(at: directory) }
+            if sameDirectory {
+                // UUID-named Profiles can alias adblock/AdBlock on a case-insensitive volume.
+                // Keep the complete legacy directory for rollback until the staged rename wins.
+                try files.moveItem(at: old, to: backup)
+            } else {
+                // Removing only empty directories preserves the no-state condition checked above.
+                let lists = directory.appendingPathComponent("lists")
+                if files.fileExists(atPath: lists.path) { try files.removeItem(at: lists) }
+                if files.fileExists(atPath: directory.path) { try files.removeItem(at: directory) }
+            }
             try Task.checkCancellation()
             try files.moveItem(at: staging, to: directory)
         } catch {
+            if files.fileExists(atPath: backup.path), !files.fileExists(atPath: old.path) {
+                try? files.moveItem(at: backup, to: old)
+            }
             try Task.checkCancellation()
             // Opening the untouched destination now seeds bundled defaults instead.
             return
         }
         // The transaction has committed. Cleanup cannot invalidate the new complete copy.
         try Task.checkCancellation()
-        try? files.removeItem(at: old)
+        try? files.removeItem(at: sameDirectory ? backup : old)
+        if sameDirectory { return }
         let parent = old.deletingLastPathComponent()
         if (try? files.contentsOfDirectory(atPath: parent.path).isEmpty) == true { try? files.removeItem(at: parent) }
     }
