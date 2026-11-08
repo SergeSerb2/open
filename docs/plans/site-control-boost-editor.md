@@ -1487,98 +1487,49 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-07; PR pending): App source
-`32638c9c` includes main `cca16812` and the required `94bbf6cb`.
-Fresh M5 Debug, automation Release and Release CLIs pass using
-`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`. All 45 automation
-keys are unique, including one left and one right. The embedded engine
-matches distribution `7a90e70e` and normalized code `7d3cb328`.
-Old-engine, M1 and interrupted receipts do not qualify this head.
+Step 3 verification (child A, 2026-11-07; PR pending): source `2b45f439`
+contains #249's sole `AppBoosts` owner and both required engine merges,
+#202 (`be8c8d52`) and #205 (`0c760e0b`). The factory binds the SCC provider
+through `app.stores.boosts`; no second store exists. The context reads
+`factory.isIncognito`. Matching private-window rows read the session's
+parent Profile, while creation/edit/toggle/Customize actions stay disabled.
 
-The packaging preflight starts the real Debug and Release engine/socket
-without windows (`OPEN_AUTOMATION_OFFSCREEN_SMOKE`). Both have zero shell
-and on-screen windows, clean quits and no new crash reports. Normal suites
-omit this automation-only flag.
+The fresh pre-engine-update receipt on `7a90e70e` had 28 PASS, S2 BLOCKED,
+and S11/S12 FAIL. All S4 and S10 real-store cases passed: editor-saved CSS,
+matching row, live off/on without reload, Edit, boosted glyph, unmatched-host
+negative, and same-parent private disabled rows/action refusals. Omitting
+the binding in a compiled build rejected the saved-row/glyph predicate;
+the first S10 run also rejected the wrong private Profile lookup. These
+receipts are retained as superseded history. New-head acceptance requires
+fresh Debug/Release and real suites against the refreshed `47af3007` engine.
+All 45 literal automation keys are unique, including left/right once.
 
-SCC has 23 PASS, three BLOCKED rows and S11/S12 FAIL. S1 checks the actual
-“Block Ads & Trackers” unavailable row: one Settings action and zero toggle
-calls (lead ruling 2026-11-06 14:41), rather than the initial On-state plan.
-S2 waits for Section 13's engine adapter; #241 supplies storage and lists,
-not that adapter. S4 waits for the shared Boost provider. No second store
-or adapter was added. S10 uses `factory.isIncognito` and proves a real
-private window and ephemeral page context, disabled/refused New/Edit/Legacy/
-View Boost menus, and SCC New Boost tap/menu refusal. Matching Boost-row
-coverage stays separately BLOCKED until the provider supplies rows.
-Three compiled App mutations are rejected. The cleanup canary reaches
-Advanced Settings, restores persistent defaults, closes two windows to
-zero and leaves no owned process, without a focus interruption.
+S11/S12 are **FAIL, known: material and element colors, follow-up S12-V
+(lead 22:20)**, accepted as known failures for this PR only, not parity.
+The interim material is `.hudWindow` plus #686881 at 0.32. Exact S11 ΔE00:
+2.176 / 4.142 / 3.363 / 7.092. Fit predicates remain ±3 sRGB levels for the
+first two probes; validation remains ΔE00 ≤3 for the last two. The original
+S12 table is 22/40 PASS, 18 FAIL. The fresh #249 table adds six existing
+New Boost probes: 27/46 PASS, 19 FAIL. Arrow rows ΔE 12–17, rims ΔE 17–20,
+separator ΔE 14, rings ΔE 3–5.6; arrow position error 9 pt. Arrows, rims and
+separator are probably wrong tokens, not only material. Both exact tables
+stay in the PR. No comparator, threshold or baseline changed.
 
-R1-1 keeps signposts and runs forced layout/display/`CATransaction.flush()`
-only with `onFirstDraw`, installed by automation. P1 p95 is 4.120 ms
-(4.748 ms including cold; first cold 13.127 ms),
-at load 28.710/31.654/31.197. Native layout/display/flush delay controls
-measure 52.336/25.312/25.375 ms and all fail the unchanged 8 ms predicate.
-Each receipt samples native call counts 3/1/1 inside the callback. Shipping
-presentation keeps normal AppKit scheduling. This measures submission,
-not physical scanout.
+S1 retains the lead-approved unavailable ad-block row and its one Settings
+call/zero toggle calls. S2 requires Section 13's real engine adapter.
+#205 now supplies E1–E3 APIs, but SCC binding stays a listed follow-up under
+the lead's 22:38 scope ruling. Existing permission rows, origin Clear
+Cookies, scheme security and absent scoped Clear Cache stay in this PR.
+P7's engine API is preserved; consuming it in the Boost App runtime remains
+outside this SCC integration. No engine tree or Section 10 code was edited.
 
-R1-2 filters/coalesces notifications and uses a light window-button query.
-The 2000-card page builds zero full snapshots closed and one open, with
-four button reads and one source delivery each. A burst of 250 title
-changes builds zero full snapshots and zero source deliveries. R1-3 keeps
-empty Cmd+E in picker mode, focuses Add Extension and handles Return as
-specified in §3.6.1. The real empty-picker S1 flow passes.
-
-Current M5 suites (load1/load5/load15 at acquisition → completion):
-
-| Suite | Result | Load |
-|---|---|---|
-| sitecontrol | 23 PASS; S11_material, S12_elements FAIL; S10_boost_rows BLOCKED; S2_adblock BLOCKED; S4_boost BLOCKED | 32.000/32.352/31.417 → 25.078/30.776/30.891 |
-| extensions-ui | 71 PASS; popup_ready_visible_p95 FAIL | 30.611/30.663/30.755 → 12.889/23.707/27.949 |
-| toolbar | 10 PASS | 14.918/17.193/23.211 → 16.135/17.357/23.197 |
-| window | 83 PASS; cold_fresh_profile, warm_existing_profile FAIL | 10.244/14.820/21.086 → 8.208/12.597/19.442 |
-| features | 19 PASS | 11.829/12.823/18.879 → 10.129/12.061/18.078 |
-| page | 85 PASS; N1_macos_delivered BLOCKED; N6_click_opens_tab BLOCKED; X1_apple_backend BLOCKED; Z3_smart_zoom DEFERRED; capture_c7_incognito BLOCKED | 14.784/13.029/17.844 → 14.500/13.309/17.491 |
-| commandbar | 77 PASS; settings_advanced_action_error Boost editing is not available in this build. | 20.313/15.173/17.923 → 21.846/16.458/18.263 |
-| split | 40 PASS | 20.968/16.660/17.957 → 20.400/17.323/18.135 |
-| space-editor | 167 PASS | 18.887/17.098/18.046 → 18.212/17.120/17.982 |
-
-All completed suites have clean cleanup and zero interruptions.
-P2 observes ten zero native SCC counters and detects then clears a timer
-canary (1→0). Whole-process CPU is 1.977% over
-2.006s, including engine work, at load 25.078/30.776/30.891.
-S13 closed/open scroll p95 is 4.600/4.400 ms, with
-zero dropped frames; the 12.800 ms slow-frame control is rejected,
-at load 32.663/32.494/31.484.
-
-S11/S12 remain **open: material, R-7 follow-up (lead ruling)**. `.hudWindow`
-and dark #686881 at 0.32 remain **interim (lead 2026-11-06)**. S11 probe
-ΔE00 values are 2.176/4.142/3.363/7.092.
-The fit points miss by 5/6 sRGB levels against ±3; validation ΔE00 values
-3.363/7.092 exceed 3.
-S12 passes 22/40 elements and fails 18 at position≤1pt/ΔE00≤2 limits.
-The arrow tip misses by 9pt; arrow colors, action rings, Add Extension,
-More, separator and rims miss the color limit. R-7 white/black response is
-ΔE00 25.430 at (300,140) and 19.392 at (260,250), INFO only. It does not
-establish parity. The separate borderless child-window `.behindWindow`
-follow-up belongs to the lead. No visual acceptance is claimed. The PR
-lists every failed element and its value for the lead's review.
-
-The final full gate is pending. Raw timing misses retain their load
-numbers under item 9.
-
-Raw window startup medians (ms): `{"cold_fresh_profile": {"engineStart": 378, "engineStarted": 452, "firstContentfulPaint": 592, "main": 260, "modelLoaded": 270, "sidebarDrawn": 377}, "warm_existing_profile": {"engineStart": 371, "engineStarted": 442, "firstContentfulPaint": 572, "main": 257, "modelLoaded": 266, "sidebarDrawn": 370}}`. The sidebar and paint medians fall within the TANDEM §4a known-main ranges (≤400/700 ms). The additional interleaved comparison is reported separately below.
-
-The additional current-main interleaved startup comparison ran main/branch/main/branch at launch load1≤30. Pooled cold sidebar/paint medians are main392/629.5ms and branch388/603ms; warm medians are main380.5/595.5ms and branch386.5/590.5ms. The strict warm-sidebar no-slower predicate FAILs by6ms; the other three comparisons PASS. Every raw result and load stays in the PR. No causal load claim or strict comparison pass is made.
-
-Quiet commandbar strict checks pass on both binaries. Builds finished before the lock; measurement ran the prebuilt binaries directly and released the lock. The stopped partial run is INTERRUPTED and excluded.
-
-| Binary | Raw count | CPU p95 ms | Inline overhead p95 ms | Load1/load5/load15, start → end |
-|---|---|---|---|---|
-| main | 151/151 | 4.41 | 0.097 | 7.883/13.395/20.162 → 8.656/12.984/19.739 |
-| branch | 151/151 | 4.31 | 0.255 | 8.656/12.984/19.739 → 8.075/12.354/19.235 |
-
-One bounded extensions-ui repeat has 72 PASS; X-13 True; 20/20 latency samples, p95 6.048041657777503 ms at load 12.158/15.649/17.365. The first run remains 71 PASS/1 FAIL from19/20 samples, p957.464ms at16.578/25.980/28.938. The cause is unproven; diagnostic-only capture keeps every popup state without changing the20-sample/16.7ms predicates.
+R1 fixes retain signposts and force native layout/display/flush only in the
+automation callback; shipping presentation stays asynchronous. Source
+notifications are filtered/coalesced and buttons use a lightweight query.
+Empty Cmd+E follows §3.6.1, focuses Add Extension and handles Return. The
+final PR records fresh suite counts, negative proofs, loads, full gate
+summary and the review checklist. Interrupted receipts never count as FAIL
+or acceptance. All M5 jobs must end by23:45; otherwise resume after01:15.
 
 
 ## 11. Risks and open questions

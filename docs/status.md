@@ -353,25 +353,21 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app`, App source `32638c9c` includes main `cca16812`.
-Fresh M5 Debug/automation Release, package startup and engine fingerprint
-checks pass against `7a90e70e` (code `7d3cb328`). SCC has 23 PASS,
-S2/S4/S10 matching-row coverage BLOCKED, and S11/S12 FAIL under the lead's
-interim ruling. The real private context and Boost action refusals pass.
-P1 p95 is 4.120 ms at load 28.710/31.654/31.197; all three native phase
-controls are rejected. Heavy-page snapshot counts are closed0/open1 and
-zero for 250 title changes. The specific Advanced Settings cleanup proof
-restores defaults, closes two windows and leaves no owned process or focus
-interruption. The plan records current suite counts and loads. S11/S12
-remain open for lead review. Raw window startup is within the known-main
-range; the extra warm-sidebar comparison misses by6ms. Quiet commandbar
-passes151/151 for main and branch. The final gate is pending. Older-engine, M1 and interrupted receipts are excluded.
+On `s12/scc-app`, source `2b45f439` contains #249, #202 and #205.
+SCC forwards to the sole `app.stores.boosts` owner; private matching rows
+use the session parent Profile and `factory.isIncognito` guards actions.
+Pre-update engine7a90 receipts proved S4/S10 real-store flows, but fresh
+Debug/Release and suites on engine47af3007 qualify the new head. S11/S12
+remain **FAIL, known: material and element colors, follow-up S12-V
+(lead 22:20)**, not parity. S2 still requires Section13's adapter. E1–E3
+APIs are available; SCC binding is deferred under lead22:38. Final current
+counts, loads, negative proofs and full gate summary are recorded in the PR.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
-| Popover from the URL pill button | FA SC-1 | site-control-boost-editor Step 3 | `OpenSiteControl`, `BrowserSiteControl`, URL/pane glyphs | `AppSiteControlSource`, factory/window hooks (`s12/scc-app`) | M5 Release `sitecontrol`: 23 PASS, 3 BLOCKED, S11/S12 FAIL; compiled owner/route negatives rejected | implemented; visual acceptance pending | URL, floating-card, pane and toolbar anchors; closes on tab/Space/window changes and Peek; unavailable in Little Open. Lead interim ruling: S1 verifies the unavailable ad-block row and its Settings action. S11/S12 remain FAIL. |
+| Popover from the URL pill button | FA SC-1 | site-control-boost-editor Step 3 | `OpenSiteControl`, `BrowserSiteControl`, URL/pane glyphs | `AppSiteControlSource`, factory/window hooks (`s12/scc-app`) | Real `sitecontrol` flow; engine47af rerun and final PR receipt | implemented; visual acceptance pending | URL, floating-card, pane and toolbar anchors; closes on tab/Space/window changes and Peek; unavailable in Little Open. Lead interim ruling: S1 verifies the unavailable ad-block row and its Settings action. S11/S12 remain FAIL. |
 | Site permissions rows | FA SC-2 | site-control-boost-editor §3.8 | `SiteControlRow` | Existing `SitePermissionStore`; token-based change notification | e2e `sitecontrol` S3 | implemented | Only non-Ask permission decisions appear; toggle writes through the engine owner. Prompt anchor hook uses the visible SCC button. Engine E1 scalar settings APIs are supplied by #205; SCC binding is deferred under lead 22:38. |
-| Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | Weak `SiteControlBoostProvider` seam | S4 blocked: boost runtime; S10 matching-row proof waits for the provider | partial | No second BoostStore. Nil provider gives no Boost rows and disables New Boost. The source reads `factory.isIncognito`, keeps matching private-window rows disabled, suppresses the boosted glyph and refuses Boost actions. S10 checks a real private window and ephemeral page context; it reports absent matching-row coverage as blocked. The lead wires the runtime provider. |
+| Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | `app.stores.boosts` via `SiteControlBoostProvider` | S4/S10 real saved matching Boost, toggles/editor/glyph and private refusals; engine47af rerun | implemented; final proof in PR | No second BoostStore. The source reads `factory.isIncognito` and matches private rows through their parent Profile. Private controls are disabled; creation, editing, Customize and toggles refuse. |
 | Extensions section (pin, site access) | FA SC-4 | extensions-ui §3.9 | Shared `OpenExtensionsUI` items; empty SCC Add tile | Per-window context and Cmd+E picker | M5 current-engine `extensions-ui` 72/72, including X-13; cleanup PASS and no focus interruption | implemented on branch | Same context as the window's strips. Picker focuses the first current item; second Cmd+E closes and third reopens. Arrows and type-select move, Return runs, Esc closes; empty picker focuses Add Extension. |
 | Share and two Capture actions; Copy URL shortcut | FA SC-5 | site-control-boost-editor §3.4 | Four action buttons | Existing App commands | e2e `sitecontrol` S6; `page` | implemented | Fourth action is Capture Full Page. Copy URL stays on ⇧⌘C and the URL field; no SCC Copy button. |
 | Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor §3.8 | `OpenAdBlock.setExcluded`, `didChange` | Reads the shared App store | S2 blocked: Section 13 ad-block adapter | blocked | The App does not bind the store engine events. Opening a Profile in Settings alone does not make blocking available. Unavailable row opens Settings ▸ Advanced and changes no blocking setting. |
@@ -794,7 +790,7 @@ Capture session 2 ran on 2026-10-26 and is committed as findings only (#106; rou
 | Decision | Default today | Source |
 |---|---|---|
 | Folders as `chrome.tabGroups` | Decided in #64: v1 has no tab groups. Folder tabs stay pinned with `groupId: -1`. | `docs/re/arccore-engine.md` §4.3.1; engine-patches P1 |
-| Do Boosts apply in incognito, Peek, Little Open, and Split panes? | Private windows disable Boost scripts, live apply, editor and Customize Page, including per-parent OTR contexts (lead 2026-11-07 15:32). SCC reads `factory.isIncognito` and disables matching rows; fresh S4/S10 real-store proof is pending after #249 integration. Other contexts follow Section 12. | boosts-zap Q4 ("Product to confirm") |
+| Do Boosts apply in incognito, Peek, Little Open, and Split panes? | Private windows disable Boost scripts, live apply, editor and Customize Page, including per-parent OTR contexts (lead 2026-11-07 15:32). SCC reads `factory.isIncognito`, matches parent-Profile rows and disables their controls. Fresh engine47af S4/S10 receipts are recorded in the PR. Other contexts follow Section 12. | boosts-zap Q4 ("Product to confirm") |
 | Keep Safe Browsing on? | Not decided | engine-patches P5 ("Keep Safe Browsing as a product decision") |
 | Pinned tabs sleep like other tabs (Chrome protects them) | Sleep; say so in Settings | memory-design §5 |
 | Tab-sleep mode names in Settings | Designer names later | memory-fork lead decision |
