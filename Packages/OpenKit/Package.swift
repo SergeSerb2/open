@@ -5,6 +5,8 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenOnboarding", targets: ["OpenOnboarding"]),
+        .executable(name: "onboarding-render", targets: ["onboarding-render"]),
         .library(name: "OpenExtensionsUI", targets: ["OpenExtensionsUI"]),
         .executable(name: "extensions-render", targets: ["extensions-render"]),
         .library(name: "OpenSiteControl", targets: ["OpenSiteControl"]),
@@ -37,6 +39,8 @@ let package = Package(
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenOnboarding", dependencies: ["OpenDesign"], resources: [.copy("Resources/Onboarding")], linkerSettings: [.linkedFramework("AVFoundation"), .linkedFramework("CoreAudio")]),
+        .executableTarget(name: "onboarding-render", dependencies: ["OpenOnboarding"]),
         .target(name: "OpenExtensionsUI", dependencies: ["OpenModel", "OpenDesign", "OpenWeb"]),
         .executableTarget(name: "extensions-render", dependencies: ["OpenModel", "OpenDesign", "OpenWeb", "OpenExtensionsUI", "OpenSidebar", "OpenFeatures"]),
         .target(name: "OpenSiteControl", dependencies: ["OpenModel", "OpenDesign", "OpenBoosts", "OpenAdBlock", "OpenWeb", "OpenExtensionsUI"]),

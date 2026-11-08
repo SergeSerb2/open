@@ -1,5 +1,8 @@
 # First run
 
+True first launch now shows [Open's intro](onboarding.md) before this flow.
+Get Started closes that window and opens the existing first-run steps below.
+
 Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C/D now add the App window, startup detection, guarded completion save, shared import runner, model landing and Settings merge. Background History uses the same runner and Profile stores for first run and Settings. Passwords and cookies remain capability OFF. The default-browser offer uses the existing App service only on its button click.
 
 `FirstRunViewModel` and `FirstRunView` live in OpenSettings. `FirstRunWindow.size` is 560 × 520 pt. OpenDesign Settings tokens supply the insets, grouped rows, typography and colors. `SettingsButtonStyle` supplies the prominent default button: accent/white while key, normal gray while inactive. Welcome uses a 28 pt semibold wordmark and 28 pt buttons. Import and Report pin the heading/footer around a scrolling middle with automatic indicators. Sparse screens center a visual and text above the footer. Step transitions use `Motion.selectionFade` and cut with Reduce Motion.

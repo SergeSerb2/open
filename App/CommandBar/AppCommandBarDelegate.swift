@@ -12,6 +12,7 @@ final class AppCommandBarSession: CommandBarDelegate {
   unowned let factory: EngineWebContentHostFactory
   private(set) var controller: CommandBarController?
   private lazy var extensionSource = EngineCommandBarSource(factory: factory)
+  private var welcomeIcons: WelcomeCommandBarIcons?
   private var openedAt = 0.0
   private var queryAt = 0.0
   private var queryRevision = 0
@@ -65,6 +66,10 @@ final class AppCommandBarSession: CommandBarDelegate {
       windowController.contentView.addSubview(bar.view)
     }
     guard let bar = controller else { return }
+    if WelcomeTab.matches(factory.selectedTab?.url) {
+      if welcomeIcons == nil { welcomeIcons = WelcomeCommandBarIcons() }
+      bar.favicons = welcomeIcons
+    } else { bar.favicons = nil }
     let style = factory.focusedSpace.map { windowController.context.style(for: $0) }
     bar.theme = CommandBarTheme(style: style)
     if let color = factory.hosts.values.first(where: { $0.content === factory.selectedContent })?.pageBackgroundColor?.usingColorSpace(.sRGB) {
@@ -104,6 +109,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       default: break
       }
     }
+    if commandBar.request?.mode == .editCurrentURL, WelcomeTab.matches(factory.selectedTab?.url),
+       commandBar.text == WelcomeTab.title { return }
     switch intent {
     case .open(let url, let destination, let modifiers),
          .search(_, let url, _, let destination, let modifiers):
