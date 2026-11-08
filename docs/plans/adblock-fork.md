@@ -2167,6 +2167,25 @@ Step 5 measure it. Rules:
 5. If C-G1 still fails with the lane, the lead decides (§13.5); nobody
    raises the gate.
 
+**2026-11-08 erratum (observer startup).** The initial document query and
+user-origin sheet insertion stay in `DidCreateDocumentElement`. JavaScript
+cannot run there: pinned Blink's
+`FrameLoader::DispatchDocumentElementAvailable` creates `ScriptForbiddenScope`
+before that callback (`core/loader/frame_loader.cc:1856`), and
+`V8ScriptRunner` refuses script execution in that scope
+(`bindings/core/v8/v8_script_runner.cc:529`). The first real CEF run therefore
+hid domain-specific elements but sent no generic reports (C-4: 0/10).
+Start the isolated observer in the frame's next AgentGroupScheduler task,
+guarded by a WeakPtr and document epoch. Enter that scheduler's isolate,
+install the native binding, then execute the observer. Before observing
+mutations, scan the existing document once, including elements created by
+parser or top-of-body inline scripts. The scan and each mutation batch stop
+after 65,536 node/token inspection steps, in addition to the existing
+65,536 distinct-token and 4,194,304 UTF-16-unit lifetime caps. Queued generic
+reports still send at most 500 tokens per flush. The new C-4 inline variant
+requires hiding and initial-scan evidence in 10/10 navigations. These changes
+are written; rebuilt runtime acceptance is pending.
+
 ### 8.3 Payload: sanitizing, insertion, and what v1 drops (D-14)
 
 **Sanitizer (shim, Rust, §5.5).** It runs on every hide selector and

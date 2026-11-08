@@ -37,9 +37,11 @@ class OpenAdBlockRendererAgent final : public content::RenderFrameObserver {
   void OnDestruct() override;
 
  private:
+  void StartObserver(uint64_t document_epoch);
   void InstallBinding(v8::Local<v8::Context> context, const char* reason);
   void Exceptions(gin::Arguments* args);
   void Report(gin::Arguments* args);
+  void TraceObserver(int stage, uint32_t count);
   void OnGenericSelectors(uint64_t document_epoch,
                           const std::vector<std::string>& selectors);
   void InsertSelectors(const std::vector<std::string>& selectors, bool initial);

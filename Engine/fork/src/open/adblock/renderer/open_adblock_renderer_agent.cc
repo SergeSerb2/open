@@ -12,8 +12,10 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "content/public/renderer/render_frame.h"
@@ -23,6 +25,7 @@
 #include "gin/function_template.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "open/adblock/renderer/open_adblock_page_script.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -150,9 +153,26 @@ void OpenAdBlockRendererAgent::DidCreateDocumentElement() {
   if (cosmetics_->generichide) {
     return;
   }
+  // Blink calls DidCreateDocumentElement inside ScriptForbiddenScope.
+  // Keep the query/style insertion here, but start the class/ID observer
+  // in this frame's next task, after that scope unwinds. WeakPtr and the
+  // epoch reject detached frames and a newer document before touching V8.
+  frame->GetAgentGroupScheduler()->DefaultTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&OpenAdBlockRendererAgent::StartObserver,
+                     weak_ptr_factory_.GetWeakPtr(), document_epoch_));
+}
 
-  auto* isolate = v8::Isolate::GetCurrent();
+void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
+  if (document_epoch != document_epoch_ || observer_started_ || !cosmetics_ ||
+      cosmetics_->generichide) {
+    return;
+  }
+  auto* frame = render_frame()->GetWebFrame();
+  auto* isolate = frame->GetAgentGroupScheduler()->Isolate();
+  v8::Isolate::Scope isolate_scope(isolate);
   v8::HandleScope scope(isolate);
+  const auto alive = weak_ptr_factory_.GetWeakPtr();
   auto context = frame->GetScriptContextFromWorldId(
       isolate, ISOLATED_WORLD_ID_CHROME_INTERNAL);
   if (context.IsEmpty()) {
@@ -162,6 +182,9 @@ void OpenAdBlockRendererAgent::DidCreateDocumentElement() {
         ISOLATED_WORLD_ID_CHROME_INTERNAL,
         blink::WebScriptSource(blink::WebString::FromUtf8("void 0")),
         blink::BackForwardCacheAware::kAllow);
+    if (!alive || document_epoch != document_epoch_) {
+      return;
+    }
     context = frame->GetScriptContextFromWorldId(
         isolate, ISOLATED_WORLD_ID_CHROME_INTERNAL);
   }
@@ -174,7 +197,8 @@ void OpenAdBlockRendererAgent::DidCreateDocumentElement() {
   }
   observer_started_ = true;
   VLOG(1) << "OpenAdBlock: observer started document=" << document_epoch_
-          << " frame=" << frame->GetLocalFrameToken().ToString();
+          << " frame=" << frame->GetLocalFrameToken().ToString()
+          << " world=" << frame->GetScriptContextWorldId(context);
   frame->ExecuteScriptInIsolatedWorld(
       ISOLATED_WORLD_ID_CHROME_INTERNAL,
       blink::WebScriptSource(
@@ -250,12 +274,46 @@ void OpenAdBlockRendererAgent::InstallBinding(v8::Local<v8::Context> context,
            .FromMaybe(false)) {
     return;
   }
+  if (VLOG_IS_ON(1)) {
+    v8::Local<v8::Function> trace;
+    if (gin::CreateFunctionTemplate(
+            isolate,
+            base::BindRepeating(
+                [](base::WeakPtr<OpenAdBlockRendererAgent> agent, int stage,
+                   uint32_t count) {
+                  if (agent) {
+                    agent->TraceObserver(stage, count);
+                  }
+                },
+                weak_ptr_factory_.GetWeakPtr()))
+            ->GetFunction(context)
+            .ToLocal(&trace)) {
+      if (!binding
+               ->CreateDataProperty(context, gin::StringToV8(isolate, "trace"),
+                                    trace)
+               .FromMaybe(false)) {
+        VLOG(1) << "OpenAdBlock: observer trace binding unavailable";
+      }
+    }
+  }
   binding_context_.Reset(isolate, context);
   binding_installed_ = true;
   VLOG(1) << "OpenAdBlock: binding installed (" << reason
           << ") document=" << document_epoch_
           << " frame="
-          << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString();
+          << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString()
+          << " world="
+          << render_frame()->GetWebFrame()->GetScriptContextWorldId(context);
+}
+
+void OpenAdBlockRendererAgent::TraceObserver(int stage, uint32_t count) {
+  VLOG(1) << "OpenAdBlock: observer trace stage=" << stage << " count=" << count
+          << " document=" << document_epoch_ << " world="
+          << render_frame()->GetWebFrame()->GetScriptContextWorldId(
+                 v8::Isolate::GetCurrent()->GetCurrentContext())
+          << " bound=" << Pipe().remote.is_bound()
+          << " connected=" << Pipe().remote.is_connected()
+          << " failed=" << Pipe().failed;
 }
 
 void OpenAdBlockRendererAgent::Exceptions(gin::Arguments* args) {
@@ -267,6 +325,13 @@ void OpenAdBlockRendererAgent::Exceptions(gin::Arguments* args) {
 }
 
 void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
+  VLOG(1) << "OpenAdBlock: report entry document=" << document_epoch_
+          << " payload=" << static_cast<bool>(cosmetics_)
+          << " generichide=" << (cosmetics_ && cosmetics_->generichide)
+          << " observer=" << observer_started_
+          << " bound=" << Pipe().remote.is_bound()
+          << " connected=" << Pipe().remote.is_connected()
+          << " failed=" << Pipe().failed;
   if (!cosmetics_ || cosmetics_->generichide || !observer_started_ ||
       Pipe().failed || !Pipe().remote.is_connected()) {
     args->Return(-1);
@@ -314,6 +379,8 @@ void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
     return;
   }
   if (classes.empty() && ids.empty()) {
+    VLOG(1) << "OpenAdBlock: report empty after token filter classes="
+            << class_count << " ids=" << id_count;
     args->Return(1);
     return;
   }
@@ -323,6 +390,9 @@ void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
     return;
   }
   ++generic_pending_;
+  VLOG(1) << "OpenAdBlock: report send document=" << document_epoch_
+          << " classes=" << classes.size() << " ids=" << ids.size()
+          << " pending=" << generic_pending_;
   Pipe().remote->GetGenericSelectors(
       top_origin_, classes, ids, cosmetics_->exceptions,
       base::BindOnce(&OpenAdBlockRendererAgent::OnGenericSelectors,
