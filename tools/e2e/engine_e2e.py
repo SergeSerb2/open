@@ -11975,7 +11975,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
@@ -12279,6 +12279,10 @@ def main():
             results["applescript"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
                 factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
+        elif opts.only == "sitedata":
+            results["sitedata"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/site_data.py"))["run"](
+                factory, results["sitedata"], tmp, new_tab, wait_until)
         elif opts.only == "boosteditor":
             import importlib.util
             sys.path.insert(0, os.path.join(ROOT, "tools", "e2e"))
@@ -12425,14 +12429,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords"):
+    for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords")
+    failures = [k for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
