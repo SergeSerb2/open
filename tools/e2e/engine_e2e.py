@@ -924,21 +924,34 @@ def feature_checks(app, style, results, tmp):
     def crash_recovery():
         if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
             return {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+        pid = app.call("ping")["pid"]
+        sibling_title = app.eval(t, "document.title")
         c = new_tab(app, "https://example.com/", background=True)
         try:
-            app.call("navigate", tab=c, url="chrome://crash")
-        except Exception:
-            pass
-        time.sleep(2)
-        st = app.page(c).get("crash")
-        model_crashed = app.tab(c)["crashed"]
-        app.call("navigate", tab=c, url="https://example.com/")
-        app.call("wait", tab=c, timeout=20)
-        after = app.page(c)
-        app.call("close", tab=c)
-        return {"ok": st != 0 and model_crashed and after["crash"] == 0 and after["url"] == "https://example.com/",
-                "crash_state": st, "model_crashed": model_crashed,
-                "after_reload": {"crash": after["crash"], "url": after["url"]}}
+            # Blink's chrome_debug_urls.cc handles chrome://kill with SIGTERM
+            # on macOS. CEF reports TS_PROCESS_WAS_KILLED; Open exposes crash
+            # state 2 and the same model crashed flag, without a fault/.ips or
+            # a macOS crash dialog (chrome://crash dereferences null instead).
+            app.call("navigate", tab=c, url="chrome://kill")
+            wait_until(lambda: app.page(c).get("crash") == 2 and app.tab(c)["crashed"], timeout=5, step=.05)
+            st = app.page(c).get("crash")
+            model_crashed = app.tab(c)["crashed"]
+            sibling_alive = app.eval(t, "document.title") == sibling_title and not app.tab(t)["crashed"]
+            app_alive = app.call("ping")["pid"] == pid
+            # Keep the original recovery navigation on the same sidebar tab.
+            app.call("navigate", tab=c, url="https://example.com/")
+            app.call("wait", tab=c, timeout=20)
+            after = app.page(c)
+            model_recovered = not app.tab(c)["crashed"]
+            title = app.eval(c, "document.title")
+            return {"ok": st == 2 and model_crashed and sibling_alive and app_alive and model_recovered
+                          and after["crash"] == 0 and after["url"] == "https://example.com/" and title == "Example Domain",
+                    "termination_url": "chrome://kill", "crash_state": st, "model_crashed": model_crashed,
+                    "sibling_alive": sibling_alive, "same_app_pid": app_alive,
+                    "after_reload": {"crash": after["crash"], "url": after["url"], "title": title,
+                                     "model_recovered": model_recovered}}
+        finally:
+            app.call("close", tab=c)
 
     for name, fn in [("js_dialogs", dialogs), ("permissions", permissions), ("popups_new_tabs", popups_and_new_tabs),
                      ("find_in_page", find), ("zoom", zoom),
