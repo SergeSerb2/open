@@ -133,7 +133,7 @@ def run(factory, results, tmp, h):
         row('window_size', s['frameSize'] == [1280, 800] and s['key'], size=s['frameSize'])
         row('F1_welcome', s['active'] and s['step'] == 'welcome' and not s['completed']
             and not app.call('shell-windows') and not snapshot_path().exists()
-            and any(w['number'] == s['window'] and w['class'] == 'NSWindow' for w in app.call('windows')), state=s, png=welcome)
+            and any(w['number'] == s['window'] and w['class'] == 'OnboardingWindow' for w in app.call('windows')), state=s, png=welcome)
         assert h.wait_until(lambda: state().get('probeReady'), timeout=10, step=.05)
         s = state()
         row('F2_probe', s['counts'].get('Spaces') == 2 and s['counts'].get('Archive') == 2
