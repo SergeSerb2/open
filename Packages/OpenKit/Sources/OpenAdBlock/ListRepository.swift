@@ -82,21 +82,23 @@ actor ListRepository {
                 try files.copyItem(at: old.appendingPathComponent(name), to: parent.appendingPathComponent(name))
             }
             try Task.checkCancellation()
-            if sameDirectory {
-                // UUID-named Profiles can alias adblock/AdBlock on a case-insensitive volume.
-                // Keep the complete legacy directory for rollback until the staged rename wins.
-                try files.moveItem(at: old, to: backup)
-            } else {
+            // Move the intact source into the canonical Profile before committing. A failed
+            // commit renames it back; failed post-commit cleanup stays inside teardown's folder.
+            // rename() never falls back to a partial cross-volume copy-and-delete.
+            guard Darwin.rename(old.path, backup.path) == 0 else { throw AdBlockError("legacy migration rename failed") }
+            if !sameDirectory {
                 // Removing only empty directories preserves the no-state condition checked above.
                 let lists = directory.appendingPathComponent("lists")
+                try Task.checkCancellation()
                 if files.fileExists(atPath: lists.path) { try files.removeItem(at: lists) }
+                try Task.checkCancellation()
                 if files.fileExists(atPath: directory.path) { try files.removeItem(at: directory) }
             }
             try Task.checkCancellation()
             try files.moveItem(at: staging, to: directory)
         } catch {
             if files.fileExists(atPath: backup.path), !files.fileExists(atPath: old.path) {
-                try? files.moveItem(at: backup, to: old)
+                _ = Darwin.rename(backup.path, old.path)
             }
             try Task.checkCancellation()
             // Opening the untouched destination now seeds bundled defaults instead.
@@ -104,7 +106,7 @@ actor ListRepository {
         }
         // The transaction has committed. Cleanup cannot invalidate the new complete copy.
         try Task.checkCancellation()
-        try? files.removeItem(at: sameDirectory ? backup : old)
+        try? files.removeItem(at: backup)
         if sameDirectory { return }
         let parent = old.deletingLastPathComponent()
         if (try? files.contentsOfDirectory(atPath: parent.path).isEmpty) == true { try? files.removeItem(at: parent) }
