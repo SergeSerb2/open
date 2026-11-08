@@ -13,6 +13,7 @@ if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LOADER_CHECK"] == "1" {
   FileHandle.standardError.write(Data("Open: loader check passed\n".utf8))
   exit(0)
 }
+LaunchTiming.shared.recordEntryImages()
 #endif
 let app = OEApplication.shared as! OEApplication
 LaunchTiming.shared.mark("main")

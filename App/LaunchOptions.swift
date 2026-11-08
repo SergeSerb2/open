@@ -92,13 +92,23 @@ final class LaunchTiming {
   private var firstFrameConfirmed: Bool?
   #if OPEN_AUTOMATION
   private var keyProbeTimestamp: TimeInterval?
+  private var entryImages: [String]?
   private var sidebarImages: [String]?
+
+  func recordEntryImages() {
+    guard ProcessInfo.processInfo.environment["OPEN_SPEED_IMAGES"] == "1" else { return }
+    entryImages = loadedImages()
+  }
 
   /// Diagnostic only: capture the image set after frame confirmation and
   /// before engine startup. Keep this scan out of ordinary launch timings.
   func recordSidebarImages() {
     guard ProcessInfo.processInfo.environment["OPEN_SPEED_IMAGES"] == "1" else { return }
-    sidebarImages = (0..<_dyld_image_count()).compactMap { index in
+    sidebarImages = loadedImages()
+  }
+
+  private func loadedImages() -> [String] {
+    (0..<_dyld_image_count()).compactMap { index in
       _dyld_get_image_name(index).map { String(cString: $0) }
     }
   }
@@ -159,6 +169,7 @@ final class LaunchTiming {
   var report: [String: Any] {
     var result: [String: Any] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded() as Any) })
     #if OPEN_AUTOMATION
+    if let entryImages { result["entryImages"] = entryImages }
     if let sidebarImages { result["sidebarImages"] = sidebarImages }
     #endif
     if speedTraceEnabled {
