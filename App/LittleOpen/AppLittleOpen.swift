@@ -59,6 +59,7 @@ extension AppDelegate {
         host.owner?.standaloneSurfaceVisibilityChanged()
       }
       self.expirySweeper?.rearm()
+      self.purgeScriptingWrappers()
       self.scheduleMenuRebuild()
     }
     media.visibility.littleOpenCoordinator = coordinator
