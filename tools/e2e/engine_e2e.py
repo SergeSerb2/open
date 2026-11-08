@@ -5691,7 +5691,7 @@ def measure(app_factory, results, tmp):
     server, port = _media_server()
     app = app_factory(urls=("http://127.0.0.1:%d/audio.html" % port,), fresh=True)
     keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
-    saved = {key: app.call("defaults", key=key) for key in keys}
+    saved = {key: app.call("defaults", key=key, persistent=True) for key in keys}
     try:
         for key in keys: app.call("defaults", key=key, value=None)
         audio = app.call("tabs")[0]["id"]
@@ -5844,7 +5844,7 @@ def media_checks(factory, results, tmp):
     # Start from the defaults the checks expect; a run killed mid-check (or another suite) can leave
     # these keys behind in the shared defaults domain.
     keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
-    saved = {key: app.call("defaults", key=key) for key in keys}
+    saved = {key: app.call("defaults", key=key, persistent=True) for key in keys}
     try:
         for key in keys: app.call("defaults", key=key, value=None)
         app.call("window-frame", frame=[80, 60, 1280, 820])
