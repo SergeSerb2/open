@@ -1,6 +1,6 @@
 # Section 14 C5: import local CRX completion
 
-2026-11-07, M5. Branch `s14/crx-completion`. Main through `1714a22e` was merged before the final Debug build and verifier. No engine source changed.
+2026-11-07, M5. Branch `s14/crx-completion`. The full verifier ran on `043588d2` with main through `1714a22e`. The final shared-file merge `a7b3a221` includes main `7f7feb26`; Debug and the affected first-run/extension suites were rerun after it. No engine source changed in this PR.
 
 The automation-only import path now uses `installLocalCRX(_:completion:)`. Installed requires the exact candidate ID. Cancelled skips. Failed preserves Chromium's error text. The hidden browser/page and delegate-event matching are removed. The production Web Store call is unchanged. Consent and readiness have no failure deadline. Undo Import keeps independent extension installations.
 
@@ -41,6 +41,13 @@ Loads are `(1, 5, 15)` minutes, before → after, rounded to two decimals. Priva
 | `build-main-final` | PASS — Debug after current main merge | (9.72, 17.57, 23.55) → (11.96, 17.54, 23.36) |
 | `extensions-p3-final` | 19 PASS, 0 FAIL; engine and cleanup PASS | (14.61, 16.09, 21.34) → (12.99, 15.41, 20.75) |
 | `verify-full-final` | 24 PASS, 1 timing FAIL — FV10 22.624 ms p95 > 8.33 ms; 688 other feature rows PASS | (12.22, 15.17, 20.60) → (19.91, 28.17, 26.36) |
+| `features-quiet-final` | CANCELLED while queued for quiet lock; no check executed | (19.33, 27.78, 26.24) → (36.19, 46.48, 36.47) |
+| `build-overlap-final` | PASS — Debug after final shared-file overlap merge | (39.76, 47.68, 36.70) → (46.74, 47.83, 37.78) |
+| `firstrun-overlap-final` | 87 PASS, 0 FAIL, 6 existing Boost BLOCKED; all 18 EI, engine and cleanup PASS after final merge | (39.76, 46.19, 37.43) → (30.87, 43.30, 38.33) |
+| `extensions-ui-overlap-final` | 70 PASS, popup timing row FAIL (19/20 samples; p95 11.431 ms <= 16.7 ms), 1 existing picker BLOCKED; cleanup PASS | (27.10, 35.72, 36.03) → (33.07, 33.45, 34.98) |
+| `extensions-p3-overlap-final` | 19 PASS, 0 FAIL; engine and cleanup PASS | (33.07, 33.45, 34.98) → (72.49, 77.49, 55.65) |
+| `extensions-ui-quiet-final` | 71 PASS, 0 FAIL, 1 existing picker BLOCKED; 20/20 popup samples; cleanup PASS. First attempt discarded for foreground loss | (60.82, 74.66, 55.02) → (34.05, 49.73, 51.50) |
+| `static-cleanup-final` | PASS — Python syntax, whitespace, byte-identical restored mapping, 0 owned App/Helper processes | (41.71, 49.09, 51.14) → (41.71, 49.09, 51.14) |
 
 ## Full verifier summary
 
@@ -79,3 +86,9 @@ Command: `tools/verify-all.sh --with-arc-data`, through section token A and `hea
 The full first-run suite retains six existing Section 12 AppBoosts BLOCKED rows. `extensions-ui` retains the existing `X13_picker` Site Control presenter BLOCKED row. No production Web Store network acceptance was added. M1 was not used because no M1 screen clearance was received. No intentional crash probe ran.
 
 The first UI run was interrupted by a monitor that treated `ExcUserFault_*` as a crash. The lead confirmed `bug_type: 309`, `isSimulated: 1`, no App crash and no crash dialog. The resumed suite passed. The monitor now stops only on real Open/Open Helper crash reports. The Chromium icon-writer fault is recorded in `docs/followups.md`; an icon size/format mismatch remains a guess.
+
+The final UI wrapper was interrupted by an instruction update while its detached suite continued. Its complete JSON and cleanup result were recovered. That table row uses the suite execution-start load instead of the lost wrapper queue-start load; its exit classification is inferred from the complete result JSON. No real Open/Open Helper crash report appeared during the interruption.
+
+The full verifier retains the `FV10` timing miss (22.624 ms versus 8.33 ms). The queued quiet retry was cancelled before any check ran, so functional rechecks could proceed at the allowed load. No OpenKit source differs from main in this PR, but this is not a separate main runtime baseline. TANDEM §3.4l treats a timing miss with recorded load as non-blocking; a low-load FV10 receipt remains open for the lead. No limit or baseline was changed.
+
+The final quiet-lock UI rerun passed all 71 functional/timing rows with one existing picker BLOCKED row. Popup ready-to-visible p95 was 8.087 ms (limit 16.7 ms), with 20/20 samples, at row load (55.89, 55.72, 53.6). One foreground-loss attempt was discarded and automatically repeated; only the completed replacement is accepted.
