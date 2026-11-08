@@ -126,13 +126,23 @@ def run(factory, results, tmp, api, defaults_before):
     def check_adblock():
         # Exercise Settings and the scheduled real list repository through the actual App.
         # The loopback HTTP server replaces upstream transport only; it serves valid filter lists.
+        hold_downloads = threading.Event()
+        download_started = threading.Event()
+        release_downloads = threading.Event()
+
         class Lists(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
+                if hold_downloads.is_set():
+                    download_started.set()
+                    release_downloads.wait(timeout=35)
                 body = b'[Adblock Plus 2.0]\n! Profile teardown fixture\n||ads.example.invalid^\n'
                 self.send_response(200)
                 self.send_header('Content-Length', str(len(body)))
                 self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # Retirement cancelled this real HTTP transfer.
 
             def log_message(self, *_):
                 pass
@@ -206,7 +216,27 @@ def run(factory, results, tmp, api, defaults_before):
                 'settingsDomains': migrated_state['adblockDomains'], 'legacyAbsent': not legacy.exists(),
                 'canonicalListsPresent': (canonical / 'lists/current.json').is_file(),
                 'otherProfileUnchanged': kept.read_bytes() == before}
+
+            if retired:
+                app.quit()
+                launch(extra_env=dict(env, OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS='0'))
+                ready('Default')
+                state(action='create', name='Ad Block Network')
+                network = profile('Ad Block Network')
+                ready('Ad Block Network')
+                hold_downloads.set()
+                active = wait(lambda: download_started.is_set() and state()['adblockUpdating'], timeout=10)
+                assert active, 'scheduled update did not enter the held HTTP request'
+                network_folder = root / 'Profiles' / network['directory']
+                confirm('Ad Block Network')
+                ended = state(adblockProfile=network['id'])
+                results['shell_adblock_network_retirement'] = {
+                    'ok': ended['adblockProfileRetired'] and not ended['adblockProfileUpdating']
+                          and not network_folder.exists() and kept.read_bytes() == before,
+                    'realHTTPInFlight': bool(active), 'retired': ended['adblockProfileRetired'],
+                    'drained': not ended['adblockProfileUpdating'], 'folderAbsent': not network_folder.exists()}
         finally:
+            release_downloads.set()
             if app is not None and not app.closed:
                 try:
                     state(action='cancel')
