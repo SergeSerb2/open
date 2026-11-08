@@ -75,17 +75,31 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     showRestartConfirmation(on: window)
   }
   private func showRestartConfirmation(on window: NSWindow?) {
-    guard readyReply != nil || installOnQuit != nil, alert == nil, let window else { return }
+    guard readyReply != nil || installOnQuit != nil, alert == nil else { return }
     let alert = NSAlert(); alert.messageText = "Open is ready to update!"; alert.informativeText = "Restart required."
     alert.addButton(withTitle: "Restart"); alert.addButton(withTitle: "Cancel")
-    self.alert = alert
-    alert.beginSheetModal(for: window) { [weak self] response in
+    presentAlert(alert, on: window) { [weak self] response in
       guard let self else { return }; self.alert = nil
       if response == .alertFirstButtonReturn {
         self.terminationWasCancelled = false
         let reply = self.readyReply; self.readyReply = nil
         if let reply { reply(.install) } else { self.installOnQuit?() }
       } else { self.toast(.cancelledInstall) }
+    }
+  }
+  private func presentAlert(_ alert: NSAlert, on window: NSWindow?, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+    self.alert = alert
+    if let window {
+      alert.beginSheetModal(for: window, completionHandler: completion)
+    } else {
+      // Update commands also work after the last browser window closes.
+      // Keep Sparkle's reply pending throughout the native modal session.
+      alert.layout()
+      alert.window.center()
+      NSApp.activate()
+      let response = alert.runModal()
+      alert.window.orderOut(nil)
+      completion(response)
     }
   }
   func open(_ url: URL) {
@@ -254,9 +268,8 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     if !userInitiated { backgroundError(error); acknowledgement(); return }
     errorShown = true
     let alert = NSAlert(); alert.messageText = "Update error!"; alert.informativeText = error.localizedDescription
-    alert.addButton(withTitle: "OK"); alert.addButton(withTitle: "Download manually"); self.alert = alert
-    guard let parent = app.frontWindowController?.window else { self.alert = nil; acknowledgement(); return }
-    alert.beginSheetModal(for: parent) { [weak self] response in
+    alert.addButton(withTitle: "OK"); alert.addButton(withTitle: "Download manually")
+    presentAlert(alert, on: app.frontWindowController?.window) { [weak self] response in
       guard let self else { acknowledgement(); return }; self.alert = nil
       if response == .alertSecondButtonReturn,
         let url = URL(string: Bundle.main.object(forInfoDictionaryKey: "OpenUpdateDownloadPageURL") as? String ?? "https://github.com/SergeSerb2/open/releases/latest") { self.open(url) }
@@ -313,7 +326,11 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   func dismissUpdateInstallation() {
     closeStatus(); closeUpdateWindow(); cancel = nil; choice = nil; readyReply = nil; installOnQuit = nil
     retryTermination = nil; terminationRetryAvailable = false; terminationWasCancelled = false
-    if let alert { if let parent = alert.window.sheetParent { parent.endSheet(alert.window, returnCode: .abort) }; alert.window.orderOut(nil) }
+    if let alert {
+      if let parent = alert.window.sheetParent { parent.endSheet(alert.window, returnCode: .abort) }
+      else if NSApp.modalWindow === alert.window { NSApp.abortModal() }
+      alert.window.orderOut(nil)
+    }
     alert = nil; phase = "idle"; refreshBanners()
   }
 

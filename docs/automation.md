@@ -1367,6 +1367,14 @@ appcast items or driver callbacks.
 `updater-act action=primary|cancel-download|later|close|banner|dismiss-banner|notes-link|alert-first|alert-second`
 uses the current update UI's actions. `action=cleanup` closes update surfaces.
 `action=settings-help|settings-check` invokes General's actual view-model actions.
+`updater-modal-alert action=arm button=0|1` observes the next native update alert
+and presses its actual button from the modal run loop. Before answering, it
+records the bounded AX text, both buttons, modal/activation state, browser count,
+and real Sparkle cycle state. `action=state` reads that observation; `action=disarm`
+removes the observer. It creates no alert and injects no updater callback.
+The updater suite's `--windowless-only` mode checks real failing loopback menu
+checks after every browser window closes. It checks OK acknowledgement, the
+manual-download new-window path, and ready-update restart cancellation.
 The loopback suite owns its app copies, signing fixtures, preferences, and port.
 It restores the shared defaults domain in `finally` and checks process/window
 cleanup even when a check fails.

@@ -61,6 +61,10 @@ is stored for the build. A first install shows no summary. Neither update
 banner has an automatic dismissal timer.
 
 User-requested errors show Update error!, OK, and Download manually.
+Error and restart alerts use a browser-window sheet when one exists. With no
+browser window, they activate Open and show the same centered app-modal alert.
+The update reply stays pending until the alert is answered. Download manually
+uses the normal new-window path when no browser window is open.
 Background errors use the existing toast system. General has the automatic
 update switch, its help link, Check for Updates…, and the core's status text.
 Background error suppression ends at Sparkle's production cycle boundary:

@@ -224,6 +224,10 @@ def run(opts, folder, results, apps):
                 info_path.write_bytes(plistlib.dumps(info))
                 subprocess.run(['codesign', '--force', '--sign', '-', '--timestamp=none',
                     '--preserve-metadata=entitlements', str(copied)], check=True, capture_output=True)
+            if opts.windowless_only:
+                serve_fixture = True
+                exercise_windowless_alerts(opts, folder, results, launch, configure, public, origin)
+                return
             canary = origin + '/appcast.xml'
             for label, key in [('placeholder', 'PASTE_PUBLIC_KEY_FROM_GENERATE_KEYS'),
                                ('invalid_base64', '!' * 44), ('short_key', base64.b64encode(b'x' * 31).decode()),
@@ -350,6 +354,7 @@ def run(opts, folder, results, apps):
                 tracker.checkpoint()
             exercise_variants(opts, folder, results, launch, configure, public, origin, original)
             exercise_review_regressions(opts, folder, results, launch, public, origin, original)
+            exercise_windowless_alerts(opts, folder, results, launch, configure, public, origin)
         finally:
             server.shutdown(); server.server_close(); thread.join(timeout=5)
             results['loopback_server_stopped'] = {'ok': not thread.is_alive(), 'requests': requests}
@@ -386,6 +391,87 @@ def ui(app):
 
 def ax(app, number):
     return next((r for r in app.call('windows', accessibility=True) if r['number'] == number), {})
+
+
+def exercise_windowless_alerts(opts, folder, results, launch, configure, public, origin):
+    """Real menu checks and pending Sparkle replies after all browsers close."""
+    for variant in ('error-ok', 'error-manual', 'restart-cancel'):
+        url = origin + ('/appcast.xml' if variant == 'restart-cancel' else '/missing-feed.xml')
+        configure(public, url)
+        write('open.general.automaticallyUpdate', False)
+        write('open.general.updateChannel', 'stable')
+        write('open.debug.updateFeedURL', url)
+        write('SULastCheckTime', datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))
+        for key in ('SUSkippedVersion', 'SUSkippedMajorVersion', 'SUSkippedMajorSubreleaseVersion'):
+            write(key, None)
+        app = launch(folder / 'Open.app', allow='1')
+        armed = False
+        try:
+            before = wait(lambda: app.call('updater-state'), lambda s: s.get('started') and s.get('canCheck'), 'updater not ready')
+            if variant == 'restart-cancel':
+                app.call('updater-background-check')
+                wait(lambda: ui(app), lambda s: s.get('phase') == 'found', 'background update not found')
+                app.call('updater-act', action='primary')
+                wait(lambda: ui(app), lambda s: s.get('phase') == 'ready', 'background update not ready')
+                app.call('updater-act', action='dismiss-banner')
+            button = 0 if variant == 'error-ok' else 1
+            try:
+                app.call('updater-modal-alert', action='arm', button=button)
+                armed = True
+            except RuntimeError as error:
+                # The preserved pre-fix App has no modal observer. Its missing
+                # alert must be the failed row, not an early harness exception.
+                if 'unknown command' not in str(error):
+                    raise
+            for window in app.call('shell-windows'):
+                app.call('window-close', window=window['id'])
+            wait(lambda: app.call('shell-windows'), lambda rows: not rows, 'browser windows stayed open')
+            app.call('menu-perform', id='check-for-updates', timeout=30)
+            if variant != 'restart-cancel':
+                settled = wait(lambda: app.call('updater-state'),
+                    lambda s: not s.get('sessionInProgress') and s.get('canCheck'), 'error acknowledgement did not finish')
+            else:
+                settled = app.call('updater-state')
+            events = app.call('updater-modal-alert') if armed else []
+            event = events[0] if len(events) == 1 else {}
+            after_ax = [row for row in app.call('windows', accessibility=True) if row.get('visible')]
+            during = event.get('updaterBeforeAnswer', {})
+            expected = ('Open is ready to update!', 'Restart required.', 'Restart', 'Cancel') if variant == 'restart-cancel' else (
+                'Update error!', 'OK', 'Download manually')
+            visible = all(text in event.get('text', []) for text in expected)
+            if variant != 'restart-cancel':
+                visible = visible and bool(event.get('informativeText')) and event['informativeText'] in event.get('text', [])
+            native = (event.get('appModal') is True and event.get('active') is True
+                and event.get('key') is True and event.get('visible') is True
+                and event.get('sheet') is False and event.get('browserWindows') == 0
+                and event.get('pressedButton') == button
+                and len(event.get('buttons', [])) == 2 and all(b['enabled'] for b in event['buttons']))
+            common = visible and native and during.get('sessionInProgress') is True and not settled['ui']['alertWindow']
+            if variant == 'restart-cancel':
+                pending = (settled['sessionInProgress'] and settled['ui']['phase'] == 'ready'
+                    and settled['ui']['banner'] == '' and not app.call('shell-windows'))
+                results['R5_windowless_restart_cancel'] = {'ok': common and pending, 'alertAX': event,
+                    'pendingAfterCancel': settled, 'windowsAXAfter': after_ax, 'modalObserverAvailable': armed}
+            else:
+                acknowledged = (during.get('completedChecks') == before['completedChecks']
+                    and settled['completedChecks'] == before['completedChecks'] + 1)
+                if variant == 'error-manual' and event:
+                    tabs = wait(lambda: app.call('tabs'), lambda rows: any(t['url'] ==
+                        'https://github.com/SergeSerb2/open/releases/latest' for t in rows), 'manual download page missing')
+                    destination = len(app.call('shell-windows')) == 1 and any(t.get('selected') and t['url'] ==
+                        'https://github.com/SergeSerb2/open/releases/latest' for t in tabs)
+                else:
+                    destination = not app.call('shell-windows')
+                results['R4_windowless_' + variant] = {'ok': common and acknowledged and destination,
+                    'alertAX': event, 'before': before, 'afterAnswer': settled, 'windowsAXAfter': after_ax,
+                    'modalObserverAvailable': armed, 'browserWindowsAfter': app.call('shell-windows')}
+        finally:
+            try:
+                if armed:
+                    app.call('updater-modal-alert', action='disarm', timeout=3)
+            finally:
+                close_updates(app); app.quit()
+        results.tracker.checkpoint()
 
 
 TOAST_COPY = {
@@ -873,6 +959,7 @@ def main():
                         if Path('/opt/homebrew/opt/openssl@3/bin/openssl').exists() else 'openssl')
     parser.add_argument('--force-failure', action='store_true')
     parser.add_argument('--review-only', action='store_true', help='Only the three real-App review regressions')
+    parser.add_argument('--windowless-only', action='store_true', help='Only real-App error and restart alerts with no browser window')
     parser.add_argument('--output', type=Path)
     opts = parser.parse_args()
     opts.bundle = (opts.bundle or Path(harness.ROOT) / 'build' / opts.config / 'Open.app').resolve()

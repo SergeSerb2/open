@@ -32,6 +32,8 @@
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
+    private var updaterModalObserver: (any NSObjectProtocol)?
+    private var updaterModalEvents: [[String: Any]] = []
     var firstRunActionTask: Task<Void, Never>?
     var importExtensionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
@@ -128,6 +130,44 @@
         return ["title": item.title, "enabled": enabled, "badgeCount": item.badge?.itemCount ?? 0,
           "canCheck": app.updater?.canCheckForUpdates ?? true]
       case "updater-act": return app.updater?.userDriver.performAutomationAction(a["action"] as? String ?? "") ?? false
+      case "updater-modal-alert":
+        let action = a["action"] as? String ?? "state"
+        if action == "state" { return updaterModalEvents }
+        if let observer = updaterModalObserver { NotificationCenter.default.removeObserver(observer) }
+        updaterModalObserver = nil
+        if action == "disarm" { return true }
+        guard action == "arm", let button = a["button"] as? Int, (0...1).contains(button) else {
+          throw Failure(message: "expected arm with button 0 or 1, state, or disarm")
+        }
+        updaterModalEvents.removeAll()
+        updaterModalObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
+          object: nil, queue: .main) { [weak self] notification in
+          MainActor.assumeIsolated {
+            guard let self, let alert = self.app.updater?.userDriver.alert,
+              notification.object as? NSWindow === alert.window else { return }
+            // CEF may hold main-queue tasks inside a native modal loop. Observe
+            // the real alert and press its button from that loop, as Downloads does.
+            RunLoop.main.perform(inModes: [.modalPanel]) { [weak self, weak alert] in
+              MainActor.assumeIsolated {
+                guard let self, let alert, alert.buttons.indices.contains(button), self.updaterModalEvents.isEmpty else { return }
+                var row = self.describe(alert.window)
+                row["text"] = self.windowText(alert.window)
+                row["informativeText"] = alert.informativeText
+                row["buttons"] = alert.buttons.map { ["title": $0.title, "enabled": $0.isEnabled] }
+                row["appModal"] = NSApp.modalWindow === alert.window
+                row["active"] = NSApp.isActive
+                row["browserWindows"] = self.app.windowControllers.count
+                row["updaterBeforeAnswer"] = self.app.updater?.automationState
+                row["pressedButton"] = button
+                self.updaterModalEvents.append(row)
+                if let observer = self.updaterModalObserver { NotificationCenter.default.removeObserver(observer) }
+                self.updaterModalObserver = nil
+                alert.buttons[button].performClick(nil)
+              }
+            }
+          }
+        }
+        return true
       case "updater-background-check": app.updater?.checkInBackgroundForAutomation(); return true
       case "updater-images": return (0..<_dyld_image_count()).compactMap { _dyld_get_image_name($0).map { String(cString: $0) } }
       case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
@@ -2378,6 +2418,7 @@
     }
     isolated deinit {
       if let managerUndoObserver { NotificationCenter.default.removeObserver(managerUndoObserver) }
+      if let updaterModalObserver { NotificationCenter.default.removeObserver(updaterModalObserver) }
     }
 
     private func timing(_ w: EngineWebContentHostFactory) async -> [String: Any] {
