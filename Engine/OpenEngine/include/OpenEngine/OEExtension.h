@@ -189,6 +189,12 @@ NS_SWIFT_UI_ACTOR
     NS_SWIFT_NAME(extensionManager(_:show:));
 @end
 
+typedef NS_ENUM(NSInteger, OEExtensionInstallResult) {
+  OEExtensionInstallResultInstalled = 0,
+  OEExtensionInstallResultCancelled = 1,
+  OEExtensionInstallResultFailed = 2,
+};
+
 /// Live Chromium extensions of this context, including non-default profiles.
 /// No Preferences reader, filesystem watcher, timer, or second state store.
 NS_SWIFT_UI_ACTOR
@@ -211,6 +217,14 @@ OE_EXPORT @interface OEExtensionManager : NSObject
     completion:(void (^)(BOOL installed, NSString* _Nullable error))completion;
 /// Real local CRX install, only with --open-automation. Uses Chromium consent.
 - (BOOL)installLocalCRX:(NSURL*)file webContent:(OEWebContent*)webContent;
+/// Automation only. Completes exactly once on a later main-queue turn, including
+/// rejection and context closure. Installed returns an ID; failed returns the
+/// Chromium error text. Cancelled has neither. No delegate error event is sent.
+/// The completion may close or replace the manager/context.
+- (void)installLocalCRX:(NSURL*)file
+    completion:(void (^)(OEExtensionInstallResult result,
+                         NSString* _Nullable extensionID,
+                         NSString* _Nullable error))completion;
 @property(class, nonatomic, readonly) NSURL* managementPageURL;
 + (NSURL*)webStorePageURLForExtensionIdentifier:(NSString*)identifier
     NS_SWIFT_NAME(webStorePageURL(extensionIdentifier:));

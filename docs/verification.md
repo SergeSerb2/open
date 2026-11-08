@@ -80,6 +80,264 @@ takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads ca
 increase these estimates. The final table and each log give actual times/results.
 Performance budgets are never retried or relaxed by the runner.
 
+### Display and timer portability (Section 16)
+
+Visual references use the exact key `scale-<native backing scale>-icc-<SHA256>`.
+The ICC digest covers the color profile of the render host's screen. The host
+is never ordered on screen. Its screen is explicit, so selection does not use
+the requested synthetic render scale, a hostname, or a machine name. Both scale
+and the full profile digest must match. Each renderer also checks its actual
+host window against the selected key before drawing. A display change fails.
+An unknown key fails with its key and a
+recording instruction. There is no fallback and no automatic recording.
+
+| Display | Native scale | ICC SHA-256 | Reference |
+|---|---:|---|---|
+| M5 AW2726DM | 1 | `b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43` | Original PNGs and original color caps |
+| M1 built-in | 2 | `b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856` | New exact 2x PNGs and recorded color caps |
+| M5 built-in, expected from its installed Color LCD profile | 2 | `689713e234c3a538d0c88d0ad0693b98d983cee00aefa50522cc6d9d001062fa` | Unknown key: FAIL; display rerun pending (lead/user) |
+
+The M5 built-in key is an offline profile inventory, not a runtime selection
+proof. No display setup was changed. Its actual selection and render proof are
+**display rerun pending (lead/user)** and are not a merge requirement.
+
+`space-legacy` and editor P1 retain all six original PNGs. The M5 renders at
+scale 1 and requires the same exact PNG bytes. The new M1 references render at
+scale 2 (1800×1400 pixels for the 900×700-point scene). They also require exact
+PNG bytes. The two renderers have separate references. Their metadata records
+trusted `origin/main` SHA `df4767ad235106863983b45b2a1ffd87c7bd1b46`, the build
+binary hashes, and each PNG hash. The recorder checks that the package source
+matches that commit. It refuses existing keys and writes only a new proposal
+directory. It never changes a reference in place.
+
+`sidebar-compare` keeps the original M5 absolute limits, positions, masks,
+element counts, exact paired geometry/ink, and 0.15 ΔE00 paired color drift.
+Its render scale remains 1 to match the reference capture scale. The display
+key uses the native screen scale and ICC profile because AppKit text and symbol
+rasterization depends on that environment. Three fresh trusted-main renders
+per state recorded the M1 limits with no added headroom. The three different
+caps are static-inactive **1.31**, selected-pinned **2.71**, and yellow **2.25**;
+the original M5 caps remain **1.17**, **1.73**, and **1.95**. Other M1 caps are
+equal to or lower than the original M5 caps. The manifest keeps all 39 measured
+samples and the trusted-main binary hash. The older checkpoint's OS-build-only
+key and its unverified recordings were not adopted.
+
+Suggestion check #31 remains a real wall-clock check. On every M5 CPU, its
+acceptance is exactly the original raw **<600 ms**, with at most three attempts.
+An unavailable CPU identity also uses that strict rule. Other CPUs compare
+against a same-run fixed reference: the real local query with networking off,
+then an independent 380 ms sleep, sampled three times. Acceptance requires
+`elapsed / max(1, medianReference / 380) < 600 ms`. A median outside
+`380..<600 ms` fails portable acceptance. The reference never invokes the remote
+provider or its timeout. Each receipt prints all reference samples, the raw
+elapsed time, calibrated time, lateness past 380 ms, CPU model, and load. The
+separate 80 ms debounce / 300 ms configured-timeout behavior check is unchanged.
+Calibration measures scheduler and local-query overhead. It does not claim that
+CPU counters measure sleeping time or that a busy host meets a quiet latency
+budget.
+
+The explicit negative-proof switch only breaks checks. It cannot make a gate
+pass. `OPEN_VERIFY_BREAK=all` changes one channel of one rendered pixel by
+1/255 in each legacy check, changes one sampled URL-field fill by 6/255 in the
+sidebar branch output, and increases the real remote timeout by 300 ms. It does
+not change any reference. Individual values are `legacy`, `editor`, `color`,
+and `suggest`. Leave this variable unset for positive and full runs.
+
+```sh
+export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main # M5 only
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh
+~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=all \
+  tools/verify-all.sh --only space-legacy,space-editor,sidebar-compare
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock \
+  ~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=suggest \
+  Packages/OpenKit/.build/release/openkit suggest-check
+```
+
+Run M1 jobs through `m1.sh` in a detached checkout of the pushed branch, per
+TANDEM §4M. Never commit or edit source there. The normal runner retains the
+on-screen lock and owned-window cleanup for the native editor suite. Private
+capture inputs and comparison images remain in ignored `.re/` or private
+receipt directories; the committed references use synthetic fixtures only.
+The standing lock order is quiet lock, then heavy slot, then screen lock when
+needed. Build first under `heavy.sh` alone. Time the already-built command;
+never hold the quiet lock during a build. Visual negative proofs take no
+quiet lock; only the timer proof does.
+
+#### Recorded controls (2026-11-07)
+
+The trusted-main control used `df4767ad235106863983b45b2a1ffd87c7bd1b46`.
+On the M5 AW2726DM, all four focused gates passed. Its timer measured 395 ms
+at load 13.8/25.6/24.3. All 13 sidebar tables were byte-identical between the
+paired processes. On the M1, unchanged main failed the original three visual
+gates: legacy Space 0, all three editor P1 PNGs, and the three color caps
+listed above. Its timer happened to pass at 390 ms, load 54.7/34.3/16.5.
+The historical timer miss is load dependent; this control does not reproduce it.
+
+The strictness receipt compares all six original PNG files with that trusted
+commit: every byte is unchanged. All 13 original color caps also match exactly.
+The M5 timer decision still compares the raw elapsed time with 600 ms.
+These checks are recorded in `m5-strictness-proof.json` under
+`.re/s16/gate-portability/` in the main checkout.
+
+Unknown-key proof used disposable copies of the real command scripts and
+metadata. Removing only the current display entry while keeping the other
+committed key made both legacy and sidebar `--probe` exit 1 on each machine,
+with the actual key and `no fallback` in the error. Missing private captures
+cannot turn that unknown-display failure into SKIP.
+The real renderer also rejected the other committed key on each machine.
+The M5 requested render scale 2 with the M1 key; its actual host reported the
+1x AW2726DM key and exited 1 before creating a PNG. The M1 rejected the
+opposite request in the same way. Both errors included `no fallback`.
+
+The first M1 focused positive run passed all four gates. Timer #31 measured
+398.894 ms raw, 376.058 ms calibrated, reference median 403.075 ms, at load
+22.4/29.1/22.2. All 13 paired sidebar tables were byte-identical, with zero
+color drift. Both PNG checks required exact bytes.
+
+M1 negative proof changed one rendered pixel by 1/255: legacy Space 0 and all
+three editor P1 PNG rows failed. The real 300 ms timeout break failed all three
+attempts: raw 712.104/724.916/715.039 ms, calibrated
+693.081/705.551/695.938 ms, reference 390.430 ms, load 18.9/23.6/21.9.
+The first color probe used 2/255 and did not fail selected-pinned. The final
+6/255 probe failed all 13 states on all three paired attempts. The required
+static-inactive/selected-pinned/yellow drifts were 0.18/0.83/1.40 ΔE00,
+each above the unchanged 0.15 limit. References stayed unchanged.
+
+The first full runs used `33b60a4a` and each had 22 PASS / 2 FAIL. A branch
+regression moved ordered motion hosts onto the screen: sidebar RI and two MC15
+rows failed on both machines. `50bb3808` restores those hosts to their original
+offscreen position; only never-ordered snapshot hosts use a screen-associated
+frame. The M5 also missed command-bar CPU p95 (10.26 ms against 8 ms, load
+12.0/13.9/17.9). The M1 also missed unrelated suggestion row #56 (extension actions
+p95 0.3120 ms against 0.2 ms, load 8.31/12.78/17.29). Its quiet rerun passed
+all 56 suggestion checks: row #56 p95 0.1608 ms, load 14.11/10.49/12.39.
+These original misses remain in the receipts.
+
+The next M1 run confirmed RI/MC15 passed, but two folder-hover checks failed
+(622 sidebar checks passed). They use ordinary snapshot hosts, which also need
+the original offscreen frame. `5c443a56` limits screen association to explicitly
+keyed verification renders. Ordinary snapshots and motion hosts keep the
+original placement. The reference and color-comparison paths remain keyed.
+
+#### M5 negative proof and quiet control
+
+The M5 visual negative run exited 1 with build PASS and all three selected
+visual gates FAIL. One 1/255 pixel change failed legacy Space 0 and all three
+editor P1 PNG rows (276 functional rows still passed). The 6/255 URL-field
+fill change failed all 13 sidebar states on all three paired attempts. Its
+fill drifts for static-inactive/selected-pinned/yellow were 0.18/0.83/1.40 ΔE00
+on every attempt, above the unchanged 0.15 limit. One static-inactive attempt
+also had text drift up to 0.61; the deliberate fill alone failed every attempt.
+Yellow also exceeded its original absolute cap: 2.04 > 1.95. End load was
+15.22/12.48/12.04.
+
+The separate M5 timer negative run failed only row #31: raw
+694.309/702.882/723.817 ms, reference median 390.280 ms, load 14.5/12.4/12.0.
+The printed calibrated values were 676.020/684.367/704.750 ms; the M5 decision
+used raw times. No cap changed. All three attempts failed.
+
+The M5 quiet command-bar rerun passed 151/151: CPU p95 3.20 ms, inline
+completion +0.114 ms, load 10.3/11.5/11.7. The unchanged trusted-main export
+`7f405f3b3e5ccf5716d2664b1f6e91e36b219df3` ran next under the same lock and
+passed 151/151: CPU p95 3.64 ms, inline completion +0.097 ms, load
+9.7/11.2/11.6. Its exported package's 801 tracked files were checked against
+the Git blobs (including symlinks), and the cached sidebar binary hash matched
+its first full-run receipt. No fresh reference was recorded from branch code.
+
+The later M5 command-bar check in the full run missed only row #151: inline completion
++0.415 ms against +0.3 ms, CPU p95 7.44 ms against 8 ms, load 26.0/23.5/18.3.
+The strict quiet run above passed both rows #150 and #151, with its main
+control in the same session. This meets TANDEM §4b for changes outside the
+command-bar product code. The full-run miss remains in its summary table;
+no timing threshold or comparator was changed.
+
+The first M5 final sequence was interrupted by the lead's lock-order change.
+Its partial receipt remains. The completed negative runs above used the lead's
+temporary heavy-before-quiet ruling, before its 16:50 withdrawal. The standing
+order is documented above; new timing runs build first without quiet, then
+take quiet before heavy for the already-built command. Visual negative proofs
+held no quiet lock. All remaining owned children of the interrupted sequence
+were reaped before the restart.
+
+#### Final M1 full gate
+
+The detached M1 run on `5c443a56` passed **24/24**, with zero FAIL and zero
+SKIP. Start load was 5.85/8.44/9.50; end load was 4.96/5.57/7.02. Timer #31
+measured 384.295 ms raw, 365.684 ms calibrated, reference median 399.340 ms,
+load 7.6/7.4/8.7. Sidebar passed 624/624. Its 13 paired color tables were
+byte-identical, with zero drift. The preceding `50bb3808` full run ended
+23 PASS / 1 FAIL (the two folder-hover rows); its receipt is retained.
+
+The receipts were copied back before the owned detached M1 worktree was
+removed. No owned M1 job remains. `CLAUDE.md` remains a symlink to `AGENTS.md`.
+
+#### Final M5 full gate and complete tables
+
+The M5 full run on `e21c62e4` (same check source as M1's `5c443a56`) ended
+**23 PASS / 1 FAIL / 0 SKIP**. Only command-bar timing row #151 missed under
+load; the strict quiet branch/main controls above satisfy TANDEM §4b.
+All four portability gates passed. Sidebar passed 624/624, and all 13 paired
+color tables were byte-identical with zero drift. Original M5 color maxima
+were 1.17/1.73/1.95. Timer #31 used raw 400.981 ms against 600 ms; reference
+median 394.832 ms, load 63.3/24.1/16.2. Full-run start load was
+9.65/11.19/11.57; end load was 26.06/26.58/22.09. Neither machine skipped a target.
+
+After the completed full gates, main advanced to
+`300a587546a8145b4d0d5b2af67e19a05ecfbdce`. Its overlap was only
+`docs/followups.md`; the merge was clean (`e69b81b1`). The CLI package,
+verification helpers, and runner are byte-for-byte unchanged from the tested
+source. The required post-merge `heavy.sh tools/build.sh Debug` passed with
+`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`, start/end load
+37.66/29.00/23.36 and 50.86/39.43/28.55. TANDEM §4 rule 5a requires no new full gate
+or unrelated e2e suite for this merge. No App was launched.
+
+The table preserves the actual full-run result. Command-bar acceptance comes
+from the separately recorded strict quiet PASS, with no budget change.
+
+| Check | M5 full result | Seconds | M1 full result | Seconds |
+|---|---|---:|---|---:|
+| `build` | PASS | 2 | PASS | 39 |
+| `commands-demo` | PASS | 5 | PASS | 1 |
+| `roundtrip` | PASS | 1 | PASS | 0 |
+| `space-legacy` | PASS | 2 | PASS | 2 |
+| `space-editor` | PASS | 119 | PASS | 160 |
+| `space-pad-compare` | PASS | 4 | PASS | 3 |
+| `suggest-check` | PASS | 31 | PASS | 35 |
+| `commands-dump` | PASS | 1 | PASS | 0 |
+| `route` | PASS | 16 | PASS | 2 |
+| `favicons` | PASS | 3 | PASS | 0 |
+| `media-demo` | PASS | 0 | PASS | 0 |
+| `sleep-demo` | PASS | 1 | PASS | 1 |
+| `adblock-perf` | PASS | 1 | PASS | 1 |
+| `adblock-catalog` | PASS | 0 | PASS | 0 |
+| `profiles` | PASS | 3 | PASS | 0 |
+| `settings-preview` | PASS | 91 | PASS | 94 |
+| `sidebar-render` | PASS | 110 | PASS | 115 |
+| `sidebar-compare` | PASS | 21 | PASS | 20 |
+| `commandbar-render` | FAIL | 41 | PASS | 41 |
+| `features-render` | PASS | 96 | PASS | 94 |
+| `extensions-render` | PASS | 9 | PASS | 7 |
+| `sitecontrol-render` | PASS | 488 | PASS | 76 |
+| `boosts` | PASS | 5 | PASS | 4 |
+| `verify-secrets-fixture` | PASS | 7 | PASS | 4 |
+
+#### Review checklist
+
+| Checklist item | Result | Evidence |
+|---|---|---|
+| 1. Input limits | PASS | Display keys are exact scale/ICC pairs; metadata ≤1 MiB, ICC ≤4 MiB, PNG ≤16 MiB, CPU string ≤256 bytes. Unknown-key CLI proofs fail on both machines. |
+| 1. Allocator ceilings / new product parser boundaries | N/A | No product input parser or allocation path changed; new references are committed synthetic fixtures. |
+| 2. Lifetimes / callbacks | PASS | Keyed snapshot hosts are never ordered; mismatch closes the host before exit. Other hosts keep original placement. No callback, ID, or deferred-state contract changed. |
+| 3. Real keys / focus / visibility paths | N/A | No production key router, menu, focus, or visibility change. |
+| 4. Checks fail with a deliberate break | PASS | One rendered pixel, one fill color, and a real +300 ms timeout fail the required gates on M5 and M1; all original references stay unchanged. |
+| 4. Image comparisons | PASS | Exact PNG bytes; original M5 caps; exact paired geometry/ink and ≤0.15 ΔE00 drift. Both full runs pass the four portable gates. |
+| 4. Specific dialog identity | N/A | No new dialog assertion. Existing editor native-picker checks remain unchanged and pass. |
+| 4. Configured timing / bounded real-time check | PASS | Existing 80/300 ms configuration check retained. One behavior, ≤3 attempts, bounded independent reference, raw time/lateness/load printed. M5 raw <600 ms retained. |
+| 4. Isolated roots / ports / cleanup | PASS | Existing runner uses private per-check scratch roots; real suggestion HTTP fixture uses an ephemeral port. Negative editor runs finish and reap children. Owned M1 worktree removed; no owned dependent job remains at handoff. |
+| 5. UI / motion product behavior | N/A | No product motion change. Original unkeyed host placement is restored; sidebar 624/624 on both machines. No new visual-parity claim. |
+| 6. Docs / comments / follow-ups | PASS | `docs/verification.md`, portability follow-ups, and Machines paragraph agree. `CLAUDE.md` remains a symlink to `AGENTS.md`. M5 built-in proof is explicitly pending. |
+
 ## Section 1 completion (2026-10-28)
 
 Sidebar implementation PRs #123–#135 are merged through main `52212f17`.
