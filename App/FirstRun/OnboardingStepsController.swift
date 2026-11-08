@@ -214,6 +214,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     // Native AppKit key loop includes every control and the shared import host.
     view.window?.recalculateKeyViewLoop()
     if step == .name { view.window?.makeFirstResponder(nameField) }
+    else if step == .favorites { view.window?.makeFirstResponder(favoriteButtons.first) }
     if direction != 0 { transition(titleLabel, direction: direction, response: 0.4); transition(descriptionLabel, direction: direction, response: 0.5) }
     let fade = CATransition(); fade.type = .fade; fade.duration = reduceMotion ? 0.2:0.35; preview.layer?.add(fade, forKey: "step-preview")
     NSAccessibility.post(element: view, notification: .announcementRequested, userInfo: [.announcement: stepTitle, .priority: NSAccessibilityPriorityLevel.high.rawValue])
@@ -382,7 +383,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       })
     }
   }
-  var state: [String: Any] { ["screen": step.rawValue, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "controls": accessibleControls(view)] }
+  var state: [String: Any] { ["screen": step.rawValue, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
     var result: [[String: String]] = []
     if root is NSButton || root is NSSwitch || (root as? NSTextField)?.isEditable == true || root is ThemeEditorButton || root is PresetSwatchView || root is OpenSpaceEditor.ColorPadView { result.append(["role": root.accessibilityRole()?.rawValue ?? "", "label": root.accessibilityLabel() ?? (root as? NSButton)?.title ?? ""]) }
@@ -416,6 +417,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   }
   required init?(coder: NSCoder) { nil }
   override var acceptsFirstResponder: Bool { true }
+  override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
   @objc private func invoke() { guard isEnabled else { return }; press() }
   override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; invoke(); return true }
   override func updateTrackingAreas() { super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea); addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)) }
