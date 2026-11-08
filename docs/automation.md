@@ -58,9 +58,11 @@ items as well as stable items on the next check. All other values select stable.
 There is no channel UI yet. `check-for-updates` is not a command-bar suggestion
 by design (`SuggestAdapter` exclusions); every dispatch of that ID uses the same
 App updater path. `SUFeedURL` in Info.plist remains the normal feed.
-`open.debug.updateFeedURL` overrides it only with `OPEN_UPDATER_ALLOW_ADHOC=1`
-in the environment or defaults. That opt-in also allows a build without a Team ID.
-It never bypasses public-key validation. Unconfigured builds never create Sparkle;
+In `OPEN_AUTOMATION` builds, `open.debug.updateFeedURL` overrides it only with
+`OPEN_UPDATER_ALLOW_ADHOC=1` in the environment or defaults. That opt-in also
+allows a build without a Team ID. Other builds ignore both defaults keys; only
+the environment opt-in can permit ad-hoc signing, and the feed always comes from
+Info.plist. The opt-in never bypasses public-key validation. Unconfigured builds never create Sparkle;
 their update action opens General with “Updates are not set up in this build.”
 
 Build Debug, then run the real-App `updater` suite:

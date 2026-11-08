@@ -8,7 +8,9 @@ import Sparkle
 final class UpdaterController: NSObject, SPUUpdaterDelegate {
   static let automaticKey = "open.general.automaticallyUpdate"
   static let channelKey = "open.general.updateChannel"
+  #if OPEN_AUTOMATION
   static let feedOverrideKey = "open.debug.updateFeedURL"
+  #endif
   static let unavailableStatus = "Updates are not set up in this build."
   private static let log = Logger(subsystem: "io.github.sergeserb2.open", category: "Updater")
 
@@ -30,8 +32,12 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
     set { UserDefaults.standard.set(newValue, forKey: Self.automaticKey); applyAutomaticPreference() }
   }
   private var allowsAdHoc: Bool {
-    ProcessInfo.processInfo.environment["OPEN_UPDATER_ALLOW_ADHOC"] == "1"
-      || UserDefaults.standard.string(forKey: "OPEN_UPDATER_ALLOW_ADHOC") == "1"
+    let environmentAllows = ProcessInfo.processInfo.environment["OPEN_UPDATER_ALLOW_ADHOC"] == "1"
+    #if OPEN_AUTOMATION
+    return environmentAllows || UserDefaults.standard.string(forKey: "OPEN_UPDATER_ALLOW_ADHOC") == "1"
+    #else
+    return environmentAllows
+    #endif
   }
 
   init(app: AppDelegate) {
@@ -98,9 +104,13 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   func allowedChannels(for updater: SPUUpdater) -> Set<String> { channel == "beta" ? ["beta"] : [] }
 
   func feedURLString(for updater: SPUUpdater) -> String? {
+    #if OPEN_AUTOMATION
     guard allowsAdHoc, let override = UserDefaults.standard.string(forKey: Self.feedOverrideKey),
       override.utf8.count <= 4096 else { return nil }
     return override
+    #else
+    return nil
+    #endif
   }
 
   func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
