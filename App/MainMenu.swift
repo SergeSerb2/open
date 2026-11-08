@@ -38,10 +38,10 @@ enum MainMenu {
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   #if OPEN_AUTOMATION
-  static func shortcutSnapshot(_ menu: NSMenu?) -> [[String: Any]] {
+  static func shortcutSnapshot(_ menu: NSMenu?, includeUnkeyed: Bool = false) -> [[String: Any]] {
     (menu?.items ?? []).flatMap { item -> [[String: Any]] in
-      if let submenu = item.submenu { return shortcutSnapshot(submenu) }
-      guard !item.keyEquivalent.isEmpty else { return [] }
+      if let submenu = item.submenu { return shortcutSnapshot(submenu, includeUnkeyed: includeUnkeyed) }
+      guard !item.isSeparatorItem, includeUnkeyed || !item.keyEquivalent.isEmpty else { return [] }
       return [["id": item.identifier?.rawValue ?? "", "key": item.keyEquivalent,
         "modifierMask": item.keyEquivalentModifierMask.rawValue,
         "action": item.action.map(NSStringFromSelector) ?? "", "targetNil": item.target == nil,

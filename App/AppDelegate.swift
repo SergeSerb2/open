@@ -332,6 +332,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     #if OPEN_AUTOMATION
     if ProcessInfo.processInfo.environment["OPEN_SPEED_MENU_PROBE"] == "1" {
       startupEvidence["firstFrameMenuShortcuts"] = MainMenu.shortcutSnapshot(NSApp.mainMenu)
+      if ProcessInfo.processInfo.environment["OPEN_SPEED_EARLY_MENU_PROBE"] == "1" {
+        NSApp.mainMenu?.items.first(where: { $0.title == "File" })?.submenu?.update()
+        startupEvidence["earlyMenuItems"] = MainMenu.shortcutSnapshot(NSApp.mainMenu, includeUnkeyed: true)
+        startupEvidence["earlyMenuCompleted"] = initialMainMenuCompleted
+      }
     }
     #endif
   }
