@@ -204,8 +204,6 @@ targets:
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY: YES
-        # Keep embedded optional libraries out of the launch graph when no symbol uses them.
-        OTHER_LDFLAGS: "$(inherited) -Wl,-dead_strip_dylibs"
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     postBuildScripts:
