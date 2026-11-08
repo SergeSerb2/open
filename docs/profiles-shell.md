@@ -55,7 +55,7 @@ stored false value applies the move without a sheet. Cancel never saves
 “Don't show again”; only confirmation with that box checked stores false.
 The apply callback rechecks the model, source Profile, target and termination.
 
-M5 real-App acceptance at `81639e87` passes the exact Library sheet text and
+M5 real-App acceptance at `5e6c7bf5` passes the exact Library sheet text and
 parent, Escape Cancel, Return confirm, Cmd+Z Undo and both suppression cases.
 The menu selection uses the actual Manager Profile indicator. No browser
 window is created. Restoring the original fallback makes
@@ -64,16 +64,19 @@ A forced early failure with that sheet open also passes cleanup: no owned
 processes or windows remain. The [final acceptance receipt](profiles-shell/final-acceptance.json)
 records these rows, the cleanup proof and required regressions.
 
-Required M5 Chrome/Debug regressions at the same source head:
+Required M5 Chrome/Debug regressions:
 
-| Suite | Result |
-|---|---|
-| Profiles | 69 PASS; includes durable storage and migration, all five Manager rows and shell cleanup |
-| Incognito | 30 PASS; native 1x light/dark, parent ancestry, isolation and extension opt-in |
-| Sidebar | 20 PASS; existing duplicate durable-storage row stays SKIP because Profiles owns it |
-| Little Open | 39 PASS |
+| Suite | Result | Head |
+|---|---|---|
+| Profiles | 69 PASS; includes durable storage and migration, all five Manager rows and shell cleanup | `5e6c7bf5` |
+| Incognito | 30 PASS; native 1x light/dark, parent ancestry, isolation and extension opt-in | `5e6c7bf5` |
+| Sidebar | 20 PASS; existing duplicate durable-storage row stays SKIP because Profiles owns it | `81639e87` |
+| Little Open | 39 PASS | `81639e87` |
 
 All four runs have zero interruptions and clean owned-process/window shutdown.
+Profiles and Incognito were rerun after merging main `300a5875`, including
+#231’s ProfileDataOwner hook and #229’s page-menu changes. The original
+Sidebar and Little Open receipts retain their earlier source head.
 
 ## Profile page destinations
 

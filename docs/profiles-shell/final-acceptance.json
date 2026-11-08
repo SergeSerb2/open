@@ -1,7 +1,7 @@
 {
   "date": "2026-11-07",
   "machine": "M5 Pro",
-  "positiveHead": "81639e876a248494d16aebdbd7293b234eacc11f",
+  "positiveHead": "5e6c7bf5fa808e0696b98486703479044425d5b7",
   "positiveRows": {
     "shell_manager_profile_alert": {
       "ok": true,
@@ -99,7 +99,7 @@
     },
     "incognito": {
       "machine": "M5 Pro",
-      "head": "81639e876a248494d16aebdbd7293b234eacc11f",
+      "head": "5e6c7bf5fa808e0696b98486703479044425d5b7",
       "passed": 30,
       "failed": 0,
       "other": {
@@ -115,23 +115,23 @@
       "cleanup": true,
       "interruptedAttempts": 0,
       "load": [
-        9.71875,
-        12.08740234375,
-        14.7861328125
+        20.47705078125,
+        29.3642578125,
+        27.6328125
       ]
     },
     "profiles": {
       "machine": "M5 Pro",
-      "head": "81639e876a248494d16aebdbd7293b234eacc11f",
+      "head": "5e6c7bf5fa808e0696b98486703479044425d5b7",
       "passed": 69,
       "failed": 0,
       "other": {},
       "cleanup": true,
       "interruptedAttempts": 0,
       "load": [
-        6.728515625,
-        9.591796875,
-        13.068359375
+        42.4111328125,
+        30.13037109375,
+        23.78662109375
       ]
     }
   }
