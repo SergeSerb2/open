@@ -485,12 +485,14 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
 
     def load(url):
         tab = h['new_tab'](app, url)
-        assert wait(lambda: app.eval(tab, 'document.readyState === "complete"'), timeout=15, step=.1)
+        ready = 'location.href === %s && document.readyState === "complete"' % json.dumps(url)
+        assert wait(lambda: app.eval(tab, ready), timeout=15, step=.1), 'fixture document did not finish navigation'
         return tab
 
     def fill(tab):
         app.call('focus', tab=tab)
         fields = app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).map(e => e.id)')
+        assert fields, 'fixture form has no inputs'
         for field in fields:
             app.call('click', tab=tab, selector='#' + field)
             text = app.eval(tab, 'document.getElementById(%s).dataset.fixture' % json.dumps(field))
@@ -532,7 +534,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
         key('down'); time.sleep(.65); key('return')
 
     def empty(tab):
-        return app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).every(e => e.value === "")')
+        return app.eval(tab, '(() => {const fields=Array.from(document.querySelectorAll("input[data-fixture]"));return fields.length > 0 && fields.every(e => e.value === "");})()')
 
     def fields_match(tab, ids, changed=False):
         script = '''(() => {const ids=%s; return ids.every(id => {
