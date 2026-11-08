@@ -1,6 +1,9 @@
 import AppKit
 import OpenEngine
 import os.signpost
+#if OPEN_AUTOMATION
+import MachO
+#endif
 
 /// Command-line options. Unknown `--switches` also reach Chromium, because
 /// CEF parses the process command line itself (for example
@@ -89,6 +92,16 @@ final class LaunchTiming {
   private var firstFrameConfirmed: Bool?
   #if OPEN_AUTOMATION
   private var keyProbeTimestamp: TimeInterval?
+  private var sidebarImages: [String]?
+
+  /// Diagnostic only: capture the image set after frame confirmation and
+  /// before engine startup. Keep this scan out of ordinary launch timings.
+  func recordSidebarImages() {
+    guard ProcessInfo.processInfo.environment["OPEN_SPEED_IMAGES"] == "1" else { return }
+    sidebarImages = (0..<_dyld_image_count()).compactMap { index in
+      _dyld_get_image_name(index).map { String(cString: $0) }
+    }
+  }
 
   /// Queue an owned-window key dispatch at the confirmed frame. The native
   /// run loop must service it, and OEApplication.sendEvent routes it normally.
@@ -145,6 +158,9 @@ final class LaunchTiming {
   func recordFirstFrame(confirmed: Bool) { firstFrameConfirmed = confirmed }
   var report: [String: Any] {
     var result: [String: Any] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded() as Any) })
+    #if OPEN_AUTOMATION
+    if let sidebarImages { result["sidebarImages"] = sidebarImages }
+    #endif
     if speedTraceEnabled {
       result["preciseMs"] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, Double($0.1 - processStartTicks) * millisecondsPerTick) })
       result["processStartTicks"] = String(processStartTicks)

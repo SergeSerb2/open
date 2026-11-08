@@ -207,7 +207,7 @@ targets:
         # Let dyld initialize optional feature frameworks on first reference.
         # AppKit/Foundation keep their required system dependencies eager.
         # Keep embedded optional libraries out of the launch graph when no symbol uses them.
-        OTHER_LDFLAGS: "$(inherited) -Wl,-dead_strip_dylibs -Wl,-delay_framework,Vision -Wl,-delay_framework,AVFoundation -Wl,-delay_framework,AVFAudio -Wl,-delay_framework,MediaPlayer -Wl,-delay_framework,NaturalLanguage"
+        OTHER_LDFLAGS: "$(inherited) -Wl,-dead_strip_dylibs -Wl,-delay_framework,Sparkle -Wl,-delay_framework,Vision -Wl,-delay_framework,AVFoundation -Wl,-delay_framework,AVFAudio -Wl,-delay_framework,MediaPlayer -Wl,-delay_framework,NaturalLanguage"
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     postBuildScripts:

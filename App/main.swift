@@ -78,6 +78,7 @@ LaunchTiming.shared.recordFirstFrame(confirmed: firstFrame.presented)
 if firstFrame.presented {
   LaunchTiming.shared.mark("sidebarDrawn")
   #if OPEN_AUTOMATION
+  LaunchTiming.shared.recordSidebarImages()
   LaunchTiming.shared.postKeyReadinessProbe(to: appDelegate.frontWindowController?.window)
   #endif
 } else {
