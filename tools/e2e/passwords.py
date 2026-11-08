@@ -920,11 +920,15 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 assert wait(lambda: app.call('incognito-state', private=True).get('private'), timeout=10, step=.1)
                 try:
                     state = app.call('incognito-state', private=True)
-                    assert state['ephemeral'] and state['parent'] == parent
-                    assert state['originalContext'] == parent_context
+                    assert state['parent'] == parent, 'private parent differs from the focused Space Profile'
                     private_before = app.call('credentials')
                     assert private_before['logins'] == 0
                     no_prompt(urls['login'].replace('login.example.com', 'private.example.com'))
+                    # A new private window opens the command bar with no page.
+                    # Check the context on the page that submitted the form.
+                    state = app.call('incognito-state', private=True)
+                    assert state['ephemeral'], 'submitted private page context is not off the record'
+                    assert state['originalContext'] == parent_context, 'submitted private page has the wrong parent context'
                     private_after = app.call('credentials')
                     assert private_after == private_before
                 finally:
