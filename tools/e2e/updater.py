@@ -847,7 +847,7 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                 results['R2_cancelled_termination_retry'] = {'ok': retry_visible
                     and len(retried['quitAlerts']) > len(rejected['quitAlerts'])
                     and 'Install and Relaunch' in ax(app, final.get('statusWindow')).get('text', [])
-                    and app.call('ping'), 'statusAX': row, 'firstQuit': rejected['quitAlerts'],
+                    and bool(app.call('ping')), 'statusAX': row, 'firstQuit': rejected['quitAlerts'],
                     'secondQuit': retried['quitAlerts'], 'final': final}
         finally:
             if installing:
