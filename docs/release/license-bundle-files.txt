@@ -347,6 +347,9 @@ Contents/Resources/OpenKit_OpenFeatures.bundle/Contents/Resources/Sounds/open-ca
 Contents/Resources/OpenKit_OpenFeatures.bundle/Contents/Resources/Sounds/open-event.caf
 Contents/Resources/OpenKit_OpenMedia.bundle/Contents/Info.plist
 Contents/Resources/OpenKit_OpenMedia.bundle/Contents/Resources/pip-site-rules.json
+Contents/Resources/OpenKit_OpenOnboarding.bundle/Contents/Info.plist
+Contents/Resources/OpenKit_OpenOnboarding.bundle/Contents/Resources/Onboarding/open-intro-reference.json
+Contents/Resources/OpenKit_OpenOnboarding.bundle/Contents/Resources/Onboarding/open-intro.m4a
 Contents/Resources/OpenKit_OpenSleep.bundle/Contents/Info.plist
 Contents/Resources/OpenKit_OpenSleep.bundle/Contents/Resources/keep-alive-sites.json
 Contents/Resources/OpenKit_OpenSpaceEditor.bundle/Contents/Info.plist

@@ -304,6 +304,7 @@ public final class AdBlockStore {
     public func debugInfo(profile: ProfileID) -> String {
         var lines = ["catalog_version=\(catalog.version)", "enabled=\(isEnabled)",
                      "enabled_lists=\(enabledListIDs(for: profile).joined(separator: ","))"]
+        lines.append("resources=\((try? BundledResources.revision().prefix(12)).map(String.init) ?? "unavailable")")
         for id in enabledListIDs(for: profile) {
             guard let receipt = states[profile]?.lists[id] else { continue }
             lines.append("\(id) bytes=\(receipt.bytes) sha256=\(receipt.sha256) etags=\(receipt.sources.map { $0.etag ?? "-" }.joined(separator: ","))")
