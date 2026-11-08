@@ -580,4 +580,3 @@ remain open for this draft and are not represented as passes.
 | Plan / followups / PR agree | PASS | Draft remains partial. Native hold, full-verifier failure, launch comparison, screen-blend cost and sound peak are explicit. Shared status/followup files are lead-owned. |
 
 </details>
-
