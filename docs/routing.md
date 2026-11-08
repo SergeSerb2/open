@@ -1,6 +1,6 @@
-# Link routing core (Phase A)
+# Link routing and Air Traffic Control
 
-Implements Steps 1–4 of [routing-little-open.md](plans/routing-little-open.md), including its Lead decisions appendix. Phase B intake, default-browser registration, windows, engine adapters, hotkeys, and sweepers remain out of scope.
+Implements the routing core and App intake in [routing-little-open.md](plans/routing-little-open.md), including its Lead decisions appendix. Profile destinations shipped in [#214](https://github.com/SergeSerb2/open/pull/214). Little Open hosting, hotkeys and sweepers are documented in [Little Open acceptance](little-open/verification.md). The dated Phase A and Step 5 receipts below describe their original revisions.
 
 ## API
 
@@ -8,9 +8,9 @@ Implements Steps 1–4 of [routing-little-open.md](plans/routing-little-open.md)
 
 - `RoutingSource` carries a trimmed, lowercase bundle id, optional PID, and display name. An empty bundle id is unknown. Source identity is normalized again at evaluator entry.
 - `RoutingRequest` carries the URL, source, and receipt time. `parseURL(_:)` is the shared CLI/Settings input parser: a bare dotted host or `host:digits[/path]` authority gains `https://` (including `localhost:3000/x`); other explicit schemes reach the evaluator.
-- `RoutingSnapshot` is a value copy of Spaces, frontmost-first windows, ordered rules, default destination, and the external-links toggle. Callers copy live model values on the main actor. The App must use its managed windows in actual front-to-back order. The CLI uses standard windows first in stored order, which the report states. `--most-recent` moves a matching standard window first, or supplies a synthetic one.
+- `RoutingSnapshot` is a value copy of Profiles, Spaces, frontmost-first windows, ordered rules, default destination, and the external-links toggle. Callers copy live model values on the main actor. The App must use its managed windows in actual front-to-back order. The CLI uses standard windows first in stored order, which the report states. `--most-recent` moves a matching standard window first, or supplies a synthetic one.
 - `RoutingEvaluator.evaluate(_:in:)` never throws. It rejects non-HTTP(S) schemes, checks source before URL, and selects the first matching rule. A matching rule with a deleted target Space is traced and skipped. A later valid rule can win. If no rule resolves, it resolves the default. A missing default Space that requires most-recent fallback sets `fallbackMissingSpace`. Skipped stale rules keep their trace without replacing the normal rule/default/toggle `via`; no usable Space gives `noSpaces`, unless Little Open can open with a nil profile hint.
-- `ResolvedDestination` is a concrete Space/profile pair or Little Open with an optional profile hint. The hint comes from the most recent valid standard window's Space, falling back to the first Space. Duplicate Space ids use their first occurrence.
+- `ResolvedDestination` is a concrete Space/profile pair or Little Open with an optional profile hint. An explicit valid Profile takes priority for Little Open; otherwise its hint comes from the most recent valid standard window's Space, falling back to the first Space. Duplicate Space ids use their first occurrence.
 - `RoutingDecision` carries the request, normalized host, considered traces, reason (`via`), concrete target (`resolved`), and the injected receipt time as `evaluatedAt`. Human rule numbers are one-based; JSON indices are zero-based.
 - `RoutingDecisionFormatter.oneLine(_:spaceTitles:)` and `.report(_:spaces:)` serve the log, CLI, and Settings. Unknown Space names use an eight-character UUID. Profile hints use an eight-character profile UUID because the supplied snapshot has no profile names.
 - `RoutingDecisionLog` stores the last 200 complete decisions, oldest first, behind an `NSLock`. It is memory-only and safe across threads. Clicked URLs and source identities have history-entry sensitivity. It stores no fetched page content, cookies, or page titles.
@@ -41,7 +41,7 @@ Persistence ownership remains:
 | Option-Command-click | `open.links.optionCommandClickLittleOpen`, fallback `true` |
 | Little Open auto-archive | Current profile's `littleOpenAutoArchiveAfter`, fresh default six hours |
 
-The model reads the two shortcut toggles and uses the snapshot's external-links toggle. It does not write UserDefaults. The CLI reads the same external-links key with the same fallback. Phase B owns defaults registration and App save wiring.
+The model reads the two shortcut toggles and uses the snapshot's external-links toggle. It does not write UserDefaults. The CLI reads the same external-links key with the same fallback. The App owns defaults registration and save wiring.
 
 ## Profile-aware Air Traffic Control (Section 10)
 
@@ -176,10 +176,10 @@ creates one when needed, inserts at Today index zero, selects and activates.
 For `.noSpaces`, the lead's Step 5 choice supersedes §8.7's re-evaluation:
 bootstrap once, then open Little Open with a nil hint.
 
-Little Open execution calls only `AppDelegate.openLittleOpen(url:profileHint:)`
-in `App/LittleOpen/AppLittleOpen.swift`. That seam records
-`lastLittleOpenRequest` and shows the existing stub. Real Little Open page
-hosting is Step 6, so this receipt makes no page-lifecycle claim for that half.
+Little Open execution calls `AppDelegate.openLittleOpen(url:profileHint:)`
+in `App/LittleOpen/AppLittleOpen.swift`. It now hosts a real Chrome-style
+page on the resolved Profile. The dated Step 5 receipt below predates page
+hosting; current lifecycle evidence is in [Little Open acceptance](little-open/verification.md).
 
 `DefaultBrowserService` is the single App API for default-browser state. It
 compares bundle ids for both schemes, observes activation for state changes,
