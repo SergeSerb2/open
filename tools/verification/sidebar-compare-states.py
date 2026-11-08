@@ -10,7 +10,7 @@ snapshot files under /tmp, deleted on exit. Concurrent runs never share a lock,
 and the private inputs in .re are never written.
 """
 import argparse
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 import hashlib
 import json
 import os
@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import runpy
 
 HISTORICAL_SHA = "2e79746492cc775d8b207bc5759084b74f3e96ab88e521c6ab9909790a278448"
 ROOT = Path(__file__).resolve().parents[2]
@@ -113,7 +114,8 @@ def build_main(out, ref):
     source = out / "main-source"
     source.mkdir()
     # This is a disposable source export, not a worktree or a copy of private data.
-    archive = subprocess.Popen(["git", "archive", ref, "Packages/OpenKit"], cwd=ROOT, stdout=subprocess.PIPE)
+    repository = subprocess.check_output(["git", "rev-parse", "--show-toplevel"], cwd=ROOT, text=True).strip()
+    archive = subprocess.Popen(["git", "archive", ref, "Packages/OpenKit"], cwd=repository, stdout=subprocess.PIPE)
     try:
         subprocess.run(["tar", "-x", "-C", str(source)], stdin=archive.stdout, check=True)
     finally:
@@ -149,6 +151,9 @@ def run_state(renderer, root, capture, state, target):
     common = ["--width", "228", "--scale", "1"]
     command([renderer, "render", "--snapshot", root / snapshot, "--out", target / "render.png", "--size", f"{width}x{height}",
              "--appearance", "dark", *([] if "--space" in render else ["--space", "0"]), *common, *render], target / "render.log")
+    if os.environ.get("OPEN_VERIFY_BREAK") in ("all", "color") and "branch" in target.parts:
+        command(["/usr/bin/swift", Path(__file__).with_name("break-render.swift"), target / "render.png", "color"],
+                target / "negative-proof.log")
     command([renderer, "compare", "--arc", capture, "--ours", target / "render.png", "--out", target,
              "--title", name, *common, *compare], target / "compare.log")
     return (target / "table.md").read_bytes()
@@ -178,10 +183,11 @@ def table_metrics(table):
     return rows, (Decimal(summary[1]), Decimal(summary[2]), int(summary[3]))
 
 
-def gate_tables(name, tables):
+def gate_tables(name, tables, color_limits):
     parsed = {kind: table_metrics(table) for kind, table in tables.items()}
     errors = []
-    count, position_limit, color_limit = LIMITS[name]
+    count, position_limit, original_color_limit = LIMITS[name]
+    color_limit = color_limits.get(name, original_color_limit)
     for kind, (rows, worst) in parsed.items():
         if len(rows) != count or worst[2] != count:
             errors.append(f"{kind}: compared element count {len(rows)}/{worst[2]} != {count}")
@@ -215,6 +221,49 @@ def gate_tables(name, tables):
             "byteIdentical": tables["main"] == tables["branch"]}
 
 
+def record_limits(baseline, data, captures, out, attempts, receipt):
+    """Propose caps from every measured main attempt; never edit a fixture."""
+    proposed = {}
+    errors = []
+    for state in STATES:
+        name, frame, _, _, _ = state
+        count, position = LIMITS[name][:2]
+        measurements = []
+        for attempt in range(1, attempts + 1):
+            table = run_state(baseline, data, captures[frame], state,
+                              out / "main" / name / f"attempt-{attempt}")
+            rows, worst = table_metrics(table)
+            measurements.append({"attempt": attempt, "count": len(rows),
+                                 "summaryCount": worst[2], "position": str(worst[0]),
+                                 "worstDeltaE00": str(worst[1])})
+            if len(rows) != count or worst[2] != count or worst[0] != Decimal(position):
+                errors.append(f"{name} attempt {attempt}: count/position disagrees with shared STATE_META")
+            # Check all metrics, including the background sampled maximum,
+            # before proposing a cap from the unchanged worst-value summary.
+            if any(color > Decimal(LIMITS[name][2]) + Decimal("1.00")
+                   for row in rows for color in row["colors"] if color is not None):
+                errors.append(f"{name} attempt {attempt}: element exceeds M5 cap + {Decimal('1.00')} ΔE00")
+        measured = max(Decimal(row["worstDeltaE00"]) for row in measurements)
+        cap = (measured * 100).to_integral_value(rounding=ROUND_CEILING) / 100
+        proposed[name] = f"{cap:.2f}"
+        old = Decimal(LIMITS[name][2])
+        if cap > old + Decimal("1.00"):
+            errors.append(f"{name}: proposed cap {cap} exceeds M5 cap {old} + {Decimal('1.00')}")
+        print(f"{name}: measured main worst {measured} ΔE00; proposed {proposed[name]}; "
+              f"M5 {old}; diff {cap - old:+.2f}; attempts {attempts}", flush=True)
+        receipt["states"].append({"name": name, "measurements": measurements})
+    receipt.update({"proposedColorLimits": proposed, "errors": errors, "passed": not errors})
+    if hashlib.sha256(baseline.read_bytes()).hexdigest() != receipt["baselineBinarySHA256"]:
+        raise ValueError("baseline renderer changed during recording; rerun after its build completes")
+    (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    if errors:
+        raise ValueError("record-limits refused: " + "; ".join(errors))
+    print("Color limit proposal (read-only; add only by reviewed PR):")
+    print(repr({receipt["envKey"]: proposed}))
+    print(f"recorded states: {len(proposed)}/13; output: {out}")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("capture_root", type=Path, nargs="?", help="absolute .re/design-compare directory")
@@ -225,7 +274,26 @@ def main():
     parser.add_argument("--probe", action="store_true", help="check private input presence only; exit 77 when absent")
     parser.add_argument("--attempts", type=int, choices=range(1, 4), default=3,
                         help="bounded paired repeats for known offscreen nondeterminism (§15.1); retains every attempt")
+    parser.add_argument("--record-limits", action="store_true",
+                        help="propose a new display key from a clean origin/main export; never overwrite a key")
     args = parser.parse_args()
+    portability = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))
+    environment = portability["display_environment"]()
+    key = environment["key"]
+    # The branch renderer also verifies the actual host window's native screen.
+    # A display change between selection and rendering fails instead of reusing caps.
+    os.environ["OPEN_VERIFY_DISPLAY_KEY"] = key
+    manifest = portability["read_manifest"](Path(__file__).with_name("sidebar-color-baselines.json"))
+    entry = manifest["environments"].get(key)
+    if entry is None and not args.record_limits:
+        raise ValueError(f"unknown sidebar display key {key}; record new trusted-main limits; no fallback")
+    color_limits = entry["colorLimits"] if entry else {}
+    if entry and (set(color_limits) != set(LIMITS) or not re.fullmatch(r"[0-9a-f]{40}", entry["trustedMainCommit"])
+                  or any(not Decimal(limit).is_finite() or Decimal(limit) <= 0 for limit in color_limits.values())):
+        raise ValueError("invalid recorded sidebar color limits")
+    if args.record_limits and (entry or args.baseline_renderer or args.baseline_ref != "origin/main"):
+        raise ValueError("recording requires a new key and a clean origin/main build, without baseline overrides")
+    print(f"sidebar color environment: {key}; limits: {'recorded' if entry else 'original strict M5'}", flush=True)
     root = (args.capture_root or default_inputs()).resolve()
     try:
         captures = inputs(root)
@@ -246,24 +314,27 @@ def main():
     ref_sha = subprocess.check_output(["git", "rev-parse", args.baseline_ref], cwd=ROOT, text=True).strip()
     baseline = args.baseline_renderer.resolve() if args.baseline_renderer else build_main(out, ref_sha)
     receipt = {"gate": {"positionAndInk": "identical", "colorMetricDrift": str(COLOR_DRIFT),
-                        "arcLimits": LIMITS, "sha": "informational"},
-               "baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
+                        "arcLimits": LIMITS, "selectedColorLimits": color_limits, "sha": "informational"},
+               "environment": environment, "envKey": key, "baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
                "baselineBinarySHA256": hashlib.sha256(baseline.read_bytes()).hexdigest(),
-               "branchBinarySHA256": hashlib.sha256(renderer.read_bytes()).hexdigest(),
                "snapshotSHA256": {name: hashlib.sha256((root / name / "State/browser.json").read_bytes()).hexdigest()
                                   for name in ("snap-static", "snap-real")},
                "captureSHA256": {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in captures.items()}, "states": []}
+    if not args.record_limits:
+        receipt["branchBinarySHA256"] = hashlib.sha256(renderer.read_bytes()).hexdigest()
     combined = {"main": {}, "branch": {}}
     failed = []
     data = private_roots(root)
     try:
+        if args.record_limits:
+            return record_limits(baseline, data, captures, out, args.attempts, receipt)
         for state in STATES:
             name, frame, _, _, _ = state
             attempt_results = []
             for attempt in range(1, args.attempts + 1):
                 tables = {kind: run_state(binary, data, captures[frame], state, out / kind / name / f"attempt-{attempt}")
                           for kind, binary in (("main", baseline), ("branch", renderer))}
-                result = gate_tables(name, tables)
+                result = gate_tables(name, tables, color_limits)
                 attempt_results.append({"attempt": attempt, **result})
                 if result["passed"] or attempt == args.attempts:
                     for kind, table in tables.items():

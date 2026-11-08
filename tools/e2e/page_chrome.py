@@ -184,17 +184,43 @@ def run(factory, results, tmp, h):
                 return check(actual == ([True, 'policy text'] if policy == 'accept' else [False, None]) and not ds()['pending'], result=actual)
             gate('dialog_policy_' + policy, policies)
 
-        for name, limit, expression, field in [('message',8192,'alert("x".repeat(N))','sourceMessageBytes'),
-                                               ('prompt',4096,'prompt("bounded","x".repeat(N))','sourcePromptBytes')]:
-            def limits(limit=limit, expression=expression, field=field):
-                page(); app.call('policy', dialogs='hold')
-                schedule('(' + expression.replace('N', str(limit)) + ',true)')
-                assert wait(lambda: ds()['pending'] == 1, timeout=3, step=.02)
-                state = ds(); app.call('dialog', accept=False); app.call('events')
-                schedule('(' + expression.replace('N', str(limit+1)) + ',true)')
-                refused = wait(lambda: any(e['type'] == 'pageChromeRefused' for e in app.call('events')), timeout=3, step=.02)
-                return check(state[field] == limit and refused and ds()['pending'] == 0, at=state[field], over=limit+1)
-            gate('dialog_' + name + '_limit', limits)
+        for name in ['message', 'prompt']:
+            def truncation(name=name):
+                checks = []
+                for kind in (['alert', 'confirm', 'prompt'] if name == 'message' else ['prompt']):
+                    # Chromium caps message characters before the callback, without a mark.
+                    # Multibyte text stays below that character cap but exceeds our byte cap.
+                    samples = [
+                        ('at', 'x' * 10240, 'x' * 10240),
+                        ('over', 'x' + 'é' * 5120, 'x' + 'é' * 5118 + '…'),
+                        ('multibyte', 'x' * 10235 + '😀' * 8, 'x' * 10235 + '…')]
+                    if name == 'message': samples.append(('upstream', 'x' * 10241, 'x' * 10240))
+                    for boundary, source, expected in samples:
+                        page()
+                        message = source if name == 'message' else 'bounded prompt'
+                        default = source if name == 'prompt' else 'seed'
+                        js = kind + '(' + json.dumps(message)
+                        if kind == 'prompt': js += ',' + json.dumps(default)
+                        js += ')'
+                        if kind == 'alert': js = '(' + js + ',"done")'
+                        app.call('events'); schedule(js)
+                        state = wait(lambda: (lambda s: s if s.get('visible') else None)(ds()), timeout=5, step=.02)
+                        if not state:
+                            refusals = [e for e in app.call('events') if e['type'] == 'pageChromeRefused']
+                            checks.append(dict(kind=kind, boundary=boundary, sourceBytes=len(source.encode()),
+                                               ok=False, visible=False, refusals=refusals))
+                            continue
+                        shown = state['informativeText'] if name == 'message' else state['text']
+                        # Press the real OK button without replacing the default field.
+                        answer()
+                        actual = value()
+                        reply = 'done' if kind == 'alert' else True if kind == 'confirm' else expected if name == 'prompt' else 'seed'
+                        checks.append(dict(kind=kind, boundary=boundary, sourceBytes=len(source.encode()),
+                            receivedBytes=state['sourceMessageBytes' if name == 'message' else 'sourcePromptBytes'],
+                            shownBytes=len(shown.encode()), shownTail=shown[-8:], visible=state['visible'],
+                            ok=shown == expected and len(shown.encode()) <= 10240 and actual == reply))
+                return check(all(c['ok'] for c in checks), cases=checks)
+            gate('dialog_' + name + '_limit', truncation)
 
         def prompt_keys():
             page(); schedule('prompt("native prompt","seed")'); state = visible(ds)

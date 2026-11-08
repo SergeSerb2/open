@@ -153,7 +153,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var promptText: String?
   var contextMenuPolicy: String?
   var pageContextMenu: PageContextMenuBuilder?
-  var pageContextMenuHooks = PageContextMenuHooks()
+  lazy var pageContextMenuHooks = PageContextMenuHooks { [weak self] in
+    _ = self?.performAppCommand("manage-extensions")
+  }
   var fullscreenPolicy: String?
   var pendingSavePanel: NSSavePanel?
   var savePageRequestCount = 0
@@ -1290,7 +1292,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       }
       return target.adoptUnownedRequest(request)
     case .newPictureInPicture:
-      return app.media.openDocumentPictureInPicture(opener: webContent, request: request, factory: self)
+      // Alloy-style pages only: a Chrome-style page's Document PiP opens through the engine's
+      // PiP delegate (MediaCoordinator, EM-7). Alloy pages get none.
+      return nil
     case .currentTab, .saveToDisk:
       return nil
     default:

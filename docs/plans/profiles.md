@@ -1595,3 +1595,51 @@ PRs. Steps 6–7 are engine/App PRs. Branch names follow the repo pattern
 - Q1 (named Arc profiles, StorableProfiles.json): keep the lenient parser; verify when a multi-profile Arc install is available.
 - Q2: per-Profile download location is deferred to the downloads milestone.
 - Phasing: model, disk layout, migration, import mapping, and the `openkit profiles` CLI now; [NEEDS ENGINE] steps after the App target + engine foundation land.
+
+## Per-Profile App stores and Profile delete (Section 10, 2026-11-07)
+
+Every App-side store that writes into a Profile's folder (Boosts, passwords and autofill, ad-block lists, and later ones) conforms to `ProfileDataOwner` (`App/Profiles/ProfileTeardown.swift`) and registers once with `app.profileTeardown.register(self)` when it is created. On an in-session Profile delete, `ProfileTeardown.wipe` journals the folder, then calls every owner's `retireProfile(_:directory:)`, then flushes history and archive, deletes the engine context, and removes the folders. After `retireProfile` returns, the owner must never write for that Profile again in this process, including its save on quit; it closes its file handles and drops dirty state, and it never deletes the folder itself. Do not add store-specific calls to `ProfileTeardown`; register instead.
+
+
+## Section 10 result
+
+Section 10 shipped isolated private windows ([#209](https://github.com/SergeSerb2/open/pull/209)),
+Profile repair/deletion, indicators and Profile-page routing
+([#213](https://github.com/SergeSerb2/open/pull/213)), Profile-aware Air Traffic
+Control ([#214](https://github.com/SergeSerb2/open/pull/214)), lazy contexts and
+per-Profile extension UI ([#217](https://github.com/SergeSerb2/open/pull/217)),
+and native parent-Profile private sessions plus safe in-session deletion
+([#222](https://github.com/SergeSerb2/open/pull/222), 0701–0703). Local CRX
+automation completion (0704) shipped in [#223](https://github.com/SergeSerb2/open/pull/223);
+its [engine receipt](../engine-spike/extensions-local-crx-completion.md) owns that gate.
+The App-store retirement registration seam shipped in [#231](https://github.com/SergeSerb2/open/pull/231).
+The final shell pass shares the Change Profile warning with Library-only
+Space Manager and uses `moveSpace(id:toProfile:)` on every sidebar path.
+
+[Measured memory and idle work](../profiles-memory.md) records five Release
+launches: the paired median first-Work-page delta was 31.6 MiB browser RSS,
+two helpers and 293.8 MiB summed helper RSS. Shared pages can be counted more
+than once. The whole-App near-zero idle goal remains open; these workload
+measurements are not an isolated context budget.
+
+[Profiles shell](../profiles-shell.md) records the M1 native 2x evidence and
+the Library-only Change Profile flow. [Private windows](../incognito.md) and
+[ATC](../routing-atc/verification.md) keep their own runtime receipts.
+
+Deferred items and owners:
+
+- Section 12: disable Boosts in private windows from `factory.isIncognito`;
+  integrate the X13 Site Control extension picker.
+- User / lead: Arc reference captures S-1…S-12, Profile indicator geometry,
+  private-window S10-P1–P5 and ATC editor/matches semantics. The import
+  matches mapping and component OR semantics remain guesses.
+- Section 10 lead: broader spanning/split extension cases and any missing
+  native 2x extension UI captures from the original #217 receipt.
+- Section 16 / lead: whole-App idle and the original 250 ms sidebar launch
+  goal. Loaded regular contexts remain resident until quit; idle eviction
+  stays deferred until lifecycle evidence supports it.
+- Section 14: physical store/context cleanup after Import Undo must consume
+  the #222 teardown path. Model Undo alone does not remove browsing data.
+
+Per-Profile download locations shipped in #181. Tab-level Profile moves
+remain a deliberate v1 cut: move the tab to a Space on the target Profile.

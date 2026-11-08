@@ -21,6 +21,11 @@ public struct BlockList: Codable, Sendable, Identifiable {
     }
 }
 
+public struct AdBlockBundledPin: Sendable {
+    public let seedURL: URL
+    public let sha256: String
+}
+
 public struct AdBlockCatalog: Codable, Sendable {
     public let version: Int
     public let lists: [BlockList]
@@ -63,18 +68,31 @@ public struct AdBlockCatalog: Codable, Sendable {
         return url
     }
 
-    private static let cachedPins: Result<[String: String], any Error> = Result { try decodePins() }
+    private static let cachedPins: Result<[String: AdBlockBundledPin], any Error> = Result { try decodePins() }
 
-    public static func bundledPins() throws -> [String: String] { try cachedPins.get() }
+    public static func bundledPins() throws -> [String: AdBlockBundledPin] { try cachedPins.get() }
 
-    private static func decodePins() throws -> [String: String] {
+    private static func decodePins() throws -> [String: AdBlockBundledPin] {
         let text = try String(contentsOf: resource("list-pins.txt"), encoding: .utf8)
-        var pins: [String: String] = [:]
+        var pins: [String: AdBlockBundledPin] = [:]
+        var commits = Set<String>()
         for line in text.split(separator: "\n") where !line.hasPrefix("#") {
             let columns = line.split(whereSeparator: \.isWhitespace)
-            guard columns.count == 3, columns[2].count == 64 else { throw AdBlockError("invalid bundle pins") }
-            pins[String(columns[0])] = String(columns[2])
+            guard columns.count == 3 else { throw AdBlockError("invalid bundle pins") }
+            let name = String(columns[0]), rawURL = String(columns[1]), hash = String(columns[2])
+            let prefix = "https://raw.githubusercontent.com/easylist/easylist/"
+            guard ["easylist.txt", "easyprivacy.txt"].contains(name), pins[name] == nil,
+                  rawURL.hasPrefix(prefix), let url = URL(string: rawURL),
+                  hash.count == 64, hash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+                throw AdBlockError("invalid bundle pins")
+            }
+            let commit = String(rawURL.dropFirst(prefix.count).prefix(40))
+            guard commit.count == 40, commit.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+                  rawURL == prefix + commit + "/" + name else { throw AdBlockError("invalid bundle seed URL") }
+            commits.insert(commit)
+            pins[name] = AdBlockBundledPin(seedURL: url, sha256: hash)
         }
+        guard pins.count == 2, commits.count == 1 else { throw AdBlockError("invalid bundle pins") }
         return pins
     }
 }
@@ -99,12 +117,15 @@ func checkedList(_ data: Data, id: String, limit: Int) throws {
 
 /// Durable same-directory publication: complete bytes, fsync, rename, then fsync parent.
 func atomicWrite(_ data: Data, to url: URL) throws {
+    try Task.checkCancellation()
     let parent = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
     let temp = parent.appendingPathComponent(".write-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: temp) }
+    try Task.checkCancellation()
     try data.write(to: temp, options: .withoutOverwriting)
     try syncPath(temp)
+    try Task.checkCancellation()
     guard Darwin.rename(temp.path, url.path) == 0 else { throw AdBlockError("file rename failed (\(errno))") }
     try syncPath(parent)
 }

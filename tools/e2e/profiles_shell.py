@@ -1,5 +1,8 @@
 """Section 10 acceptance through the real App, Settings, native fields and AX actions."""
 import json
+import http.server
+import shutil
+import threading
 import base64
 import os
 import re
@@ -13,7 +16,8 @@ def run(factory, results, tmp, api, defaults_before):
     wait = api['wait_until']
     restore = api['_restore_defaults']
     server, origin = api['_fixture_server']('Profiles shell')
-    keys = ('open.general.searchSuggestNoticeDismissed', 'open.links.littleOpenNUXSeen')
+    confirm_key = 'open.profiles.confirmInterProfileMove'
+    keys = ('open.general.searchSuggestNoticeDismissed', 'open.links.littleOpenNUXSeen', confirm_key, 'open.settings.lastPane')
     saved = {key: defaults_before.get(key) for key in keys}
     app = None
 
@@ -21,7 +25,10 @@ def run(factory, results, tmp, api, defaults_before):
         nonlocal app
         app = factory(urls=(), **args)
         for key in keys:
+            app.call('defaults', key=key, value=None)
+        for key in keys[:2]:
             app.call('defaults', key=key, value=True)
+        app.call('defaults', key='open.settings.lastPane', value='general')
         return app
 
     def state(**args):
@@ -100,8 +107,71 @@ def run(factory, results, tmp, api, defaults_before):
         raw.replace(destination)
         return dict(shot, path=str(destination), nativeScale=scale)
 
-    def press(label):
-        return state(action='press', label=label)
+    def press(label, **args):
+        return state(action='press', label=label, **args)
+
+    def manager_profile_checks():
+        state(action='create', name='Manager Work')
+        source = app.call('spaces')[0]
+        target = profile('Manager Work')
+        # Close every browser. The Library must not manufacture a new factory.
+        for window in list(app.call('incognito-state')['windows']):
+            app.call('window-focus', id=window['id'], activate=True)
+            app.call('window-close')
+        assert wait(lambda: not app.call('incognito-state')['windows'], timeout=5)
+        manager = app.call('library-open')
+
+        def request():
+            state(action='indicator-menu', library=True, item='Manager Work')
+            return wait(lambda: state() if state()['managerSheet'] else None, timeout=3)
+
+        def assigned():
+            return next(s['profile'] for s in app.call('spaces') if s['id'] == source['id'])
+
+        shown = request()
+        text = shown['managerSheetText'] if shown else []
+        warning = ('Each Profile has different browser data, so you might get logged out or lose your progress in '
+                   + (source['title'] or 'Space 1') + '. Its tabs will reopen with Manager Work data.')
+        results['shell_manager_profile_alert'] = {
+            'ok': bool(shown) and shown['managerSheetParent'] == manager['window']
+                  and all(t in text for t in ('Change Profile?', warning, 'Change Profile', 'Cancel', "Don't show again"))
+                  and not app.call('incognito-state')['windows'] and assigned() == source['profile'],
+            'text': text, 'parent': shown['managerSheetParent'] if shown else 0, 'library': manager['window'],
+            'profileUnchanged': assigned() == source['profile']}
+        assert results['shell_manager_profile_alert']['ok'], 'Change Profile sheet missing from Library'
+        if os.environ.get('OPEN_PROFILES_SHELL_FORCE_MANAGER_DIALOG_FAILURE') == '1':
+            raise AssertionError('intentional early Manager sheet failure for cleanup proof')
+        app.call('key', window=shown['managerSheet'], key='escape', route='app')
+        assert wait(lambda: state()['managerSheet'] == 0, timeout=5)
+        results['shell_manager_profile_cancel'] = {'ok': assigned() == source['profile']}
+        shown = request()
+        assert shown, 'Change Profile sheet missing after Cancel'
+        app.call('key', window=shown['managerSheet'], key='return', route='app')
+        changed = wait(lambda: assigned() == target['id'] and state()['managerSheet'] == 0, timeout=5)
+        undo_name = state()['undoName']
+        app.call('key', window=manager['window'], key='z', modifiers=['cmd'], route='app')
+        undone = wait(lambda: assigned() == source['profile'], timeout=5)
+        results['shell_manager_profile_confirm_undo'] = {'ok': bool(changed and undone) and undo_name == 'Change Profile',
+                                                        'changed': bool(changed), 'undone': bool(undone), 'undoName': undo_name}
+        assert request(), 'Change Profile sheet missing before suppression'
+        press("Don't show again", library=True)
+        press('Cancel', library=True)
+        assert wait(lambda: state()['managerSheet'] == 0, timeout=5)
+        results['shell_manager_profile_cancel_suppression'] = {
+            'ok': app.call('defaults', key=confirm_key, persistent=True) is None and assigned() == source['profile']}
+        assert request(), 'Cancel must not save suppression'
+        press("Don't show again", library=True)
+        press('Change Profile', library=True)
+        assert wait(lambda: assigned() == target['id'] and state()['managerSheet'] == 0, timeout=5)
+        suppressed = app.call('defaults', key=confirm_key, persistent=True) is False
+        app.call('key', window=manager['window'], key='z', modifiers=['cmd'], route='app')
+        assert wait(lambda: assigned() == source['profile'], timeout=5)
+        state(action='indicator-menu', library=True, item='Manager Work')
+        results['shell_manager_profile_suppressed'] = {
+            'ok': suppressed and assigned() == target['id'] and state()['managerSheet'] == 0
+                  and not app.call('incognito-state')['windows']}
+        app.call('defaults', key=confirm_key, value=None)
+        app.call('library-close')
 
     def show(name=None):
         state(action='show', **({'profile': name} if name else {}))
@@ -113,6 +183,8 @@ def run(factory, results, tmp, api, defaults_before):
         assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
         before = state()
         assert ('Delete Unused Profiles' if bulk else 'Delete this Profile') in before['sheetText'], before
+        if os.environ.get('OPEN_PROFILES_SHELL_FORCE_DIALOG_FAILURE') == '1':
+            raise AssertionError('intentional early dialog failure for cleanup proof')
         state(action='type-delete', text=token if token is not None else name)
         typed = state()
         assert typed['deleteEnabled'] and typed['deleteAXEnabled'] is True, typed
@@ -120,10 +192,146 @@ def run(factory, results, tmp, api, defaults_before):
         assert wait(lambda: not state()['deleting'] and state()['sheet'] == 0, timeout=15), state()
         return before, typed, state()
 
+    def check_adblock():
+        # Exercise Settings and the scheduled real list repository through the actual App.
+        # The loopback HTTP server replaces upstream transport only; it serves valid filter lists.
+        hold_downloads = threading.Event()
+        download_started = threading.Event()
+        release_downloads = threading.Event()
+
+        class Lists(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if hold_downloads.is_set():
+                    download_started.set()
+                    release_downloads.wait(timeout=35)
+                body = b'[Adblock Plus 2.0]\n! Profile teardown fixture\n||ads.example.invalid^\n'
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # Retirement cancelled this real HTTP transfer.
+
+            def log_message(self, *_):
+                pass
+
+        lists = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Lists)
+        thread = threading.Thread(target=lists.serve_forever, daemon=True)
+        thread.start()
+        env = {'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % lists.server_port,
+               'OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS': '12',
+               'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.005'}
+
+        def ready(name):
+            state(profile=name, action='adblock-open')
+            answer = wait(lambda: state() if state()['adblockReady'] else None, timeout=30)
+            assert answer, state()
+            return answer
+
+        try:
+            launch(fresh=True, extra_env=env)
+            root = Path(app.user_data)
+            default = profile('Default')
+            ready('Default')
+            state(action='adblock-exclude', host='kept.example.com')
+            kept = root / 'Profiles' / default['directory'] / 'AdBlock/exclusions.json'
+            before = kept.read_bytes()
+            state(action='create', name='Ad Block Deleted')
+            victim = profile('Ad Block Deleted')
+            assert victim['directory'] != victim['id'], 'fixture must use a non-UUID data directory'
+            ready('Ad Block Deleted')
+            state(action='adblock-exclude', host='deleted.example.org')
+            folder = root / 'Profiles' / victim['directory']
+            legacy = root / 'Profiles' / victim['id'] / 'adblock'
+            dirty = json.loads((folder / 'AdBlock/exclusions.json').read_text())
+            updating = wait(lambda: state()['adblockUpdating'], timeout=5)
+            assert updating and dirty == ['example.org'], (updating, dirty, state())
+            confirm('Ad Block Deleted')
+            # Wait past the held operation via its actual state. Without App forwarding its
+            # failure receipt re-creates the deleted folder, which must make this row fail.
+            drained = wait(lambda: not state(adblockProfile=victim['id'])['adblockProfileUpdating'], timeout=20)
+            retired = state(adblockProfile=victim['id'])['adblockProfileRetired']
+            app.quit()
+            launch(extra_env=env)
+            ready('Default')
+            results['shell_adblock_dirty_inflight_delete_relaunch'] = {
+                'ok': bool(drained) and retired and not folder.exists() and not legacy.exists()
+                      and kept.read_bytes() == before and state()['adblockDomains'] == ['example.com'],
+                'dirty': dirty == ['example.org'], 'inFlightBeforeDelete': bool(updating),
+                'retired': retired, 'drained': bool(drained), 'folderAbsent': not folder.exists(),
+                'legacyAbsent': not legacy.exists(), 'otherProfileUnchanged': kept.read_bytes() == before}
+
+            state(action='create', name='Ad Block Migrated')
+            migrated = profile('Ad Block Migrated')
+            ready('Ad Block Migrated')
+            state(action='adblock-exclude', host='migrated.example.net')
+            canonical = root / 'Profiles' / migrated['directory'] / 'AdBlock'
+            legacy = root / 'Profiles' / migrated['id'] / 'adblock'
+            app.quit()
+            legacy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(canonical / 'lists'), str(legacy))
+            for name in ('catalog-state.json', 'exclusions.json'):
+                shutil.move(str(canonical / name), str(legacy / name))
+            canonical.rmdir()
+            old_pointer = (legacy / 'current.json').read_bytes()
+            launch(extra_env=env)
+            migrated_state = ready('Ad Block Migrated')
+            results['shell_adblock_legacy_layout_migration'] = {
+                'ok': migrated_state['adblockDomains'] == ['example.net'] and not legacy.exists()
+                      and (canonical / 'lists/current.json').read_bytes() == old_pointer
+                      and (canonical / 'catalog-state.json').is_file()
+                      and kept.read_bytes() == before,
+                'settingsDomains': migrated_state['adblockDomains'], 'legacyAbsent': not legacy.exists(),
+                'canonicalListsPresent': (canonical / 'lists/current.json').is_file(),
+                'otherProfileUnchanged': kept.read_bytes() == before}
+
+            if retired:
+                app.quit()
+                launch(extra_env=dict(env, OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS='0'))
+                ready('Default')
+                # Hold the initial list download before the Profile opens. This also proves
+                # retirement during open, without racing the first scheduled update.
+                hold_downloads.set()
+                download_started.clear()
+                state(action='create', name='Ad Block Network')
+                network = profile('Ad Block Network')
+                active = wait(lambda: download_started.is_set() and state()['adblockUpdating'], timeout=10)
+                assert active, 'Profile open did not enter the held HTTP request'
+                network_folder = root / 'Profiles' / network['directory']
+                confirm('Ad Block Network')
+                ended = state(adblockProfile=network['id'])
+                results['shell_adblock_network_retirement'] = {
+                    'ok': ended['adblockProfileRetired'] and not ended['adblockProfileUpdating']
+                          and not network_folder.exists() and kept.read_bytes() == before,
+                    'realHTTPInFlight': bool(active), 'retired': ended['adblockProfileRetired'],
+                    'drained': not ended['adblockProfileUpdating'], 'folderAbsent': not network_folder.exists()}
+        finally:
+            release_downloads.set()
+            if app is not None and not app.closed:
+                try:
+                    state(action='cancel')
+                finally:
+                    restore(app, saved)
+                    app.quit()
+            lists.shutdown()
+            lists.server_close()
+            thread.join(timeout=5)
+
     try:
+        if not any(os.environ.get(key) == '1' for key in
+                   ('OPEN_PROFILES_SHELL_PAGES_ONLY', 'OPEN_PROFILES_SHELL_REPAIR_ONLY')):
+            check_adblock()
+        if os.environ.get('OPEN_PROFILES_SHELL_ADBLOCK_ONLY') == '1':
+            return
         launch(fresh=True)
         one = state()
         results['shell_indicator_one_profile'] = {'ok': len(one['profiles']) == 1 and one['indicators'] == [], 'indicators': one['indicators']}
+        manager_profile_checks()
+        if os.environ.get('OPEN_PROFILES_SHELL_MANAGER_ONLY') == '1':
+            return
+        app.quit()
+        launch(fresh=True)
         if os.environ.get('OPEN_PROFILES_SHELL_PAGES_ONLY') == '1':
             check_pages('Default', has_space=True)
             state(action='create', name='Page Without Space')
@@ -188,7 +396,7 @@ def run(factory, results, tmp, api, defaults_before):
             app.call('window-close')
             app.call('window-focus', id=normal['id'], activate=True)
         # Native window evidence uses the display's real backing scale.
-        # 2x hardware captures stay deferred while the M1 is on hold.
+        # Native 2x hardware captures are recorded separately on the M1.
         evidence = Path(api['ROOT']) / 'docs/profiles-shell'
         evidence.mkdir(parents=True, exist_ok=True)
         app.call('window-frame', frame=[100, 100, 1000, 700])
@@ -423,6 +631,7 @@ def run(factory, results, tmp, api, defaults_before):
         if app is not None:
             if not app.closed:
                 try:
+                    app.call('library-close', timeout=3)
                     app.call('profiles-shell', action='cancel', timeout=3)
                     app.call('profiles-shell', action='notice-ok', timeout=3)
                 except Exception:

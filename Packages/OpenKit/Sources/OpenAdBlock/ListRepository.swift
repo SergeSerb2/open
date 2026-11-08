@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public struct AdBlockListReceipt: Codable, Sendable, Equatable {
     public var sha256: String
@@ -32,13 +33,15 @@ public struct AdBlockUpdateResult: Sendable {
     public let statuses: [Int]
     public let attempts: Int
     public let duration: TimeInterval
+    /// Present only for a downloaded release seed, never for runtime updates.
+    public var seedURL: URL? = nil
 }
 
 /// Owns list IO off the main actor. The store serializes operations for each Profile.
 actor ListRepository {
     let policy: AdBlockDownloadPolicy
     let downloader: ListDownloader
-    let pins: [String: String]
+    let pins: [String: AdBlockBundledPin]
     let bundle: URL?
     let ephemeral: Bool
 
@@ -50,18 +53,78 @@ actor ListRepository {
 
     private var storage: GenerationStorage { GenerationStorage(maximumBytes: max(64 * 1024 * 1024, policy.maximumListBytes), ephemeral: ephemeral) }
 
+    /// Build the new layout beside its destination, then publish with one same-volume rename.
+    /// Until publication succeeds the old folder is read-only, so a failed copy loses no data.
+    func migrate(from old: URL, to directory: URL) throws {
+        let files = FileManager.default
+        try Task.checkCancellation()
+        guard files.fileExists(atPath: old.path) else { return }
+        let staging = directory.deletingLastPathComponent().appendingPathComponent(".adblock-migration-\(UUID().uuidString)")
+        let backup = directory.deletingLastPathComponent().appendingPathComponent(".adblock-legacy-\(UUID().uuidString)")
+        var sameDirectory = false
+        defer { try? files.removeItem(at: staging) }
+        do {
+            let values = try old.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else { return }
+            var oldInfo = stat(), newInfo = stat()
+            sameDirectory = lstat(old.path, &oldInfo) == 0 && lstat(directory.path, &newInfo) == 0
+                && oldInfo.st_dev == newInfo.st_dev && oldInfo.st_ino == newInfo.st_ino
+            // ProfileDirectories may already have made an empty AdBlock/lists directory.
+            let entries = files.fileExists(atPath: directory.path) ? try files.contentsOfDirectory(atPath: directory.path) : []
+            if !sameDirectory { guard entries.allSatisfy({ $0 == "lists" }) else { return } }
+            let existingLists = directory.appendingPathComponent("lists")
+            if files.fileExists(atPath: existingLists.path),
+               !(try files.contentsOfDirectory(atPath: existingLists.path)).isEmpty { return }
+            try Task.checkCancellation()
+            try files.createDirectory(at: staging.appendingPathComponent("lists"), withIntermediateDirectories: true)
+            for name in try files.contentsOfDirectory(atPath: old.path) {
+                if sameDirectory && name == "lists" { continue } // Existing empty canonical folder.
+                try Task.checkCancellation()
+                let parent = ["exclusions.json", "catalog-state.json"].contains(name) ? staging : staging.appendingPathComponent("lists")
+                try files.copyItem(at: old.appendingPathComponent(name), to: parent.appendingPathComponent(name))
+            }
+            try Task.checkCancellation()
+            // Move the intact source into the canonical Profile before committing. A failed
+            // commit renames it back; failed post-commit cleanup stays inside teardown's folder.
+            // rename() never falls back to a partial cross-volume copy-and-delete.
+            guard Darwin.rename(old.path, backup.path) == 0 else { throw AdBlockError("legacy migration rename failed") }
+            if !sameDirectory {
+                // Removing only empty directories preserves the no-state condition checked above.
+                let lists = directory.appendingPathComponent("lists")
+                try Task.checkCancellation()
+                if files.fileExists(atPath: lists.path) { try files.removeItem(at: lists) }
+                try Task.checkCancellation()
+                if files.fileExists(atPath: directory.path) { try files.removeItem(at: directory) }
+            }
+            try Task.checkCancellation()
+            try files.moveItem(at: staging, to: directory)
+        } catch {
+            if files.fileExists(atPath: backup.path), !files.fileExists(atPath: old.path) {
+                _ = Darwin.rename(backup.path, old.path)
+            }
+            try Task.checkCancellation()
+            // Opening the untouched destination now seeds bundled defaults instead.
+            return
+        }
+        // The transaction has committed. Cleanup cannot invalidate the new complete copy.
+        try Task.checkCancellation()
+        try? files.removeItem(at: backup)
+        if sameDirectory { return }
+        let parent = old.deletingLastPathComponent()
+        if (try? files.contentsOfDirectory(atPath: parent.path).isEmpty) == true { try? files.removeItem(at: parent) }
+    }
+
     func open(directory: URL, catalog: AdBlockCatalog) async throws -> AdBlockProfileState {
         // Migrate settings only from the former layout. Legacy list directories are never inputs.
-        let legacy = directory.deletingLastPathComponent().appendingPathComponent("AdBlock")
+        try Task.checkCancellation()
+        let legacy = directory.deletingLastPathComponent()
         let empty = AdBlockProfileState(catalogVersion: catalog.version, enabledBlockLists: catalog.defaultIDs)
         var state = empty
         var report: String?
-        let settings = directory.appendingPathComponent("catalog-state.json")
+        let settings = legacy.appendingPathComponent("catalog-state.json")
         do {
             if FileManager.default.fileExists(atPath: settings.path) {
                 state = try readJSON(AdBlockProfileState.self, at: settings, fallback: empty)
-            } else {
-                state = try readJSON(AdBlockProfileState.self, at: legacy.appendingPathComponent("catalog-state.json"), fallback: empty)
             }
         } catch { report = "catalog-state invalid; reconciled from committed generation or defaults" }
         let pointer: CurrentGeneration?
@@ -131,7 +194,7 @@ actor ListRepository {
         guard size <= policy.maximumSourceBytes else { throw AdBlockError("\(id): bundled size limit exceeded") }
         let data = try Data(contentsOf: url)
         try checkedList(data, id: id, limit: policy.maximumSourceBytes)
-        guard digest(data) == pins[filename] else { throw AdBlockError("\(id): bundled SHA-256 pin mismatch; run adblock bundle to repair") }
+        guard digest(data) == pins[filename]?.sha256 else { throw AdBlockError("\(id): bundled SHA-256 pin mismatch; run adblock bundle to repair") }
         return data
     }
 
@@ -141,6 +204,7 @@ actor ListRepository {
 
     private func makeStaging(_ directory: URL) throws -> URL {
         let staging = directory.appendingPathComponent(".update-\(UUID().uuidString)")
+        try Task.checkCancellation()
         try FileManager.default.createDirectory(at: staging.appendingPathComponent("lists"), withIntermediateDirectories: true)
         return staging
     }
@@ -149,6 +213,7 @@ actor ListRepository {
         guard let reference = try storage.current(in: directory)?.live else { throw AdBlockError("no current generation") }
         let manifest = try storage.verify(reference, directory: directory, catalog: catalog)
         for file in manifest.files {
+            try Task.checkCancellation()
             try FileManager.default.copyItem(at: storage.path(reference, in: directory).appendingPathComponent(file.file),
                                             to: staging.appendingPathComponent("lists/\(file.file)"))
         }
@@ -301,14 +366,17 @@ actor ListRepository {
                     continue
                 } catch { repaired = true }
             }
-            let (response, attempts) = try await downloader.fetch(url: list.urls[0], etag: nil, modified: nil, redirectHosts: list.redirectHosts ?? [])
+            guard let pin = pins[list.id.lowercased() + ".txt"] else { throw AdBlockError("\(list.id): missing bundle pin") }
+            // The downloader allows the source host itself. No catalog redirect hosts
+            // apply to immutable seeds; runtime updateBatch still uses list.urls.
+            let (response, attempts) = try await downloader.fetch(url: pin.seedURL, etag: nil, modified: nil)
             try checkedList(response.data, id: list.id, limit: policy.maximumSourceBytes)
             let hash = digest(response.data)
-            guard hash == pins[list.id.lowercased() + ".txt"] else { throw AdBlockError("\(list.id): downloaded bundle SHA-256 pin mismatch") }
+            guard hash == pin.sha256 else { throw AdBlockError("\(list.id): downloaded bundle SHA-256 pin mismatch expected=\(pin.sha256) actual=\(hash)") }
             try atomicWrite(response.data, to: destination.appendingPathComponent(list.id.lowercased() + ".txt"))
             results.append(AdBlockUpdateResult(id: list.id, changed: true, repaired: repaired, bytes: response.data.count,
                 downloadedBytes: response.data.count, sha256: hash, etags: [response.etag ?? "-"], statuses: [response.status],
-                attempts: attempts, duration: Date().timeIntervalSince(start)))
+                attempts: attempts, duration: Date().timeIntervalSince(start), seedURL: pin.seedURL))
         }
         return results
     }

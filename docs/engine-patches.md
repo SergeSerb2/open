@@ -133,6 +133,7 @@ wrappers `engine-apply` regenerates.
 0306-open-extension-windows-tabs.patch         # E11: AppKit windows; P1: tabs API move/discard guards
 0401-open-media-session.patch                   # Media: tab volume; per-player PiP availability
 0402-open-video-pip-window.patch                # Media EM-4: Open's own video PiP window
+0403-open-document-pip-window.patch             # Media EM-7: Document PiP in Open's panel
 # cef/series (starts at 0302)
 0302-open-hosted-tabs.patch                    # P1: hosted Chrome style tabs
 0303-open-context-menu-submenu-commands.patch  # P1: submenu commands with their own delegate
@@ -366,6 +367,55 @@ patches and distribution SHA-256
 See the [P3 receipt](engine-spike/extensions-p3-receipt.md) and the PR's final
 regression/full-verification tables.
 
+### Local CRX completion (Section 10, 0704)
+
+0704 uses the next Section 10 number, but belongs to the **03xx extensions
+area**. It is an overlay-only change to `cef_extension_manager.h` and
+`open/browser/extensions/open_extension_manager.mm`; the CEF series/manifest
+record that ownership without adding an empty upstream patch. `engine-apply`
+generates `cef_install_local_crx`, the C API, wrappers and API hashes.
+
+The missing delegate error has a concrete upstream cause:
+`CrxInstaller::ReportFailureFromUIThread` calls
+`LoadErrorReporter::ReportError(error.message(), false)`
+(`extensions/browser/crx_installer.cc`). `ReportError` stores/logs the text;
+only `ReportLoadError` sends `Observer::OnLoadFailure`
+(`extensions/browser/load_error_reporter.cc`). Local CRX completion therefore
+uses the installer's result, rather than extending the unpacked-load delegate.
+
+`OEExtensionManager.installLocalCRX(_:completion:)` reports installed with its
+extension ID, user Cancel, or failure with Chromium's error text. The old
+page-based initiation selector remains a wrapper. No result is routed through
+the manager delegate, and the production Web Store path stays as before.
+
+Chromium 156 names the completion API `CrxInstaller::AddInstallerCallback`
+(`extensions/browser/crx_installer.h`), rather than the design's
+`set_installer_callback`. It posts a once callback with an optional
+`CrxInstallError` after the registry install or unpack failure. The manager
+retains at most 32 installers through this callback, erases each request before
+delivery, and fails pending requests once at context closure. Callers run on a
+later main-queue turn and can close their context safely. Only Chromium's
+`USER_CANCELED` detail maps to cancelled; `USER_ABORTED`, policy rejection and
+signature rejection map to failed. Messages are bounded to 65,536 UTF-16 units.
+
+The new selector needs no requesting page: Chromium's profile/native-window
+prompt constructor uses the manager's profile and the existing shell presenter.
+A supplied page in the old API must still belong to that profile. Neither path
+permits silent installation or an ephemeral profile.
+
+Real-App acceptance in `extensions_p3.py` passed 19/19 before and after the
+negative proof: signed CRX -> installed + registry ID, corrupted RSA signature ->
+failed + `CRX_SIGNATURE_VERIFICATION_FAILED`, Cancel, main-thread delivery,
+exactly-one completion counts and fixture cleanup. Suppressing only the bridge's
+callback invocation made the signature row time out with zero events. The source
+was restored byte for byte, rebuilt, and the same gate passed.
+
+Section 14 still calls the old selector on this branch, so its import-queue
+failure row needs the consumer update and remains a separate gate.
+The [verification receipt](engine-spike/extensions-local-crx-completion.md)
+records the new distribution, load tuples, full gate, regression findings and
+remaining runtime boundaries.
+
 ## P4. Proprietary codecs and Widevine
 
 - Measured on stock CEF: H.264 `false`, AAC `false`, HEVC `false`; VP9, AV1, Opus `true` (results-features-alloy.json, `codecs`). Widevine EME works in stock CEF once Chromium's component updater has downloaded the CDM (final run: a Widevine stream played), and is unavailable until then.
@@ -394,9 +444,10 @@ Status: implemented (2026-11-02, Section 3 Step 7, branch `s3/engine-media-sessi
 
 | Part | Where | What it does |
 |---|---|---|
-| CEF API | overlay `cef/include/cef_media_controller.h` (P1 mechanism: translator-generated C API, `CEF_API_ADDED(CEF_EXPERIMENTAL)`) | `CefMediaController` (one per browser, Chrome style and Alloy): `GetForBrowser(browser, handler)`, `IsValid`, `IsAudible`, `GetState` (a dictionary, so later fields need no translator change), `ExecuteAction(name, args)`, `SetVolume`/`GetVolume`, `RequestPictureInPicture`, `ExitPictureInPicture(behavior)`. `CefMediaControllerHandler`: `OnAudibleChanged`, `OnMediaStateChanged`. Declared for EM-4 and not called yet (so EM-4 needs no second API rebuild if the shape holds): `ShouldHostPictureInPicture`, `OnPictureInPictureOpened/Changed/Closed`, `CefPictureInPictureWindow` (`IsValid`, `GetVideoView`, `GetState`, `SetWindowFrame`, `ExecuteAction`). |
+| CEF API | overlay `cef/include/cef_media_controller.h` (P1 mechanism: translator-generated C API, `CEF_API_ADDED(CEF_EXPERIMENTAL)`) | `CefMediaController` (one per browser, Chrome style and Alloy): `GetForBrowser(browser, handler)`, `IsValid`, `IsAudible`, `GetState` (a dictionary, so later fields need no translator change), `ExecuteAction(name, args)`, `SetVolume`/`GetVolume`, `RequestPictureInPicture`, `ExitPictureInPicture(behavior)`. `CefMediaControllerHandler`: `OnAudibleChanged`, `OnMediaStateChanged`. Since EM-4 (and EM-7, with no API change): `ShouldHostPictureInPicture`, `OnPictureInPictureOpened/Changed/Closed`, `CefPictureInPictureWindow` (`IsValid`, `GetVideoView`, `GetState`, `SetWindowFrame`, `ExecuteAction`); a Document PiP session has `GetState` `"kind": "document"`. |
 | `open_engine::OpenMediaController` | overlay `open/browser/media/open_media_controller.{h,cc}` (in `open_libcef_mac_sources`) | WebContents user data + `WebContentsObserver` + `media_session::mojom::MediaSessionObserver`. Players from `MediaMetadataChanged`, `MediaStartedPlaying`, `MediaStoppedPlaying` (end of stream ends a player's "in progress"), `MediaResized` (natural size), `MediaDestroyed`, `MediaPictureInPictureChanged`; only players of active documents count (`RenderFrameHost::IsActive`: not the back-forward cache). Session part from the mojo observer, read back with the synchronous getters (`GetMediaSessionInfoSync`, `GetMediaSessionActionsSync`, `GetMediaSessionMetadata`, `GetMediaSessionPosition`) so a queued message never restores an older state. A snapshot is compared with the last one and `OnMediaStateChanged` posted at most once per message-loop turn; a position that continues the clock (within 250 ms of the extrapolated one, same rate, duration and end) is not a change. Commands: `MediaSessionImpl` (`Resume`/`Suspend`/`Stop(kUI)`, tracks, `Seek`, `SeekTo`, `ScrubTo`, meeting actions, slides), or the players' `media::mojom::MediaPlayer` remotes when the session is not controllable. |
 | EM-4 window | overlay `open/browser/media/open_video_overlay_window.{h,mm}`, `open_media_hooks.h`; hook `patches/chromium/0402-open-video-pip-window.patch` (`CreateVideoOverlayWindow` in `chrome/browser/ui/views/overlay/video_overlay_window_views.cc` asks `open_engine::GetMediaHooks().create_video_overlay_window` first; the overlay fills the pointer in `OpenMediaController::GetOrCreate`, the pattern of 0504) | `OpenVideoOverlayWindow` implements `content::VideoOverlayWindow` when the page's handler answers `ShouldHostPictureInPicture` (else Chromium's `VideoOverlayWindowViews`). It owns a layer-hosting `NSView`, a `ui::RecyclableCompositorMac`, a black root layer and a letterboxed `ui::LayerSurface` for the video surface (`SetSurfaceId` adds the child frame sink; the previous one goes first), and a `ui::DisplayCALayerTree` (model: `content/browser/renderer_host/unbounded_surface_window_mac.mm`). Each shown session is a `CefPictureInPictureWindow` object: `GetVideoView`, `GetState` (natural size, source bounds, playback, controls, meeting and mute state, position, title), `SetWindowFrame` (top-left screen coordinates; a size change calls `UpdateLayerBounds`, so the page gets its PiP `resize`), `ExecuteAction` (controller calls; `close` goes through `PictureInPictureWindowManager::ExitPictureInPictureViaWindowUi`, posted). `Hide` ends the session and reports the close at once. `Close` (only from the controller's `WebContentsDestroyed`) never calls back into the controller and reports the close on the next turn. The window keeps the handler and browser from its open, so the close also reaches the App after the media controller let go of the page. |
+| EM-7 Document PiP | overlay `open/browser/media/open_document_pip_host.{h,mm}`, `open_media_hooks.h` (`host_document_picture_in_picture`); hook `patches/chromium/0403-open-document-pip-window.patch` (+18/−0: `NavigateImpl` in `chrome/browser/ui/navigator/browser_navigator.cc`, for `NEW_PICTURE_IN_PICTURE` after the opener checks and before Chromium's standalone path, asks the hook first and returns without a Browser when it took the child) | CEF sends a Chrome-style page's Document PiP through Chromium's default creation (`use_default_browser_creation` in `CefBrowserInfoManager::CanCreateWindow`, a file of cef/0302), so the hook sits in `Navigate()`, where Chromium's own standalone path also takes the child. `OpenDocumentPipHost` (model: Chromium's standalone `DocumentPipHost`; a `WebContentsUserData` of the opener) takes the child when the opener's handler answers `ShouldHostPictureInPicture`, registers Chromium's controller first (`PictureInPictureWindowManager::EnterDocumentPictureInPicture`, which closes any other PiP and closes the child when the opener navigates or goes), and is the child's `WebContentsDelegate`: display mode `kPictureInPicture`, `CloseContents` ends the session, `SetContentsBounds` (`resizeTo`) reports a new requested size, a same-window navigation closes it, other links and popups go to the opener's delegate, keys the page leaves reach `NSApp.mainMenu`, `GetWindowBoundsInScreen` is the embedder's frame. Camera and microphone requests from the PiP document are refused (the base delegate's answer; Chromium's host wires permission prompts, Open's does not yet). The session is a `CefPictureInPictureWindow`: `GetVideoView` is the child's `WebContentsViewMac` view, `GetState` has `kind` `document`, `naturalWidth/Height` (the requested size), `sourceTitle` (the opener's title); `ExecuteAction("close")` (posted) goes through the controller's `Close`, so the PiP document's `pagehide` runs. Alloy-style pages keep CEF's popup path (no Document PiP in Open). |
 | Chromium hook | `patches/chromium/0401-open-media-session.patch` (+42/−1) | `MediaSessionImpl::SetOpenVolumeMultiplier` (0…1) multiplied into `GetVolumeMultiplier()` and pushed with `UpdateVolumeMultiplier()` to normal, one-shot and ambient players (players added later get it in `AddPlayer`); `MediaSessionControllersManager::OpenIsPictureInPictureAvailable(id)`, the player's last `OnPictureInPictureAvailabilityChanged` report. Files no CEF or other Open patch touches. |
 | OpenEngine | `Engine/OpenEngine/src/OEMediaSession.mm`, `OEWebContent.mm`, `OEApp.mm`, `OEClient.{h,mm}`, `OEInternal.h`; headers `OEMediaSession.h`, `OEWebContent.h` | `OEWebContent` attaches the controller in `OnAfterCreated` (`oe_attachMedia:`). `OEMediaSession` is built from `GetState`; commands call `ExecuteAction`. New: `OEWebContent.mediaVolume`, `OEMediaSession.volume`. The page probes (`kAudibleProbe`, `kMediaProbe`) are deleted (docs/engine-api.md "Media"). |
 
