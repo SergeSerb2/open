@@ -73,8 +73,8 @@ The main Release control was built before the engine edit from main `cb1add52`
 (branch merge `e686f1d4`, with historical docs only). Build: PASS in 133.63 s,
 load1 9.17→13.68. Its CEF SHA-256 is
 `24d7d6f5e9ee25da0a4a890fe12b73b5fa0c30046c34acd0ce1c7e4c7cb8d6e0`.
-This is a provisional control: any new main engine patch must be incorporated
-and rebuilt before final matched evidence and distribution.
+This historical build is retained only as the different-build replacement
+fixture. It is not the final timing control.
 
 After the restart, the overlay metadata hardening was applied with
 `engine-apply --all` (`hardening-apply.json`, exit 0). A focused build of
@@ -103,3 +103,24 @@ qualify the final proof. The matched main control must include #264 without
 `0106`; the branch engine must include #264 followed by `0106`. Both are
 built in S16. All runtime rows and engine-status remain pending on that
 rebuilt engine, followed by the full gate on the merged head.
+
+The earlier full build passed in 1h39m (`engine-build-resume.json`). Next,
+`engine-main-264.log` records `0801` through `0810` applying in order with
+`0106` excluded. CEF API regeneration and the incremental engine build passed
+(856 actions, 2m57s). The S16-built main distribution has SHA-256
+`619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`,
+which exactly matches main's recorded framework. See
+`matched-main-engine.json` for the full series and distribution path.
+
+`app-main-264.json` records the frozen automation Release App control from
+merged head `d1f555da`: build PASS in 206.68 s, load1 17.34→39.35, deep strict
+signature verification PASS. The App executable has SHA-256
+`549c4c442ded786b49181cc7431453ac1c7c999174eee8f7bc3ac575b46b2214`.
+Its embedded, re-signed CEF binary has SHA-256
+`d18b7b785ae84900d1bf0ec3445e835e0044259780f12a8b0d9193a57d78eaa5`;
+this differs from the distribution hash because embedding re-signs the code.
+
+The 14:08 M5 screen hold began before any runtime proof in this series.
+No 0106 on-screen row overlapped 14:02. Live replacement, launch timing and
+e2e remain pending screen clearance. The branch rebuild follows the main
+control build; no gain or runtime safety PASS is claimed from build results.
