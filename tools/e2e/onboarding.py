@@ -81,7 +81,7 @@ def run(factory, results, tmp, h):
         until(lambda: app.call('first-run').get('probeReady', False))
         first_run = app.call('first-run')
         app.call('snapshot', path=str(evidence/'intro-handoff-first-run.png'))
-        gate('get_started_handoff', lambda s: s.get('screen')=='first-run' and not s['active'], state(), phase2)
+        gate('get_started_handoff', lambda s: s.get('screen')=='name' and s['active'], state(), phase2)
         gate('handoff_import_fresh_choices', lambda s: s.get('active') and s.get('step')=='welcome' and s.get('probeReady'), first_run, phase2)
         app.call('first-run', action='fresh')
         until(lambda: not app.call('first-run')['active'])
@@ -144,6 +144,11 @@ def run(factory, results, tmp, h):
         replay = state()
         gate('replay_over_browser', lambda s: s.get('active') and s.get('replay'), replay, returning)
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+        for _ in range(7):
+            screen = state()['screen']
+            if screen == 'ready': break
+            app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
+        app.call('onboarding', action='get-started')
         until(lambda: not state()['active'])
         results['replay_does_not_write'] = dict(ok=snapshot.read_bytes()==prior and not app.call('first-run')['active'])
         # A denied replay exits before root preparation. It opens no window,
@@ -169,3 +174,4 @@ def run(factory, results, tmp, h):
         if app and not app.closed: app.quit()
         h._restore_defaults(None, saved)
         (evidence/'negative-proofs.json').write_text(json.dumps(negatives, indent=2))
+    runpy.run_path(str(Path(h.ROOT)/'tools/e2e/onboarding_steps.py'))['run'](factory, results, tmp, h)

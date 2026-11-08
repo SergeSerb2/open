@@ -12,8 +12,12 @@ final class FirstRunWindowController: NSWindowController, NSWindowDelegate {
   private var hasDisplayed = false
   private var probeRequest: UUID?
 
-  init(model: FirstRunViewModel) {
+  init(model: FirstRunViewModel, hostedIn: NSWindow? = nil) {
     self.model = model
+    if let hostedIn {
+      super.init(window: hostedIn)
+      return
+    }
     let window = FirstRunNativeWindow(contentRect: NSRect(origin: .zero, size: FirstRunWindow.size),
       styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
     window.title = "Open"; window.titleVisibility = .hidden

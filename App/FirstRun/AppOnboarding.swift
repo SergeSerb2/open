@@ -13,15 +13,8 @@ extension AppDelegate {
     onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
     controller.onHandoff = { [weak self] in
       guard let self else { return }
-      if replay {
-        onboardingWindowController?.window?.orderOut(nil)
-        frontWindowController?.window?.makeKeyAndOrderFront(nil)
-        onboardingWindowController?.finish()
-      }
-      else {
-        onboardingHandedOff = true
-        showFirstRunSteps()
-      }
+      onboardingHandedOff = true
+      showFirstRunSteps(replay: replay)
     }
     controller.onRelease = { [weak self, weak controller] receipt, baseline in
       guard let self, let controller, onboardingWindowController === controller else { return }
@@ -37,15 +30,17 @@ extension AppDelegate {
     }
     controller.showIntro(measureFrames: options.measureIntroFrames)
   }
-  func showFirstRunSteps() {
-    // Use Section 7 unchanged in its existing window for v1. Its first probe
-    // starts after this display, since App/main's initial display was the intro.
+  func showFirstRunSteps(replay: Bool = false) {
+    guard let onboarding = onboardingWindowController, let window = onboarding.window else { return }
     let actions = AppFirstRunActions(app: self)
-    let viewModel = OpenSettings.FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
-    let controller = FirstRunWindowController(model: viewModel)
-    firstRunWindowController = controller; lastFirstRunStep = "welcome"
-    controller.showWindow(nil); controller.window?.displayIfNeeded(); controller.startProbeAfterDisplay()
-    if let window = controller.window { onboardingWindowController?.handoff(to: window) }
+    let model = OpenSettings.FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
+    let holder = FirstRunWindowController(model: model, hostedIn: window)
+    if !replay { firstRunWindowController = holder; lastFirstRunStep = "welcome" }
+    let steps = OnboardingStepsController(app: self, firstRun: model, replay: replay, reduceMotion: onboarding.intro.reduceMotion)
+    onboarding.steps = steps
+    onboarding.show(content: steps)
+    window.displayIfNeeded()
+    if !replay { holder.startProbeAfterDisplay() }
   }
 }
 

@@ -13,6 +13,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   let intro: IntroView
   let sound: IntroSound
   let replay: Bool
+  var steps: OnboardingStepsController?
   private let dim: NSWindow
   private var started = false
   private var closingForHandoff = false
@@ -109,30 +110,45 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     intro.addSubview(content.view)
     window?.makeFirstResponder(content.view)
   }
-  /// v1 bridge to Section 7's existing window. Later screens use show(content:).
-  func handoff(to legacyWindow: NSWindow) {
-    dim.parent?.removeChildWindow(dim)
-    legacyWindow.addChildWindow(dim, ordered: .below)
-    window?.orderOut(nil)
-  }
   func finish() {
     guard !finishing else { return }; finishing = true
     sound.fadeOut()
+    let reduced = intro.reduceMotion
+    let duration = reduced ? 0.3 : 2.5
     dim.parent?.removeChildWindow(dim)
+    if let browser = NSApp.keyWindow {
+      dim.order(.below, relativeTo: browser.windowNumber)
+    }
     NSAnimationContext.runAnimationGroup { context in
-      context.duration = IntroTimeline.beat("dimFinish").end
-      context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      context.duration = duration; context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
       dim.animator().alphaValue = 0
     }
+    if let window {
+      if !reduced {
+        NSAnimationContext.runAnimationGroup { context in
+          context.duration = 0.4; context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+          window.animator().setFrameOrigin(NSPoint(x: window.frame.minX, y: window.frame.minY+24))
+        }
+      }
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = reduced ? 0.3:0.6; context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        window.animator().alphaValue = 0
+      }
+    }
     lifecycle.append(Task { [weak self] in
-      try? await Task.sleep(for: .seconds(IntroTimeline.beat("dimFinish").end))
+      try? await Task.sleep(for: .seconds(reduced ? 0.3:0.6))
+      guard !Task.isCancelled, let self else { return }; window?.orderOut(nil)
+    })
+    lifecycle.append(Task { [weak self] in
+      try? await Task.sleep(for: .seconds(duration))
       guard !Task.isCancelled, let self else { return }
       intro.stop(); sound.stop(); dim.close(); close()
-      onRelease?(state, residentBaseline)
+      var receipt = state; receipt["screen"] = "done"; receipt["active"] = false
+      onRelease?(receipt, residentBaseline)
     })
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    if closingForHandoff { return true }
+    if finishing { return true }
     intro.stop(); sound.stop(); dim.close()
     // Deferred: this delegate may be retained only by the window it closes.
     Task { @MainActor in NSApp.terminate(nil) }
@@ -142,7 +158,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   var state: [String: Any] {
     var state = intro.state
     state["active"] = window?.isVisible == true
-    state["screen"] = window?.isVisible == true ? "intro" : "handoff"
+    if let steps { state.merge(steps.state) { _, new in new } }
+    state["screen"] = finishing ? "handoff" : steps?.step.rawValue ?? "intro"
     state["sound"] = sound.state; state["replay"] = replay
     state["window"] = window?.windowNumber ?? 0
     state["frameSize"] = [window?.frame.width ?? 0, window?.frame.height ?? 0]

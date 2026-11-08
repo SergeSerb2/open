@@ -1,4 +1,5 @@
 import OpenSettings
+import Foundation
 
 @MainActor
 final class AppFirstRunActions: FirstRunActions {
@@ -9,7 +10,24 @@ final class AppFirstRunActions: FirstRunActions {
   func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
     await app.importRunner.installExtension(candidate, window: app.firstRunWindowController?.window)
   }
-  func setAsDefaultBrowser() -> String? { app.settingsPresenter.setAsDefaultBrowser() }
-  func isDefaultBrowser() -> Bool { app.settingsPresenter.isDefaultBrowser() }
+  #if OPEN_AUTOMATION
+  private var stubDefault = false
+  #endif
+  func setAsDefaultBrowser() -> String? {
+    #if OPEN_AUTOMATION
+    if app.options.automationSocket != nil {
+      let result = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] ?? "declined"
+      stubDefault = result == "success" || result == "already"
+      return result == "failed" ? "Automation default-browser failure" : nil
+    }
+    #endif
+    return app.settingsPresenter.setAsDefaultBrowser()
+  }
+  func isDefaultBrowser() -> Bool {
+    #if OPEN_AUTOMATION
+    if app.options.automationSocket != nil { return stubDefault || ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] == "already" }
+    #endif
+    return app.settingsPresenter.isDefaultBrowser()
+  }
   func finishFirstRun(imported: Bool) { app.finishFirstRun(imported: imported) }
 }

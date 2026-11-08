@@ -313,7 +313,7 @@ public final class IntroView: NSView {
     }
     /// Later screens reuse the room/orbs without rebuilding or restarting sound.
     public func showBackgroundOnly() {
-        composition.isHidden = true; button.isHidden = true
+        composition.isHidden = true; button.isHidden = true; ambient.opacity = 0.4
     }
     public override func cancelOperation(_ sender: Any?) { skip() }
     public override func keyDown(with event: NSEvent) {

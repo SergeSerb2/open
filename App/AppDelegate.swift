@@ -290,16 +290,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     prepareData()
     if isFirstRun && !firstRunSaved && windowControllers.isEmpty {
       if !onboardingHandedOff {
-        showOnboarding(replay: false)
+        showOnboarding(replay: options.replayOnboarding)
         return
       }
-      if firstRunWindowController == nil {
-        let actions = AppFirstRunActions(app: self)
-        let viewModel = FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
-        firstRunWindowController = FirstRunWindowController(model: viewModel)
-        lastFirstRunStep = "welcome"
-      }
-      firstRunWindowController?.showWindow(nil)
+      onboardingWindowController?.showWindow(nil)
       return
     }
     guard windowControllers.isEmpty else { return }
@@ -504,14 +498,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("firstRunLandingStarted")
     let states = model.windows.filter { $0.style == .standard }
     for state in states { createWindowController(state: state) }
-    firstRunWindowController?.window?.makeKeyAndOrderFront(nil)
+    if let onboarding = onboardingWindowController?.window {
+      for controller in windowControllers { controller.window?.order(.below, relativeTo: onboarding.windowNumber) }
+      onboarding.makeKeyAndOrderFront(nil)
+    } else { firstRunWindowController?.window?.makeKeyAndOrderFront(nil) }
   }
 
   func finishFirstRun(imported: Bool) {
     guard firstRunWindowController != nil else { return }
     assert(imported || model === firstRunDefaultModel, "A fresh finish must keep the original default model")
     do {
+      try onboardingWindowController?.steps?.applyChoices()
       try snapshotStore.saveNow(model: model)
+      // C4 WELCOME HAND-OFF: WelcomeTab.insert(into: model, spaceID: focusedSpace.id)
+      // The tab is inserted here after the first successful save, before building the browser.
+      onboardingWindowController?.steps?.persistName()
       firstRunSaved = true
       UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
     } catch {
@@ -519,11 +520,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return
     }
     lastFirstRunStep = firstRunWindowController?.model.step.rawValue ?? lastFirstRunStep
-    onboardingWindowController?.finish()
-    firstRunWindowController?.close(); firstRunWindowController = nil
+    firstRunWindowController = nil
     prepareLittleOpen()
     showWindowsIfNeeded()
-    frontWindowController?.window?.makeKeyAndOrderFront(nil)
+    if let onboarding = onboardingWindowController?.window {
+      for controller in windowControllers { controller.window?.order(.below, relativeTo: onboarding.windowNumber) }
+      frontWindowController?.window?.makeKey()
+      onboardingWindowController?.finish()
+    } else { frontWindowController?.window?.makeKeyAndOrderFront(nil) }
     settingsPresenter.attachBrowserStores()
     startAutoArchiveIfNeeded(); todayAutoArchive?.finishStartupComposition()
     for url in options.initialURLs {
