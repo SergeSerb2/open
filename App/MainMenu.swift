@@ -14,7 +14,8 @@ enum MainMenu {
     let menu = MenuBuilder.buildMainMenu(dispatcher: dispatcher,
       spaces: (factory?.model ?? app.model).spaces.map { SpaceMenuEntry(id: $0.id.description, title: (factory?.model ?? app.model).displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
-      overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
+      overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"),
+      shortcutsOnly: !app.initialMainMenuCompleted)
     menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
     if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
     #if DEBUG || OPEN_AUTOMATION
@@ -31,6 +32,18 @@ enum MainMenu {
     return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
+  #if OPEN_AUTOMATION
+  static func shortcutSnapshot(_ menu: NSMenu?) -> [[String: Any]] {
+    (menu?.items ?? []).flatMap { item -> [[String: Any]] in
+      if let submenu = item.submenu { return shortcutSnapshot(submenu) }
+      guard !item.keyEquivalent.isEmpty else { return [] }
+      return [["id": item.identifier?.rawValue ?? "", "key": item.keyEquivalent,
+        "modifierMask": item.keyEquivalentModifierMask.rawValue,
+        "action": item.action.map(NSStringFromSelector) ?? "", "targetNil": item.target == nil,
+        "tag": item.tag, "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+    }
+  }
+  #endif
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     if let sheet = event.window as? SavePromptSheet, sheet.isVisible {

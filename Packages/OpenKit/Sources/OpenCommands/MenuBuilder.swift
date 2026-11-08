@@ -71,6 +71,7 @@ public struct TabMenuEntry: Sendable, Hashable {
 @MainActor
 final class MenuCommandTarget: NSObject, NSMenuItemValidation {
     weak var dispatcher: (any CommandDispatcher)?
+    var shortcutsOnly = false
     var enabledKeys: [String: String] = [:] // item identifier string -> enabled key
 
     @objc func openCommandAction(_ sender: NSMenuItem) {
@@ -106,10 +107,12 @@ public enum MenuBuilder {
         spaces: [SpaceMenuEntry] = [],
         tabs: [TabMenuEntry] = [],
         overrides: KeyBindingStore = .empty,
-        switchToNinth: Bool = false
+        switchToNinth: Bool = false,
+        shortcutsOnly: Bool = false
     ) -> NSMenu {
         let target = MenuCommandTarget()
         target.dispatcher = dispatcher
+        target.shortcutsOnly = shortcutsOnly
         let main = NSMenu()
         main.autoenablesItems = true
         for menu in [
@@ -191,6 +194,9 @@ public enum MenuBuilder {
 
     private static func add(_ menu: NSMenu, _ ids: [String], target: MenuCommandTarget, overrides: KeyBindingStore) {
         for id in ids {
+            if target.shortcutsOnly,
+               let command = CommandRegistry.byID[id],
+               overrides.effectiveShortcuts(for: command).isEmpty { continue }
             menu.addItem(item(id, target: target, overrides: overrides))
             carriers(id, target: target, overrides: overrides, into: menu)
         }
@@ -212,7 +218,7 @@ public enum MenuBuilder {
         menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenuItem("Services", services))
-        NSApp?.servicesMenu = services
+        if !target.shortcutsOnly { NSApp?.servicesMenu = services }
         menu.addItem(.separator())
         add(menu, ["hide-open", "hide-others", "show-all"], target: target, overrides: overrides)
         menu.addItem(.separator())
@@ -263,7 +269,7 @@ public enum MenuBuilder {
 
         let font = NSMenu(title: "Font")
         add(font, ["show-fonts", "font-bold", "font-italic", "font-underline"], target: target, overrides: overrides)
-        NSFontManager.shared.setFontMenu(font)
+        if !target.shortcutsOnly { NSFontManager.shared.setFontMenu(font) }
         let format = NSMenu(title: "Format")
         format.addItem(submenuItem("Font", font))
         menu.addItem(submenuItem("Format", format))
@@ -376,7 +382,7 @@ public enum MenuBuilder {
         add(menu, ["view-downloads", "view-library", "view-media", "view-boosts"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["bring-all-to-front"], target: target, overrides: overrides)
-        NSApp?.windowsMenu = menu
+        if !target.shortcutsOnly { NSApp?.windowsMenu = menu }
         return menu
     }
 
@@ -387,7 +393,7 @@ public enum MenuBuilder {
         let troubleshooting = NSMenu(title: "Troubleshooting")
         add(troubleshooting, ["task-manager", "record-trace", "cancel-trace", "copy-open-info", "reveal-open-data"], target: target, overrides: overrides)
         menu.addItem(submenuItem("Troubleshooting", troubleshooting))
-        NSApp?.helpMenu = menu
+        if !target.shortcutsOnly { NSApp?.helpMenu = menu }
         return menu
     }
 

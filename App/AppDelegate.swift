@@ -36,6 +36,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   // model opens one group per command; multi-operation UI actions may nest.
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
   private(set) var engineReady = false
+  /// The first-frame menu carries every effective key. AppKit's launch
+  /// callback installs the full contents and native Services/Font menus once.
+  private(set) var initialMainMenuCompleted = false
   private(set) var terminationRequested = false
   private var faviconShutdownTask: Task<Void, Never>?
   private var historyQuitTask: Task<Void, Never>?
@@ -109,9 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
     LaunchTiming.shared.phase("settingsRegistered")
-    NSApp.mainMenu = MainMenu.build()
-    LaunchTiming.shared.phase("mainMenuBuilt")
+    initialMainMenuCompleted = true
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
+    LaunchTiming.shared.phase("mainMenuBuilt")
     LaunchTiming.shared.phase("initialMenuRetargeted")
     NSApp.setActivationPolicy(.regular)
     // The window and sidebar come from the snapshot and do not wait for the
@@ -326,6 +329,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       "contextsBeforeEngine": OEEngine.shared.contexts.count,
       "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
     ]
+    #if OPEN_AUTOMATION
+    if ProcessInfo.processInfo.environment["OPEN_SPEED_MENU_PROBE"] == "1" {
+      startupEvidence["firstFrameMenuShortcuts"] = MainMenu.shortcutSnapshot(NSApp.mainMenu)
+    }
+    #endif
   }
 
   @discardableResult
