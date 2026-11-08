@@ -97,6 +97,12 @@ class OpenAdBlockCosmeticsHost final : public mojom::AdBlockCosmetics {
 
  private:
   bool ActiveFor(const url::Origin& origin) const {
+    // This is a process pipe, not a RenderFrameHost receiver (plan §8.2).
+    // RenderThread::BindHostReceiver supplies no frame identity, and one
+    // process can serve several top sites. Treat the renderer origin as
+    // untrusted: a lying renderer can change hiding only in its own process
+    // and probe this Profile's exclusion state; selectors are public lists.
+    // Do not add a UI-thread origin lookup to either request path.
     return matcher_ && !origin.opaque() &&
            origin.GetURL().SchemeIsHTTPOrHTTPS() &&
            matcher_->IsActiveFor(origin.host());

@@ -4717,7 +4717,28 @@ change or engine-format bump is made by this checkpoint.
 
 **Errata to §8.** Generic requests now carry `top_origin`, as initial
 requests do. The old generic signature could not re-check exclusions on
-a process pipe shared by several documents. The renderer checks for an
+a process pipe shared by several documents.
+
+**Browser-known origin limit (lead correction, 2026-11-08 12:48).** This
+receiver is bound per **render process**, not per `RenderFrameHost`:
+`ChromeContentBrowserClientCef::ExposeInterfacesToRenderer` takes a
+`RenderProcessHost*`, and the renderer uses
+`content::RenderThread::BindHostReceiver` (F-28). Neither call carries a
+frame identity. Several frames/documents with different top origins can
+share that process pipe, so the browser cannot use one cached main-frame
+origin as a correct cross-check. A frame lookup per request would also
+add the UI-thread hop forbidden by §8.2. The current per-process design
+therefore checks the supplied `top_origin` against the matcher's current
+enabled/exclusion state on every call, without claiming browser
+validation of that origin. **Trust note:** a lying renderer can change
+hiding only in its own process; selectors come from public lists. It can
+also probe exclusion state within its own Profile, as already accepted
+in §8.2. If the receiver moves to a `RenderFrameHost` in a later design,
+use that frame's browser-known main-frame last committed origin, compare
+the supplied origin, and return null (empty generic output) with a
+`--v=1` mismatch log when they disagree.
+
+ The renderer checks for an
 empty result from `GetScriptContextFromWorldId`; if needed it creates the
 world with fixed `void 0`, then installs before executing the observer,
 matching the existing P7 creation pattern. The legacy shared Chrome
