@@ -1,6 +1,9 @@
 # Release — implementation plan for Open
 
-Status: plan for implementation. Implementer: follow this file top to bottom.
+Status: implementation is partial. Section 16 re-check and local pipeline
+evidence are in [the release receipt](../release/s16-pipeline-verification.md).
+User setup is in [release-user-steps.md](../release-user-steps.md).
+Implementer: follow this file top to bottom.
 Do not spawn subagents (AGENTS.md rule 8). Do not write unit tests (rule 6).
 Verify end to end only: real builds, real signing, real app launch.
 This file is the complete context. The implementer has no other context.
@@ -62,6 +65,55 @@ Authoritative inputs. Read these before you start:
 ---
 
 ## 0. Current state (verified 2026-10-25; re-check at Step 1)
+
+**2026-11-07 status / errata.** The C-table below is the historical snapshot.
+The Section 16 receipt records each row's current evidence and drift. Bundle IDs,
+entitlements, metadata, Sparkle 2.10.1, acknowledgements and the script are now
+present. The license inventory and build credits were audited in #236.
+The official engine, full Chromium credits and Step 8 updater controller
+are still absent. The permitted main engine view contains a dev distrib only;
+the shared Chromium tree and live PGO profile were not inspected.
+
+Current script inputs also include `OPEN_NOTARY_PROFILE` (default `open-notary`),
+`OPEN_SPARKLE_KEY_ACCOUNT` (the pinned tools' actual default is `ed25519`), optional
+`OPEN_SPARKLE_KEY_FILE`, `OPEN_RELEASE_FEED_URL`, and
+`OPEN_RELEASE_DOWNLOAD_PREFIX`. The last variable is this tag's full asset URL
+prefix. The defaults in §§5–6 remain proposals pending U-8. The script updates
+the staged bundle's feed URL before signing. Production preflight rejects the
+placeholder public key and proves key equality by signing a random probe and
+verifying it with the source plist public key. A file key is accepted only when
+both pinned tools advertise `--ed-key-file`. `--preflight-only` performs these
+checks without a build or notary submission. See the user-step guide for setup.
+`OPEN_RELEASE_HEAVY_WRAPPER` may select a section scheduler instead of the
+default `heavy.sh`; Section 16 uses its mandatory two-token wrapper.
+
+The §9 dry-run errata are explicit: the main dev engine may be packaged while
+A-1 records mode-SKIP; its measured size may exceed the production hard limit
+while A-7 records mode-SKIP; sample credits remain an incomplete local preview
+(A-14). None of those exceptions applies to production. Dry-run feeds use a
+`file://` enclosure for the local DMG. This proves feed shape and signatures
+only; Sparkle does not consume a file feed (lead: pinned 2.10.1, error 2001).
+CryptoKit verifies the enclosure's Ed25519
+signature against the throwaway public key, independently of the signing key.
+
+The exact-entitlement ad-hoc artifact cannot pass Library Validation. The lead's
+2026-11-07 16:16 STOP-rule withdrew permission to launch it: an earlier probe
+caused a crash dialog. Never launch that artifact or the exact app on its DMG.
+Record only static `codesign` runtime/no-Team-ID evidence and cite §4.4.
+A-2/A-3/A-11 use only the **supplemental local-only launch copy,
+disable-library-validation exception, not the shipped signature**, on the M1
+under its own screen lock. The script refuses this smoke on the M5. It also
+checks the temporary app/helper DLV entitlement seals before launch. The copy
+and temporary entitlements are deleted. The app in `build/release` and the DMG
+keep exact committed entitlements, enforced by sealed-dictionary comparisons.
+Preflight also refuses DLV in app or helper source entitlements, except the
+plugin helper's existing committed exception.
+The M5 preparation run exits 1 until a valid M1 smoke receipt for that exact DMG
+exists. Missing or mismatched smoke evidence is FAIL, not a mode-SKIP.
+No mode launches an exact artifact; production runtime acceptance uses a
+separately approved lead receipt bound to the DMG. Never relaunch a failed-to-load
+build. If anything crashes, stop on-screen work
+and report it to the lead. U-9 is not defined in §10 or follow-ups.
 
 | ID | Fact | Evidence |
 |---|---|---|
