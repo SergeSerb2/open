@@ -44,7 +44,7 @@ Deltas below are medians of differences within each interleaved round. They are 
 | Unreferenced file-size padding |−0.08 ms with both frameworks; range −2.32…+2.97 ms|51,136→28,749,824 bytes. File length/mapping alone does not explain the large gap. This does not isolate paging of real code/metadata or external signature/security waits in slow launch modes.|
 | Dynamic OpenKit / additional Swift overlays |No extra image to add|At entry, matched floor 747 images; floor+both 766; retained Open 766. After normalizing bundle paths, the latter two differ only in the executable. No additional Swift image or dynamic OpenKit image appears. This is image-set evidence, not a zero-cost claim.|
 | Own load-time initializers |No main/Sparkle initializer; one OpenEngine allocator-zone initializer|`dyld_info -arch arm64 -inits`. Its cost is included in the framework controls. No non-lazy Objective-C class/category list is present.|
-| Large pre-entry wall-time difference |About 153–157 ms depends on the LaunchServices request|The same executable/hash, with empty main, measured 177.65 ms under the simple request versus 25.20 ms with the harness request: paired delta 152.93 ms. It cannot be explained by a different application image graph or post-main work. Exact OS wait remains unresolved.|
+| Large pre-entry wall-time difference |About 153–157 ms in the original request experiment|The same executable/hash, with empty main, measured 177.65 ms under the simple request versus 25.20 ms with the harness request: paired delta 152.93 ms. It cannot be explained by a different application image graph or post-main work. The follow-up below identifies a `syspolicyd` scan and corrects the request-only interpretation.|
 
 Static inventory (`audit.py`, `otool -L`, `dyld_info -arch arm64 -inits -fixups`): the retained empty Open is 28,648,608 bytes, 493 Objective-C classes, one category and 48,782 fixups. The small C control has no own classes and 22 fixups. OpenEngine has 31 classes/6,815 fixups; Sparkle has 57 classes/5,908 fixups. Open has 1,503 Swift type-descriptor references. These counts support the pooled comparison; they do not assign CPU milliseconds to individual sections.
 
@@ -63,7 +63,7 @@ A second control records self CPU time with `getrusage` at entry, plus page-ins 
 
 The paired wall reduction is 155.99/156.91/156.74 ms for those three request changes. The first simple sample is 38.69 ms and remains in the data. Page-ins are 39 in the warm samples for both slow and fast requests. The shared-cache reslide flag is unset throughout. This excludes neither external signature/security work nor another platform wait; it does show that the missing wall time is not 150 ms of CPU in Open's process.
 
-A final bundle control changes only the bundle identifier and its required signature. Unique-ID simple launches still have a 159.82 ms entry median, while the same control with arguments has 25.31 ms. Duplicate-ID simple launches have 178.22 ms, versus 25.31 ms with arguments. Duplicate registration alone does not explain the delay. Full-main controls also retain occasional slow-entry samples. No exact launchd/dyld/security caller was established. The fast controls use an altered entry/bundle and do not establish that the production App meets its launch budgets.
+A final bundle control changes only the bundle identifier and its required signature. Unique-ID simple launches still have a 159.82 ms entry median, while the same control with arguments has 25.31 ms. Duplicate-ID simple launches have 178.22 ms, versus 25.31 ms with arguments. Duplicate registration alone does not explain the delay. Full-main controls also retain occasional slow-entry samples. That experiment did not yet identify the OS caller. The unified-log follow-up below does. The fast controls use an altered entry/bundle and do not establish that the production App meets its launch budgets.
 
 WebKit is informational. Sparkle adds WebKit to the entry image set, while the no-Sparkle AppKit floors load it later by the confirmed frame. Its presence is not a gate and does not prove a removable launch duration.
 
@@ -71,11 +71,76 @@ WebKit is informational. Sparkle adds WebKit to the entry image set, while the n
 
 These are measured opportunity bounds, not accepted fix gains:
 
-1. **Explain the LaunchServices pre-entry wait first:** roughly 150 ms of request-sensitive wall time is the largest observed pool. Keep executable, arguments, environment and bundle identity explicit in the next receipt. Identify the platform wait before proposing a shipping change. A harness-mode change is not a product launch improvement.
+1. **Check the security scan on the first signed build:** the follow-up below identifies about 157 ms in `syspolicyd` `ChangetimeScan`. Establish its behavior on the actual notarized distribution before proposing a shipping change. Changing the harness request is not a product launch improvement.
 2. **Reduce the executable's real loader footprint only if worthwhile:** the measured pool is about 5.9 ms. Class/Swift metadata registration,48.8k fixups and touched code/signature pages remain combined. A module split or metadata reduction cannot claim the full 107 ms hypothesis from this evidence.
 3. **Embedded framework work is low priority:** roughly 1 ms in the Swift floor and 3 ms in the C graph control. Do not revive Sparkle/framework-delay candidates without a new measured gain.
 
 The former menu/layout/link candidates remain reverted. No optimization was implemented during this research.
+
+## Unified-log follow-up: the wait is a syspolicy change-time scan
+
+The OS component is **`syspolicyd`**, specifically its `ChangetimeScan` signpost. Across the follow-up, launches with this scan take a median 182.25 ms to the empty C entry; launches without it take 25.51 ms. The scan median is 156.86 ms. Subtracting each scan interval leaves a median 24.81 ms. This accounts for the large non-CPU interval. It does not establish that a production notarized build pays the same cost.
+
+The earlier “simple versus harness” result was incomplete. An unchanged executable can launch quickly through either request. After a research copy's file-change time advances, **all** request types can incur the scan, including arguments, plain `open -a`, and default NSWorkspace. Arguments are not a reliable way to remove it. Cache/change-time state must be controlled as well as request shape.
+
+### Capture and controls
+
+The original empty-main slow/fast binary was repeated in seven interleaved pairs, then another seven pairs with two seconds between pairs outside all locks. The first simple launch in each set remained slow (183.24/185.54 ms); the following simple launches were fast. All samples are retained.
+
+A second control keeps the original Open code, metadata and links, but writes the C-entry receipt to a fixed `/tmp/s16-ls-entry-PID.json` path. This lets the request be exactly `/usr/bin/open -a APP`, with no arguments, environment or output-redirection options. The NSWorkspace helper calls `openApplicationAtURL:configuration:completionHandler:` with `[NSWorkspaceOpenConfiguration configuration]` unchanged. Its timing/log window starts at the API call, excluding the helper's own startup. Neither control calls the original Swift main or creates NSApplication.
+
+For the change-time experiment, only the research copy's executable timestamps were changed with `os.utime`; its bytes and SHA-256 remained identical. A second set advanced the whole change-time second before every sample, outside all locks. This tests security cache invalidation, not a disk-cold launch. No quarantine attribute was removed, no cache was purged, and no security policy was disabled. The frozen window artifacts were untouched.
+
+Builds used `s16-heavy.sh` with the authorized engine root exported. Changed controls passed signature checks and direct loader-only launches under the screen lock before LaunchServices runs. Timing waited outside all locks for load1≤12, then acquired quiet → screen per set, with load checks before each launch. Launches took no heavy token. The scripts held no lock during spacing or low-load waits.
+
+For every launch, `log show --start/--end --style ndjson --info --debug --signpost` captured the named security/launch daemons, plus kernel AMFI/sandbox messages containing the control path or PID. This version of `log show` rejects fractional start/end timestamps. The queries therefore enclose the window in whole seconds; the retained `.ndjson` is filtered back to the exact request-to-observed-exit interval. `.seconds.ndjson` preserves the enclosing query. All collection ran after releasing timing locks. No command requested a password.
+
+Raw evidence, sources, exact link commands, artifact hashes and query arguments are in `.re/s16/launch-fixes/pre-main/launchservices/` under the project artifact directory. `TABLE.md`, `summary.json`, `derived.json`, and `evidence.md` index the results. Each sample has its original launch receipt, exact log window and retained enclosing log. The historical CPU sample is separately labeled and excluded from the new timing totals.
+
+### Cause and hypothesis table
+
+All **168** launches passed the load gate (load1 **6.39–11.12**); none was discarded. There were 82 launches with a complete `ChangetimeScan` and 86 without one. Every request/settings row below has seven interleaved launches. The full per-sample table and all outliers are in the raw artifact table.
+
+| Request or hypothesis | Measured result | Evidence and interpretation |
+|---|---|---|
+| Original simple / args pair, unchanged files |Entry 25.30 / 24.03 ms medians; first simple 183.24 ms retained. Spaced repeat 24.01 / 23.18 ms; first simple 185.54 ms retained.|`results/` and `spaced-pair/`; each first slow sample has a 145.26/147.73 ms scan. Most warm simple launches do not.|
+| Simple / args after change-time advances |Entry 177.65 / 173.42 ms; scan 152.75 / 151.37 ms. Scan incidence 7/7 and 6/7.|`ctime-seconds-results/`; the 24.77 ms first args sample remains. In the later settings set both modes have scans 7/7 and entry 182.04/180.64 ms. A request-only explanation is refuted.|
+| Dock-equivalent `open -a`, no options |Warm entry 27.22 ms; after change-time advances 180.96 ms. Scan 157.16 ms, 7/7.|`results/` versus `ctime-seconds-results/`. Request→RunningBoard PID median 25.12 ms; request→SIGCONT 28.13 ms in the latter set.|
+| Default NSWorkspace configuration |Warm entry 28.80 ms; after change-time advances 185.29 ms. Scan 161.55 ms, 7/7.|Same sets. Actual API request→RunningBoard PID 19.88 ms; request→SIGCONT 22.80 ms. Caller startup is excluded.|
+| Gatekeeper / ad-hoc-signature hypothesis |A long `syspolicyd` change-time scan accounts for the gap; the first ordinary `GatekeeperEvaluation` is only 6.25 ms.|`results/000-0-legacy-simple.ndjson` lines 40–43, 182–185, 313. AMFI names the research paths and reports ad-hoc/unknown-chain status. The signed/notarized outcome remains untested.|
+| State restoration / reopen |Single-key `NSQuitAlwaysKeepsWindows=NO`: entry 183.53 ms, scan 157.85 ms, 7/7. Same-set base 182.04 ms.|`settings-results/`. The empty entry creates no NSApplication or window. The tested setting does not remove the scan.|
+| LaunchServices / Apple Event handshake |Hint send→reply median 0.226 ms, range 0.104–0.415 ms across all 168 launches; SIGCONT precedes scan completion.|Per-sample CoreServicesUIAgent/launchservicesd sequence. The app exits without consuming an open-application event. This handshake is not the observed 150 ms interval.|
+| App scripting / child-death declarations |`NSAppleScriptEnabled=NO`: entry 180.10 ms, scan 158.47 ms in 5/7; two fast samples retained. `LSGetAppDiedEvents=NO`: entry 186.58 ms, scans 7/7.|`settings-results/` and `ctime-results/`. Neither setting prevents the scan. They do not supply a product fix.|
+
+The executable's kernel process-start receipt is not an `exec` tracepoint. The requested daemon/kernel filter exposed no precise successful-exec timestamp. The table uses the explicit RunningBoard `submitAndStart completed … pid=…` line and LaunchServices SIGCONT as observable boundaries. These appear well before entry and cannot account for the scan interval. Wall-clock-to-log calibration varied by up to 9.9 ms, so sub-millisecond request-to-exec claims would be unsound. Scan durations use begin/end timestamps from the same log.
+
+In the first slow sample, `GatekeeperEvaluation` ends at 01:48:12.102709 and `ChangetimeScan` runs from 01:48:12.102751 to .248012 (145.261 ms). LaunchServices sent SIGCONT at .099368. The scan ends just before the embedded OpenEngine/Sparkle AMFI messages and C entry. A prior CPU sample independently has `ChangetimeScan` from 01:28:41.372907 to .528813 (155.906 ms). `evidence.md` gives exact source lines.
+
+AMFI reports the expected missing certificate chain and ad-hoc/unknown-chain status for these research images. They still exit normally with status 0. This is not a crash or evidence that a Developer ID signature will bypass every scan. Syspolicy's ordinary `GatekeeperEvaluation` and its much longer `ChangetimeScan` are distinct intervals. Generic trustd/security activity with private targets is not attributed to Open. No separately identified XProtect, trustd, securityd or kernel interval accounts for the 150 ms gap in these samples.
+
+### App settings and signed-build check
+
+No App-side setting tested removes the scan. The single-key `NSQuitAlwaysKeepsWindows=NO` control tests the restoration hypothesis. `NSAppleScriptEnabled=NO` tests whether the App's scripting declaration is responsible. `LSGetAppDiedEvents=NO` also leaves the delay. These are research-only Info.plist copies; none is proposed for the product. The first exploratory restoration copy also included `NSDisablePersistence` as an Info entry; that entry is not treated as proof of a supported NSApplication switch. The later single-key control is the useful comparison.
+
+The empty C entry has not created NSApplication, called `finishLaunching`, restored a window, dispatched an open-application event, or entered a run loop. An App-side restoration handler or NSApplication option applied after entry cannot explain a delay before that entry. The logs show the Apple Events hint and SIGCONT completing before the scan finishes. This excludes that handshake as the dominant observed interval; it does not claim that every OS restoration path has been exhaustively tested.
+
+**First notarized Developer ID build: required check.** The owner should produce a signed measurement-only empty-entry sibling from the same Release object inputs and engine as the signed App, with the receipt writer included before signing. Sign/notarize/staple it through the normal owner-run distribution process. Do not re-sign an existing distribution or change its quarantine state. We did not access a signing identity, Keychain or notary service.
+
+On its first natural launch from the intended distribution location, at load1≤12 under quiet → screen, record the exact `open -a` request, entry receipt and exit window before running an explicit Gatekeeper assessment. Then run seven interleaved launches per mode: `open -a APP`, default NSWorkspace, and the existing args request, retaining first and warm samples separately. Use the same `collect.py` predicate and exact-window filtering. Repeat the signed real App's normal Dock-equivalent launch and record sidebar/paint with its existing diagnostics in a separate functional/timing set. The empty sibling alone does not accept a product launch budget.
+
+Record these static checks after preserving the first-launch evidence (none needs signing credentials):
+
+```sh
+codesign --verify --deep --strict "$SIGNED_APP"
+codesign -d --verbose=4 "$SIGNED_APP"
+xcrun stapler validate "$SIGNED_APP"
+spctl --assess --type execute --verbose=4 "$SIGNED_APP"
+xattr -p com.apple.quarantine "$SIGNED_APP"  # absence is a recorded result
+```
+
+Compare the signed cohort's `ChangetimeScan` incidence/duration, AMFI chain result, request→RunningBoard/SIGCONT intervals and entry time with this ad-hoc cohort. A valid Developer ID chain, accepted notarization and absence of the long scan would support the signing hypothesis. A persistent scan would refute the claim that notarization alone removes it. Preserve network state and first/warm cache state; do not promise a 155 ms product gain from this research. Stop rather than answering any authentication dialog.
+
+No product code or product signing configuration changed.
 
 ## Current-source validation block
 
