@@ -12,29 +12,41 @@ are in `IntroTimeline.beats`; the Python generator reads the same table.
 
 | Beat | Start (s) | End (s) |
 |---|---:|---:|
-| introAnimation | 0 | 3.3 |
-| sellIntro | 3.3 | 9.8 |
-| sellCompleted | 9.8 | — |
-| Room / orbs | 0 | 1 |
-| Dim overlay | 0 | 1.5 |
-| Dim finish fade | 0 | 2.5 |
-| Door stroke | 0.3 | 1.9 |
-| Sun spring | 1.7 | 2.7 |
-| Bell pair | 2.3 | 2.47 |
-| Light spill | 2.4 | 3.3 |
-| Mark move / wordmark | 3.3 | 4.1 |
-| Identity line | 4.3 | 4.9 |
-| Value line 1 | 5.6 | 6.8 |
-| Value line 2 | 6.8 | 8 |
-| Value line 3 | 8 | 9.2 |
-| Button fade (enabled at start) | 9.8 | 10.2 |
-| Button spring (response 1.25, damping 0.9, 24 pt offset) | 9.8 | 11.05 |
-| Music plateau | 5 | 15 |
-| Sub entry | 3.3 | 5.3 |
-| Air sweep | 2.4 | 3.3 |
-| Music fade | 15 | 19.5 |
-| Digital silence | 19.5 | 20 |
-| Ambient pause | 23.5 | — |
+| `introAnimation` | 0 | 3.3 |
+| `sellIntro` | 3.3 | 9.8 |
+| `sellCompleted` | 9.8 | 9.8 |
+| `room` | 0 | 1 |
+| `dim` | 0 | 1.5 |
+| `dimFinish` | 0 | 2.5 |
+| `door` | 0.3 | 1.9 |
+| `sun` | 1.7 | 2.7 |
+| `bellPair` | 2.3 | 2.47 |
+| `spill` | 2.4 | 3.3 |
+| `markMove` | 3.3 | 4.1 |
+| `wordmark` | 3.3 | 4.1 |
+| `line` | 4.3 | 4.9 |
+| `value1` | 5.6 | 6.8 |
+| `value2` | 6.8 | 8 |
+| `value3` | 8 | 9.2 |
+| `button` | 9.8 | 10.2 |
+| `buttonSpring` | 9.8 | 11.05 |
+| `plateau` | 5 | 15 |
+| `subEntry` | 3.3 | 5.3 |
+| `airSweep` | 2.4 | 3.3 |
+| `sound` | 0 | 20 |
+| `soundFade` | 15 | 19.5 |
+| `idlePause` | 23.5 | 23.5 |
+| `reduceFade` | 0 | 0.6 |
+| `reduceButton` | 1 | 1 |
+| `handoff` | 0 | 0.45 |
+| `handoffSound` | 0 | 0.8 |
+| `syncLead` | 0 | 0.08 |
+| `soundDeadline` | 0 | 0.3 |
+| `measureFrames` | 0 | 8 |
+| `measureMemory` | 3 | 3 |
+| `orbBlue` | 0 | 18 |
+| `orbPurple` | 0 | 22 |
+| `orbWarm` | 0 | 26 |
 
 Other table constants: Reduce Motion fade 0–0.6 s, button enable 1 s;
 hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
@@ -69,8 +81,9 @@ of the spec's final phrase, whose exact resolution time was unspecified.
 
 The v2 master plateau is approximately −14 LUFS. Normal playback uses volume
 0.5 (about −20 LUFS heard); silent automation sets volume zero before player
-preparation. The master leaves extra headroom below the v1 −1 dBFS peak
-ceiling to meet the newer loudness target. No automation run emits audio.
+preparation. The PCM peak is −2.90 dBFS, below the original −1 dBFS target.
+This retains the v2 loudness target. Acceptance of this headroom, or a score
+retune to hit both values, is a decision for the lead. No automation run emits audio.
 
 Run the actual offscreen renderer and decoder after building their product:
 

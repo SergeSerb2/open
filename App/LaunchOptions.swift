@@ -96,7 +96,7 @@ struct LaunchOptions {
     if replayOnboarding {
       let root = userDataDirectory.standardizedFileURL.resolvingSymlinksInPath().path
       let temp = FileManager.default.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath().path
-      let safe = explicitUserData && (root.hasPrefix("/private/tmp/") || root.hasPrefix(temp + "/"))
+      let safe = explicitUserData && (root.hasPrefix("/private/tmp/") || root.hasPrefix("/tmp/") || root.hasPrefix(temp + "/"))
       replayRefused = !safe
     }
   }
