@@ -149,6 +149,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     }
     if step == .name {
       let field = NSTextField(string: name); field.placeholderString = "Your name"; field.font = .systemFont(ofSize: 20)
+      field.setAccessibilityElement(true); field.setAccessibilityRole(.textField)
       field.setAccessibilityLabel("Your name"); field.delegate = self; field.target = self; field.action = #selector(acceptName(_:))
       field.frame = NSRect(x: 0, y: 0, width: 380, height: 40); controls.addSubview(field); nameField = field
     }
@@ -191,7 +192,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
           card.frame = NSRect(x: 0, y: index*64, width: 395, height: 52)
           let radio = NSButton(radioButtonWithTitle: text, target: self, action: #selector(defaultChanged(_:)))
           radio.font = .systemFont(ofSize: 15); radio.tag = index; radio.state = defaultYes == (index == 0) ? .on:.off
-          radio.frame = NSRect(x: 16, y: 0, width: 363, height: 52); radio.setAccessibilityLabel(text)
+          radio.frame = NSRect(x: 16, y: 0, width: 363, height: 52)
+          radio.setAccessibilityElement(true); radio.setAccessibilityRole(.radioButton); radio.setAccessibilityLabel(text)
           card.addSubview(radio); controls.addSubview(card)
         }
       }

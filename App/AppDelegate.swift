@@ -342,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     hostFactories[state.id] = factory
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
-      snapshotStore: session == nil ? snapshotStore : nil, incognitoTitle: title)
+      snapshotStore: session == nil && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title)
     if isFirstRun, let onboarding = onboardingWindowController, !onboarding.replay {
       controller.allowsWindowActivation = false
       controller.window?.alphaValue = 0
@@ -526,7 +526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("firstRunLandingStarted")
     let states = model.windows.filter { $0.style == .standard }
     for state in states { createWindowController(state: state) }
-    if let onboarding = onboardingWindowController, let window = onboarding.window {
+    if let onboarding = onboardingWindowController, !onboarding.replay, let window = onboarding.window {
       for controller in windowControllers {
         controller.allowsWindowActivation = false
         if let browser = controller.window { onboarding.hidePreparedBrowser(browser) }

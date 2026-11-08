@@ -285,7 +285,11 @@ def run(factory, results, tmp, h):
                 blocker=hashlib.sha256(Path(app.user_data,'adblock-settings.json').read_bytes()).hexdigest(),
                 name=app.call('defaults', key=keys[0], persistent=True),
                 completed=app.call('defaults', key=keys[1], persistent=True))
+        # Flush the ordinary hand-off window-state save before the replay starts.
+        # Replay still has to preserve the complete saved bytes, not a subset.
+        app.call('save')
         baseline = persisted()
+        replay_before = snapshot().read_bytes()
         action('replay-intro'); action('skip-intro'); action('get-started'); screen('name')
         action('set-name', name='Replay only'); action('next'); screen('favorites')
         action('toggle-favorite', index=1); action('next'); screen('theme')
@@ -295,6 +299,9 @@ def run(factory, results, tmp, h):
         replay_ready = state(); action('shuffle-card'); action('get-started')
         until(lambda: not state()['active'] and not state()['dim']['exists'])
         replay_saved = persisted()
+        if replay_saved['snapshot'] != baseline['snapshot']:
+            (evidence/'replay-before.json').write_bytes(replay_before)
+            (evidence/'replay-after.json').write_bytes(snapshot().read_bytes())
         replay_saved['defaultAttempted'] = replay_ready['defaultAttempted']
         gate('replay_read_only', lambda s: all(s.get(key)==value for key,value in baseline.items())
             and s.get('defaultAttempted') is False, replay_saved, pending)

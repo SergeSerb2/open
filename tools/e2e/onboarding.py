@@ -217,6 +217,21 @@ def run(factory, results, tmp, h):
             replay_launch = state()
             gate('replay_temp_root_allowed', lambda s: s.get('active') and s.get('screen')=='intro', replay_launch, returning)
             gate('replay_default_root_refused', lambda s: s.get('exit')==64 and s.get('refused'), denied_state, replay_launch)
+            app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+            assert until(lambda: state()['screen']=='name'), state()
+            for _ in range(7):
+                screen = state()['screen']
+                if screen == 'ready': break
+                app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
+                assert until(lambda: state()['screen']!=screen), state()
+            app.call('onboarding', action='get-started')
+            assert until(lambda: not state()['active']), state()
+            replay_windows = app.call('windows')
+            replay_finished = dict(same=Path(root,'State/browser.json').read_bytes()==prior,
+                browserVisible=any(w['class']=='BrowserWindow' and w['visible'] and w['alpha']==1 and w['key'] for w in replay_windows),
+                firstRun=app.call('first-run')['active'])
+            gate('replay_launch_finishes_read_only', lambda s: s['same'] and s['browserVisible'] and not s['firstRun'],
+                 replay_finished, dict(same=True,browserVisible=bool(app.call('onboarding')['active']),firstRun=False))
             app.quit()
         launch('--intro-sound=off')
         before_intro_close = state()
