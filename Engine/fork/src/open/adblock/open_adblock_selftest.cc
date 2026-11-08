@@ -9,6 +9,8 @@
 #include <time.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -741,6 +743,100 @@ std::vector<BenchItem> ReadBenchFile(base::FilePath path) {
   return items;
 }
 
+// Non-official C-G2 harness: the off Profile still has a loaded engine.
+// Pace on UI, but enqueue exactly one task per check on the normal matcher
+// runner. Neither synthetic checks nor a file read execute on UI.
+struct BenchLoadState {
+  std::vector<BenchItem> items;
+  double rate = 0;
+  base::TimeTicks start;
+  base::TimeTicks last_log;
+  uint64_t posted = 0;  // UI only.
+  std::atomic<uint64_t> checks{0};
+  std::atomic<uint32_t> pending{0};
+};
+
+std::atomic<uint64_t> g_bench_load_checks{0};
+std::atomic<bool> g_bench_load_started{false};
+
+void PumpBenchLoad(base::WeakPtr<OpenAdBlockService> service,
+                   std::shared_ptr<BenchLoadState> state) {
+  if (!service) {
+    fprintf(stderr, "OpenAdBlockBenchLoad: stopped checks=%llu\n",
+            static_cast<unsigned long long>(state->checks.load()));
+    return;
+  }
+  const auto now = base::TimeTicks::Now();
+  const uint64_t due =
+      static_cast<uint64_t>((now - state->start).InSecondsF() * state->rate);
+  while (state->posted < due && state->pending.load() < 1000) {
+    const size_t index = state->posted++ % state->items.size();
+    state->pending.fetch_add(1);
+    AdBlockMatcherTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](scoped_refptr<OpenAdBlockMatcher> matcher,
+                          std::shared_ptr<BenchLoadState> state, size_t index) {
+                         const auto& item = state->items[index];
+                         matcher->Check(item.url, item.source, item.type,
+                                        kOpenAdBlockMatchCapBytes);
+                         state->checks.fetch_add(1);
+                         g_bench_load_checks.fetch_add(1);
+                         state->pending.fetch_sub(1);
+                       },
+                       service->matcher(), state, index));
+  }
+  if (now - state->last_log >= base::Seconds(1)) {
+    fprintf(stderr,
+            "OpenAdBlockBenchLoad: rate=%.3f elapsed_s=%.3f checks=%llu "
+            "posted=%llu pending=%u\n",
+            state->rate, (now - state->start).InSecondsF(),
+            static_cast<unsigned long long>(state->checks.load()),
+            static_cast<unsigned long long>(state->posted),
+            state->pending.load());
+    state->last_log = now;
+  }
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(&PumpBenchLoad, service, std::move(state)),
+      base::Milliseconds(1));
+}
+
+void StartBenchLoad(base::WeakPtr<OpenAdBlockService> service) {
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch("open-adblock-bench-load")) {
+    return;
+  }
+  double rate = 0;
+  if (!base::StringToDouble(
+          command_line->GetSwitchValueASCII("open-adblock-bench-load-rate"),
+          &rate) ||
+      !std::isfinite(rate) || rate <= 0 || rate > 1000000) {
+    fprintf(stderr, "OpenAdBlockBenchLoad: FAIL invalid rate\n");
+    return;
+  }
+  AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&ReadBenchFile, command_line->GetSwitchValuePath(
+                                         "open-adblock-bench-load")),
+      base::BindOnce(
+          [](base::WeakPtr<OpenAdBlockService> service, double rate,
+             std::vector<BenchItem> items) {
+            if (!service || items.empty()) {
+              fprintf(stderr, "OpenAdBlockBenchLoad: FAIL no live corpus\n");
+              return;
+            }
+            auto state = std::make_shared<BenchLoadState>();
+            state->items = std::move(items);
+            state->rate = rate;
+            state->start = state->last_log = base::TimeTicks::Now();
+            g_bench_load_started.store(true);
+            fprintf(stderr,
+                    "OpenAdBlockBenchLoad: started rate=%.3f urls=%zu\n", rate,
+                    state->items.size());
+            PumpBenchLoad(service, std::move(state));
+          },
+          service, rate));
+}
+
 // Repetition 1 is warm-up (a first regex compile can take 6.78 ms, F-35):
 // its max is printed apart; mean, p50, p99 and max cover repetitions 2-10.
 void PrintTimings(const std::string& label,
@@ -1431,6 +1527,9 @@ void LoadOpenAdBlockForSmoke(OpenAdBlockService* service,
             fprintf(stderr, "OpenAdBlockSmoke: load result=%s %s\n",
                     kNames[static_cast<int>(result)],
                     AdBlockStatusText(service->GetStatus()).c_str());
+            if (result == AdBlockLoadResult::kLoaded) {
+              StartBenchLoad(service);
+            }
           },
           service->GetWeakPtr()));
 }
@@ -1438,6 +1537,13 @@ void LoadOpenAdBlockForSmoke(OpenAdBlockService* service,
 void RecordOpenAdBlockMemoryPhase(const char* phase) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch("open-adblock-diagnostic")) {
     MemorySnapshot(phase);
+  }
+}
+
+void PrintOpenAdBlockBenchLoadCount() {
+  if (g_bench_load_started.load()) {
+    fprintf(stderr, "OpenAdBlockBenchLoad: shutdown_checks=%llu\n",
+            static_cast<unsigned long long>(g_bench_load_checks.load()));
   }
 }
 

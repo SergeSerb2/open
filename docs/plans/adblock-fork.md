@@ -2054,7 +2054,8 @@ interface AdBlockCosmetics {
       => (AdBlockDocumentCosmetics? cosmetics);
 
   // Generic class/ID selectors for tokens the observer has not sent before.
-  GetGenericSelectors(array<string> classes, array<string> ids,
+  GetGenericSelectors(url.mojom.Origin top_origin,
+                      array<string> classes, array<string> ids,
                       array<string> exceptions)
       => (array<string> selectors);
 };
@@ -2106,7 +2107,9 @@ as `GetNewBrowserInfo(render_frame_token)` does (`cef.mojom:138-140`).
   URL is `http`/`https`, and the registrable domain (or host) of
   `top_origin` is not excluded. Else run the shim's cosmetic query and
   convert the vectors to the mojom struct. No UI-thread step, no file I/O.
-- `GetGenericSelectors`: cap the input at **500 tokens in total**
+- `GetGenericSelectors`: re-check enabled state and `top_origin` exclusions
+  on every request; return an empty array when inactive. Carry the origin
+  per call because documents share a pipe. Cap the input at **500 tokens in total**
   (classes plus IDs) per call, drop the rest, run `HiddenSelectors`,
   reply. This is the one batch limit, shared with the observer in §8.3
   (review r2 N-9), so a reply holds at most 500 selectors and becomes
@@ -3499,11 +3502,11 @@ first-party host, `127.0.0.2` the third-party host):
 ||127.0.0.1/api/data.json$removeparam=utm_source
 ||127.0.0.1/generichide.html$generichide
 127.0.0.1##.ad-slot
-127.0.0.1##.late-ad
 127.0.0.1##.ad-slot-allowed
 127.0.0.1#@#.ad-slot-allowed
 ##.generic-ad
-127.0.0.1##+js(open-test-scriptlet)
+##.generic-static-ad
+127.0.0.1##+js(open-test-scriptlet.js)
 ```
 
 The `$generichide` rule is scoped to the `generichide.html` URL
@@ -3531,17 +3534,20 @@ tests its suppression.
   `<div class="ad-slot-allowed">` (`#@#` exception — must stay visible;
   note the list also needs `127.0.0.1##.ad-slot-allowed` for the
   exception to have something to except: add it above `#@#`),
-  `<div class="generic-ad">` (generic hide via class token),
+  `<div class="generic-static-ad">` (generic hide via the initial class token),
 - a button-free timer: at +500 ms, insert
-  `<div class="late-ad">` and `<div class="generic-late">` (the second
-  via class `generic-ad` added dynamically — one rule, two paths:
-  `.late-ad` is domain-specific so it hides at document start only if
-  present then; dynamic insertion tests the token flow. Give the late
-  node class `late-ad generic-ad` so both channels are exercised),
-- the scriptlet target: rule `##+js(open-test-scriptlet)`, with **no**
-  resource of that name. v1 must **not** run it (C-5); the rule stays as
-  a must-drop case. The test `resources.json` holds only `noop.js`,
-  because v1 resources exclude scriptlet templates (§9.3).
+  `<div class="late-ad generic-ad">`. No domain-specific `.late-ad`
+  rule is present: an initial CSS rule also matches future nodes and
+  would make C-4 pass without the observer. Only the generic token
+  round-trip may hide this late node. The initial generic node uses
+  `generic-static-ad`, so the late node introduces new class tokens and
+  requires mutation delivery as well as the initial scan,
+- the scriptlet target: rule `##+js(open-test-scriptlet.js)` and a
+  matching **synthetic test-only** `kind: "template"` resource that sets
+  `window.__openTestScriptlet`. The crate must resolve it for C-5's
+  drop counter to increase; without a resource, the counter is zero.
+  The shim must discard it and the renderer must never execute it.
+  Production bundled resources still exclude scriptlet templates (§9.3).
 
 `generichide.html`: contains `<div class="generic-ad">` (must stay
 **visible** — generic hide suppressed) and `<div class="ad-slot">`
@@ -3554,10 +3560,10 @@ on disk proves blocks are ours, not 404s), `track/pixel.gif` (a real
 `printf 'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b' > track/pixel.gif`
 at Step 4; verify with `file`), `api/data.json` (`{}`).
 `resources.json` format: the crate's serialized `Vec<Resource>` (§9.3),
-with one entry, `noop.js`. Make it with the Step 7 `/tmp` driver from a
-one-file input, or write it by hand in the crate's serde form; it is
-Open's own test data, not converted uBlock Origin content. It is listed
-in the fixture manifest as `_resources`.
+with `noop.js` plus the synthetic C-5 template. The latter is test data
+only and must never enter production resources. Both entries are Open's
+own synthetic data, not converted uBlock Origin content. The file is
+listed in the fixture manifest as `_resources`.
 
 **Additions 2026-10-26** (Steps 4–5). New lines at the end of
 `testlist.txt`:
@@ -4630,3 +4636,115 @@ distribution, real App acceptance and the full verify gate remain pending
 in E3. N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
+
+
+### Step 5 as built (2026-11-08, code checkpoint; runtime unverified)
+
+Branch `s13/step5-cosmetics` starts at Step 4 `dc7b985a`. No engine root
+has been assigned to E4. This checkpoint is source work only: no engine
+apply, GN generation, build, cefsimple launch or App acceptance has run.
+Step 5 remains **in progress**. Step 4 remains the stack base; its entry
+gate is waived for code preparation only by the E4 brief.
+
+- `mojom/open_adblock.mojom` carries the initial sorted hide selectors,
+  generic exceptions and `generichide`. `OpenAdBlockCosmeticsHost` is a
+  self-owned receiver bound with `BinderRegistry::AddInterface` on
+  `AdBlockCosmeticsTaskRunner()`. Only registry setup runs on UI. Requests
+  hold a matcher reference, never a Profile or service pointer, and do no
+  file I/O. Disabled, unloaded, non-http(s), opaque-top and excluded-site
+  initial requests return null.
+- `cef/0311` adds the renderer-process registry hook while retaining its
+  Step 4 network and socket hooks. New `cef/0901` (P-4) attaches one
+  `OpenAdBlockRendererAgent` per frame. GN generates Mojo files; none are
+  committed. The renderer has a separate GN source set, without Rust or
+  browser-only dependencies.
+- The process pipe binds at first frame creation. An http(s) document
+  makes one sync query at `DidCreateDocumentElement`; a failed pipe is
+  never retried. Each sanitized selector gets its own fixed
+  `{display:none!important}` rule, inserted with `WebCssOrigin::kUser`
+  and `BackForwardCacheAware::kAllow`. No style DOM node, CSS-valued
+  script interpolation or main-world global is created.
+- The fixed class/ID observer runs in
+  `ISOLATED_WORLD_ID_CHROME_INTERNAL` only after native binding installation.
+  An early context callback installs the binding idempotently; its
+  `v8::Global<Context>` follows release. Weak callbacks read the current
+  payload lazily. Generic replies carry a document epoch and old replies
+  are discarded. `generichide` prevents the observer and all reports.
+- Generic batches contain at most 500 class/ID tokens in total; the host
+  also caps each reply at 500 selectors (one token can match several).
+  The renderer allows at most 64 inserted generic sheets and reserves a
+  slot for each pending reply. Empty replies release the slot. The fixed
+  observer retries unsent tokens if all remaining slots are reserved.
+  It debounces by 100 ms and never sends an accepted token twice.
+- The observer uses a TreeWalker instead of building an array of DOM
+  nodes. Its lifetime sets/queues stop collecting at 65,536 distinct
+  tokens or 4,194,304 UTF-16 code units, whichever comes first. Each
+  token is at most 2,048 UTF-16 code units; native and host input also
+  limit its UTF-8 size to 2,048 bytes. These are defensive work limits,
+  separate from the sheet count. Already queued tokens still drain.
+- The inherited non-official `--open-adblock-off` switch stays in 0310.
+  The smoke loader now supports `--open-adblock-bench-load=<file>` and
+  `--open-adblock-bench-load-rate=<R>`: read on the build runner, then pace
+  one normal-runner task per `Check`, even with blocking off. At most
+  1,000 checks are queued. Logs give requested rate, elapsed time, posted,
+  pending and completed counts. A normal shutdown also prints the aggregate
+  count on the matcher sequence after queued checks. The run must report actual completed
+  checks and any backlog; requested R alone is not contention proof.
+  `--open-adblock-drop-cosmetics-receiver` closes the browser receiver
+  without binding it. All three added switch paths are non-official only.
+- Renderer `--v=1` logs identify frame/document, query microseconds,
+  first-in-process calls, null/failure replies, installation order,
+  insertion counts/bytes/time and the generic sheet ceiling. Non-official
+  verbose insertions also log in-process `TASK_VM_INFO.phys_footprint`
+  before the first sheet and after each sheet. Insertion time measures
+  `InsertStyleSheet`, not later style recalculation. The worst-case receipt
+  must separately force style resolution and record the CDP
+  `RecalcStyleDuration` delta and final renderer footprint.
+
+**Sanitizer security callout (98-2, unchanged Rust shim).**
+`rust/src/lib.rs::check_selector` rejects empty selectors, selectors over
+2,048 UTF-8 bytes, newline/CR/form-feed/NUL anywhere, unclosed strings,
+a trailing escape, mismatched delimiters and nesting beyond 32 levels.
+Outside quoted strings, it rejects unescaped `{`, `}`, `;`, `<`, `@` and
+`/*`. A backslash escapes the next byte; quoted attribute text can contain
+those punctuation characters. Procedural operator detection is ASCII
+case-insensitive (`PROCEDURAL` in `lib.rs`); native `:has()` stays.
+The shim discards and counts `:style()`, `:remove*()` and scriptlet output.
+It sorts selectors before applying `Sanitizer`'s 256 KiB sum of kept
+UTF-8 selector bytes. Generic output uses the same sanitizer and cap.
+The host and renderer add only the fixed display declaration. No Rust
+change or engine-format bump is made by this checkpoint.
+
+**Errata to §8.** Generic requests now carry `top_origin`, as initial
+requests do. The old generic signature could not re-check exclusions on
+a process pipe shared by several documents. The renderer checks for an
+empty result from `GetScriptContextFromWorldId`; if needed it creates the
+world with fixed `void 0`, then installs before executing the observer,
+matching the existing P7 creation pattern. The legacy shared Chrome
+internal world is kept as specified; the separate Open world is not
+silently substituted. The observer token/character work limits and the
+64-slot reservation are explicit implementation bounds. The 500-selector
+reply cap is independent of the 500-token input cap.
+
+| Acceptance | Current result |
+|---|---|
+| Patch syntax/application against pinned public CEF source fixture | PASS (0311 and 0901; static only) |
+| Extracted fixed observer `node --check` | PASS (syntax only) |
+| Rust sanitizer review against §8.3 and Step 2 refinements | Source reviewed; unchanged; runtime verification pending |
+| GN/build, C-1…C-8/C-10, C-4 ×10, install-before-execute | PENDING: no assigned root; C-9 stays reserved |
+| Contended C-G1/C-G2, T/R/check count, C-G3, worst-case payload | PENDING; no timing result or load receipt exists |
+| Receiver drop, quit-during-load ×5 | PENDING |
+| Real-App EasyList on/excluded/off controls and `adblock` + `page` suites | PENDING: lead must authorize this engine in the App |
+
+**Fixture errata.** Remove the domain-specific `.late-ad` rule so C-4
+requires the generic observer. The initial generic element uses
+`generic-static-ad`, so it cannot preload the late `generic-ad` selector.
+Add an Open-written test-only scriptlet
+template and use its exact `.js` name in the fixture list: an unresolved
+scriptlet cannot increment C-5's resolved-output drop counter. Refresh the
+fixture's byte counts and SHA-256 values. This does not add production
+scriptlets or change the bundled resource policy.
+
+The priority lane and no-wait fallback are not added speculatively. Run
+both contended gates first, then apply §8.2 escalation if required.
+Runtime receipts and each milestone checkpoint belong in `.re/s13/e4/`.

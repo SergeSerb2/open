@@ -1,0 +1,19 @@
+diff --git a/cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc b/cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc
+--- a/cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc
++++ b/cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc
+@@ -11,6 +11,7 @@
+ #include "chrome/renderer/printing/chrome_print_render_frame_helper_delegate.h"
+ #include "content/public/renderer/render_frame.h"
+ #include "content/public/renderer/render_thread.h"
++#include "open/adblock/renderer/open_adblock_renderer_agent.h"
+ #include "third_party/blink/public/web/web_view.h"
+
+ ChromeContentRendererClientCef::ChromeContentRendererClientCef()
+@@ -44,6 +45,7 @@
+   // Will delete itself when no longer needed.
+   CefRenderFrameObserver* render_frame_observer =
+       new CefRenderFrameObserver(render_frame);
++  new open_engine::OpenAdBlockRendererAgent(render_frame);
+
+   bool browser_created;
+   std::optional<cef::BrowserConfig> config;

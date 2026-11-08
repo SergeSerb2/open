@@ -383,3 +383,21 @@ live Open Default; named Profiles still match stable import IDs only.
 - Closed: restore-windows preference App consumer. Off opens one centered default-size standard window on the most recently focused Space and selection; on restores the saved windows and frames. The sidebar model is retained.
 - Closed: Profile Clear Browsing Data downloads consumer. Terminal session rows clear by start time for every range. Running/paused downloads and files remain; invalid selections fail before mutation. No persisted App download-history store exists; Section 10's granular OpenEngine API now clears native download history too. Main's Last 4 weeks range and independent cookies/cache choices are retained.
 - Closed: Library History default Profile follows the front standard window when it opens, falls back to the default Profile without a standard window, and preserves a manual choice while visible. The Settings Profile page stays at its five parity rows; it has no History entry.
+
+
+## Section 13 cosmetic filtering checkpoint (2026-11-08)
+
+- Step 5 source is on `s13/step5-cosmetics`; no engine root is assigned at
+  this checkpoint. All C-cases, contended C-G1/C-G2, C-G3, worst-case
+  renderer footprint/style-recalc record, receiver-drop, five quit-load
+  runs and real-App on/excluded/off proofs remain pending. The lead must
+  authorize App use of that engine before the App `adblock`/`page` runs.
+- Scriptlets, `:style()`, `:remove*()` and procedural filters remain
+  post-v1 by lead ruling 6. The shared Chrome internal isolated world is
+  kept for this milestone; coordinate a dedicated cosmetic world with P7
+  before a co-tenant enumerates that world's globals (plan §8.3).
+- Generic collection stops at 65,536 distinct tokens or 4,194,304 UTF-16
+  code units per document; native inputs also cap each token at 2,048
+  UTF-8 bytes. A page beyond those limits can miss generic hiding. Review
+  these work bounds against real-page traces without raising the 64-sheet
+  cap or bypassing sanitizer rules.

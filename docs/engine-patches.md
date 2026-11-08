@@ -552,6 +552,22 @@ purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
 Final quiet/page gates, document-count proof and distribution remain pending.
 Only lead rulings 2a and 4a replace the original budgets.
 
+### Step 5 implementation checkpoint (2026-11-08)
+
+| Piece | Source change | Verification |
+|---|---|---|
+| P-3, `cef/0311` registry hook | Register the per-Profile matcher on `AdBlockCosmeticsTaskRunner()`. No request returns to UI. Network/socket hunks retained. | Applies to pinned CEF source fixture; engine build pending root assignment. |
+| P-4, `cef/0901-open-adblock-renderer-agent.patch` | Include and attach one per-frame cosmetic agent. Mojo host, isolated observer and user-origin sheets live in overlay; generated Mojo files stay out of patches. | Patch application and observer syntax PASS; C-cases and gates pending. |
+| Non-official harness | Existing off switch plus paced `--open-adblock-bench-load` / `--open-adblock-bench-load-rate` and receiver-drop switch. Renderer verbose logs include timing, counts and in-process footprint. | Source only; no runtime/timing claim. |
+
+The unchanged sanitizer's exact quote, escape, delimiter, procedural and
+256 KiB rules are quoted in the plan's "Step 5 as built" security callout
+(98-2). It returns selector vectors, and the renderer constructs only the
+fixed `display:none!important` declaration. No scriptlets, style/remove
+or procedural action executes. Generic requests carry the top origin to
+re-check the global toggle and site exclusions for every batch. See the
+plan's errata and explicit pending acceptance table.
+
 ### Control API (Section 13, 2026-11-07)
 
 The `cef_open_adblock.h` overlay adds six free functions, with generated C

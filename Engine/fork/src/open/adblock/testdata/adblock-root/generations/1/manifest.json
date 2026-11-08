@@ -4,16 +4,16 @@
     {
       "file": "testlist.txt",
       "listID": "testlist",
-      "bytes": 1129,
-      "sha256": "8fe3d5da949a8591c41e0c695e02695acfdd3c30a0eef7fb0179ca7e67a1103f",
+      "bytes": 1133,
+      "sha256": "955ab4d0dc7a2c1b4b98b760143002960c10930fe6fe44d5a8b930ea5ba83958",
       "sourceRevision": "open-test",
       "generation": 1
     },
     {
       "file": "resources.json",
       "listID": "_resources",
-      "bytes": 128,
-      "sha256": "675e395b0ef35a9b3ce860efef1d8980a1ca206844061647389093750d18648e",
+      "bytes": 254,
+      "sha256": "0a28dbb12187296851608719005cf6effe7af50e2ae9b85506f84795aaf5cd7c",
       "sourceRevision": "open-test",
       "generation": 1
     }
