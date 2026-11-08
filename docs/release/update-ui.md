@@ -36,6 +36,10 @@ Known launch-cost item: the pinned Sparkle binary eagerly links WebKit. The
 launch-fixes work owns delaying the Sparkle load. This UI keeps the existing
 Sparkle dependency and does not build it from source.
 
+The UI uses event callbacks. It adds no timers, polling, or display links.
+Status and updater windows are created when needed and released on close.
+Banner views exist only while a banner or its dismissal animation is needed.
+
 A background update ready to install takes the bottom sidebar banner slot.
 Clicking it asks for Restart or Cancel. Dismissal lasts for the session. With
 automatic updates off, dismissal increments a count and applies no threshold.
