@@ -1,7 +1,7 @@
 """Real App Welcome tab lifecycle, native page, and finite CA playlist.
 
 Only the existing automation socket and the App's own event/menu paths are used.
-No global input or real user data. No preference keys are changed by this suite.
+No global input or real user data. Shared preferences are restored in finally.
 """
 import json
 import os
@@ -20,7 +20,7 @@ def run(factory, results, tmp, api):
     evidence.mkdir(parents=True, exist_ok=True)
     app = None
     domain = 'io.github.sergeserb2.open'
-    keys = ('open.settings.lastPane', 'open.library.lastSection')
+    keys = ('open.settings.lastPane', 'open.library.lastSection', 'open.import.lastArcDir')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {key: before.get(key) for key in keys}
