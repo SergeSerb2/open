@@ -153,3 +153,23 @@ then builds the Release and Debug Apps, compiles the existing e2e helpers and
 prepares temporary DLV copies. It launches no App and starts no suite.
 All screen runners retain the local hold guard. Full `verify-all` also waits
 for screen clearance because it opens windows.
+
+### Supplemental off-screen control
+
+`offscreen-main/receipt.json` records a windowless caller of the real public
+OpenEngine startup, message-loop and shutdown API. It uses the matched main
+engine `619324d3` in a disposable bundle, with a 55,920-byte caller executable.
+The caller creates no browser or native window and uses a temporary profile
+and the mock keychain. It keeps `MacAppCodeSignClone` enabled. This is engine
+lifecycle evidence; it does not satisfy the normal-App or helper-rendering
+rows above.
+
+The main control passed: its original executable retained the same device,
+inode, size and mtime, while link count went from 1 to 2 during initialization
+and back to 1 after cleanup. Its ctime changed. The caller initialized and
+shut down successfully; the AppKit and owned on-screen-window checks found
+no windows. No real crash report appeared. All owned processes, temporary
+paths and test cache paths were removed. Crash-dialog suppression was
+restored. Load1 was 17.17 before the functional run and 18.28 afterward;
+this was not a timing measurement. The branch comparison remains pending
+the rebuilt engine.
