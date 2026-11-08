@@ -25,7 +25,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       root: app.directories.root, snapshot: app.snapshotStore,
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
-    if !app.isFirstRun || app.firstRunSaved {
+    // Command services can create Settings before its window is shown. An
+    // unsupported engine must not open a Profile or schedule list updates then.
+    if (!app.isFirstRun || app.firstRunSaved) && app.adBlockEngineAdapter.isSupported {
       if let store = app.stores.adBlock { vm.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
       else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
     }
@@ -47,14 +49,18 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       $0.isEnabled && AdBlockKnownBlockers.extensionIDs.contains($0.identifier)
     }
   }
-  func attachBrowserStores() {
+  func attachBrowserStores(openingSettings: Bool = false) {
+    guard openingSettings || app.adBlockEngineAdapter.isSupported else { return }
     if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
   @ObservationIgnored private(set) var library: LibraryViewModel?
   @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
-  func show(pane: PaneID? = nil) { settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild() }
+  func show(pane: PaneID? = nil) {
+    attachBrowserStores(openingSettings: true)
+    settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild()
+  }
   func showProfileSettings(profileID: ProfileID) {
     guard app.model.profile(id: profileID) != nil else { return }
     settings.profiles.select(profileID); show(pane: .profiles)

@@ -161,6 +161,8 @@ ad-block API is currently a placeholder: `adBlockStatus.engine` is `pending`
 and no requests are blocked until the Section 13 E2 engine binding lands.
 `OEBrowserContext.adBlockSupported` is false, so the store's engine callback stays
 nil and launch opens no Profile in the store or starts its update schedule.
+Command-service Settings initialization also leaves the store unattached when
+the engine is unsupported; showing Settings attaches it on demand.
 Opening Settings → Advanced still opens the selected Profile (`ready: true`).
 The placeholder row checks this after first paint and a 5 s observation.
 Settings reports that blocking is not active. The query also returns
