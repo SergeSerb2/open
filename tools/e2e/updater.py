@@ -593,7 +593,8 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
             state = wait(lambda: ui(app), lambda s: s.get('phase') in ('found', 'upToDate'), 'no result window')
             row = ax(app, state['updateWindow'])
             if variant == 'up-to-date':
-                results['A4_up_to_date'] = {'ok': 'Your browser is up to date' in row.get('text', [])
+                version = 'Version ' + original['CFBundleShortVersionString'] + ' (' + original['CFBundleVersion'] + ')'
+                results['A4_up_to_date'] = {'ok': version in row.get('text', []) and 'Your browser is up to date' in row.get('text', [])
                     and 'Close' in row.get('text', []), 'ax': row,
                     'paths': capture_pair(app, opts, 'up-to-date', state['updateWindow'])}
                 app.call('key', key='return', window=state['updateWindow'], route='app')

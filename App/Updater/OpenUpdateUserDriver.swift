@@ -213,7 +213,10 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   func showUpdateNotFoundWithError(_ error: any Error, acknowledgement: @escaping () -> Void) {
     closeStatus(); closeUpdateWindow(); cancel = nil; available = false; phase = "upToDate"
     let window = UpdateWindowController(title: "Open Update")
-    updateWindow = window; window.column.prompt.stringValue = "Your browser is up to date"
+    updateWindow = window
+    let installed = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    window.column.version.stringValue = "Version \(installed) (\(build))"
+    window.column.prompt.stringValue = "Your browser is up to date"
     window.column.primary.title = "Close"; window.column.primary.keyEquivalent = "\r"
     self.acknowledgement = acknowledgement
     let close: () -> Void = { [weak self] in self?.acknowledge() }
