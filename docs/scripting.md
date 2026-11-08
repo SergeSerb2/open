@@ -357,6 +357,25 @@ loading and request counts, and unchanged sidebar-tab IDs. Shared defaults are
 reset and restored in `finally`. External Automation consent remains a separate
 user gate.
 
+Little Open acceptance on M5 (`b8f321e9`, App code `0ee5128d`, main merged as
+`3b2a7487`; engine distribution `2ecaeadab71b3da3…`):
+
+| Check | Result | Local receipt |
+|---|---|---|
+| `applescript`, warm and cold | 208 PASS, 0 FAIL; external osascript/JXA 2 BLOCKED; zero interrupted attempts; cleanup PASS | `.re/applescript-littleopen/m5-functional/results-applescript-debug.json` |
+| `littleopen` | M5 39 PASS, 0 FAIL; zero interrupted attempts; cleanup PASS | `.re/applescript-littleopen/m5-functional/results-littleopen-debug.json` |
+| `page` / D4 | M5 85 PASS, 0 FAIL; 4 existing BLOCKED, 1 DEFERRED; all 3 D4 rows PASS; zero interrupted attempts; cleanup PASS | `.re/applescript-littleopen/m5-functional/results-page-chrome.json` |
+| Core/setd negative → positive | M1 WIP `6c7fec9f` crashed during receiver decoding; fixed M5 App sends real events with zero native windows, exits 0; normal URL setters also pass warm/cold A11 | `.re/applescript-littleopen/set-description-proof.json` |
+| Old creation path | M1 unchanged `df4767ad` returns 1011 on warm and cold application make; the new A15 creation gate refuses that result | `.re/applescript-littleopen/old-code-negative.json` |
+
+A15 verifies the returned ID against the specific native session, URL/title/loading,
+unchanged model-tab IDs, fresh same-URL creation, all supported page verbs, the JS
+permission gate and strict CSP, every stale property/verb/setter returning 1000,
+unsupported operations returning 1009, and blank-bar navigation into page mode.
+The single deadline check returned 1014 after 10.017 s at load 18.24/21.89/34.79;
+its configured deadline remains ten seconds, and a following execute succeeds.
+The M1 crashed build was not relaunched. External sender consent remains open.
+
 ## Step 1–4 verification (2026-10-25, America/Vancouver)
 
 All package builds ran inside `Packages/OpenKit` with
