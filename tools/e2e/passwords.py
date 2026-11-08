@@ -751,6 +751,10 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('P-12', card_fill, ['P-11'])
 
             def card_reauthentication():
+                # The previous row restored this pref in memory. A graceful
+                # checkpoint commits it before a system-auth modal can require
+                # forced cleanup of an unresponsive automation socket.
+                relaunch()
                 assert app.call('credentials-prefs')['cardReauthentication'] is True
                 tab = load(urls['card']); assert popup(tab, '#number')
                 authenticating = app
@@ -802,7 +806,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 # Verified-PID cleanup cancels this owned request before any
                 # later row. It does not send input to the system dialog.
                 relaunch()
-                assert app.call('credentials-prefs')['cardReauthentication'] is True
+                assert app.call('credentials-prefs')['cardReauthentication'] is True, 'restored card reauth preference did not survive auth cleanup'
                 losses = tracker.loss() if tracker else []
                 losses += [e for e in observations if e['frontmostPID'] != authenticating.pid]
                 auth_changes = [e for e in losses if e.get('event') == 'frontmostChanged'
@@ -827,6 +831,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist,
                         'verifiedSecurityAgentHandoff': bool(auth_changes),
                         'modalAutomationBlocked': blocked, 'focusObservationErrors': len(observation_errors),
+                        'restoredPreferenceSurvivedRelaunch': True,
                         'authenticationCompletionRequired': False}
             row('PW-REAUTH-request', card_reauthentication, ['P-12'])
 
