@@ -53,9 +53,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func attachSavePrompts() {
     guard savePrompts == nil, let window else { return }
     savePrompts = SavePromptPresenter(window: window) { [weak self] page in
-      guard let self, let window = self.window,
-            window.isKeyWindow || window.attachedSheet?.isKeyWindow == true,
-            let content = self.standaloneSurface?.surfacePage ?? self.selectedContent else { return false }
+      // This is the focused pane of this presenter's own window, including
+      // Little Open. Sheet presentation changes key windows synchronously.
+      guard let self, let content = self.standaloneSurface?.surfacePage ?? self.selectedContent else { return false }
       return page == AnyHashable(content.identifier)
     }
     #if OPEN_AUTOMATION

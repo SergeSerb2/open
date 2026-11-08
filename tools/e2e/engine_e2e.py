@@ -7619,6 +7619,7 @@ def littleopen_checks(factory, results, tmp):
     import copy
     import plistlib
     import uuid
+    crashes_before = _open_crash_reports()
     domain = 'io.github.sergeserb2.open'
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
             'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
@@ -7752,6 +7753,7 @@ def littleopen_checks(factory, results, tmp):
         app.call('save-prompt', mock={'kind': 'password', 'host': 'login.example.com'})
         save_sheet = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
         if not save_sheet: raise RuntimeError('Little Open save sheet did not appear')
+        sheet_parent = next(w.get('parent') for w in app.call('windows') if w['number'] == save_sheet['window'])
         try:
             app.call('key', window=save_sheet['window'], key='escape', route='app')
             dismissed = wait_until(lambda: not app.call('save-prompt', state=True).get('visible'), timeout=5, step=.05)
@@ -7759,15 +7761,49 @@ def littleopen_checks(factory, results, tmp):
             main_events = app.call('events', window=main_number)
             little_events = app.call('events', window=loaded['window'])
             completions = [e for e in little_events if e.get('type') == 'savePrompt']
+            alive = app.call('ping')['pid'] == app.pid and not (_open_crash_reports() - crashes_before)
             record('littleopen_events_owner', dismissed
                    and not any(e.get('type') == 'savePrompt' for e in main_events)
                    and len(completions) == 1 and completions[0].get('answer') == 'dismiss'
                    and completions[0].get('window') == loaded['window']
                    and completions[0].get('content') == loaded['content']
+                   and sheet_parent == loaded['window'] and alive
                    and any(e.get('type') == 'load' and e.get('content') == loaded['content'] for e in little_events),
                    mainSaveEvents=sum(e.get('type') == 'savePrompt' for e in main_events),
-                   littleSaveEvents=len(completions), pageLogOwned=True)
+                   littleSaveEvents=len(completions), pageLogOwned=True, appAlive=alive, answers=len(completions))
         finally:
+            app.call('save-prompt', withdraw=True)
+
+        # Real window hide/show and key transfers must preserve this sheet,
+        # even while the main browser window is still alive.
+        action(bar['id'], 'focus')
+        app.call('events', window=loaded['window'])
+        app.call('save-prompt', mock={'kind': 'password', 'host': 'login.example.com'})
+        stress_sheet = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
+        if not stress_sheet: raise RuntimeError('Little Open stress sheet did not appear')
+        try:
+            main_window = app.call('shell-windows')[0]
+            for _ in range(6):
+                action(bar['id'], 'hide')
+                assert wait_until(lambda: not session(bar['id'])['visible'], timeout=5, step=.05)
+                app.call('window-focus', id=main_window['id'], activate=True)
+                assert not any(e.get('type') == 'savePrompt' for e in app.call('events', window=main_window['number']))
+                action(bar['id'], 'focus')
+                assert wait_until(lambda: session(bar['id'])['visible'], timeout=5, step=.05)
+                current = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
+                assert current and current['window'] == stress_sheet['window'] and current['queueLength'] == 0
+                assert not any(e.get('type') == 'savePrompt' for e in app.call('events', window=loaded['window']))
+            app.call('key', window=stress_sheet['window'], key='escape', route='app')
+            assert wait_until(lambda: not app.call('save-prompt', state=True).get('visible'), timeout=5, step=.05)
+            answers = [e for e in app.call('events', window=loaded['window']) if e.get('type') == 'savePrompt']
+            alive = app.call('ping')['pid'] == app.pid and not (_open_crash_reports() - crashes_before)
+            extra = [e for e in app.call('events', window=loaded['window']) if e.get('type') == 'savePrompt']
+            record('littleopen_save_sheet_focus_visibility_stress', alive and len(answers) == 1
+                   and answers[0].get('answer') == 'dismiss' and answers[0].get('window') == loaded['window']
+                   and answers[0].get('content') == loaded['content'] and not extra,
+                   cycles=6, appAlive=alive, answers=len(answers), extraAnswers=len(extra))
+        finally:
+            action(bar['id'], 'focus')
             app.call('save-prompt', withdraw=True)
 
         menu('new-little-open-window')
@@ -12142,6 +12178,7 @@ def main():
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
     ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
+    ap.add_argument('--passwords-m-only', action='store_true', help='run only the real-App save-sheet M rows')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument('--stop-on-app-death', action='store_true',
@@ -12187,6 +12224,8 @@ def main():
         selected = opts.passwords_rows.split(',')
         if opts.only != 'passwords' or not set(selected) <= allowed or len(set(selected)) != len(selected):
             ap.error('--passwords-rows requires passwords and unique HTTPS-First lifetime row ids')
+    if opts.passwords_m_only and (opts.only != 'passwords' or opts.passwords_rows is not None):
+        ap.error('--passwords-m-only requires passwords without --passwords-rows')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
@@ -12531,7 +12570,7 @@ def main():
             results["passwords"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](
                 factory, results["passwords"], tmp, globals(), results['engine']['distributionSHA256'],
-                row_ids=opts.passwords_rows.split(',') if opts.passwords_rows else None)
+                row_ids=opts.passwords_rows.split(',') if opts.passwords_rows else None, m_only=opts.passwords_m_only)
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
@@ -12624,6 +12663,7 @@ def main():
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
     name = (probe_result_name if opts.only == 'passwords-probe' else
+            'results-passwords-m-%s.json' % opts.config.lower() if opts.passwords_m_only else
             "results-actions-p2.json" if opts.only == "actions" else
             "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))

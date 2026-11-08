@@ -7,7 +7,7 @@ The post-main-merge H run passes the full password suite: **77 PASS**,
 **C-2 M1-only by rule**, **PW-KC1 user hand check**. It has zero interrupted
 attempts, zero new crash reports and clean owned-process/window shutdown.
 The sanitized per-row loads are in [results-passwords.json](results-passwords.json).
-H stopped before PR creation: the features suite passed 17 rows, then failed
+H initially stopped before PR creation: the features suite passed 17 rows, then failed
 because the Widevine component updater provided no CDM in its bounded wait.
 The first attempt expired at the 120 s row watchdog; the suite correction
 starts the named row and limits the download wait to 60 s, preserving the
@@ -16,15 +16,43 @@ component at load 21.29 / 45.44 / 47.58, with clean owned-process/window
 shutdown and zero interruptions. This is a component prerequisite failure;
 no engine root was changed and no engine regression cause is inferred.
 
-Per the engine-side stop rule, page, littleopen, settings-preview and the full
-verify-all gate are NOT RUN on this H checkpoint. The new Little Open
-page/save-completion ownership row is also NOT RUN. The App PR remains
-pending this gate; there is no all-suite acceptance claim. Full local rows,
-commands and loads are in `.re/s15/h/REPORT.md`.
+## H2 continuation and Little Open crash stop (2026-11-08)
+
+H2 reran `features` once on App head `221f2127`, on the same #264 engine.
+All 26 runnable rows pass, including downloaded Widevine EME playback;
+`crash_recovery` remains M1-only by rule. The conditional unchanged-main
+control is not needed. `page` passes 85 rows, with its four existing blocked
+rows (macOS notification delivery, service-worker window opening, the Apple
+translation pack and the incognito capture fixture) and smart zoom deferred.
+Both runs have zero interruptions and clean owned-process/window shutdown.
+Sanitized rows and loads are in [results-passwords-h2.json](results-passwords-h2.json).
+
+Little Open passes its first eight rows, then crashes while showing the save
+sheet for the new ownership row. The 14:02:21 MST crash has repeated
+`SavePromptPresenter.showNext` / `pageDidBecomeFocused` frames through
+`standaloneSurfaceVisibilityChanged` and
+`LittleOpenWindowController.windowDidResignKey`. Presenting the sheet transfers
+the key window; the old focus predicate treats that transfer as page loss,
+parks the sheet inside `beginSheet`, and re-enters presentation. The local
+receipt is `Open-2026-11-08-140223.ips`; the stack and failed run are preserved
+under `.re/s15/h2/`. Cleanup leaves no owned process or window.
+
+The prepared fix coalesces all presenter triggers into one asynchronous pass,
+guards sheet presentation/removal against re-entry, and compares the active
+page with the focused pane of the presenter's own window. A sheet's own key
+transfer does not park its request. The Little Open coverage checks the sheet
+parent, page/event ownership, App survival and exactly one answer, then stresses
+six real window hide/show and focus cycles with the same sheet.
+
+This fix is not runtime accepted. M5 screen work is held until the lead relays
+clearance after the crash dialog is dismissed. Password M rows, Little Open,
+settings-preview and the full verify-all gate remain pending on the fix.
+The App PR is not open and status remains implemented with acceptance
+incomplete. Full commands and loads are in `.re/s15/h2/REPORT.md`.
 
 The sections below retain D5/D6 diagnosis history. D5's old framework is not
 accepted or replayed. Raw historical receipts remain in the engine checkout's
-`.re/s15/d5/` and `.re/s15/d6/`; H receipts are under `.re/s15/h/` in the App
+`.re/s15/d5/` and `.re/s15/d6/`; H/H2 receipts are under `.re/s15/h/` and `.re/s15/h2/` in the App
 checkout. Receipts contain no credential values.
 
 ## Historical D5 causes

@@ -1302,9 +1302,11 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
             if app: app.quit()
 
 
-def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids=None):
+def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids=None, m_only=False):
     guard = PasswordGuard(factory, results, harness)
     if row_ids is None:
         run_save_prompts(guard.launch, guard, tmp, harness)
+        if m_only:
+            return
         run_manage_pages(guard.launch, guard, tmp, harness)
     run_engine(guard.launch, guard, tmp, harness, guard, engine_distribution_sha256, row_ids)
