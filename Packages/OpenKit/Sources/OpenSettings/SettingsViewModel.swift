@@ -26,7 +26,11 @@ import OpenAdBlock
     public var preferenceRevision = 0
     public var adBlock: AdBlockSettingsModel?
     @ObservationIgnored public private(set) lazy var shortcuts = ShortcutsViewModel(root: self)
-    public func attach(adBlockStore: AdBlockStore) { adBlock = AdBlockSettingsModel(root: self, store: adBlockStore) }
+    public func attach(adBlockStore: AdBlockStore, directoryForProfile: (@MainActor (Profile) -> URL)? = nil) {
+        let directories = ProfileDirectories(root: root)
+        adBlock = AdBlockSettingsModel(root: self, store: adBlockStore,
+            directoryForProfile: directoryForProfile ?? { directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) })
+    }
     public var showsPreviews = false
     public var showsImport = false { didSet {
         if showsImport && !oldValue { importWizard = ImportWizardViewModel(root: self) }

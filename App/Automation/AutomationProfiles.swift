@@ -15,6 +15,12 @@ extension AutomationController {
     switch args["action"] as? String ?? "state" {
     case "state":break
     case "show":adapter.show(pane:.profiles)
+    case "adblock-open":
+      adapter.show(pane:.advanced)
+      await adapter.settings.adBlock?.openSelectedProfile()
+    case "adblock-exclude":
+      guard let host=args["host"] as? String,host.utf8.count <= 253 else {throw Failure(message:"expected a site host")}
+      adapter.settings.adBlock?.setExcluded(host,excluded:true)
     case "create":
       guard let name=args["name"] as? String, name.utf8.count <= 1024, vm.create(name:name) != nil else { throw Failure(message:"could not create fixture Profile") }
     case "notice-ok":app.missingProfileNotice?.buttons.first?.performClick(nil)
@@ -82,6 +88,7 @@ extension AutomationController {
       guard object.responds(to:selector) else {return nil}
       return object.perform(selector,with:"AXEnabled")?.takeUnretainedValue() as? Bool
     }
+    let adblockProfile = (args["adblockProfile"] as? String).flatMap(UUID.init(uuidString:)).map { ProfileID(rawValue: $0) } ?? adapter.settings.selectedProfileID
     return ["profiles":app.model.profiles.map { profile -> [String:Any] in
       ["id":profile.id.description,"name":profile.name,"directory":profile.dataDirectoryName,"spaces":app.model.spaces(using:profile.id).count,
        "icon":String(describing:profile.icon),"loaded":app.profileTeardown.wasLoaded(profile.id)]
@@ -91,6 +98,12 @@ extension AutomationController {
       "deleteText":vm.deleteConfirmation,"deleteNames":vm.deletionProfiles.map(\.name),
       "sheet":sheet?.windowNumber ?? 0,"sheetText":sheet.map(windowText) ?? [],"settings":owner?.windowNumber ?? 0,
       "error":vm.errorText,"canUndo":app.undoManager.canUndo,
+      "adblockReady":adapter.settings.adBlock?.isReady ?? false,
+      "adblockUpdating":adapter.settings.adBlock.map { $0.store.isUpdating(adapter.settings.selectedProfileID) } ?? false,
+      "adblockDomains":adapter.settings.adBlock?.domains ?? [],
+      "adblockError":adapter.settings.adBlock?.errorText ?? "unavailable",
+      "adblockProfileRetired":adapter.settings.adBlock?.store.isRetired(adblockProfile) ?? false,
+      "adblockProfileUpdating":adapter.settings.adBlock?.store.isUpdating(adblockProfile) ?? false,
       "noticeShown":app.missingProfileNoticeCount,"noticeTitles":app.missingProfileNoticeTitles,
       "noticeVisible":app.missingProfileNotice?.window.isVisible ?? false,
       "iconPicker":adapter.profileIconPicker?.isClosed == false,"indicatorMenu":profileIndicatorMenuTitles,

@@ -117,12 +117,15 @@ func checkedList(_ data: Data, id: String, limit: Int) throws {
 
 /// Durable same-directory publication: complete bytes, fsync, rename, then fsync parent.
 func atomicWrite(_ data: Data, to url: URL) throws {
+    try Task.checkCancellation()
     let parent = url.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
     let temp = parent.appendingPathComponent(".write-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: temp) }
+    try Task.checkCancellation()
     try data.write(to: temp, options: .withoutOverwriting)
     try syncPath(temp)
+    try Task.checkCancellation()
     guard Darwin.rename(temp.path, url.path) == 0 else { throw AdBlockError("file rename failed (\(errno))") }
     try syncPath(parent)
 }
