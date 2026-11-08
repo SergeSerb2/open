@@ -40,10 +40,11 @@ while read -r name url expected; do
   seed_commit="$current_commit"
   old_url="$url"
   [[ "$UPDATE" == false ]] || url="https://raw.githubusercontent.com/easylist/easylist/$commit/$name"
-  # An existing snapshot is immutable until an explicit pin refresh. This also
-  # makes offline builds repeatable and refuses a tampered cache without repair.
-  if [[ "$UPDATE" == false && -e "$DEST/$name" ]]; then
-    [[ $(wc -c < "$DEST/$name") -le 16777216 ]] || { echo "$name: size limit exceeded" >&2; exit 1; }
+  # Reuse a cached snapshot only when it matches the pin (offline builds stay
+  # repeatable). A stale or tampered cache is fetched again from the immutable,
+  # commit-pinned URL and must then match the pin; nothing unverified is staged.
+  if [[ "$UPDATE" == false && -f "$DEST/$name" && $(wc -c < "$DEST/$name") -le 16777216 &&
+        "$(shasum -a 256 "$DEST/$name" | cut -d ' ' -f1)" == "$expected" ]]; then
     cp "$DEST/$name" "$STAGING/$name"
   else
     curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 90 --retry 3 \
