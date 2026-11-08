@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "environments": {
+    "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856": {
+      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "environment": {
+        "backingScale": 2,
+        "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+        "key": "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856"
+      },
+      "renderScale": 2,
+      "osBuild": "26B123",
+      "binarySHA256": {
+        "openkit": "ec0ed388e2f64c5d8b3d744c6669cdd4fce5288f0ca4de72a22f3623ff37f759",
+        "sidebar-render": "ef0e0d8ef14839199c5c65d8c6f3a2e709a87296a4bad3e6cf292f9f9b696f1f",
+        "space-editor-render": "74faaa4ad5ea4198aa62528d5adc36e29ea4776b2d1f7d9a7c3c6f1c36d779e6"
+      },
+      "pngSHA256": {
+        "legacy": {
+          "window-0.png": "169ab5897b3fe43dfd33d558f5270e48c8778d11808df13a749e5deabcaf21af",
+          "window-1.png": "4836241ab5a25917a3bebae86cc378a97346c7994792bc5d140e5ede01eaf242",
+          "window-2.png": "bfa12bf9e1eb5d71afdd7aced9db3565ec782b6baaf3918f060dbbbd71d23817"
+        },
+        "editor": {
+          "window-0.png": "15b64a5ba0ec84cbabfead2195acd1902dcc8542cecfffa79daa7e9ade4bc204",
+          "window-1.png": "428120f86a323764ccb6a297700ce254012f8f99ac1555295dae9ceb46892322",
+          "window-2.png": "766d09ab15bdf766daf11aec477f7801a185fe4d36b67a9913f5dbc1516b7ad7"
+        }
+      },
+      "reason": "Same-scale 2x render from unchanged trusted main. AppKit text and symbol rasterization follows the main backing scale and ICC profile. Existing 1x references stay byte-for-byte unchanged."
+    },
+    "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43": {
+      "original": true,
+      "renderScale": 1,
+      "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
+      "reason": "Original references on trusted main. No PNG is regenerated. Exact original byte comparisons and render scale 1 remain in force.",
+      "pngSHA256": {
+        "legacy": {
+          "window-0.png": "2631803ef7ccacd9992a211dd3ebf60a0ea807486f65340e8d7ffcb21253819c",
+          "window-1.png": "c75aa5197edcc3f463d104b1778cf8f922635858b4bf72469fbf60716c172dfa",
+          "window-2.png": "288e647edeeb792c28534a92492282401d0858209837abe28d2c568c0084a94b"
+        },
+        "editor": {
+          "window-0.png": "4a275632fc96d590060566c3cf47aadd5dacf31ec81b111d4f43ac192808d7a9",
+          "window-1.png": "e5756cd9be3da70fc31561f7a4e2dfb2891ce43a054f30b96a3b7f85999c6754",
+          "window-2.png": "bea8d9f21317991961b89de98ef4af4356999fa42d3101f3dbb175d1f295e7d9"
+        }
+      }
+    }
+  }
+}
