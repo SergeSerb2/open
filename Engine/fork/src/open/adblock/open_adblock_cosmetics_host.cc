@@ -27,6 +27,10 @@ namespace {
 
 constexpr size_t kMaxTokens = 500;
 constexpr size_t kMaxTokenBytes = 2048;
+constexpr size_t kMaxGenericInputBytes = 256 * 1024;
+// Cosmetic matching keeps the URL whole or skips hiding. Use the same
+// 16 KiB work bound as network matching, without changing URL semantics.
+constexpr size_t kMaxDocumentUrlBytes = 16 * 1024;
 
 class OpenAdBlockCosmeticsHost final : public mojom::AdBlockCosmetics {
  public:
@@ -37,6 +41,12 @@ class OpenAdBlockCosmeticsHost final : public mojom::AdBlockCosmetics {
                             const url::Origin& top_origin,
                             GetDocumentCosmeticsCallback callback) override {
     DCHECK(AdBlockCosmeticsTaskRunner()->RunsTasksInCurrentSequence());
+    if (document_url.possibly_invalid_spec().size() > kMaxDocumentUrlBytes) {
+      VLOG(1) << "OpenAdBlock: document cosmetics null over URL limit bytes="
+              << document_url.possibly_invalid_spec().size();
+      std::move(callback).Run(nullptr);
+      return;
+    }
     if (!document_url.SchemeIsHTTPOrHTTPS() || !ActiveFor(top_origin)) {
       VLOG(1) << "OpenAdBlock: document cosmetics null";
       std::move(callback).Run(nullptr);
@@ -73,20 +83,50 @@ class OpenAdBlockCosmeticsHost final : public mojom::AdBlockCosmetics {
     // arrays together, including invalid tokens, before copying strings.
     const size_t class_count = std::min(classes.size(), kMaxTokens);
     const size_t id_count = std::min(ids.size(), kMaxTokens - class_count);
-    auto copy_tokens = [](const auto& input, size_t count) {
+    const size_t exception_count = std::min(exceptions.size(), kMaxTokens);
+    size_t remaining_bytes = kMaxGenericInputBytes;
+    bool budget_exhausted = false;
+    bool truncated = class_count < classes.size() || id_count < ids.size() ||
+                     exception_count < exceptions.size();
+    auto copy_tokens = [&remaining_bytes, &budget_exhausted, &truncated](
+                           const auto& input, size_t count) {
       std::vector<std::string> out;
+      if (budget_exhausted) {
+        truncated |= count != 0;
+        return out;
+      }
       for (size_t i = 0; i < count; ++i) {
-        if (!input[i].empty() && input[i].size() <= kMaxTokenBytes) {
-          out.push_back(input[i]);
+        if (input[i].empty()) {
+          continue;
         }
+        if (input[i].size() > kMaxTokenBytes) {
+          truncated = true;
+          continue;
+        }
+        if (input[i].size() > remaining_bytes) {
+          budget_exhausted = true;
+          truncated = true;
+          break;
+        }
+        remaining_bytes -= input[i].size();
+        out.push_back(input[i]);
       }
       return out;
     };
+    // Sequence these copies explicitly: they share one byte budget.
+    auto bounded_classes = copy_tokens(classes, class_count);
+    auto bounded_ids = copy_tokens(ids, id_count);
+    auto bounded_exceptions = copy_tokens(exceptions, exception_count);
+    if (truncated) {
+      VLOG(1) << "OpenAdBlock: generic input truncated classes="
+              << bounded_classes.size() << " ids=" << bounded_ids.size()
+              << " exceptions=" << bounded_exceptions.size()
+              << " bytes=" << kMaxGenericInputBytes - remaining_bytes;
+    }
     VLOG(1) << "OpenAdBlock: GetGenericSelectors tokens="
             << class_count + id_count;
-    auto selectors =
-        matcher_->HiddenSelectors(copy_tokens(classes, class_count),
-                                  copy_tokens(ids, id_count), exceptions);
+    auto selectors = matcher_->HiddenSelectors(bounded_classes, bounded_ids,
+                                               bounded_exceptions);
     // A token can match several compound selectors. Bound output by rules
     // as well as input by tokens (adblock-fork §8.3).
     if (selectors.size() > kMaxTokens) {

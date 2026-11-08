@@ -4836,3 +4836,31 @@ scriptlets or change the bundled resource policy.
 The priority lane and no-wait fallback are not added speculatively. Run
 both contended gates first, then apply §8.2 escalation if required.
 Runtime receipts and each milestone checkpoint belong in `.re/s13/e4/`.
+
+
+### Step 5 root and shared-sequence bounds (2026-11-08 14:00)
+
+The lead assigned `~/Developer/open-engine-s13b` to E4 and authorized
+its distribution for App acceptance. Before the first apply/build,
+`s13/step5-cosmetics` merged Step 4 `f06011e7`, including main `d26300e6`
+and Section 15 CEF patches 0801–0810. Merge conflicts retained the
+resource pipeline row, updated Step 4 receipt limits and cosmetic row.
+The earlier no-root/source-only checkpoint remains history.
+
+The cosmetics host now bounds renderer work before calling the shared
+matcher sequence's Rust query:
+
+- `GetDocumentCosmetics` rejects a URL longer than **16,384 bytes** with
+  a null reply and a `--v=1` length-only log. It does not cut a URL and
+  change its cosmetic matching meaning.
+- `GetGenericSelectors` visits at most **500 classes plus IDs in total**,
+  and at most **500 exceptions**. Each kept string is at most **2,048
+  UTF-8 bytes**. Empty items are ignored; oversized items are dropped.
+- Classes, IDs and exceptions share a **262,144-byte** kept-string budget.
+  Copy order is classes, IDs, then exceptions. The first item that would
+  exceed that budget ends all further copying. Count/item/byte truncation
+  is logged at `--v=1` with only kept counts and bytes. No unbounded
+  renderer exception vector reaches `HiddenSelectors`.
+
+These limits apply per request; the matcher remains per context, including
+OTR. All build and runtime acceptance rows still require real receipts.
