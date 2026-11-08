@@ -33,6 +33,7 @@ struct GenerationManifest: Codable, Sendable {
 struct GenerationStorage: Sendable {
     let maximumBytes: Int
     let ephemeral: Bool
+    let resources: BundledResources
 
     func current(in directory: URL) throws -> CurrentGeneration? {
         try readJSON(CurrentGeneration?.self, at: directory.appendingPathComponent("current.json"), fallback: nil)
@@ -51,13 +52,25 @@ struct GenerationStorage: Sendable {
               digest(bytes) == reference.manifestSHA256 else { throw AdBlockError("manifest SHA-256 mismatch or missing generation") }
         let manifest = try JSONDecoder().decode(GenerationManifest.self, from: bytes)
         let ids = manifest.state.enabledBlockLists
+        let listFiles = manifest.files.filter { $0.listID != "_resources" }
+        let resourceFiles = manifest.files.filter { $0.listID == "_resources" }
         guard manifest.generation == reference.generation, manifest.state.catalogVersion == catalog.version,
-              Set(ids).count == ids.count, manifest.files.count == ids.count,
-              Set(manifest.files.map(\.listID)) == Set(ids),
+              Set(ids).count == ids.count, listFiles.count == ids.count, resourceFiles.count <= 1,
+              Set(listFiles.map(\.listID)) == Set(ids),
               ids.allSatisfy({ id in catalog.lists.contains { $0.id == id && !$0.urls.isEmpty } }) else {
             throw AdBlockError("manifest enabled-list set mismatch")
         }
-        for file in manifest.files {
+        // Legacy generations without resources remain verifiable. The repository
+        // adds the current bundle on its next publication (including Profile open).
+        for file in resourceFiles {
+            guard file.file == "resources.json", file.generation == reference.generation,
+                  file.sourceRevision == [file.sha256],
+                  let data = boundedData(generation.appendingPathComponent(file.file), maximum: BundledResources.maximumBytes),
+                  !data.isEmpty, data.count == file.bytes, digest(data) == file.sha256 else {
+                throw AdBlockError("_resources: size or SHA-256 mismatch")
+            }
+        }
+        for file in listFiles {
             guard file.file == "\(file.listID).txt", file.generation == reference.generation,
                   let receipt = manifest.state.lists[file.listID], receipt.bytes == file.bytes,
                   receipt.sha256 == file.sha256, file.sourceRevision == revisions(receipt),
@@ -70,7 +83,8 @@ struct GenerationStorage: Sendable {
     }
 
     func save(_ state: AdBlockProfileState, directory: URL) throws {
-        if !ephemeral { try writeJSON(state, to: directory.appendingPathComponent("catalog-state.json")) }
+        try Task.checkCancellation()
+        if !ephemeral { try writeJSON(state, to: directory.deletingLastPathComponent().appendingPathComponent("catalog-state.json")) }
     }
 
     /// All inputs are validated and durable before state is saved and the single live pointer moves.
@@ -78,12 +92,14 @@ struct GenerationStorage: Sendable {
                  previous: GenerationReference?) throws -> GenerationReference {
         let files = FileManager.default
         let generations = directory.appendingPathComponent("generations", isDirectory: true)
+        try Task.checkCancellation()
         try files.createDirectory(at: generations, withIntermediateDirectories: true)
         let numbers = try files.contentsOfDirectory(atPath: generations.path).compactMap(Int.init)
         let latest = max(numbers.max() ?? 0, previous?.generation ?? 0)
         guard latest < Int.max else { throw AdBlockError("generation number exhausted") }
         let number = latest + 1
         let generation = generations.appendingPathComponent(String(number), isDirectory: true)
+        try Task.checkCancellation()
         try files.createDirectory(at: generation, withIntermediateDirectories: false)
         // A failed/crashed publication leaves an unreferenced directory. Open never promotes it.
         var entries: [GenerationFile] = []
@@ -97,6 +113,10 @@ struct GenerationStorage: Sendable {
             entries.append(GenerationFile(file: "\(id).txt", bytes: data.count, sha256: receipt.sha256,
                                           listID: id, sourceRevision: revisions(receipt), generation: number))
         }
+        let resourceData = try resources.verifiedData()
+        try atomicWrite(resourceData, to: generation.appendingPathComponent("resources.json"))
+        entries.append(GenerationFile(file: "resources.json", bytes: resourceData.count, sha256: resources.sha256,
+                                      listID: "_resources", sourceRevision: [resources.sha256], generation: number))
         let manifest = GenerationManifest(generation: number, files: entries, state: state)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         let bytes = try encoder.encode(manifest)
@@ -119,6 +139,7 @@ struct GenerationStorage: Sendable {
     }
 
     func activate(_ reference: GenerationReference, previous: GenerationReference?, directory: URL) throws {
+        try Task.checkCancellation()
         try writeJSON(CurrentGeneration(live: reference, previous: previous), to: directory.appendingPathComponent("current.json"))
         // Cleanup is best-effort AFTER publication. Failure cannot roll back a committed pointer.
         cleanup(keeping: [reference.generation, previous?.generation].compactMap { $0 }, directory: directory)
@@ -127,6 +148,7 @@ struct GenerationStorage: Sendable {
     func cleanup(keeping numbers: [Int], directory: URL) {
         let generations = directory.appendingPathComponent("generations")
         for name in (try? FileManager.default.contentsOfDirectory(atPath: generations.path)) ?? [] {
+            guard !Task.isCancelled else { return }
             guard let number = Int(name), !numbers.contains(number) else { continue }
             try? FileManager.default.removeItem(at: generations.appendingPathComponent(name))
         }
@@ -136,7 +158,9 @@ struct GenerationStorage: Sendable {
         let source = path(reference, in: directory)
         guard FileManager.default.fileExists(atPath: source.path) else { return }
         let target = directory.appendingPathComponent("quarantine/\(reference.generation)-\(UUID().uuidString)")
+        try Task.checkCancellation()
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Task.checkCancellation()
         try FileManager.default.moveItem(at: source, to: target)
         try syncPath(source.deletingLastPathComponent())
         try syncPath(target.deletingLastPathComponent())

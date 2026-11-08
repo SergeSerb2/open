@@ -38,7 +38,66 @@ machine-wide heavy-job slot script (capacity is set by the lead):
 Do not hold the on-screen lock while waiting for a heavy-job slot. Keep the
 on-screen lock around one suite only; take the heavy slot around build steps.
 
-## Enable
+## Updater core
+
+`updater-state` is a read-only App query. Before the post-paint startup hook it
+returns `created: false, started: false`. Once created, it reports `offReason`
+(`invalid-public-key`, `missing-team-identifier`, `start-failed`, or null),
+`started`, `canCheck`, `lastCheck` (Unix seconds or null), `automaticallyChecks`,
+`automaticallyDownloads`, `automaticPreference`, and `channel` (`stable` or `beta`).
+`foundVersion`, `completedChecks`, and `lastErrorCode` expose Sparkle delegate
+results. Reading the query does not create an updater or request a feed.
+The existing `settings-toggle` command accepts `name=updates` to invoke General's
+toggle model and its preference writer; it returns the new boolean value.
+The `timing` query includes `updaterCreated`, after first content paint (or the
+existing two-second blank-page fallback), always after `sidebarDrawn`.
+
+General's `open.general.automaticallyUpdate` setting defaults to true and controls
+both Sparkle automatic flags live. `open.general.updateChannel=beta` allows beta
+items as well as stable items on the next check. All other values select stable.
+There is no channel UI yet. `check-for-updates` is not a command-bar suggestion
+by design (`SuggestAdapter` exclusions); every dispatch of that ID uses the same
+App updater path. `SUFeedURL` in Info.plist remains the normal feed.
+In `OPEN_AUTOMATION` builds, `open.debug.updateFeedURL` overrides it only with
+`OPEN_UPDATER_ALLOW_ADHOC=1` in the environment or defaults. That opt-in also
+allows a build without a Team ID. Other builds ignore both defaults keys; only
+the environment opt-in can permit ad-hoc signing, and the feed always comes from
+Info.plist. The opt-in never bypasses public-key validation. Unconfigured builds never create Sparkle;
+their update action opens General with “Updates are not set up in this build.”
+
+Build Debug, then run the real-App `updater` suite:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/updater.py --config Debug
+```
+
+Check the shared priority flag before acquiring the screen lock. The suite tests
+placeholder/malformed keys, the ad-hoc signing gate, one menu item, command-ID
+dispatch, a signed loopback HTTP feed, stable/beta filtering, and live automatic
+flags. A loopback canary proves the off paths make no feed requests. It generates
+throwaway Ed25519 keys with OpenSSL in TMPDIR and uses Sparkle 2.10.1
+`sign_update --ed-key-file`. `generate_keys -h` confirms its `-f` option imports
+into Keychain, so the suite never uses it. It only changes and re-signs a temporary
+App copy. The server binds only to `127.0.0.1` on an ephemeral port and stops in
+`finally`. No ATS exception is added. Sparkle 2.10.1 rejects `file://` feeds with
+error 2001: “The download request URL must use http or https” (`SPUDownloader.m`).
+The loopback fixture replaces the plan's file feed with the lead's approval.
+It resets touched defaults before launch and restores their original
+plist types in `finally`, including Sparkle's `SU*` preferences and its
+`NSWindow Frame SUUpdateAlert2` geometry entry.
+
+`--force-failure` exits 1 with the real update window open to prove process/window
+cleanup. `--tools PATH` selects the pinned tools folder. `--output PATH` selects
+the private JSON receipt (default `.re/updater/results.json`). Install and relaunch
+are not tested; ad-hoc library validation does not qualify a shipped update.
+For a launch receipt, build main and branch Release with `OPEN_AUTOMATION=1`, then
+use `--config Release --main-bundle /path/to/main/Open.app`. Wait for load1 ≤ 12,
+then take the quiet and screen locks; this pairing needs no heavy slot. Build
+under `heavy.sh` first, without the quiet lock. Time an already built CLI under
+the quiet lock, then a heavy slot. The pairing alternates main/branch five times and
+requires branch median `sidebarDrawn` ≤ main median. Every sample records load.
+
+## Enable automation
 
 ### Synthetic secrets import (Section 15)
 
@@ -132,7 +191,9 @@ early-quit, missing-engine, and migration launches do the same. All suite
 modules, peer launches, and benchmarks use that launcher. `tools/run.sh` and
 the release smoke launch also pass the switch. `tools/openctl` connects to
 an existing socket and never launches the App. `verify-all.sh` runs package
-CLIs, not the App. Only the `firstrun` suite opts into first run.
+CLIs, not the App. The `firstrun` and `onboarding` suites opt into first run.
+The former uses the intro's real skip/Continue actions before its existing
+Section 7 assertions. Both always pass silent audio unless explicitly off.
 
 The dev launcher `tools/run.sh` always passes `--skip-first-run`. To see first
 run by hand, launch the built App binary directly with a disposable data root,
@@ -163,6 +224,34 @@ lists are empty (`extensions.loaded` is false); mutations that need a Browser
 return a not-loaded error. Notification reads likewise use an existing context.
 A pending Little Open window never borrows a standard window's Browser.
 
+`settings-adblock-engine` reads the applied ad-block configuration without
+opening Settings, a store, or a native context. `profiles` contains the store's
+`storeReady` (`AdBlockStore.isProfileOpen`), enabled state and excluded domains,
+plus each existing regular and OTR context's
+`adBlockEnabled`, `listDirectorySet`, `listDirectoryMatchesProfile`,
+`excludedDomains`, and `adBlockStatus`. Directory checks are booleans; this query
+never returns paths or page URLs. Excluded domains are available only through
+automation; copyable debug info contains their count instead.
+
+`settings-adblock` uses the real Settings actions. It accepts `enabled`, or
+`host` with `excluded`, and `copyDebug: true` exercises Copy Debug Info while
+restoring the clipboard before returning `copiedDebugInfo`. The OpenEngine
+ad-block API is currently a placeholder: `adBlockStatus.engine` is `pending`
+and no requests are blocked until the Section 13 E2 engine binding lands.
+`OEBrowserContext.adBlockSupported` is false, so the store's engine callback stays
+nil and launch opens no Profile in the store or starts its update schedule.
+Command-service Settings initialization also leaves the store unattached when
+the engine is unsupported; showing Settings attaches it on demand.
+Opening Settings → Advanced still opens the selected Profile (`ready: true`).
+The placeholder row checks this after first paint and a 5 s observation.
+Settings reports that blocking is not active. The query also returns
+`nativeSupported`, `adapterSupported`, and `bindingInstalled`. Automation builds
+in Debug alone accept `OPEN_ADBLOCK_AUTOMATION_FORCE_SUPPORTED=1` to exercise the adapter
+against the placeholder. This does not change the engine's support property and
+has no effect in any Release build.
+Run these flows with `OPEN_E2E_EXTENSIONS_UI_SCOPE=adblock
+tools/e2e/engine_e2e.py --only extensions-ui` under the on-screen lock.
+
 The real-App `extensions-ui` suite includes `P10_*` rows for empty-Space focus,
 Settings/read laziness, two-window Profile actions, key-window menus and
 shortcuts, Work popups/management, context reuse, Little Open, unloaded
@@ -172,6 +261,13 @@ launches and the existing OS idle CPU sampler; see [the receipt](profiles-memory
 Both modes reset and restore their shared defaults keys in `finally`.
 
 ## Protocol
+
+Automation builds can run the Cocoa setter preflight without creating native
+windows or starting Chromium. Set `OPEN_AUTOMATION_SCRIPTING_PREFLIGHT` to an
+absolute JSON receipt path and launch the built App with an isolated
+`--user-data-dir`. The App sends actual Apple events to itself, records setter
+round trips/errors and `nativeWindows: 0`, then exits. This launch still takes
+the on-screen lock. See [scripting](scripting.md#little-open-tab-references-2026-11-07).
 
 One JSON object per line in each direction.
 
@@ -207,6 +303,48 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 - No `tab`: the selected tab.
 
 ## Commands
+
+`onboarding action=state` reports `active`, `moduleActive`, `screen`, intro
+`phase` (`introAnimation`, `sellIntro`, `sellCompleted`), elapsed time,
+Reduce Motion, scheduled audio/animation host times, sound decision/events,
+player lifetime flags, opt-in frame stats, and resident deltas at 3 s and
+after hand-off. `action=skip-intro` completes the visual tracks;
+`action=get-started` uses the native button action and refuses before ready.
+`action=replay-intro` overlays a running browser without writing data.
+Unknown actions/arguments are refused. The dim child window is reported
+only inside `onboarding` state; window lists and PNG snapshots exclude it.
+
+Launch options: `--intro-sound=off|silent`; automation-only
+`--intro-sound=fail-device`, `--reduce-motion`, `--measure-intro-frames`.
+`--replay-onboarding` requires an explicit `--user-data-dir` under the OS
+temporary directory or `/tmp`; the default root is refused before preparation.
+Debug Help ▸ Troubleshooting contains Replay Intro. Automated runs must use
+`--intro-sound=silent` (real player, volume zero) or `off` (no player).
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only onboarding
+```
+
+The suite uses a synthetic Arc-shaped source and disposable Open roots,
+restores preference keys in `finally`, checks cleanup, and records a negative
+proof for each gate using contrasting real App states. Frame statistics
+include p50/p95/max, drops and load1. The strict high-refresh row is INFO
+unless it runs on the M5 at load1 ≤12 and a display at 120 Hz or faster.
+`OPEN_ONBOARDING_FORCE_EARLY_FAILURE=1` makes the suite fail while the intro
+and dim are visible, to verify its failure cleanup. Check the shared priority
+flag before acquiring the screen lock, as for the other native suites.
+`tools/e2e/onboarding_launch.py --main-app PATH --out FILE` measures five
+interleaved main/branch returning launches on a real saved root, with no skip
+switch. Run it under quiet then screen locks after building both Apps. It
+requires load1 ≤12, confirmed first frames, and every shared numeric launch
+mark's branch median within 5 ms of main.
+
+`tools/e2e/onboarding_frames.py --out FILE` interleaves three screen/normal
+blend pairs on one already-built Debug App. Use quiet then screen locks at
+load1 ≤12. It records p50/p95/max/drops and loads, asserts the real layer
+filters and muted player state, and requires an absolute median p95 delta
+below 0.5 ms with no extra screen drops. `OPEN_INTRO_NORMAL_BLEND=1` disables
+the two filters only in automation builds for this comparison.
 
 `first-run` returns `{active, step, completed}` even when there is no browser
 window. Optional `action` drives the same view-model methods as the buttons:
@@ -273,7 +411,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | Command | Args | Result |
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
-| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
+| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`, `little`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
 | `tabs` | optional `sidebar:true` | Plain response is an array; `sidebar:true` adds `{tabs,rows,folders,selectedNode}` native row/state readback. Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
 | `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
 | `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
@@ -360,8 +498,8 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `child-dialog-button` | Optional `window` number, optional exact `label` | Inspect button labels in Open's frontmost visible native child window (not a sheet), or activate one uniquely matching button through its real accessibility press action. A supplied window number must match that frontmost child. Refuses missing, ambiguous, disabled, or non-actionable buttons. Used for the HTTPS-First Continue action; Return and Esc exercise Go back through `key`. Touches only this process's own windows. |
 | `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. `presentation` is `popover` or `card`; `frame` gives the card rectangle in window coordinates. Pass a Little Open window number in `window` to inspect or answer its prompt. With an answer, call `performClick` on the real button |
 | `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
-| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
-| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
+| `events` | optional Little Open `window` number | Drain that Little Open window's page log, or the front browser window's log otherwise: `change`, `load`, `loadError`, `open`, `dialog`, `dialogAnswer`, `permission`, `permissionAnswer`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no). Also drain the shared `savePrompt` completion log, which remains available after the final browser window closes. |
+| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames`, `world` (`page` default or `open`) | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
 | `download-dir` / `downloads` | `path` | Where downloads go; list downloads |
@@ -647,14 +785,16 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 | `media-action` | `tab`, `action` (`play`, `pause`, `next`, `previous`, `toggle-mute`, `close`, `back-to-tab`, `pip`, `seek` + `value`, `volume` + `value`, `exit-pip` [+ `pause`]); or `action` `mute-all` / `unmute-all` without `tab` | Runs the same `MediaIntent` (or App command) path as the mini player and the command bar. |
 | `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin; `drawerOpen`, `height`, the shown volume `slider` value such as `"25%"` or null, the source's `volume`, `microphoneOn`, `cameraOn`), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`, `animations`. |
 | `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`, and the volume drawer's `volumeLow`, `volumeHigh`, `slider`), `fraction` (slider only, 0…1 of the knob's travel, default 0.5) | Clicks the real card control through `mouse` events built inside Open. Title-row and volume targets hover the card first (`mouse` `hover`, coming from a point off the card, so an earlier hover that left the stack "entered" cannot swallow the enter) and wait for the expanded stack. `slider` sends a press and a release at `fraction` and returns the slider's new `value`. |
-| `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`; phase 2: Open's own window), number, frame, level. |
+| `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`; phase 2: Open's own window), number, frame, level. With a Document PiP (EM-7): `documentWindow` (number, frame, level, visible, opener `tab`, panel `class`, `topBarHeight`, `pageSize`, `pageInWindow`, `requested` size, `valid`). |
 | `capture-permission` | — | macOS camera and microphone authorization for this app (`camera`, `microphone`: `authorized`, `denied`, `restricted`, `notDetermined`). Reading it never prompts. Chromium asks macOS while a status is `notDetermined`, even with fake devices, so e2e `media_recording_card` runs only when both are `authorized` and is BLOCKED otherwise. |
 | `pip-frame` | `path` (default: the temporary directory's `open-pip-frame.png`) | Phase 2: writes the engine's composited picture of Open's PiP video view as a PNG and returns `path` and `bytes`. Not a screen capture: the window server leaves out GPU-process layers on macOS 26. Fails with `no Open PiP window` or `no frame` (2 s timeout). |
-| `pip-action` | `action` (`close`, `back-to-tab`; phase 2 also `minimize`, `menu` [+ `item`]) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. Phase 2: Open's own window, through its real controls' paths; `menu` without `item` lists the window menu (`✓` marks a checked item). |
+| `pip-action` | `action` (`close`, `back-to-tab`; phase 2 also `minimize`, `menu` [+ `item`]) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. Phase 2: Open's own window, through its real controls' paths; `menu` without `item` lists the window menu (`✓` marks a checked item). With a Document PiP open and no video PiP, `close` closes its panel (the × path). |
 | `now-playing` | — | `MPNowPlayingInfoCenter` title, artist, rate, elapsed, `playbackState`, and whether the remote play, pause, toggle, next and previous commands are enabled (read in-process; Chromium's system media controls own them). |
 | `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
 
 The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
+
+Each `mini-players` card also has `timing`: `event` (`leave` or `engine`), `handledAt` / `insertedAt` (system uptime seconds), and `handledTurn` / `insertedTurn`. The App records handling before publishing a leave and insertion immediately after `MediaControlsView` adds the card. Turns count main-run-loop `afterWaiting` observations; insertion within zero or one turn passes the speed gate. The observer runs only with an explicit automation socket or the e2e harness's `OPEN_E2E_OWNER_PID`, schedules no work and never wakes the run loop. Missing endpoints are null; absent evidence is an empty object. These fields measure insertion, not animation completion or the automation polling round trip. For Auto-PiP, `media.decision.at` records the start of the coordinator's leave handling, before policy evaluation or the PiP request; `pip.enteredAt - media.decision.at` is the full leave-to-enter interval.
 
 ## Notifications (page-platform Step 7)
 
@@ -1122,7 +1262,84 @@ relaunches that profile, and repeats the drag after repair.
 `popup-quit` first quits the App to exercise restoration without the socket.
 Frame preferences are restored after quit through the shared defaults fallback.
 
+## Open-world scripts and messages
 
+`eval` accepts `world: "page"` (default) or `"open"`, through OpenWeb's
+`evaluateJavaScript(_:in:)`. Invalid world names fail. Open evaluation targets
+only the current main-frame document and grants no user gesture.
+`script-add` accepts the same world names. Open-world scripts always run at
+document start and in the main frame, even with `end` or `allFrames` set.
+With `css: true`, the stylesheet keeps its original source and receives no
+JavaScript transport prelude.
+
+`open-world-messages` accepts `tab`, optional `clear: true`, and optional `subscribe: true/false`
+(to exercise the OpenWeb callback). It returns
+`messages` and `callbacks` (type, payloadJSON, documentID, content), and `statistics` (accepted,
+oversized, rateLimited, invalid). The App retains only the last 64 messages
+across its factory; clearing removes that page's receipt, not engine counters.
+The recorder is automation-only and never persists payloads.
+
+Example: add an Open script containing
+`__openNative.postMessage("picker:ready", JSON.stringify({boostID:"fixture"}))`,
+navigate to a matching page, then read `open-world-messages`. Page and extension
+worlds see `typeof __openNative === "undefined"`.
+
+
+## Site settings, data and security (E1/E2/E3)
+
+All four commands use the selected page's OpenWeb profile/content; optional
+`tab` selects another page. These commands do not open Site Control UI.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `site-settings` | `origin` HTTP(S) URL | `[{kind,state}]` effective exceptions that differ from the global default |
+| `site-setting` | `origin`, `kind` Chromium name, `state:allow\|block\|ask\|session` | Boolean acceptance; each kind supports only registered states |
+| `site-data-clear` | `origin`, `kinds:[cookies,cache,storage]` (any subset) | Waits for every backend, then returns true or an error. Empty kinds is valid. HTTP cache eviction is origin-specific. |
+| `security-state` | Optional `tab` | `{level,certificates:[{bytes,sha256}]}`; leaf first, no certificate subject or private data |
+
+`events` records change bit 16 for visible security/certificate updates.
+The `sitedata` suite uses isolated loopback HTTP origins and a temporary
+self-signed TLS server; valid HTTPS uses a public control because no new local
+trust root is installed. Run it under the on-screen lock after the lead clears
+any screen HOLD:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sitedata
+```
+
+## Boost runtime and simple editor (Section 12)
+
+| Command | Arguments | Result |
+|---|---|---|
+| `boosts` | `action: list\|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
+| `boost-library` | `action: rename\|enabled\|delete`, `boost` UUID, `name` or `enabled` | Requires a visible Boosts Library row; calls its real LibraryActions boundary after confirmation. It does not prove native button or confirmation input. |
+| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type\|customize`, optional `boost`, `tab` for open | Real simple/Code editor and session (`mode: simple|code`). Private or non-http(s) tabs refuse open. `customize` invokes the selected tab’s real Customize Page sidebar action and returns its success. `incognito-state` exposes read-only `boostScriptIDs` for private script-isolation checks. |
+
+`drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
+coordinates. It sends mouse down, drag through the final point, then mouse up.
+`key` uses the normal `key` arguments and always routes through OEApplication.
+`tap` takes a native control ID (`editor.color.invert`, `editor.undo`), a plan alias
+(`font.Avenir`, `size`, `case`, `firstRun.makeABoost`), `menu.<native title>`, or
+`alert.Done|Cancel|Delete`. Menus and alerts use their real native actions.
+`type text=...` edits the active rename sheet or visible CSS/JS text view through
+App key events (16 KiB limit). Empty text clears the selected field through Delete.
+
+State includes the Boost value, bound tab/Profile, interstitial, global and scope
+state, undo state, controls, panel frame/key state, specific active alert, and
+refresh generation/completion, timing, delivered/skipped page counts, JavaScript
+delivery count and apply-failure count. Code state adds `loadedJS` (the current
+document's installed script, or null) and `refreshToRun`. The `boosteditor` suite exercises
+B1–B3, B5 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
+Edit Boost for a disabled saved Boost, discard/wake refresh, Library metadata
+reconciliation, Undo/Redo preservation, and Library Delete. The ten-page timing
+row requires ten live matching pages with nine hidden pages. B26 saves a Boost,
+restores the selected matching tab without a launch URL, and checks CSS and JS
+from that document's first inline script. Global off is its negative control.
+B4 is blocked by P7.
+B5 proves that CSS applies live, JS waits for reload, and Refresh to Run follows
+the loaded document rather than the latest stored text. Every row includes a real negative control. The suite restores all
+preference keys in `finally` and uses
+an ephemeral local fixture server plus the runner's isolated roots/cleanup.
 ## Space editors (Section 4)
 
 Theme commands use the real App model and the same window controller as the
@@ -1246,3 +1463,4 @@ clicks a real field and returns metadata for newly visible child windows.
 `fill_from_dropdown(app, tab, wait_until, selector='#username', down=1)` selects
 a suggestion with real App Down/Return keys. The caller compares field values
 in the page and reports only equality, never the values.
+Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.

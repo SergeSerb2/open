@@ -156,6 +156,8 @@ extension AutomationController {
         default: throw Failure(message: "unknown pip action")
         }
       }
+      // EM-7: the Document PiP panel's close button path.
+      if let document = media.documentPiP, a["action"] as? String == "close" { document.close(); return true }
       // Phase 1 has Chromium's own PiP window; these run the same session paths its controls end in.
       guard let source = media.session.activeSource else { throw Failure(message: "no active PiP") }
       switch a["action"] as? String ?? "" {
@@ -240,6 +242,11 @@ extension AutomationController {
 
   private func describeCard(_ card: MiniPlayerCardView, window: NSWindow?) -> [String: Any] {
     let s = card.source
+    var timing: [String: Any] = [:]
+    if let id = s.tabID, let t = app.media.cardTimings[id] {
+      timing = ["event": t.event, "handledAt": t.handledAt, "handledTurn": t.handledTurn,
+                "insertedAt": t.insertedAt as Any? ?? NSNull(), "insertedTurn": t.insertedTurn as Any? ?? NSNull()]
+    }
     var buttons: [String: Any] = [:]
     for name in ["favicon", "previous", "play", "next", "volume", "pip", "close", "microphone", "camera", "volumeLow", "volumeHigh"] {
       guard let c = card.control(named: name), !c.view.isHiddenOrHasHiddenAncestor else { continue }
@@ -249,6 +256,7 @@ extension AutomationController {
     }
     return [
       "tab": s.tabID?.description ?? "", "kind": s.kind == .recording ? "recording" : "audioVideo",
+      "timing": timing,
       "playback": "\(s.playback)", "hasVideo": s.hasVideo, "muted": s.isMuted, "pip": "\(s.pip)",
       "expanded": card.isExpanded, "level": card.level, "retiring": card.isRetiring,
       "frame": rect(card.convert(card.bounds, to: nil), in: window), "buttons": buttons,
@@ -313,6 +321,16 @@ extension AutomationController {
       state["openWindow"] = ["number": window.windowNumber, "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height],
                              "level": window.level.rawValue, "visible": window.isVisible, "closing": media.pipWindow?.isClosing ?? false,
                              "tab": media.pipHost?.tabID.description ?? ""] as [String: Any]
+    }
+    // EM-7: the Document PiP panel (its top bar and the PiP page's view).
+    if let document = media.documentPiP, let controller = document.window, let window = controller.window {
+      let page = document.pip.videoView
+      state["documentWindow"] = ["number": window.windowNumber, "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height],
+                                 "level": window.level.rawValue, "visible": window.isVisible, "tab": document.openerTabID.description,
+                                 "class": NSStringFromClass(type(of: window)), "topBarHeight": controller.topBar.frame.height,
+                                 "pageSize": [page.frame.width, page.frame.height], "pageInWindow": page.window === window,
+                                 "requested": [document.pip.naturalSize.width, document.pip.naturalSize.height],
+                                 "valid": document.pip.webContent != nil] as [String: Any]
     }
     state["phase"] = media.hostsPictureInPicture ? 2 : 1
     state["snoozed"] = media.session.snoozed.map(\.description).sorted()

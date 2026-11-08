@@ -15,6 +15,7 @@
 #include "open/browser/autofill/open_autofill_hooks.h"
 #include "open/browser/autofill/open_password_prompt_router.h"
 #include "open/browser/autofill/open_save_prompt_impl.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 
 namespace open_engine {
 namespace {
@@ -69,6 +70,15 @@ void WithdrawSavePrompt(content::WebContents* contents) {
   auto found = State().prompts.find(contents);
   if (found != State().prompts.end() && found->second) found->second->Withdraw();
 }
+void WithdrawPasswordSavePrompt(content::WebContents* contents) {
+  auto found = State().prompts.find(contents);
+  // Password UI state changes also run after address/payment submissions.
+  // Only that UI's own offers belong to its show/hide lifecycle.
+  if (found != State().prompts.end() && found->second &&
+      found->second->GetKind() <= 1) {
+    found->second->Withdraw();
+  }
+}
 void ShowSavePrompt(CefRefPtr<OpenSavePrompt> prompt) {
   auto* contents = prompt->web_contents();
   WithdrawSavePrompt(contents);
@@ -85,6 +95,15 @@ void ShowSavePrompt(CefRefPtr<OpenSavePrompt> prompt) {
             (prompt->GetKind() <= 2 && !SecretsPromptsAllowed(contents))) {
           prompt->Answer(3);
           return;
+        }
+        if (prompt->GetKind() == 2) {
+          // Chromium gates filling on this predicate, but local card saving
+          // does not. Apply the same HTTPS/security-level rule to Open offers.
+          auto* client = autofill::ContentAutofillClient::FromWebContents(contents);
+          if (!client || !client->IsContextSecure()) {
+            prompt->Answer(3);
+            return;
+          }
         }
         auto handler = State().handler;
         handler->OnShowSavePrompt(

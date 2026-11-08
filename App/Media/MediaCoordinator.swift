@@ -23,6 +23,23 @@ final class MediaCoordinator {
   /// Automation evidence: when each tab's PiP request started and entered (system uptime).
   private(set) var pipTimes: [ItemID: (requested: TimeInterval, entered: TimeInterval?)] = [:]
   private(set) var pipRequests = 0
+  #if OPEN_AUTOMATION
+  struct CardTiming {
+    let event: String
+    let handledAt: TimeInterval
+    let handledTurn: UInt64
+    var insertedAt: TimeInterval?
+    var insertedTurn: UInt64?
+  }
+  private(set) var cardTimings: [ItemID: CardTiming] = [:]
+  private var timingTurn: UInt64 = 0
+  private var timingObserver: CFRunLoopObserver?
+
+  private func noteCardEvent(_ id: ItemID, event: String) {
+    guard timingObserver != nil else { return }
+    cardTimings[id] = CardTiming(event: event, handledAt: ProcessInfo.processInfo.systemUptime, handledTurn: timingTurn)
+  }
+  #endif
   /// Tabs Open asked to leave PiP (system uptime). A report that still says "in PiP" before the
   /// page's exit lands is not a new manual PiP.
   private var pendingExit: [ItemID: TimeInterval] = [:]
@@ -52,6 +69,15 @@ final class MediaCoordinator {
       // The bundled file is part of OpenMedia; this branch only keeps a broken bundle from crashing.
       rules = try! PiPSiteRules(data: Data(#"{"version":1,"disallow":[],"sites":[]}"#.utf8))
     }
+    #if OPEN_AUTOMATION
+    if app.options.automationSocket != nil || ProcessInfo.processInfo.environment["OPEN_E2E_OWNER_PID"] != nil {
+      // Counts turns without scheduling or waking the run loop. Only automated runs install it.
+      timingObserver = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.afterWaiting.rawValue, true, 0) { [weak self] _, _ in
+        MainActor.assumeIsolated { self?.timingTurn += 1 }
+      }
+      if let timingObserver { CFRunLoopAddObserver(CFRunLoopGetMain(), timingObserver, .commonModes) }
+    }
+    #endif
     // D-8: phase 2 replaces Chromium's PiP window only when the engine supports it (fork EM-4).
     if OEEngine.shared.supportsShellPictureInPicture {
       let delegate = PictureInPictureDelegate(coordinator: self)
@@ -62,8 +88,21 @@ final class MediaCoordinator {
 
   // MARK: Windows
 
+  #if OPEN_AUTOMATION
+  isolated deinit { if let timingObserver { CFRunLoopObserverInvalidate(timingObserver) } }
+  #endif
+
   func attach(_ factory: EngineWebContentHostFactory) {
     guard let controller = factory.controller else { return }
+    #if OPEN_AUTOMATION
+    if timingObserver != nil {
+      controller.sidebar.mediaControls.onCardInserted = { [weak self] id in
+        guard let self, self.cardTimings[id]?.insertedAt == nil else { return }
+        self.cardTimings[id]?.insertedAt = ProcessInfo.processInfo.systemUptime
+        self.cardTimings[id]?.insertedTurn = self.timingTurn
+      }
+    }
+    #endif
     controller.context.media = store
     // The window controller refreshes after every selection, Space, split and visibility change.
     // Keep any hook another owner installed (the sleep adapter's AppVisibilityProvider).
@@ -84,6 +123,12 @@ final class MediaCoordinator {
     let old = displayed[windowID] ?? []
     guard now != old || displayed[windowID] == nil else { return }
     displayed[windowID] = now
+    #if OPEN_AUTOMATION
+    if timingObserver != nil {
+      let eligible = Set(store.visibleSources(windowID: windowID, displayed: now).compactMap(\.tabID))
+      for id in old.subtracting(now) where eligible.contains(id) { noteCardEvent(id, event: "leave") }
+    }
+    #endif
     if factory.controller?.context.displayedTabIDs != now { factory.controller?.context.displayedTabIDs = now }
     for id in now.subtracting(old) {
       if let effect = session.displayed(tabID: id) { apply(effect) }
@@ -104,11 +149,25 @@ final class MediaCoordinator {
 
   func contentChanged(_ host: EngineWebContentHost, changes: OEWebContentChange) {
     guard !changes.isDisjoint(with: [.media, .audio, .mediaCapture, .pictureInPicture, .live, .crash]) else { return }
+    #if OPEN_AUTOMATION
+    if timingObserver != nil, let factory = host.owner {
+      let shown = displayed[factory.windowState.id] ?? []
+      // Preserve the first event of an eligible publication until its card is inserted.
+      // An earlier non-media event (or an ineligible leave) must not supply this timestamp.
+      if !shown.contains(host.tabID),
+         !store.visibleSources(windowID: factory.windowState.id, displayed: shown).contains(where: { $0.tabID == host.tabID }) {
+        noteCardEvent(host.tabID, event: "engine")
+      }
+    }
+    #endif
     sync(host)
   }
 
   /// A tab's page closed: tab close, archive, unload (sleep), crash teardown, window close.
   func hostClosed(tabID: ItemID) {
+    #if OPEN_AUTOMATION
+    cardTimings[tabID] = nil
+    #endif
     store.remove(tabID: tabID); pendingExit[tabID] = nil; decisions[tabID] = nil; pipTimes[tabID] = nil
     exitWaits.removeValue(forKey: tabID)?.cancel()
     var minimized = false
@@ -179,6 +238,7 @@ final class MediaCoordinator {
   // MARK: Auto-PiP
 
   private func leave(_ host: EngineWebContentHost, factory: EngineWebContentHostFactory) {
+    let leftAt = ProcessInfo.processInfo.systemUptime
     let content = host.content, id = host.tabID
     guard let url = content.url else { return }
     let media = content.mediaSession
@@ -186,7 +246,7 @@ final class MediaCoordinator {
       tabID: id, url: url, state: Self.state(media), audible: content.isAudible, event: .selection,
       settings: settings, rules: rules, session: session,
       disablePictureInPicture: media?.isPictureInPictureDisabled ?? false)
-    decisions[id] = (decision, ProcessInfo.processInfo.systemUptime)
+    decisions[id] = (decision, leftAt)
     guard decision == .open else { return }
     request(content, tabID: id, automatic: true)
   }
@@ -292,6 +352,7 @@ final class MediaCoordinator {
     guard let content = pip.webContent,
           let factory = app.hostFactories.values.first(where: { $0.tabID(for: content) != nil }),
           let tabID = factory.tabID(for: content) else { return }
+    if pip.kind == .document { openDocumentPictureInPicture(pip, openerTabID: tabID, factory: factory); return }
     if let old = pipWindow { old.dismiss(reason: .replaced) }
     let host = EnginePictureInPictureHost(
       pip: pip, tabID: tabID,
@@ -317,11 +378,13 @@ final class MediaCoordinator {
   }
 
   fileprivate func pictureInPictureDidChange(_ pip: OEPictureInPicture) {
+    if let document = documentPiP, document.pip === pip { document.refresh(); return }
     guard pipHost?.pip === pip else { return }
     pipWindow?.refresh()
   }
 
   fileprivate func pictureInPictureDidClose(_ pip: OEPictureInPicture) {
+    if let document = documentPiP, document.pip === pip { document.close(); return }
     // The page, a navigation, a crash or a new PiP ended it: the window goes without pausing.
     guard pipHost?.pip === pip, let window = pipWindow, !window.isClosing else { return }
     window.dismiss(reason: .sourceGone)
@@ -345,25 +408,23 @@ final class MediaCoordinator {
 
   // MARK: Document PiP (§4.6, EM-7)
 
-  /// The page asked for a Document PiP window. Returns the child web content Chromium fills,
-  /// or nil (the request fails in the page) when the engine cannot host it in Open's panel.
-  func openDocumentPictureInPicture(opener: OEWebContent, request: OEOpenRequest,
-                                    factory: EngineWebContentHostFactory) -> OEWebContent? {
-    guard OEEngine.shared.supportsShellDocumentPictureInPicture, let tabID = factory.tabID(for: opener) else { return nil }
+  /// The page opened a Document PiP window (EM-7): Chromium already closed any other PiP and
+  /// holds the PiP page; Open's panel shows it. Synchronous, inside the engine's open.
+  private func openDocumentPictureInPicture(_ pip: OEPictureInPicture, openerTabID: ItemID,
+                                            factory: EngineWebContentHostFactory) {
+    if let old = pipWindow { old.dismiss(reason: .replaced) }
     documentPiP?.close()
-    let config = OEWebContentConfiguration(context: request.context)
-    config.runtimeStyle = opener.runtimeStyle
-    let child = OEWebContent(configuration: config, url: nil)
-    let document = DocumentPictureInPicture(child: child, opener: opener, openerTabID: tabID)
-    document.openURL = { [weak factory] url in _ = factory?.openNewTab(url: url, background: false) }
+    let document = DocumentPictureInPicture(pip: pip, openerTabID: openerTabID)
     document.onClosed = { [weak self, weak document] in
       guard let self, self.documentPiP === document else { return }
       self.documentPiP = nil; self.feedSleep()
     }
-    guard document.present(settings: settings, screen: factory.window?.screen?.visibleFrame) else { return nil }
+    guard document.present(settings: settings, screen: factory.window?.screen?.visibleFrame) else {
+      DispatchQueue.main.async { pip.close(pausingVideo: false) }
+      return
+    }
     documentPiP = document
     feedSleep()
-    return child
   }
 
   // MARK: Helpers

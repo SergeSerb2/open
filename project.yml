@@ -92,7 +92,7 @@ targets:
         SKIP_INSTALL: YES
         HEADER_SEARCH_PATHS: $(CEF_ROOT) $(SRCROOT)/Engine/OpenEngine/include
         GCC_PREPROCESSOR_DEFINITIONS: CEF_USE_SANDBOX=1 __STDC_CONSTANT_MACROS __STDC_FORMAT_MACROS $(inherited)
-        OTHER_LDFLAGS: $(CEF_WRAPPER_LIB) -framework AppKit -framework IOSurface -framework QuartzCore
+        OTHER_LDFLAGS: $(CEF_WRAPPER_LIB) -framework AppKit -framework IOSurface -framework QuartzCore -framework Security
         WARNING_CFLAGS: -Wno-unused-parameter -Wno-shorten-64-to-32 -Wno-comma
         CLANG_WARN_DOCUMENTATION_COMMENTS: NO
 
@@ -149,17 +149,19 @@ targets:
       - package: OpenKit
         product: OpenStore
       - package: OpenKit
-        product: OpenBoosts
-      - package: OpenKit
         product: OpenWeb
       - package: OpenKit
         product: OpenExtensionsUI
+      - package: OpenKit
+        product: OpenBoosts
       - package: OpenKit
         product: OpenSiteControl
       - package: OpenKit
         product: OpenFeatures
       - package: OpenKit
         product: OpenSettings
+      - package: OpenKit
+        product: OpenOnboarding
       - package: OpenKit
         product: OpenCommandBar
       - package: OpenKit
@@ -207,6 +209,23 @@ targets:
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     postBuildScripts:
+      - name: Embed verified ad-block lists
+        script: '"$SRCROOT/tools/embed-adblock.sh"'
+        basedOnDependencyAnalysis: false
       - name: Embed CEF framework and helpers
         script: '"$SRCROOT/tools/embed-cef.sh"'
+        basedOnDependencyAnalysis: false
+      - name: Generate acknowledgements
+        script: |
+          python3 "$SRCROOT/tools/generate-acknowledgements.py" \
+            "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Credits.rtf" \
+            --app-info-plist "$TARGET_BUILD_DIR/$INFOPLIST_PATH" \
+            --ubo-source "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/AdBlock/Source" \
+            --cef-credits "$CEF_ROOT/CREDITS.html"
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Credits.rtf
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Acknowledgements.txt
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/CREDITS.html
         basedOnDependencyAnalysis: false

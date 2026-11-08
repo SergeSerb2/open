@@ -48,6 +48,16 @@ CefRefPtr<OEClient> OECreateClient(OEWebContent* webContent) {
   return new OEClient(webContent);
 }
 
+bool OEClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefFrame> frame, CefProcessId source,
+    CefRefPtr<CefProcessMessage> message) {
+  auto name = message->GetName();
+  if (source != PID_RENDERER || !frame->IsMain() ||
+      (name != "oe.open.message" && name != "oe.open.reply")) return false;
+  [view_ oe_openWorldMessage:message];
+  return true;
+}
+
 #pragma mark Life span
 
 bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
@@ -76,6 +86,13 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
     return true;
   }
   id<OEWebContentDelegate> delegate = source.delegate;
+  // Document PiP of a Chrome-style page: CEF uses Chromium's default creation,
+  // where the fork's EM-7 hook (chromium/0403) shows it through the shell's
+  // pictureInPictureDelegate, or Chromium's own window without one.
+  if (source && target_disposition == CEF_WOD_NEW_PICTURE_IN_PICTURE &&
+      source.runtimeStyle == OERuntimeStyleChrome) {
+    return false;
+  }
   if (!source ||
       ![delegate respondsToSelector:@selector(webContent:
                                         createWebContentForOpenRequest:)]) {

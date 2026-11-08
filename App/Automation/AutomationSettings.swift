@@ -3,8 +3,72 @@ import AppKit
 import ImageIO
 import OpenModel
 import OpenSettings
+import OpenEngine
 
 extension AutomationController {
+  func settingsAdBlock(_ args: [String: Any]) throws -> [String: Any] {
+    let adapter = app.settingsPresenter
+    guard let model = adapter.settings.adBlock else { throw Failure(message: "ad blocking unavailable") }
+    if let enabled = args["enabled"] as? Bool { model.setEnabled(enabled) }
+    if let host = args["host"] as? String {
+      guard host.utf8.count <= 253, let excluded = args["excluded"] as? Bool else { throw Failure(message: "expected a site host and exclusion state") }
+      model.setExcluded(host, excluded: excluded)
+    }
+    var copiedDebug: String?
+    if args["copyDebug"] as? Bool == true {
+      // Exercise the real copy action and restore all clipboard formats locally.
+      let board = NSPasteboard.general
+      let saved = (board.pasteboardItems ?? []).map { item in
+        Dictionary(uniqueKeysWithValues: item.types.compactMap { type in item.data(forType: type).map { (type, $0) } })
+      }
+      defer {
+        board.clearContents()
+        let items = saved.map { values in
+          let item = NSPasteboardItem()
+          for (type, data) in values { item.setData(data, forType: type) }
+          return item
+        }
+        board.writeObjects(items)
+      }
+      model.copyDebug()
+      copiedDebug = board.string(forType: .string)
+    }
+    // SwiftUI exposes its static text only after enhanced AX is requested,
+    // as in the existing Profiles automation. This changes only this process.
+    let write = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+    if NSApp.responds(to: write) { NSApp.perform(write, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
+    return ["enabled": model.enabled, "hasOtherBlocker": model.hasOtherBlocker,
+      "ready": model.isReady, "error": model.errorText,
+      "copiedDebugInfo": copiedDebug ?? "",
+      "listStatus": model.lists.filter(\.bundled).map { model.listStatus($0) },
+      "text": adapter.settingsPresenter.window.map { windowText($0) } ?? []]
+  }
+
+  /// Read-only: does not instantiate Settings, open a store, or create a context.
+  func settingsAdBlockEngine() -> [String: Any] {
+    let store = app.stores.existingAdBlock
+    return ["started": app.adBlockEngineAdapter.started,
+      "nativeSupported": OEBrowserContext.adBlockSupported,
+      "adapterSupported": app.adBlockEngineAdapter.isSupported,
+      "bindingInstalled": store?.onEngineEvent != nil,
+      "profiles": app.model.profiles.map { profile -> [String: Any] in
+        let expected = app.directories.adBlockDirectory(dataDirectoryName: profile.dataDirectoryName)
+          .appendingPathComponent("lists", isDirectory: true).standardizedFileURL
+        let contexts = app.adBlockEngineAdapter.contexts(for: profile.id)
+        return ["profile": profile.id.description,
+          "storeReady": store?.isProfileOpen(profile.id) ?? false,
+          "storeEnabled": store?.isEnabled ?? false,
+          "storeExcludedDomains": store?.excludedDomains(for: profile.id) ?? [],
+          "contexts": contexts.map { context -> [String: Any] in
+            ["identifier": context.identifier, "offTheRecord": context.originalContext != nil,
+              "adBlockEnabled": context.isAdBlockEnabled,
+              "listDirectorySet": context.adBlockListDirectory != nil,
+              "listDirectoryMatchesProfile": context.adBlockListDirectory?.standardizedFileURL == expected,
+              "excludedDomains": context.adBlockExcludedDomains, "adBlockStatus": context.adBlockStatus]
+          }]
+      }]
+  }
+
   func settingsProfilePage(_ args: [String: Any]) throws -> Bool {
     guard Set(args.keys).isSubset(of: ["profile", "page"]),
       let raw = args["profile"] as? String,

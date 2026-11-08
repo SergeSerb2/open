@@ -8,7 +8,13 @@ import OpenStore
     var downloads: [DownloadItemSnapshot]
     init(_ downloads: [DownloadItemSnapshot]) { self.downloads = downloads }
 }
-@MainActor final class PreviewLibraryActions: LibraryActions {
+@MainActor final class PreviewLibraryActions: LibraryActions, BoostsProvider {
+    var boostRows: [ProfileID: [BoostItemSnapshot]] = [:]
+    func boosts(profileID: ProfileID) -> [BoostItemSnapshot] { boostRows[profileID] ?? [] }
+    func setBoostEnabled(id: String, enabled: Bool, profileID: ProfileID) { record("setBoostEnabled \(id) \(enabled) \(profileID)") }
+    func renameBoost(id: String, to name: String, profileID: ProfileID) { record("renameBoost \(id) \(profileID)") }
+    func deleteBoost(id: String, profileID: ProfileID) { record("deleteBoost \(id) \(profileID)") }
+    func editBoost(id: String, profileID: ProfileID) { record("editBoost \(id) \(profileID)") }
     var log: [String] = []
     let model: BrowserModel
     let downloads: PreviewDownloads

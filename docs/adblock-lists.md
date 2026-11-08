@@ -41,6 +41,30 @@ invented URL replaces it. Availability of every optional upstream is not claimed
 
 ## Files and ownership
 
+Redirect resources are app-bound, separate from the 46-list catalog and
+`enabledBlockLists`. Stage them with `tools/fetch-adblock-lists.sh` before
+standalone SwiftPM builds. The script verifies the pinned uBO archive, runs
+the locked `adblock =0.8.11` driver offline under `/tmp`, and verifies the
+output SHA-256. A matching `Vendor/adblock/resources.json` is reused without
+Rust. The build also caches the hash-verified `ubo.tar.gz` for license-source
+staging, so both caches together avoid the network; stale bytes trigger a rebuild, and any pin mismatch exits 1
+before publication. Cargo is available on M5 (`~/.cargo/bin`), absent on M1
+as checked 2026-11-08; copy the verified output and archive caches to M1 before building.
+The generated SwiftPM payload is ignored. Its pins receipt is a checked
+mirror of `Engine/fork/adblock/resources-pins.txt`. See plan §9.3 for the
+source commit, hashes, driver and `ResourceType` counts.
+
+The App embeds `AdBlock/resources.json`. Each new generation copies it and
+records `{file: "resources.json", listID: "_resources", sourceRevision:
+[<output pin>], bytes, sha256, generation}` in `manifest.json`. Verification
+checks the 4 MiB cap, size, hash and receipt. Legacy generations without it
+gain it on the next publish (including open, update and reset); an app pin
+change republishes on open. Debug info reports the first 12 hash digits.
+`openkit adblock reset` exercises the store's real reset transaction.
+`openkit adblock bundle` also copies or repairs resources from the verified
+app payload, so its output remains a complete offline seed directory.
+No resource download occurs at runtime. Engine N-19 is a separate gate.
+
 The store's `root` is the Open application-data directory. The CLI requires an
 explicit root so it cannot change a user's app settings by default. Its default
 Profile UUID is `00000000-0000-0000-0000-000000000001`; `--profile UUID` selects
@@ -53,23 +77,24 @@ The normative engine directory contract is [plan §9.2](plans/adblock-fork.md#92
 <root>/
   .adblock-lock
   adblock-settings.json
-  Profiles/<UUID>/adblock/
+  Profiles/<dataDirectoryName>/AdBlock/
     catalog-state.json
     exclusions.json                   canonical Unicode sites; unbracketed IPs
-    downloads/<listID>/<index>.body    hash-checked source cache, never inputs
-    current.json                      live + previous {generation, manifestSHA256}
-    generations/<n>/
-      <listID>.txt                    complete enabled set, one file per list
-      manifest.json                   inventory, hashes, generation, state snapshot
-      engine.dat                      optional browser-owned, generation-bound
-      engine-inputs.json              browser DAT receipt, deferred integration
-    quarantine/<n>-<unique>/           rejected generation
+    lists/                            engine directory
+      downloads/<listID>/<index>.body  hash-checked source cache, never inputs
+      current.json                    live + previous {generation, manifestSHA256}
+      generations/<n>/
+        <listID>.txt                  complete enabled set, one file per list
+        manifest.json                 inventory, hashes, generation, state snapshot
+        engine.dat                    optional browser-owned, generation-bound
+        engine-inputs.json            browser DAT receipt, deferred integration
+      quarantine/<n>-<unique>/         rejected generation
 ```
 
-`listDirectory(for:)` and engine configure/reload events now pass the **adblock
-root**. The engine must resolve `current.json`, verify its manifest hash, and
+`openProfile(_:directory:)` takes the canonical `AdBlock` directory from its
+caller. `listDirectory(for:)` and engine configure/reload events pass **AdBlock/lists**. The engine must resolve `current.json`, verify its manifest hash, and
 verify every manifest file's size and SHA-256 before loading. It reads only that
-inventory. Extra `.txt` files, old `lists/` directories, and unreferenced
+inventory. Extra `.txt` files, legacy loose list directories, and unreferenced
 generations cannot become engine inputs. A cached DAT is valid only within the
 same generation with recorded input hashes equal to the manifest. The plan
 also specifies the DAT's own hash/size receipt. Swift never writes DAT.
@@ -99,7 +124,9 @@ The engine must repeat verification at load to cover changes after Swift opens.
 
 The release seed pins live in
 [`list-pins.txt`](../Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt).
-The [official EasyList site](https://easylist.to/) supplies both defaults.
+Both defaults come from the official [easylist/easylist repository](https://github.com/easylist/easylist),
+using immutable `raw.githubusercontent.com` URLs at one pinned `gh-pages`
+commit. The three columns are local name, seed URL, and SHA-256.
 
 ```sh
 # From the repo root. Downloads only from official HTTPS upstreams.
@@ -109,19 +136,22 @@ tools/fetch-adblock-lists.sh --update-pins
 ```
 
 The script stages under ignored `Vendor/adblock/`. It verifies list headers and
-SHA-256 before replacement. List text is never committed. Mutable upstream URLs
-can change during development; an ordinary fetch must then fail its old pin.
-Only explicit `--update-pins` changes committed pins. This occurred during this
-implementation and confirmed that ordinary fetching does not silently repin.
-The app packaging step must copy the verified files into Resources/AdBlock.
-That app packaging and uBO resources remain deferred.
+SHA-256 before replacement. List text is never committed. Normal fetching uses
+exactly the pinned URLs and can reuse verified local files offline; it refuses
+a tampered cache. `--update-pins` resolves the current official `gh-pages`
+commit once, rewrites both URLs and hashes, and prints old → new values.
+This seed policy changed on 2026-11-07 because the live EasyList URL changes
+many times per day. App packaging copies verified files into Resources/AdBlock.
 
 Supply that bundle directory to `AdBlockStore` before opening a Profile. It
 verifies the fixed pins and seeds missing enabled defaults, without a network
 request. A damaged bundle fails its pin check. The real `adblock bundle --dir`
-command repairs a damaged staged default by an unconditional official download,
-then verifies the same fixed pin before replacing it. If upstream changed, repair
-fails safely until a reviewed pin update supplies a new seed snapshot.
+command repairs a damaged staged default by downloading its pinned seed URL,
+then verifies the same fixed pin before replacing it. Its result prints
+`seed_url` for each download. Seed fetches permit only their source host,
+`raw.githubusercontent.com`; they do not add that host to runtime redirect
+allow-lists. A wrong pin fails with expected and actual hashes and preserves
+the existing file.
 
 Runtime updates use live upstream revisions. They validate the header and save
 a new SHA-256 receipt, rather than requiring live revisions to equal the fixed
@@ -158,7 +188,7 @@ let store = try AdBlockStore(
 store.onEngineEvent = { event in
     // The OpenEngine adapter handles configure/enabled/exclusions/reload/closed.
 }
-try await store.openProfile(profileID)
+try await store.openProfile(profileID, directory: directories.adBlockDirectory(dataDirectoryName: profile.dataDirectoryName))
 try store.setEnabled(false)
 try store.setExcluded("news.example.co.uk", excluded: true, profile: profileID)
 try await store.setListEnabled("fi", true, profile: profileID)
@@ -166,6 +196,8 @@ try await store.updateListsNow(profile: profileID)
 let snapshot = store.siteSnapshot(for: profileID)
 let allowed = try snapshot.isAllowlisted(host: "cdn.example.co.uk")
 try store.closeProfile(profileID)
+// Permanent deletion: await the IO barrier before ProfileTeardown removes any folder.
+await store.retireProfile(profileID)
 ```
 
 `isEnabled` is readable; `setEnabled` is the throwing persistence setter.
@@ -330,16 +362,17 @@ pass does not claim CEF/DAT runtime acceptance.
 
 ## Scope deviations and remaining integration
 
-- Catalog and pins live in the new OpenKit target, with one canonical copy each,
-  instead of the deferred `Engine/fork/adblock` directory. The fetch script reads
-  those same pins. The later engine/package work can consume these resources.
+- Catalog and list pins live in the OpenKit target. Resource pins live in
+  `Engine/fork/adblock`, with a byte-checked package mirror. The fetch script
+  reads both receipts. The later engine work can consume these resources.
 - BCNYBlocklists is an unavailable catalog entry because the reference manifest
   supplies no public upstream source. The `dk` ID and 18 Korean sources follow
   the actual manifest rather than the plan's summaries.
 - `AdBlockStore` supplies throwing setters, an async list-enable operation, and
   value-only engine events. An OpenEngine adapter still needs to bind those events.
-- Engine steps, resources assembly, actual page blocking, and app packaging are
-  deferred as requested. CLI reload-event counts prove the Swift contract only.
+- Engine steps and actual page blocking remain separate. Redirect resource
+  assembly, bundling and Swift generations are implemented (plan §9.3).
+  CLI reload-event counts prove the Swift contract only.
 
 ### Performance budgets (lead decision, 2026-10-25)
 

@@ -95,10 +95,10 @@ The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) ย
 | `identifier`, `directory`, `isEphemeral` | Ephemeral contexts are in memory only (incognito) |
 | `originalContext`, `state` | A private context has its chosen regular parent. State is `.live` or `.closed`; retained closed wrappers and managers stay inert. Unknown native contexts never fall back to Default. |
 | `extensions` | `OEExtensionManager` |
-| `userScripts`, `addUserScript(_:)`, `removeUserScript(identifier:)`, `removeAllUserScripts()` | Boosts and Zap. `OEUserScript`: JavaScript or a style sheet, document start or end, Chrome match patterns, main frame only. New documents in every page of the context get changes at once. Main world only (patch P7). |
+| `userScripts`, `addUserScript(_:)`, `removeUserScript(identifier:)`, `removeAllUserScripts()` | Boosts and Zap. `OEUserScript`: JavaScript or a style sheet, document start or end, Chrome match patterns, main frame only. Page world by default; Open-world JavaScript runs at document start in the main frame. Changes reach new documents, including replacement renderer processes (0602). |
 | `requestFilter` | `(OEResourceRequest) -> OERequestDecision`, called on the network thread for every request of the context, including service workers. Allowed requests get no per-request handler. |
 | `permissionState(for:origin:)`, `setPermissionState(_:for:origin:)` | Chromium content settings for Site Control Center |
-| `clearBrowsingData(origin:)` | With an origin: the host cookies of that URL's host, any path (`CefCookieManager::DeleteCookies` with a URL and no name; `Domain=` cookies stay), and nothing else: the HTTP cache is untouched. With nil: every cookie and the whole HTTP cache. Per-site cache clearing (Site Control E2) needs a fork patch: DevTools `Storage.clearDataForOrigin` has no HTTP cache type and CEF's `ClearHttpCache` clears every site. |
+| `clearBrowsingData(origin:)` | With an origin: the host cookies of that URL's host, any path (`CefCookieManager::DeleteCookies` with a URL and no name; `Domain=` cookies stay), and nothing else: the HTTP cache is untouched. With nil: every cookie and the whole HTTP cache. Use `clearSiteData(origin:types:completion:)` for per-site cookies, HTTP cache or storage (E2, below). |
 | `clearBrowsingData(_:from:to:completion:)` | Per-Profile Chromium history, cookies and site data, cached files, and download records, from begin through end, inclusive (Chromium semantics). Requires begin < end. Uses Chromium's browsing-data remover and reports its real completion or an error. Site data includes localStorage, IndexedDB, service workers and cache storage. Downloaded files and Open's separate HistoryStore are not removed by this API. |
 | `websiteColorScheme` | `.automatic`, `.light`, `.dark` (EP-9a): Chrome's browser color scheme of the context's profile (`CefRequestContext::SetChromeColorScheme`, user color transparent). Chrome derives `prefers-color-scheme` from it (`GetPreferredColorScheme` in `chrome_content_browser_client.cc`); open pages update without a reload. Chrome keeps the value in the profile's prefs, so the first set always reaches Chromium, later sets only on a change. Chrome's default incognito policy follows device appearance. The setter also calls `CefSetWebsiteColorScheme` (fork 0505, EP-9b, #158/#164), which sets the web preference on both styles and after navigation. |
 | `downloads`, `delegate` | `browserContext(_:decideDestinationFor:suggestedFilename:completion:)`, `browserContext(_:downloadDidUpdate:)`; `OEDownload` has state, bytes, speed, `cancel/pause/resume` |
@@ -309,6 +309,7 @@ From the fork's `CefMediaController` (overlay `cef/include/cef_media_controller.
 - `mediaVolume` (settable, 0...1, default 1, not persisted): a tab volume that Chromium's media session multiplies into every player's volume, players added later too (chromium/0401). The page's own `element.volume` does not change. Web Audio is not a session player and is not affected; use `isMuted` for silence.
 - `requestPictureInPicture(completion:)` enters video PiP for the largest playing video (`largestVideoSize`) from the browser, so no user gesture is needed. It fails at once for a video that cannot enter PiP (Blink's browser-initiated path does not check `disablePictureInPicture`, so the engine checks the player's availability first). Completion YES when the page is in PiP, NO otherwise after at most 2 s (Chromium has no direct reply). `exitPictureInPicture(pausing:)` closes this page's PiP window only (one app-wide): without pausing as Chromium's own exit, with pausing as the user's close.
 - Open's own PiP window (EM-4, `OEPictureInPicture.h`). While `OEEngine.pictureInPictureDelegate` is set (`supportsShellPictureInPicture` is YES), video PiP opens in the App's window instead of Chromium's.
+- Document PiP (EM-7, `OEPictureInPicture.h`). `documentPictureInPicture.requestWindow()` on a Chrome-style page opens through the same delegate as an `OEPictureInPicture` of `kind` `.document` (`supportsShellDocumentPictureInPicture` is YES): `videoView` is the PiP page, `naturalSize` the requested size (CSS px; `window.resizeTo` sends `.naturalSize`), `close(pausingVideo:)` runs the PiP document's `pagehide`. `OEOpenDispositionNewPictureInPicture` reaches `createWebContentFor` only from Alloy-style pages. The `OEWebContent.requestedPictureInPictureSize` category is gone.
   - `pictureInPictureDidOpen:` is synchronous, inside Chromium's session start. The App makes its window there, puts `videoView` in it and sets `windowFrame`, because Chromium reads the window size for the renderer right after.
   - `videoView` shows the video. It is a layer-hosting view with the engine's compositor and takes no mouse events.
   - The App's controls call the commands (`togglePlayPause`, `seek(to:)`, `setMuted:`, the track, slide and meeting actions, `close(pausingVideo:)`).
@@ -347,6 +348,7 @@ The caller makes lazy images load first (`img[loading=lazy]` โ’ `eager`, wait โ
 | `reload()` | Invalidates the live snapshot and notifies observers; no disk read. |
 | `managementPageURL`, `webStorePageURL(extensionIdentifier:)` | The existing management and store URLs. |
 | `installLocalCRX(_:webContent:)` | Automation hook, only with the engine's `--open-automation` switch. A real local CRX3 goes through `CrxInstaller` and its consent prompt. This is the network-free install gate. |
+| `installLocalCRX(_:completion:)` | Automation-only 0704 completion. Exactly once on a later main-queue turn: `OEExtensionInstallResult.installed` with extension ID, `.cancelled` with neither ID nor error, or `.failed` with Chromium's error text (including `CRX_SIGNATURE_VERIFICATION_FAILED`). Rejected requests and context closure also complete. No requesting page is required; consent uses this manager's profile presenter. At most 32 local requests may be pending; file paths are capped at 4,096 UTF-8 bytes and error text at 65,536 UTF-16 units. Completion may close/replace the context. This result does not use the delegate; Web Store installs keep their existing completion. |
 
 Optional delegate events: `extensionManagerDidChange(_:)`, `extensionManagerDidBecomeReady(_:)`, `extensionManagerDidChangeCommands(_:)`, `extensionManager(_:didInstall:byUser:)`, and `extensionManager(_:didFailToLoadExtensionAt:error:)`. Events arrive on the main thread outside Chromium model notifications. Callbacks may close/replace their context or window. Managers must be released on the main thread.
 
@@ -369,7 +371,7 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 | H.264, AAC, Widevine | Not in stock CEF | P4 |
 | Audible state for Web Audio | Fixed: Chromium's tab audio signal through `CefMediaController` (no page probe) | P6, done |
 | Media session, tab volume, PiP without a gesture | Fixed: `OEMediaSession`, `mediaVolume`, `requestPictureInPicture` from the fork's `CefMediaController` | media 0401, done |
-| User scripts in an isolated world | Main world | P7 |
+| User scripts in an isolated world | Page and Open worlds, native channel and document token | P7 implemented |
 
 ## Debugging crashes
 
@@ -477,3 +479,92 @@ for the address manager's pending changes, then a read on the same web data
 service; cards wait for that service read. Cookies wait for
 `FlushCookieStore`. These are the durability barriers in the password plan
 ยง8.3. Completions contain counts only, never imported values.
+## Open isolated world (P7 / E5)
+
+`OEScriptWorld` has `.page` (0, default) and `.open` (1). Set `OEUserScript.world`
+before adding it to a context; the context copies the script. Open scripts
+always run at document start in the main frame, using the existing match
+patterns. Page scripts keep their injection time and frame options.
+
+CEF patch `0602-open-browser-extra-info.patch` adds the experimental UI-thread
+`CefSetBrowserExtraInfo(browser, extraInfo)` entry point. It stores a read-only
+copy for future renderer processes (null clears it). Script changes update this
+snapshot before notifying the current renderer, so scripts added after a tab
+exists run at document start after a renderer replacement too. The existing
+`OnRenderViewReady` resend remains in place.
+
+This includes private (OTR) browsers. Broadcasts select web contents by their
+exact `OEBrowserContext` identity; each snapshot reads that context's scripts.
+An OTR context has its own script list, so scripts installed only in its parent
+profile do not appear in it, and private-only scripts do not reach the parent.
+
+`evaluateJavaScript(_:inWorld:)` evaluates in the current document. The Open
+world shares the DOM, with separate globals and DOM wrappers. It grants no
+user gesture, awaits promises, returns JSON-compatible values (undefined and
+values whose JSON serialization is undefined become null), and reports
+exceptions. Open evaluation limits: 1 MiB source (UTF-16
+units), 1 MiB UTF-8 result, 64 pending calls, 10-second completion deadline.
+Open source containing NUL or malformed Unicode is refused before conversion.
+Page evaluation keeps its existing behavior.
+
+Only Open's reserved world exposes `__openNative.postMessage(type, payloadJSON)`.
+The App prelude maps `window.__open.postMessage(type, payload)` to this function
+with `JSON.stringify(payload)`. It is added only to JavaScript; Open-world
+stylesheet sources stay unchanged. Native replies evaluate
+`window.__open.receive(envelope)` in `.open`. The engine does not interpret the
+runtime's envelope. `webContent(_:didReceiveOpenWorldMessage:payloadJSON:documentID:)`
+and `onOpenWorldMessage` deliver on the main thread. Consumers must validate
+message types and payloads. Either callback may close the page.
+
+`documentID` is Chromium's document token. A new main-frame document changes it;
+fragment and history-state navigation keep it. The handler drops stale-context
+calls. Accepted-message size is at most 65,536 UTF-8 bytes for type plus payload.
+Only 200 messages in a sliding second pass per renderer page. Oversize, rate,
+and invalid-argument drops are counted without IPC.
+`openWorldMessageStatistics` reads accepted/oversized/rateLimited/invalid totals.
+
+OpenWeb mirrors this as `ScriptWorld`, `UserScript.world`,
+`WebContent.evaluateJavaScript(_:in:)`, and `onOpenWorldMessage`.
+
+
+## Site settings, data and connection security (E1/E2/E3)
+
+`OESiteControl.h` adds these main-thread APIs. `App/EngineSiteControlBridge.swift`
+mirrors them through OpenWeb; OpenKit imports no CEF types.
+
+| OpenEngine | OpenWeb | Behavior |
+|---|---|---|
+| `changedSiteSettings(origin:) -> [OESiteSetting]` | `WebProfile.changedSiteSettings(origin:) -> [WebSiteSetting]` | Effective per-origin exceptions that differ from the profile default. Each `kind` is Chromium's registry name, such as `javascript`, `images` or `cookies`. Every scalar ContentSetting in `ContentSettingsRegistry` is visited, including future types; this is not the older permission whitelist. |
+| `setSiteSetting(_:state:origin:) -> Bool` | `setSiteSetting(_:kind:origin:) -> Bool` | `allow`, `block`, `ask`, `session`. Each kind accepts only its registered states. Returns false for an invalid origin, kind/state, or an uninitialized context. A value equal to the global default is omitted from the returned list, but the API has no `default` state to clear an exception. Reset permissions remains a follow-up. |
+| `clearSiteData(origin:types:completion:)` | `clearSiteData(origin:kinds:) async throws` | Bits 1 cookies, 2 cache, 4 storage (`OESiteDataType` / `WebSiteDataKinds`). Empty kinds succeeds; invalid arguments fail. Completion runs once after every selected backend finishes; a backend failure can leave a partial result. Safe before profile initialization; completion may close the profile. |
+| `securityLevel` (`engineSecurityLevel` in Swift) | `WebContent.securityLevel: WebSecurityLevel` | `secure`, `neutral`, `insecure`, `dangerous`, `mixedContent`. Chrome's existing visible-security helper supplies certificate/mixed-content flags and available Safe Browsing verdicts. Major certificate errors take precedence; HTTP, including loopback, is insecure; non-network pages are neutral. This API does not add a Safe Browsing service or policy. |
+| `certificateChain` (`engineCertificateChain` in Swift) | `WebContent.certificateChain: [SecCertificate]` | Chromium's visible TLS chain as `SecCertificateRef` objects, leaf first. Empty on a non-TLS page or refusal. Maximum 32 certificates, 256 KiB per certificate, 1 MiB total. |
+
+Observe `OEWebContentChangeSecurity` / `WebContentChange.security` (bit **16**,
+next after main's selection bit 15), then read both security properties again.
+The native delegate notification is deferred to the next main-loop turn so
+that a delegate may close the page without deleting the active Chromium observer.
+
+`cef_site_control.h` and `open/browser/page/open_site_control.cc` are CEF overlay
+files. They need no new upstream patch: `OpenPageState` already observes each
+WebContents. HTTP cache and DOM/shared storage removal use `BrowsingDataRemover`
+with an exact `url::Origin` and `kOriginInAllContexts`. Storage includes local
+storage, IndexedDB, CacheStorage, service workers, file systems and background
+fetch. HTTP cache is a separate kind from CacheStorage.
+
+Cookies cannot use that origin filter: Chromium's
+`BrowsingDataFilterBuilder::BuildCookieDeletionFilter` rejects `AddOrigin`,
+while an eTLD+1 filter would remove unrelated sibling hosts. The overlay instead
+enumerates canonical cookies and deletes matches for the requested host across
+paths and partitions. This includes parent Domain cookies, which are shared by
+their nature; unrelated host-only cookies stay intact. Cookies also intrinsically
+share schemes and ports. Enumeration refuses more than 10,000 cookies or 64 MiB
+of cookie strings. Origins are capped at 16,384 UTF-16 units, kinds at 128 and
+states at 16. Alternate OpenWeb backends return no exceptions, refuse setters,
+and throw `unsupported` for data removal until they implement these APIs.
+
+The `sitedata` real-App suite covers JavaScript/images, session and invalid/empty
+requests, separate cookie/cache/storage deletion with a second origin preserved,
+server-hit proof of HTTP cache eviction, HTTP/neutral/valid HTTPS/self-signed
+security, TLS certificates and the security change bit. Current distribution
+fingerprints, runtime results and loads are recorded in the PR evidence.

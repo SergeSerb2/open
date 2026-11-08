@@ -88,6 +88,10 @@ def checks(factory, results, tmp, harness):
         for k in keys: app.call('defaults', key=k, value=None)
         for k, v in zip(keys, [True, True, False, False, False, False]): app.call('defaults', key=k, value=v)
         normal = windows(False)[0]; normal_tab = app.call('tabs')[0]['id']; app.call('wait', tab=normal_tab)
+        if os.environ.get('OPEN_BOOST_PRIVATE_ONLY') == '1':
+            from incognito_boosts import check_boosts_private
+            check_boosts_private(app, normal, base, wait, results, harness)
+            return
         profile = app.call('history-state')['profile']
         app.eval(normal_tab, "document.cookie='normalOnly=1; path=/'; true")
         # Drain normal launch metadata and durable writes before the private session.
@@ -179,7 +183,7 @@ def checks(factory, results, tmp, harness):
         linked = wait(lambda: next((w for w in windows(True) if w['id'] not in previous), None), timeout=5, step=.05)
         check('context_menu_private_link', bool(linked))
         if linked: focus(linked); wait(lambda: state()['ephemeral'], timeout=5, step=.05)
-        # Real window-server snapshots on each physical display, never rescaled renders.
+        # The App captures its own native window without screen-recording rights.
         evidence = Path(harness.ROOT) / 'docs/engine-spike/incognito'; evidence.mkdir(parents=True, exist_ok=True)
         for appearance in ['light', 'dark']:
             app.call('appearance', name=appearance)
@@ -187,13 +191,16 @@ def checks(factory, results, tmp, harness):
                 display = app.call('incognito-screen', scale=scale)
                 time.sleep(.15)
                 path = evidence / ('private-%s-%dx.png' % (appearance, scale))
-                subprocess.run(['/usr/sbin/screencapture', '-x', '-o', '-l', str(display['number']), str(path)], check=True)
+                shot = app.call('snapshot', window=display['number'], path=str(path))
                 width, height, pixel = harness.read_image(str(path), srgb=True)
                 # Flat empty sidebar below the rows: actual pixels, no PNG-size proxy.
                 colors = [pixel(x * scale, y * scale) for x, y in [(70, 580), (100, 590), (130, 600)]]
                 target = (38, 35, 43)
                 check('snapshot_%s_%dx' % (appearance, scale), path.is_file() and state()['appearance'] == 'NSAppearanceNameDarkAqua'
-                      and all(max(abs(a-b) for a, b in zip(c, target)) <= 2 for c in colors), scale=display['scale'], pixels=colors, size=[width, height], path=str(path.relative_to(harness.ROOT)))
+                      and display['scale'] == scale and [width, height] == [p * scale for p in display['sizePoints']]
+                      and all(max(abs(a-b) for a, b in zip(c, target)) <= 2 for c in colors), scale=display['scale'],
+                      pixels=colors, size=[width, height], sizePoints=display['sizePoints'], method=shot['method'],
+                      path=str(path.relative_to(harness.ROOT)))
         # Last-session quit has a beforeunload handler; private pages must not prompt.
         private_tab = next(t['id'] for t in app.call('tabs') if t['selected'])
         app.eval(private_tab, "window.addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='stay';});true")
@@ -218,7 +225,8 @@ def checks(factory, results, tmp, harness):
         app.call('quit'); clean_exit = wait(lambda: not app.process_path(app.pid), timeout=8, step=.1)
         app.quit()
         check('quit_private_no_prompt_no_records', clean_exit and fingerprint() == quit_before)
-        results['native_2x_captures'] = dict(status='DEFERRED', reason='Lead ruling 16:28: M5 exposes 1x only; M1 held. Run OPEN_INCOGNITO_CAPTURE_SCALE=2 under the same lock on a native 2x display. No upscaling.')
+        if os.environ.get('OPEN_INCOGNITO_CAPTURE_SCALE', '1') != '2':
+            results['native_2x_captures'] = dict(status='DEFERRED', reason='This run uses 1x. Run OPEN_INCOGNITO_CAPTURE_SCALE=2 on a native 2x display; no upscaling.')
         # Exercise the product's provider, session registry and native menu path.
         # These rows use real parent Profiles and Chrome's extension opt-in.
         app = factory(urls=(base + '/parent-default',), fresh=True)
@@ -280,7 +288,8 @@ def checks(factory, results, tmp, harness):
               before=before_allow, grant=grant, work_script=bool(ran), default_script=default_script)
         focus(work_private); app.call('window-close')
         focus(default_private); app.call('window-close')
-        results['boosts_disabled'] = dict(status='DEFERRED', reason='Lead ruling 16:12: Section 12 consumes factory.isIncognito when its App presenter lands.')
+        from incognito_boosts import check_boosts_private
+        check_boosts_private(app, normal, base, wait, results, harness)
     finally:
         if saved: harness._restore_defaults(app, saved)
         if app: app.quit()

@@ -113,7 +113,7 @@ unsafe `MovePinnedAction` call. No Chromium debugger was used.
 | P4 | Proprietary codecs (Widevine is out of v1) | H.264/AAC sites | 0: already in the fork's GN args; verify on the first fork build | — |
 | P5 | Trim the Chrome layer (Google services, components, locales) | Less network chatter, smaller bundle, faster first launch | 1–2 weeks | — |
 | P6 | Audible state callback (done 2026-11-02, part of "Media" below) | Correct speaker icon (Web Audio too); OpenSleep needs every audio change | 1–2 days | — |
-| P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
+| P7 | Isolated-world scripts for Open's page runtimes (implemented, Section 12) | Zap picker and Boost applier out of the page's reach | done | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 | P9 | Passwords and autofill | Save prompt routing, local stores and bounded import API | Section 15 | P1 |
 
@@ -134,6 +134,7 @@ wrappers `engine-apply` regenerates.
 0306-open-extension-windows-tabs.patch         # E11: AppKit windows; P1: tabs API move/discard guards
 0401-open-media-session.patch                   # Media: tab volume; per-player PiP availability
 0402-open-video-pip-window.patch                # Media EM-4: Open's own video PiP window
+0403-open-document-pip-window.patch             # Media EM-7: Document PiP in Open's panel
 # cef/series (starts at 0302)
 0302-open-hosted-tabs.patch                    # P1: hosted Chrome style tabs
 0303-open-context-menu-submenu-commands.patch  # P1: submenu commands with their own delegate
@@ -367,6 +368,55 @@ patches and distribution SHA-256
 See the [P3 receipt](engine-spike/extensions-p3-receipt.md) and the PR's final
 regression/full-verification tables.
 
+### Local CRX completion (Section 10, 0704)
+
+0704 uses the next Section 10 number, but belongs to the **03xx extensions
+area**. It is an overlay-only change to `cef_extension_manager.h` and
+`open/browser/extensions/open_extension_manager.mm`; the CEF series/manifest
+record that ownership without adding an empty upstream patch. `engine-apply`
+generates `cef_install_local_crx`, the C API, wrappers and API hashes.
+
+The missing delegate error has a concrete upstream cause:
+`CrxInstaller::ReportFailureFromUIThread` calls
+`LoadErrorReporter::ReportError(error.message(), false)`
+(`extensions/browser/crx_installer.cc`). `ReportError` stores/logs the text;
+only `ReportLoadError` sends `Observer::OnLoadFailure`
+(`extensions/browser/load_error_reporter.cc`). Local CRX completion therefore
+uses the installer's result, rather than extending the unpacked-load delegate.
+
+`OEExtensionManager.installLocalCRX(_:completion:)` reports installed with its
+extension ID, user Cancel, or failure with Chromium's error text. The old
+page-based initiation selector remains a wrapper. No result is routed through
+the manager delegate, and the production Web Store path stays as before.
+
+Chromium 156 names the completion API `CrxInstaller::AddInstallerCallback`
+(`extensions/browser/crx_installer.h`), rather than the design's
+`set_installer_callback`. It posts a once callback with an optional
+`CrxInstallError` after the registry install or unpack failure. The manager
+retains at most 32 installers through this callback, erases each request before
+delivery, and fails pending requests once at context closure. Callers run on a
+later main-queue turn and can close their context safely. Only Chromium's
+`USER_CANCELED` detail maps to cancelled; `USER_ABORTED`, policy rejection and
+signature rejection map to failed. Messages are bounded to 65,536 UTF-16 units.
+
+The new selector needs no requesting page: Chromium's profile/native-window
+prompt constructor uses the manager's profile and the existing shell presenter.
+A supplied page in the old API must still belong to that profile. Neither path
+permits silent installation or an ephemeral profile.
+
+Real-App acceptance in `extensions_p3.py` passed 19/19 before and after the
+negative proof: signed CRX -> installed + registry ID, corrupted RSA signature ->
+failed + `CRX_SIGNATURE_VERIFICATION_FAILED`, Cancel, main-thread delivery,
+exactly-one completion counts and fixture cleanup. Suppressing only the bridge's
+callback invocation made the signature row time out with zero events. The source
+was restored byte for byte, rebuilt, and the same gate passed.
+
+Section 14 still calls the old selector on this branch, so its import-queue
+failure row needs the consumer update and remains a separate gate.
+The [verification receipt](engine-spike/extensions-local-crx-completion.md)
+records the new distribution, load tuples, full gate, regression findings and
+remaining runtime boundaries.
+
 ## P4. Proprietary codecs and Widevine
 
 - Measured on stock CEF: H.264 `false`, AAC `false`, HEVC `false`; VP9, AV1, Opus `true` (results-features-alloy.json, `codecs`). Widevine EME works in stock CEF once Chromium's component updater has downloaded the CDM (final run: a Widevine stream played), and is unavailable until then.
@@ -395,9 +445,10 @@ Status: implemented (2026-11-02, Section 3 Step 7, branch `s3/engine-media-sessi
 
 | Part | Where | What it does |
 |---|---|---|
-| CEF API | overlay `cef/include/cef_media_controller.h` (P1 mechanism: translator-generated C API, `CEF_API_ADDED(CEF_EXPERIMENTAL)`) | `CefMediaController` (one per browser, Chrome style and Alloy): `GetForBrowser(browser, handler)`, `IsValid`, `IsAudible`, `GetState` (a dictionary, so later fields need no translator change), `ExecuteAction(name, args)`, `SetVolume`/`GetVolume`, `RequestPictureInPicture`, `ExitPictureInPicture(behavior)`. `CefMediaControllerHandler`: `OnAudibleChanged`, `OnMediaStateChanged`. Declared for EM-4 and not called yet (so EM-4 needs no second API rebuild if the shape holds): `ShouldHostPictureInPicture`, `OnPictureInPictureOpened/Changed/Closed`, `CefPictureInPictureWindow` (`IsValid`, `GetVideoView`, `GetState`, `SetWindowFrame`, `ExecuteAction`). |
+| CEF API | overlay `cef/include/cef_media_controller.h` (P1 mechanism: translator-generated C API, `CEF_API_ADDED(CEF_EXPERIMENTAL)`) | `CefMediaController` (one per browser, Chrome style and Alloy): `GetForBrowser(browser, handler)`, `IsValid`, `IsAudible`, `GetState` (a dictionary, so later fields need no translator change), `ExecuteAction(name, args)`, `SetVolume`/`GetVolume`, `RequestPictureInPicture`, `ExitPictureInPicture(behavior)`. `CefMediaControllerHandler`: `OnAudibleChanged`, `OnMediaStateChanged`. Since EM-4 (and EM-7, with no API change): `ShouldHostPictureInPicture`, `OnPictureInPictureOpened/Changed/Closed`, `CefPictureInPictureWindow` (`IsValid`, `GetVideoView`, `GetState`, `SetWindowFrame`, `ExecuteAction`); a Document PiP session has `GetState` `"kind": "document"`. |
 | `open_engine::OpenMediaController` | overlay `open/browser/media/open_media_controller.{h,cc}` (in `open_libcef_mac_sources`) | WebContents user data + `WebContentsObserver` + `media_session::mojom::MediaSessionObserver`. Players from `MediaMetadataChanged`, `MediaStartedPlaying`, `MediaStoppedPlaying` (end of stream ends a player's "in progress"), `MediaResized` (natural size), `MediaDestroyed`, `MediaPictureInPictureChanged`; only players of active documents count (`RenderFrameHost::IsActive`: not the back-forward cache). Session part from the mojo observer, read back with the synchronous getters (`GetMediaSessionInfoSync`, `GetMediaSessionActionsSync`, `GetMediaSessionMetadata`, `GetMediaSessionPosition`) so a queued message never restores an older state. A snapshot is compared with the last one and `OnMediaStateChanged` posted at most once per message-loop turn; a position that continues the clock (within 250 ms of the extrapolated one, same rate, duration and end) is not a change. Commands: `MediaSessionImpl` (`Resume`/`Suspend`/`Stop(kUI)`, tracks, `Seek`, `SeekTo`, `ScrubTo`, meeting actions, slides), or the players' `media::mojom::MediaPlayer` remotes when the session is not controllable. |
 | EM-4 window | overlay `open/browser/media/open_video_overlay_window.{h,mm}`, `open_media_hooks.h`; hook `patches/chromium/0402-open-video-pip-window.patch` (`CreateVideoOverlayWindow` in `chrome/browser/ui/views/overlay/video_overlay_window_views.cc` asks `open_engine::GetMediaHooks().create_video_overlay_window` first; the overlay fills the pointer in `OpenMediaController::GetOrCreate`, the pattern of 0504) | `OpenVideoOverlayWindow` implements `content::VideoOverlayWindow` when the page's handler answers `ShouldHostPictureInPicture` (else Chromium's `VideoOverlayWindowViews`). It owns a layer-hosting `NSView`, a `ui::RecyclableCompositorMac`, a black root layer and a letterboxed `ui::LayerSurface` for the video surface (`SetSurfaceId` adds the child frame sink; the previous one goes first), and a `ui::DisplayCALayerTree` (model: `content/browser/renderer_host/unbounded_surface_window_mac.mm`). Each shown session is a `CefPictureInPictureWindow` object: `GetVideoView`, `GetState` (natural size, source bounds, playback, controls, meeting and mute state, position, title), `SetWindowFrame` (top-left screen coordinates; a size change calls `UpdateLayerBounds`, so the page gets its PiP `resize`), `ExecuteAction` (controller calls; `close` goes through `PictureInPictureWindowManager::ExitPictureInPictureViaWindowUi`, posted). `Hide` ends the session and reports the close at once. `Close` (only from the controller's `WebContentsDestroyed`) never calls back into the controller and reports the close on the next turn. The window keeps the handler and browser from its open, so the close also reaches the App after the media controller let go of the page. |
+| EM-7 Document PiP | overlay `open/browser/media/open_document_pip_host.{h,mm}`, `open_media_hooks.h` (`host_document_picture_in_picture`); hook `patches/chromium/0403-open-document-pip-window.patch` (+18/−0: `NavigateImpl` in `chrome/browser/ui/navigator/browser_navigator.cc`, for `NEW_PICTURE_IN_PICTURE` after the opener checks and before Chromium's standalone path, asks the hook first and returns without a Browser when it took the child) | CEF sends a Chrome-style page's Document PiP through Chromium's default creation (`use_default_browser_creation` in `CefBrowserInfoManager::CanCreateWindow`, a file of cef/0302), so the hook sits in `Navigate()`, where Chromium's own standalone path also takes the child. `OpenDocumentPipHost` (model: Chromium's standalone `DocumentPipHost`; a `WebContentsUserData` of the opener) takes the child when the opener's handler answers `ShouldHostPictureInPicture`, registers Chromium's controller first (`PictureInPictureWindowManager::EnterDocumentPictureInPicture`, which closes any other PiP and closes the child when the opener navigates or goes), and is the child's `WebContentsDelegate`: display mode `kPictureInPicture`, `CloseContents` ends the session, `SetContentsBounds` (`resizeTo`) reports a new requested size, a same-window navigation closes it, other links and popups go to the opener's delegate, keys the page leaves reach `NSApp.mainMenu`, `GetWindowBoundsInScreen` is the embedder's frame. Camera and microphone requests from the PiP document are refused (the base delegate's answer; Chromium's host wires permission prompts, Open's does not yet). The session is a `CefPictureInPictureWindow`: `GetVideoView` is the child's `WebContentsViewMac` view, `GetState` has `kind` `document`, `naturalWidth/Height` (the requested size), `sourceTitle` (the opener's title); `ExecuteAction("close")` (posted) goes through the controller's `Close`, so the PiP document's `pagehide` runs. Alloy-style pages keep CEF's popup path (no Document PiP in Open). |
 | Chromium hook | `patches/chromium/0401-open-media-session.patch` (+42/−1) | `MediaSessionImpl::SetOpenVolumeMultiplier` (0…1) multiplied into `GetVolumeMultiplier()` and pushed with `UpdateVolumeMultiplier()` to normal, one-shot and ambient players (players added later get it in `AddPlayer`); `MediaSessionControllersManager::OpenIsPictureInPictureAvailable(id)`, the player's last `OnPictureInPictureAvailabilityChanged` report. Files no CEF or other Open patch touches. |
 | OpenEngine | `Engine/OpenEngine/src/OEMediaSession.mm`, `OEWebContent.mm`, `OEApp.mm`, `OEClient.{h,mm}`, `OEInternal.h`; headers `OEMediaSession.h`, `OEWebContent.h` | `OEWebContent` attaches the controller in `OnAfterCreated` (`oe_attachMedia:`). `OEMediaSession` is built from `GetState`; commands call `ExecuteAction`. New: `OEWebContent.mediaVolume`, `OEMediaSession.volume`. The page probes (`kAudibleProbe`, `kMediaProbe`) are deleted (docs/engine-api.md "Media"). |
 
@@ -415,7 +466,63 @@ Verification: see "Media verification" below.
 
 ## P7. Isolated-world scripts for Open's page runtimes
 
-User Boost JavaScript runs in the main world on purpose (docs/boosts.md). Open's own page runtimes (the Zap picker, the Boost applier internals) must run in an isolated world so pages cannot reach them (docs/followups.md, PR #23 review). OpenEngine injects at V8 context creation (`OnContextCreated` in `OEApp.mm`), which is document-start but main world only. Patch: run the same document-start hook in an isolated world through `blink::WebLocalFrame::ExecuteScriptInIsolatedWorld`, using the queued-context path in `cef/libcef/renderer/frame_impl.cc` that adblock-fork F-10 describes for cosmetic filtering. Coordinate with that plan's `cef.mojom` change so both use one mechanism.
+User Boost JavaScript keeps the page world. Open's applier and picker use
+`OEScriptWorldOpen`. Chromium patch `0601-open-script-world.patch` reserves
+`ISOLATED_WORLD_ID_OPEN` (6 on macOS) immediately below the extension range.
+CEF patch `0601-open-script-world.patch` confines queued-context actions and
+release notifications to the main world; isolated-world creation must not
+flush or invalidate the main frame's queue.
+
+CEF patch `0602-open-browser-extra-info.patch` makes the browser's stored
+extra-info snapshot replaceable. Its getter and setter share `CefBrowserInfo`'s
+lock; the setter stores a read-only copy on the UI thread. The experimental
+`cef_open_browser_info.h` API is implemented in `open/browser/page/open_browser_info.cc`.
+`oe_broadcastScripts` updates the snapshot before sending the existing renderer
+message. `OnRenderViewReady` keeps its resend as a second path.
+
+Handoff precheck: CEF `libcef/browser/browser_info_manager.cc:374–394` resolves
+an existing browser for `OnGetNewBrowserInfo`; `SendNewBrowserInfoResponse` at
+lines 810–845 uses the request's sequence and copies `browser_info->extra_info()`
+into the renderer reply. `OEApp.mm`'s `OnBrowserCreated` reads `oe.scripts`
+before `OnContextCreated`. Updating that stored value therefore reaches a
+replacement process before its first document-start script.
+
+The broadcast includes OTR browsers owned by the changed `OEBrowserContext`,
+using exact context identity and each web content's own script list. It does
+not inherit scripts from the parent Profile. The real-App
+`open_world_private_renderer` row installs page/Open scripts after a private
+tab exists, checks both at document start after a process swap, and checks
+normal/private script isolation in both directions. CEF 0601 and 0602 follow
+main's 0701 in the series, as directed for this stack; their numbers stay fixed.
+
+The overlay API `cef_open_world.h` creates or gets that world's context using
+Blink's `ExecuteScriptInIsolatedWorld` and `GetScriptContextFromWorldId`.
+`OEApp::OnContextCreated` filters to the main world, then runs matching Open
+scripts there at document start, main frame only. Creation is lazy: pages with
+no Open scripts and no Open evaluation create no Open context.
+
+`OEOpenWorld.mm` installs `__openNative.postMessage(type, payloadJSON)` only in
+that context. The native handler checks the current world and document token.
+It drops messages above 64 KiB (type plus payload, UTF-8), and messages beyond
+200 in any sliding second per page, before IPC. Counters are read on demand.
+Main-thread delivery includes Chromium's `DocumentToken` as `documentID`.
+Native evaluation uses the same context without a user gesture, awaits
+promises, bounds results to 1 MiB and pending calls to 64, and times out after
+10 seconds. The old page-world evaluation is unchanged.
+
+Ad-block cosmetics can reuse the per-frame `CefGetOpenScriptContext` from
+their renderer hook. OpenEngine limits its user scripts and native channel
+to the main frame; the CEF primitive also supports child-frame cosmetics. The current adblock-fork plan supersedes the old F-10 frame-pipe push:
+`cef.mojom` connects after commit (F-27); process-level renderer pull supplies
+cosmetic data (D-13). P7 adds no second browser-to-renderer document-start
+pipe. Both runtimes can use this fixed world; cosmetic data delivery remains
+Section 13's work.
+
+Evidence: real-App `features` rows `open_world_document_start`,
+`open_world_extension_isolation`, `open_world_messages`, `open_world_limits`,
+`open_world_non_json_result`, `open_world_replacement_renderer`, plus the
+existing `user_scripts` row. Build and suite receipts are recorded in
+the PR. This transport adds no App UI.
 
 ## P8. Native ad-block engine
 
@@ -516,6 +623,10 @@ Steps 1–2. The save sheet and import wizard belong to their own App changes.
 | `0804-open-null-credential-dialogs.patch` | H-6: replace the five credential/autofill factories for Open pages. |
 | `0805-open-autofill-defaults.patch` | Fill on account select on; leak detection and auto-sign-in off; mandatory card re-auth on for new profiles, with no opt-in promo. |
 | `0806-open-https-fallback-dialog-host.patch` | Route the Step 0 HTTPS fallback warning through the native modal host; cancel when a detached page has no host. |
+| `0807-open-hosted-autofill-popup.patch` | H-5: attach native autofill dropdowns to the Open AppKit parent; reserve menu fallback for keyboard shortcuts. |
+| `0808-open-hosted-modal-dialog.patch` | H-7: attach web-modal Views windows to their Open AppKit parent and place them at the page's top center on show and resize; keep Chromium's modal manager, focus, and decisions. |
+| `0809-open-https-warning-after-commit.patch` | H-7: register a hosted HTTPS-First warning after its triggering commit finishes notifying observers; a weak tab reference and navigation generation reject a stale deferred show. Native modal closure and security decisions remain unchanged. |
+| `0810-open-modal-unblock-during-tab-teardown.patch` | H-7: keep the modal blocked-state update when a closing tab's features have already been destroyed, but omit the tab UI event that would dereference those features. Tab removal still emits its normal event. |
 
 New files live in `open/browser/autofill/` and the overlay header
 `cef/include/cef_open_autofill.h`. CEF generates the C API and wrappers when
@@ -600,7 +711,7 @@ cookies wait for FlushCookieStore. Secret source buffers and bridge-owned
 binary buffers are cleared on acceptance and rejection. No new LOG, VLOG,
 or os_log statement contains a credential value.
 
-Offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
+Historical offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
 
 - The interrupted, unchanged `c5a7c4be` baseline resumed and built
   `cefsimple cefclient` successfully in 448 seconds. Its inherited reset
@@ -621,12 +732,40 @@ Offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
 - `tools/verify-all.sh --only commands-dump` passed its release build
   (zero warnings and errors) and command check under heavy letter `b`.
 
-The M5 screen hold still blocks real-App acceptance: save delegates and
-counts, card/address prompts, null Credential Management completion,
-HTTPS warning buttons, mock-key prompt suppression, and the `features`,
-`page`, and `extensions-ui` suites are unverified. No Open process or e2e
-suite was launched for this receipt. The engine PR remains pending those
-checks.
+No Open process or e2e suite was launched for that historical receipt.
+
+The repaired 2026-11-08 distribution includes 0801–0810, on main
+`cdd147ca`. Framework SHA-256:
+`619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`.
+Strict status passes 8/8 (37 Open patches, 117 CEF patches, 75 overlays,
+43 symbols). The real-App focused rows PW-HF1, PW-HF2-return,
+PW-HF2-escape, PW-HF3-tab-close, PW-HF4-window-close, PW-HF5-navigate,
+PW-HF6-space and PW-HF7-quit pass with no new crash reports and complete
+owned-process cleanup. Continue requires the PROCEED metric and the form;
+Escape requires DONT_PROCEED and the previous page. On macOS, Return has
+no default action; its row verifies no decision, then cancels with Escape.
+The harness waits through Chromium's 500 ms input-protection interval
+before sending an action. It does not change that guard.
+
+Negative proof comes from `Open-2026-11-06-203144.ips`
+(`TabDialogManager::CreateTabScopedDialog` CHECK) and
+`Open-2026-11-07-210523.ips` (`TabUIHelper::GetFavicon` during modal
+unblock after TabFeatures destruction). The crashing `20b0f936` framework
+is permanently refused and was not replayed. These reports and the new
+per-row receipts are retained in the local D5/D6 handoff directories.
+The full real-App password suite on this same distribution passes 77 rows.
+C-2 stays M1-only by rule and PW-KC1 stays a user Keychain hand check.
+The regression runs pass 26 feature rows, 85 page rows and 71 extension UI
+rows. Existing page/extension prerequisite gates remain listed separately
+in the PR's row/load table; intentional crash rows were not run on M5.
+With main's App code and no save-prompt delegate, a real synthetic sign-in
+records one Ignored offer (PasswordManager.SaveUIDismissalReason bucket 0),
+shows no sheet or Chromium bubble, leaves the App alive and produces no
+new crash report. Every selected run passes owned-process cleanup.
+The main-App acceptance was rebuilt after merging main `eb49e472`; no
+compiled fork source changed from the repaired distribution. The shared
+harness now supports bounded direct-child runs and first-App-death stop
+without changing main's onboarding or Welcome dispatch.
 
 ## Tab sleeping (memory fork, Section 8 PR #158)
 
@@ -756,6 +895,26 @@ service observer's set, independent of native macOS delivery. It adds no series
 entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
 clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
 [#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
+
+
+### Site Control E1/E2/E3 overlays (Section 12)
+
+`cef/include/cef_site_control.h` and `open/browser/page/open_site_control.cc`
+expose the complete scalar content-settings registry, origin-filtered
+BrowsingDataRemover cache/storage removal, canonical host-cookie deletion, and
+visible SSL security state. The existing `cef_open_page.h` / `OpenPageState`
+observer forwards visible-security changes. No extra patch number is needed;
+these files use P1's existing overlay source list. See `engine-api.md` for
+cookie scope, supported states, completion behavior and bounds. Four C API
+entry points are required by `verification/expected-symbols.txt`.
+
+The engine and Debug App compile with these overlays. The real-App `sitedata`
+suite passes all ten settings, data and security rows. Temporarily disabling
+the bridge backends and native security observer makes all ten rows fail;
+production source is restored and rebuilt afterwards. Cache proof uses server
+hit counters: clearing origin A changes hits from [1, 1] to [2, 1], while
+origin B remains cached. Mixed-content and malicious-page classifications
+have source support but no dedicated runtime fixtures in this receipt.
 
 ## Passwords Step 0 probe (2026-11-06; remaining rows 2026-11-07)
 

@@ -15,7 +15,7 @@ bool OpenPasswordPromptRouter::Show(content::WebContents* contents,
                                     bool user_action) {
   if (!IsOpenWebContents(contents)) return false;
   auto live_contents = contents->GetWeakPtr();
-  WithdrawSavePrompt(contents);
+  WithdrawPasswordSavePrompt(contents);
   if (!live_contents) return true;
   auto delegate = PasswordsModelDelegateFromWebContents(contents);
   if (!delegate) return true;
@@ -61,7 +61,7 @@ bool OpenPasswordPromptRouter::Show(content::WebContents* contents,
 }
 bool OpenPasswordPromptRouter::Hide(content::WebContents* contents) {
   if (!IsOpenWebContents(contents)) return false;
-  WithdrawSavePrompt(contents);
+  WithdrawPasswordSavePrompt(contents);
   return true;
 }
 }  // namespace open_engine

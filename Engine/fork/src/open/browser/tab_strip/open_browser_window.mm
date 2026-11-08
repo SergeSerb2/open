@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "open/browser/tab_strip/open_browser_window.h"
+#include "open/browser/tab_strip/open_hosted_window_hooks.h"
 #include "open/browser/autofill/open_autofill_bubble_handler.h"
 #include "open/browser/autofill/open_autofill_handler_registry.h"
 #include "open/browser/autofill/open_autofill_hooks.h"
@@ -194,6 +195,23 @@ OpenBrowserWindow::OpenBrowserWindow(Profile* profile)
     if (parent && popup && parent != popup && !popup.parentWindow) {
       [parent addChildWindow:popup ordered:NSWindowAbove];
     }
+  };
+  GetHostedWindowHooks().prepare_modal_dialog = [](
+      content::WebContents* contents, gfx::NativeWindow dialog_window) {
+    if (!IsOpenWebContents(contents)) return;
+    NSView* page = contents->GetNativeView().GetNativeNSView();
+    NSView* host = page.superview ?: page;
+    NSWindow* parent = host.window;
+    NSWindow* dialog = dialog_window.GetNativeNSWindow();
+    if (!parent || !dialog || parent == dialog) return;
+    // NativeWidgetMac only discovers Views parents. Keep Chromium's modal
+    // manager, focus and decisions; supply the missing AppKit relationship.
+    if (!dialog.parentWindow) [parent addChildWindow:dialog ordered:NSWindowAbove];
+    if (dialog.parentWindow != parent) return;
+    const NSRect page_screen = [parent convertRectToScreen:
+        [host convertRect:host.bounds toView:nil]];
+    [dialog setFrameTopLeftPoint:NSMakePoint(
+        NSMidX(page_screen) - NSWidth(dialog.frame) / 2, NSMaxY(page_screen))];
   };
 }
 

@@ -193,6 +193,7 @@ enum RowPresentation {
 /// URL text for rows: no scheme, no "www.", no trailing slash (F0040 "google.com", F0048 "youtube.com/c/…").
 public enum URLDisplay {
     public static func short(_ url: URL) -> String {
+        if url.absoluteString == "open://welcome" { return "Welcome to Open" }
         var s = url.absoluteString
         for prefix in ["https://", "http://"] where s.lowercased().hasPrefix(prefix) {
             s.removeFirst(prefix.count)

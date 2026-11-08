@@ -246,6 +246,7 @@ def all_passed(text):
 
 
 def build(root):
+    run(str(root / "tools/fetch-adblock-lists.sh"))
     # A new session protects the Swift build from an app restart. Stop on diagnostics,
     # drain its pipe, and count warning lines even when Swift would otherwise exit 0.
     command = ["nice", "-n", "10", "swift", "build", "-c", "release", "-j",
@@ -285,6 +286,8 @@ def save_snapshot(data, directory="fixture"):
 
 
 def legacy_space_fixture(cli, root):
+    portability = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))
+    baseline, scale, key = portability["legacy_baseline"](root)
     fixture = root / "Packages/OpenKit/Fixtures/space-schema1"
     original = (fixture / "State/browser.json").read_bytes()
     expected = json.loads(original)
@@ -301,8 +304,11 @@ def legacy_space_fixture(cli, root):
     for space in range(3):
         output = Path(f"legacy-space-{space}.png").resolve()
         run(renderer, "render", "--snapshot", str(directory), "--space", str(space),
-            "--size", "900x700", "--scale", "1", "--out", str(output))
-        require(output.read_bytes() == (fixture / f"window-{space}.png").read_bytes(),
+            "--size", "900x700", "--scale", str(scale), "--out", str(output),
+            env=dict(os.environ, OPEN_VERIFY_DISPLAY_KEY=key))
+        if os.environ.get("OPEN_VERIFY_BREAK") in ("all", "legacy"):
+            run("/usr/bin/swift", str(Path(__file__).with_name("break-render.swift")), str(output), "pixel")
+        require(output.read_bytes() == (baseline / f"window-{space}.png").read_bytes(),
                 f"legacy Space {space} PNG differs from the committed pre-Step-1 baseline")
     require((fixture / "State/browser.json").read_bytes() == original, "legacy fixture source was modified")
     print("P1 legacy DTO roundtrip byte comparison PASS; original semantic fields unchanged; 3/3 baseline PNGs byte-identical")
@@ -646,6 +652,7 @@ def adblock_catalog(cli, root):
     require(list(categories.values()) == [3, 2, 5, 35, 1], "catalog category counts differ")
     require({row[0] for row in rows if row[2] == "true"} == {"EasyList", "EasyPrivacy"}, "catalog defaults differ")
     print("catalog 46/46; categories 3/2/5/35/1; defaults verified")
+    runpy.run_path(str(root / "tools/verification/adblock_resources.py"))["verify"](cli, root)
 
 
 def archive_migration(cli):
@@ -870,17 +877,22 @@ def main():
         profiles(cli)
     elif name == "settings-preview":
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
-        all_passed(run(preview, "check"))
+        # Every Settings preview launch takes the shared screen lock.
+        locked = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", preview]
+        all_passed(run(*locked, "check", timeout=None, interrupted_exit=2))
         output = Path("settings-panes").resolve()
-        rendered = run(preview, "render", "--out", str(output))
+        rendered = run(*locked, "render", "--out", str(output), timeout=None, interrupted_exit=2)
         require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
                 "missing rendered Previews control evidence")
-        dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
+        dump = run(*locked, "dump-keys", "--root", str(output / "fixture"), timeout=None, interrupted_exit=2)
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 236, "missing settings/library/appearance/detail/sheet/state renders")
+        # The populated and empty Boosts section each add 1x and 2x renders.
+        require(len(pngs) == 240, "missing settings/library/appearance/detail/sheet/state renders")
+        require({f"library-boosts{state}@{scale}x.png" for state in ("", "-empty") for scale in (1, 2)} <= {p.name for p in pngs},
+                "missing Library Boosts renders")
         require({f"sheet-link-rule-profile-work@{scale}x.png" for scale in (1, 2)} <= {p.name for p in pngs},
                 "missing two-Profile destination renders")
         require({f"{state}@{scale}x.png" for state in
@@ -922,6 +934,10 @@ def main():
         matches(r"extensions-render check: [1-9]\d* passed, 0 failed", text)
         require(not re.search(r"^FAIL\b", text, re.MULTILINE), "extensions check failure")
         run(renderer, "menus", "--out", str(Path("extensions-menus")))
+    elif name == "onboarding-render":
+        run(sys.executable, str(root / "tools/generate-intro-sound.py"), "--check")
+        decoded = json.loads(run(str(root / "Packages/OpenKit/.build/release/onboarding-render"), "--check-sound"))
+        require(decoded["ok"], "committed intro failed decoded PCM curve comparison")
     elif name == "features-render":
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")

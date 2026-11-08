@@ -199,6 +199,7 @@ public final class SidebarContext {
     /// The URL field text: the host, or for a Developer Mode site the full URL without the scheme
     /// (host, port, path, query).
     static func fieldText(_ url: URL, _ developerHosts: Set<String>) -> String {
+        if url.absoluteString == "open://welcome" { return "Welcome to Open" }
         let scheme = url.scheme?.lowercased()
         let key = scheme == "file" ? "file" : url.host()?.lowercased()
         guard let key, developerHosts.contains(key) else { return URL.displayHost(url) }

@@ -10,3 +10,5 @@
 #import <OpenEngine/OEPictureInPicture.h>
 #import <OpenEngine/OEExtension.h>
 #import <OpenEngine/OEAutofill.h>
+#import <OpenEngine/OEAdBlock.h>
+#import <OpenEngine/OESiteControl.h>

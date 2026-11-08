@@ -60,11 +60,14 @@ keeps live Space metadata, Profile assignments, item order, and selections.
 It merges search-engine fields only when selected. Equal routing rule bodies
 are duplicates even when the source importer assigns a new rule ID; the live
 default destination stays authoritative. Source objects are unchanged.
-Structural edits emit precise insert/remove events; new containers emit
-reloads. The caller's synchronous snapshot save is part of the command.
+Structural edits coalesce into one reload per changed parent after the merge,
+rollback or model Undo/Redo. The caller's synchronous snapshot save is part
+of the command.
 Failure reverses the edits and registers no undo. Success registers one undo
-step for the sidebar/search/routing merge. Archive rows have their own
-per-Profile transaction and are not removed by sidebar Undo.
+step for the sidebar/search/routing merge. The App captures that inverse in
+a private UndoManager and registers one native import action with committed
+Archive and History receipts. Store removal and Redo run on the stores'
+own queues. A duplicate-only repeat registers no new action.
 
 Space editor inputs live in `SpaceTheme.style: SpaceStyle?`. A style stores
 only its key color, count, wheel, appearance, noise, texture, intensity, and
@@ -300,13 +303,23 @@ DTO back before reporting success. BoostStore stamps new records' modification
 time at import, so `protectedEdits` counts newer destination records, including
 unchanged imports. It cannot distinguish those from user edits.
 
-The App has a report-only `recordBoostImport([ProfileID: [Boost]], counts:)`
-seam. It reports source counts and `Not imported in this build`; it writes no
-Boosts. Persistence, live apply, re-import and shared Undo remain **BLOCKED
-(Section 12 AppBoosts)**. Follow-up must use
-`app.stores.boosts.store(for: profileID).upsert(boost)`, then
-`app.stores.boosts.refresh(profile: profileID)` once per Profile. No second App
-BoostStore is allowed: its delayed save could overwrite the sole owner's data.
+The App resolves `boostsByProfile` through the import's `profileMapping` after
+the model lands; Arc Default maps to the live Default by role. It uses only
+`app.stores.boosts.store(for:)`, adds absent stable IDs on a utility worker and
+calls `refresh(profile:)` once per changed Profile. Existing IDs stay untouched,
+including user edits; they count as duplicates. The report's "Boosts" row counts
+additions, while an unreadable cache still shows "Could not be read". Missing
+local enablement keeps imported Boosts disabled.
+
+The one "Import from Arc" action retains only the added Boosts and their store
+references in `AppImportUndo`. Undo calls the existing `BoostStore.delete(id:)`
+for those IDs and flushes the removals before restoring the model, so the
+bootstrap Default cannot load stale Boosts from the shared Default path. It
+then refreshes each Profile. Redo adds them back and refreshes;
+it preserves any same-ID record created since Undo. Store mutations and queued
+file writes run off the main thread. No second App BoostStore or idle work is
+added. `firstrun` proves persistence, computed page styles, disabled state,
+add-only re-import, shared Undo/Redo and user-edited duplicate preservation.
 
 Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md) "Archive and session files (observed)"):
 
@@ -367,6 +380,45 @@ queue, then passes the ID sets into the synchronous model merge. Live-ID
 deduplication stays unchanged. Neither rule changes Arc's source files.
 
 The reader retains the plan's array-returning API and adds an awaited batch-consumer overload. The CLI uses that overload to keep at most one 5,000-visit batch in flight, plus the source URL map. `HistoryStore(fileURL:)` accepts a full destination path. The writer uses one checked transaction per batch, reuses prepared statements, and rolls back all changes on failure. `history_import_keys` deduplicates by source profile directory and Chromium visit ID. The new `(url_id, time)` index supports count recomputation. A result success flag also detects a bad destination for an empty import.
+
+The App's `AppImportUndo` records only newly inserted Archive records and
+History visits. Each History receipt binds the existing `history_import_keys`
+key to the exact destination visit row ID. Undo removes that visit and its
+key, recomputes aggregates, and drops only newly created empty URL rows.
+Changed titles are restored only while the imported value still owns them.
+Existing imported visits and ordinary visits with equal URL/time/transition
+remain. Redo imports the receipt and keeps its new row IDs for the next Undo.
+Each native Undo/Redo handler retains its receipt until that action leaves the
+stack. A no-op repeat creates no action and does not release earlier receipts.
+Settings merge, rollback and model Undo/Redo coalesce structural notifications
+into one reload per changed parent after the synchronous edit. Observers see
+the final graph, avoiding a sidebar rebuild and engine mirror sync for every
+imported item.
+No SQLite schema migration is needed. Model Undo includes imported Profiles;
+physical directories and loaded engine contexts remain Section 10's boundary.
+An Undo during an awaited batch stops later batches. Store Undo/Redo waits
+for the import to finish collecting its final receipts, including when Redo
+is pressed before the awaited batch returns. Quit drains pending store work. The App serializes pending store Undo
+with the next import and reports a failed removal in the import wizard.
+
+`readSidebar()` prepares immutable JSON for the optional metadata, windows,
+routing, Archive and session files on the App's utility worker. `importAll`
+keeps its synchronous CLI entry point. The App builds its live graph on the
+main actor with `includeArchive: false`, then prepares Archive value records
+and payload JSON with `readArchive` on a utility worker. Missing sidebar or
+History files report "Not found"; unreadable and malformed files report
+"Could not be read". A readable committed WAL snapshot can import while a
+writer holds a transaction; the source database is never opened by SQLite.
+
+Automation imports run a background main-queue ping watchdog with one
+outstanding ping and a 5 ms interval. The timer stops on every return path.
+`first-run` exposes total/History time, maximum main lag, timer state and
+pending store Undo. The `import-robust` suite checks both repeat paths,
+source failures, partial success and Undo, plus a 6-Space/2-Profile fixture
+with 1,200 added tabs, 2,000 Archive rows and 100,000 History visits.
+The real-App suite covers functional rows, 27 negative proofs, Release phase
+lag and idle work. Current engine receipts and the full verifier table are
+recorded in draft #224. See [robustness verification](import-robustness.md).
 
 The upsert skips unchanged or empty replacement titles. This preserves the specified title result and avoids redundant FTS trigger work. The first F2 run, before this guard, failed the timing gate at 3.307 s. The final streaming implementation passed at 1.443 s. Re-import updates no visit count by hand and inserts no duplicate visit.
 

@@ -6,17 +6,22 @@ import json
 import math
 import os
 from pathlib import Path
+import runpy
 import statistics
 import time
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from extensions_p3 import pack_probe
+pack_probe = runpy.run_path(str(Path(__file__).with_name("extensions_p3.py")))["pack_probe"]
 
 
-def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions):
-    from profiles_extensions import run as profiles_extensions
-    profiles_extensions(factory, results, tmp, root, wait_until)
+def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions, engine):
+    from settings_adblock import run as settings_adblock
+    if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") == "adblock":
+        settings_adblock(factory, results, tmp, root, wait_until)
+        return
+    profiles_extensions = runpy.run_path(str(Path(__file__).with_name("profiles_extensions.py")))["run"]
+    profiles_extensions(factory, results, tmp, root, wait_until, engine)
     if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") in ("profiles", "profiles-memory"):
         return
     class Progress:
@@ -625,8 +630,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                 except (OSError,RuntimeError,json.JSONDecodeError): pass
         finally:
             # Restore the real shared domain even after a crashed App.
-            from engine_e2e import _restore_defaults
-            _restore_defaults(app,saved)
+            engine._restore_defaults(app,saved)
             if previous_bindings is None: bindings.unlink(missing_ok=True)
             else: bindings.write_bytes(previous_bindings)
             app.quit()

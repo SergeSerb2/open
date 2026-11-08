@@ -60,6 +60,13 @@
 class CefOpenPageHandler : public virtual CefBaseRefCounted {
  public:
   ///
+  /// The visible connection state or certificate changed. UI thread. Query
+  /// CefGetSiteSecurityLevel and the visible navigation entry's SSL status.
+  ///
+  /*--cef()--*/
+  virtual void OnSecurityStateChanged(CefRefPtr<CefBrowser> browser) {}
+
+  ///
   /// The page's text selection became empty (|has_selection| false) or
   /// non-empty (true). Not called for caret moves that keep that state.
   ///

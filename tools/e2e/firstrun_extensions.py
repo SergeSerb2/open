@@ -7,10 +7,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import time
 
-from extensions_p3 import pack_probe
+# The engine harness uses Python's isolated mode, which omits sibling modules.
+pack_probe = runpy.run_path(str(Path(__file__).with_name('extensions_p3.py')))['pack_probe']
 
 
 def run(launch, state, until, row, source, tmp, h, results):
@@ -30,13 +32,11 @@ def run(launch, state, until, row, source, tmp, h, results):
         digest = hashlib.sha256(crx.with_suffix('.der').read_bytes()).digest()[:16].hex()
         identifiers[label] = ''.join(chr(ord('a') + int(c, 16)) for c in digest)
         files[identifiers[label]] = str(crx)
-    # Keep the damaged-signature fixture for the engine completion gate. The
-    # current engine has no completion for this rejection (lead filed it).
+    # Chromium must reject this signed CRX through the completion API.
     failed_file = Path(files[identifiers['failed']])
     if negative != 'queue':
         damaged = bytearray(failed_file.read_bytes()); damaged[-1] ^= 1
         failed_file.write_bytes(damaged)
-    damaged_file = str(failed_file)
     if negative != 'queue':
         # Refuse before calling the engine; no event or timeout is fabricated.
         files[identifiers['failed']] = str(Path(tmp)/'missing-import-fixture.crx')
@@ -85,6 +85,14 @@ def run(launch, state, until, row, source, tmp, h, results):
         app.call('first-run', action='settings-import', directory=str(directory))
         app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
         assert h.wait_until(lambda: state().get('settingsStep') == 'Report', timeout=20), state()
+    def settings_done():
+        # SwiftUI dismisses its native report sheet asynchronously. Wait for
+        # that exact window to go before replacing the wizard on re-import.
+        sheets = {w['attachedSheet'] for w in app.call('windows') if w['visible'] and w['attachedSheet']}
+        assert len(sheets) == 1, 'expected one native Settings import sheet'
+        app.call('first-run', action='settings-done')
+        assert h.wait_until(lambda: not sheets.intersection(
+            w['number'] for w in app.call('windows') if w['visible']), timeout=10), 'Settings import sheet did not dismiss'
     def queue(answer, hold_consent=False):
         ext(action='install')
         prompts = []
@@ -194,7 +202,7 @@ def run(launch, state, until, row, source, tmp, h, results):
             and identifiers['existing'] not in registry[work],
             installedInLiveDefault=identifiers['existing'] in registry[personal],
             absentInOther=identifiers['existing'] not in registry[work])
-        app.call('first-run', action='settings-done')
+        settings_done()
         # Add one tab so Settings import owns a real, independently undoable action.
         modified = json.loads((fixture/'StorableSidebar.json').read_text())
         graph = modified['sidebar']['containers'][1]
@@ -205,31 +213,47 @@ def run(launch, state, until, row, source, tmp, h, results):
             'data': {'tab': {'savedURL': 'https://example.com/extension-import', 'savedTitle': 'Example extension import tab'}}}]
         (fixture/'StorableSidebar.json').write_text(json.dumps(modified))
         settings_import(fixture)
-        if negative == 'queue': app.call('first-run', action='settings-done')
+        if negative == 'queue': settings_done()
         current = ext()
         row('EI_settings_section', current['visible'] and len(current['rows']) == 3 and current['showsProfiles'])
         if negative == 'queue': settings_import(fixture)
+        # Keep App preflight rejection separate from Chromium rejection.
+        selected({identifiers['failed']})
+        app_result, _ = queue('accept')
+        rows = install_rows()
+        row('EI_failure_reported_app', rows[identifiers['failed']]['status'] == 'Failed: The local fixture file is missing or unreadable.'
+            and identifiers['failed'] not in set().union(*registries().values())
+            and app_result['summary'] == 'Installed 0 · Skipped 0 · Failed 1'
+            and not app_result['installing'], status=rows[identifiers['failed']]['status'], summary=app_result['summary'])
+        settings_done()
+        settings_import(fixture)
+        files[identifiers['failed']] = str(failed_file)
+        ext(action='fixtures', files=files)
         result, prompts = queue('accept')
         rows = install_rows(); registry = registries()
         row('EI_already_installed', rows[identifiers['existing']]['status'] == 'Skipped (already installed)'
             and all(p['extension'] != identifiers['existing'] for p in prompts), status=rows[identifiers['existing']]['status'])
-        failure_events = [e for e in app.call('ext-prompt')['events'] if e.get('event') in ('loadFailed', 'importFixtureFailure')]
-        row('EI_failure_reported_app', rows[identifiers['failed']]['status'] == 'Failed: The local fixture file is missing or unreadable.'
+        inspection = ext(action='inspect')
+        rendered = ' '.join(r['text'] for r in inspection['text'])
+        signature_error = 'CRX_SIGNATURE_VERIFICATION_FAILED'
+        # OCR can render underscores as spaces; the model must retain the exact error.
+        rendered_error = ''.join(c for c in rendered if c.isalnum()).casefold()
+        signature_visible = signature_error.replace('_', '').casefold() in rendered_error
+        row('EI_failure_reported_engine', rows[identifiers['failed']]['status'].startswith('Failed: ')
+            and signature_error in rows[identifiers['failed']]['status']
+            and signature_visible
             and identifiers['failed'] not in set().union(*registry.values())
             and result['summary'] == 'Installed 1 · Skipped 1 · Failed 1'
-            and rows[identifiers['install']]['status'] == 'Installed',
-            status=rows[identifiers['failed']]['status'], events=failure_events)
-        hrow = dict(status='BLOCKED', reason='engine: installLocalCRX has no completion; lead filed it',
-                    damagedSignatureFixtureRetained=Path(damaged_file).is_file(), load=os.getloadavg())
-        # No false ok/FAIL: this requires an engine-owner hook.
-        results['EI_failure_reported_engine'] = hrow
+            and rows[identifiers['install']]['status'] == 'Installed' and not result['installing'],
+            status=rows[identifiers['failed']]['status'], summary=result['summary'],
+            nextInstalled=rows[identifiers['install']]['status'] == 'Installed', renderedSignature=signature_visible)
         row('EI_target_profile', rows[identifiers['install']]['status'] == 'Installed'
             and identifiers['install'] in registry[work] and identifiers['install'] not in registry[personal]
             and identifiers['existing'] in registry[personal] and identifiers['existing'] not in registry[work],
             installedInTarget=identifiers['install'] in registry[work], absentInOther=identifiers['install'] not in registry[personal])
         row('EI_result_counts', result['summary'] == 'Installed 1 · Skipped 1 · Failed 1'
             and len(prompts) == 1 and not result['canInstall'] and not pending(), summary=result['summary'], prompts=len(prompts))
-        app.call('first-run', action='settings-done')
+        settings_done()
         browser_id = app.call('shell-windows')[0]['id']
         app.call('window-focus', id=browser_id, activate=True)
         app.call('sidebar-key', key='z', modifiers=['command'])
@@ -270,7 +294,7 @@ def run(launch, state, until, row, source, tmp, h, results):
         result = ext()
         row('EI_no_candidates', real_counts['candidates'] == 0 and not result['visible'] and not result['rows']
             and state()['settingsOutcome'].get('Extensions candidates') == 0, sourceCounts=real_counts, sectionShown=result['visible'])
-        app.call('first-run', action='settings-done')
+        settings_done()
         metadata_limits(app, settings_import, state, row, empty, tmp, identifiers['existing'], negative == 'queue')
         if os.environ.get('OPEN_E2E_IMPORT_EXT_NETWORK') == '1' and not negative:
             network_receipt(app, settings_import, ext, empty, tmp, results)

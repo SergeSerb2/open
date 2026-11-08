@@ -41,6 +41,13 @@ import time
 import traceback
 from pathlib import Path
 
+# The -I shebang drops this folder from sys.path. Put it first so sibling
+# suites (engine_activation, downloads, extensions_p3, ...) import when the
+# script runs directly.
+_E2E_DIR = os.path.dirname(os.path.realpath(__file__))
+if sys.path[:1] != [_E2E_DIR]:
+    sys.path.insert(0, _E2E_DIR)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
 _ACTIVE_FOCUS_TRACKER = None
@@ -328,6 +335,7 @@ class Open:
         if cmd in ("window-close", "popup-close", "quit") or (cmd == "devtools" and args.get("method") == "Page.crash"):
             self.discover_owned_processes()
         foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
+        if cmd == "boost-editor" and args.get("action") in ("key", "type", "tap", "drag"): foreground_input = True
         if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
         if cmd == "first-run" and args.get("action") == "focus": foreground_input = True
         if cmd == "profiles-shell" and args.get("action") in ("press", "type-delete", "icon-symbol", "indicator-menu"):
@@ -1077,21 +1085,34 @@ def feature_checks(app, style, results, tmp):
     def crash_recovery():
         if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
             return {"status": "DEFERRED", "reason": "M1-only by rule; not run"}
+        pid = app.call("ping")["pid"]
+        sibling_title = app.eval(t, "document.title")
         c = new_tab(app, "https://example.com/", background=True)
         try:
-            app.call("navigate", tab=c, url="chrome://crash")
-        except Exception:
-            pass
-        time.sleep(2)
-        st = app.page(c).get("crash")
-        model_crashed = app.tab(c)["crashed"]
-        app.call("navigate", tab=c, url="https://example.com/")
-        app.call("wait", tab=c, timeout=20)
-        after = app.page(c)
-        app.call("close", tab=c)
-        return {"ok": st != 0 and model_crashed and after["crash"] == 0 and after["url"] == "https://example.com/",
-                "crash_state": st, "model_crashed": model_crashed,
-                "after_reload": {"crash": after["crash"], "url": after["url"]}}
+            # Blink's chrome_debug_urls.cc handles chrome://kill with SIGTERM
+            # on macOS. CEF reports TS_PROCESS_WAS_KILLED; Open exposes crash
+            # state 2 and the same model crashed flag, without a fault/.ips or
+            # a macOS crash dialog (chrome://crash dereferences null instead).
+            app.call("navigate", tab=c, url="chrome://kill")
+            wait_until(lambda: app.page(c).get("crash") == 2 and app.tab(c)["crashed"], timeout=5, step=.05)
+            st = app.page(c).get("crash")
+            model_crashed = app.tab(c)["crashed"]
+            sibling_alive = app.eval(t, "document.title") == sibling_title and not app.tab(t)["crashed"]
+            app_alive = app.call("ping")["pid"] == pid
+            # Keep the original recovery navigation on the same sidebar tab.
+            app.call("navigate", tab=c, url="https://example.com/")
+            app.call("wait", tab=c, timeout=20)
+            after = app.page(c)
+            model_recovered = not app.tab(c)["crashed"]
+            title = app.eval(c, "document.title")
+            return {"ok": st == 2 and model_crashed and sibling_alive and app_alive and model_recovered
+                          and after["crash"] == 0 and after["url"] == "https://example.com/" and title == "Example Domain",
+                    "termination_url": "chrome://kill", "crash_state": st, "model_crashed": model_crashed,
+                    "sibling_alive": sibling_alive, "same_app_pid": app_alive,
+                    "after_reload": {"crash": after["crash"], "url": after["url"], "title": title,
+                                     "model_recovered": model_recovered}}
+        finally:
+            app.call("close", tab=c)
 
     for name, fn in [("js_dialogs", dialogs), ("permissions", permissions), ("popups_new_tabs", popups_and_new_tabs),
                      ("find_in_page", find), ("zoom", zoom),
@@ -1100,6 +1121,9 @@ def feature_checks(app, style, results, tmp):
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
                      ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
+    runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
+        app, results, tmp, new_tab, wait_until)
+
 
 
 # ----------------------------------------------------------------------------
@@ -2382,8 +2406,7 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
-    import engine_activation
-    engine_activation.run(app_factory, results)
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
     sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     window_material_checks(app_factory, results, tmp)
@@ -5791,6 +5814,41 @@ def process_cpu_window(app, seconds=60):
             'complete': before.keys() == after.keys() == common}
 
 
+def _media_idle_cpu(app, audio):
+    """Four interleaved paused-card/no-card pairs, with the OS sampler used by measure."""
+    def players(): return app.call("mini-players")
+    def paused(): return any(c["tab"] == audio and c["playback"] == "paused" for c in players()["cards"])
+    app.call("media-action", tab=audio, action="pause")
+    if not wait_until(paused, timeout=3, step=.02):
+        raise RuntimeError("idle CPU fixture has no paused mini player")
+    samples = {"with": [], "without": []}
+    animations, pending = [], []
+    for _ in range(4):
+        time.sleep(6)
+        view = players(); animations.append(view["animations"]); pending.append(view["pendingCollapse"])
+        samples["with"].append(process_cpu_window(app, seconds=8))
+        app.call("media-action", tab=audio, action="close")
+        if not wait_until(lambda: not players()["cards"], timeout=3, step=.02):
+            raise RuntimeError("idle CPU fixture did not remove the card")
+        time.sleep(6)
+        samples["without"].append(process_cpu_window(app, seconds=8))
+        app.call("media-action", tab=audio, action="play")
+        wait_until(lambda: any(c["tab"] == audio for c in players()["cards"]), timeout=3, step=.02)
+        app.call("media-action", tab=audio, action="pause")
+        if not wait_until(paused, timeout=3, step=.02):
+            raise RuntimeError("idle CPU fixture did not restore the paused card")
+    # Retain the existing 0.5 percentage-point tolerance and four-pair floor comparison.
+    floors = {k: min(x["total_cpu_percent"] for x in v) for k, v in samples.items()}
+    browser = {k: min(x["by_kind"].get("browser", 0) for x in v) for k, v in samples.items()}
+    return {"ok": abs(floors["with"] - floors["without"]) <= .5
+            and abs(browser["with"] - browser["without"]) <= .5
+            and all(x["complete"] for v in samples.values() for x in v)
+            and animations == [0] * 4 and pending == [0] * 4,
+            "minWith": floors["with"], "minWithout": floors["without"],
+            "browserMinWith": browser["with"], "browserMinWithout": browser["without"],
+            "restAnimations": animations, "pendingCollapse": pending, "samples": samples}
+
+
 def measure(app_factory, results, tmp):
     def mb(x):
         return round(x / 1048576, 1)
@@ -5811,6 +5869,24 @@ def measure(app_factory, results, tmp):
         results['idle_cpu_empty_task_manager'] = app.call('metrics', interval=10)
     finally:
         app.quit()
+
+    # D-11: the same paused-card speed gate as the media suite, on a local fixture.
+    server, port = _media_server()
+    app = app_factory(urls=("http://127.0.0.1:%d/audio.html" % port,), fresh=True)
+    keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
+    saved = {key: app.call("defaults", key=key, persistent=True) for key in keys}
+    try:
+        for key in keys: app.call("defaults", key=key, value=None)
+        audio = app.call("tabs")[0]["id"]
+        app.call("wait", tab=audio)
+        app.eval(audio, "start()")
+        wait_until(lambda: app.call("media", tab=audio)["playback"] == "playing", timeout=10, step=.05)
+        new_tab(app, "about:blank")
+        wait_until(lambda: app.call("mini-players")["cards"], timeout=3, step=.02)
+        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
+    finally:
+        _restore_defaults(app, saved)
+        app.quit(); server.shutdown(); server.server_close()
 
     # Cold-ish launch: profile already exists (second launch), one restored
     # tab. Process start to first contentful paint of that tab.
@@ -5950,9 +6026,10 @@ def media_checks(factory, results, tmp):
         app.call("close", tab=tab)
     # Start from the defaults the checks expect; a run killed mid-check (or another suite) can leave
     # these keys behind in the shared defaults domain.
-    for key in ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop"):
-        app.call("defaults", key=key, value=None)
+    keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
+    saved = {key: app.call("defaults", key=key, persistent=True) for key in keys}
     try:
+        for key in keys: app.call("defaults", key=key, value=None)
         app.call("window-frame", frame=[80, 60, 1280, 820])
         home = app.call("tabs")[0]["id"]
         app.call("wait", tab=home)
@@ -5971,18 +6048,26 @@ def media_checks(factory, results, tmp):
         app.call("media-action", tab=audio, action="toggle-mute")
 
         # E-M3: the card appears when the source leaves the screen, and goes when it comes back.
-        select(home)
         t0 = time.monotonic()
+        select(home)
         listed = wait_until(lambda: audio in ids(), timeout=1, step=.005)
         appear_ms = (time.monotonic() - t0) * 1000
         card = players()["cards"][0] if listed else None
+        timing = (card or {}).get("timing", {})
+        turns = timing.get("insertedTurn", -2) - timing.get("handledTurn", 0) if timing.get("insertedTurn") is not None else -2
+        insert_ms = (timing["insertedAt"] - timing["handledAt"]) * 1000 if timing.get("insertedAt") is not None else None
         select(audio)
         gone = wait_until(lambda: not ids(), timeout=1, step=.01)
-        results["media_card_on_leave"] = {"ok": bool(listed) and bool(gone) and appear_ms < 1000
+        results["media_card_on_leave"] = {"ok": bool(listed) and bool(gone) and timing.get("event") == "leave" and 0 <= turns <= 1
+            and insert_ms is not None and insert_ms >= 0
             and card is not None and set(["favicon", "previous", "play", "next", "volume"]) <= set(card["buttons"]),
-            "appearMs": round(appear_ms, 1), "load": os.getloadavg(), "card": card}
+            "appearMs": round(appear_ms, 1), "insertMs": insert_ms, "insertTurns": turns, "load": os.getloadavg(), "card": card}
 
         # E-M4: the card's controls reach the page (Chromium's media session; next/previous route to the page's handlers).
+        # Real clicks need Open frontmost. LaunchServices can answer the socket before it grants the
+        # foreground, and an app that never became active resigns nothing, so the focus guard would not
+        # see it: establish the precondition through the exact-PID activation path (as tabstrip does).
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         select(home)
         wait_until(lambda: audio in ids(), timeout=2, step=.01)
         app.call("media-click", tab=audio, target="play")
@@ -6006,6 +6091,8 @@ def media_checks(factory, results, tmp):
         second = wait_until(lambda: (lambda w: w if len(w) >= 2 else None)(app.call("shell-windows")), timeout=5, step=.05)
         second_cards = ids() if second else None
         if second:
+            # Close Window needs the new window key (a menu command): activate it first.
+            app.call("window-focus", id=app.call("window-state")["id"], activate=True)
             app.call("command", id="close-window")
             wait_until(lambda: len(app.call("shell-windows")) == 1, timeout=5, step=.05)
         app.call("space", space=home_space)
@@ -6021,34 +6108,8 @@ def media_checks(factory, results, tmp):
         for t in extra: close_tab(t)
         wait_until(lambda: ids() == [audio], timeout=3, step=.02)
 
-        # E-M15 / D-11: idle CPU with a paused card on screen equals idle CPU without it.
-        # Alternate the two states (paused card shown / hidden by a sidebar toggle-free Space switch is not
-        # equivalent, so the card leaves by selecting its own tab and comes back by leaving it again).
-        app.call("media-action", tab=audio, action="pause")
-        wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=3, step=.02)
-        def cpu(x): return round(sum(max(p["cpu"], 0) for p in x["tasks"]), 2)
-        def browser_cpu(x): return round(sum(max(p["cpu"], 0) for p in x["tasks"] if p.get("kind") == 1), 2)
-        samples = {"with": [], "without": [], "browserWith": [], "browserWithout": [], "load": []}
-        card_view = players()
-        rest_animations = []
-        for _ in range(4):
-            time.sleep(6); rest_animations.append(players()["animations"]); x = app.call("metrics", interval=8)
-            samples["with"].append(cpu(x)); samples["browserWith"].append(browser_cpu(x)); samples["load"].append(os.getloadavg()[0])
-            app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
-            time.sleep(6); x = app.call("metrics", interval=8)
-            samples["without"].append(cpu(x)); samples["browserWithout"].append(browser_cpu(x)); samples["load"].append(os.getloadavg()[0])
-            # Back to a shown paused card: play (clears the dismissal), pause again.
-            app.call("media-action", tab=audio, action="play"); wait_until(lambda: audio in ids(), timeout=3, step=.02)
-            app.call("media-action", tab=audio, action="pause")
-            wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=3, step=.02)
-        # Other work on the Mac only adds CPU, so compare the floor of four interleaved pairs; the
-        # structural part (no animation keys, no pending collapse) holds in every sample.
-        results["media_idle_cpu"] = {"ok": abs(min(samples["with"]) - min(samples["without"])) <= 0.5
-            and abs(min(samples["browserWith"]) - min(samples["browserWithout"])) <= 0.5
-            and card_view["pendingCollapse"] == 0 and rest_animations == [0] * len(rest_animations),
-            "minWith": min(samples["with"]), "minWithout": min(samples["without"]),
-            "browserMinWith": min(samples["browserWith"]), "browserMinWithout": min(samples["browserWithout"]),
-            "restAnimations": rest_animations, "samples": samples}
+        # E-M15 / D-11: same OS sampling and paused-card fixture as `measure`.
+        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
         app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
         close_tab(audio)
 
@@ -6062,13 +6123,14 @@ def media_checks(factory, results, tmp):
         latency = (p.get("enteredAt") or 0) - (p.get("requestedAt") or 0) if p.get("enteredAt") else None
         decision = m(video)["decision"]
         leave_to_request = (p.get("requestedAt") or 0) - (decision["at"] if decision else 0)
+        leave_to_enter = (p["enteredAt"] - decision["at"]) if p.get("enteredAt") and decision else None
         pip_windows = p.get("windows", [])
         # Phase 1 shows Chromium's frameless window; phase 2 (EM-4) Open's own window and no Chromium one.
         phase = p.get("phase", 1)
         shown = len(pip_windows) >= 1 if phase == 1 else bool((p.get("openWindow") or {}).get("visible")) and not pip_windows
         results["media_auto_pip_on_leave"] = {"ok": opened["state"] == "active" and opened.get("automatic") is True and opened.get("tab") == video
-            and latency is not None and latency <= 0.5 and shown and abs(leave_to_request) < 0.05, "phase": phase,
-            "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request,
+            and leave_to_enter is not None and 0 <= leave_to_enter <= 0.5 and shown, "phase": phase,
+            "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request, "leaveToEnterSeconds": leave_to_enter,
             "load": os.getloadavg(), "windowsBefore": windows_before, "decision": decision, "audibleAfterPlayMs": video_audible_ms,
             "autoPiPSetting": app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave")}
         # Sleep feed (§4.10): the PiP source is protected.
@@ -6390,7 +6452,94 @@ def media_checks(factory, results, tmp):
             results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         select(fv); wait_pip("closed")
         close_tab(fv)
-        results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
+        # Item 11 (#110 code review C5): with two cards in an expanded stack, Close or Back to Tab on the
+        # top card, then the pointer over the tab list: the other card must collapse. Synthetic pointer on
+        # the real tracking-area path (mouse hover delivers enter/exit to the views under the point).
+        def two_card_pass(target):
+            a, b = open_tab(base + "audio.html?c5=a" + target), open_tab(base + "audio.html?c5=b" + target)
+            start(a); start(b)
+            select(home)
+            both = wait_until(lambda: (lambda c: c if set(c) >= {a, b} else None)(ids()), timeout=3, step=.02)
+            top = (both or [b])[0]
+            other = a if top == b else b
+            app.call("media-click", tab=top, target=target)
+            # Back to Tab selects the top card's tab: it shows, so its card leaves (Close removes it too).
+            gone = wait_until(lambda: top not in ids(), timeout=3, step=.02)
+            app.call("hover", node=home)
+            def collapsed():
+                p = players()
+                card = next((c for c in p["cards"] if c["tab"] == other), None)
+                return p if card and not p["expanded"] and not card["expanded"] else None
+            rest = wait_until(collapsed, timeout=2, step=.02)
+            p = players()
+            for t in (a, b):
+                close_tab(t)
+            return {"ok": bool(both) and bool(gone) and bool(rest), "top": top, "gone": bool(gone),
+                    "stackExpanded": p["expanded"], "cards": [{k: c.get(k) for k in ("tab", "expanded")} for c in p["cards"]]}
+        c5_close = two_card_pass("close")
+        c5_title = two_card_pass("title")
+        results["media_two_card_collapse"] = {"ok": c5_close["ok"] and c5_title["ok"], "close": c5_close, "backToTab": c5_title}
+
+        # E-M13 (EM-7): documentPictureInPicture.requestWindow() opens Open's Document PiP panel (28 pt top
+        # bar, the PiP page in it at the requested size); the page's element moves into it, and Close
+        # gives it back (the PiP document's pagehide). A navigation of the opener closes the panel.
+        # requestWindow needs a user gesture: Runtime.evaluate with userGesture.
+        def gesture_eval(tab, js):
+            r = app.call("devtools", tab=tab, method="Runtime.evaluate",
+                         params={"expression": js, "userGesture": True, "returnByValue": True, "awaitPromise": True})
+            return (r or {}).get("result", {}).get("value")
+        def doc_window(): return pip().get("documentWindow")
+        dp = open_tab(base + "docpip.html")
+        dp_opened = gesture_eval(dp, "start()")
+        dp_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] and w["pageSize"] == w["requested"]
+                                     else None)(doc_window()), timeout=3, step=.02)
+        dp_page = app.eval(dp, "JSON.stringify(__pip)")
+        # The PiP page learns its size from the panel a moment after requestWindow resolves.
+        dp_size = wait_until(lambda: (lambda v: v if v == [400, 300] else None)(app.eval(dp,
+            "documentPictureInPicture.window ? [documentPictureInPicture.window.innerWidth, documentPictureInPicture.window.innerHeight] : null")),
+            timeout=3, step=.02)
+        dp_moved = app.eval(dp, "document.getElementById('player') === null")
+        dp_level = dp_win["level"] if dp_win else None
+        app.call("pip-action", action="close")
+        dp_gone = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        dp_back = wait_until(lambda: app.eval(dp, "__pip.closed === 1 && document.getElementById('player') !== null"), timeout=3, step=.05)
+        # Failure path: the opener navigates while its Document PiP is open (Chromium's rule closes it).
+        dp_reopened = gesture_eval(dp, "start()")
+        dp_win2 = wait_until(lambda: doc_window(), timeout=3, step=.02)
+        app.eval(dp, "location.href = 'plain.html'; true")
+        dp_nav_gone = wait_until(lambda: doc_window() is None, timeout=5, step=.02)
+        results["media_document_pip"] = {"ok": dp_opened is True and bool(dp_win) and dp_win["topBarHeight"] == 28
+            and dp_win["requested"] == [400, 300] and dp_win["pageSize"] == [400, 300] and dp_win["class"].endswith("PiPPanel")
+            and json.loads(dp_page)["opened"] == 1 and dp_size == [400, 300]
+            and dp_moved is True and bool(dp_gone) and dp_back is True and dp_reopened is True and bool(dp_win2) and bool(dp_nav_gone),
+            "window": dp_win, "page": dp_page, "innerSize": dp_size, "moved": dp_moved, "level": dp_level, "closed": bool(dp_gone), "elementBack": dp_back,
+            "navigationCloses": bool(dp_nav_gone), "videoPiP": pip()["state"]}
+        close_tab(dp)
+
+        # EM-6 + EM-7, the Meet path: a playing page that registers "enterpictureinpicture" gets Chromium's
+        # own auto-PiP on a tab leave (the hidden tab strip tells Chromium's helper; no setter needed), and
+        # its handler opens Document PiP in Open's panel. Open's rule yields (decision chromiumAutoPiP). Back
+        # on the tab, Chromium closes its auto PiP. Chromium auto-PiPs only https:// and file:// pages.
+        fx_file = "file://" + os.path.join(ROOT, "tools", "e2e", "fixtures", "media") + "/"
+        meet = open_tab(fx_file + "meet-like.html")
+        meet_heard, _ = start_heard(meet)
+        select(home)
+        meet_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] and w["pageSize"] == w["requested"]
+                                       else None)(doc_window()), timeout=3, step=.02)
+        meet_auto = app.eval(meet, "JSON.stringify(__auto)")
+        meet_decision = (m(meet).get("decision") or {}).get("value")
+        # Chromium marks the opener as in PiP while its Document PiP is open, so Open's session holds the
+        # tab (no mini player card, protected from sleep) until the panel goes.
+        meet_session = {k: pip().get(k) for k in ("state", "tab", "automatic")}
+        select(meet)
+        meet_closed = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        meet_session_after = wait_until(lambda: (lambda p: p if p["state"] != "active" else None)(pip()), timeout=3, step=.02)
+        results["media_meet_auto_pip"] = {"ok": meet_heard and bool(meet_win) and json.loads(meet_auto)["entered"] == 1
+            and meet_decision == "chromiumAutoPiP" and meet_session == {"state": "active", "tab": meet, "automatic": False}
+            and bool(meet_closed) and bool(meet_session_after) and meet_win["requested"] == [320, 240] and meet_win["topBarHeight"] == 28,
+            "window": meet_win, "auto": meet_auto, "decision": meet_decision, "session": meet_session,
+            "closedOnReturn": bool(meet_closed), "sessionAfter": (meet_session_after or {}).get("state")}
+        close_tab(meet)
         # Item 16 (criterion 6) with section 8's sleep controller (#156): a paused tab whose mini player
         # shows survives a pass that sleeps an idle background tab; after Close (the card goes) the same
         # pass may sleep it. The controller's clock moves; no wall-clock wait.
@@ -6429,6 +6578,7 @@ def media_checks(factory, results, tmp):
         state = m(a1) if kept else {}
         results["media_mute_survives_relaunch"] = {"ok": bool(kept) and state.get("modelMuted") is True, "state": state}
     finally:
+        _restore_defaults(app, saved)
         app.quit(); server.shutdown(); server.server_close()
 
 
@@ -11973,10 +12123,12 @@ def main():
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "passwords-probe", "secrets-import"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument('--features-passwords-engine-safety', action='store_true',
+                    help='features: prove ignored save offers with main App code and no password delegate')
     ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
@@ -11999,6 +12151,8 @@ def main():
         signal.signal(signal.SIGALRM, row_timeout)
     if opts.firstrun_boosts_only and opts.only != "firstrun":
         ap.error("--firstrun-boosts-only requires --only firstrun")
+    if opts.features_passwords_engine_safety and opts.only != 'features':
+        ap.error('--features-passwords-engine-safety requires --only features')
     # Startup itself may migrate legacy Peek choices before the socket answers.
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
@@ -12062,6 +12216,8 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.features_passwords_engine_safety:
+        extra.append('--open-allow-mock-keychain-secrets')
     if opts.only == "extensions-e2":
         import extensions_e2
         dirs = extensions_e2.fixtures(ROOT, tmp, opts.extensions)
@@ -12089,7 +12245,11 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
-    if opts.only == "extensions-ui":
+    if opts.only == "extensions-ui" and os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") == "adblock":
+        from settings_adblock import fixtures
+        extra += ["--load-extension=" + ",".join(fixtures(ROOT, tmp)),
+                  "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "extensions-ui" and os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") != "adblock":
         probe_copy = Path(tmp) / "action-probe-ui"
         shutil.copytree(Path(ROOT) / "tools/e2e/fixtures/action-probe", probe_copy)
         probe_manifest = json.loads((probe_copy / "manifest.json").read_text())
@@ -12122,9 +12282,13 @@ def main():
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
         launch_args = [arg for arg in extra if load_extensions or not arg.startswith("--load-extension=")]
-        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
+        if opts.only in ("firstrun", "import-robust") and app.call("onboarding").get("active"):
+            app.call("onboarding", action="skip-intro")
+            app.call("onboarding", action="get-started")
+            wait_until(lambda: app.call("first-run")["active"], timeout=10, step=.05)
         return app
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -12206,7 +12370,11 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == 'passwords-probe':
+        if opts.only == "import-robust":
+            results["import-robust"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "import_robust.py"))["run"](
+                factory, results["import-robust"], tmp, sys.modules[__name__])
+        elif opts.only == 'passwords-probe':
             results[opts.only] = {}
             results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
                 sys.modules[__name__], factory, results[opts.only], tmp,
@@ -12217,6 +12385,14 @@ def main():
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/secrets_import.py'))['run'](
                 factory, results[opts.only], tmp, sys.modules[__name__])
+        elif opts.only == "onboarding":
+            results["onboarding"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
+                factory, results["onboarding"], tmp, sys.modules[__name__])
+        elif opts.only == "welcome":
+            import welcome
+            results["welcome"] = CheckedResults(tracker)
+            welcome.run(factory, results["welcome"], tmp, sys.modules[__name__])
         elif opts.only == "firstrun":
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
@@ -12229,8 +12405,9 @@ def main():
                     factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
-            import extensions_ui
-            extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "extensions_ui.py"))["run"](
+                factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT,
+                sys.modules[__name__])
         elif opts.only == "split":
             import importlib.util
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))
@@ -12242,7 +12419,10 @@ def main():
             shell_checks(factory, results["shell"], tmp)
         elif opts.only == "relaunch":
             results["relaunch"] = CheckedResults(tracker)
-            relaunch_checks(factory, results["relaunch"], tmp)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
+                factory, results["relaunch"], tmp, sys.modules[__name__], opts.config)
+            if os.environ.get('OPEN_RELAUNCH_SETTINGS_ONLY') != '1':
+                relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
@@ -12278,6 +12458,17 @@ def main():
             results["applescript"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/applescript.py"))["run"](
                 factory, results["applescript"], tmp, _fixture_server, _restore_defaults, wait_until)
+        elif opts.only == "sitedata":
+            results["sitedata"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/site_data.py"))["run"](
+                factory, results["sitedata"], tmp, new_tab, wait_until)
+        elif opts.only == "boosteditor":
+            import importlib.util
+            sys.path.insert(0, os.path.join(ROOT, "tools", "e2e"))
+            spec = importlib.util.spec_from_file_location("boosteditor_suite", os.path.join(ROOT, "tools/e2e/boosteditor.py"))
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            results[opts.only] = CheckedResults(tracker)
+            module.run(factory, results[opts.only], tmp, globals())
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
             page_checks(factory, results["page"], tmp, opts.style)
@@ -12336,7 +12527,7 @@ def main():
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
-            app = factory(urls=("about:blank" if opts.only == "extensions-p3" else "https://example.com/",))
+            app = factory(urls=("about:blank" if opts.only == "extensions-p3" or opts.features_passwords_engine_safety else "https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
@@ -12358,7 +12549,11 @@ def main():
                     import extensions_e2
                     extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
                 else:
-                    feature_checks(app, opts.style, results["features"], tmp)
+                    if opts.features_passwords_engine_safety:
+                        runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_engine_safety.py'))['run'](
+                            app, results['features'], tmp, globals())
+                    else:
+                        feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
 
@@ -12431,14 +12626,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import"):
+    for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
-            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
+            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "secrets-import")
+    failures = [k for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

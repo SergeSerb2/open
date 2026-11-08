@@ -79,7 +79,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       }
     }
   }
-  func load(_ url: URL) { if !closed { content.load(url) } }
+  func load(_ url: URL) { if !closed, !WelcomeTab.isInternal(url) { content.load(url) } }
   func reload() { if !closed { content.reload() } }
   func stop() { if !closed { content.stopLoading() } }
   func goBack() { if !closed { content.goBack() } }
@@ -117,6 +117,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     // CEF's OnLoadStart excludes same-document commits. Address changes outside
     // a document load cover pushState/fragments without duplicating that hook.
     if changes.contains(.URL), let url = page.url {
+      if !page.isLoading { owner.app.stores.boosts.pageCommitted(self, url: url) }
       historyRecorder.addressChanged(url, isLoading: page.isLoading, ephemeral: page.context.isEphemeral, title: page.title)
     }
     if changes.contains(.loading), !page.isLoading { historyRecorder.loadingChanged(false); historyRecorder.titleChanged(page.title) }
@@ -258,7 +259,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     guard !closed else { return nil }; return owner?.webContent(page, createWebContentFor: request)
   }
   func webContent(_ page: OEWebContent, shouldNavigateTo url: URL, userGesture: Bool, modifiers: NSEvent.ModifierFlags) -> Bool {
-    guard !closed else { return false }
+    guard !closed, !WelcomeTab.isInternal(url) else { return false }
     owner?.record("navigationPolicy", page, ["url": url.absoluteString, "modifiers": modifiers.rawValue, "userGesture": userGesture])
     return !userGesture || shouldNavigate?(url, modifiers) != false
   }
@@ -296,6 +297,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     !closed && owner?.webContent(page, showContextMenu: menu) == true
   }
   func webContent(_ page: OEWebContent, didUpdateFindResult result: OEFindResult) { if !closed { owner?.webContent(page, didUpdateFindResult: result) } }
+  func webContent(_ page: OEWebContent, didReceiveOpenWorldMessage type: String, payloadJSON: String, documentID: String) {
+    if !closed { owner?.webContent(page, didReceiveOpenWorldMessage: type, payloadJSON: payloadJSON, documentID: documentID) }
+  }
   func webContent(_ page: OEWebContent, didRequestFullscreen fullscreen: Bool) { if !closed { owner?.webContent(page, didRequestFullscreen: fullscreen) } }
   /// Chromium's history swiper (page-platform EP-1): the factory records it; Step 12 draws Open's
   /// indicator from it.
@@ -304,6 +308,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   }
   func webContent(_ page: OEWebContent, didCommitNavigationTo url: URL, isReload: Bool) {
     guard !closed else { return }
+    owner?.app.stores.boosts.pageCommitted(self, url: url, newDocument: true)
     owner?.findController?.didNavigate(page)
     historyRecorder.committed(url: url, isReload: isReload, ephemeral: page.context.isEphemeral)
     owner?.record("historyCommit", page, ["url": url.absoluteString, "reload": isReload])

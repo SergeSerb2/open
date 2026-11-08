@@ -60,7 +60,7 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         app.call('menu-perform', id='check-for-updates')
         s = app.call('settings-state')
         results['settings_general_action_error'] = {'ok': s['pane'] == 'general'
-            and s['generalError'] == 'An update feed is not available yet.', 'error': s['generalError']}
+            and s['generalError'] == 'Updates are not set up in this build.', 'error': s['generalError']}
         app.call('menu-perform', id='view-boosts')
         s = app.call('settings-state')
         results['settings_advanced_action_error'] = {'ok': s['pane'] == 'advanced'

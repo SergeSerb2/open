@@ -103,6 +103,7 @@ public struct ExtensionShortcutConflict: Sendable, Hashable {
     func setEnabledBlockLists(_ ids: [String], profileID: ProfileID)
     func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID)
     func adBlockDebugInfo(profileID: ProfileID) -> String
+    func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool
     func setTabSleepMode(_ mode: TabSleepMode)
     func setApplicationIcon(id: String)
     // Required by plan buttons that have no method in its original protocol sketch.
@@ -124,6 +125,7 @@ public struct ExtensionShortcutConflict: Sendable, Hashable {
 }
 
 public extension SettingsActions {
+    func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool { false }
     func chooseProfileIcon(profileID: ProfileID, anchor: NSView) {}
     func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict] { [] }
     func makeSpaceManagerView() -> NSView? { nil }

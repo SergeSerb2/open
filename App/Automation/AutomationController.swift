@@ -46,6 +46,7 @@
     private var revealedURLs: [URL] = []
     var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
     var profileProofContexts: [String: OEBrowserContext] = [:]
+    var recordedOpenWorldCallbacks: [[String: Any]] = []
 
     init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
 
@@ -70,6 +71,7 @@
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
+        if cmd == "boost-editor", ["key", "type", "tap", "drag"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -103,10 +105,15 @@
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
       case "child-dialog-button": return try await childDialogButton(a)
+      case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
-        let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []
+        // Little Open owns its own page events, even while a main window exists.
+        let owner = (a["window"] as? Int).flatMap { number in
+          app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
+        } ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+        let pageEvents = owner?.drainEvents() ?? []
         let events = savePromptEvents; savePromptEvents.removeAll()
         return pageEvents + events
       case "credentials": return try await credentialCounts(a)
@@ -120,6 +127,10 @@
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
+      case "onboarding": return try await runOnboarding(a)
+      case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
+        return try await mouse(a, nil)
+      case "welcome": return try welcome(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -132,7 +143,7 @@
         return app.model.spaces.map { ["id": $0.id.description, "title": $0.title ?? "", "profile": $0.profileID.description, "pinned": $0.pinned.count, "today": $0.today.count, "focused": false] as [String: Any] }
       case "tabs" where app.frontWindowController == nil: return [] as [String]
       case "windows" where app.frontWindowController == nil:
-        return NSApp.windows.map { nativeWindow in
+        return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
           if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
@@ -228,8 +239,11 @@
       case "settings-profile": return try settingsProfile(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
+      case "settings-adblock": return try settingsAdBlock(a)
+      case "settings-adblock-engine": return settingsAdBlockEngine()
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
+        if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
@@ -575,6 +589,8 @@
         guard let profile = app.model.profiles.first(where: { $0.name == name }) ?? app.model.createProfile(name: name) else { throw Failure(message: "unknown Profile") }
         try app.directories.ensureProfileDirectories(for: profile)
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
+      case "boost-editor", "boosts", "boost-library":
+        return try await runBoostCommand(cmd, a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
       case "peek-open":
@@ -669,7 +685,10 @@
         w.addSplitView(nil)
         return w.visibleTabs.map { describe($0, in: w) }
       case "navigate":
-        try content(a, w).load(try url(a, "url"))
+        let destination = try url(a, "url")
+        guard !WelcomeTab.isInternal(destination) else { throw Failure(message: "internal URL navigation refused") }
+        if let tab = try? modelTab(a, w), let host = w.welcomeHosts[tab.id] { host.load(destination) }
+        else { try content(a, w).load(destination) }
         return true
       case "back":
         try content(a, w).goBack()
@@ -710,11 +729,13 @@
             $0.isIncognito && $0.incognitoSession?.context === content.context
           }
         }.map { describe($0, in: w) }
+      case "site-settings", "site-setting", "site-data-clear", "security-state":
+        return try await runSiteDataCommand(cmd, a, page: try content(a, w))
       case "eval":
         guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
         // Through the OpenWeb protocol, as OpenKit features will call it.
         let page: any WebContent = try content(a, w)
-        return try await page.evaluateJavaScript(js)
+        return try await page.evaluateJavaScript(js, in: try scriptWorld(a))
       case "devtools":
         guard let method = a["method"] as? String else { throw Failure(message: "missing method") }
         return try await content(a, w).sendDevToolsMethod(method, parameters: a["params"] as? [String: Any])
@@ -936,7 +957,16 @@
 
       // Windows and pixels (Open's own windows only).
       case "windows":
-        return NSApp.windows.map { nativeWindow in
+        let enhanced = a["accessibility"] as? Bool == true
+        let axRead = NSSelectorFromString("accessibilityAttributeValue:"), axWrite = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+        let previousAX = enhanced && NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: "AXEnhancedUserInterface")?.takeUnretainedValue() : nil
+        if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
+        defer { if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: "AXEnhancedUserInterface") } }
+        if enhanced {
+          for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
+          try? await Task.sleep(for: .milliseconds(50))
+        }
+        return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
           if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
@@ -1027,6 +1057,8 @@
           "firstResponder": win.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
           "activationPolicy": NSApp.activationPolicy().rawValue,
           "screenFrame": win.screen.map { rect($0.frame) } ?? [],
+          "mainScreenVisibleFrame": NSScreen.main.map { rect($0.visibleFrame) } ?? [],
+          "mainScreenName": NSScreen.main?.localizedName ?? "", "mainScreenScale": NSScreen.main?.backingScaleFactor ?? 0,
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           // The optional content toolbar (commandbar-completion §4.6).
@@ -1218,6 +1250,7 @@
         }
         let store = SitePermissionStore.forContext(browser.context)
         return ["ready": store.indexReady, "decisions": store.allDecisions().map { ["origin": $0.origin.absoluteString, "kind": $0.kind.rawValue, "state": $0.state.rawValue] }]
+      case "open-world-messages": return try await openWorldMessages(try content(a, w), factory: w, clear: a["clear"] as? Bool == true, subscribe: a["subscribe"] as? Bool)
       case "script-add":
         let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
         profile.addUserScript(
@@ -1226,7 +1259,7 @@
             kind: a["css"] as? Bool == true ? .styleSheet : .javaScript,
             injectionTime: a["end"] as? Bool == true ? .documentEnd : .documentStart,
             matchPatterns: a["matches"] as? [String] ?? ["<all_urls>"],
-            mainFrameOnly: !(a["allFrames"] as? Bool ?? false)))
+            mainFrameOnly: !(a["allFrames"] as? Bool ?? false), world: try scriptWorld(a)))
         return profile.userScripts.map(\.id)
       case "script-remove":
         let profile = EngineWebProfile(try focusedBrowser(w, create: a["create"] as? Bool ?? false).context)
@@ -1852,8 +1885,8 @@
         "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
     }
 
-    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
-      let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
+    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
+      let number = a["window"] as? Int ?? app.onboardingWindowController?.window?.windowNumber ?? w?.window?.windowNumber ?? 0
       guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
       pointerRequestID += 1
       let motionTag = Self.syntheticPointerTag + pointerRequestID
@@ -2034,7 +2067,7 @@
     /// only: the system keyboard is never touched.
     func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
       guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
-        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
+        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
       try await activateForInput(target)
       if let text = a["text"] as? String {
@@ -2142,8 +2175,9 @@
         return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
-      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
+      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
+      guard target.identifier?.rawValue != "onboarding-dim" else { throw Failure(message: "dim window snapshots are excluded") }
       var keyTime: Double?
       var capturedAfterKey: Double?
       let toggle = a["toggleSidebar"] as? Bool == true

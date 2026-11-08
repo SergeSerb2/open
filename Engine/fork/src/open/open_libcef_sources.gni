@@ -18,6 +18,8 @@ open_libcef_mac_sources = [
   "//open/browser/autofill/open_profile_data_impl.h",
   "//open/browser/autofill/open_save_prompt_impl.cc",
   "//open/browser/autofill/open_save_prompt_impl.h",
+  "//open/browser/page/open_site_control.cc",
+  "//open/renderer/open_script_world.cc",
   "//open/browser/extensions/open_extension_window_hooks.h",
   "//open/browser/extensions/open_omnibox.cc",
   "//open/browser/extensions/open_extension_manager.mm",
@@ -26,6 +28,8 @@ open_libcef_mac_sources = [
   "//open/browser/extensions/open_extension_popup.h",
   "//open/browser/extensions/open_extensions_toolbar.cc",
   "//open/browser/extensions/open_extensions_toolbar.h",
+  "//open/browser/media/open_document_pip_host.h",
+  "//open/browser/media/open_document_pip_host.mm",
   "//open/browser/media/open_media_controller.cc",
   "//open/browser/media/open_media_controller.h",
   "//open/browser/media/open_media_hooks.h",
@@ -35,6 +39,7 @@ open_libcef_mac_sources = [
   "//open/browser/memory/open_navigation_history.h",
   "//open/browser/memory/open_page_lifecycle.cc",
   "//open/browser/page/open_history_swipe_hooks.h",
+  "//open/browser/page/open_browser_info.cc",
   "//open/browser/page/open_history_swipe_mac.mm",
   "//open/browser/page/open_notification_hooks.h",
   "//open/browser/page/open_notifications.cc",
@@ -47,6 +52,7 @@ open_libcef_mac_sources = [
   "//open/browser/tab_strip/hidden_browser.h",
   "//open/browser/tab_strip/open_browser_window.h",
   "//open/browser/tab_strip/open_browser_window.mm",
+  "//open/browser/tab_strip/open_hosted_window_hooks.h",
   "//open/browser/tab_strip/open_hosted_platform_delegate.h",
   "//open/browser/tab_strip/open_hosted_platform_delegate.mm",
   "//open/browser/tab_strip/open_tab_strip.cc",
@@ -56,6 +62,7 @@ open_libcef_mac_sources = [
 
 # Open GN targets libcef_static links (also wired in by patch 0302).
 open_libcef_deps = [
+  "//chrome/browser/ssl",
   # Native ad blocking: the per-Profile service (docs/plans/adblock-fork.md).
   "//open/adblock",
 

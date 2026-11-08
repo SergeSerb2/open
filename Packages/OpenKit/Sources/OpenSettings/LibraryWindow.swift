@@ -21,6 +21,7 @@ public struct LibraryContent:View {
             case .spaces:LibrarySpacesSection(model:viewModel)
             case .archive:ArchiveSection(model:viewModel)
             case .downloads:DownloadsSection(model:viewModel)
+            case .boosts:BoostsSection(model:viewModel)
             case .captures,.media:CapturesSection(model:viewModel)
             case .history:HistorySection(model:viewModel)
             }}.padding(viewModel.section == .spaces ? 0 : 16).frame(maxWidth:.infinity,maxHeight:.infinity)
@@ -52,8 +53,10 @@ private struct LibraryToolbar:View {
         case .captures,.media:
             if model.section == .media {Picker("Kind",selection:$model.mediaKind){Text("All Media").tag("All");Text("Captures").tag("Captures");Text("Screenshots").tag("Screenshots")}.labelsHidden()}
             Picker("Sort",selection:$model.captureSort){ForEach(["Newest","Oldest","Name"],id:\.self){Text($0).tag($0)}}.labelsHidden()
-        case .history:
-            Picker("Profile",selection:$model.historyProfileID){ForEach(model.model.profiles,id:\.id){Text($0.name).tag($0.id)}}.labelsHidden()
+        case .history, .boosts:
+            if model.section != .boosts || model.model.profiles.count > 1 {
+                Picker("Profile",selection:$model.historyProfileID){ForEach(model.model.profiles,id:\.id){Text($0.name).tag($0.id)}}.labelsHidden()
+            }
         }
         Spacer(minLength:0)
         TextField("Search \(model.section.title)",text:$model.query).textFieldStyle(.roundedBorder).frame(width:180)
