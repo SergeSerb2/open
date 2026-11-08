@@ -25,7 +25,9 @@ def run(factory, results, tmp, api):
     before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {key: before.get(key) for key in keys}
     for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-    server, origin = api._fixture_server('Welcome')
+    fixture_page = Path(tmp) / 'welcome-navigation.html'
+    fixture_page.write_text('<!doctype html><title>Welcome navigation</title><h1>Welcome navigation</h1>')
+    destination = fixture_page.as_uri()
 
     def record(name, ok, **details):
         results[name] = dict(ok=bool(ok), loadAverage=list(os.getloadavg()), **details)
@@ -163,13 +165,14 @@ def run(factory, results, tmp, api):
         record('W14_commandbar_label', bar.get('presented') and bar.get('text') == 'Welcome to Open', state=bar)
         app.call('key', key='escape')
         app.call('key', key='l', modifiers=['cmd'])
-        app.call('key', text=origin + '/from-welcome')
+        app.call('key', text=destination)
         app.call('key', key='return')
         navigated = api.wait_until(lambda: app.call('tab-state', tab=welcome) if
-            app.call('tab-state', tab=welcome)['url'] == origin + '/from-welcome' else None, timeout=10, step=.1)
+            app.call('tab-state', tab=welcome)['url'] == destination else None, timeout=10, step=.1)
         app.call('wait', tab=welcome)
         record('W15_same_tab_web_navigation', navigated and navigated['id'] == welcome
-               and app.eval(welcome, 'location.href') == origin + '/from-welcome'
+               and app.eval(welcome, 'location.href') == destination
+               and app.eval(welcome, 'document.title') == 'Welcome navigation'
                and not state()['visible'] and state()['hostCount'] == 0,
                tab=app.call('tab-state', tab=welcome), state=state())
         app.call('menu-perform', id='open-basics')
@@ -277,7 +280,6 @@ def run(factory, results, tmp, api):
             api._restore_defaults(app, saved)
         finally:
             if app: app.quit()
-            server.shutdown(); server.server_close()
         for source in Path(tmp).glob('open.log*'):
             shutil.copyfile(source, evidence / source.name)
         (evidence / 'welcome-checks.json').write_text(json.dumps(dict(results), indent=2))

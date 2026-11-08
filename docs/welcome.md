@@ -60,7 +60,7 @@ export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main
 
 Check the shared screen-priority flag before running. Screenshots and detailed
 receipts go to `.re/handoff/sections/s17/c4/`. The suite uses temporary data and
-cache roots, a synthetic loopback site, and owned-process cleanup. It saves, resets,
+cache roots, a local file page, and owned-process cleanup. It saves, resets,
 and restores `open.settings.lastPane`, `open.library.lastSection`, and
 `open.import.lastArcDir` in a `finally` path. The common runner preserves its
 startup preference keys. It changes no Welcome preference keys.
