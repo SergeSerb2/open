@@ -25,6 +25,7 @@ RATE = 48000
 TIMELINE = Path(__file__).resolve().parents[1] / "Packages/OpenKit/Sources/OpenOnboarding/IntroTimeline.swift"
 BEATS = {name: (float(a), float(b)) for name, a, b in re.findall(r'.init\(name: "([^"]+)", start: ([0-9.]+), end: ([0-9.]+)\)', TIMELINE.read_text())}
 DURATION = int(BEATS["sound"][1])
+FADE_START, SILENCE_START = BEATS["soundFade"]
 SEED = 0x4F50454E17
 EXPECTED_PCM = "980936f5cb2cf2d3488e6ff160e57dabf5ef27e55902d3aa23481936d21859b5"
 DEST = Path(__file__).resolve().parents[1] / "Packages/OpenKit/Sources/OpenOnboarding/Resources/Onboarding/open-intro.m4a"
@@ -53,7 +54,7 @@ def synthesize():
               (16/3, 32/3, [35, 42, 50, 57, 64]),
               (32/3, 16, [31, 50, 54, 57, 61]),
               (16, 17.75, [33, 52, 59, 66]),
-              (17.75, 19.5, [38, 45, 52, 54])]
+              (17.75, SILENCE_START, [38, 45, 52, 54])]
     for start, end, notes in chords:
         a, b = max(0, round((start - .45) * RATE)), min(count, round((end + .45) * RATE))
         for ni, note in enumerate(notes):
@@ -87,9 +88,9 @@ def synthesize():
     bells = [(BEATS["door"][1], 69, .55), (BEATS["bellPair"][0], 74, .5), (BEATS["bellPair"][1], 78, .5), (BEATS["plateau"][0], 81, 1.1)]
     # Plateau bars at 90 BPM: beats 1, 1.5, 2.5, 3; 4/4 bar = 8/3 s.
     bar = BEATS["plateau"][0]
-    while bar < 15:
+    while bar < FADE_START:
         bells += [(bar + beat * 2/3, note, .35) for beat, note in zip((0, .5, 1.5, 2), (74, 76, 78, 81))
-                  if bar + beat * 2/3 < 15]
+                  if bar + beat * 2/3 < FADE_START]
         bar += 8/3
     for bi, (onset, midi, velocity) in enumerate(bells):
         f = hz(midi)
@@ -162,16 +163,16 @@ def synthesize():
         block = max(0, t * 2 - .5)
         k = min(len(energies)-2, int(block))
         energy = energies[k] + (energies[k+1]-energies[k]) * (block-k)
-        db = -31 + 21 * smooth(t / BEATS["plateau"][0]) if t < BEATS["plateau"][0] else -10 if t < 15 else -10 - 30 * smooth((t-15)/4.5)
+        db = -31 + 21 * smooth(t / BEATS["plateau"][0]) if t < BEATS["plateau"][0] else -10 if t < FADE_START else -10 - 30 * smooth((t-FADE_START)/(SILENCE_START-FADE_START))
         envelope = 10 ** (db/20) / max(.01, energy)
         # Final 100 ms reaches digital silence before AAC's tail.
-        envelope *= 1 - smooth((t-19.4)/.1)
-        if t >= 19.5: envelope = 0
+        envelope *= 1 - smooth((t-(SILENCE_START-.1))/.1)
+        if t >= SILENCE_START: envelope = 0
         left[i] *= envelope
         right[i] *= envelope
     peak = max(max(map(abs, left)), max(map(abs, right)))
-    # v2 master: calibrated plateau -14 LUFS (ebur128), with -1 dBFS as
-    # the peak ceiling. The extra headroom is intentional, never a limiter.
+    # v2 master: calibrated plateau -14 LUFS (ebur128). The resulting
+    # -2.90 dBFS peak misses the original -1 dBFS target; documented for review.
     gain = 10 ** ((-1-1.9)/20) / peak
     pcm = array('h')
     for l, r in zip(left, right):
@@ -190,7 +191,7 @@ def metrics(pcm):
         rms = math.sqrt(sum((x/32768)**2 for x in part)/len(part))
         curve.append(round(20*math.log10(max(1e-9, rms)), 3))
     return dict(duration=len(samples)/(RATE*2), peakDBFS=20*math.log10(max(map(abs,samples))/32768), rmsDBFS=curve,
-                silentTailPeak=max(map(abs, samples[round(19.5*RATE)*2:]), default=0))
+                silentTailPeak=max(map(abs, samples[round(SILENCE_START*RATE)*2:]), default=0))
 
 
 def decode(path, temporary):

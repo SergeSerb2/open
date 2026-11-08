@@ -57,19 +57,20 @@ def run(factory, results, tmp, h):
         for key in ('t', 'l'): app.call('key', key=key, modifiers=['command'])
         guarded = dict(intro=state(), browsers=app.call('shell-windows'))
         dim = elapsed(1.7)
+        if os.environ.get('OPEN_ONBOARDING_FORCE_EARLY_FAILURE') == '1':
+            raise RuntimeError('forced early failure with the intro and dim windows visible')
         app.call('snapshot', path=str(evidence/'intro-native-initial.png'))
         phase0 = state()
         phase1 = elapsed(3.5)
         phase2 = elapsed(10.3)
         gate('early_keys_do_not_advance', lambda s: s.get('active') and s.get('screen')=='intro' and not s.get('ready'), early_keys, phase2)
         app.call('snapshot', path=str(evidence/'intro-native-completed.png'))
-        phase_pred = lambda rows: [s['phase'] for s in rows] == ['introAnimation', 'sellIntro', 'sellCompleted'] and rows[-1]['buttonEnabled'] and rows[-1]['buttonDefault'] and rows[-1]['buttonLabel']=='Get Started'
+        phase_pred = lambda rows: [s['phase'] for s in rows] == ['introAnimation', 'sellIntro', 'sellCompleted'] and rows[-1]['buttonEnabled'] and rows[-1]['buttonDefault'] and rows[-1]['buttonLabel']=='Continue'
         gate('phases_reached_in_order', phase_pred, [phase0, phase1, phase2], [phase0, phase1, phase1])
         frame_pred = lambda s: s.get('frameStats', {}).get('count', 0) >= 30 and not s['frameStats']['running']
         played_pred = lambda s: s.get('sound', {}).get('decision') == 'played' and s['sound']['playerCreated'] and abs(s['sound']['audioStartHostTime']-s['animationStartHostTime']) <= .020
-        played = phase1
         invalid = []
-        for arguments in (dict(action='x'*33), dict(action='state', unexpected=True)):
+        for arguments in (dict(action='x'*33), dict(action='state', unexpected=True), dict(action=7)):
             try: app.call('onboarding', **arguments)
             except RuntimeError: invalid.append(True)
             else: invalid.append(False)
@@ -93,14 +94,16 @@ def run(factory, results, tmp, h):
         app.call('snapshot', path=str(evidence/'intro-handoff-first-run.png'))
         gate('get_started_handoff', lambda s: s.get('screen')=='name' and s['active'], state(), phase2)
         gate('handoff_import_fresh_choices', lambda s: s.get('active') and s.get('step')=='welcome' and s.get('probeReady'), first_run, phase2)
+        before_landing = dict(windows=app.call('windows'), snapshot=Path(app.user_data, 'State/browser.json').exists())
         app.call('first-run', action='fresh')
         until(lambda: not app.call('first-run')['active'])
         until(lambda: isinstance(state().get('residentDeltaAfterHandoff'), int))
         landed = dict(windows=app.call('windows'), snapshot=Path(app.user_data, 'State/browser.json').exists(), memory=state().get('residentDeltaAfterHandoff'))
-        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, phase2)
+        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, before_landing)
         # Natural returning launch: a real saved browser root, no skip switch.
         launch(fresh=False)
         returning = state()
+        gate('light_uses_screen_blend', lambda s: s.get('blendFilters')==['screenBlendMode', 'screenBlendMode'], phase2, returning)
         gate('intro_browser_shortcuts_guarded', lambda s: s.get('intro', {}).get('active') and not s.get('browsers'), guarded, dict(intro=returning, browsers=app.call('shell-windows')))
         gate('first_launch_shows_intro', lambda s: s.get('active') and s.get('screen')=='intro' and s.get('moduleActive'), intro, returning)
         inactive = lambda s: not s.get('active') and not s.get('moduleActive') and s.get('phase')=='inactive'
@@ -112,6 +115,7 @@ def run(factory, results, tmp, h):
         gate('skip_first_run_inactive', inactive, skipped_launch, intro)
         launch()
         unmeasured = elapsed(.3)
+        played = unmeasured
         gate('frame_stats_recorded', frame_pred, measured, unmeasured)
         app.call('key', key='escape')
         escaped = state()
@@ -189,7 +193,7 @@ def run(factory, results, tmp, h):
         gate('quit_during_animation_fixture', lambda s: s.get('active') and s.get('dim', {}).get('exists'), interrupted_intro, returning)
         before_quit = app.call('windows')
         app.quit()
-        gate('owned_window_cleanup', lambda s: s.get('ok') and s.get('windows_after_quit', {}).get('count')==0, app.quit_report, dict(windows=before_quit))
+        gate('owned_window_cleanup', lambda s: s.get('count')==0, app.quit_report['windows_after_quit'], dict(count=len(before_quit), windows=before_quit))
         with tempfile.TemporaryDirectory(prefix='open-intro-replay-', dir='/tmp') as root:
             Path(root, 'State').mkdir()
             Path(root, 'State/browser.json').write_bytes(prior)
@@ -201,6 +205,15 @@ def run(factory, results, tmp, h):
             gate('replay_temp_root_allowed', lambda s: s.get('active') and s.get('screen')=='intro', replay_launch, returning)
             gate('replay_default_root_refused', lambda s: s.get('exit')==64 and s.get('refused'), denied_state, replay_launch)
             app.quit()
+        launch('--intro-sound=off')
+        before_intro_close = state()
+        app.call('key', key='w', modifiers=['command'])
+        closed = until(lambda: app.owned_windows()['count'] == 0, timeout=8)
+        app.quit()
+        gate('native_intro_close_quits', lambda s: s.get('closed') and s.get('cleanup') and not s.get('forced') and not s.get('snapshot'),
+             dict(closed=closed, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced', False),
+                  snapshot=Path(app.user_data, 'State/browser.json').exists()),
+             dict(closed=not before_intro_close['active'], cleanup=False, forced=False))
     finally:
         if app and not app.closed: app.quit()
         h._restore_defaults(None, saved)

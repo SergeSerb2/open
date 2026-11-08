@@ -225,6 +225,14 @@ restores preference keys in `finally`, checks cleanup, and records a negative
 proof for each gate using contrasting real App states. Frame statistics
 include p50/p95/max, drops and load1. The strict high-refresh row is INFO
 unless it runs on the M5 at load1 ≤12 and a display at 120 Hz or faster.
+`OPEN_ONBOARDING_FORCE_EARLY_FAILURE=1` makes the suite fail while the intro
+and dim are visible, to verify its failure cleanup. Check the shared priority
+flag before acquiring the screen lock, as for the other native suites.
+`tools/e2e/onboarding_launch.py --main-app PATH --out FILE` measures five
+interleaved main/branch returning launches on a real saved root, with no skip
+switch. Run it under quiet then screen locks after building both Apps. It
+requires load1 ≤30, confirmed first frames, and every shared numeric launch
+mark's branch median within 5 ms of main.
 
 `first-run` returns `{active, step, completed}` even when there is no browser
 window. Optional `action` drives the same view-model methods as the buttons:

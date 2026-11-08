@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import Metal
 import OpenDesign
 
 @MainActor
@@ -130,7 +131,7 @@ public final class IntroView: NSView {
         let scale = min(bounds.width/1280, bounds.height/800)
         scene.position = CGPoint(x: bounds.midX, y: bounds.midY)
         scene.setAffineTransform(.init(scaleX: scale, y: scale))
-        button.frame = NSRect(x: bounds.midX-100*scale, y: bounds.midY+(616-400)*scale, width: 200*scale, height: 44*scale)
+        button.frame = NSRect(x: bounds.midX-100*scale, y: bounds.midY+(567-400)*scale, width: 200*scale, height: 44*scale)
         CATransaction.commit()
     }
 
@@ -148,16 +149,18 @@ public final class IntroView: NSView {
             let orb = radial(spec.0, diameter: spec.1)
             orb.position = .init(x: spec.2, y: spec.3); orb.opacity = i == 2 ? 0 : spec.4
             ambient.addSublayer(orb); orbs.append(orb)
+            if i == 2 { orb.compositingFilter = "screenBlendMode" }
             let beat = ["orbBlue", "orbPurple", "orbWarm"][i]
             orbTracks.append(.init(layer: orb, key: "position.x", values: [Double(spec.2), Double(spec.2+35), Double(spec.2-18), Double(spec.2)], fractions: [0, 0.35, 0.7, 1], beat: beat))
             orbTracks.append(.init(layer: orb, key: "position.y", values: [Double(spec.3), Double(spec.3-24), Double(spec.3+18), Double(spec.3)], fractions: [0, 0.35, 0.7, 1], beat: beat))
         }
         add(ambient, "opacity", [0, 1], "room", curve: [0, 0, 0.58, 1])
         add(orbs[2], "opacity", [0, 0.22], "spill")
-        let spill = radial(0xFFD7A0, diameter: 480); spill.position = .init(x: 640, y: 336)
+        let spill = radial(0xFFD9A8, diameter: 480); spill.position = .init(x: 640, y: 336)
+        spill.compositingFilter = "screenBlendMode"
         spillGroup.frame = full; scene.addSublayer(spillGroup); spillGroup.addSublayer(spill)
         add(spill, "transform.scale", [0.2, 3.5], "spill")
-        add(spill, "opacity", [0, 0.55, 0.30], "spill", fractions: [0, 0.65, 1])
+        add(spill, "opacity", [0, 0.45, 0.28], "spill", fractions: [0, 0.65, 1])
         let grain = CAReplicatorLayer(); grain.frame = full
         if let image = Grain.tile(noiseFactor: 0.6, scale: scale) {
             let rows = CAReplicatorLayer(); rows.frame = full
@@ -176,10 +179,10 @@ public final class IntroView: NSView {
         let brand = OnboardingBrandMark.components(in: rect)
         let path = brand.doorway.path
         let interior = CAGradientLayer(); interior.frame = full
-        interior.colors = [IntroColors.color(0xFFD7A0, alpha: 0.8).cgColor, IntroColors.color(0xFF9A3D, alpha: 0.08).cgColor]
+        interior.colors = [IntroColors.color(0xFFF3DC).cgColor, IntroColors.color(0xFFC680).cgColor]
         interior.startPoint = .init(x: 0.5, y: 0.34); interior.endPoint = .init(x: 0.5, y: 0.51)
         let mask = CAShapeLayer(); mask.frame = full; mask.path = path; mask.fillColor = NSColor.white.cgColor
-        interior.mask = mask; mark.addSublayer(interior); add(interior, "opacity", [0, 1], "spill")
+        interior.mask = mask; mark.addSublayer(interior); add(interior, "opacity", [0, 0.92], "spill")
         for glow in [true, false] {
             let door = glow ? OnboardingBrandMark.components(in: rect).doorway : brand.doorway
             door.frame = full
@@ -199,10 +202,10 @@ public final class IntroView: NSView {
         let word = text("Open", size: 56, weight: .semibold, frame: .init(x: 390, y: 352, width: 500, height: 72), scale: scale, alpha: 1)
         composition.addSublayer(word)
         add(word, "opacity", [0, 1], "wordmark"); add(word, "position.y", [word.position.y+12, word.position.y], "wordmark")
-        let line = text(OnboardingTokens.line, size: 17, weight: .regular, frame: .init(x: 310, y: 475, width: 660, height: 28), scale: scale, alpha: increaseContrast ? 0.9 : 0.75)
+        let line = text(OnboardingTokens.line, size: 17, weight: .regular, frame: .init(x: 310, y: 431, width: 660, height: 28), scale: scale, alpha: increaseContrast ? 0.9 : 0.75)
         composition.addSublayer(line); add(line, "opacity", [0, 1], "line")
         for (i, title) in ["Spaces for every part of your life.", "Tabs that tidy themselves.", "Everything stays on this Mac."].enumerated() {
-            let value = text(title, size: 15, weight: .regular, frame: .init(x: 310, y: 517+CGFloat(i)*28, width: 660, height: 25), scale: scale, alpha: 0.6)
+            let value = text(title, size: 15, weight: .regular, frame: .init(x: 310, y: 463+CGFloat(i)*28, width: 660, height: 22), scale: scale, alpha: 0.6)
             composition.addSublayer(value); add(value, "opacity", [0, 1], "value\(i+1)")
         }
         apply(at: 0)
@@ -350,6 +353,10 @@ public final class IntroView: NSView {
         func keys(_ root: CALayer) -> [String] {
             (root.animationKeys() ?? []) + (root.sublayers ?? []).flatMap(keys) + (root.mask.map(keys) ?? [])
         }
+        func blendFilters(_ root: CALayer) -> [String] {
+            ((root.compositingFilter as? String).map { [$0] } ?? [])
+                + (root.sublayers ?? []).flatMap(blendFilters)
+        }
         let animationKeys = layer.map(keys) ?? []
         let door = tracks.first { $0.key == "strokeEnd" && $0.layer.name == "door" }!.layer
         let sun = tracks.first { $0.beat == "sun" }!.layer
@@ -357,7 +364,7 @@ public final class IntroView: NSView {
                 "animationStartHostTime": animationStartHostTime, "reduceMotion": reduceMotion, "skipped": skipped,
                 "ready": ready, "buttonEnabled": button.isEnabled, "buttonDefault": button.keyEquivalent == "\r",
                 "buttonLabel": button.accessibilityLabel() ?? "", "ambientPaused": ambientPaused,
-                "animations": animationKeys, "frameStats": frameStats,
+                "animations": animationKeys, "blendFilters": blendFilters(scene), "frameStats": frameStats,
                 "doorStrokeEnd": (door.presentation() ?? door).value(forKeyPath: "strokeEnd") ?? 0,
                 "sunY": (sun.presentation() ?? sun).position.y]
     }
@@ -381,10 +388,45 @@ public final class IntroView: NSView {
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width*4,
                 space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw CocoaError(.fileWriteUnknown) }
         context.scaleBy(x: scale, y: scale)
-        // A raw bitmap context is bottom-up; match AppKit's flipped view context.
+        // CALayer.render(in:) has a different radial-gradient fallback from
+        // the render server. CARenderer uses the real CA/Metal scene instead.
+        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { throw CocoaError(.featureUnsupported) }
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.storageMode = .shared; descriptor.usage = [.renderTarget, .shaderRead]
+        guard let texture = device.makeTexture(descriptor: descriptor) else { throw CocoaError(.fileWriteUnknown) }
+        let canvas = CALayer()
+        let pixelBounds = CGRect(x: 0, y: 0, width: width, height: height)
+        canvas.frame = pixelBounds; canvas.isGeometryFlipped = true
+        canvas.backgroundColor = IntroColors.room.cgColor
+        let oldPosition = scene.position, oldTransform = scene.affineTransform()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        canvas.addSublayer(scene)
+        scene.position = CGPoint(x: CGFloat(width)/2, y: CGFloat(height)/2)
+        scene.setAffineTransform(oldTransform.scaledBy(x: scale, y: scale))
+        CATransaction.commit()
+        defer {
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            layer?.insertSublayer(scene, at: 0); scene.position = oldPosition; scene.setAffineTransform(oldTransform)
+            CATransaction.commit()
+        }
+        let renderer = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace: space, kCARendererMetalCommandQueue: queue])
+        renderer.layer = canvas; renderer.bounds = pixelBounds
+        CATransaction.flush()
+        renderer.beginFrame(atTime: CACurrentMediaTime(), timeStamp: nil)
+        renderer.addUpdate(pixelBounds); renderer.render(); renderer.endFrame()
+        guard let fence = queue.makeCommandBuffer() else { throw CocoaError(.fileWriteUnknown) }
+        fence.commit(); fence.waitUntilCompleted()
+        var pixels = [UInt8](repeating: 0, count: width*height*4)
+        pixels.withUnsafeMutableBytes { raw in
+            if let base = raw.baseAddress { texture.getBytes(base, bytesPerRow: width*4, from: .init(origin: .init(x: 0, y: 0, z: 0), size: .init(width: width, height: height, depth: 1)), mipmapLevel: 0) }
+        }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let rendered = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width*4,
+                space: space, bitmapInfo: [.byteOrder32Little, CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)],
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { throw CocoaError(.fileWriteUnknown) }
         context.saveGState()
         context.translateBy(x: 0, y: bounds.height); context.scaleBy(x: 1, y: -1)
-        layer?.render(in: context)
+        context.draw(rendered, in: bounds)
         context.restoreGState()
         // An unshown NSButton has no WindowServer backing contents. Ask the
         // real control to draw itself, then composite that exact native bitmap.

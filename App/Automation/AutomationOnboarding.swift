@@ -8,7 +8,10 @@ extension AutomationController {
   func runOnboarding(_ args: [String: Any]) async throws -> [String: Any] {
     let action = args["action"] as? String ?? "state"
     let allowed: [String: Set<String>] = ["state": [], "skip-intro": [], "get-started": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
-    guard let extra = allowed[action], Set(args.keys).isSubset(of: extra.union(["action"])) else { throw Failure(message: "unknown onboarding action or argument") }
+    guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,
+          let extra = allowed[action], Set(args.keys).isSubset(of: extra.union(["action"])) else {
+      throw Failure(message: "unknown onboarding action or argument")
+    }
     if action == "replay-intro" { app.showOnboarding(replay: true) }
     else if action != "state" {
       guard let controller = app.onboardingWindowController, controller.window?.isVisible == true else { throw Failure(message: "onboarding is not active") }
