@@ -320,7 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     for controller in windowControllers {
       controller.prepareForInitialDisplay()
       LaunchTiming.shared.phase("sidebarPrepared")
-      // prepareForInitialDisplay already lays out this root before theme preparation.
+      controller.window?.contentView?.layoutSubtreeIfNeeded()
       LaunchTiming.shared.phase("sidebarLaidOut")
       controller.window?.displayIfNeeded()
       LaunchTiming.shared.phase("sidebarDisplayed")
