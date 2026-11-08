@@ -52,7 +52,7 @@ def run(factory, results, tmp, h):
         # Native Return/Space reach OEApplication, and cannot advance early.
         app.call('key', key='return'); app.call('key', key='space')
         early_keys = state()
-        dim = elapsed(.8)
+        dim = elapsed(1.7)
         app.call('snapshot', path=str(evidence/'intro-native-initial.png'))
         phase0 = state()
         phase1 = elapsed(3.5)
@@ -87,7 +87,7 @@ def run(factory, results, tmp, h):
         until(lambda: not app.call('first-run')['active'])
         until(lambda: isinstance(state().get('residentDeltaAfterHandoff'), int))
         landed = dict(windows=app.call('windows'), snapshot=Path(app.user_data, 'State/browser.json').exists(), memory=state().get('residentDeltaAfterHandoff'))
-        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, dict(windows=[], snapshot=False))
+        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, phase2)
         # Natural returning launch: a real saved browser root, no skip switch.
         launch(fresh=False)
         returning = state()
@@ -110,7 +110,12 @@ def run(factory, results, tmp, h):
         # Native default button hands off through the real key/menu responder path.
         app.call('key', key='return')
         until(lambda: app.call('first-run')['active'])
-        results['native_return_handoff'] = dict(ok=app.call('first-run')['active'])
+        gate('native_return_handoff', lambda s: s.get('active') and s.get('step')=='welcome', app.call('first-run'), escaped)
+        music_after_continue = state()
+        gate('music_continues_after_continue', lambda s: s.get('sound', {}).get('playerCreated') and s['sound']['decision']=='played' and s.get('screen')=='first-run', music_after_continue, skipped_launch)
+        app.call('first-run', action='fresh')
+        until(lambda: state().get('sound', {}).get('playerCreated') is False)
+        gate('finish_releases_player', lambda s: not s.get('sound', {}).get('playerCreated') and s.get('sound', {}).get('decision')=='played', state(), music_after_continue)
         launch('--reduce-motion')
         reduced_initial = state()
         reduced = elapsed(1.2)

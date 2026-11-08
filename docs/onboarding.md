@@ -16,7 +16,8 @@ are in `IntroTimeline.beats`; the Python generator reads the same table.
 | sellIntro | 3.3 | 9.8 |
 | sellCompleted | 9.8 | — |
 | Room / orbs | 0 | 1 |
-| Dim overlay | 0 | 0.6 |
+| Dim overlay | 0 | 1.5 |
+| Dim finish fade | 0 | 2.5 |
 | Door stroke | 0.3 | 1.9 |
 | Sun spring | 1.7 | 2.7 |
 | Bell pair | 2.3 | 2.47 |
@@ -27,6 +28,7 @@ are in `IntroTimeline.beats`; the Python generator reads the same table.
 | Value line 2 | 6.8 | 8 |
 | Value line 3 | 8 | 9.2 |
 | Button fade (enabled at start) | 9.8 | 10.2 |
+| Button spring (response 1.25, damping 0.9, 24 pt offset) | 9.8 | 11.05 |
 | Music plateau | 5 | 15 |
 | Sub entry | 3.3 | 5.3 |
 | Air sweep | 2.4 | 3.3 |
@@ -39,15 +41,18 @@ hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
 0.08 s; sound preparation deadline 0.3 s; frame measurement 0–8 s;
 resident measurement 3 s; orb periods 18/22/26 s.
 
-Get Started closes the 1280×800 intro window and opens Section 7's existing
+Continue hides the 1280×800 intro window and opens Section 7's existing
 560×520 first-run window. The existing shared importer, source probe, guarded
 save and Start Fresh behavior remain its owners. The intro never writes a
 snapshot. A small screen (both width ≤1280 and height ≤800) uses its full
 screen size minus 72 pt in each dimension. The mouse-transparent dim child
 window covers that screen at 85% black. It is excluded from automation window
-lists and snapshots and closes with its owner on every exit.
+lists and snapshots and transfers to the existing first-run window. Music keeps playing through Continue.
+Only completion or closing fades the music over 0.8 s and the dim over 2.5 s.
+`OnboardingWindowController.show(content:)` replaces the foreground above the
+shared room for later setup screens, without changing the music clock.
 
-Esc or a scene click completes the visual tracks and enables Get Started.
+Esc or a scene click completes the visual tracks and enables Continue.
 The music continues on its original clock. Return and Space cannot advance
 before the button enable beat. Reduce Motion uses only a final-composition
 cross-fade, with static orbs. Increase Contrast raises the identity line to

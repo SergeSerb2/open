@@ -213,6 +213,9 @@ public final class IntroView: NSView {
     private func text(_ title: String, size: CGFloat, weight: NSFont.Weight, frame: CGRect, scale: CGFloat, alpha: CGFloat) -> CATextLayer {
         let layer = CATextLayer(); layer.frame = frame; layer.contentsScale = scale; layer.alignmentMode = .center
         layer.isGeometryFlipped = true
+        // CATextLayer keeps a bottom-up glyph context under our top-down scene.
+        // Reflect glyphs about their own center; the frame/animation stays put.
+        layer.setAffineTransform(.init(scaleX: 1, y: -1))
         layer.string = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: NSColor.white.withAlphaComponent(alpha)])
         return layer
     }
@@ -388,7 +391,11 @@ public final class IntroView: NSView {
             rep.size = button.bounds.size; button.cacheDisplay(in: button.bounds, to: rep)
             if let image = rep.cgImage {
                 context.saveGState(); context.setAlpha(button.alphaValue)
-                context.draw(image, in: .init(x: button.frame.minX, y: bounds.height-button.frame.maxY, width: button.frame.width, height: button.frame.height))
+                let b = IntroTimeline.beat("buttonSpring")
+                let seconds = max(0, time-b.start), frequency = 2*Double.pi/(b.end-b.start)
+                let damp = 0.9*frequency, oscillation = frequency*sqrt(1-0.9*0.9)
+                let offset = reduceMotion || time >= b.end ? 0 : 24*exp(-damp*seconds)*(cos(oscillation*seconds)+damp/oscillation*sin(oscillation*seconds))
+                context.draw(image, in: .init(x: button.frame.minX, y: bounds.height-button.frame.maxY-offset, width: button.frame.width, height: button.frame.height))
                 context.restoreGState()
             }
         }

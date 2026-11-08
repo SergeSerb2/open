@@ -43,6 +43,7 @@ extension AppDelegate {
     let actions = AppFirstRunActions(app: self)
     let viewModel = OpenSettings.FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
     let controller = FirstRunWindowController(model: viewModel)
+    controller.onClose = { [weak self] in self?.onboardingWindowController?.finish() }
     firstRunWindowController = controller; lastFirstRunStep = "welcome"
     controller.showWindow(nil); controller.window?.displayIfNeeded(); controller.startProbeAfterDisplay()
     if let window = controller.window { onboardingWindowController?.handoff(to: window) }

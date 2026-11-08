@@ -12,7 +12,7 @@ extension AutomationController {
       guard let controller = app.onboardingWindowController, controller.window?.isVisible == true else { throw Failure(message: "intro is not active") }
       if action == "skip-intro" { controller.intro.skip() }
       if action == "get-started" {
-        guard controller.intro.ready else { throw Failure(message: "Get Started is not ready") }
+        guard controller.intro.ready else { throw Failure(message: "Continue is not ready") }
         controller.intro.getStarted()
       }
     }
