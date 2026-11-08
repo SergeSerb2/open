@@ -277,7 +277,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     return nil
   }
-  func checkForUpdates() { status("An update feed is not available yet.", pane: .general); show(pane: .general) }
+  func checkForUpdates() {
+    if let updater = app.updater { updater.checkForUpdates() }
+    else { app.checkForUpdatesAfterPaint = true }
+  }
+  func showUpdatesUnavailable() { status(UpdaterController.unavailableStatus, pane: .general); show(pane: .general) }
   func openMoreSettings() { openURL(URL(string: "chrome://settings")!, profileID: settings.selectedProfileID) }
   // One source with Help ▸ Troubleshooting (page-platform §4.11.3–4).
   func revealOpenDataFolder() { TroubleshootingActions.shared.revealOpenData() }

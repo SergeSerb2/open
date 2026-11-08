@@ -77,6 +77,8 @@
 	<string>PASTE_PUBLIC_KEY_FROM_GENERATE_KEYS</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>28800</integer>
 	<key>OpenChromiumVersion</key>
