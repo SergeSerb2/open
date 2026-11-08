@@ -55,6 +55,8 @@ def run(factory, results, tmp, h):
         for key in ('t', 'l'): app.call('key', key=key, modifiers=['command'])
         guarded = dict(intro=state(), browsers=app.call('shell-windows'))
         dim = elapsed(1.7)
+        if os.environ.get('OPEN_ONBOARDING_FORCE_EARLY_FAILURE') == '1':
+            raise RuntimeError('forced early failure with the intro and dim windows visible')
         app.call('snapshot', path=str(evidence/'intro-native-initial.png'))
         phase0 = state()
         phase1 = elapsed(3.5)
@@ -195,6 +197,14 @@ def run(factory, results, tmp, h):
             gate('replay_temp_root_allowed', lambda s: s.get('active') and s.get('screen')=='intro', replay_launch, returning)
             gate('replay_default_root_refused', lambda s: s.get('exit')==64 and s.get('refused'), denied_state, replay_launch)
             app.quit()
+        launch('--intro-sound=off')
+        before_intro_close = state()
+        app.call('key', key='w', modifiers=['command'])
+        closed = until(lambda: app.owned_windows()['count'] == 0, timeout=8)
+        app.quit()
+        gate('native_intro_close_quits', lambda s: s.get('closed') and s.get('cleanup') and not s.get('forced'),
+             dict(closed=closed, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced', False)),
+             dict(closed=not before_intro_close['active'], cleanup=False, forced=False))
     finally:
         if app and not app.closed: app.quit()
         h._restore_defaults(None, saved)
