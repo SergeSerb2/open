@@ -92,6 +92,12 @@ def run(factory, results, tmp, h):
         handoff = state(); until(lambda: not state()['active'] and not state()['dim']['exists'])
         final = state(); stored = json.loads(snapshot().read_text())
         tabs = app.call('tabs'); selected_tabs = [t for t in tabs if t.get('selected')]
+        welcome = app.call('welcome')
+        native_welcome = lambda s: s.get('visible') and s.get('engineInternalPages')==0 and s.get('urlField')=='Welcome to Open'
+        gate('welcome_native_selected', native_welcome, welcome, {})
+        welcome_id = welcome['tab']
+        results['steps_welcome_first_today'] = dict(ok=bool(selected_tabs) and selected_tabs[0]['id']==welcome_id
+            and app.call('tab-state', tab=welcome_id)['section']=='today' and tabs[0]['id']==welcome_id, load=os.getloadavg())
         adblock = json.loads(Path(app.user_data,'adblock-settings.json').read_text())
         saved_name = app.call('defaults', key=keys[0], persistent=True)
         results['steps_final_data'] = dict(ok=saved_name=='Example' and adblock.get('nativeAdBlockEnabled') is False
@@ -99,8 +105,27 @@ def run(factory, results, tmp, h):
             and 'keyColor' in json.dumps(stored), load=os.getloadavg(), blocker=adblock, savedName=saved_name)
         gate('handoff_done', lambda s: not s['active'] and not s['dim']['exists'] and s['screen']=='done', final, handoff)
         results['steps_browser_key'] = dict(ok=any(w.get('key') for w in app.call('windows') if w.get('class')=='BrowserWindow'), load=os.getloadavg())
+        until(lambda: app.call('welcome')['playlist']=='stopped' and not app.call('welcome')['animating'], timeout=38)
+        stopped = app.call('welcome')
+        gate('welcome_playlist_ends', lambda s: s.get('playedCards')==[1,2,3,4] and not s.get('animating')
+            and s.get('animationCount')==0 and not s.get('pendingCompletion'), stopped, welcome)
+        app.call('welcome', action='replay', card=2)
+        active = app.call('welcome')
+        app.call('key', key='t', modifiers=['command']); app.call('key', key='escape')
+        # A new ordinary tab hides Welcome and must cancel its pending work.
+        app.call('open', url='about:blank')
+        hidden = app.call('welcome')
+        gate('welcome_hidden_stops', lambda s: not s.get('visible') and s.get('animationCount')==0
+            and not any(x['animating'] for x in s.get('hosts',[])), hidden, active)
+        app.call('select', tab=welcome_id); app.call('save')
         returning = launch(fresh=False)
         gate('returning', lambda s: not s['active'] and not s['moduleActive'], returning, initial)
+        restored = app.call('welcome')
+        gate('welcome_restores', lambda s: native_welcome(s) and s['tab']==welcome_id, restored, hidden)
+        app.call('command', id='archive-tab')
+        app.call('menu-perform', id='open-basics')
+        reopened = app.call('welcome')
+        gate('open_basics_menu', native_welcome, reopened, hidden)
         # Import branch uses Section 7's real plan, runner, report and model swap.
         launch(); action('next'); screen('import')
         app.call('first-run', action='continue')
