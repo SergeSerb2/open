@@ -8,7 +8,9 @@ The use column starts with `Ships:`, `Build only:` or `Not shipped:`.
 The generator includes shipped rows and the texts for shipped/build-only
 rows. Build tools are recorded because their generated code can carry
 notices; their host binaries are not in Open.app. License choices for Rust
-follow each `README.chromium` (usually the Apache choice for dual licenses).
+follow each `README.chromium` (usually the Apache choice for dual licenses),
+except psl: its Cargo metadata declares MIT/Apache-2.0, its vendored LICENSE
+is MIT, and this inventory retains both alternatives and full texts.
 The source paths beginning `third_party/` are relative to Chromium src.
 New crates are in `Engine/fork/patches/rust/0001-adblock-vendor.patch`;
 existing Chromium crates use pin `d0c02bfad08ec92a6ffcf989e53cd995e6381a4c`.
@@ -70,7 +72,7 @@ review and the U-8 public source location also remain open.
 | Rust: percent-encoding | 2.3.2 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/percent_encoding/v2/README.chromium`, `third_party/rust/chromium_crates_io/vendor/percent-encoding-v2/`; https://crates.io/crates/percent-encoding/2.3.2 ; licenses/Apache-2.0.txt. |
 | Rust: potential_utf | 0.1.6 | Unicode-3.0 | Ships: browser-process adblock dependency. | `third_party/rust/potential_utf/v0_1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/potential_utf-v0_1/`; https://crates.io/crates/potential_utf/0.1.6 ; licenses/Unicode-ICU4X.txt. |
 | Rust: proc-macro2 | 1.0.107 | Apache-2.0 | Build only: host proc macro or its dependency; host executable is not bundled. Generated code notices are retained. | `third_party/rust/proc_macro2/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/proc-macro2-v1/`; https://crates.io/crates/proc-macro2/1.0.107 ; licenses/itoa-v1-LICENSE-APACHE.txt. |
-| Rust: psl | 2.1.245 | Apache-2.0; embedded PSL data MPL-2.0 | Ships: browser-process adblock dependency. Compiled src/list.rs contains a third PSL snapshot; exact upstream list commit is not recorded by this crate. | `third_party/rust/psl/v2/README.chromium`, `third_party/rust/chromium_crates_io/vendor/psl-v2/`; https://crates.io/crates/psl/2.1.245 ; licenses/psl-v2-LICENSE.txt, licenses/MPL-2.0.txt. Public generated PSL source location UNSET (U-8). |
+| Rust: psl | 2.1.245 | MIT OR Apache-2.0; embedded PSL data MPL-2.0 | Ships: browser-process adblock dependency. Compiled src/list.rs contains a third PSL snapshot; exact upstream list commit is not recorded by this crate. | `third_party/rust/psl/v2/README.chromium`, `third_party/rust/chromium_crates_io/vendor/psl-v2/`; https://crates.io/crates/psl/2.1.245 ; licenses/psl-v2-LICENSE.txt (upstream MIT LICENSE), licenses/Apache-2.0.txt (Cargo.toml declares MIT/Apache-2.0; README.chromium selects Apache), licenses/MPL-2.0.txt. Public generated PSL source location UNSET (U-8). |
 | Rust: psl-types | 2.0.11 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/psl_types/v2/README.chromium`, `third_party/rust/chromium_crates_io/vendor/psl-types-v2/`; https://crates.io/crates/psl-types/2.0.11 ; licenses/Apache-2.0.txt. |
 | Rust: quote | 1.0.47 | Apache-2.0 | Build only: host proc macro or its dependency; host executable is not bundled. Generated code notices are retained. | `third_party/rust/quote/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/quote-v1/`; https://crates.io/crates/quote/1.0.47 ; licenses/itoa-v1-LICENSE-APACHE.txt. |
 | Rust: regex | 1.13.1 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/regex/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/regex-v1/`; https://crates.io/crates/regex/1.13.1 ; licenses/Apache-2.0.txt. |
