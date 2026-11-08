@@ -627,7 +627,12 @@ def real_engine(factory, results, wait):
             and empty['resources_loaded'] == 0 and empty['last_error'] == '', status=empty)
         app.call('settings-adblock', list='EasyList', listEnabled=True)
         assert wait(lambda: status(resource_profile['id'])['load_generation'] > empty['load_generation']
-                    and status(resource_profile['id'])['engine_loaded'], timeout=40)
+                    and status(resource_profile['id'])['engine_loaded']
+                    and status(resource_profile['id'])['list_count'] == 1, timeout=40)
+        one_list = status(resource_profile['id'])
+        row('one_list_restore_advances_generation', one_list['list_count'] == 1
+            and one_list['load_generation'] > empty['load_generation']
+            and one_list['last_error'] == '', beforeGeneration=empty['load_generation'], status=one_list)
         visit(resource_tab, 'one_list_restored_blocks', True)
         resource_probe(resource_tab, 'one_list_restored_stub', True)
 
