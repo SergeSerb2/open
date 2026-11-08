@@ -861,6 +861,7 @@ def feature_checks(app, style, results, tmp):
              fullscreen="record")
 
     def run(name, fn):
+        begin_row(name)
         try:
             results[name] = fn()
         except Exception as e:
@@ -1058,7 +1059,11 @@ def feature_checks(app, style, results, tmp):
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
-        got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=120, step=2)
+        # Leave time inside the 120 s row cap for EME/playback and publish a
+        # concrete prerequisite failure instead of expiring at the wait boundary.
+        got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=60, step=2)
+        if not got:
+            return {"ok": False, "reason": "Widevine component updater did not download a CDM within 60 s", "cdm_versions": None}
         w = new_tab(app, "https://example.com/")
         r = app.eval(w, '(async () => { try { const a = await navigator.requestMediaKeySystemAccess("com.widevine.alpha",'
                         ' [{initDataTypes: ["cenc"], videoCapabilities: [{contentType: \'video/webm; codecs="vp9"\','
@@ -7762,6 +7767,30 @@ def littleopen_checks(factory, results, tmp):
         record('B9_page_frame', loaded['window'] == bar['window'] and rect_equal(loaded['frame'], expected_page), session=loaded)
         record('B4_real_engine', loaded['url'] == url and loaded['runtimeStyle'] == 'chrome' and not loaded['sidebarTab']
                and loaded['content'] > 0, session=loaded)
+        # Section 11's per-window page log and Section 15's save completion
+        # must both stay with Little Open while a main browser window exists.
+        action(bar['id'], 'focus')
+        app.call('save-prompt', mock={'kind': 'password', 'host': 'login.example.com'})
+        save_sheet = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
+        if not save_sheet: raise RuntimeError('Little Open save sheet did not appear')
+        try:
+            app.call('key', window=save_sheet['window'], key='escape', route='app')
+            dismissed = wait_until(lambda: not app.call('save-prompt', state=True).get('visible'), timeout=5, step=.05)
+            main_number = app.call('shell-windows')[0]['number']
+            main_events = app.call('events', window=main_number)
+            little_events = app.call('events', window=loaded['window'])
+            completions = [e for e in little_events if e.get('type') == 'savePrompt']
+            record('littleopen_events_owner', dismissed
+                   and not any(e.get('type') == 'savePrompt' for e in main_events)
+                   and len(completions) == 1 and completions[0].get('answer') == 'dismiss'
+                   and completions[0].get('window') == loaded['window']
+                   and completions[0].get('content') == loaded['content']
+                   and any(e.get('type') == 'load' and e.get('content') == loaded['content'] for e in little_events),
+                   mainSaveEvents=sum(e.get('type') == 'savePrompt' for e in main_events),
+                   littleSaveEvents=len(completions), pageLogOwned=True)
+        finally:
+            app.call('save-prompt', withdraw=True)
+
         menu('new-little-open-window')
         second = next(s for s in sessions() if s['id'] != bar['id'])
         record('B9_second_first_frame', rect_equal(second['frame'], expected_bar)

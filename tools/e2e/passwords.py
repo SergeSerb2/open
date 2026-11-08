@@ -153,6 +153,7 @@ def run_save_prompts(factory, results, tmp, harness):
         for choice in ['save', 'never', 'dismiss']:
             def check_answer(choice=choice):
                 events(); show(); answer(choice)
+                assert not app.call('events', window=-1), 'unknown window drained another window events'
                 ev = events()
                 assert len(ev) == 1 and ev[0]['answer'] == choice and ev[0]['kind'] == 'password' and ev[0]['displayHost'] == 'login.example.com', ev
                 try:
@@ -861,6 +862,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                 tab = load(urls['login']); assert popup(tab); events()
                 # Password dropdown has one fixture entry followed by its footer.
                 key('down'); key('down'); time.sleep(.65); key('return')
+                assert not app.call('events', window=-1), 'unknown window drained the Manage event'
                 assert wait(lambda: any(e.get('type') == 'autofillPage' and e.get('page') == 'passwords' for e in events()), timeout=5, step=.1)
                 selected = next(t for t in app.call('tabs') if t.get('selected'))
                 assert selected['id'] == identity['manage']

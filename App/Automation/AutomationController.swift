@@ -42,6 +42,8 @@
     static weak var savePromptOwner: AutomationController?
     var savePromptPolicy = "hold"
     var realSavePromptAnswers = NSMapTable<OESavePrompt, NSString>.weakToStrongObjects()
+    var realSavePromptFactories = NSMapTable<OESavePrompt, EngineWebContentHostFactory>.weakToWeakObjects()
+    var realSavePromptPages = NSMapTable<OESavePrompt, OEWebContent>.weakToWeakObjects()
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
     var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
@@ -109,13 +111,19 @@
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
-        // Little Open owns its own page events, even while a main window exists.
-        let owner = (a["window"] as? Int).flatMap { number in
-          app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
-        } ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
-        let pageEvents = owner?.drainEvents() ?? []
-        let events = savePromptEvents; savePromptEvents.removeAll()
-        return pageEvents + events
+        // Keep Section 11's Little Open routing. Every event, including password
+        // offers and Manage links, is recorded by the factory that owns its page.
+        let owner: EngineWebContentHostFactory?
+        if let number = a["window"] as? Int {
+          owner = app.hostFactories.values.first { $0.window?.windowNumber == number }
+            ?? app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
+        } else {
+          owner = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+        }
+        let number = a["window"] as? Int ?? owner?.window?.windowNumber
+        let completions = savePromptEvents.filter { number == nil || $0["window"] as? Int == number }
+        savePromptEvents.removeAll { number == nil || $0["window"] as? Int == number }
+        return (owner?.drainEvents() ?? []) + completions
       case "credentials": return try await credentialCounts(a)
       case "import-secrets-fixture": return try await importSecretsFixture(a)
       case "import-secrets-state": return secretsImportState()
