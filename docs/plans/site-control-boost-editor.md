@@ -104,7 +104,7 @@ engine extension state. This plan adds no second store for any of those values (
 | D-7 | **Amended 2026-10-26.** The pad maps a screen point to `BoostColorWheel` inputs (§4.4.2). Interim runtime (#103): the CSS-filter math (`BoostColorWheel.adjustment`) does not change; `colorAdjustment` is derived from `colorWheel` when it is set. v1 target: an engine-level color remap applied at paint time, with images, video, and canvas untouched (Step 4R). | Q12 ruling 2026-10-26 (Q4 superseded). One derivation function, one writer (§5.2). |
 | D-8 | **Amended 2026-10-26.** Zap keeps the existing in-page picker (`zap-picker.js`, closed shadow overlay). Its bar and popup take Arc's look (§4.8). The list of Zaps lives in the page bar ("Click to reveal"); the editor shows only the count on the Zap button. | Arc: bar, popup, and count measured (S2 10/0058, 0060, 0067; IS §20.6). Supersedes Q10. |
 | D-9 | Code editors are `NSTextView` with a small regex highlighter and an `NSRulerView` gutter. No dependency. | Arc's code body is an internal web page that was disabled on the capture machine (S2 10/0071), so its look is not known; the native path keeps memory and cold start low. |
-| D-10 | Boost editing and creation are disabled in incognito windows. Existing Boosts still apply there. | BO-10; lead Q6. |
+| D-10 | Boost editing, creation and application are disabled in incognito windows, including OTR contexts of the same parent Profile. | Supersedes Q6; lead 2026-11-07 15:32; Arc Incognito restriction. |
 | D-11 | **Superseded 2026-10-26.** The panel has no header. Order: action row, Extensions, Boosts, Settings, footer. Rows replace tiles (§3.3). | S2 09/0010, 11/0005 (C2). |
 | D-12 | **New 2026-10-26.** The Boost color pad and the Space theme editor's pad share one AppKit core, `OpenDesign/ColorPad.swift` (plate, dot grid, knobs, drag and keyboard handling). Each owner supplies its geometry and color law. | Both pads are square dot-grid plates whose knob hue equals the screen angle, clockwise from 3 o'clock (theme: `space-theme-editor.md` §2.2; Boost: IS §20.15). One implementation, two styles. |
 
@@ -536,6 +536,8 @@ unless another frame is cited. The editor is always light; there are no dark tok
 | Close | Done (header), Esc (§4.12), the bound tab closes, or the profile closes. Close exits Zap, flushes pending state with `BoostStore.saveNow` (lead round 2), and deletes the Boost if it was created in this session and is still empty. |
 | Incognito | The four open commands are disabled (D-10). |
 | Global off | The commands stay enabled; the "Boosts are off" banner shows and live preview is skipped. |
+| Library Rename or Enable | **Open choice (lead, 2026-11-06):** keep the editor open. The session observes store changes for its own Boost ID without polling and immediately adopts the store's `name` and `isEnabled`; the header updates and no undo step is added. Every Undo/Redo restore keeps the current `isEnabled`. It also keeps the current `name`, except for the editor's own Rename step. All other fields restore as before. The reconciliation hook is in `OpenSiteControl/BoostEditorSession.swift`. |
+| Library Delete | Close every matching editor before deleting the Boost. |
 
 ### 4.2 Window and placement
 
@@ -1163,6 +1165,7 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
     func store(for profile: ProfileID) -> BoostStore
     func preview(_ boost: Boost, tabID: ItemID)                     // §5.3 bound page only
     func refresh(profile: ProfileID)                                // §5.3 all matching pages
+    func updateScripts(profile: ProfileID)                          // future document-start list only; default no-op
     func pageSnapshot(tabID: ItemID) async -> Data?                 // PNG for baseHue
     func zapAvailability(tabID: ItemID) -> Bool                     // required query; false before P7 or without the Open world
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool           // coordinator + send; false if blocked (P7)
@@ -1179,6 +1182,15 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
     func browserWindowFrame(tabID: ItemID) -> NSRect?               // §4.2 placement (screen coordinates)
 }
 ```
+
+`updateScripts(profile:)` has a default no-op in a protocol extension (lead,
+2026-11-07). A JS save calls it instead of `refresh(profile:)`. The App updates
+the Profile's matcher and regular-context document-start script lists without
+evaluating live JS or reapplying CSS. OTR contexts are excluded. Undo/Redo,
+reset-all and delete already call `refresh(profile:)`, which also updates the
+script lists. B28 saves a new JS version, checks the old live result and visible
+Refresh to Run, then checks the first inline script after reload for the new
+version. Its hook-disabled negative must fail; F18 and B5 stay unchanged.
 
 `BoostPickerEvent` is declared in OpenBoosts and aliased by OpenSiteControl. The App
 publishes the coordinator’s `lastEvent` after `handle`. Its cases include
@@ -1373,6 +1385,7 @@ No external network is needed by these suites.
 | B8 | New Boost, close at once → store empty. |
 | B9 | Quit and relaunch with a saved Boost → the style applies at document start (existing `boosts` suite probe) and the panel lists it. |
 | B10 | `defaults write <bundle> open.advanced.enableBoosts -bool false` before launch → panel shows "Boosts are off…", editor banner, no `hue-rotate` on the page. |
+| B28 | JS save replaces future document-start scripts without changing the live JS result, CSS or delivery count; "Refresh to Run" stays visible. Reload must run the new JS in the first inline script. Omitting only `updateScripts(profile:)` must fail. On main engine `7a90e70e…`, hook/live checks pass but reload is blocked by the B5 replacement-renderer defect (#202 patch 0602); keep the execution assertion. |
 
 Any check that needs a missing engine item reports `blocked: E<n>` or `blocked: P7` and never
 passes by itself.
@@ -1441,9 +1454,9 @@ paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are
 | 3 | new (App) | App data source and actions; URL field and pane anchors; URL field button states (§3.10); intents and commands; automation; e2e `sitecontrol` | S1–S9, S11–S13 PASS (S10 blocked; S12 skipped without local captures) |
 | 4 | #103 (rework) | `BoostColorWheel` (as is); `OpenDesign/ColorPad.swift` (§12.4); editor window, placement, header, name menu with scope submenu, pad, color buttons, advanced popover, font grid, Size/Case/Zap/Code (Zap and Code disabled), first-run card, banners | F10–F12, F14–F16, F19, F24, F25 PASS; `check` knob-gradient probe; `editor-*` simple states; `boosts` harness 26/26 |
 | 4R | new (engine lane) | **Boost color remap (engine)**, Q12 ruling. Starts after #103 merges; runs beside Steps 5–7. (a) RE study of ArcCore's `EffectsAgent` (a separate task; findings land in `docs/re/features-advanced.md` as **BO-23**, the next free id; BO-12 is "Editor lifecycle" and stays as cited in §4.13). (b) An engine plan (`docs/plans/`) for a paint-time color remap in our fork, the same kind of mechanism as Chromium's auto dark mode (`DarkModeFilter`, which classifies images separately): page colors remap toward the pad's two knob colors, while images, video, and canvas stay untouched. (c) Implementation in the fork, then the App switches Boost colors from filters to the remap. | No Boost color: zero added paint cost (measured; zero within the noise band the engine plan defines). One Boost color: scroll p95 and paint time on three heavy pages (named by the engine plan) within the budget the engine plan sets. B2 rewritten to probe a white background and an image pixel (tinted vs. unchanged). |
-| 5 | new (App) | App editor host (placement frame, preview/refresh), Boost commands, Library Boosts section | B1–B3, B6–B10 PASS; `settings-preview check` PASS |
+| 5 | [App runtime #249](https://github.com/SergeSerb2/open/pull/249) | App editor host, document-start runtime, Boost commands, Library Boosts, metadata reconciliation and Undo/Redo preservation | B1–B3, B6–B10 plus Library rename/disable → editor edit → Undo/Redo (B24/B25), restored first-document injection (B26), and Profile delete → quit → relaunch without recreated Boost data (B27); current M5 receipts and the full gate are in the PR. B4 blocked on P7; B5 and B28 reload execution blocked by #202 patch 0602. |
 | 6 | [S12-D #197](https://github.com/SergeSerb2/open/pull/197) | Zap: picker restyle (frame, bar, popup, "Click to reveal"), count on the button, picker events | F13 PASS; `boosts` harness PASS; B4 after P7 |
-| 7 | package: [Code mode #203](https://github.com/SergeSerb2/open/pull/203); App: Step 5 host | Code mode (480 × 588 window, header, native text view, bottom bar, CSS live, JS refresh, devtools, size persistence). Evidence and negative-proof logs are in the package PR body. | Package F17/F18 and review-fix receipts are recorded in the PR; B5 pending App host `loadedJS` and bound-commit wiring. |
+| 7 | package: [Code mode #203](https://github.com/SergeSerb2/open/pull/203); App: Step 5 host | Code mode (480 × 588 window, header, native text view, bottom bar, CSS live, JS refresh, devtools, size persistence). Evidence and negative-proof logs are in the package PR body. | Package F17/F18 and review-fix receipts are recorded in the PR; App host `loadedJS` and bound-commit wiring are implemented. B5 is BLOCKED: engine defect, targeted by #202 patch 0602; see `docs/followups.md`. |
 | 8 | [S12-D package #197](https://github.com/SergeSerb2/open/pull/197); code-mode binding in [Code mode #203](https://github.com/SergeSerb2/open/pull/203) | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `boosts` harness incl. a check that select mode commits nothing; flow "Pick Selector inserts the selector" |
 | 9 | new | Engine items E1–E4 as they land | interim rows switch |
 

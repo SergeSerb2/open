@@ -149,11 +149,11 @@ targets:
       - package: OpenKit
         product: OpenStore
       - package: OpenKit
-        product: OpenBoosts
-      - package: OpenKit
         product: OpenWeb
       - package: OpenKit
         product: OpenExtensionsUI
+      - package: OpenKit
+        product: OpenBoosts
       - package: OpenKit
         product: OpenSiteControl
       - package: OpenKit

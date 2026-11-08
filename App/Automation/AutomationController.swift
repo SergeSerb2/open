@@ -63,6 +63,7 @@
         inputCommand = cmd == "editor-act" || cmd == "key" || cmd == "focus" || cmd == "little-open-link-click" || (cmd == "window-focus" && args["activate"] as? Bool == true)
         if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
+        if cmd == "boost-editor", ["key", "type", "tap", "drag"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -569,6 +570,8 @@
         guard let profile = app.model.profiles.first(where: { $0.name == name }) ?? app.model.createProfile(name: name) else { throw Failure(message: "unknown Profile") }
         try app.directories.ensureProfileDirectories(for: profile)
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
+      case "boost-editor", "boosts", "boost-library":
+        return try await runBoostCommand(cmd, a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
       case "peek-open":
@@ -930,6 +933,15 @@
 
       // Windows and pixels (Open's own windows only).
       case "windows":
+        let enhanced = a["accessibility"] as? Bool == true
+        let axRead = NSSelectorFromString("accessibilityAttributeValue:"), axWrite = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+        let previousAX = enhanced && NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: "AXEnhancedUserInterface")?.takeUnretainedValue() : nil
+        if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
+        defer { if enhanced, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: "AXEnhancedUserInterface") } }
+        if enhanced {
+          for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
+          try? await Task.sleep(for: .milliseconds(50))
+        }
         return NSApp.windows.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
