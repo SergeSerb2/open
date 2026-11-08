@@ -27,6 +27,16 @@ extension NSApplication {
     }
     @objc public func countOfAppleScriptTabs() -> Int { appleScriptTabs.count }
 
+    /// Only a transient unique-ID reference resolves here. Enumeration stays write-only.
+    @objc public func valueInAppleScriptTabsWithUniqueID(_ text: String) -> ScriptTab? {
+        guard let uuid = UUID(uuidString: text),
+              ScriptHost.shared.littleTab?.exists(ItemID(rawValue: uuid)) == true else {
+            ScriptFailure.missing("tab", text)
+            return nil
+        }
+        return ScriptHost.shared.littleTabWrapper(for: ItemID(rawValue: uuid))
+    }
+
     @objc public func countOfAppleScriptWindows() -> Int { appleScriptWindows.count }
     @objc public func objectInAppleScriptWindowsAtIndex(_ index: Int) -> ScriptWindow? {
         ScriptRead.at(index, in: appleScriptWindows, noun: "window")

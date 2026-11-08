@@ -8,6 +8,16 @@
   -->
   <suite name="Standard Suite" code="core" description="Common classes and commands for all applications.">
 
+    <!-- Keep the receiver metadata supplied by the sdef loader. Rebuilding the
+         implicit core/setd description loses it before command dispatch. -->
+    <command name="set" code="coresetd" description="Set an object's property.">
+      <cocoa class="ScriptSetCommand"/>
+      <direct-parameter type="specifier" description="The property to set."/>
+      <parameter name="to" code="data" type="any" description="The new value.">
+        <cocoa key="Value"/>
+      </parameter>
+    </command>
+
     <command name="make" code="corecrel" description="Make a new object.">
       <cocoa class="ScriptMakeCommand"/>
       <access-group identifier="*"/>
@@ -49,6 +59,7 @@
     </class>
 
     <command name="close" code="coreclos" description="Close an object.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The object to execute the command on." type="specifier"/>
     </command>
 
@@ -108,21 +119,27 @@
     </class>
 
     <command name="select" code="CrSelect" description="Select the tab.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="go back" code="CrSuBack" description="Go Back (If Possible).">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="go forward" code="CrSuFwd " description="Go Forward (If Possible).">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="reload" code="CrSuRlod" description="Reload a tab.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="stop" code="CrSustop" description="Stop the current tab from loading.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
     </command>
     <command name="execute" code="CrSuExJa" description="Execute a piece of javascript.">
+      <cocoa class="ScriptTransientTabCommand"/>
       <direct-parameter description="The tab to execute the command in." type="specifier"/>
       <parameter name="javascript" code="JvSc" description="The javascript code to execute." type="text">
         <cocoa key="javascript"/>
