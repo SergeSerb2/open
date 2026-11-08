@@ -1,6 +1,5 @@
 # Open patches for Chromium. One patch per line: <file>.patch  # rationale
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
-0106-open-code-sign-clone-reuse.patch  # S16: reuse the signed hard-link clone without advancing executable ctime on warm launches
 0301-open-headless-browser-window.patch  # P1: Browser features without a BrowserView (hidden tab-strip Browsers)
 0302-open-hidden-browser-ui.patch  # P1: Chrome UI code that assumes "no BrowserView => unit test" accepts hidden tab-strip Browsers
 0303-open-hosted-tab-lifecycle.patch  # P1: hosted tabs are never discarded by Chrome's lifecycle unit; tab API guards moved to 0306
@@ -24,3 +23,4 @@
 0808-open-hosted-modal-dialog.patch  # H-7: attach and position Views web-modal dialogs in their AppKit parent
 0809-open-https-warning-after-commit.patch  # H-7: defer hosted HTTPS warning beyond its triggering commit; cancel stale shows
 0810-open-modal-unblock-during-tab-teardown.patch  # H-7: keep modal unblock state but omit UI events after tab features are destroyed
+0106-open-code-sign-clone-reuse.patch  # S16: reuse the signed hard-link clone without advancing executable ctime on warm launches; after main's 0801–0810

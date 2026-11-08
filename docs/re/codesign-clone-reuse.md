@@ -93,3 +93,13 @@ live replacement with a reused clone for ad-hoc and temporary hardened DLV
 copies; unwritable-cache fallback; seven interleaved launch pairs; window
 warm-profile rows; shell/features/updater suites; engine-status and full gate.
 No runtime result or performance gain is claimed yet.
+
+### Main engine ordering
+
+Main `d26300e6` (PR #264) is merged into this branch. Its Chromium patches
+`0801` through `0810` precede `0106` in the recorded series. The earlier
+engine build is allowed to finish, but its engine predates #264 and cannot
+qualify the final proof. The matched main control must include #264 without
+`0106`; the branch engine must include #264 followed by `0106`. Both are
+built in S16. All runtime rows and engine-status remain pending on that
+rebuilt engine, followed by the full gate on the merged head.
