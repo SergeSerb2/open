@@ -83,7 +83,7 @@ def run(factory, results, tmp, api):
         record('W06_finite_playlist_1_to_4', stopped and stopped['activeCard'] == 4
                and stopped['duration'] == 8.5 and stopped['completionCount'] == 4
                and stopped['animationCount'] == 0 and not stopped['pendingCompletion'], state=stopped,
-               lastState=state())
+               lastState=state(), lastWindow=app.call('window-state'), lastFocus=app.call('native-focus-state'))
         if not stopped:
             raise AssertionError('Welcome playlist did not finish in order')
         completion_count = stopped['completionCount']
