@@ -952,14 +952,18 @@ Never print a full path. Print counts only. See section 5 for the ID flag rule.
 
 ### 4.3 Reinstall plan
 
-**Implementation errata (Section 14 C3c, 2026-11-07):** The App queue has
+**Implementation errata (Section 14 C5, 2026-11-07):** The App queue has
 no install deadline. An unanswered Chromium consent sheet remains pending.
-`EI_failure_reported_app` gates offline App failure handling: a missing fixture
-is refused before `installLocalCRX`, the row retains the error, the summary
-counts it, and the next candidate installs. `EI_failure_reported_engine` is
-**BLOCKED**, because `installLocalCRX` has no failure completion for a damaged
-signature; the lead filed the engine need. The damaged-signature fixture stays
-in the harness for that future hook. No engine change is part of this work.
+Automation uses `installLocalCRX(_:completion:)` from engine 0704 (#223).
+Installed must return the candidate ID; a different ID fails with a clear error.
+Cancelled skips the row. Failed retains Chromium's error text. The completion
+runs exactly once on a later main-queue turn, including rejection and context
+closure; the import no longer creates a hidden page or matches delegate events.
+`EI_failure_reported_app` gates a missing fixture before the engine call.
+`EI_failure_reported_engine` gates the damaged-signature rejection, its rendered
+error text and result count, and installation of the next candidate. All 18 EI
+gates pass; mapping failed to skipped makes the engine and count gates fail.
+See the [C5 receipt](../engine-spike/s14-crx-completion.md).
 A production Web Store request for a well-formed nonexistent ID is an INFO
 receipt, bounded to two minutes by the harness. That bound never marks a row
 failed or advances the App queue. The merged multi-Profile mapping resolves

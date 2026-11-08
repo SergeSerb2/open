@@ -13,15 +13,16 @@ extension AutomationController {
       throw Failure(message: "AppleScript body must be text of at most 1048576 UTF-8 bytes")
     }
     let host = ScriptHost.shared
-    let model = host.modelProvider, bridge = host.engineBridge, makeWindow = host.makeWindow
+    let model = host.modelProvider, bridge = host.engineBridge, makeWindow = host.makeWindow, littleTab = host.littleTab
     switch args["unavailable"] as? String {
     case "model": host.modelProvider = nil
     case "engine": host.engineBridge = nil
     case "window": host.makeWindow = nil
+    case "little": host.littleTab = nil
     case nil: break
     default: throw Failure(message: "unknown scripting unavailability fixture")
     }
-    defer { host.modelProvider = model; host.engineBridge = bridge; host.makeWindow = makeWindow }
+    defer { host.modelProvider = model; host.engineBridge = bridge; host.makeWindow = makeWindow; host.littleTab = littleTab }
     let bundle = Bundle.main.bundlePath.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
     let source = "using terms from application \"\(bundle)\"\ntell current application\n\(body)\nend tell\nend using terms from"
     let data: Data = await withCheckedContinuation { done in
