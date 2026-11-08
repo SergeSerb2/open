@@ -15,9 +15,14 @@ final class PageDialogPresenter {
     var field: NSTextField?
     var suppression: NSButton?
     let suppressible: Bool
+    let message: String
+    let defaultPromptText: String
     var completed = false
     init(page: OEWebContent, dialog: OEJavaScriptDialog, held: Bool, suppressible: Bool) {
-      self.page = page; self.dialog = dialog; self.held = held; self.suppressible = suppressible; super.init()
+      self.page = page; self.dialog = dialog; self.held = held; self.suppressible = suppressible
+      message = PageChromeLimits.dialogText(dialog.message)
+      defaultPromptText = PageChromeLimits.dialogText(dialog.defaultPromptText)
+      super.init()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var acceptsFirstResponder: Bool { true }
@@ -75,9 +80,6 @@ final class PageDialogPresenter {
       dialog.complete(accepted: dialog.kind == .alert, text: nil); return
     }
     record?("dialog", page, info)
-    if let reason = PageChromeLimits.dialogFailure(dialog) {
-      record?("pageChromeRefused", page, ["reason": reason]); dialog.complete(accepted: false, text: nil); return
-    }
     guard entries.filter({ $0.page === page }).count < PageChromeLimits.pendingRequests else {
       record?("pageChromeRefused", page, ["reason": "Page dialog queue exceeds 8 requests."])
       dialog.complete(accepted: false, text: nil); return
@@ -144,12 +146,12 @@ final class PageDialogPresenter {
     }
     let alert = NSAlert(); entry.alert = alert
     alert.messageText = Self.title(entry.dialog)
-    alert.informativeText = entry.dialog.kind == .beforeUnload ? "Changes you made may not be saved." : entry.dialog.message
+    alert.informativeText = entry.dialog.kind == .beforeUnload ? "Changes you made may not be saved." : entry.message
     for title in Self.buttons(entry.dialog) { alert.addButton(withTitle: title) }
     if alert.buttons.count > 1 { alert.buttons[1].keyEquivalent = "\u{1b}" }
     var accessories: [NSView] = []
     if entry.dialog.kind == .prompt {
-      let field = NSTextField(string: entry.dialog.defaultPromptText)
+      let field = NSTextField(string: entry.defaultPromptText)
       field.frame.size = NSSize(width: 260, height: 24); entry.field = field
       field.delegate = entry; field.setAccessibilityLabel("Response"); accessories.append(field)
     }
