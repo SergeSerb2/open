@@ -2462,14 +2462,22 @@ Purpose: stage EasyList + EasyPrivacy (+ the §9.3 resources file) under
 `Vendor/adblock/` for the app bundle and for `cefsimple` acceptance.
 Never commit list text. Never read `/Applications/Arc.app`.
 
-`Engine/fork/adblock/list-pins.txt` (committed, exact format):
+**Erratum — 2026-11-07:** EasyList republishes its live URL many times per
+day. A release hash on that URL breaks clean builds and seed repair after
+upstream moves. Bundled seeds now use immutable URLs from the official
+`easylist/easylist` repository's `gh-pages` branch. Both files use the same
+40-character commit. Runtime updates and their ETag flow still use the
+catalog's live `easylist.to` URLs.
+
+`Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt`
+(committed, exact format):
 
 ```text
 # Open bundled filter lists. One line per file:
-# <local-name> <official-url> <sha256-hex-lowercase>
+# <local-name> <seed-url> <sha256-hex-lowercase>
 # Update only via: tools/fetch-adblock-lists.sh --update-pins (reviewed PR).
-easylist.txt https://easylist.to/easylist/easylist.txt <fill at Step 7>
-easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt <fill at Step 7>
+easylist.txt https://raw.githubusercontent.com/easylist/easylist/<40-hex-commit>/easylist.txt <sha256>
+easyprivacy.txt https://raw.githubusercontent.com/easylist/easylist/<same-commit>/easyprivacy.txt <sha256>
 ```
 
 Script behavior (Bash, `set -euo pipefail`, no fork-script sourcing —
@@ -2479,8 +2487,11 @@ Script behavior (Bash, `set -euo pipefail`, no fork-script sourcing —
 tools/fetch-adblock-lists.sh [--update-pins] [--dest <dir, default Vendor/adblock>]
 ```
 
-1. Read `list-pins.txt` (+ `resources-pins.txt`, §9.3). For each entry:
-   download with `curl -fsSL --retry 3 -o <dest>/<name>.tmp <url>`
+1. Read `list-pins.txt` (+ `resources-pins.txt`, §9.3). Allow only the
+   exact `https://raw.githubusercontent.com/easylist/easylist/<40 lowercase hex>/`
+   seed URL with the matching `easylist.txt` or `easyprivacy.txt` filename.
+   Without `--update-pins`, fetch exactly that URL (or reuse a verified cache).
+   For each missing entry, download with `curl -fsSL --retry 3 -o <dest>/<name>.tmp <url>`
    (follow the official URL only; an HTTP error is fatal, no fallback
    mirror).
 2. Verify: first non-empty line matches `^\[Adblock Plus` (lists) and
@@ -2488,15 +2499,15 @@ tools/fetch-adblock-lists.sh [--update-pins] [--dest <dir, default Vendor/adbloc
    print expected vs actual, exit 1. **Never** overwrite a good staged
    file with an unverified one — rename `.tmp` over the target only
    after both checks pass.
-3. `--update-pins`: after a successful verify-except-hash download,
-   rewrite the pin file with the new hash and print a one-line summary
-   per changed file (`<name>: <old> -> <new>`). This mode is how a list
-   update is reviewed; a normal run must never edit pins.
+3. `--update-pins`: resolve `refs/heads/gh-pages` once with
+   `git ls-remote https://github.com/easylist/easylist refs/heads/gh-pages`.
+   Download both lists at that commit, then rewrite both URLs and hashes
+   after successful header verification. Print old → new URLs and hashes.
+   This mode is how a list update is reviewed; a normal run must never edit pins.
 4. Print `fetch-adblock-lists: <n> files, <bytes> bytes -> <dest>`.
 
-At Step 7 the implementer runs the script once, then `--update-pins`
-once to fill the two `<fill at Step 7>` hashes from the real downloads,
-and commits the filled pins. Record the byte sizes and line counts in
+Use `--update-pins` to refresh both committed URLs and hashes together.
+Record the resolved commit, byte sizes, and line counts in
 the PR (expect ~80k lines EasyList, ~57k EasyPrivacy per the design's
 count of the same upstream lists; a wildly different count means the
 wrong URL).
@@ -2510,21 +2521,34 @@ files beside `cefsimple` via the smoke harness switch (§13.1).
 
 **Lead decision — 2026-10-25: use generations.** This replaces the earlier
 `AdBlock/lists/` layout and any directory-enumeration or unbound-DAT instructions
-elsewhere in this plan. The Swift slice uses `<root>/Profiles/<UUID>/adblock/`.
-The CEF/OpenEngine directory parameter names this `adblock/` root.
+elsewhere in this plan.
+
+**Folder correction — 2026-11-07.** The caller passes
+`ProfileDirectories.adBlockDirectory(dataDirectoryName:)` to
+`AdBlockStore.openProfile(_:directory:)`: `<root>/Profiles/<dataDirectoryName>/AdBlock/`.
+Swift settings and exclusions stay there; list generations, download caches and
+`current.json` live under `AdBlock/lists/`. The CEF/OpenEngine directory parameter
+names that **lists** directory. A UUID is the Profile identity, not its folder name.
+On first open with no new state, the old `Profiles/<UUID>/adblock/` contents migrate
+through a staged copy and atomic destination rename; failure leaves the old data
+untouched and opens defaults. Existing `AdBlock/exclusions.json` remains readable.
+The App registers its lazy store owner with `ProfileTeardown`; retirement marks
+the Profile deleted, cancels its schedule and tracked IO task, waits for IO to
+finish, drops state and emits `closed` before teardown removes its folder.
 
 ```text
-<profile-dir>/adblock/
-  catalog-state.json            Swift state, persisted before current.json moves
-  exclusions.json               Swift exclusion set
-  downloads/<listID>/<n>.body   source caches; never engine inputs
-  current.json                  live {generation, manifestSHA256}, previous ref
-  generations/<n>/
-    <listID>.txt                 exactly one per enabled list
-    manifest.json               generation, full file inventory, state snapshot
-    engine.dat                  optional browser-owned cache for THIS generation
-    engine-inputs.json          browser-owned DAT receipt (see below)
-  quarantine/<n>-<unique>/       rejected generation; never engine inputs
+<profile-dir>/AdBlock/
+  catalog-state.json              Swift state, persisted before current.json moves
+  exclusions.json                 Swift exclusion set
+  lists/                          engine directory
+    downloads/<listID>/<n>.body    source caches; never engine inputs
+    current.json                  live {generation, manifestSHA256}, previous ref
+    generations/<n>/
+      <listID>.txt                exactly one per enabled list
+      manifest.json              generation, full file inventory, state snapshot
+      engine.dat                 optional browser-owned cache for THIS generation
+      engine-inputs.json         browser-owned DAT receipt (see below)
+    quarantine/<n>-<unique>/       rejected generation; never engine inputs
 ```
 
 `current.json` is `{ "live": { "generation": n, "manifestSHA256": "..." },
