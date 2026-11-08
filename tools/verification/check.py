@@ -885,7 +885,10 @@ def main():
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 236, "missing settings/library/appearance/detail/sheet/state renders")
+        # The populated and empty Boosts section each add 1x and 2x renders.
+        require(len(pngs) == 240, "missing settings/library/appearance/detail/sheet/state renders")
+        require({f"library-boosts{state}@{scale}x.png" for state in ("", "-empty") for scale in (1, 2)} <= {p.name for p in pngs},
+                "missing Library Boosts renders")
         require({f"sheet-link-rule-profile-work@{scale}x.png" for scale in (1, 2)} <= {p.name for p in pngs},
                 "missing two-Profile destination renders")
         require({f"{state}@{scale}x.png" for state in

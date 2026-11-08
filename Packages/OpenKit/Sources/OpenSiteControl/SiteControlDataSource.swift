@@ -40,6 +40,8 @@ extension SiteControlDataSource {
     func store(for profile: ProfileID) -> BoostStore
     func preview(_ boost: Boost, tabID: ItemID)
     func refresh(profile: ProfileID)
+    /// Replace future document-start scripts without touching any live page.
+    func updateScripts(profile: ProfileID)
     func pageSnapshot(tabID: ItemID) async -> Data?
     /// False before P7 or while the bound page has no usable Open world.
     func zapAvailability(tabID: ItemID) -> Bool
@@ -57,4 +59,8 @@ extension SiteControlDataSource {
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?
     func showBoostsLibrary(profileID: ProfileID)
+}
+
+public extension BoostEditorHost {
+    func updateScripts(profile: ProfileID) {}
 }

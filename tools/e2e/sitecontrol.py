@@ -42,7 +42,9 @@ def run(factory, results, tmp, env, functional_only=False):
             except RuntimeError: return True
         try:
             for key, value in {'open.advanced.playSoundEffects': False, 'open.advanced.showToolbar': False,
-                               'open.settings.lastPane': 'general'}.items():
+                               'open.settings.lastPane': 'general',
+                               'open.advanced.enableBoosts': True,
+                               'open.boosts.hasDismissedInterstitial': False}.items():
                 saved[key] = app.call('defaults', key=key, persistent=True)
                 app.call('defaults', key=key, value=value)
             app.call('appearance', name='dark')
@@ -155,8 +157,42 @@ def run(factory, results, tmp, env, functional_only=False):
             value = app.call('permission', origin=origin, kind=1)
             record('S3_permission', not row(absent,'row.permission.camera') and bool(allowed) and row(toggled,'row.permission.camera').get('subtitle') == 'Blocked' and value == 2 and toggled['reloadVisible'], allowed=allowed,blocked=toggled,negative=absent)
             app.call('permission', origin=origin, kind=1, state=0)
-            blocked('S4_boost', 'boost runtime', negativeNewBoostRefused=refused(action='tap', id='action.newBoost'),
-                    negativeMenuRefused=refused(action='menu', item='New Boost…'), noBoostRows=not state()['boostsVisible'])
+            # Create and persist through the real editor, then exercise the
+            # SCC's visible controls against the sole AppBoosts owner.
+            def editor(action='state', **args): return app.call('boost-editor', action=action, **args)
+            empty_boosts=opened()
+            empty_negative=not empty_boosts['boostsVisible'] and not any(
+                c['id'].startswith('boost.') for c in empty_boosts['controls'])
+            app.call('site-controls',action='tap',id='action.newBoost')
+            if editor().get('interstitial'): editor('tap',id='firstRun.makeABoost')
+            assert wait(lambda:editor().get('colorsReady'),timeout=10,step=.05)
+            editor('tap',id='font.Avenir')
+            boost_id=editor()['boost']['id']; boost_profile=editor()['profile']
+            editor('close')
+            def stored_boost(): return app.call('boosts',action='get',boost=boost_id,profile=boost_profile)
+            circle='boost.'+boost_id+'.circle'; edit_row='boost.'+boost_id+'.row'
+            matching=opened()
+            record('S4_boost',empty_negative and matching['boostsVisible']
+                   and all(control(matching,c).get('visible') and control(matching,c).get('enabled') for c in (circle,edit_row))
+                   and stored_boost()['isEnabled']
+                   and matching['urlButtonState'] in ('boosted','openBoosted'),
+                   state=matching,stored=stored_boost(),negativeEmpty=empty_negative)
+            app.call('site-controls',action='tap',id=circle)
+            assert wait(lambda:not stored_boost()['isEnabled'],timeout=5,step=.02)
+            off=wait(lambda:(lambda x:x if x['urlButtonState'] not in ('boosted','openBoosted') else None)(state()),timeout=5,step=.02)
+            off_store=stored_boost()
+            app.call('site-controls',action='tap',id=circle)
+            assert wait(lambda:stored_boost()['isEnabled'],timeout=5,step=.02)
+            on=wait(lambda:(lambda x:x if x['urlButtonState'] in ('boosted','openBoosted') else None)(state()),timeout=5,step=.02)
+            record('S4_toggle_glyph',bool(off and on) and not off_store['isEnabled'] and stored_boost()['isEnabled']
+                   and all(control(x,edit_row).get('visible') for x in (off,on) if x),
+                   disabled=off,reenabled=on,negativeDisabled=off_store)
+            editor_closed=not editor().get('open')
+            app.call('site-controls',action='tap',id=edit_row)
+            edited=editor()
+            record('S4_edit',editor_closed and edited.get('open') and edited['boost']['id']==boost_id,
+                   editor=edited,negativeClosed=editor_closed)
+            editor('close');opened()
             # boost.html shares the cookie's origin and does not set it again
             # on reload, so S5 can prove that Clear Cookies removed it.
             close(); app.call('navigate', tab=tab, url=origin+'/boost.html'); app.call('wait', tab=tab)
@@ -214,6 +250,7 @@ def run(factory, results, tmp, env, functional_only=False):
             record('S9_empty_internal',no_site and s['presented'] and s['extensionsVisible'] and [c['id'] for c in acts if c['enabled']]==['action.share'] and not s['security'].get('visible'),state=s,negativeNoSite=no_site)
             normal_window=app.call('window-state')['id']
             normal_context=s
+            normal_boost=stored_boost()
             private_windows=app.call('incognito-state')['windows']
             existing_private={w['id'] for w in private_windows if w['private']}
             app.call('menu-perform',id='new-incognito-window')
@@ -238,6 +275,12 @@ def run(factory, results, tmp, env, functional_only=False):
                     except RuntimeError:
                         refused_commands[command]=True
                 private_menu_refused=refused(action='menu',item='New Boost…')
+                private_customize_refused=editor('customize') is False and not editor().get('open')
+                try:
+                    editor('open',boost=boost_id)
+                    private_editor_refused=False
+                except RuntimeError:
+                    private_editor_refused=True
                 record('S10_incognito',private_context.get('private') is True and private_context.get('ephemeral') is True
                     and private_state['isIncognito'] is True and not normal_context['isIncognito']
                     and not private_state['canCreateBoost'] and not control(private_state,'action.newBoost')['enabled']
@@ -245,21 +288,29 @@ def run(factory, results, tmp, env, functional_only=False):
                     and private_state['urlButtonState'] not in ('boosted','openBoosted')
                     and len(menu_rows)==len(boost_commands) and all(not r['enabled'] for r in menu_rows.values())
                     and all(refused_commands.values()) and private_menu_refused
+                    and private_customize_refused and private_editor_refused
                     and refused(action='tap',id='action.newBoost'),
                     state=private_state,privateContext=private_context,
                     boostMenus=menu_rows,refusedCommands=refused_commands,negativeDisabledMenu=private_menu_refused,
-                    negativeNormalContext=normal_context['isIncognito'],negativeDisabledTap=True)
-                if boost_controls:
-                    record('S10_boost_rows',all(not c['enabled'] for c in boost_controls)
-                           and all(refused(action='tap',id=c['id']) for c in boost_controls),
-                           controls=boost_controls)
-                else:
-                    blocked('S10_boost_rows','boost runtime: no matching Boost rows to exercise',
-                            controls=boost_controls,privateFlag=private_state['isIncognito'])
+                    negativeNormalContext=normal_context['isIncognito'],negativeDisabledTap=True,
+                    customizeRefused=private_customize_refused,editorRefused=private_editor_refused)
+                row_refusals={c['id']:refused(action='tap',id=c['id']) for c in boost_controls}
+                unchanged_boost=stored_boost()
+                record('S10_boost_rows',private_context.get('parent')==boost_profile
+                       and {c['id'] for c in boost_controls}=={circle,edit_row}
+                       and all(c['visible'] and not c['enabled'] for c in boost_controls)
+                       and all(row_refusals.values()) and unchanged_boost==normal_boost,
+                       controls=boost_controls,refusals=row_refusals,storedUnchanged=unchanged_boost==normal_boost,
+                       negativeNormalEnabled=normal_boost['isEnabled'],parent=private_context.get('parent'))
             finally:
                 app.call('window-focus',id=private_window['id'],activate=True)
                 app.call('menu-perform',id='close-window')
                 app.call('window-focus',id=normal_window,activate=True)
+            # Remove the saved fixture through its editor before pixel rows.
+            app.call('select',tab=tab)
+            editor('open',boost=boost_id)
+            editor('tap',id='menu.Delete this Boost');editor('tap',id='alert.Delete')
+            assert wait(lambda:not any(b['id']==boost_id for b in app.call('boosts',action='list',profile=boost_profile)),timeout=5,step=.02)
             if functional_only:
                 for key in ['S11_material', 'S12_elements', 'S13_scroll', 'P1_first_draw', 'P2_idle']:
                     results[key]=dict(status='DEFERRED', reason='M5 display/performance receipt required (TANDEM §4M)')

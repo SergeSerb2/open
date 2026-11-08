@@ -242,6 +242,11 @@ extension AutomationController {
 
   private func describeCard(_ card: MiniPlayerCardView, window: NSWindow?) -> [String: Any] {
     let s = card.source
+    var timing: [String: Any] = [:]
+    if let id = s.tabID, let t = app.media.cardTimings[id] {
+      timing = ["event": t.event, "handledAt": t.handledAt, "handledTurn": t.handledTurn,
+                "insertedAt": t.insertedAt as Any? ?? NSNull(), "insertedTurn": t.insertedTurn as Any? ?? NSNull()]
+    }
     var buttons: [String: Any] = [:]
     for name in ["favicon", "previous", "play", "next", "volume", "pip", "close", "microphone", "camera", "volumeLow", "volumeHigh"] {
       guard let c = card.control(named: name), !c.view.isHiddenOrHasHiddenAncestor else { continue }
@@ -251,6 +256,7 @@ extension AutomationController {
     }
     return [
       "tab": s.tabID?.description ?? "", "kind": s.kind == .recording ? "recording" : "audioVideo",
+      "timing": timing,
       "playback": "\(s.playback)", "hasVideo": s.hasVideo, "muted": s.isMuted, "pip": "\(s.pip)",
       "expanded": card.isExpanded, "level": card.level, "retiring": card.isRetiring,
       "frame": rect(card.convert(card.bounds, to: nil), in: window), "buttons": buttons,

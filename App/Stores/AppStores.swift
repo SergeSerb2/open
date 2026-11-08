@@ -12,6 +12,7 @@ final class AppStores: ProfileDataOwner {
   private var histories: [ProfileID: HistoryStore] = [:]
   private var currentProfile: ProfileID?
   private var currentSuggest: SuggestEngine?
+  lazy var boosts = AppBoosts(app: app)
   private var adBlockStorage: AdBlockStore?
   /// A read of existing settings must not open the store or load its PSL.
   var existingAdBlock: AdBlockStore? { adBlockStorage }
