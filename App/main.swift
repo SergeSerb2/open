@@ -6,6 +6,14 @@ import QuartzCore
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
 LaunchTiming.shared.phase("entry")
+#if OPEN_AUTOMATION
+// Validate the loader without creating NSApplication or a window. This is
+// used before the first on-screen launch of a changed link set.
+if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LOADER_CHECK"] == "1" {
+  FileHandle.standardError.write(Data("Open: loader check passed\n".utf8))
+  exit(0)
+}
+#endif
 let app = OEApplication.shared as! OEApplication
 LaunchTiming.shared.mark("main")
 // Open restores windows from its own snapshot (OpenStore), never through
