@@ -165,12 +165,17 @@ def run(factory, results, tmp, h):
         row('titlebar_clearance', heading_top >= 36 and heading_top > light_bottom,
             headingTop=heading_top, trafficLightsBottom=light_bottom, png=imported_png)
         app.call('first-run', action='continue'); until('importing')
+        progress_state = state()
         progress1 = shot('progress'); time.sleep(.15); progress2 = shot('progress-animation')
+        progress_after = state()
         w1, h1, p1 = h.read_image(progress1); w2, h2, p2 = h.read_image(progress2)
-        # The central bar region excludes the icon, phase text and window chrome.
-        changed = sum(p1(x,y) != p2(x,y) for y in range(int(h1*.52), int(h1*.66))
-                      for x in range(int(w1*.18), int(w1*.82))) if (w1,h1) == (w2,h2) else 0
-        row('N9_indeterminate_animation', changed > 0, changedPixels=changed, pngs=[progress1,progress2])
+        # Only the hosted progress area in the left pane. The room's moving
+        # orbs and the right preview cannot satisfy the animation assertion.
+        changed = sum(p1(x,y) != p2(x,y) for y in range(int(h1*300/800), int(h1*650/800))
+                      for x in range(int(w1*80/1280), int(w1*440/1280))) if (w1,h1) == (w2,h2) else 0
+        row('N9_indeterminate_animation', changed > 0 and progress_state['step']==progress_after['step']=='importing'
+            and progress_state['phase']==progress_after['phase'] and progress_state['progress'] is None,
+            changedPixels=changed, phase=progress_state['phase'], pngs=[progress1,progress2])
         s = until('report'); report_png = shot('report'); copy()
         counts = s['outcome']
         tabs = user_tabs()
