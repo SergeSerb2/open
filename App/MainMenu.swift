@@ -5,7 +5,6 @@ import OpenSettings
 /// The registry owns titles, ordering, shortcuts and menu actions.
 @MainActor
 enum MainMenu {
-  private static var initialMenuDelegateKey: UInt8 = 0
   static func build(factoryOverride: EngineWebContentHostFactory? = nil) -> NSMenu {
     guard let app = NSApp.delegate as? AppDelegate, app.model != nil else { return NSMenu() }
     let owner = NSApp.keyWindow.flatMap { app.factory(forKeyWindow: $0) }
@@ -15,8 +14,7 @@ enum MainMenu {
     let menu = MenuBuilder.buildMainMenu(dispatcher: dispatcher,
       spaces: (factory?.model ?? app.model).spaces.map { SpaceMenuEntry(id: $0.id.description, title: (factory?.model ?? app.model).displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
-      overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"),
-      shortcutsOnly: !app.initialMainMenuCompleted)
+      overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
     menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
     if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
     #if DEBUG || OPEN_AUTOMATION
@@ -30,10 +28,6 @@ enum MainMenu {
       troubleshooting.addItem(archive)
     }
     #endif
-    if !app.initialMainMenuCompleted {
-      let completion = InitialMenuCompletion(app: app, menu: menu)
-      objc_setAssociatedObject(menu, &initialMenuDelegateKey, completion, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-    }
     return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
@@ -127,42 +121,6 @@ enum MainMenu {
     guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
           app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
     app.performCommand(id, keyDownTimestamp: event.timestamp); return true
-  }
-}
-
-/// An early menu click must see every item, even before didFinishLaunching.
-/// Populate the existing submenus so AppKit can finish opening the clicked menu.
-@MainActor
-private final class InitialMenuCompletion: NSObject, NSMenuDelegate {
-  weak var app: AppDelegate?
-  weak var root: NSMenu?
-  private var fullMenu: NSMenu?
-  private var previousDelegates: [ObjectIdentifier: any NSMenuDelegate] = [:]
-
-  init(app: AppDelegate, menu: NSMenu) {
-    self.app = app
-    root = menu
-    super.init()
-    for submenu in menu.items.compactMap(\.submenu) {
-      if let delegate = submenu.delegate { previousDelegates[ObjectIdentifier(submenu)] = delegate }
-      submenu.delegate = self
-    }
-  }
-
-  func menuNeedsUpdate(_ menu: NSMenu) {
-    guard let app, let root, fullMenu == nil else { return }
-    app.completeInitialMainMenu()
-    let full = MainMenu.build()
-    fullMenu = full // Retain the full builder's command target while its items are in root.
-    for (old, replacement) in zip(root.items, full.items) {
-      guard let destination = old.submenu, let source = replacement.submenu else { continue }
-      destination.removeAllItems()
-      for item in source.items { source.removeItem(item); destination.addItem(item) }
-      destination.delegate = previousDelegates[ObjectIdentifier(destination)]
-      if destination.title == "Window" { NSApp.windowsMenu = destination }
-      if destination.title == "Help" { NSApp.helpMenu = destination }
-    }
-    previousDelegates[ObjectIdentifier(menu)]?.menuNeedsUpdate?(menu)
   }
 }
 

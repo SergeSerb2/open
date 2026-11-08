@@ -71,7 +71,6 @@ public struct TabMenuEntry: Sendable, Hashable {
 @MainActor
 final class MenuCommandTarget: NSObject, NSMenuItemValidation {
     weak var dispatcher: (any CommandDispatcher)?
-    var shortcutsOnly = false
     var enabledKeys: [String: String] = [:] // item identifier string -> enabled key
 
     @objc func openCommandAction(_ sender: NSMenuItem) {
@@ -107,12 +106,10 @@ public enum MenuBuilder {
         spaces: [SpaceMenuEntry] = [],
         tabs: [TabMenuEntry] = [],
         overrides: KeyBindingStore = .empty,
-        switchToNinth: Bool = false,
-        shortcutsOnly: Bool = false
+        switchToNinth: Bool = false
     ) -> NSMenu {
         let target = MenuCommandTarget()
         target.dispatcher = dispatcher
-        target.shortcutsOnly = shortcutsOnly
         let main = NSMenu()
         main.autoenablesItems = true
         for menu in [
@@ -194,9 +191,6 @@ public enum MenuBuilder {
 
     private static func add(_ menu: NSMenu, _ ids: [String], target: MenuCommandTarget, overrides: KeyBindingStore) {
         for id in ids {
-            if target.shortcutsOnly,
-               let command = CommandRegistry.byID[id],
-               overrides.effectiveShortcuts(for: command).isEmpty { continue }
             menu.addItem(item(id, target: target, overrides: overrides))
             carriers(id, target: target, overrides: overrides, into: menu)
         }
@@ -218,7 +212,6 @@ public enum MenuBuilder {
         menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenuItem("Services", services))
-        // Native Services can add user-assigned shortcuts outside the registry.
         NSApp?.servicesMenu = services
         menu.addItem(.separator())
         add(menu, ["hide-open", "hide-others", "show-all"], target: target, overrides: overrides)

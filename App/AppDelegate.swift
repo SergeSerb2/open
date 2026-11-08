@@ -36,9 +36,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   // model opens one group per command; multi-operation UI actions may nest.
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
   private(set) var engineReady = false
-  /// The first-frame menu carries every effective key and native menu registration.
-  /// AppKit's launch callback adds the remaining commands in one full build.
-  private(set) var initialMainMenuCompleted = false
   private(set) var terminationRequested = false
   private var faviconShutdownTask: Task<Void, Never>?
   private var historyQuitTask: Task<Void, Never>?
@@ -114,9 +111,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
     LaunchTiming.shared.phase("settingsRegistered")
-    completeInitialMainMenu()
-    MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
+    NSApp.mainMenu = MainMenu.build()
     LaunchTiming.shared.phase("mainMenuBuilt")
+    MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     LaunchTiming.shared.phase("initialMenuRetargeted")
     NSApp.setActivationPolicy(.regular)
     // The window and sidebar come from the snapshot and do not wait for the
@@ -343,14 +340,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if ProcessInfo.processInfo.environment["OPEN_SPEED_MENU_PROBE"] == "1" {
       startupEvidence["firstFrameMenuShortcuts"] = MainMenu.shortcutSnapshot(NSApp.mainMenu)
       startupEvidence["firstFrameRegistryRoutes"] = MainMenu.registryShortcutRoutes(self)
-      if ProcessInfo.processInfo.environment["OPEN_SPEED_EARLY_MENU_PROBE"] == "1" {
-        // Exercise the callback AppKit uses before opening this native menu.
-        if let menu = NSApp.mainMenu?.items.first(where: { $0.title == "File" })?.submenu {
-          menu.delegate?.menuNeedsUpdate?(menu)
-        }
-        startupEvidence["earlyMenuItems"] = MainMenu.shortcutSnapshot(NSApp.mainMenu, includeUnkeyed: true)
-        startupEvidence["earlyMenuCompleted"] = initialMainMenuCompleted
-      }
     }
     #endif
   }
@@ -702,11 +691,6 @@ extension AppDelegate: CommandDispatcher {
       guard let self, !Task.isCancelled else { return }
       self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
     }
-  }
-  func completeInitialMainMenu() {
-    initialMainMenuCompleted = true
-    menuRebuildTask?.cancel()
-    menuRebuildTask = nil
   }
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {
