@@ -66,7 +66,8 @@ CosmeticsPipe& Pipe() {
 }
 
 // Avoid converting an unbounded JavaScript array before applying the cap.
-std::vector<std::string> ReadTokens(v8::Local<v8::Context> context,
+std::vector<std::string> ReadTokens(v8::Isolate* isolate,
+                                    v8::Local<v8::Context> context,
                                     v8::Local<v8::Array> array,
                                     uint32_t count) {
   std::vector<std::string> tokens;
@@ -77,7 +78,7 @@ std::vector<std::string> ReadTokens(v8::Local<v8::Context> context,
       continue;
     }
     std::string token;
-    if (gin::ConvertFromV8(context->GetIsolate(), value, &token) &&
+    if (gin::ConvertFromV8(isolate, value, &token) &&
         !token.empty() && token.size() <= 2048) {
       tokens.push_back(std::move(token));
     }
@@ -133,7 +134,8 @@ void OpenAdBlockRendererAgent::DidCreateDocumentElement() {
       pipe.remote->GetDocumentCosmetics(document_url, top_origin_, &cosmetics_);
   const auto query_time = query_timer.Elapsed();
   VLOG(1) << "OpenAdBlock: cosmetics query document=" << document_epoch_
-          << " frame=" << render_frame()->GetRoutingID() << " first=" << first
+          << " frame=" << frame->GetLocalFrameToken().ToString()
+          << " first=" << first
           << " us=" << query_time.InMicrosecondsF() << " ok=" << ok
           << " null=" << !cosmetics_;
   if (!ok) {
@@ -172,7 +174,7 @@ void OpenAdBlockRendererAgent::DidCreateDocumentElement() {
   }
   observer_started_ = true;
   VLOG(1) << "OpenAdBlock: observer started document=" << document_epoch_
-          << " frame=" << render_frame()->GetRoutingID();
+          << " frame=" << frame->GetLocalFrameToken().ToString();
   frame->ExecuteScriptInIsolatedWorld(
       ISOLATED_WORLD_ID_CHROME_INTERNAL,
       blink::WebScriptSource(
@@ -192,7 +194,7 @@ void OpenAdBlockRendererAgent::WillReleaseScriptContext(
     v8::Local<v8::Context> context,
     int32_t world_id) {
   if (world_id == ISOLATED_WORLD_ID_CHROME_INTERNAL && binding_installed_ &&
-      binding_context_.Get(context->GetIsolate()) == context) {
+      binding_context_.Get(v8::Isolate::GetCurrent()) == context) {
     binding_context_.Reset();
     binding_installed_ = false;
   }
@@ -203,7 +205,7 @@ void OpenAdBlockRendererAgent::InstallBinding(v8::Local<v8::Context> context,
   if (binding_installed_ || context.IsEmpty()) {
     return;
   }
-  auto* isolate = context->GetIsolate();
+  auto* isolate = v8::Isolate::GetCurrent();
   v8::Context::Scope scope(context);
   auto binding = v8::Object::New(isolate);
   v8::Local<v8::Function> exceptions;
@@ -252,7 +254,8 @@ void OpenAdBlockRendererAgent::InstallBinding(v8::Local<v8::Context> context,
   binding_installed_ = true;
   VLOG(1) << "OpenAdBlock: binding installed (" << reason
           << ") document=" << document_epoch_
-          << " frame=" << render_frame()->GetRoutingID();
+          << " frame="
+          << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString();
 }
 
 void OpenAdBlockRendererAgent::Exceptions(gin::Arguments* args) {
@@ -283,12 +286,15 @@ void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
     args->Return(0);
     return;
   }
-  v8::Local<v8::Array> class_array;
-  v8::Local<v8::Array> id_array;
-  if (!args->GetNext(&class_array) || !args->GetNext(&id_array)) {
+  v8::Local<v8::Value> class_value;
+  v8::Local<v8::Value> id_value;
+  if (!args->GetNext(&class_value) || !class_value->IsArray() ||
+      !args->GetNext(&id_value) || !id_value->IsArray()) {
     args->Return(-1);
     return;
   }
+  const auto class_array = class_value.As<v8::Array>();
+  const auto id_array = id_value.As<v8::Array>();
   auto context = args->isolate()->GetCurrentContext();
   const uint32_t class_count = std::min(class_array->Length(), kMaxTokens);
   const uint32_t id_count =
@@ -297,12 +303,12 @@ void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
   // another member after either conversion unless this document survived.
   const auto alive = weak_ptr_factory_.GetWeakPtr();
   const auto epoch = document_epoch_;
-  auto classes = ReadTokens(context, class_array, class_count);
+  auto classes = ReadTokens(args->isolate(), context, class_array, class_count);
   if (!alive || epoch != document_epoch_) {
     args->Return(-1);
     return;
   }
-  auto ids = ReadTokens(context, id_array, id_count);
+  auto ids = ReadTokens(args->isolate(), context, id_array, id_count);
   if (!alive || epoch != document_epoch_) {
     args->Return(-1);
     return;
@@ -326,7 +332,7 @@ void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
 
 void OpenAdBlockRendererAgent::OnGenericSelectors(
     uint64_t document_epoch,
-    std::vector<std::string> selectors) {
+    const std::vector<std::string>& selectors) {
   if (document_epoch == document_epoch_ && cosmetics_ &&
       !cosmetics_->generichide) {
     --generic_pending_;
@@ -374,14 +380,16 @@ void OpenAdBlockRendererAgent::InsertSelectors(
       blink::BackForwardCacheAware::kAllow);
   const auto insertion_time = timer.Elapsed();
   VLOG(1) << "OpenAdBlock: InsertStyleSheet document=" << document_epoch_
-          << " frame=" << render_frame()->GetRoutingID()
+          << " frame="
+          << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString()
           << " initial=" << initial << " selectors=" << selectors.size()
           << " bytes=" << css.size()
           << " us=" << insertion_time.InMicrosecondsF();
 #if !defined(OFFICIAL_BUILD)
   if (VLOG_IS_ON(1)) {
     VLOG(1) << "OpenAdBlock: renderer footprint document=" << document_epoch_
-            << " frame=" << render_frame()->GetRoutingID()
+            << " frame="
+            << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString()
             << " initial=" << initial << " generic_sheets=" << generic_sheets_
             << " before_bytes=" << footprint_before_insert_
             << " current_bytes=" << RendererFootprintBytes();

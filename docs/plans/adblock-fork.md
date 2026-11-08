@@ -4726,6 +4726,12 @@ next build checks those include paths and compiles the cosmetic objects and
 small targets before the complete CEF targets. These are source changes;
 compile and runtime acceptance remain pending.
 
+The small-object pass then caught renderer API mismatches in 16 s. The
+source now passes V8 isolates explicitly, logs Blink LocalFrameToken values,
+reads raw Gin values before checking for arrays, and takes the generated
+Mojo callback's selector vector by const reference. Apply, GN generation and
+renderer/Mojo DEPS checks passed; a repeated compile is pending.
+
 - `mojom/open_adblock.mojom` carries the initial sorted hide selectors,
   generic exceptions and `generichide`. `OpenAdBlockCosmeticsHost` is a
   self-owned receiver bound with `BinderRegistry::AddInterface` on

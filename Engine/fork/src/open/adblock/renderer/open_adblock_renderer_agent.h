@@ -41,7 +41,7 @@ class OpenAdBlockRendererAgent final : public content::RenderFrameObserver {
   void Exceptions(gin::Arguments* args);
   void Report(gin::Arguments* args);
   void OnGenericSelectors(uint64_t document_epoch,
-                          std::vector<std::string> selectors);
+                          const std::vector<std::string>& selectors);
   void InsertSelectors(const std::vector<std::string>& selectors, bool initial);
 
   mojom::AdBlockDocumentCosmeticsPtr cosmetics_;
