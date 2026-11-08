@@ -128,6 +128,7 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if id == "check-for-updates" { return app.updater?.canCheckForUpdates ?? true }
     if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
