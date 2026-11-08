@@ -553,9 +553,10 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
         updated = re.search(r'id="password"[^>]*data-fixture="([^"]+)"', (fixture_root / 'change.html').read_text()).group(1)
         return app.eval(tab, script % (json.dumps(ids), 'true' if changed else 'false', json.dumps(updated)))
 
-    def no_prompt(url, profile=None):
+    def no_prompt(url, tab=None):
         app.call('policy', savePrompt='hold'); events()
-        tab = load(url); fill(tab); submit(tab)
+        tab = load(url) if tab is None else tab
+        fill(tab); submit(tab)
         deadline = time.monotonic() + 1.5
         while time.monotonic() < deadline:
             assert not sheet().get('visible')
@@ -1076,9 +1077,28 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                 before = app.call('credentials', profile='Default')['logins']
                 relaunch(allow=False)
                 assert app.call('credentials-prefs', profile='Default')['canEnablePasswordSaving'] is False
-                no_prompt(urls['login'].replace('login.example.com', 'mock-blocked.example.com'))
+                home = next(s['id'] for s in app.call('spaces') if s['focused'])
+                # A sibling-host match copies an already saved credential
+                # without offering UI. Test a genuinely new credential here,
+                # without changing Chromium's persisted preferences.
+                space = app.call('space-create', title='Mock password guard', profile='Mock password guard')
+                tab = None
+                try:
+                    app.call('space', space=space)
+                    url = urls['login'].replace('login.example.com', 'mock-blocked.example.com')
+                    tab = load(url)
+                    initial = app.call('credentials')
+                    assert initial['usesMockKeychain'] and not initial['canEnablePasswordSaving']
+                    assert initial['logins'] == 0 and initial['blockedSites'] == 0
+                    no_prompt(url, tab=tab)
+                    counts(logins=0, blockedSites=0)
+                finally:
+                    if tab is not None:
+                        app.call('close', tab=tab)
+                    app.call('space', space=home)
                 assert app.call('credentials', profile='Default')['logins'] == before
-                return {'canEnablePasswordSaving': False, 'loginsUnchanged': True}
+                return {'canEnablePasswordSaving': False, 'loginsUnchanged': True,
+                        'freshProfile': True, 'parentStoreUnchanged': True}
             row('P-22', mock_guard)
 
             def mock_offer_guards():
