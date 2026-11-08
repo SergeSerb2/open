@@ -40,6 +40,7 @@ public final class ScriptSpace: NSObject {
     @objc public func countOfAppleScriptTabs() -> Int { appleScriptTabs.count }
     @objc public func objectInAppleScriptTabsAtIndex(_ index: Int) -> ScriptTab? { ScriptRead.at(index, in: appleScriptTabs, noun: "tab") }
     @objc public func valueInAppleScriptTabsWithUniqueID(_ id: String) -> ScriptTab? {
+        guard !ScriptRead.rejectsLittleTabContainment(id) else { return nil }
         // A held tab specifier keeps its original Space container across a location
         // move (A12). Resolve its stable ID from the live model; enumeration stays
         // scoped to this Space. Never return a cached wrapper for a closed tab.
