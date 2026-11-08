@@ -116,6 +116,7 @@
       case "onboarding": return try await runOnboarding(a)
       case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
         return try await mouse(a, nil)
+      case "welcome": return try welcome(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -666,7 +667,10 @@
         w.addSplitView(nil)
         return w.visibleTabs.map { describe($0, in: w) }
       case "navigate":
-        try content(a, w).load(try url(a, "url"))
+        let destination = try url(a, "url")
+        guard !WelcomeTab.isInternal(destination) else { throw Failure(message: "internal URL navigation refused") }
+        if let tab = try? modelTab(a, w), let host = w.welcomeHosts[tab.id] { host.load(destination) }
+        else { try content(a, w).load(destination) }
         return true
       case "back":
         try content(a, w).goBack()
