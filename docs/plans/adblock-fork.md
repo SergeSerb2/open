@@ -4493,3 +4493,23 @@ The new measurements use the official immutable seed snapshot from
 `c1d09df3…`), checked before staging; these differ from the historical
 October measurements. The same staged bytes will be used before and
 after each optimization.
+
+**Working measurement support (E1, 2026-11-07).** The non-official
+`--open-adblock-selftest --open-adblock-diagnostic` path loads the real
+service once, without the synthetic selftest engines. It prints in-process
+`task_info` physical footprint and PartitionAlloc allocated, active,
+resident, committed, decommittable and discardable bytes before the load
+and after a settling interval. `--open-adblock-text` forces a text build;
+the next run can load its verified DAT. `--open-adblock-measure-only`
+omits the corpus. `--open-adblock-settle-seconds` accepts 0–60 seconds;
+pass the bench switch as well to use the existing 300-second deadline.
+G-3 now prints thread CPU beside wall time. The opt-in
+`--open-adblock-verdict-dump=<private path>` writes every result field for
+each corpus row, in order, on the build runner. No URL is added to a log.
+
+The first working measurement (load1 14, no quiet lock, P-3 temporarily
+removed for the negative proof) has identical text/DAT verdict files:
+20,311 rows each, SHA-256 `10c74cb4…` at 16 KiB and `ba80db77…` at 8 KiB.
+One-engine physical-footprint deltas are 56.6–58.0 MiB after a text build
+and 67.2 MiB after DAT load. These are baselines before the four rulings'
+optimizations, not final acceptance. Receipts are in the E1 directory.

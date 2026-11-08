@@ -21,17 +21,24 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/json/json_writer.h"
+#include "base/location.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/platform_thread.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/values.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "open/adblock/open_adblock_matcher.h"
 #include "open/adblock/open_adblock_service.h"
 #include "open/adblock/open_adblock_url_loader_factory.h"
 #include "open/adblock/rust/src/lib.rs.h"
+#include "partition_alloc/partition_root.h"
+#include "partition_alloc/partition_stats.h"
+#include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
 #include "url/gurl.h"
 
 namespace open_engine {
@@ -764,15 +771,14 @@ int64_t NowNs() {
 }
 
 // The bench thread's CPU time. Wall time also counts the time the thread
-// waits for a core, which a busy machine adds to single checks; the gates
-// read wall time, and the CPU column shows how much of a slow check was the
-// check itself.
+// waits for a core. The Section 13 G-2 max ruling reads thread CPU time;
+// wall time is still reported, including the separate quiet-run ceiling.
 int64_t ThreadCpuNs() {
   return static_cast<int64_t>(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID));
 }
 
 // Matcher sequence: the corpus 10x, then the G-3 long URLs 10x each.
-void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
+std::string RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
               std::vector<BenchItem> items,
               uint32_t cap) {
   Line("bench matcher thread=" + std::string(base::PlatformThread::GetName()) +
@@ -788,6 +794,9 @@ void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
   size_t slowest_wall_line = 0, slowest_cpu_line = 0;
   size_t matched = 0;
   size_t truncated = 0;
+  std::string verdicts;
+  const bool dump = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      "open-adblock-verdict-dump");
   // §7.8 manifest third_party_share: registrable domains differ (the
   // crate's party rule, F-8, here with Chromium's copy of the PSL).
   size_t third_party = 0;
@@ -802,6 +811,22 @@ void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
       const int64_t ns = NowNs() - start;
       const int64_t cpu_ns = ThreadCpuNs() - start_cpu;
       if (rep == 1) {
+        if (dump) {
+          // Full results, in corpus order, never just the match count.
+          // The opt-in file is private verification output, not a log.
+          base::DictValue row;
+          row.Set("line", static_cast<int>(line + 1));
+          row.Set("matched", result.matched);
+          row.Set("important", result.important);
+          row.Set("has_redirect", result.has_redirect);
+          row.Set("redirect_data_url", std::string(result.redirect_data_url));
+          row.Set("rewritten_url", std::string(result.rewritten_url));
+          row.Set("csp_directives", std::string(result.csp_directives));
+          row.Set("truncated", result.truncated);
+          std::string encoded;
+          base::JSONWriter::Write(row, &encoded);
+          verdicts += encoded + "\n";
+        }
         first_max = std::max(first_max, ns);
         first_max_cpu = std::max(first_max_cpu, cpu_ns);
         matched += result.matched;
@@ -854,21 +879,59 @@ void RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
     const GURL url("https://ads.example-long.com/" + path);
     const GURL source("https://www.example-news.com/");
     std::vector<int64_t> long_warm;
+    std::vector<int64_t> long_warm_cpu;
     int64_t long_first = 0;
+    int64_t long_first_cpu = 0;
     for (int rep = 1; rep <= 10; ++rep) {
+      const int64_t start_cpu = ThreadCpuNs();
       const int64_t start = NowNs();
       matcher->Check(url, source, OpenRequestType::Script, cap);
       const int64_t ns = NowNs() - start;
+      const int64_t cpu_ns = ThreadCpuNs() - start_cpu;
       if (rep == 1) {
         long_first = ns;
+        long_first_cpu = cpu_ns;
       } else {
         long_warm.push_back(ns);
+        long_warm_cpu.push_back(cpu_ns);
       }
     }
     PrintTimings("bench long_" + std::to_string(length), std::move(long_warm),
                  long_first);
+    PrintTimings("bench long_" + std::to_string(length) + " cpu",
+                 std::move(long_warm_cpu), long_first_cpu);
   }
   Line(AdBlockLatencyHistogramText());
+  return verdicts;
+}
+
+// The matcher never does file IO. The final callback waits for the private
+// verdict file on the build runner before it ends the real binary run.
+void BenchAndWrite(scoped_refptr<OpenAdBlockMatcher> matcher,
+                   std::vector<BenchItem> items,
+                   uint32_t cap,
+                   base::OnceCallback<void(bool)> done) {
+  AdBlockMatcherTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&RunBench, matcher, std::move(items), cap),
+      base::BindOnce(
+          [](base::OnceCallback<void(bool)> done, std::string verdicts) {
+            const base::FilePath path = base::CommandLine::ForCurrentProcess()
+                                            ->GetSwitchValuePath(
+                                                "open-adblock-verdict-dump");
+            if (path.empty()) {
+              std::move(done).Run(true);
+              return;
+            }
+            AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
+                FROM_HERE,
+                base::BindOnce(
+                    [](base::FilePath path, std::string verdicts) {
+                      return !verdicts.empty() && base::WriteFile(path, verdicts);
+                    },
+                    path, std::move(verdicts)),
+                std::move(done));
+          },
+          std::move(done)));
 }
 
 void Finish(base::WeakPtr<OpenAdBlockService> service,
@@ -938,14 +1001,18 @@ void AfterMatcherChecks(base::WeakPtr<OpenAdBlockService> service,
                            command_line.GetSwitchValuePath("open-adblock-bench")),
             base::BindOnce(
                 [](scoped_refptr<OpenAdBlockMatcher> matcher, uint32_t cap,
-                   base::OnceClosure after, std::vector<BenchItem> items) {
-                  AdBlockMatcherTaskRunner()->PostTaskAndReply(
-                      FROM_HERE,
-                      base::BindOnce(&RunBench, matcher, std::move(items), cap),
-                      std::move(after));
+                   base::OnceCallback<void(bool)> after,
+                   std::vector<BenchItem> items) {
+                  BenchAndWrite(matcher, std::move(items), cap, std::move(after));
                 },
                 matcher, cap,
-                base::BindOnce(&Finish, service, root, std::move(done), ok)));
+                base::BindOnce(
+                    [](base::WeakPtr<OpenAdBlockService> service,
+                       base::FilePath root, base::OnceCallback<void(bool)> done,
+                       bool ok, bool written) {
+                      Finish(service, root, std::move(done), ok && written);
+                    },
+                    service, root, std::move(done), ok)));
       },
       service, service_root, std::move(done), ok);
   base::ThreadPool::PostTaskAndReplyWithResult(
@@ -1000,11 +1067,136 @@ void OnLoaded(base::WeakPtr<OpenAdBlockService> service,
                      std::move(done), ok));
 }
 
+uint64_t MemorySnapshot(const char* phase) {
+  task_vm_info_data_t info{};
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  const bool measured = task_info(mach_task_self(), TASK_VM_INFO,
+                                 reinterpret_cast<task_info_t>(&info),
+                                 &count) == KERN_SUCCESS;
+  Line(std::string("memory phase=") + phase + " phys_footprint=" +
+       std::to_string(measured ? info.phys_footprint : 0));
+  using allocator_shim::internal::PartitionAllocMalloc;
+  for (size_t index = 0; index < allocator_shim::kNumPartitions; ++index) {
+    for (auto* root : {PartitionAllocMalloc::Allocator(index),
+                       PartitionAllocMalloc::OriginalAllocator(index)}) {
+      if (!root) {
+        continue;
+      }
+      partition_alloc::SimplePartitionStatsDumper dumper;
+      root->DumpStats("malloc", /*is_light_dump=*/true,
+                      /*populate_discardable_bytes=*/true, &dumper);
+      const auto& stats = dumper.stats();
+      Line(std::string("memory phase=") + phase + " partition=" +
+           std::to_string(index) + " allocated=" +
+           std::to_string(stats.total_allocated_bytes) + " active=" +
+           std::to_string(stats.total_active_bytes) + " resident=" +
+           std::to_string(stats.total_resident_bytes) + " committed=" +
+           std::to_string(stats.total_committed_bytes) + " decommittable=" +
+           std::to_string(stats.total_decommittable_bytes) + " discardable=" +
+           std::to_string(stats.total_discardable_bytes));
+    }
+  }
+  return measured ? info.phys_footprint : 0;
+}
+
+// Real service load and matcher interface, without the selftest's synthetic
+// engines or safety fixtures contaminating the single-engine memory window.
+void RunDiagnostic(base::WeakPtr<OpenAdBlockService> service,
+                   base::FilePath root,
+                   base::OnceCallback<void(bool)> done) {
+  if (!service) {
+    std::move(done).Run(false);
+    return;
+  }
+  const uint64_t before = MemorySnapshot("before-load");
+  const bool prefer_dat = !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      "open-adblock-text");
+  service->SetEnabled(true);
+  service->LoadFromDirectory(
+      root, prefer_dat,
+      base::BindOnce(
+          [](base::WeakPtr<OpenAdBlockService> service, uint64_t before,
+             base::OnceCallback<void(bool)> done, AdBlockLoadResult result) {
+            if (!service || result != AdBlockLoadResult::kLoaded) {
+              Line("FAIL diagnostic load");
+              std::move(done).Run(false);
+              return;
+            }
+            unsigned settle_seconds = 2;
+            unsigned requested = 0;
+            if (base::StringToUint(base::CommandLine::ForCurrentProcess()
+                                   ->GetSwitchValueASCII(
+                                       "open-adblock-settle-seconds"),
+                                   &requested)) {
+              settle_seconds = requested;
+            }
+            base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+                FROM_HERE,
+                base::BindOnce(
+                    [](base::WeakPtr<OpenAdBlockService> service,
+                       uint64_t before, base::OnceCallback<void(bool)> done) {
+                      if (!service) {
+                        std::move(done).Run(false);
+                        return;
+                      }
+                      const uint64_t after = MemorySnapshot("settled-load");
+                      Line("memory delta_phys_footprint=" +
+                           std::to_string(static_cast<int64_t>(after) -
+                                          static_cast<int64_t>(before)));
+                      Line("diagnostic status " +
+                           AdBlockStatusText(service->GetStatus()));
+                      const auto& command =
+                          *base::CommandLine::ForCurrentProcess();
+                      if (command.HasSwitch("open-adblock-measure-only")) {
+                        std::move(done).Run(before && after);
+                        return;
+                      }
+                      unsigned cap = kOpenAdBlockMatchCapBytes;
+                      unsigned requested = 0;
+                      if (base::StringToUint(command.GetSwitchValueASCII(
+                                                 "open-adblock-bench-cap"),
+                                             &requested) && requested > 0) {
+                        cap = requested;
+                      }
+                      AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
+                          FROM_HERE,
+                          base::BindOnce(&ReadBenchFile,
+                                         command.GetSwitchValuePath(
+                                             "open-adblock-bench")),
+                          base::BindOnce(
+                              [](scoped_refptr<OpenAdBlockMatcher> matcher,
+                                 uint32_t cap,
+                                 base::OnceCallback<void(bool)> done,
+                                 std::vector<BenchItem> items) {
+                                if (items.empty()) {
+                                  std::move(done).Run(false);
+                                  return;
+                                }
+                                BenchAndWrite(matcher, std::move(items), cap,
+                                              std::move(done));
+                              },
+                              service->matcher(), cap, std::move(done)));
+                    },
+                    service, before, std::move(done)),
+                base::Seconds(std::min(settle_seconds, 60u)));
+          },
+          service, before, std::move(done)));
+}
+
 }  // namespace
 
 void RunOpenAdBlockSelftest(OpenAdBlockService* service,
                             base::FilePath adblock_root,
                             base::OnceCallback<void(bool)> done) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          "open-adblock-diagnostic")) {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&RunDiagnostic, service->GetWeakPtr(), adblock_root,
+                       std::move(done)),
+        base::Seconds(1));
+    return;
+  }
   Line("loading " + adblock_root.value());
   service->SetEnabled(true);
   service->SetExcludedDomains(

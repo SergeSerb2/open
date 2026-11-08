@@ -30,8 +30,14 @@ source_set("adblock") {
       "open_adblock_selftest.cc",
       "open_adblock_selftest.h",
     ]
+    deps = [
+      "//base/allocator/partition_allocator/src/partition_alloc",
+      "//base/allocator/partition_allocator/src/partition_alloc:allocator_shim",
+    ]
+  } else {
+    deps = []
   }
-  deps = [
+  deps += [
     "//base",
     "//content/public/browser",
     "//crypto",
