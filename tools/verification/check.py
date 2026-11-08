@@ -246,6 +246,7 @@ def all_passed(text):
 
 
 def build(root):
+    run(str(root / "tools/fetch-adblock-lists.sh"))
     # A new session protects the Swift build from an app restart. Stop on diagnostics,
     # drain its pipe, and count warning lines even when Swift would otherwise exit 0.
     command = ["nice", "-n", "10", "swift", "build", "-c", "release", "-j",
@@ -651,6 +652,7 @@ def adblock_catalog(cli, root):
     require(list(categories.values()) == [3, 2, 5, 35, 1], "catalog category counts differ")
     require({row[0] for row in rows if row[2] == "true"} == {"EasyList", "EasyPrivacy"}, "catalog defaults differ")
     print("catalog 46/46; categories 3/2/5/35/1; defaults verified")
+    runpy.run_path(str(root / "tools/verification/adblock_resources.py"))["verify"](cli, root)
 
 
 def archive_migration(cli):
