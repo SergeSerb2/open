@@ -73,8 +73,8 @@ The main Release control was built before the engine edit from main `cb1add52`
 (branch merge `e686f1d4`, with historical docs only). Build: PASS in 133.63 s,
 load1 9.17→13.68. Its CEF SHA-256 is
 `24d7d6f5e9ee25da0a4a890fe12b73b5fa0c30046c34acd0ce1c7e4c7cb8d6e0`.
-This historical build is retained only as the different-build replacement
-fixture. It is not the final timing control.
+This historical build is retained with the earlier evidence. It is not used
+by the final timing or live-replacement proofs.
 
 After the restart, the overlay metadata hardening was applied with
 `engine-apply --all` (`hardening-apply.json`, exit 0). A focused build of
@@ -124,3 +124,7 @@ The 14:08 M5 screen hold began before any runtime proof in this series.
 No 0106 on-screen row overlapped 14:02. Live replacement, launch timing and
 e2e remain pending screen clearance. The branch rebuild follows the main
 control build; no gain or runtime safety PASS is claimed from build results.
+The final live-swap matrix replaces main with the matched branch build and
+branch with matched main. Both include #264 and share its public engine API;
+the native difference is `0106`. The harness requires different executable
+SHA-256 values and removes the old staging bundle after the directory swap.
