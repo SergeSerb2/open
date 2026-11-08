@@ -25,16 +25,17 @@ importer. Notes use 12 pt system text, 20 pt lines, white or black backgrounds,
 8 pt paragraph spacing, and #458AFF links. The heading and body share 32 pt
 horizontal insets. The body starts 12 pt below the heading. The notes panel has
 10 pt corners and uses the text background color in light mode and black in
-dark mode. Both windows use the system window background color. Links open
-in a new foreground Open tab.
+dark mode. Both windows use sRGB #ECECEC for their light content background.
+This keeps the reference look: macOS 26 makes the system window background
+white, which hides the white controls. Dark mode keeps the system window
+background color. Links open in a new foreground Open tab.
 
 Sparkle 2.10.1 exposes `SUAppcastItem.itemDescriptionFormat` and accepts
 `<description sparkle:format="markdown">`. Its source reads this attribute in
 `SUAppcast.m` and accepts `markdown` in `SUAppcastItem.m`. The published header
-comment omits Markdown. **Pipeline follow-up for the lead:** `tools/release.sh`
-must embed the release Markdown in the item description with this attribute.
-The current release plan uses Markdown source (§8.3) but describes HTML output.
-This UI change does not change the release script.
+comment omits Markdown. The release pipeline must embed the release Markdown
+in the item description with this attribute. The lead owns that pipeline work
+separately in #256. This UI change does not change `tools/release.sh`.
 
 Known launch-cost item: the pinned Sparkle binary eagerly links WebKit. The
 launch-fixes work owns delaying the Sparkle load. This UI keeps the existing

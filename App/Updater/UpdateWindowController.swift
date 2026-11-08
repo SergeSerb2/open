@@ -2,8 +2,12 @@ import AppKit
 
 @MainActor
 class UpdateWindowBackgroundView: NSView {
+  // Keep Arc's look, not Liquid Glass. macOS 26 resolves windowBackgroundColor
+  // to white, which hides Arc's white controls.
+  private static let lightContentBackground = NSColor(srgbRed: 236/255, green: 236/255, blue: 236/255, alpha: 1)
   override func draw(_ dirtyRect: NSRect) {
-    NSColor.windowBackgroundColor.setFill(); bounds.fill()
+    let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    (dark ? NSColor.windowBackgroundColor : Self.lightContentBackground).setFill(); bounds.fill()
   }
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance(); needsDisplay = true
