@@ -85,6 +85,10 @@ Location: `~/Library/Application Support/Open/`.
 
 Tactics: build the window and sidebar from the snapshot before the engine finishes starting. Create web content only for visible or recently used tabs. Put tabs to sleep after a period without use (configurable). Load features on first use (command bar panel, settings, Little Open, editors). Ship only the locales we need.
 
+Launch time starts at the kernel process-start counter, before the first App constructor. `sidebarDrawn` requires a display callback whose timestamp is at or after the flushed window transaction. It does not mean that the window was merely ordered or that drawing was queued. CEF loads after this confirmed frame. First web paint and the first accepted key are separate milestones; a sidebar change must preserve both.
+
+`OPEN_SPEED_TRACE=1` enables fixed startup signposts and precise phase counters. It is off by default. Automation can separately capture loaded images at the confirmed sidebar frame with `OPEN_SPEED_IMAGES=1`. This image scan stays out of primary timing runs. Floor calibration uses a standalone AppKit window and a second variant with the same direct system links as Open. Both use the same kernel origin, LaunchServices path and frame rule.
+
 ## Testing
 
 No unit tests. Each feature is verified end to end on the real app through the automation channel (`docs/automation.md`, built by the engine spike): open URLs, read tab and sidebar state, run JavaScript in pages, and capture PNGs of our own window. We never drive the user's desktop.
