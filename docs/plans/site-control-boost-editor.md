@@ -1515,18 +1515,29 @@ one open, with four light reads and one source delivery per load. A burst
 of 250 title changes builds zero snapshots, with six light reads and zero
 source deliveries. Full snapshot cost is O(1) per commit. R1-3 follows
 §3.6.1: empty Cmd+E focuses + and Return runs Add Extension. S1's real empty
-picker flow passes. Remaining App regressions and X-13 are held on M5.
+picker flow passes. Current-engine M5 `extensions-ui` passes 72/72,
+including X-13, with clean cleanup and no focus interruption. M5 regressions
+pass: toolbar 10, features 19, page 85 (four BLOCKED and one DEFERRED),
+commandbar 77, split 40 and space-editor 167. Window has 83 PASS and two
+known-main startup budget FAIL rows: cold/warm sidebar 385/395 ms and first
+paint 621/622 ms. All owned cleanup passes, with zero interruptions. Split
+interference did not recur. Cmd+T first-open results are 3.691 ms; query
+results are 0.264 ms at unchanged budgets (loads 24.506/26.196/22.214 and
+25.186/26.309/22.277). The interleaved startup comparison remains pending.
 
 S11/S12 remain **open: material, R-7 follow-up (lead ruling)**. The shipped
 `.hudWindow` and dark #686881 at 0.32 are **interim (lead 2026-11-06)**.
 S11's four probe ΔE00 values are 2.176/4.142/3.363/7.092; S12 is 22/40 with
-18 FAIL elements at unchanged limits. R-7 is INFO: white→black RGB at
+18 FAIL elements at unchanged limits. S11 fit errors are 5/6 sRGB levels
+against ±3, and validation ΔE00 is 3.363/7.092 against ≤3. S12 fails the
+arrow tip position (9 pt against ≤1), arrow colors, three action rings, the
+Add Extension tile, More circle, separator and rims (ΔE00 >2). R-7 is INFO: white→black RGB at
 (300,140) is (123,122,129)→(51,50,57), ΔE00 25.430; at (260,250) it is
 (138,137,145)→(89,88,94), ΔE00 19.392. The page itself changes white→black.
 These responses do not establish parity. The separate lead follow-up uses
 a borderless child window with `.behindWindow` blending (§11.1); it is not
 implemented here. These new-suite visual FAIL rows are not regressions and
-do not block the interim merge under the lead ruling.
+remain open for the lead to decide at review. No visual acceptance is claimed.
 
 P2 observes zero native SCC activity across all ten counters and detects then
 clears its timer canary. S13 closed/open scroll p95 is 4.900/4.800 ms, with
@@ -1536,10 +1547,12 @@ lost focus to UserNotificationCenter PID29564 in all three attempts (load1
 12.64/13.71/17.73). Its raw code-keystroke timing is 2.023 ms against 2 ms at
 load1 37.54. No native rows are accepted from that attempt. Native cleanup
 completed; queued extensions and startup jobs stopped before App launch.
-The M5 screen hold is restored until an explicit clear. Remaining App suites,
-startup qualification and the final full gate are pending. The final gate
-waits for #224 to merge or
-17:55 Vancouver on November 7, then a main merge, Debug build and key grep.
+The lead cleared M5 at 16:20 on November 7. The one F25 rerun passes 11/11 on its second fresh native attempt. Attempt 1
+lost focus to cmux PID 29116 and remains INTERRUPTED, not counted as PASS.
+The native worker cleaned up all owned windows/processes. Startup qualification
+and the final full gate are pending. The final gate
+waits for the explicit lead message “#224 is on main” (item 14), then a
+main merge, Debug build and key grep. The 17:55 fallback is cancelled.
 
 The historical commandbar comparison met TANDEM §4c after a 30-minute quiet
 wait, with CPU p95 medians main/branch 10.88/9.39 ms. It remains in the PR's
