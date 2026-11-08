@@ -300,6 +300,21 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 14: multi-profile import boundaries
 
+- Extension install icon diagnostic — Chromium `shortcuts::SetIconForFile` →
+  `NSWorkspace setIcon` → `ISMutableIcns addCGImage` emitted an `os_log_fault`
+  during `extensions-ui` CRX installation on 2026-11-07. The `ExcUserFault_*`
+  report has `bug_type: 309`, `isSimulated: 1`; the lead confirmed no App crash
+  or crash dialog. An icon size/format mismatch is a guess, not a proven cause.
+  Follow up in the engine icon writer; ignore these simulated reports in crash
+  monitors, while retaining real Open/Open Helper crash detection. — Section 14 C5.
+
+- **Closed — import automation local CRX completion.** Engine 0704 (#223)
+  supplies `installLocalCRX(_:completion:)`. The import now maps installed,
+  cancelled and failed directly, checks the installed ID and preserves
+  Chromium's error text. `firstrun`'s `EI_failure_reported_engine` gates the
+  damaged-signature error, result count and next queue item. No install timeout
+  or delegate error event is used. — Section 14 C5, 2026-11-07.
+
 - Import Undo (#224) removes created Profiles and sidebar/routing changes from the
   model, and the Archive rows and History visits/keys that the import inserted
   ([verification](import-robustness.md)). Main #222 now provides typed Profile
