@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import Security
 
 // OpenWeb: the Swift view of the web engine for OpenKit libraries.
 //
@@ -70,6 +71,9 @@ public protocol WebContent: AnyObject {
     var isCrashed: Bool { get }
     /// 0 = 100%, each step is 20%.
     var zoomLevel: Double { get set }
+    var securityLevel: WebSecurityLevel { get }
+    /// Leaf first; empty for non-TLS or refused oversized chains.
+    var certificateChain: [SecCertificate] { get }
 
     func load(_ url: URL)
     func goBack()
@@ -80,6 +84,9 @@ public protocol WebContent: AnyObject {
     /// Runs `script` in the page's main world (promises are awaited) and
     /// returns a JSON-compatible value; undefined and null come back as NSNull.
     func evaluateJavaScript(_ script: String) async throws -> Any
+    func evaluateJavaScript(_ script: String, in world: ScriptWorld) async throws -> Any
+    /// Main-thread Open-world transport. documentID is Chromium's document token.
+    var onOpenWorldMessage: ((String, String, String) -> Void)? { get set }
     /// PNG of the visible page.
     func snapshotPNG() async throws -> Data
     /// PNG of the whole page at device scale, at most `maxDevicePixels` tall (page-platform
@@ -91,6 +98,21 @@ public protocol WebContent: AnyObject {
 }
 
 // MARK: - Profile (scripts, network filter, permissions)
+
+public enum ScriptWorld: Sendable, Hashable { case page, open }
+public enum ScriptWorldError: Error { case unsupported }
+
+extension WebContent {
+    /// Alternate backends must opt in to Open's isolated world.
+    public func evaluateJavaScript(_ script: String, in world: ScriptWorld) async throws -> Any {
+        guard world == .page else { throw ScriptWorldError.unsupported }
+        return try await evaluateJavaScript(script)
+    }
+    public var onOpenWorldMessage: ((String, String, String) -> Void)? {
+        get { nil }
+        set {}
+    }
+}
 
 public enum UserScriptKind: Sendable, Hashable {
     case javaScript
@@ -113,15 +135,16 @@ public struct UserScript: Sendable, Hashable, Identifiable {
     /// Chrome match patterns ("*://*.example.com/*", "<all_urls>").
     public var matchPatterns: [String]
     public var mainFrameOnly: Bool
+    public var world: ScriptWorld
 
     public init(
         id: String, source: String, kind: UserScriptKind = .javaScript,
         injectionTime: UserScriptInjectionTime = .documentStart,
-        matchPatterns: [String], mainFrameOnly: Bool = true
+        matchPatterns: [String], mainFrameOnly: Bool = true, world: ScriptWorld = .page
     ) {
         self.id = id; self.source = source; self.kind = kind
         self.injectionTime = injectionTime; self.matchPatterns = matchPatterns
-        self.mainFrameOnly = mainFrameOnly
+        self.mainFrameOnly = mainFrameOnly; self.world = world
     }
 }
 
@@ -171,6 +194,10 @@ public protocol WebProfile: AnyObject {
     /// nil allows everything.
     func setRequestFilter(_ filter: RequestFilter?)
     func permission(_ permission: SitePermission, origin: URL) -> SitePermissionState
+    func changedSiteSettings(origin: URL) -> [WebSiteSetting]
+    @discardableResult
+    func setSiteSetting(_ state: WebSiteSettingState, kind: String, origin: URL) -> Bool
+    func clearSiteData(origin: URL, kinds: WebSiteDataKinds) async throws
     func setPermission(_ state: SitePermissionState, for permission: SitePermission, origin: URL)
 }
 

@@ -1,11 +1,10 @@
 # Boosts + Zap
 
-Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileURL(for: profile)` to `BoostStore(root:profileID:fileURL:)`. The current destination is `Profiles/<dataDirectoryName>/Boosts/boosts.json`. The original `root:profileID:` constructor remains available for standalone callers; the App must pass the explicit Profile path. No App caller exists yet.
+Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileURL(for: profile)` to `BoostStore(root:profileID:fileURL:)`. The current destination is `Profiles/<dataDirectoryName>/Boosts/boosts.json`. The original `root:profileID:` constructor remains available for standalone callers; the App must pass the explicit Profile path. `AppBoosts` supplies this path and loads each store once before mutation.
 
 `OpenBoosts` is a Swift 6, macOS 26+ library in OpenKit. It depends only on
 `OpenModel` for `ProfileID`. It provides the data, persistence, matching, injection
-plans, picker bridge, and page runtimes. It has no engine or App wiring. Editor UI,
-Settings storage, sharing, imports, and per-frame engine injection remain future work.
+plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing, imports and Zap transport remain future work.
 
 ## API
 
@@ -77,6 +76,82 @@ store. There is no DOM manifest. The stylesheet contains CSS only, with no Boost
 ID comments or attributes. Hide selectors are inherently observable CSS; they are
 not secrets. A page-created `__openZap.enter({boostID})` does not enter picking.
 A page-invented nonce cannot pass the native session check.
+
+## App runtime and editor (Section 12, Step 5)
+
+`AppBoosts` owns one store per loaded Profile. It registers as a weak `ProfileDataOwner`. Profile deletion permanently retires the store before folder removal: pending writes are canceled, in-flight work is drained, dirty state is discarded, scripts are removed and the bound editor closes. Stale stores cannot save again, including on quit. The editor, Library and matching
+pages share it. Context creation only records identity;
+the host factory loads and installs scripts before that context creates its
+first `OEWebContent`, including a restored tab. Menu validation before engine
+readiness does not initialize Boost services. A missing Boosts file takes one
+existence check, with no directory scan or JSON decode. Reading an unchanged
+store does not create an empty Boosts file on quit.
+
+Editor commits, undo, Library
+switches, rename and delete rebuild two cached matchers at the same boundary:
+an enabled-only runtime matcher, and a matcher that also returns disabled Boosts
+for Site Control and Edit Boost. The latter returns the original stored flags.
+The global preference uses a UserDefaults notification; the runtime has no timer
+or idle polling. The Site Control provider methods are present without protocol
+conformance so the parallel Site Control App adapter can adopt them.
+
+Engine user scripts are Profile-wide. `BoostEngineAdapter` registers all reachable
+matcher plans before the first navigation. Mutually exclusive host/path gates
+keep overlapping plans separate across tabs. Replacing scripts is synchronous on
+the main actor and touches only `open.boosts.*`. Main-frame document-start appliers
+carry CSS, color filters, font, zoom, transform and saved Zaps. User JS is a
+separate document-start script; live preview/refresh never executes it. Commits
+and SPA address changes update the bound page. No matching Boost and no old live
+plan causes no JavaScript evaluation or runtime injection.
+
+Refresh skips closed or discarded web contents without a retry or error toast.
+Profile scripts stay current, so a slept tab takes the current plan at document
+start when it wakes or reloads. A close racing an engine reply is also ignored.
+
+Global off removes scripts and clears live pages. Global on rebuilds scripts and
+refreshes pages. Editor commands refuse ephemeral and non-http(s) pages.
+Private windows never register or prepare Boost scripts, load a Boost store, or
+receive a live plan. This also applies to OTR contexts that share a regular
+Profile parent. Editor commands and Customize Page refuse private windows
+(lead, 2026-11-07 15:32). The real Incognito suite checks a matching regular
+and private page from the same parent Profile.
+
+The simple editor is bound to one tab and one window. Tab, Space, Profile and
+window changes close it; navigation outside scope keeps it open with the native
+inactive banner. Preview uses the session's 60 Hz coalescing and the bound page
+only. Snapshots, reload and DevTools use OpenEngine. Cmd+Z/Shift+Cmd+Z enter via
+OEApplication before page edit routing and use the editor's own undo stack.
+
+`new-boost`, `edit-boost`, `new-legacy-boost`, Customize Page and `view-boosts`
+are wired. Legacy opens Code mode. Gallery is disabled.
+Library Boosts uses the same stores and a Profile picker, with Edit, Rename,
+Delete, enable switches, the empty state and global Turn On action. Library Rename
+and enable changes update an open editor immediately without adding an undo step.
+Undo/Redo preserve the current enabled flag and current Library name, except
+that the editor's own Rename step restores its recorded name. Library Delete
+closes matching editors before deleting the stored Boost.
+
+**Limits:** managed scripts currently run in the main world. Overlay secrecy is
+not proven. P7 isolated-world/native message support blocks Zap; `enterZap`
+returns false. Code mode uses the native CSS/JS text views from #203. CSS saves
+refresh live pages; JS saves replace future document-start scripts without live
+execution. The runtime retains the installed JS snapshot for each current
+document, independently of store changes and same-document navigation. Real
+document commits update that snapshot and notify the editor. Main currently
+loses updated script registrations when a renderer is replaced, so prompt
+removal alone does not prove execution. B5 remains **BLOCKED: engine defect,
+targeted by #202 patch 0602** (lead, 2026-11-07). The strict B5/B28 reload
+checks still fail on main engine `7a90e70e…`; engine child E owns the fix and
+its page-execution proof. Color uses the documented interim
+filter math until the paint-time remap lands. The existing isolated-world harness
+receipts below do not prove the App's current world isolation.
+
+The PR records redacted real-App counts, timings and load averages. The e2e
+runner writes local receipts under `docs/engine-spike/`; do not commit their
+process identifiers or temporary paths.
+Run `python3 tools/e2e/engine_e2e.py --style chrome --only boosteditor` under the
+on-screen lock. B4 reports BLOCKED. B5 checks live CSS, deferred JS and Refresh to Run against
+the bound document, including a second edit and same-document navigation.
 
 ## Verification (2026-10-25, America/Vancouver)
 
@@ -163,8 +238,9 @@ The bundled and served resource bytes match the final source: applier SHA-256
 The fallback bridge can be replaced after runtime load while retaining handlers;
 apply, ready, and a real banner-click commit reach the adopted transport.
 
-Production document-start timing and the actual OpenEngine adapter remain
-unverified. This pass proves package/Chrome runtime behavior and the real native
+In this historical pass, production document-start timing and the actual
+OpenEngine adapter were unverified. The Section 12 App receipts above cover the
+current adapter separately. This pass proves package/Chrome runtime behavior and the real native
 coordinator/store bridge. Existing model/store/matcher baseline results from the
 initial milestone were not repeated for this bounded fix.
 
