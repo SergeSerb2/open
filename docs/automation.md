@@ -1201,7 +1201,9 @@ enabled state, and `canCheck` in the same main-actor turn.
 attach a debugger. Sparkle's eager WebKit link can appear in that list.
 `updater-view-tree` walks the App's real window/view trees. It reports WebKit
 view counts and the actual notes view class. A9 requires zero WebKit views and
-an NSTextView while the updater shows notes.
+an NSTextView while the updater shows notes. `bannerStyles` reads each visible
+update banner's title, subtitle, and subtitle sRGB color as 8-bit RGBA values.
+The loopback suite checks these colors after each light/dark snapshot.
 
 `updater-banner-width width=164...400` changes the real model sidebar width.
 It lets the loopback suite check both normal and narrow banner copy and layout.
