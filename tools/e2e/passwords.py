@@ -928,7 +928,10 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                     assert state['parent'] == parent, 'private parent differs from the focused Space Profile'
                     private_before = app.call('credentials')
                     assert private_before['logins'] == 0
-                    no_prompt(urls['login'].replace('login.example.com', 'private.example.com'))
+                    # Incognito enables HTTPS-First for public HTTP origins.
+                    # Use the real loopback HTTP form here; the dedicated
+                    # HTTPS-First rows exercise that warning and its decisions.
+                    no_prompt(urls['local_login'])
                     # A new private window opens the command bar with no page.
                     # Check the context on the page that submitted the form.
                     state = app.call('incognito-state', private=True)
@@ -971,8 +974,14 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                     app.call('snapshot', window=child['number'], path=os.path.join(tmp, 'P-21-webauthn.png'))
                     key('escape', window=child['number'])
                     assert wait(lambda: app.eval(tab, 'document.querySelector("#result").textContent') == 'NotAllowedError', timeout=5, step=.05)
-                finally: app.call('dismiss')
-                return {'childWindowVisible': True, 'rejection': 'NotAllowedError'}
+                    assert wait(lambda: any(w['number'] == child['parent'] and w.get('visible')
+                                            for w in app.call('windows')), timeout=5, step=.05), 'WebAuthn cancellation closed its parent'
+                finally:
+                    # The rejected request has closed its own native dialog.
+                    # Dispose only this row's page, rather than closing every
+                    # visible Chromium window through broad dialog cleanup.
+                    app.call('close', tab=tab)
+                return {'childWindowVisible': True, 'rejection': 'NotAllowedError', 'parentWindowStillVisible': True}
             row('P-21', native_webauthn)
 
             def credential_manager():
@@ -1106,11 +1115,11 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('C-3', encrypted_cookies, ['C-1'])
             results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'Lead decision: user hand check; no synthetic Keychain-error hook and no real Keychain access in this suite'}
             def https_first_warning(action):
-                if not app.call('credentials')['supportsSecretsImport']:
-                    raise PasswordBlocked('running engine has no 08xx capability (supportsSecretsImport is false)')
                 # Each decision gets a new origin and a restarted engine. A
                 # previous Continue decision must not bypass the next warning.
                 relaunch(allow=False)
+                if not app.call('credentials')['supportsSecretsImport']:
+                    raise PasswordBlocked('running engine has no 08xx capability (supportsSecretsImport is false)')
                 app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
                 settings = load('chrome://settings/security')
                 enabled = app.eval(settings, '''new Promise(resolve => chrome.settingsPrivate.setPref('https_only_mode_enabled', true, '', success => resolve(success === true)))''')
