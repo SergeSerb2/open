@@ -277,6 +277,7 @@ signal.alarm(max(1,min(90,int(a.deadline-time.time()))))
 name=os.environ['S16_BATCH_VARIANT'];v=cfg['variants'][name]
 log=a.output/f'{which}-{a.sample:03}-{name}.log'
 row={'set':which,'index':a.sample,'variant':name,'load_before':load()}
+assert row['load_before'][0]<=a.max_load,f'Load1 rose above {a.max_load} before launch: release locks immediately'
 if v.get('floor'):
  r=subprocess.run(['/usr/bin/open','-n','-W','-a',v['bundle'],'--env','OPEN_SPEED_IMAGES=0','--stdout',str(log),'--stderr',str(log)],capture_output=True,text=True,timeout=20)
  reports=[]
