@@ -130,7 +130,13 @@ import OpenWeb
         }
     }
     public func cancelAll() {
-        closing = true; removePending { _ in true }; activeInvalidated = true; scheduleNext()
+        closing = true; removePending { _ in true }; activeInvalidated = true
+        // Release the request while its closing window/page can still supply
+        // completion metadata. AppKit sheet teardown stays in the queued pass.
+        if let sheet = active, let request = sheet.request {
+            discard(request); sheet.releaseUnanswered()
+        }
+        scheduleNext()
     }
     isolated deinit {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
