@@ -16,6 +16,10 @@ pack_probe = runpy.run_path(str(Path(__file__).with_name("extensions_p3.py")))["
 
 
 def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions, engine):
+    from settings_adblock import run as settings_adblock
+    if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") == "adblock":
+        settings_adblock(factory, results, tmp, root, wait_until)
+        return
     profiles_extensions = runpy.run_path(str(Path(__file__).with_name("profiles_extensions.py")))["run"]
     profiles_extensions(factory, results, tmp, root, wait_until, engine)
     if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") in ("profiles", "profiles-memory"):

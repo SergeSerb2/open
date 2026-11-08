@@ -1,5 +1,8 @@
 """Section 10 acceptance through the real App, Settings, native fields and AX actions."""
 import json
+import http.server
+import shutil
+import threading
 import base64
 import os
 import re
@@ -14,7 +17,7 @@ def run(factory, results, tmp, api, defaults_before):
     restore = api['_restore_defaults']
     server, origin = api['_fixture_server']('Profiles shell')
     confirm_key = 'open.profiles.confirmInterProfileMove'
-    keys = ('open.general.searchSuggestNoticeDismissed', 'open.links.littleOpenNUXSeen', confirm_key)
+    keys = ('open.general.searchSuggestNoticeDismissed', 'open.links.littleOpenNUXSeen', confirm_key, 'open.settings.lastPane')
     saved = {key: defaults_before.get(key) for key in keys}
     app = None
 
@@ -25,6 +28,7 @@ def run(factory, results, tmp, api, defaults_before):
             app.call('defaults', key=key, value=None)
         for key in keys[:2]:
             app.call('defaults', key=key, value=True)
+        app.call('defaults', key='open.settings.lastPane', value='general')
         return app
 
     def state(**args):
@@ -179,6 +183,8 @@ def run(factory, results, tmp, api, defaults_before):
         assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
         before = state()
         assert ('Delete Unused Profiles' if bulk else 'Delete this Profile') in before['sheetText'], before
+        if os.environ.get('OPEN_PROFILES_SHELL_FORCE_DIALOG_FAILURE') == '1':
+            raise AssertionError('intentional early dialog failure for cleanup proof')
         state(action='type-delete', text=token if token is not None else name)
         typed = state()
         assert typed['deleteEnabled'] and typed['deleteAXEnabled'] is True, typed
@@ -186,7 +192,138 @@ def run(factory, results, tmp, api, defaults_before):
         assert wait(lambda: not state()['deleting'] and state()['sheet'] == 0, timeout=15), state()
         return before, typed, state()
 
+    def check_adblock():
+        # Exercise Settings and the scheduled real list repository through the actual App.
+        # The loopback HTTP server replaces upstream transport only; it serves valid filter lists.
+        hold_downloads = threading.Event()
+        download_started = threading.Event()
+        release_downloads = threading.Event()
+
+        class Lists(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if hold_downloads.is_set():
+                    download_started.set()
+                    release_downloads.wait(timeout=35)
+                body = b'[Adblock Plus 2.0]\n! Profile teardown fixture\n||ads.example.invalid^\n'
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # Retirement cancelled this real HTTP transfer.
+
+            def log_message(self, *_):
+                pass
+
+        lists = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Lists)
+        thread = threading.Thread(target=lists.serve_forever, daemon=True)
+        thread.start()
+        env = {'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % lists.server_port,
+               'OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS': '12',
+               'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.005'}
+
+        def ready(name):
+            state(profile=name, action='adblock-open')
+            answer = wait(lambda: state() if state()['adblockReady'] else None, timeout=30)
+            assert answer, state()
+            return answer
+
+        try:
+            launch(fresh=True, extra_env=env)
+            root = Path(app.user_data)
+            default = profile('Default')
+            ready('Default')
+            state(action='adblock-exclude', host='kept.example.com')
+            kept = root / 'Profiles' / default['directory'] / 'AdBlock/exclusions.json'
+            before = kept.read_bytes()
+            state(action='create', name='Ad Block Deleted')
+            victim = profile('Ad Block Deleted')
+            assert victim['directory'] != victim['id'], 'fixture must use a non-UUID data directory'
+            ready('Ad Block Deleted')
+            state(action='adblock-exclude', host='deleted.example.org')
+            folder = root / 'Profiles' / victim['directory']
+            legacy = root / 'Profiles' / victim['id'] / 'adblock'
+            dirty = json.loads((folder / 'AdBlock/exclusions.json').read_text())
+            updating = wait(lambda: state()['adblockUpdating'], timeout=5)
+            assert updating and dirty == ['example.org'], (updating, dirty, state())
+            confirm('Ad Block Deleted')
+            # Wait past the held operation via its actual state. Without App forwarding its
+            # failure receipt re-creates the deleted folder, which must make this row fail.
+            drained = wait(lambda: not state(adblockProfile=victim['id'])['adblockProfileUpdating'], timeout=20)
+            retired = state(adblockProfile=victim['id'])['adblockProfileRetired']
+            app.quit()
+            launch(extra_env=env)
+            ready('Default')
+            results['shell_adblock_dirty_inflight_delete_relaunch'] = {
+                'ok': bool(drained) and retired and not folder.exists() and not legacy.exists()
+                      and kept.read_bytes() == before and state()['adblockDomains'] == ['example.com'],
+                'dirty': dirty == ['example.org'], 'inFlightBeforeDelete': bool(updating),
+                'retired': retired, 'drained': bool(drained), 'folderAbsent': not folder.exists(),
+                'legacyAbsent': not legacy.exists(), 'otherProfileUnchanged': kept.read_bytes() == before}
+
+            state(action='create', name='Ad Block Migrated')
+            migrated = profile('Ad Block Migrated')
+            ready('Ad Block Migrated')
+            state(action='adblock-exclude', host='migrated.example.net')
+            canonical = root / 'Profiles' / migrated['directory'] / 'AdBlock'
+            legacy = root / 'Profiles' / migrated['id'] / 'adblock'
+            app.quit()
+            legacy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(canonical / 'lists'), str(legacy))
+            for name in ('catalog-state.json', 'exclusions.json'):
+                shutil.move(str(canonical / name), str(legacy / name))
+            canonical.rmdir()
+            old_pointer = (legacy / 'current.json').read_bytes()
+            launch(extra_env=env)
+            migrated_state = ready('Ad Block Migrated')
+            results['shell_adblock_legacy_layout_migration'] = {
+                'ok': migrated_state['adblockDomains'] == ['example.net'] and not legacy.exists()
+                      and (canonical / 'lists/current.json').read_bytes() == old_pointer
+                      and (canonical / 'catalog-state.json').is_file()
+                      and kept.read_bytes() == before,
+                'settingsDomains': migrated_state['adblockDomains'], 'legacyAbsent': not legacy.exists(),
+                'canonicalListsPresent': (canonical / 'lists/current.json').is_file(),
+                'otherProfileUnchanged': kept.read_bytes() == before}
+
+            if retired:
+                app.quit()
+                launch(extra_env=dict(env, OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS='0'))
+                ready('Default')
+                # Hold the initial list download before the Profile opens. This also proves
+                # retirement during open, without racing the first scheduled update.
+                hold_downloads.set()
+                download_started.clear()
+                state(action='create', name='Ad Block Network')
+                network = profile('Ad Block Network')
+                active = wait(lambda: download_started.is_set() and state()['adblockUpdating'], timeout=10)
+                assert active, 'Profile open did not enter the held HTTP request'
+                network_folder = root / 'Profiles' / network['directory']
+                confirm('Ad Block Network')
+                ended = state(adblockProfile=network['id'])
+                results['shell_adblock_network_retirement'] = {
+                    'ok': ended['adblockProfileRetired'] and not ended['adblockProfileUpdating']
+                          and not network_folder.exists() and kept.read_bytes() == before,
+                    'realHTTPInFlight': bool(active), 'retired': ended['adblockProfileRetired'],
+                    'drained': not ended['adblockProfileUpdating'], 'folderAbsent': not network_folder.exists()}
+        finally:
+            release_downloads.set()
+            if app is not None and not app.closed:
+                try:
+                    state(action='cancel')
+                finally:
+                    restore(app, saved)
+                    app.quit()
+            lists.shutdown()
+            lists.server_close()
+            thread.join(timeout=5)
+
     try:
+        if not any(os.environ.get(key) == '1' for key in
+                   ('OPEN_PROFILES_SHELL_PAGES_ONLY', 'OPEN_PROFILES_SHELL_REPAIR_ONLY')):
+            check_adblock()
+        if os.environ.get('OPEN_PROFILES_SHELL_ADBLOCK_ONLY') == '1':
+            return
         launch(fresh=True)
         one = state()
         results['shell_indicator_one_profile'] = {'ok': len(one['profiles']) == 1 and one['indicators'] == [], 'indicators': one['indicators']}

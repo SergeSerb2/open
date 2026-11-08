@@ -153,6 +153,7 @@ public struct WindowDTO: Codable, Sendable {
     public var stayOnTop: Bool
     /// Absent in snapshots written before the toolbar (= false); written only when true.
     public var showsToolbar: Bool?
+    public var lastFocusedAt: Date?
 }
 
 public enum RoutingMatchDTO: Codable, Sendable {
@@ -395,18 +396,21 @@ public enum SnapshotMapper {
         return WindowDTO(id: w.id.rawValue.uuidString, focusedSpaceID: w.focusedSpaceID.rawValue.uuidString,
                          selectedNodeBySpace: sel, sidebarWidth: w.sidebarWidth, sidebarMode: w.sidebarMode.rawValue,
                          frameX: w.frameX, frameY: w.frameY, frameWidth: w.frameWidth, frameHeight: w.frameHeight,
-                         style: w.style.rawValue, stayOnTop: w.stayOnTop, showsToolbar: w.showsToolbar ? true : nil)
+                         style: w.style.rawValue, stayOnTop: w.stayOnTop, showsToolbar: w.showsToolbar ? true : nil,
+                         lastFocusedAt: w.lastFocusedAt)
     }
 
     static func window(from dto: WindowDTO) -> BrowserWindowState {
         var sel: [SpaceID: ItemID] = [:]
         for (k, v) in dto.selectedNodeBySpace { sel[SpaceID(uuidString: k)] = ItemID(uuidString: v) }
-        return BrowserWindowState(id: WindowID(uuidString: dto.id), focusedSpaceID: SpaceID(uuidString: dto.focusedSpaceID),
+        let state = BrowserWindowState(id: WindowID(uuidString: dto.id), focusedSpaceID: SpaceID(uuidString: dto.focusedSpaceID),
                                   selectedNodeBySpace: sel, sidebarWidth: dto.sidebarWidth,
                                   sidebarMode: SidebarMode(rawValue: dto.sidebarMode) ?? .anchored,
                                   frameX: dto.frameX, frameY: dto.frameY, frameWidth: dto.frameWidth, frameHeight: dto.frameHeight,
                                   style: WindowStyle(rawValue: dto.style) ?? (dto.style == "littleArc" ? .littleOpen : .standard), stayOnTop: dto.stayOnTop,
                                   showsToolbar: dto.showsToolbar ?? false)
+        state.lastFocusedAt = dto.lastFocusedAt
+        return state
     }
 
     private static func normalizedSourceBundleID(_ value: String?) -> String? {

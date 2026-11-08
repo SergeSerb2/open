@@ -292,6 +292,7 @@ final class MediaCoordinator {
     guard let content = pip.webContent,
           let factory = app.hostFactories.values.first(where: { $0.tabID(for: content) != nil }),
           let tabID = factory.tabID(for: content) else { return }
+    if pip.kind == .document { openDocumentPictureInPicture(pip, openerTabID: tabID, factory: factory); return }
     if let old = pipWindow { old.dismiss(reason: .replaced) }
     let host = EnginePictureInPictureHost(
       pip: pip, tabID: tabID,
@@ -317,11 +318,13 @@ final class MediaCoordinator {
   }
 
   fileprivate func pictureInPictureDidChange(_ pip: OEPictureInPicture) {
+    if let document = documentPiP, document.pip === pip { document.refresh(); return }
     guard pipHost?.pip === pip else { return }
     pipWindow?.refresh()
   }
 
   fileprivate func pictureInPictureDidClose(_ pip: OEPictureInPicture) {
+    if let document = documentPiP, document.pip === pip { document.close(); return }
     // The page, a navigation, a crash or a new PiP ended it: the window goes without pausing.
     guard pipHost?.pip === pip, let window = pipWindow, !window.isClosing else { return }
     window.dismiss(reason: .sourceGone)
@@ -345,25 +348,23 @@ final class MediaCoordinator {
 
   // MARK: Document PiP (§4.6, EM-7)
 
-  /// The page asked for a Document PiP window. Returns the child web content Chromium fills,
-  /// or nil (the request fails in the page) when the engine cannot host it in Open's panel.
-  func openDocumentPictureInPicture(opener: OEWebContent, request: OEOpenRequest,
-                                    factory: EngineWebContentHostFactory) -> OEWebContent? {
-    guard OEEngine.shared.supportsShellDocumentPictureInPicture, let tabID = factory.tabID(for: opener) else { return nil }
+  /// The page opened a Document PiP window (EM-7): Chromium already closed any other PiP and
+  /// holds the PiP page; Open's panel shows it. Synchronous, inside the engine's open.
+  private func openDocumentPictureInPicture(_ pip: OEPictureInPicture, openerTabID: ItemID,
+                                            factory: EngineWebContentHostFactory) {
+    if let old = pipWindow { old.dismiss(reason: .replaced) }
     documentPiP?.close()
-    let config = OEWebContentConfiguration(context: request.context)
-    config.runtimeStyle = opener.runtimeStyle
-    let child = OEWebContent(configuration: config, url: nil)
-    let document = DocumentPictureInPicture(child: child, opener: opener, openerTabID: tabID)
-    document.openURL = { [weak factory] url in _ = factory?.openNewTab(url: url, background: false) }
+    let document = DocumentPictureInPicture(pip: pip, openerTabID: openerTabID)
     document.onClosed = { [weak self, weak document] in
       guard let self, self.documentPiP === document else { return }
       self.documentPiP = nil; self.feedSleep()
     }
-    guard document.present(settings: settings, screen: factory.window?.screen?.visibleFrame) else { return nil }
+    guard document.present(settings: settings, screen: factory.window?.screen?.visibleFrame) else {
+      DispatchQueue.main.async { pip.close(pausingVideo: false) }
+      return
+    }
     documentPiP = document
     feedSleep()
-    return child
   }
 
   // MARK: Helpers
