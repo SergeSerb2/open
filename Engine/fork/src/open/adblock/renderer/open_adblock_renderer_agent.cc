@@ -292,8 +292,19 @@ void OpenAdBlockRendererAgent::Report(gin::Arguments* args) {
   const uint32_t class_count = std::min(class_array->Length(), kMaxTokens);
   const uint32_t id_count =
       std::min(id_array->Length(), kMaxTokens - class_count);
+  // Array getters can execute script and detach the frame. Do not read
+  // another member after either conversion unless the observer survived.
+  const auto alive = weak_ptr_factory_.GetWeakPtr();
   auto classes = ReadTokens(context, class_array, class_count);
+  if (!alive) {
+    args->Return(-1);
+    return;
+  }
   auto ids = ReadTokens(context, id_array, id_count);
+  if (!alive) {
+    args->Return(-1);
+    return;
+  }
   if (classes.empty() && ids.empty()) {
     args->Return(1);
     return;
