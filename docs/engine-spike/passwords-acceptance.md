@@ -119,3 +119,17 @@ sets `OverrideDefaultButton(kNone)`, and `ui/views/style/platform_style.h` sets
 makes no decision, then uses real Escape input and checks DONT_PROCEED and the
 previous page. It does not change a security guard or invoke a controller
 callback directly. The red diagnostic and per-run loads are in the D6 handoff.
+
+### Automatic policy fixture isolation (D6)
+
+The first full D6 run passed 61 rows, then PW-POLICY-never saw no prompt. A
+focused real sign-in observed no prompt events or sheet and a login-count
+change from 1 to 2. That diagnostic was interrupted by foreground loss and
+is not acceptance. Chromium's `ShouldPromptUserToSavePassword` in
+`components/password_manager/core/browser/password_manager.cc` returns false
+for PSL/grouped matches, then its no-prompt path saves the successful login.
+Earlier policy rows used sibling `example.com` hosts in the same Profile.
+Each automatic-policy row now uses an empty synthetic Profile, requires a
+new password-save offer and the real sheet-button answer, checks both saved
+logins and blocked-site counts, and checks that its parent Profile store stays
+unchanged. Chromium's matching and save behavior remain enabled.

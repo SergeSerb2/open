@@ -1031,24 +1031,42 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
             row('PW-SW3', switch_profiles, ['PW-SW1'])
 
             def auto_policy(policy):
-                app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
-                app.call('credentials-prefs', profile='Default', passwordSaving=True)
-                before = app.call('credentials')['logins']; events()
-                app.call('policy', savePrompt=policy)
+                home = next(s['id'] for s in app.call('spaces') if s['focused'])
+                parent = app.call('credentials')
+                parent_counts = {k: parent[k] for k in ('logins', 'blockedSites')}
+                # Sibling example.com hosts can match an existing credential
+                # through Chromium's PSL rules and save without a prompt.
+                # This row needs a new credential, so isolate its real store.
+                space = app.call('space-create', title='Policy '+policy, profile='Policy '+policy)
+                tab = None
                 try:
+                    app.call('space', space=space)
                     url = urls['login'].replace('login.example.com', 'policy-'+policy+'.example.com')
-                    tab = load(url); fill(tab); submit(tab)
+                    tab = load(url)  # Wait for the new Profile's real context.
+                    counts(logins=0, blockedSites=0)
+                    app.call('credentials-prefs', passwordSaving=True)
+                    events()
+                    app.call('policy', savePrompt=policy)
+                    fill(tab); submit(tab)
                     expected = 'dismiss' if policy == 'record' else policy
                     seen = []
                     def answered():
                         seen.extend(e for e in events() if e.get('type') == 'savePrompt')
                         return any(e.get('answer') == expected for e in seen)
                     assert wait(answered, timeout=5, step=.05), 'automatic real-sheet answer was not recorded'
-                    assert any(e.get('answer') == 'pending' for e in seen), 'real engine prompt was not recorded'
+                    assert any(e.get('kind') == 'password' and e.get('answer') == 'pending' for e in seen), 'new real engine save prompt was not recorded'
                     assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05)
-                    counts(logins=before+(1 if policy == 'save' else 0))
-                    return {'policy': policy, 'answer': expected, 'realSheetButton': True}
-                finally: app.call('policy', savePrompt='hold')
+                    stored = counts(logins=int(policy == 'save'), blockedSites=int(policy == 'never'))
+                    detail = {'policy': policy, 'answer': expected, 'realSheetButton': True,
+                              'emptyProfile': True, **stored}
+                finally:
+                    app.call('policy', savePrompt='hold')
+                    if tab is not None:
+                        app.call('close', tab=tab)
+                    app.call('space', space=home)
+                current = app.call('credentials')
+                assert all(current[k] == v for k, v in parent_counts.items()), 'policy fixture changed the parent Profile store'
+                return dict(detail, parentStoreUnchanged=True)
             for policy in ['record', 'save', 'never', 'dismiss']:
                 row('PW-POLICY-'+policy, lambda policy=policy: auto_policy(policy))
 
