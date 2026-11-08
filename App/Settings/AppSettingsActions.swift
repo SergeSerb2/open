@@ -75,6 +75,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
   @ObservationIgnored private var spaceManager: SpaceManagerView?
+  @ObservationIgnored private var pendingManagerProfileAlert: NSAlert?
   /// No persistent preference writes: this context never arms hover previews.
   @ObservationIgnored private let managerPreferences: UserDefaults = SpaceManagerPreferences()
   func makeSpaceManagerView() -> NSView? {
@@ -97,6 +98,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       }
       let factory = self.app.hostFactories[context.windowID]
       switch intent {
+      case .setSpaceProfile(let space, let profile):
+        if let factory { return factory.performSidebar(intent) ?? false }
+        return self.confirmManagerProfileChange(spaceID: space, profileID: profile)
       case .openURL(let url, let parent, let index):
         // The Manager shows every Space: create the tab in the column it was
         // dropped on, not in the browser's focused Space, then select it there.
@@ -140,6 +144,35 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     spaceManager = manager
     return manager
+  }
+  private func confirmManagerProfileChange(spaceID: SpaceID, profileID: ProfileID) -> Bool {
+    guard let model = app.model,
+      let request = ChangeProfileRequest(spaceID: spaceID, toProfile: profileID, in: model),
+      pendingManagerProfileAlert == nil, let window = libraryPresenter?.window,
+      window.attachedSheet == nil else { return false }
+    let apply: @MainActor () -> Void = { [weak self] in
+      guard let self, !self.app.terminationRequested, self.app.model === model,
+        model.space(id: spaceID)?.profileID == request.fromProfileID,
+        model.profile(id: profileID) != nil else { return }
+      self.app.undoManager.beginUndoGrouping()
+      model.moveSpace(id: spaceID, toProfile: profileID)
+      self.app.undoManager.setActionName("Change Profile")
+      self.app.undoManager.endUndoGrouping()
+      self.app.scheduleSave(); self.app.scheduleMenuRebuild()
+    }
+    let preferences = UserDefaults.standard
+    if preferences.object(forKey: request.dontShowAgainKey) != nil && !preferences.bool(forKey: request.dontShowAgainKey) {
+      apply(); return true
+    }
+    let alert = makeSpaceProfileChangeAlert(request)
+    pendingManagerProfileAlert = alert
+    alert.beginSheetModal(for: window) { [weak self] response in
+      guard let self else { return }; self.pendingManagerProfileAlert = nil
+      guard response == .alertFirstButtonReturn else { return }
+      if alert.suppressionButton?.state == .on { preferences.set(false, forKey: request.dontShowAgainKey) }
+      apply()
+    }
+    return true
   }
   private func confirmManagerDelete(_ intent: SidebarIntent, context: SidebarContext, factory: EngineWebContentHostFactory?) -> Bool {
     guard let model = app.model, let window = libraryPresenter?.window else { return false }
