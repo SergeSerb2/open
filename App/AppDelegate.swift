@@ -219,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model = Self.makeDefaultModel()
       autoCreatedLaunchWindowID = model.windows.first?.id
     }
+    applyLaunchWindowPreference(to: model)
     let repaired = repairMissingProfiles(in: model)
     if model.windows.isEmpty, let space = model.spaces.first {
       let state = BrowserWindowState(focusedSpaceID: space.id)
@@ -403,6 +404,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
+    if let state = model.windows.first(where: { $0.id == id && $0.style == .standard }) {
+      state.lastFocusedAt = Date()
+      scheduleSave()
+    }
     for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
     MainMenu.targetWindowCommands(hostFactories[id])
     settingsPresenter.refreshSpaceManagerContext()

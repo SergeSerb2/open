@@ -13,6 +13,20 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 // Opt-in: while OEEngine.pictureInPictureDelegate is set, a video PiP opens
 // through the delegate instead of Chromium's own window. Without a delegate
 // (or without the fork's EM-4 support) Chromium's window is used (phase 1).
+//
+// Document Picture in Picture (documentPictureInPicture.requestWindow(), §6
+// EM-7) comes through the same delegate as a session of kind
+// OEPictureInPictureKindDocument: its view is the PiP document's page, and
+// naturalSize is the size the page asked for (CSS px). It has no playback or
+// controls. Closing it runs the document's pagehide, so the page can take its
+// elements back.
+
+typedef NS_ENUM(NSInteger, OEPictureInPictureKind) {
+  /// A video element (Chromium's VideoOverlayWindow).
+  OEPictureInPictureKindVideo = 0,
+  /// A Document PiP window: the page's own document.
+  OEPictureInPictureKindDocument,
+};
 
 typedef NS_ENUM(NSInteger, OEPictureInPicturePlaybackState) {
   OEPictureInPicturePlaybackStatePlaying = 0,
@@ -44,15 +58,20 @@ typedef NS_OPTIONS(NSUInteger, OEPictureInPictureChange) {
   OEPictureInPictureChangeMuted = 1u << 7,
 };
 
-/// One open video PiP. Chromium allows one at a time.
+/// One open PiP. Chromium allows one at a time (video or document).
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEPictureInPicture : NSObject
 - (instancetype)init NS_UNAVAILABLE;
-/// The page whose video plays here; nil after it closed.
+/// Fixed for the session.
+@property(nonatomic, readonly) OEPictureInPictureKind kind;
+/// The page whose video plays here (for a document: the opener); nil after it
+/// closed.
 @property(nonatomic, readonly, weak, nullable) OEWebContent* webContent;
-/// Shows the video. Put it in one window; the engine draws into it.
+/// Shows the video (for a document: the PiP page). Put it in one window; the
+/// engine draws into it.
 @property(nonatomic, readonly) NSView* videoView;
-/// The video's natural size (pixels); zero until known.
+/// The video's natural size (pixels); for a document the size the page asked
+/// for (CSS px; window.resizeTo changes it). Zero until known.
 @property(nonatomic, readonly) CGSize naturalSize;
 /// The video element's rect in webContent.view coordinates when PiP started;
 /// zero when unknown.
@@ -96,8 +115,8 @@ OE_EXPORT @interface OEPictureInPicture : NSObject
 
 NS_SWIFT_UI_ACTOR
 @protocol OEPictureInPictureDelegate <NSObject>
-/// A video PiP started. Create the window now and set windowFrame before
-/// returning.
+/// A PiP started (see `kind`). Create the window now and set windowFrame
+/// before returning.
 - (void)pictureInPictureDidOpen:(OEPictureInPicture*)pictureInPicture
     NS_SWIFT_NAME(pictureInPictureDidOpen(_:));
 - (void)pictureInPicture:(OEPictureInPicture*)pictureInPicture
@@ -114,15 +133,9 @@ NS_SWIFT_UI_ACTOR
 @property(nonatomic, weak, nullable) id<OEPictureInPictureDelegate> pictureInPictureDelegate;
 /// YES when this engine build can host video PiP in the shell (fork EM-4).
 @property(nonatomic, readonly) BOOL supportsShellPictureInPicture;
-/// YES when a Document PiP child can live in the shell's panel (fork EM-7).
-/// Without it, answer OEOpenDispositionNewPictureInPicture with nil.
+/// YES when Document PiP opens through pictureInPictureDelegate (fork EM-7)
+/// for Chrome-style pages.
 @property(nonatomic, readonly) BOOL supportsShellDocumentPictureInPicture;
-@end
-
-@interface OEWebContent (DocumentPictureInPicture)
-/// For a Document PiP child: the size the page asked for (CSS px); zero until
-/// known. Changes come with OEWebContentChangePictureInPicture.
-@property(nonatomic, readonly) CGSize requestedPictureInPictureSize;
 @end
 
 NS_HEADER_AUDIT_END(nullability, sendability)
