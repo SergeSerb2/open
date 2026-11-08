@@ -20,3 +20,4 @@
 0806-open-https-fallback-dialog-host.patch  # Use the native modal host for HTTPS fallback; cancel when detached
 0807-open-hosted-autofill-popup.patch
 0808-open-hosted-modal-dialog.patch  # H-7: attach and position Views web-modal dialogs in their AppKit parent
+0809-open-https-warning-after-commit.patch  # H-7: defer hosted HTTPS warning beyond its triggering commit; cancel stale shows

@@ -568,6 +568,7 @@ Steps 1–2. The save sheet and import wizard belong to their own App changes.
 | `0805-open-autofill-defaults.patch` | Fill on account select on; leak detection and auto-sign-in off; mandatory card re-auth on for new profiles, with no opt-in promo. |
 | `0806-open-https-fallback-dialog-host.patch` | Route the Step 0 HTTPS fallback warning through the native modal host; cancel when a detached page has no host. |
 | `0808-open-hosted-modal-dialog.patch` | H-7: attach web-modal Views windows to their Open AppKit parent and place them at the page's top center on show and resize; keep Chromium's modal manager, focus, and decisions. |
+| `0809-open-https-warning-after-commit.patch` | H-7: register a hosted HTTPS-First warning after its triggering commit finishes notifying observers; a weak tab reference and navigation generation reject a stale deferred show. Native modal closure and security decisions remain unchanged. |
 
 New files live in `open/browser/autofill/` and the overlay header
 `cef/include/cef_open_autofill.h`. CEF generates the C API and wrappers when
