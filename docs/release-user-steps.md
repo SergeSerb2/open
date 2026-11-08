@@ -176,7 +176,8 @@ A successful web page redirect does not prove a feed exists.
 ## U-6: License, patent and security review
 
 This unlocks the first public release. Read `docs/release/licenses.md`, the full
-credits from the official engine, and `docs/engine-patches.md` → Security review.
+credits from the official engine, `docs/release/license-audit.md`, and
+`docs/engine-patches.md` → Security review.
 Review the adblock, regex and aho-corasick notes and the list-parser fuzz work.
 Confirm the MPL source offer, any GPL assets, and H.264/AAC distribution posture
 in the release PR. Counsel is the user's choice.

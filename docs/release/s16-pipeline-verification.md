@@ -2,11 +2,13 @@
 
 Run date: 2026-11-07. Machine: M5 Pro, arm64, macOS 27.2.
 Starting main: `df4767ad`. Branch: `s16/release-pipeline`.
-The final artifact uses source head `e8ba3901`, after merging `origin/main`
-`ca56dff3` (#223 engine 0704 and #233 gate portability). The final full verifier
-runs on that merged source. Later changes in this branch only update this
-receipt and the release status text. Internal fetch/build commands select
-`OPEN_RELEASE_HEAVY_WRAPPER` with Section 16's mandatory two-token wrapper.
+The final artifact uses source head `765fd8c4`, after merging `origin/main`
+`eaae198d` (#236 license audit) on top of the #223/#233 merge. The full M5
+verifier passed on `e8ba3901`. The later overlap changes only build credits,
+license inputs and release status text; its diff has no OpenKit CLI or verifier
+source changes. Under TANDEM §4.5a, the final merge reruns Debug build and the
+real release command rather than another broad gate. Internal fetch/build
+commands select `OPEN_RELEASE_HEAVY_WRAPPER` with Section 16's two-token wrapper.
 All App builds use `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
 No engine tree, Keychain, certificate, notary profile, tag, upload or public
 hosting setting was changed. No unit tests or desktop input were used.
@@ -32,9 +34,9 @@ here. This is an explicit evidence gap, not a current confirmation of old facts.
 | C-10 | Confirmed in source: release packaging still fails with `release packaging not wired yet: CEF's make_distrib expects out/Release_GN_arm64`. No engine-distrib command was run against the view. | `Engine/fork/scripts/engine-distrib:29` |
 | C-11 | Confirmed: no Team ID selects the mock Keychain path; Developer ID selects Open Safe Storage. No credential was queried. | `App/main.swift`, `configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier` |
 | C-12 | Changed: Sparkle 2.10.1 is linked. The OpenKit menu owns the visible commands. `check-for-updates` routes to the Settings stub. `App/UpdaterController.swift` is absent. | `project.yml`; `App/AppDelegate.swift`; `App/Settings/AppSettingsActions.swift`; `test -f App/UpdaterController.swift` fails |
-| C-13 | Changed: the source generator and license inventory exist. Release staging generates Credits.rtf and a text twin. Native About rendering still needs a real artifact-bound receipt. | `tools/generate-acknowledgements.py`; `docs/release/licenses.md` |
+| C-13 | Changed: #236 generates build-time RTF/TXT/HTML credits in Debug and Release. Release staging generates its signed preview. Native About rendering still needs an artifact-bound receipt. | `tools/generate-acknowledgements.py`; `docs/release/licenses.md` |
 | C-14 | Confirmed remote URL. `gh repo view --json visibility` says PRIVATE. `gh release list`, `git tag -l`, and `git ls-remote --heads origin gh-pages` returned no release, tag or Pages branch. No public endpoint is established. | Read-only GitHub/git commands, 2026-11-07 |
-| C-15 | Changed: `Engine/fork/licenses/THIRD_PARTY.md` has the vendored dependency inventory, not one planned row. The release inventory still contains older “not yet linked” descriptions. Full Chromium credits are only the 401-byte sample. U-6 review and U-8 public source offer remain open. | `Engine/fork/licenses/THIRD_PARTY.md`; `docs/release/licenses.md`; recorded CREDITS.html |
+| C-15 | Changed: the dependency inventory and upstream texts were audited in #236, including Rust, data, FFmpeg and Sparkle notices. uBO assets are excluded. Full generated Chromium credits remain the 401-byte sample; U-6 review and U-8 public source offer remain open. | `docs/release/license-audit.md`; `docs/release/licenses.md`; recorded CREDITS.html |
 
 ## Sparkle tool provenance
 
@@ -99,19 +101,19 @@ or acceptance.
 
 Attempt 6 completed packaging on `78617865`, then repeated all 12 phases as
 NO-OP. It predated the strict missing-M1-receipt gate and is not full acceptance.
-Attempts 7 and 8 also passed static packaging and stopped at the missing M1
+Attempts 7–9 also passed static packaging and stopped at the missing M1
 receipt. They are superseded by the final merged-source attempt below.
 
-Attempt 9 packages `e8ba3901`, after the #223/#233 main merge and source DLV
-guard. It produces the final app, DMG, checksum and signed file feed. All static
+Attempt 10 packages `765fd8c4`, after the #236 license merge and source DLV
+guard. The merge keeps both the upstream license audit and this release proof. It produces the final app, DMG, checksum and signed file feed. All static
 artifact checks pass. It exits 1 only because the lead's M1 screen hold prevents
 the required supplemental smoke. The unchanged second run has 12 NO-OP phases
 and still exits 1. Pending smoke does not become a pass. No release app was
-launched by attempts 6–9.
+launched by attempts 6–10.
 
-Final DMG: 202,582,754 bytes, SHA-256
-`65f6bd643a517267a861a2590e9c15d8989909e7778c332a6d423bf79f9cf287`.
-App disk use: 548,474,880 bytes. The dev engine exceeds the official size budget;
+Final DMG: 202,619,116 bytes, SHA-256
+`4ef8c81ebf39c3844d598755d3a6642678939e7f912c5af79a09c9d20d072485`.
+App disk use: 548,798,464 bytes. The dev engine exceeds the official size budget;
 the production 320 MB hard gate stays active. Manifest dev framework SHA-256:
 `c03a5109fc0d815770743a6c25a92d24bd1632eba6e658e00eb6e46314440c91`.
 An earlier DMG and checksum passed transfer verification on the M1. The final
@@ -119,10 +121,10 @@ DMG has not been transferred or launched there. The lead must forward
 **M1 clear** before any supplemental smoke. The unused detached M1 worktree
 was removed during cleanup; no M1 app was launched.
 
-Attempt 9 load averages: 14.80 / 38.03 / 51.19 → 14.94 / 29.83 / 46.09.
-No-op loads: 14.94 / 29.83 / 46.09 → 14.94 / 29.83 / 46.09.
+Attempt 10 load averages: 11.89 / 13.13 / 21.02 → 11.78 / 13.10 / 20.15.
+No-op loads: 11.78 / 13.10 / 20.15 → 11.39 / 13.00 / 20.07.
 These are functional receipts, not timing acceptance.
-Logs: `dry-run-9-final-m5.log`, `dry-run-9-noop.log`.
+Logs: `dry-run-10-final-m5.log`, `dry-run-10-noop.log`.
 
 | §9.4 row | Result | Evidence / limit |
 |---|---|---|
@@ -132,7 +134,7 @@ Logs: `dry-run-9-final-m5.log`, `dry-run-9-noop.log`.
 | A-4 Signature | PASS | Inside-out ad-hoc runtime signing; deep/strict verification; all six sealed entitlement dictionaries equal source. |
 | A-5 Gatekeeper | mode-SKIP | Ad-hoc, no notarization acceptance claimed. |
 | A-6 Staple | mode-SKIP | No ticket or credential used. |
-| A-7 Size | mode-SKIP | App 548,474,880 bytes; DMG 202,582,754 bytes. Dev engine is above the production hard limit. |
+| A-7 Size | mode-SKIP | App 548,798,464 bytes; DMG 202,619,116 bytes. Dev engine is above the production hard limit. |
 | A-8 Locales | PASS | Exact `en` set; required resources and arm64-only binaries present. |
 | A-9 Symbols | PASS | No dSYMs in the app. Official symbol archive remains open. |
 | A-10 Automation | PASS | No automation socket string or compile flag in the Release binary/build log. |
@@ -232,10 +234,11 @@ script and private keys were deleted. Receipts: `preflight-break-intact.log`,
 | Check | Result | Evidence |
 |---|---|---|
 | Bash 3.2 syntax | PASS | `/bin/bash` 3.2.57; `/bin/bash -n tools/release.sh` exits 0. |
-| Whitespace | PASS | `git diff --check` exits 0. |
+| Whitespace and scope | PASS | `git diff --check` exits 0; exactly six allowed files differ from merged main. Status changes stay in §1.20; follow-ups change only Release lines. |
 | Source entitlement plists | PASS | `plutil -lint App/Open.entitlements Helper/Entitlements/*.entitlements`: six OK. |
 | M5 launch refusal | PASS | Final merged `--dry-run --smoke-only` exits 1 at the M1-only guard; no launch. |
 | Source DLV drift | PASS | Four real temporary-input CLI cases refuse DLV in generic/GPU/renderer/alerts source before build or key access. |
+| Final merge build | PASS | `build-debug-license-merge.log`: exit 0, loads 13.01 / 13.40 / 21.25 → 11.89 / 13.13 / 21.02. |
 | U-7 verification command | PASS, local fixture | Exact guide command downloads the dry DMG, compares its approved checksum/length and verifies the enclosure with the throwaway public key. No production endpoint or update consumption claimed. |
 
 ## Review checklist
@@ -269,7 +272,7 @@ script and private keys were deleted. Receipts: `preflight-break-intact.log`,
 ## Remaining public-release gates
 
 - Official ThinLTO/PGO engine, distribution packaging, and local symbol archive.
-- Complete Chromium/codec credits and refreshed linked-component inventory.
+- Complete generated Chromium/codec credits from the engine; #236 audited the inventory.
 - Step 8 updater controller, menu/Settings wiring, and channel routing.
 - Native About receipt and a real predecessor update, where applicable.
 - Final notes and a new build number before anything leaves this Mac.

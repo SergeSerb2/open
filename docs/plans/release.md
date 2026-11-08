@@ -69,7 +69,8 @@ Authoritative inputs. Read these before you start:
 **2026-11-07 status / errata.** The C-table below is the historical snapshot.
 The Section 16 receipt records each row's current evidence and drift. Bundle IDs,
 entitlements, metadata, Sparkle 2.10.1, acknowledgements and the script are now
-present. The official engine, full Chromium credits and Step 8 updater controller
+present. The license inventory and build credits were audited in #236.
+The official engine, full Chromium credits and Step 8 updater controller
 are still absent. The permitted main engine view contains a dev distrib only;
 the shared Chromium tree and live PGO profile were not inspected.
 
