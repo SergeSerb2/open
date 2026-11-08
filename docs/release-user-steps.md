@@ -309,11 +309,42 @@ production preflight, the agent also runs:
 tools/release.sh --preflight-only
 ```
 
-## U-9: not defined in the plan
+## U-9: iCloud Keychain passkey entitlement
 
-Neither release plan §10 nor the release follow-ups defines U-9. No action,
-environment variable or verification command is assigned to it. The lead must
-name it before it can become a release requirement.
+This unlocks iCloud Keychain passkeys in Open (the system passkey sheet). Open
+ships without it: security keys and phone passkeys (hybrid) already work through
+Chromium's WebAuthn dialog. The source is `docs/plans/passwords-autofill.md`
+(D-8, §12 Q-3, and the line that names this item U-9).
+
+Chromium checks the managed entitlement
+`com.apple.developer.web-browser.public-key-credential` at runtime. Apple must
+approve it for the Team, and the signed build then needs a matching provisioning
+profile. It needs U-1 and U-2 first.
+
+User steps:
+
+1. In the Apple Developer portal, request the managed capability for web-browser
+   public-key credentials for the App ID `io.github.sergeserb2.open`.
+2. When Apple approves it, create a Developer ID provisioning profile for that
+   App ID with the capability, and download it.
+3. Tell the agent the local path of the downloaded profile. Do not commit it.
+
+This fills no environment variable yet. The agent then changes, in one reviewed PR:
+`App/Open.entitlements` (add the entitlement), `docs/plans/release.md` §4.2 (its
+entitlement list), and `tools/release.sh` (embed the profile as
+`Contents/embedded.provisionprofile` before signing).
+
+Agent verification, with approval, on the signed app:
+
+```bash
+codesign -d --entitlements - build/release/<marketing>-<build>/Open.app 2>/dev/null \
+  | grep -F com.apple.developer.web-browser.public-key-credential
+security cms -D -i build/release/<marketing>-<build>/Open.app/Contents/embedded.provisionprofile \
+  | grep -F com.apple.developer.web-browser.public-key-credential
+```
+
+Then the passwords P-20 passkey run without the virtual authenticator
+(passwords-autofill plan §9.5) must pass on that signed build.
 
 After the source work, user setup, and review gates pass, the production command is:
 
