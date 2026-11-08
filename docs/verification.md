@@ -1160,6 +1160,149 @@ Section 2's existing command-bar budgets unchanged.
 
 For the Section 8 milestone, the lead's final instruction defers full and targeted regression suites to one run on final main. This PR records the completed negative proofs and current-display before/after measurements; it does not claim a new full-suite PASS.
 
+## Instruction calibration (lead ruling, 2026-11-08 09:30)
+
+The SM6, Site Control cold-open and simple-editor instruction ceilings are
+`ceil(main median × 1.10)`. Calibrate each from at least five unchanged-main
+pairs at load1 ≤30. Each pair is two back-to-back release CLI runs. Build first
+under the Section 16 `s16-heavy.sh` wrapper, without a quiet or screen lock.
+Wait for load outside every lock. Hold the quiet lock only while measuring;
+recheck load after acquisition and record start, end and peak load for each run.
+SM6 takes one quiet hold per pair. The five-pair Site Control calibration uses
+one quiet → screen hold, with no low-load wait inside that hold.
+Keep each gate's existing measured span. Use CPU brand plus macOS build as the
+fixture key, never hostname. Other machine/build references remain unchanged.
+
+Re-baseline rule (lead, 2026-11-08 11:55): the current ceilings are keyed to
+Apple M5 Pro / macOS 26B123. After a macOS update, or on a new machine, the key
+changes and the gate fails with "unknown key". Then record a new key with the
+same five-pair method from unchanged `origin/main`, in its own PR, and keep
+every older key as it is.
+
+This calibration uses unchanged `origin/main` at
+`cdd147cac296ea4ea8a9da244299636aee28deb9`, Apple M5 Pro / `26B123`.
+Five SM6 pairs ran first; five full Site Control pairs followed. A table sample
+is one full CLI run's instruction median. The accepted count is the median of
+the ten run medians (round the mean of the two middle values up to one
+instruction). Then round the 10% ceiling up. No outlier removal is permitted.
+
+`sidebar-render sm6-cost` is offscreen: `SM6Measure.swift` sets activation to
+`.prohibited`; `OffscreenRenderer.host` creates a never-ordered host at
+(-20000,-20000). It needs only the quiet lock. Full `sitecontrol-render check`
+also needs the screen lock: `main.swift` calls `EditorFlows.run`, which calls
+`EditorNativeKey.run`; that launches `EditorHarness.app`, sets regular
+activation and calls `makeKeyAndOrderFront`. The standalone editor bench cannot
+record an accepted cost reference (`EditorOpenBench.run`). Keep quiet → screen
+for the full-check pairs and honor screen priority before acquisition.
+
+SM6 keeps one discarded warm-up and five fresh measured child processes in
+every run. All ten runs exited 0 and all 60 child reports confirmed cleanup.
+The instruction baseline was unavailable for this new OS key during sampling;
+its original INFO verdicts are retained in the raw receipts.
+
+| SM6 pair | Run | Run median instructions | Load1 start | End | Peak |
+|---|---|---:|---:|---:|---:|
+| 1 | 1 | 671,256,097 | 12.496 | 12.496 | 12.496 |
+| 1 | 2 | 670,719,279 | 12.496 | 12.496 | 12.496 |
+| 2 | 1 | 670,496,615 | 12.496 | 11.976 | 12.496 |
+| 2 | 2 | 670,580,802 | 11.976 | 11.976 | 11.976 |
+| 3 | 1 | 671,603,177 | 11.976 | 11.497 | 11.976 |
+| 3 | 2 | 671,256,210 | 11.497 | 11.497 | 11.497 |
+| 4 | 1 | 670,797,129 | 11.497 | 11.497 | 11.497 |
+| 4 | 2 | 670,248,900 | 11.497 | 11.938 | 11.938 |
+| 5 | 1 | 670,494,664 | 11.938 | 11.938 | 11.938 |
+| 5 | 2 | 670,627,361 | 11.938 | 11.702 | 11.938 |
+
+SM6 accepted median: **670,673,320**. Ceiling: **737,740,652** instructions.
+
+Raw command logs, every fresh-child report, binary hashes and per-run load
+receipts are in `.re/budget-rulings/`. The versioned fixture retains the ten
+run medians, all ten discarded warm-ups, source head and release binary hash.
+
+Full `sitecontrol-render check` keeps five warm-ups and 30 measured cold opens
+at process entry, followed by its pooled suites and the editor's five warm-ups
+and 20 measured opens. All ten unchanged-main full checks exited 0. Every
+private root was removed and no native helper remained after cleanup. All
+loads below are observed load1; no run was excluded.
+
+| Site Control pair | Run | Cold median instructions | Editor median instructions | Load1 start | End | Peak |
+|---|---|---:|---:|---:|---:|---:|
+| 1 | 1 | 92,494,287 | 133,851,524 | 13.967 | 20.187 | 20.657 |
+| 1 | 2 | 93,335,648 | 133,230,208 | 20.187 | 19.731 | 23.325 |
+| 2 | 1 | 92,542,494 | 133,113,330 | 19.731 | 16.403 | 19.810 |
+| 2 | 2 | 92,541,418 | 132,926,967 | 16.403 | 16.932 | 18.145 |
+| 3 | 1 | 92,502,418 | 133,260,271 | 16.932 | 17.431 | 18.426 |
+| 3 | 2 | 92,470,901 | 133,588,461 | 17.431 | 20.821 | 21.763 |
+| 4 | 1 | 92,570,936 | 133,149,444 | 20.821 | 22.128 | 29.266 |
+| 4 | 2 | 92,561,231 | 133,301,521 | 22.128 | 17.339 | 22.128 |
+| 5 | 1 | 92,462,013 | 133,143,982 | 17.339 | 17.994 | 21.171 |
+| 5 | 2 | 92,526,458 | 133,185,919 | 17.994 | 13.331 | 17.994 |
+
+| Gate, Apple M5 Pro / 26B123 | Accepted median | Ceiling, ceil(median ×1.10) |
+|---|---:|---:|
+| SM6 | 670,673,320 | 737,740,652 |
+| Site Control cold open | 92,533,938 | 101,787,332 |
+| Site Control simple editor | 133,208,064 | 146,528,871 |
+
+The Site Control versioned fixture retains all ten run medians for both spans,
+every run's start/end/peak load, source head and binary hash. Its existing
+CPU-brand/macOS-build lookup and ceiling arithmetic are unchanged. The SM6
+reader accepts the ten run medians and preserves legacy five-sample entries.
+
+### Idle ruling report proof
+
+The real `tools/budgets.sh --report` interface re-rendered the saved November 8
+00:30 window receipt. This does not launch the App or repeat the idle window.
+Static idle is **0.1230% PASS** against ≤0.5% (load1 5.917 → 4.562). Animated
+idle is **3.5927% NO NUMERIC BUDGET** (load1 8.508 → 5.917). The report exits 1
+with 69 PASS, 14 FAIL and 1 NO NUMERIC BUDGET: all other window budget misses
+remain unchanged. Source receipt SHA-256:
+`2b1c2decc6b0766e8ff1b895138880e86b0dd7a0b608819415c5e33e6ce53976`.
+
+### SM6 gate proof
+
+After installing the fixture and its ten-sample reader, the unchanged main
+workload passes. A temporary loop inside `SM6Fixture.measure`, after native
+first layout and before the counters stop, adds 16,000,000 dependent integer
+iterations. It adds measured work; the fixture and comparator stay fixed.
+
+| Control | Median instructions | Ceiling | CLI exit | Load1 start | End | Peak | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Main workload | 675,180,953 | 737,740,652 | 0 | 29.723 | 28.063 | 29.723 | PASS (CLI prints OK) |
+| Injected cost, first | 772,346,206 | 737,740,652 | 1 | 28.935 | 30.061 | 30.061 | Expected FAIL |
+| Injected cost, confirmation | 767,593,738 | 737,740,652 | 1 | 25.674 | 25.674 | 25.674 | Expected FAIL |
+
+The first negative proof peaked at 30.061; a second confirmation stayed at
+25.674. Neither negative sample sets a reference. All three runs reaped their
+children and removed their private roots. The temporary source change was
+restored byte-for-byte; the rebuilt release binary is byte-identical to the
+positive-proof binary. The real CLI also refused an eleven-sample private
+fixture before starting a child; the valid ten-sample fixture passed above.
+
+### Site Control gate proof
+
+After installing the reference, the unchanged main workload passes both gates.
+The temporary negative proof adds 2,500,000 dependent integer iterations inside
+`Bench.run`'s cold-open measured span and 3,500,000 inside the editor's measured
+span. Each loop retains a printed sink so the release compiler cannot remove
+it. The fixture hash is identical in the positive and negative proofs; neither
+the comparator nor reference changes.
+
+| Control | Cold median instructions / ceiling | Editor median instructions / ceiling | CLI exit | Cold load1 | Editor load1 | Verdict |
+|---|---:|---:|---:|---:|---:|---|
+| Main workload | 92,464,623 / 101,787,332 | 133,200,352 / 146,528,871 | 0 | 10.57 | 10.86 | Both PASS |
+| Injected cost | 109,649,251 / 101,787,332 | 157,985,592 / 146,528,871 | 1 | 22.25 | 45.41 | Both expected FAIL |
+
+These are functional proofs at any load, under the screen lock, not calibration
+or latency acceptance. Including the screen queue, the positive proof's load1
+was 5.198 → 10.310 (peak 13.067); the negative proof was 36.883 → 44.658 (peak
+46.940). The negative run has exactly two FAIL rows, both instruction gates.
+Its CPU p95 values, 19.421 ms cold and 20.285 ms editor, remain diagnostic.
+Both runs reaped the renderer, stopped all owned native helpers and removed
+the private root. Both injected source files were restored byte-for-byte to
+main. Final full verification rebuilds and runs the restored source.
+
+
 ## Quiet-machine budgets
 
 `tools/budgets.sh --out <receipt.json>` runs the existing performance
@@ -1238,7 +1381,7 @@ Budget inventory (the Python source cites each numeric limit):
 |---|---|
 | Existing-profile launch | `engine_e2e.py` `warm_existing_profile`, extracted from S16 `run_launch.py`: seven launches; sidebar median ≤250 ms, first paint median ≤700 ms. Also main ≤50 ms and modelLoaded ≤120 ms intermediate marks from the app-shell plan. Kernel process birth and a confirmed sidebar frame are required. Process-cold, warm file caches. |
 | First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh Welcome roots, median first content ≤250 ms, selected imported-tab paint from `firstRunLandingStarted` ≤700 ms. Uses the existing synthetic import fixture with local deterministic saved pages. |
-| Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. The target is ≈0%, with no numeric tolerance. Valid measurements show `NO NUMERIC BUDGET` and their measured CPU; JSON has no numeric ceiling. Missing data or failed cleanup still fails. |
+| Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. Lead ruling, 2026-11-08 09:30: static total CPU ≤0.5%; always print and retain its measured value. The animated row has no numeric ceiling and shows `NO NUMERIC BUDGET` with measured CPU. Missing data or failed cleanup still fails in either row. See `docs/architecture.md` performance budgets. |
 | Site Control | Full `sitecontrol-render check`: cold-open CPU p95 <8 ms; simple-editor CPU p95 <12 ms using the required full-check procedure; both instruction gates; idle <10 ms CPU/2 s; ten-page refresh <100 ms; pad CPU p95 <2 ms; off-main hue <15 ms; ≤61 previews/120 inputs; code highlight CPU p95 <2 ms. Unknown instruction baselines fail closed. |
 | SM6 and mini-player | `sidebar-render check`: one declared warm-up and five fresh processes, accepted instruction ceiling, first-layout wall median ≤120 ms, structural gates, MC8 paused idle CPU ≤0.5%. |
 | Command bar keystrokes | `commandbar-render check` (#132/#135/#136, now 150/151): CPU p95 <8 ms, completion added p95 ≤0.3 ms, ≤1 panel layout pass. Retains the full combined gate. |

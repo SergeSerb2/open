@@ -1,12 +1,22 @@
 # Follow-ups
 
-- Import Arc Boosts — C2 adds the bounded Firestore cache reader, synthetic CLI
-  flow and locked CLI persistence. App persistence, live apply, re-import and
-  shared Undo remain BLOCKED (Section 12 AppBoosts). Wire only through
-  `app.stores.boosts.store(for:)` and `refresh(profile:)`; never create another
-  App BoostStore. Confirm color/zoom conversion, absent local enablement policy,
-  account-to-Default Profile assignment and a populated real cache sample.
-  See [storage evidence](re/boosts-store.md). — Section 14 C2, 2026-11-06
+- Welcome playlist (Section 17, 2026-11-08) — unexplained one-off W06 timeout
+  after an earlier attempt lost foreground to another app. The retry used a
+  fresh App; the old failure receipt lacked final state. A diagnostic rerun
+  passed. W34 and W35 now cover hide/occlude resume: minimize or cover the real
+  Welcome window mid-card-1, stop animation and its timer, then restore/uncover,
+  restart that card and finish through card 4. W35 observed actual occlusion
+  (`8192` covered, `8194` uncovered), not a simulated state. Both rows and the
+  final 41-row Welcome suite passed. No visibility behavior was changed; retain
+  the old receipt at `.re/handoff/sections/s17/c4/final/welcome-overlap-1.json`
+  if the timeout recurs. — Section 17 lead-requested follow-up.
+
+- Import Arc Boosts — App wiring closed: first run and Settings use the sole
+  `app.stores.boosts` owner, add-only stable IDs, live refresh and shared
+  Undo/Redo. Missing local enablement imports disabled. Schema follow-ups remain:
+  confirm color/zoom conversion and account-to-Default Profile assignment with
+  a populated, redacted real cache sample. See [storage evidence](re/boosts-store.md).
+  — Section 14 C7, 2026-11-08
 
 Small items found during review and verification. Each line: area — issue — where found.
 

@@ -1,6 +1,7 @@
 import AppKit
 import OpenModel
 import OpenStore
+import OpenBoosts
 
 /// The model command keeps its normal inverse in a private UndoManager. One
 /// native App action owns that inverse and the committed store receipts.
@@ -18,6 +19,7 @@ final class AppImportUndo {
   private var importWaiters: [CheckedContinuation<Void, Never>] = []
   private var archives: [(ArchiveStore, [ArchivedTabRecord])] = []
   private var histories: [(HistoryStore, HistoryImportUndo)] = []
+  private var boosts: [(ProfileID, BoostStore, [Boost])] = []
   private(set) var task: Task<Void, Never>?
   private(set) var pendingOperations = 0
   private(set) var errorText = ""
@@ -41,6 +43,11 @@ final class AppImportUndo {
 
   func append(history: HistoryStore, receipt: HistoryImportUndo) {
     histories.append((history, receipt)); registerIfNeeded()
+  }
+
+  func append(boosts values: [Boost], store: BoostStore, profileID: ProfileID) {
+    guard !values.isEmpty else { return }
+    boosts.append((profileID, store, values)); registerIfNeeded()
   }
 
   func finishImport() {
@@ -71,21 +78,37 @@ final class AppImportUndo {
     guard let app else { return }
     if undoing { cancelled = true }
     register(on: app.undoManager, undoing: !undoing)
-    if let model = targetModel {
-      captureModel(model) {
-        if undoing { if modelUndo.canUndo { modelUndo.undo() } }
-        else if modelUndo.canRedo { modelUndo.redo() }
-      }
-    }
-    app.scheduleSave()
     enqueue { [self] in
       if importing { await withCheckedContinuation { importWaiters.append($0) } }
       if undoing {
+        for (_, store, values) in boosts {
+          await Task.detached(priority: .utility) {
+            for boost in values { store.delete(id: boost.id) }
+            // First run restores the bootstrap Default ID at the same file
+            // path. Finish the removal before that Profile can load its store.
+            store.saveNow()
+          }.value
+        }
+        applyModel(undoing: true)
+        for (profileID, _, _) in boosts { app.stores.boosts.refresh(profile: profileID) }
         for (store, receipt) in histories.reversed() {
           guard await store.removeImportedHistory(receipt) else { throw UndoFailure.store }
         }
         for (store, records) in archives.reversed() { try await store.delete(ids: records.map(\.id)) }
       } else {
+        applyModel(undoing: false)
+        var replacedBoosts: [(ProfileID, BoostStore, [Boost])] = []
+        for (profileID, store, values) in boosts {
+          guard app.model.profile(id: profileID) != nil, !app.stores.boosts.isRetired(profileID) else { continue }
+          let added = await Task.detached(priority: .utility) {
+            values.filter { store.boost(id: $0.id) == nil }.map { store.upsert($0) }
+          }.value
+          if !added.isEmpty {
+            replacedBoosts.append((profileID, store, added))
+            app.stores.boosts.refresh(profile: profileID)
+          }
+        }
+        boosts = replacedBoosts
         var replaced: [(HistoryStore, HistoryImportUndo)] = []
         for (store, receipt) in histories {
           let result = await store.importHistoryBatch(receipt.redoVisits, sourceProfileKey: receipt.sourceProfileKey)
@@ -101,6 +124,16 @@ final class AppImportUndo {
         archives = replacedArchives
       }
     }
+  }
+
+  private func applyModel(undoing: Bool) {
+    if let model = targetModel {
+      captureModel(model) {
+        if undoing { if modelUndo.canUndo { modelUndo.undo() } }
+        else if modelUndo.canRedo { modelUndo.redo() }
+      }
+    }
+    app?.scheduleSave()
   }
 
   private enum UndoFailure: Error { case store }
