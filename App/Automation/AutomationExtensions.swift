@@ -124,9 +124,29 @@ extension AutomationController {
     case "install-crx":
       guard let path = args["path"] as? String, let content = browser.activeWebContent else { throw Failure(message: "missing CRX path or active page") }
       return manager.installLocalCRX(URL(fileURLWithPath: path), webContent: content)
+    case "install-crx-completion":
+      guard let path = args["path"] as? String, id.utf8.count <= 128 else { throw Failure(message: "missing CRX path or request ID exceeds 128 bytes") }
+      startLocalCRXInstall(manager, file: URL(fileURLWithPath: path), request: id)
     default: throw Failure(message: "unknown management action")
     }
     return true
+  }
+  // The socket must return before consent is answered. Keep the callback form
+  // so the real-App gate can count duplicate completions without an async
+  // continuation trapping the process first.
+  private func startLocalCRXInstall(_ manager: OEExtensionManager, file: URL, request: String) {
+    manager.installLocalCRX(file) { [weak extensionAutomation] result, extensionID, error in
+      let status: String
+      switch result {
+      case .installed: status = "installed"
+      case .cancelled: status = "cancelled"
+      case .failed: status = "failed"
+      @unknown default: status = "unknown"
+      }
+      extensionAutomation?.record(["event": "localInstallComplete", "request": request,
+        "result": status, "id": extensionID ?? "", "error": error ?? "",
+        "mainThread": Thread.isMainThread])
+    }
   }
   /// X-27 uses the actual Settings model/save callback, menu target and rendered
   /// notice labels. It never constructs a second conflict list for the check.
