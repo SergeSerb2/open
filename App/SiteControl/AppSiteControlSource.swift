@@ -143,7 +143,10 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     }
     // Matching is read-only. Private windows keep disabled matching rows;
     // the view and the action guards refuse creation, editing and toggles.
-    let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: profileID) ?? [] : []
+    // Private windows have a separate model Profile. Read matching rows from
+    // the parent owner's store; private controls and actions remain disabled.
+    let boostProfileID = factory.incognitoSession?.parent.id ?? profileID
+    let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: boostProfileID) ?? [] : []
     return SiteControlSnapshot(context: context, tiles: tiles, boosts: boosts,
       boostsGloballyEnabled: boostProvider?.boostsGloballyEnabled ?? true,
       capabilities: factory.extensions.host == nil ? [] : [.extensionPinning],
