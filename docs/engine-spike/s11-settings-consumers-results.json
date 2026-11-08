@@ -1,6 +1,13 @@
 {
   "implementationCommit": "a72c4602dc196df23a07712cc54b650cd25c6978",
   "mergedMainCommit": "eaa70c2865aff7dd5bd1a3b05d09eca5486b698f",
+  "postGateMainCommit": "b082d35cb5b33294ffffeb078cf76ee38650174d",
+  "postGateMergeCommit": "9ae3f7e6dfeddadf501e8df3d02efc542f10f4c3",
+  "postGateDebugBuild": {
+    "machine": "M5",
+    "passed": true,
+    "receipt": ".re/settings-consumers/build-postmerge-m5.log"
+  },
   "engineFrameworkSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
   "date": "2026-11-07",
   "functional": {
@@ -324,6 +331,19 @@
     "cpuP95MS": 10.86,
     "inlineOverheadMS": 0.347,
     "disposition": "Non-blocking per Section 11 lead 2026-11-07 17:08: main fails the same rows under load; skip quiet retry (TANDEM 4l)."
+  },
+  "siteControlTimingRuling": {
+    "check": "sitecontrol-render",
+    "passed": 1548,
+    "total": 1549,
+    "load": [
+      12.96,
+      21.48,
+      24.62
+    ],
+    "highlightCPUP95MS": 2.387,
+    "budgetMS": 2,
+    "disposition": "Non-blocking per Section 11 lead 2026-11-07 17:17: main #204 missed at 2.343 ms and load 26.9; skip quiet retry (TANDEM 4l)."
   },
   "verification": [
     {

@@ -1,6 +1,9 @@
 # Settings consumers: real-App verification
 
-Implementation: `a72c4602`, with `origin/main` merged at `eaa70c28`.
+Implementation: `a72c4602`, with the acceptance runs based on `eaa70c28` from
+`origin/main`. After the full gate, `b082d35c` was merged cleanly at `9ae3f7e6`:
+only docs overlap this PR, so TANDEM 5a requires no second full gate or e2e
+rerun. The post-merge Debug build is recorded separately below.
 Engine framework SHA-256: `2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10`.
 All runs use the real Debug App and automation socket. No unit tests, desktop
 input, debugger, Arc launch, engine rebuild, or baseline change was used.
@@ -35,7 +38,8 @@ warning UI is implemented. The owner-death bypass is unchanged.
 
 | Check | Machine | Result | Raw receipt under `.re/settings-consumers/` |
 |---|---|---|---|
-| Final Debug build | M5 | PASS | `build-final-m5.log` |
+| Acceptance Debug build | M5 | PASS | `build-final-m5.log` |
+| Post-merge Debug build | M5 | PASS | `build-postmerge-m5.log` |
 | Final Debug build | M1 | PASS; existing Xcode headermap/signing and simulator diagnostics | `m1-final/build-final-m1.log` |
 | Full relaunch | M1 | 7/7 PASS; 20/20 real quit/relaunch soak | `m1-final/final-relaunch-m1.json` |
 | Full Downloads | M1 | 46/46 PASS | `m1-final/final-downloads-m1.json` |
@@ -59,8 +63,10 @@ does not touch command-bar code. The raw FAIL remains in the summary.
 
 `sitecontrol-render` passes 1,548/1,549 checks, including every F24 display row
 and native cleanup. Its sole failure is the code CSS highlight CPU p95:
-2.387 ms against 2 ms at load 12.96 / 21.48 / 24.62. A focused quiet rerun is
-pending. No foreground interruption occurred.
+2.387 ms against 2 ms at load 12.96 / 21.48 / 24.62. The lead's 17:17 ruling
+also treats this as non-blocking under TANDEM 4l and explicitly skips its quiet
+retry: main's #204 gate missed the same row at 2.343 ms and load 26.9. This PR
+does not touch Site Control. No foreground interruption occurred.
 
 Negative controls invert the restore preference, remove a saved sidebar tab,
 invert the Library visibility gate, disable App history/download clearing,
