@@ -96,13 +96,15 @@ public final class LittleOpenCoordinator {
     }
     /// Explicit Profile pages (Settings and extension management) always create
     /// a window; external-link URL reuse remains owned by open(url:profileHint:).
-    public func create(url: URL, profile: ProfileID, focus: Bool) {
-        guard model.profile(id:profile) != nil else { return }
+    @discardableResult
+    public func create(url: URL, profile: ProfileID? = nil, focus: Bool) -> ItemID? {
+        guard let profile = profile ?? defaultProfile, model.profile(id:profile) != nil else { return nil }
         let tab = Tab(url: url); tab.live.sleepPhase = .live
         let session = LittleOpenSession(tab: tab, profileID: profile)
         let controller = LittleOpenWindowController(session: session, coordinator: self, factory: LittleHostFactory(makeWebContent), defaults: defaults)
         sessions.insert(session, at: 0); controllers[session.id] = controller
         resurface(session.id); if focus { controller.focusURL() }; onChange?()
+        return tab.id
     }
     public func resurface(_ id: WindowID) {
         guard let session = sessions.first(where: { $0.id == id }), let controller = controllers[id] else { return }
