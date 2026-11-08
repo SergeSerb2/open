@@ -735,6 +735,26 @@ entry. Its distribution receipt is `e949ff69`; N1 macOS delivery and N6
 clients.openWindow stay BLOCKED. App swipe and appearance wiring merged in
 [#162](https://github.com/SergeSerb2/open/pull/162) and [#164](https://github.com/SergeSerb2/open/pull/164). These are saved receipts, not checks run for this docs change.
 
+
+### Site Control E1/E2/E3 overlays (Section 12)
+
+`cef/include/cef_site_control.h` and `open/browser/page/open_site_control.cc`
+expose the complete scalar content-settings registry, origin-filtered
+BrowsingDataRemover cache/storage removal, canonical host-cookie deletion, and
+visible SSL security state. The existing `cef_open_page.h` / `OpenPageState`
+observer forwards visible-security changes. No extra patch number is needed;
+these files use P1's existing overlay source list. See `engine-api.md` for
+cookie scope, supported states, completion behavior and bounds. Four C API
+entry points are required by `verification/expected-symbols.txt`.
+
+The engine and Debug App compile with these overlays. The real-App `sitedata`
+suite passes all ten settings, data and security rows. Temporarily disabling
+the bridge backends and native security observer makes all ten rows fail;
+production source is restored and rebuilt afterwards. Cache proof uses server
+hit counters: clearing origin A changes hits from [1, 1] to [2, 1], while
+origin B remains cached. Mixed-content and malicious-page classifications
+have source support but no dedicated runtime fixtures in this receipt.
+
 ## Passwords Step 0 probe (2026-11-06; remaining rows 2026-11-07)
 
 The real Debug App used Chrome style and main's recorded engine distribution
