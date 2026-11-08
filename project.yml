@@ -161,6 +161,8 @@ targets:
       - package: OpenKit
         product: OpenSettings
       - package: OpenKit
+        product: OpenOnboarding
+      - package: OpenKit
         product: OpenCommandBar
       - package: OpenKit
         product: OpenCommands
@@ -218,6 +220,7 @@ targets:
           python3 "$SRCROOT/tools/generate-acknowledgements.py" \
             "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Credits.rtf" \
             --app-info-plist "$TARGET_BUILD_DIR/$INFOPLIST_PATH" \
+            --ubo-source "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/AdBlock/Source" \
             --cef-credits "$CEF_ROOT/CREDITS.html"
         inputFiles:
           - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
