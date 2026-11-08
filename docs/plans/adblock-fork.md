@@ -1106,7 +1106,7 @@ it never destroys an engine under a lock.
 | Concurrent builds | 1 per process: one shared build runner for all Profiles, so a burst of toggles in several Profiles queues | Peak transient memory is one build (~80 MiB measured for the defaults) |
 | Stale builds | A build checks an atomic "latest load id" for its Profile before it parses and before it writes the cache, and drops itself when stale | 100-7; also bounds wasted memory |
 | Text lifetime | List texts are freed right after `open_adblock_build` returns, before serialize and the cache write; the DAT is written from the Rust `Vec<u8>` through a `base::span`, with no `std::string` copy | 100-5 |
-| Resources JSON | 4 MiB read cap (bundled file; Step 7 records its real size) | Guess at headroom; the uBO resources set is about 1 MiB today (guess) |
+| Resources JSON | 4 MiB read cap (bundled file; Step 7: 142,493 bytes, 47 redirect resources) | Headroom above the pinned payload; source and output hashes are recorded in §9.3 |
 
 **Budgets (measured as `phys_footprint` of the browser process,
 `footprint` tool or `vmmap --summary`; the step that gates each row is
@@ -2694,6 +2694,48 @@ Versioning: see the **Version** bullet above (the pinned SHA-256; an
 app update is the only way it changes). Tombstone: the pre-revision
 "resources update with the lists on the §9.5 schedule" rule is
 superseded by lead ruling 7.
+
+**Step 7 resources as built (2026-11-08).** Official uBO commit
+`3762a26fd65df422080c116e6a70d13bc8d57d62` confirms both input paths:
+`src/web_accessible_resources/` and `src/js/redirect-resources.js`.
+`Engine/fork/adblock/resources-pins.txt` pins the official source archive
+(`addfeba80c8e231cd4882160c01b64aaf2b632b3399972fc5c0819c2158b7991`)
+and output (`6d4a87b8f0e44e0ffad66c5b66694c4a1da27383eaa11acae218030a29d9575e`).
+The redirect index SHA-256 is
+`870666664a8cc95a4d55566c440d71a5ee00e0f3f4326a15287aa55f138b547a`.
+`Engine/fork/adblock/resources-inputs.sha256` records each input file's hash;
+the source archive pin verifies all of them before assembly.
+`tools/fetch-adblock-resources.py` copies the checked-in Cargo driver and
+lockfile from `tools/adblock-resources/` into `/tmp`, fetches locked crates,
+then runs `cargo run --offline --locked`. It uses crates.io `adblock =0.8.11`
+with D-3's features. The lock holds `rmp` at the fork's 0.8.11 (0.8.15
+removed APIs required by `rmp-serde` 0.15). No scriptlet assembler is called.
+The crate's serialized `Vec<Resource>` is 142,493 bytes: 47 kept, 0 dropped;
+all are `ResourceType::Mime`, with `Template=0` and `Mime(FnJavascript)=0`.
+Kinds: ApplicationJavascript 31, ApplicationJson 1, AudioMp3 2, ImageGif 1,
+ImagePng 3, TextCss 1, TextHtml 1, TextPlain 1, TextXml 4, Unknown 1,
+VideoMp4 1. The driver prints these counts before and after filtering.
+
+`tools/fetch-adblock-lists.sh` stages the verified output in `Vendor/adblock/`
+and the ignored SwiftPM resource directory; `tools/embed-adblock.sh` copies
+it into `Open.app/Contents/Resources/AdBlock/`. The package's pins receipt
+mirrors the engine-side file, with byte equality required at staging.
+M5 has Cargo 1.99.1 in `~/.cargo/bin`; M1 has no Cargo installed (checked
+2026-11-08). A matching output cache needs no Rust. The verified source archive is cached
+too, for bundling original source text and LICENSE.txt under `AdBlock/Source`
+for acknowledgements. Both matching caches avoid network use. A clean or
+stale output cache needs Cargo and pinned inputs; M1 can receive the verified
+142,493-byte output and source archive before its build. Never substitute unverified bytes.
+The assembler reads only `/tmp` inputs. The bundled source text is license
+material, not an engine input: 42 original text files, 136,725 bytes (the
+kept redirect stubs' text, redirect index and LICENSE.txt).
+
+Every new Swift generation has `_resources`, independently of
+`enabledBlockLists`. Old generations remain verifiable and gain the current
+bundle on the next publication (open, update, reset or list change). An app
+resource-pin change also republishes on open without changing enabled lists.
+Copyable debug info includes `resources=6d4a87b8f0e4`.
+Engine resources-after-DAT acceptance N-19 remains E3's separate gate.
 
 ### 9.4 The 46-list catalog (committed data file)
 
@@ -4630,3 +4672,4 @@ distribution, real App acceptance and the full verify gate remain pending
 in E3. N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
+
