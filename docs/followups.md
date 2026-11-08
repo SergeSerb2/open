@@ -10,7 +10,7 @@
 
 Small items found during review and verification. Each line: area — issue — where found.
 
-- Boost code mode (Step 7 package, [Code mode #203](https://github.com/SergeSerb2/open/pull/203)) — App Step 5 must implement `BoostEditorHost.loadedJS(boostID:tabID:)` from the bound document, call `BoostEditorController.boundPageDidCommit(tabID:)` after commit, and prove real-page B5 (CSS live, JS only after reload). Native code flows (including available CSS selector insertion and one-step undo) and bar comparison cover the package; real-App rest/hover snapshots await host integration. The JS notice uses the lead’s 2026-11-06 ruling recorded in plan §4.10. Package evidence and negative-proof logs are in the PR body. — Section 12 child C, 2026-11-06.
+- Boost code mode (Step 7 package, [Code mode #203](https://github.com/SergeSerb2/open/pull/203)) — App Step 5 now implements `BoostEditorHost.loadedJS(boostID:tabID:)` from the installed document snapshot and calls `BoostEditorController.boundPageDidCommit(tabID:)` after real document commits. Real-page B5 checks live CSS, deferred JS, Refresh to Run and reload. Native code flows (including available CSS selector insertion and one-step undo) and bar comparison cover the package; real-App rest/hover snapshots await host integration. The JS notice uses the lead’s 2026-11-06 ruling recorded in plan §4.10. Package evidence and negative-proof logs are in the PR body. — Section 12 child C, 2026-11-06.
 
 - Little Open Browser performance (Section 9, PR #185) — deferred creation passes first frame, but the strict page-load gate remains open. Final 30 interleaved Release pairs on engine `3f45b07b`, main `8920190f` versus the branch after merging `e83dc38f`, load1 8.32–11.98: first frame main 80.10/123.01 ms versus branch 66.86/93.76 ms median/p95; page load main 113.23/186.48 ms versus branch 130.11/209.34 ms. Browser creation to ready is 146.63/229.81 ms; added RSS is 5.26 MiB/window. The native-frame boundary, pending URL and cancellation flows pass real-App checks. No Chromium tree or patch was changed. Keep the PR draft; further performance work needs the lead's direction. [All attempts and methods](little-open/deferred-browser.md). — Section 9, 2026-11-06.
 
@@ -253,6 +253,7 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Find menu fallbacks.** #187 implements Find and Replace by opening Find, with no replacement controls. Jump to Selection centers the DOM selection’s start element through the existing page-world JavaScript API; no selection means no action. Page scripts can affect it; no isolated-world API was added. `find` covers the merged menu/key flow; these are fallbacks, not proved Arc parity. See [the Find report](engine-spike/find/README.md#scope-and-source-review). Owner: Section 11 follow-up / lead.
 - **Generic Warn-before-quitting UI.** Not implemented because no Arc warning presentation was proved. The 2026-11-07 read-only quit call-path audit remains INCONCLUSIVE about a gate on the Downloads alert, so both switch values keep that alert; owner-death automation quit stays prompt-free. [RE pointers](re/downloads-s11.md#quit-warning-setting-consumer-audit-2026-11-07) include the caller/subscription/presenter chain and unresolved policy, plus the preference registration/action renderer; none proves generic warning UI. Owner: Section 11 follow-up / lead.
 - **Little Open Downloads tray.** Deferred by [routing §0.2](plans/routing-little-open.md#02-out-of-scope-do-not-build); #181 does not add it. Owner: Section 9 / lead.
+- **Closed — AppleScript Little Open creation.** Application `make new tab` now returns a working transient reference. URL, title, loading and page verbs resolve through the Little Open provider; no model tab is created. Unsupported containment/location/select returns 1009; closed references return 1000. M5 real Apple-event acceptance is 208 PASS / 2 external-consent BLOCKED in `applescript` (warm/cold `A15_*`); see [the scripting guide](scripting.md#little-open-tab-references-2026-11-07). External sender consent remains below. — Section 11, 2026-11-07.
 - **External AppleScript/JXA.** External osascript/JXA and Script Editor remain BLOCKED by macOS Automation consent (-1744). Self-scripting PASS in #174 does not close that gate. The user’s numbered Script Editor hand checks are in [the scripting guide](scripting.md#script-editor-and-external-sender-hand-checks). Owner: user hand check / lead.
 - **Join Meeting.** Disabled post-v1; it needs calendar live data (lead decision S2). #178 `context-menus` checks disabled dispatch. Owner: post-v1 / lead.
 - **Blank Window.** #178 leaves the existing New Window path unchanged. A distinct “This Window” sidebar remains a parity GUESS with no proved specification. Owner: Section 11 RE follow-up / lead.
@@ -282,7 +283,8 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 ### Section 10 private windows (lead design, 2026-11-06)
 
 - Completed, 0701: `IncognitoContextProvider.makeContext(parent:)` uses `makeIncognitoContext(for:completion:)` with that parent's regular context. Real product windows prove Work ancestry, no cookie seeding, different-parent isolation, extension opt-in and final private-session teardown. Spanning content-script behavior is verified; Chromium retains its own spanning/split implementation.
-- Open — owner Section 12: fill SiteControlContext.isIncognito from factory.isIncognito; disable Boosts in private windows (Arc fact: Boosts cannot be installed or used in Incognito Mode).
+- Section 12 Boost runtime: private contexts never prepare/install scripts or receive live refreshes; editor and Customize Page refuse. The Incognito suite checks a matching normal/private page under the same parent Profile, including a deliberate script-leak negative proof. SiteControlContext.isIncognito remains owned by the Site Control presenter. (Arc fact: Boosts can't be installed or used in Incognito Mode.)
+- Open — owner Section 12: fill SiteControlContext.isIncognito from factory.isIncognito; the presenter owns that remaining hook.
 - Native display evidence: the eight Profiles shell 2x window captures are complete (M1 built-in Retina, main `f65327a5`, 2026-11-07; [receipt](profiles-shell.md)). Incognito native 1x/2x is complete through the App-side snapshot path (M5/M1, 2026-11-07); [receipt](incognito.md). Any missing #217 extension UI 2x captures remain open, owner Section 10 lead; the exact command is in [profiles-memory.md](profiles-memory.md).
 - Guess S10-P1 capture (owner user / lead): user opens a private window in the reference build, once with light and once with dark system appearance; capture a resting full window and measure the sidebar color, gradient, noise, and forced appearance. Open currently uses flat sRGB #26232B, dark appearance, zero noise.
 - Guess S10-P2 capture (owner user / lead): user opens a private window with one Profile, then with multiple Profiles; capture the header at rest and hovered, including icon, title, menu and Profile indicator. Open uses eyeglasses and `Incognito` / `Incognito · <Profile name>`, with no header menu or Profile indicator.
@@ -297,8 +299,37 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 
 User-operated Arc captures are still needed for the editor layout and destination menu, whether a Test feature exists, invalid drafts and cancellation/save behavior, the empty state, and matches/contains semantics (host versus full URL, boundaries, case, wildcards). The relationship between multiple source components and rule precedence also remains unverified. Import matches mapping and OR semantics are explicit guesses; the source-app picker is an Open extra, Arc unverified. Facts: `.re/s10/arc-routing-fields.tsv:12-20,24-34`; `docs/re/features-core.md` §6 and `docs/re/data-model.md` §2.7. Section 10's implementation does not close these Arc evidence gaps. Owner: user-operated captures / lead.
 
+## Section 12 Boost App runtime limits
+
+- B5 is **BLOCKED: engine defect, targeted by #202 patch 0602** (lead, 2026-11-07). CEF gives replacement renderers the script list captured at browser creation; the current-list update arrives after the main-world context. Main engine `af4b3cc3…`: reload has Boost version `null`, run count `0`, and no plain control; a fresh tab has version `one`, run count `1`, and the control. Zero focus interruptions; load 14.92/25.27/19.04 → 15.09/25.14/19.03. Evidence: `.re/handoff/sections/s12/B-evidence/M5-nov7-script-reload/`. Engine child E owns the fix and B5 validation. Keep the page-execution assertions; do not substitute postload evaluation.
+- B28 on engine `7a90e70e…` proves that JS save changes future script IDs without live JS/CSS delivery; omitting only the hook fails at unchanged IDs. Its strict reload check still sees old JS at the first inline script, the same B5 replacement-renderer defect (#202 patch 0602). Raw FAIL retained. Evidence: `.re/handoff/sections/s12/B-evidence/private222/script-hook-{negative,positive}-focused.json`; positive hook/live checks pass, zero interruptions.
+- Managed Boost scripts run in the main world until P7 adds isolated-world
+  injection and a native page-message channel. Overlay secrecy is not proven.
+  Zap entry is refused; existing saved Zap CSS can apply. Do not enable the
+  picker through a main-world capability relay.
+- Color uses the plan's interim root filters. Paint-time color remap remains the
+  engine lane's Step 4R; filters can affect images/video/canvas.
+- Code mode is integrated from #203, including live CSS and document-bound JS
+  reload state. Gallery stays disabled; P7 still blocks selector picking.
+- Private windows refuse Boosts. The App skips registration, script installation and live plans for OTR contexts; editor commands and Customize Page refuse. The same-parent Profile row and deliberate script-leak negative proof cover this boundary.
+- Profile deletion retires the registered Boost owner before folder removal. The store discards dirty state, cancels and drains writes, and stays closed for the process lifetime. B27 covers Settings delete → debounce → quit → relaunch with a deliberate disabled-retirement negative proof.
 
 ## Section 14: multi-profile import boundaries
+
+- Extension install icon diagnostic — Chromium `shortcuts::SetIconForFile` →
+  `NSWorkspace setIcon` → `ISMutableIcns addCGImage` emitted an `os_log_fault`
+  during `extensions-ui` CRX installation on 2026-11-07. The `ExcUserFault_*`
+  report has `bug_type: 309`, `isSimulated: 1`; the lead confirmed no App crash
+  or crash dialog. An icon size/format mismatch is a guess, not a proven cause.
+  Follow up in the engine icon writer; ignore these simulated reports in crash
+  monitors, while retaining real Open/Open Helper crash detection. — Section 14 C5.
+
+- **Closed — import automation local CRX completion.** Engine 0704 (#223)
+  supplies `installLocalCRX(_:completion:)`. The import now maps installed,
+  cancelled and failed directly, checks the installed ID and preserves
+  Chromium's error text. `firstrun`'s `EI_failure_reported_engine` gates the
+  damaged-signature error, result count and next queue item. No install timeout
+  or delegate error event is used. — Section 14 C5, 2026-11-07.
 
 - Import Undo (#224) removes created Profiles and sidebar/routing changes from the
   model, and the Archive rows and History visits/keys that the import inserted

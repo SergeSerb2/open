@@ -155,6 +155,13 @@ Both modes reset and restore their shared defaults keys in `finally`.
 
 ## Protocol
 
+Automation builds can run the Cocoa setter preflight without creating native
+windows or starting Chromium. Set `OPEN_AUTOMATION_SCRIPTING_PREFLIGHT` to an
+absolute JSON receipt path and launch the built App with an isolated
+`--user-data-dir`. The App sends actual Apple events to itself, records setter
+round trips/errors and `nativeWindows: 0`, then exits. This launch still takes
+the on-screen lock. See [scripting](scripting.md#little-open-tab-references-2026-11-07).
+
 One JSON object per line in each direction.
 
 ```text
@@ -255,7 +262,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | Command | Args | Result |
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
-| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
+| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`, `little`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
 | `tabs` | optional `sidebar:true` | Plain response is an array; `sidebar:true` adds `{tabs,rows,folders,selectedNode}` native row/state readback. Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
 | `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
 | `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
@@ -634,6 +641,8 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 | `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
 
 The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
+
+Each `mini-players` card also has `timing`: `event` (`leave` or `engine`), `handledAt` / `insertedAt` (system uptime seconds), and `handledTurn` / `insertedTurn`. The App records handling before publishing a leave and insertion immediately after `MediaControlsView` adds the card. Turns count main-run-loop `afterWaiting` observations; insertion within zero or one turn passes the speed gate. The observer runs only with an explicit automation socket or the e2e harness's `OPEN_E2E_OWNER_PID`, schedules no work and never wakes the run loop. Missing endpoints are null; absent evidence is an empty object. These fields measure insertion, not animation completion or the automation polling round trip. For Auto-PiP, `media.decision.at` records the start of the coordinator's leave handling, before policy evaluation or the PiP request; `pip.enteredAt - media.decision.at` is the full leave-to-enter interval.
 
 ## Notifications (page-platform Step 7)
 
@@ -1123,6 +1132,39 @@ Example: add an Open script containing
 navigate to a matching page, then read `open-world-messages`. Page and extension
 worlds see `typeof __openNative === "undefined"`.
 
+## Boost runtime and simple editor (Section 12)
+
+| Command | Arguments | Result |
+|---|---|---|
+| `boosts` | `action: list\|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
+| `boost-library` | `action: rename\|enabled\|delete`, `boost` UUID, `name` or `enabled` | Requires a visible Boosts Library row; calls its real LibraryActions boundary after confirmation. It does not prove native button or confirmation input. |
+| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type\|customize`, optional `boost`, `tab` for open | Real simple/Code editor and session (`mode: simple|code`). Private or non-http(s) tabs refuse open. `customize` invokes the selected tab’s real Customize Page sidebar action and returns its success. `incognito-state` exposes read-only `boostScriptIDs` for private script-isolation checks. |
+
+`drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
+coordinates. It sends mouse down, drag through the final point, then mouse up.
+`key` uses the normal `key` arguments and always routes through OEApplication.
+`tap` takes a native control ID (`editor.color.invert`, `editor.undo`), a plan alias
+(`font.Avenir`, `size`, `case`, `firstRun.makeABoost`), `menu.<native title>`, or
+`alert.Done|Cancel|Delete`. Menus and alerts use their real native actions.
+`type text=...` edits the active rename sheet or visible CSS/JS text view through
+App key events (16 KiB limit). Empty text clears the selected field through Delete.
+
+State includes the Boost value, bound tab/Profile, interstitial, global and scope
+state, undo state, controls, panel frame/key state, specific active alert, and
+refresh generation/completion, timing, delivered/skipped page counts, JavaScript
+delivery count and apply-failure count. Code state adds `loadedJS` (the current
+document's installed script, or null) and `refreshToRun`. The `boosteditor` suite exercises
+B1–B3, B5 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
+Edit Boost for a disabled saved Boost, discard/wake refresh, Library metadata
+reconciliation, Undo/Redo preservation, and Library Delete. The ten-page timing
+row requires ten live matching pages with nine hidden pages. B26 saves a Boost,
+restores the selected matching tab without a launch URL, and checks CSS and JS
+from that document's first inline script. Global off is its negative control.
+B4 is blocked by P7.
+B5 proves that CSS applies live, JS waits for reload, and Refresh to Run follows
+the loaded document rather than the latest stored text. Every row includes a real negative control. The suite restores all
+preference keys in `finally` and uses
+an ephemeral local fixture server plus the runner's isolated roots/cleanup.
 ## Space editors (Section 4)
 
 Theme commands use the real App model and the same window controller as the
@@ -1203,3 +1245,5 @@ PR-7 stays blocked pending an approved engine-fix distribution hash. After the
 lead clears a prior crash dialog, resume remaining rows with
 `--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
 write a separate receipt so the primary crash evidence survives.
+
+Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.

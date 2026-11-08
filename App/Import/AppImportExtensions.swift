@@ -3,17 +3,13 @@ import OpenEngine
 import OpenSettings
 
 /// One operation, retained until its completion. The prompt presenter remains
-/// the manager's sole delegate; these hooks only observe this import install.
+/// the manager's sole delegate; the attempt routes consent to the import window.
 @MainActor
 final class AppImportExtensionAttempt {
   let manager: OEExtensionManager
   let identifier: String
   weak var window: NSWindow?
   var cancelled = false
-  #if OPEN_AUTOMATION
-  var localFile: URL?
-  var localCompletion: ((ImportExtensionInstallResult) -> Void)?
-  #endif
   init(manager: OEExtensionManager, identifier: String, window: NSWindow) {
     self.manager = manager; self.identifier = identifier; self.window = window
   }
@@ -22,17 +18,7 @@ final class AppImportExtensionAttempt {
   }
   func answered(_ accepted: Bool) {
     if !accepted { cancelled = true }
-    #if OPEN_AUTOMATION
-    if !accepted { completeLocal(.skipped("cancelled")) }
-    #endif
   }
-  #if OPEN_AUTOMATION
-  func completeLocal(_ result: ImportExtensionInstallResult) {
-    guard let completion = localCompletion else { return }; localCompletion = nil
-    // Never release a context or advance the queue in a Chromium notification.
-    Task { @MainActor in await Task.yield(); completion(result) }
-  }
-  #endif
 }
 
 extension AppImportRunner {
@@ -60,27 +46,24 @@ extension AppImportRunner {
     defer { extensionAttempt = nil }
     #if OPEN_AUTOMATION
     if let file = extensionFixtures[candidate.extensionID] {
-      // An initiation failure belongs to the App. Once Chromium starts an
-      // install, only its answer/event may complete it; consent has no deadline.
       guard FileManager.default.isReadableFile(atPath: file.path) else {
         return .failed("The local fixture file is missing or unreadable.")
       }
-      // A fresh, hidden page in precisely the target context lets Chromium's
-      // existing automation-only local installer run its real consent flow.
-      let content = OEWebContent(configuration: OEWebContentConfiguration(context: context), url: URL(string: "about:blank"))
-      let browser = OEBrowser(context: context); browser.window = window
-      browser.insert(content, at: 0); browser.activeWebContent = content
-      content.view.frame = NSRect(x: 0, y: 0, width: 1, height: 1)
-      content.view.isHidden = true; window.contentView?.addSubview(content.view)
-      defer { content.view.removeFromSuperview(); content.close(); browser.close() }
-      while !content.isLive && !app.terminationRequested && window.isVisible {
-        do { try await Task.sleep(for: .milliseconds(25)) } catch { return .skipped("cancelled") }
-      }
-      guard !app.terminationRequested, !Task.isCancelled, window.isVisible else { return .skipped("cancelled") }
-      attempt.localFile = file
+      // The engine completes exactly once on a later main-queue turn, even
+      // for rejection or context closure. Consent has no deadline.
       return await withCheckedContinuation { continuation in
-        attempt.localCompletion = { continuation.resume(returning: $0) }
-        if !manager.installLocalCRX(file, webContent: content) { attempt.completeLocal(.failed("The local fixture could not be installed.")) }
+        manager.installLocalCRX(file) { result, identifier, error in
+          let outcome: ImportExtensionInstallResult
+          switch result {
+          case .installed:
+            outcome = identifier == candidate.extensionID ? .installed
+              : .failed("The installed extension ID does not match the import candidate.")
+          case .cancelled: outcome = .skipped("cancelled")
+          case .failed: outcome = .failed(error ?? "The extension could not be installed.")
+          @unknown default: outcome = .failed("The engine returned an unknown extension install result.")
+          }
+          continuation.resume(returning: outcome)
+        }
       }
     }
     #endif
