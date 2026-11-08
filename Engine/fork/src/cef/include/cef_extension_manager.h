@@ -118,6 +118,21 @@ class CefExtensionInstallCallback : public virtual CefBaseRefCounted {
   virtual void OnComplete(bool installed, const CefString& error) = 0;
 };
 ///
+/// Completion of an automation-only local CRX install, exactly once on the UI
+/// thread outside Chromium notifications. Independent of manager delegate events.
+///
+/*--cef(source=client,added=experimental)--*/
+class CefExtensionLocalInstallCallback : public virtual CefBaseRefCounted {
+ public:
+  ///
+  /// Result: 0 installed, 1 user cancelled, 2 failed. Extension ID is present
+  /// only on success; error is Chromium's message on failure, empty on cancel.
+  ///
+  /*--cef(optional_param=extension_id,optional_param=error)--*/
+  virtual void OnComplete(int result, const CefString& extension_id,
+                         const CefString& error) = 0;
+};
+///
 /// One profile's live extension registry. All methods are UI-thread only.
 ///
 /*--cef(source=library,added=experimental)--*/
@@ -186,5 +201,16 @@ class CefExtensionManager : public virtual CefBaseRefCounted {
   virtual bool InstallLocalCrx(const CefString& path,
       CefRefPtr<CefBrowser> browser) = 0;
 };
+///
+/// Automation only (--open-automation): installs a local CRX3 with real consent.
+/// A null browser uses the manager's profile and the shell's profile presenter.
+/// A supplied browser must belong to that profile. Returns whether started;
+/// callback also completes for rejected requests and manager/context closure.
+/// At most 32 local installs may be pending per manager. Path limit: 4096 bytes.
+///
+/*--cef(added=experimental,optional_param=browser)--*/
+bool CefInstallLocalCrx(CefRefPtr<CefExtensionManager> manager,
+                       const CefString& path, CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefExtensionLocalInstallCallback> callback);
 #endif
 #endif

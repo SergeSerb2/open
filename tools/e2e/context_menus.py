@@ -231,6 +231,13 @@ def context_menu_checks(factory, results, tmp, h):
                 if anchor < len(expected) and expected[anchor] != '-':
                     addition.append('-')
                 expected[anchor:anchor] = addition
+            if name != 'editable':
+                anchor = next((i for i, title in enumerate(expected) if title.startswith('Inspect')), len(expected))
+                if anchor > 0 and expected[anchor - 1] == '-': anchor -= 1
+                addition = ['Manage Extensions']
+                if anchor > 0 and expected[anchor - 1] != '-': addition.insert(0, '-')
+                if anchor < len(expected) and expected[anchor] != '-': addition.append('-')
+                expected[anchor:anchor] = addition
             trimmed = []
             for title in expected:
                 if title != '-' or (trimmed and trimmed[-1] != '-'):
@@ -245,6 +252,50 @@ def context_menu_checks(factory, results, tmp, h):
                                          ('image', '#image', False), ('linked_image', '#linked-image', False),
                                          ('selection', '#selection', True), ('url', '#url', True), ('editable', '#editable', False)]:
             run('cm_order_' + name, lambda n=name, s=selector, v=selection: order(n, s, v))
+        def manage_extensions():
+            focus()
+            extension = wait(lambda: next((e for e in app.call('extensions')['installed']
+                if e['name'] == 'Open context menu limits probe'), None), timeout=15)
+            assert extension, 'real extension fixture missing'
+            probe = h.new_tab(app, 'chrome-extension://' + extension['id'] + '/probe.html')
+            cases = []
+            try:
+                for contributed in [False, True]:
+                    configured = app.eval(probe, 'chrome.runtime.sendMessage(' + json.dumps(
+                        dict(op='configure', count=1 if contributed else 0, title='Manage placement probe')) + ')')
+                    assert configured.get('ok'), configured
+                    for target, selector in [('page', '#page'), ('link', '#link'), ('image', '#image'),
+                                              ('selection', '#selection'), ('editable', '#editable')]:
+                        focus()
+                        if target == 'selection': select(selector, 'bonjour menu contextuel')
+                        event, _ = menu(selector, clear=target != 'selection')
+                        shown = event.get('shown', [])
+                        if target == 'editable':
+                            ok = 'Manage Extensions' not in shown and bool(shown)
+                        else:
+                            index = shown.index('Manage Extensions') if 'Manage Extensions' in shown else -1
+                            inspect = next((i for i, title in enumerate(shown) if title.startswith('Inspect')), len(shown))
+                            if contributed:
+                                # One contribution is top-level; preserve its group and Inspect separator.
+                                ok = index > 0 and shown[index - 1] == 'Manage placement probe' and shown[index + 1] == '-'
+                            else:
+                                ok = index > 0 and shown[index - 1] == '-' and shown[index + 1:inspect] == ['-']
+                            ok = ok and shown.count('Manage Extensions') == 1
+                        cases.append(dict(target=target, extension=contributed, ok=ok, shown=shown))
+                focus()
+                before = {t['id'] for t in app.call('tabs')}
+                event, decisions = menu('#page', 'run-open:Manage Extensions')
+                opened = wait(lambda: next((t for t in app.call('tabs') if t['id'] not in before
+                    and t['url'].rstrip('/') == 'chrome://extensions' and t['selected']), None), timeout=5)
+                action = bool(opened) and opened.get('section') == 'today'
+                if opened: app.call('close', tab=opened['id'])
+                return dict(ok=all(c['ok'] for c in cases) and action, cases=cases, action=action,
+                            opened=opened, decisions=[e for e in decisions if e['type'] == 'contextMenuDecision'])
+            finally:
+                app.eval(probe, 'chrome.runtime.sendMessage({op:"configure",count:0})')
+                app.call('close', tab=probe)
+        run('cm_manage_extensions', manage_extensions)
+
         run('cm_link_background', lambda: new_background('#link', 'Open Link in New Tab', origin + '/target.html'))
         run('cm_image_background', lambda: new_background('#image', 'Open Image in New Tab', origin + '/image.svg'))
 

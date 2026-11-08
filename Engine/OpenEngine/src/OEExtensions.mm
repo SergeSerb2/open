@@ -268,6 +268,23 @@ class OEInstallCompletion : public CefExtensionInstallCallback {
   void (^completion_)(BOOL, NSString*);
   IMPLEMENT_REFCOUNTING(OEInstallCompletion);
 };
+class OELocalInstallCompletion : public CefExtensionLocalInstallCallback {
+ public:
+  explicit OELocalInstallCompletion(void (^completion)(OEExtensionInstallResult, NSString*, NSString*))
+      : completion_([completion copy]) {}
+  void OnComplete(int result, const CefString& identifier, const CefString& error) override {
+    auto completion = completion_; completion_ = nil;
+    NSString* extensionID = identifier.empty() ? nil : OEString(identifier);
+    NSString* message = error.empty() ? nil : OEString(error);
+    // Always leave the CEF stack before caller code can tear down its context.
+    if (completion) dispatch_async(dispatch_get_main_queue(), ^{
+      completion(static_cast<OEExtensionInstallResult>(result), extensionID, message);
+    });
+  }
+ private:
+  void (^completion_)(OEExtensionInstallResult, NSString*, NSString*);
+  IMPLEMENT_REFCOUNTING(OELocalInstallCompletion);
+};
 }
 @implementation OEExtensionManager {
   CefRefPtr<CefExtensionManager> _manager;
@@ -343,6 +360,15 @@ class OEInstallCompletion : public CefExtensionInstallCallback {
 }
 - (BOOL)installLocalCRX:(NSURL*)file webContent:(OEWebContent*)content {
   return _manager && _manager->InstallLocalCrx(OECef(file.path), content.oe_browser);
+}
+- (void)installLocalCRX:(NSURL*)file
+    completion:(void (^)(OEExtensionInstallResult, NSString*, NSString*))completion {
+  CefRefPtr<OELocalInstallCompletion> callback = new OELocalInstallCompletion(completion);
+  if (!file.isFileURL || !_manager) {
+    callback->OnComplete(2, "", !file.isFileURL ? "Local CRX requires a file URL" : "Extension system is not ready");
+    return;
+  }
+  CefInstallLocalCrx(_manager, OECef(file.path), nullptr, callback);
 }
 - (void)reload { [self oe_changed:NO]; }
 - (void)oe_changed:(BOOL)commands {
