@@ -283,6 +283,15 @@ were 1.17/1.73/1.95. Timer #31 used raw 400.981 ms against 600 ms; reference
 median 394.832 ms, load 63.3/24.1/16.2. Full-run start load was
 9.65/11.19/11.57; end load was 26.06/26.58/22.09. Neither machine skipped a target.
 
+After the completed full gates, main advanced to
+`300a587546a8145b4d0d5b2af67e19a05ecfbdce`. Its overlap was only
+`docs/followups.md`; the merge was clean (`e69b81b1`). The CLI package,
+verification helpers, and runner are byte-for-byte unchanged from the tested
+source. The required post-merge `heavy.sh tools/build.sh Debug` passed with
+`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`, start/end load
+37.66/29.00/23.36 and 50.86/39.43/28.55. TANDEM §4 rule 5a requires no new full gate
+or unrelated e2e suite for this merge. No App was launched.
+
 The table preserves the actual full-run result. Command-bar acceptance comes
 from the separately recorded strict quiet PASS, with no budget change.
 
