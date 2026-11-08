@@ -840,6 +840,7 @@ def feature_checks(app, style, results, tmp):
              fullscreen="record")
 
     def run(name, fn):
+        begin_row(name)
         try:
             results[name] = fn()
         except Exception as e:
@@ -1037,7 +1038,11 @@ def feature_checks(app, style, results, tmp):
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
-        got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=120, step=2)
+        # Leave time inside the 120 s row cap for EME/playback and publish a
+        # concrete prerequisite failure instead of expiring at the wait boundary.
+        got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=60, step=2)
+        if not got:
+            return {"ok": False, "reason": "Widevine component updater did not download a CDM within 60 s", "cdm_versions": None}
         w = new_tab(app, "https://example.com/")
         r = app.eval(w, '(async () => { try { const a = await navigator.requestMediaKeySystemAccess("com.widevine.alpha",'
                         ' [{initDataTypes: ["cenc"], videoCapabilities: [{contentType: \'video/webm; codecs="vp9"\','
