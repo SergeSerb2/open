@@ -1347,6 +1347,8 @@ write a separate receipt so the primary crash evidence survives.
 
 The `card` object reports its relative luminance, text-color choice and converted frame, plus the native circle-button frames and labels. `confettiBehindCard` and `confettiLifetime` record the emitter's actual layer order and cell lifetime when created. The setup suite checks saved yellow/blue card text pixels through the real Save panel and uses the opposite-color export as each negative proof. It removes any older export before saving. Reduce Motion captures use separate names, so they do not replace the ordinary Ready light/dark pair.
 
+In automation builds, `--reduce-motion` and `OPEN_E2E_REDUCE_MOTION=1` apply to the intro, setup and Welcome page. The onboarding suite follows `--reduce-motion` through all three surfaces and checks that Welcome has no animation or pending playlist completion. Normal builds use the system preference.
+
 Actions: `next`, `back`, `skip`, `set-name name=…` (at most 40 characters), `toggle-favorite index=0…11`, `set-theme preset=…`, `set-blocker on=true|false`, `choose-default yes=true|false`, `shuffle-card`, and `get-started` on Ready. Intro actions remain `skip-intro`, `get-started` (Continue), and `replay-intro`.
 
 With an automation socket, default-browser requests use `OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed` (default `declined`) and never open the system prompt. `OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS` delays that stub's completion by at most 5000 ms, so the suite can prove that setup waits for a result before its 1.2-second outcome display.

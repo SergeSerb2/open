@@ -48,7 +48,8 @@ final class WelcomePageView: NSScrollView {
   private(set) var completionCount = 0
   var reduceMotion: Bool {
     #if OPEN_AUTOMATION
-    if ProcessInfo.processInfo.environment["OPEN_E2E_REDUCE_MOTION"] == "1" { return true }
+    if (NSApp.delegate as? AppDelegate)?.options.reduceMotion == true
+      || ProcessInfo.processInfo.environment["OPEN_E2E_REDUCE_MOTION"] == "1" { return true }
     #endif
     return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
   }

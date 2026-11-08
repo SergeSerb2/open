@@ -34,6 +34,9 @@ struct LaunchOptions {
   init(arguments: [String]) {
     let env = ProcessInfo.processInfo.environment
     skipFirstRun = env["OPEN_SKIP_FIRST_RUN"] == "1"
+    #if OPEN_AUTOMATION
+    reduceMotion = env["OPEN_E2E_REDUCE_MOTION"] == "1"
+    #endif
     let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     #if DEBUG
       let defaultDir = support.appendingPathComponent("Open-Dev", isDirectory: true)

@@ -26,6 +26,7 @@ def run(factory, results, tmp, h):
     keys = ('open.onboarding.name', 'open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane')
     saved = {key: domain.get(key) for key in keys}
     app = None
+    last_intro = None
     negatives = {}
     ax_steps = {}
     def state(): return app.call('onboarding', action='state')
@@ -33,10 +34,11 @@ def run(factory, results, tmp, h):
         assert h.wait_until(predicate, timeout=timeout, step=.025), state()
     def screen(name): until(lambda: state()['screen']==name); return state()
     def launch(directory=source, fresh=True, flags=(), **env):
-        nonlocal app
+        nonlocal app, last_intro
         if app and not app.closed: app.quit()
         if fresh: h._restore_defaults(None, {keys[0]: None, keys[1]: None})
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(directory), '--intro-sound=off', *flags], extra_env=env)
+        last_intro = state()
         if state().get('active') and state()['screen']=='intro':
             app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started'); screen('name')
         return state()
@@ -84,6 +86,7 @@ def run(factory, results, tmp, h):
     try:
         h._restore_defaults(None, {key: None for key in keys})
         initial = launch()
+        normal_intro = last_intro
         shot('name-light')
         action('set-name', name='N'*40)
         at_limit = state()
@@ -158,6 +161,7 @@ def run(factory, results, tmp, h):
         final = state(); stored = json.loads(snapshot().read_text())
         tabs = app.call('tabs'); selected_tabs = [t for t in tabs if t.get('selected')]
         welcome = app.call('welcome')
+        normal_surfaces = dict(intro=normal_intro, setup=ready, welcome=welcome)
         native_welcome = lambda s: s.get('visible') and s.get('engineInternalPages')==0 and s.get('urlField')=='Welcome to Open'
         gate('welcome_native_selected', native_welcome, welcome, {})
         welcome_id = welcome['tab']
@@ -267,6 +271,15 @@ def run(factory, results, tmp, h):
         # Replay exercises all setup choices over the saved browser. None may
         # reach the importer, model, preferences, blocker or default service.
         action('get-started'); until(lambda: not state()['active'] and not state()['dim']['exists'])
+        reduced_welcome = app.call('welcome')
+        gate('reduce_motion_all_surfaces', lambda s: s['intro'].get('reduceMotion') is True
+            and all('crossfade' in key for key in s['intro'].get('animations',[]))
+            and s['setup']['reduceMotion'] and s['setup']['offset']==0
+            and not s['setup']['confettiPlayed'] and not s['setup']['confettiActive']
+            and s['welcome']['visible'] and s['welcome']['reduceMotion']
+            and not s['welcome']['animating'] and s['welcome']['animationCount']==0
+            and not s['welcome']['pendingCompletion'],
+            dict(intro=last_intro, setup=reduced, welcome=reduced_welcome), normal_surfaces)
         def persisted():
             return dict(snapshot=hashlib.sha256(snapshot().read_bytes()).hexdigest(),
                 blocker=hashlib.sha256(Path(app.user_data,'adblock-settings.json').read_bytes()).hexdigest(),
