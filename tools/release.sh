@@ -12,6 +12,7 @@ IDENTITY=${OPEN_SIGN_IDENTITY:-}
 NOTARY_PROFILE=${OPEN_NOTARY_PROFILE:-open-notary}
 KEY_ACCOUNT=${OPEN_SPARKLE_KEY_ACCOUNT:-ed25519}
 KEY_FILE=${OPEN_SPARKLE_KEY_FILE:-}
+HEAVY=${OPEN_RELEASE_HEAVY_WRAPPER:-$HOME/Library/Caches/OpenRE/scripts/heavy.sh}
 PHASE=arguments
 usage() {
     cat <<'EOF'
@@ -22,6 +23,7 @@ Env: OPEN_SIGN_IDENTITY, OPEN_NOTARY_PROFILE (default open-notary),
      OPEN_SPARKLE_TOOLS, OPEN_SPARKLE_KEY_ACCOUNT (default ed25519),
      OPEN_SPARKLE_KEY_FILE (optional, instead of Keychain),
      OPEN_RELEASE_FEED_URL, OPEN_RELEASE_DOWNLOAD_PREFIX, OPEN_ENGINE_ROOT,
+     OPEN_RELEASE_HEAVY_WRAPPER (optional scheduler; default heavy.sh),
      OPEN_BUILD_JOBS (default 6)
 Production requires the completed release prerequisites, an existing Developer ID
 identity and open-notary profile. This script never creates them or publishes.
@@ -193,6 +195,9 @@ if 'PRODUCT_BUNDLE_IDENTIFIER: io.github.sergeserb2.open' not in s or 'app.open.
 e=plistlib.loads(Path('App/Open.entitlements').read_bytes())
 if not e.get('com.apple.security.personal-information.photos-library') or not e.get('com.apple.security.device.print'):missing.append('Step 5 app entitlements')
 if any(k.startswith('com.apple.security.cs.') for k in e) or e.get('com.apple.security.get-task-allow'):raise SystemExit('unexpected main-app signing exceptions')
+for path in Path('Helper/Entitlements').glob('*.entitlements'):
+ if path.name!='helper.plugin.entitlements' and 'com.apple.security.cs.disable-library-validation' in plistlib.loads(path.read_bytes()):
+  raise SystemExit('supplemental disable-library-validation exception must never enter source entitlements: '+str(path))
 for k in ['OpenChromiumVersion','OpenCEFCommit','OpenEngineStamp','SUFeedURL','SUPublicEDKey']:
  if not p.get(k):missing.append('Step 6 Info.plist '+k)
 if not re.search(r'^\s+Sparkle:',s,re.M):missing.append('Step 7 Sparkle dependency')
@@ -321,6 +326,7 @@ run_phase() {
     log "END: $(cat "$result_file")"
 }
 preflight() {
+    [[ -x "$HEAVY" ]] || die 'OPEN_RELEASE_HEAVY_WRAPPER must name an executable scheduler (default heavy.sh)'
     [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || die 'macOS arm64 required'
     [[ $(sw_vers -productVersion | cut -d. -f1) -ge 26 ]] || die 'macOS 26 or newer required'
     for tool in xcodebuild xcodegen python3 ditto hdiutil codesign xcrun curl xmllint openssl swift lipo node; do
@@ -374,7 +380,7 @@ engine() {
     if [[ ! -f "$official_fw" || ! -f "$SRC/$OUT_DIR_RELEASE/args.gn" ]]; then
         if [[ $DRY == 1 ]]; then
             [[ -n "$recorded" && -d "$recorded" ]] || die 'OPEN_ENGINE_ROOT has no recorded dev distribution for the local dry run'
-            CEF_SOURCE=fork "$HOME/Library/Caches/OpenRE/scripts/heavy.sh" "$ROOT/tools/fetch-cef.sh"
+            CEF_SOURCE=fork "$HEAVY" "$ROOT/tools/fetch-cef.sh"
             python3 - "$recorded" "$CHROMIUM_COMMIT" "$CEF_COMMIT" <<'PY'
 from pathlib import Path
 import sys
@@ -514,7 +520,7 @@ app_build() {
     if ! ready 04-acknowledgements; then mode_skip "$(reason 04-acknowledgements)"; return; fi
     [[ ${OPEN_AUTOMATION:-0} != 1 ]] || die 'OPEN_AUTOMATION must be off for release'
     # No gclient, engine-build, or autoninja. This is the Swift/ObjC++ shell build.
-    OPEN_AUTOMATION=0 CEF_SOURCE=fork OPEN_KEEP_LOCALES="$LOCALES" "$HOME/Library/Caches/OpenRE/scripts/heavy.sh" "$ROOT/tools/build.sh" Release
+    OPEN_AUTOMATION=0 CEF_SOURCE=fork OPEN_KEEP_LOCALES="$LOCALES" "$HEAVY" "$ROOT/tools/build.sh" Release
     rm -rf "$STAGE/built"
     mkdir -p "$STAGE/built"
     ditto "$ROOT/build/Release/Open.app" "$STAGE/built/Open.app"

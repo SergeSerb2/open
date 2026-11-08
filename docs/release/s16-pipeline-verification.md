@@ -2,8 +2,12 @@
 
 Run date: 2026-11-07. Machine: M5 Pro, arm64, macOS 27.2.
 Starting main: `df4767ad`. Branch: `s16/release-pipeline`.
-The dry run includes main through `eaa70c28`. Before full verification, merged
-`origin/main` at `7f405f3b` (only the software-update RE document was added).
+The final artifact uses source head `fd72a41c`, after merging `origin/main`
+`300a5875` in `87647e2f`. Full verification started at `87647e2f`. The only later
+code changes make a missing M1 smoke receipt fail release acceptance, reject
+source DLV drift outside the plugin helper, and select the required Section 16
+scheduler for internal heavy work. The final real release command and Bash 3.2
+syntax check cover those changes.
 All App builds use `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
 No engine tree, Keychain, certificate, notary profile, tag, upload or public
 hosting setting was changed. No unit tests or desktop input were used.
@@ -26,7 +30,7 @@ here. This is an explicit evidence gap, not a current confirmation of old facts.
 | C-7 | Historical stock-CEF 329/279 MB measurements were not repeated. Initial dev CEF binary was 460,839,664 bytes; the refreshed #222 main view is 460,886,288 bytes, so the old official-size budget cannot apply to this dev-only packaging exercise. Production's 320 MB hard gate stays active. | Recorded framework `stat`; current dry-run size rows below |
 | C-8 | Release args confirmed: official, PGO 2, ThinLTO, codecs on, Widevine off. Dev args changed: `symbol_level=0`, `enable_widevine=true`; phase 0 / official false remain. Release args override Widevine off. | `Engine/fork/gn/dev.args.gn`, `release.args.gn`; `VERSIONS` |
 | C-9 | Not re-verified: this read-only main engine view has a distrib only. No official out directory or live PGO tree is available under this allowed root. The engine owner must establish the profile's current state. | `open-engine-s8-main/README.txt`; absence of official args/output in the view |
-| C-10 | Confirmed in source: release packaging still fails with `release packaging not wired yet: CEF's make_distrib expects out/Release_GN_arm64`. No engine-distrib command was run against the view. | `Engine/fork/scripts/engine-distrib:28` |
+| C-10 | Confirmed in source: release packaging still fails with `release packaging not wired yet: CEF's make_distrib expects out/Release_GN_arm64`. No engine-distrib command was run against the view. | `Engine/fork/scripts/engine-distrib:29` |
 | C-11 | Confirmed: no Team ID selects the mock Keychain path; Developer ID selects Open Safe Storage. No credential was queried. | `App/main.swift`, `configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier` |
 | C-12 | Changed: Sparkle 2.10.1 is linked. The OpenKit menu owns the visible commands. `check-for-updates` routes to the Settings stub. `App/UpdaterController.swift` is absent. | `project.yml`; `App/AppDelegate.swift`; `App/Settings/AppSettingsActions.swift`; `test -f App/UpdaterController.swift` fails |
 | C-13 | Changed: the source generator and license inventory exist. Release staging generates Credits.rtf and a text twin. Native About rendering still needs a real artifact-bound receipt. | `tools/generate-acknowledgements.py`; `docs/release/licenses.md` |
@@ -50,7 +54,11 @@ The default account is `ed25519`, not the account name in the old plan.
 The release app and the app inside the DMG keep the exact committed entitlement
 dictionaries for the app and all five helpers. The script compares sealed plist
 dictionaries to the source files. The plugin helper's existing Library Validation
-exception is expected; no other release binary gains one.
+exception is expected; no other release binary gains one. Preflight also rejects
+DLV in the four other helper source files and all app CS exceptions. Four real
+CLI runs added DLV to separate temporary helper inputs. Each failed before build
+or key access; the actual source files stayed unchanged.
+Receipt: `source-entitlement-guard.json`.
 
 The lead's 2026-11-07 16:16 STOP-rule withdrew the earlier permission to launch
 the exact ad-hoc artifact. That probe caused a dyld crash dialog. Its successful
@@ -65,8 +73,9 @@ path, runtime/ad-hoc signature, and exact source dictionaries plus DLV for the
 app and all five helpers. It copies from a read-only DMG mount, launches only
 that temporary copy under the M1 screen lock, deletes it and its temporary
 entitlements, and detaches. `m1-smoke.json` binds the result to the DMG hash.
-The M5 summary accepts that receipt only for its exact DMG. Receipt import
-invalidates only the summary stamp. No failed-to-load build is relaunched.
+The M5 summary accepts that receipt only for its exact DMG. Missing or mismatched
+M1 evidence fails A-2/A-3/A-11. Receipt import invalidates only the summary stamp.
+No failed-to-load build is relaunched.
 If anything crashes, on-screen work stops and the lead is told. No mode of
 `release.sh` launches an exact artifact. Production runtime rows require a
 separately approved, DMG-bound lead receipt; this task creates none.
@@ -83,15 +92,96 @@ Its M5 supplemental launches and original no-op run do not prove the new policy.
 
 The replacement protocol is M5 packaging/static checks, an M1-only temporary
 copy smoke, receipt import, then an unchanged M5 run with 12 NO-OP phases.
-Final results and hashes will be filled from that run. Attempt 5 was stopped
-while queued for its build slot to close the remaining production launch path.
-No app was launched by attempt 5. The first full M5 gate was also stopped for
-the policy revision after 21 PASS rows; its trap printed `sitecontrol-render
-FAIL 0`. That is an interrupted run, not a Site Control failure or acceptance.
+Attempt 5 was stopped while queued for its build slot to close the remaining
+production launch path. No app was launched by attempt 5. The first full M5 gate
+was also stopped for the policy revision after 21 PASS rows; its trap printed
+`sitecontrol-render FAIL 0`. That is an interrupted run, not a Site Control failure
+or acceptance.
+
+Attempt 6 completed packaging on `78617865`, then repeated all 12 phases as
+NO-OP. It predated the strict missing-M1-receipt gate and is not full acceptance.
+Attempt 7 packages the merged source `fd72a41c`. It produces the final app, DMG,
+checksum and signed file feed. All static artifact checks pass. It exits 1 only
+because the lead's M1 screen hold prevents the required supplemental smoke.
+The unchanged second run has 12 NO-OP phases and still exits 1. It does not turn
+pending smoke into a pass. No release app was launched by attempts 6 or 7.
+
+Final DMG: 203,098,351 bytes, SHA-256
+`c162948c16da172749ffbfec1b44991f811a772e24129ce9086039c23e169a84`.
+App disk use: 548,470,784 bytes. The dev engine exceeds the official size budget;
+the production 320 MB hard gate stays active. The same DMG and checksum were
+transferred to the detached M1 worktree and passed `shasum -a 256 -c` there.
+No M1 app launch has run. The lead must forward **M1 clear** first.
+
+Attempt 7 load averages: 11.98 / 16.05 / 21.36 → 147.63 / 55.79 / 35.27.
+No-op loads: 211.19 / 93.97 / 51.23 → 210.26 / 97.66 / 53.04.
+These are functional receipts,
+not timing acceptance. Logs: `dry-run-7-final-m5.log`, `dry-run-7-noop.log`.
+
+| §9.4 row | Result | Evidence / limit |
+|---|---|---|
+| A-1 Engine provenance | mode-SKIP | Main dev distribution; manifest records root and framework hash. No official output exists in the permitted view. |
+| A-2 Launch | BLOCKED (script FAIL) | M1 screen hold. No accepted launch of the final artifact's supplemental copy. |
+| A-3 Helpers / JIT | BLOCKED (script FAIL) | Required M1 renderer, GPU and JavaScript smoke has not run. |
+| A-4 Signature | PASS | Inside-out ad-hoc runtime signing; deep/strict verification; all six sealed entitlement dictionaries equal source. |
+| A-5 Gatekeeper | mode-SKIP | Ad-hoc, no notarization acceptance claimed. |
+| A-6 Staple | mode-SKIP | No ticket or credential used. |
+| A-7 Size | mode-SKIP | App 548,470,784 bytes; DMG 203,098,351 bytes. Dev engine is above the production hard limit. |
+| A-8 Locales | PASS | Exact `en` set; required resources and arm64-only binaries present. |
+| A-9 Symbols | PASS | No dSYMs in the app. Official symbol archive remains open. |
+| A-10 Automation | PASS | No automation socket string or compile flag in the Release binary/build log. |
+| A-11 DMG | Static PASS; smoke BLOCKED (script FAIL) | `hdiutil verify`, attach read-only, verify mounted signature and exact entitlements, detach. Mounted app never launched. |
+| A-12 Feed | PASS, shape/signature only | XML and current item fields pass; CryptoKit verifies Ed25519 with the throwaway public key. |
+| A-13 Real update | mode-SKIP | No shipped predecessor or updater-consumption claim. |
+| A-14 About / credits | mode-SKIP | Incomplete preview generated; full Chromium credits, U-8 source offer and native About proof remain open. |
+| A-15 Secrets | PASS | Outputs ignored; no private-key files/PEM; temporary key removed. |
 
 The `file://` feed proves shape and Ed25519 signatures only. Pinned Sparkle
 2.10.1 rejects file feeds in the real App (lead: error 2001). No App update
 consumption is claimed.
+
+## Full M5 verifier
+
+`heavy.sh tools/verify-all.sh --with-arc-data` completed: 24 PASS, 1 FAIL,
+0 SKIP. The one failure is command-bar timing row 150: CPU p95 9.97 ms against
+8 ms, at load 21.8 / 31.0 / 28.1. Its other 150 rows pass. No command-bar code
+changed in this branch. Full-run loads: 21.41 / 21.02 / 18.35 →
+12.48 / 16.54 / 21.72. Raw evidence is in the lead project's private
+`.re/s16/release-pipeline/verify-all-2/` folder.
+
+No quiet timing receipt exists. The lead stopped the queued wrapper (PID 85251)
+under the 17:27 ruling before any timing check started. Load later exceeded 200.
+The timing miss stays recorded with its load under TANDEM §3.4l; the lead says it
+is not a PR blocker. Future heavy calls use the mandatory Section 16 token
+wrapper. No targeted timing run may start at load1 > 20.
+
+| Check | Result | Seconds, including lock waits |
+|---|---|---:|
+| build | PASS | 4 |
+| commands-demo | PASS | 7 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 2 |
+| space-editor | PASS | 398 |
+| space-pad-compare | PASS | 3 |
+| suggest-check | PASS | 35 |
+| commands-dump | PASS | 0 |
+| route | PASS | 17 |
+| favicons | PASS | 3 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 2 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 4 |
+| settings-preview | PASS | 88 |
+| sidebar-render | PASS | 117 |
+| sidebar-compare | PASS | 165 |
+| commandbar-render | FAIL | 44 |
+| features-render | PASS | 97 |
+| extensions-render | PASS | 9 |
+| sitecontrol-render | PASS | 340 |
+| boosts | PASS | 4 |
+| import-arc | PASS | 2 |
+| verify-secrets-fixture | PASS | 8 |
 
 ## Preflight failure cases
 
@@ -155,7 +245,7 @@ script and private keys were deleted. Receipts: `preflight-break-intact.log`,
 | Exact dialog identity | N/A | No dialog check added; no generic-window success claim |
 | Timing logic | N/A | No new performance acceptance row; functional polling has a fixed timeout |
 | Isolated data/ports | PASS | Each permitted M1 smoke uses a new data root and ephemeral CDP port; release lock excludes same-version writers |
-| No human/cleanup | Pending M1 proof | The earlier exact-artifact probe caused a crash dialog and was withdrawn. New code permits only guarded M1 temporary DLV launches, with finally/EXIT cleanup. No desktop input. |
+| No human/cleanup | BLOCKED for M1 proof | The earlier exact-artifact probe caused a crash dialog and was withdrawn. Final M5 failure exits clean up keys, mounts and the release lock. Guarded M1 temporary DLV launch/cleanup proof waits for M1 clear. No desktop input. |
 | Reduce Motion | N/A | No motion changed |
 | Interrupted animation | N/A | No animation changed |
 | Resize/hide animation | N/A | No geometry changed |

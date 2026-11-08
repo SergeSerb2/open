@@ -15,6 +15,10 @@ DLV copy on the M1, under its own screen lock. The agent imports the DMG-bound
 `m1-smoke.json` receipt before the final M5 summary. The exact artifact's expected
 Library Validation refusal is static evidence only (§4.4). Never relaunch a build
 that failed to load. If a build crashes, stop on-screen work and tell the lead.
+For the Section 16 run, set `OPEN_RELEASE_HEAVY_WRAPPER` to
+`/Users/serge/.t3/projects/open/.re/handoff/sections/s16/s16-heavy.sh`.
+The pipeline uses that scheduler for its internal fetch and build commands.
+The default scheduler for later releases is `heavy.sh`.
 The first M5 run prepares the artifact, then exits 1 until its required M1 smoke
 receipt exists. A missing or mismatched receipt cannot pass A-2/A-3/A-11.
 
@@ -150,7 +154,9 @@ request, build, or release signing. No private key is printed or exported.
 This unlocks public appcast hosting. Complete U-8 first. In the selected public
 repository, open Settings → Pages → Build and deployment → Deploy from a branch.
 Choose `gh-pages` and `/ (root)`. Save. The initial branch/feed commit is part of
-the approved U-7 publish step. Until that commit, a 404 is expected.
+the approved U-7 publish step. If `gh-pages` does not exist, first approve that
+initial U-7 commit, then return to Pages settings. Until that commit, a 404 is
+expected.
 
 Set `OPEN_RELEASE_FEED_URL` to the full stable feed URL chosen under U-8.
 The default is `https://sergeserb2.github.io/open/appcast.xml`. Beta runs use

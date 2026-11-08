@@ -83,6 +83,8 @@ placeholder public key and proves key equality by signing a random probe and
 verifying it with the source plist public key. A file key is accepted only when
 both pinned tools advertise `--ed-key-file`. `--preflight-only` performs these
 checks without a build or notary submission. See the user-step guide for setup.
+`OPEN_RELEASE_HEAVY_WRAPPER` may select a section scheduler instead of the
+default `heavy.sh`; Section 16 uses its mandatory two-token wrapper.
 
 The §9 dry-run errata are explicit: the main dev engine may be packaged while
 A-1 records mode-SKIP; its measured size may exceed the production hard limit
@@ -103,6 +105,8 @@ under its own screen lock. The script refuses this smoke on the M5. It also
 checks the temporary app/helper DLV entitlement seals before launch. The copy
 and temporary entitlements are deleted. The app in `build/release` and the DMG
 keep exact committed entitlements, enforced by sealed-dictionary comparisons.
+Preflight also refuses DLV in app or helper source entitlements, except the
+plugin helper's existing committed exception.
 The M5 preparation run exits 1 until a valid M1 smoke receipt for that exact DMG
 exists. Missing or mismatched smoke evidence is FAIL, not a mode-SKIP.
 No mode launches an exact artifact; production runtime acceptance uses a
