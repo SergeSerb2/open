@@ -2,6 +2,19 @@ import AppKit
 import Foundation
 import OpenModel
 
+/// App-owned transient tabs. These IDs never enter BrowserModel or its containers.
+@MainActor
+public protocol LittleTabProviding: AnyObject {
+    func make(url: URL?) -> ItemID?
+    func exists(_ id: ItemID) -> Bool
+    func url(_ id: ItemID) -> URL?
+    func title(_ id: ItemID) -> String
+    func loading(_ id: ItemID) -> Bool
+    func canGoBack(_ id: ItemID) -> Bool
+    func canGoForward(_ id: ItemID) -> Bool
+    func close(_ id: ItemID)
+}
+
 /// H1 supplies the current live model, window mappings, creation hooks, and engine bridge.
 /// Pull-based wrapper caches retain identity; the App observer purges external removals.
 @MainActor
@@ -13,7 +26,7 @@ public final class ScriptHost {
     public var engineBridge: (any ScriptEngineBridge)?
     public var windowStateID: ((NSWindow) -> WindowID?)?
     public var windowForState: ((WindowID) -> NSWindow?)?
-    public var makeLittleTab: ((URL?) -> ItemID?)?
+    public var littleTab: (any LittleTabProviding)?
     public var makeWindow: ((Bool) -> WindowID?)?
     public var model: BrowserModel? { modelProvider?() }
     public var lastSetterError: (number: Int, message: String)?
@@ -53,24 +66,37 @@ public final class ScriptHost {
         return wrapper
     }
 
+    func littleTabWrapper(for id: ItemID) -> ScriptTab {
+        if let wrapper = tabWrappers[id] { return wrapper }
+        let wrapper = ScriptTab(littleTabID: id)
+        tabWrappers[id] = wrapper
+        return wrapper
+    }
+
     /// Called by the App-owned observer for changes made outside scripting.
     public func purgeRemovedWrappers() {
         guard let model else {
             windowWrappers.removeAll()
             spaceWrappers.removeAll()
-            tabWrappers.removeAll()
+            tabWrappers = tabWrappers.filter { littleTab?.exists($0.key) == true }
             windowModes.removeAll()
             return
         }
         windowWrappers = windowWrappers.filter { id, _ in model.windows.contains { $0.id == id } }
         spaceWrappers = spaceWrappers.filter { model.space(id: $0.key) != nil }
-        tabWrappers = tabWrappers.filter { model.tab(id: $0.key) != nil }
+        tabWrappers = tabWrappers.filter { model.tab(id: $0.key) != nil || littleTab?.exists($0.key) == true }
         windowModes = windowModes.filter { id, _ in model.windows.contains { $0.id == id } }
     }
 }
 
 @MainActor
 enum ScriptRead {
+    static func rejectsLittleTabContainment(_ text: String) -> Bool {
+        guard let uuid = UUID(uuidString: text),
+              ScriptHost.shared.littleTab?.exists(ItemID(rawValue: uuid)) == true else { return false }
+        return !ScriptHost.shared.littleTabWrapper(for: ItemID(rawValue: uuid)).supportsModelContainment("Space/window containment")
+    }
+
     static func model() -> BrowserModel? {
         guard let model = ScriptHost.shared.model else {
             ScriptFailure.report(ScriptError.notReady, "Open is not ready.")
