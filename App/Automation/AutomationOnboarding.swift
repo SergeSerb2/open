@@ -50,6 +50,7 @@ extension AutomationController {
     }
     var state = app.onboardingWindowController?.state ?? app.onboardingReceipt ?? ["active": false, "screen": "done", "phase": "inactive", "dim": ["exists": false, "alpha": 0]]
     state["moduleActive"] = app.onboardingActivated
+    if app.frontWindowController != nil { state["welcome"] = try welcome(["action": "state"]) }
     return state
   }
 }

@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var model: BrowserModel!
   private(set) var isFirstRun = false
   var firstRunSaved = false
+  private var firstRunWelcomeID: ItemID?
   var firstRunWindowController: FirstRunWindowController?
   var onboardingWindowController: OnboardingWindowController?
   var onboardingActivated = false
@@ -512,8 +513,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     do {
       try onboardingWindowController?.steps?.applyChoices()
       try snapshotStore.saveNow(model: model)
-      // C4 WELCOME HAND-OFF: WelcomeTab.insert(into: model, spaceID: focusedSpace.id)
-      // The tab is inserted here after the first successful save, before building the browser.
+      // Save the choices first, then insert Welcome before any browser is built.
+      // Retain its ID across a failed second save so retry cannot add a duplicate.
+      if firstRunWelcomeID.flatMap({ model.tab(id: $0) }) == nil,
+        let space = onboardingWindowController?.steps?.focusedSpace ?? model.spaces.first {
+        firstRunWelcomeID = WelcomeTab.insert(into: model, spaceID: space.id)
+      }
+      try snapshotStore.saveNow(model: model)
       onboardingWindowController?.steps?.persistName()
       firstRunSaved = true
       UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
