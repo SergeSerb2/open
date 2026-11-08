@@ -95,7 +95,7 @@ The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) Â
 | `identifier`, `directory`, `isEphemeral` | Ephemeral contexts are in memory only (incognito) |
 | `originalContext`, `state` | A private context has its chosen regular parent. State is `.live` or `.closed`; retained closed wrappers and managers stay inert. Unknown native contexts never fall back to Default. |
 | `extensions` | `OEExtensionManager` |
-| `userScripts`, `addUserScript(_:)`, `removeUserScript(identifier:)`, `removeAllUserScripts()` | Boosts and Zap. `OEUserScript`: JavaScript or a style sheet, document start or end, Chrome match patterns, main frame only. New documents in every page of the context get changes at once. Main world only (patch P7). |
+| `userScripts`, `addUserScript(_:)`, `removeUserScript(identifier:)`, `removeAllUserScripts()` | Boosts and Zap. `OEUserScript`: JavaScript or a style sheet, document start or end, Chrome match patterns, main frame only. Page world by default; Open-world JavaScript runs at document start in the main frame. Changes reach new documents, including replacement renderer processes (0602). |
 | `requestFilter` | `(OEResourceRequest) -> OERequestDecision`, called on the network thread for every request of the context, including service workers. Allowed requests get no per-request handler. |
 | `permissionState(for:origin:)`, `setPermissionState(_:for:origin:)` | Chromium content settings for Site Control Center |
 | `clearBrowsingData(origin:)` | With an origin: the host cookies of that URL's host, any path (`CefCookieManager::DeleteCookies` with a URL and no name; `Domain=` cookies stay), and nothing else: the HTTP cache is untouched. With nil: every cookie and the whole HTTP cache. Per-site cache clearing (Site Control E2) needs a fork patch: DevTools `Storage.clearDataForOrigin` has no HTTP cache type and CEF's `ClearHttpCache` clears every site. |
@@ -371,7 +371,7 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 | H.264, AAC, Widevine | Not in stock CEF | P4 |
 | Audible state for Web Audio | Fixed: Chromium's tab audio signal through `CefMediaController` (no page probe) | P6, done |
 | Media session, tab volume, PiP without a gesture | Fixed: `OEMediaSession`, `mediaVolume`, `requestPictureInPicture` from the fork's `CefMediaController` | media 0401, done |
-| User scripts in an isolated world | Main world | P7 |
+| User scripts in an isolated world | Page and Open worlds, native channel and document token | P7 implemented |
 
 ## Debugging crashes
 
@@ -402,3 +402,50 @@ are in `Engine/OpenEngine/src/`. The tables above give behavior and limits.
 [#149](https://github.com/SergeSerb2/open/pull/149) adds relaunch evidence, not a public API. G2 App sleep integration
 merged in [#165](https://github.com/SergeSerb2/open/pull/165); e2e `sleep` F0/F2/F4/F5 prove the App paths.
 `sleep_f3_capture` remains BLOCKED without a camera/mic grant.
+
+## Open isolated world (P7 / E5)
+
+`OEScriptWorld` has `.page` (0, default) and `.open` (1). Set `OEUserScript.world`
+before adding it to a context; the context copies the script. Open scripts
+always run at document start in the main frame, using the existing match
+patterns. Page scripts keep their injection time and frame options.
+
+CEF patch `0602-open-browser-extra-info.patch` adds the experimental UI-thread
+`CefSetBrowserExtraInfo(browser, extraInfo)` entry point. It stores a read-only
+copy for future renderer processes (null clears it). Script changes update this
+snapshot before notifying the current renderer, so scripts added after a tab
+exists run at document start after a renderer replacement too. The existing
+`OnRenderViewReady` resend remains in place.
+
+This includes private (OTR) browsers. Broadcasts select web contents by their
+exact `OEBrowserContext` identity; each snapshot reads that context's scripts.
+An OTR context has its own script list, so scripts installed only in its parent
+profile do not appear in it, and private-only scripts do not reach the parent.
+
+`evaluateJavaScript(_:inWorld:)` evaluates in the current document. The Open
+world shares the DOM, with separate globals and DOM wrappers. It grants no
+user gesture, awaits promises, returns JSON-compatible values (undefined and
+values whose JSON serialization is undefined become null), and reports
+exceptions. Open evaluation limits: 1 MiB source (UTF-16
+units), 1 MiB UTF-8 result, 64 pending calls, 10-second completion deadline.
+Open source containing NUL or malformed Unicode is refused before conversion.
+Page evaluation keeps its existing behavior.
+
+Only Open's reserved world exposes `__openNative.postMessage(type, payloadJSON)`.
+The App prelude maps `window.__open.postMessage(type, payload)` to this function
+with `JSON.stringify(payload)`. It is added only to JavaScript; Open-world
+stylesheet sources stay unchanged. Native replies evaluate
+`window.__open.receive(envelope)` in `.open`. The engine does not interpret the
+runtime's envelope. `webContent(_:didReceiveOpenWorldMessage:payloadJSON:documentID:)`
+and `onOpenWorldMessage` deliver on the main thread. Consumers must validate
+message types and payloads. Either callback may close the page.
+
+`documentID` is Chromium's document token. A new main-frame document changes it;
+fragment and history-state navigation keep it. The handler drops stale-context
+calls. Accepted-message size is at most 65,536 UTF-8 bytes for type plus payload.
+Only 200 messages in a sliding second pass per renderer page. Oversize, rate,
+and invalid-argument drops are counted without IPC.
+`openWorldMessageStatistics` reads accepted/oversized/rateLimited/invalid totals.
+
+OpenWeb mirrors this as `ScriptWorld`, `UserScript.world`,
+`WebContent.evaluateJavaScript(_:in:)`, and `onOpenWorldMessage`.

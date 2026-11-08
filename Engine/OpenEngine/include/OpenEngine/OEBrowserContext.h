@@ -17,6 +17,11 @@ typedef NS_ENUM(NSInteger, OEUserScriptInjectionTime) {
   OEUserScriptInjectionTimeDocumentEnd = 1,
 };
 
+typedef NS_ENUM(NSInteger, OEScriptWorld) {
+  OEScriptWorldPage = 0,
+  OEScriptWorldOpen = 1,
+};
+
 typedef NS_ENUM(NSInteger, OEUserScriptKind) {
   OEUserScriptKindJavaScript = 0,
   /// The source is a style sheet; the engine inserts it as a <style> element
@@ -25,8 +30,8 @@ typedef NS_ENUM(NSInteger, OEUserScriptKind) {
 };
 
 /// A script or style sheet injected into matching frames of every web content
-/// in a context. Runs in the page's main world (see docs/engine-api.md for the
-/// isolated-world gap).
+/// in a context. Defaults to the page world. Open-world scripts always run
+/// at document start in the main frame, with the same match patterns.
 OE_EXPORT @interface OEUserScript : NSObject <NSCopying>
 - (instancetype)initWithIdentifier:(NSString*)identifier
                             source:(NSString*)source
@@ -43,6 +48,7 @@ OE_EXPORT @interface OEUserScript : NSObject <NSCopying>
 /// Chrome match patterns ("*://*.example.com/*", "<all_urls>").
 @property(nonatomic, readonly, copy) NSArray<NSString*>* matchPatterns;
 @property(nonatomic, readonly) BOOL mainFrameOnly;
+@property(nonatomic) OEScriptWorld world;
 @end
 
 #pragma mark - Network filter (ad blocking)

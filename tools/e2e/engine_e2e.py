@@ -961,6 +961,9 @@ def feature_checks(app, style, results, tmp):
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
                      ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
+    runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
+        app, results, tmp, new_tab, wait_until)
+
 
 
 # ----------------------------------------------------------------------------
@@ -2243,8 +2246,7 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
-    import engine_activation
-    engine_activation.run(app_factory, results)
+    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
     sidebar_resize_gesture_checks(app_factory, results, tmp)
     window_chrome_followup_checks(app_factory, results, tmp)
     window_material_checks(app_factory, results, tmp)
@@ -12207,8 +12209,9 @@ def main():
                     factory, results["firstrun"], tmp, sys.modules[__name__])
         elif opts.only == "extensions-ui":
             results["extensions-ui"] = CheckedResults(tracker)
-            import extensions_ui
-            extensions_ui.run(factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT)
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "extensions_ui.py"))["run"](
+                factory, results["extensions-ui"], tmp, ROOT, wait_until, new_tab, frame, read_image, EXT,
+                sys.modules[__name__])
         elif opts.only == "split":
             import importlib.util
             spec = importlib.util.spec_from_file_location('split_checks', os.path.join(ROOT, 'tools/e2e/split_checks.py'))

@@ -162,6 +162,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private lazy var privateDownloads = IncognitoDownloads()
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
+  var recordedOpenWorldMessages: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
   func standaloneSurfaceVisibilityChanged() {
     // Setting even the same window re-enters Chromium's SetHostView path.
