@@ -70,7 +70,37 @@ summary is in draft [#224](https://github.com/SergeSerb2/open/pull/224).
 ## Full verifier
 
 <!-- FULL_QUALIFICATION_START -->
-**RUNNING**: `tools/verify-all.sh --with-arc-data` on the M5. The complete summary will be added after the one full run.
+Full `tools/verify-all.sh --with-arc-data` ran once on the M5 at `7509e3b663e0e3b8b57510007bda59a9d9e88063`, with App code unchanged from `c42ba0a4a61638676824e6a95e4738437e1b7ccd` and engine SHA-256 `2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10`. Raw result: **23 PASS / 2 FAIL / 0 SKIP**.
+
+Both FAIL entries are **prelaunch priority deferrals, exit 75**, from the private foreground/priority guard. `space-editor` deferred to Section 3; `sitecontrol-render` deferred to Section 11. Neither target ran assertions or launched its native suite. **RUNNING:** scoped completion of only `space-editor,sitecontrol-render`; currently waiting for screen priority outside all locks. No second full run will start.
+
+| Check | Raw result | Seconds | Load 1/5/15, start / guards → finish |
+|---|---|---|---|
+| build | PASS | 93 | 11.89/14.90/20.38 → 15.16/14.89/19.80 |
+| commands-demo | PASS | 4 | 15.16/14.89/19.80 → 14.26/14.71/19.71 |
+| roundtrip | PASS | 1 | 14.26/14.71/19.71 → 14.26/14.71/19.71 |
+| space-legacy | PASS | 1 | 14.26/14.71/19.71 → 13.84/14.61/19.65 |
+| space-editor | FAIL | 0 | 13.84/14.61/19.65 → 13.84/14.61/19.65 |
+| space-pad-compare | PASS | 2 | 13.84/14.61/19.65 → 13.84/14.61/19.65 |
+| suggest-check | PASS | 22 | 13.84/14.61/19.65 → 12.34/14.20/19.38 |
+| commands-dump | PASS | 0 | 12.34/14.20/19.38 → 12.34/14.20/19.38 |
+| route | PASS | 21 | 12.34/14.20/19.38 → 19.52/15.69/19.77 |
+| favicons | PASS | 3 | 19.52/15.69/19.77 → 19.52/15.69/19.77 |
+| media-demo | PASS | 1 | 19.52/15.69/19.77 → 19.52/15.69/19.77 |
+| sleep-demo | PASS | 1 | 19.52/15.69/19.77 → 18.35/15.51/19.68 |
+| adblock-perf | PASS | 1 | 18.35/15.51/19.68 → 18.35/15.51/19.68 |
+| adblock-catalog | PASS | 0 | 18.35/15.51/19.68 → 18.35/15.51/19.68 |
+| profiles | PASS | 4 | 18.35/15.51/19.68 → 18.41/15.57/19.67 |
+| settings-preview | PASS | 87 | 18.41/15.57/19.67 → 10.26/13.93/18.67 |
+| sidebar-render | PASS | 109 | 10.26/13.93/18.67 → 5.80/11.21/17.02 |
+| sidebar-compare | PASS | 108 | 5.80/11.21/17.02 → 8.99/10.79/16.18 |
+| commandbar-render | PASS | 36 | 8.99/10.79/16.18 → 8.14/10.36/15.77 |
+| features-render | PASS | 91 | 8.14/10.36/15.77 → 9.07/9.97/15.07 |
+| extensions-render | PASS | 8 | 9.07/9.97/15.07 → 9.23/9.99/15.05 |
+| sitecontrol-render | FAIL | 0 | 9.23/9.99/15.05 → 9.23/9.99/15.05 |
+| boosts | PASS | 4 | 9.23/9.99/15.05 → 9.13/9.95/15.01 |
+| import-arc | PASS | 3 | 9.13/9.95/15.01 → 9.20/9.95/14.98 |
+| verify-secrets-fixture | PASS | 9 | 9.20/9.95/14.98 → 9.02/9.89/14.90 |
 <!-- FULL_QUALIFICATION_END -->
 
 ## Integration and limits
