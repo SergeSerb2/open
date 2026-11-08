@@ -96,10 +96,15 @@
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
       case "credentials": return try await credentialCounts(a)
+      case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
-        let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []
+        // Little Open owns its own page events, even while a main window exists.
+        let owner = (a["window"] as? Int).flatMap { number in
+          app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
+        } ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+        let pageEvents = owner?.drainEvents() ?? []
         let events = savePromptEvents; savePromptEvents.removeAll()
         return pageEvents + events
       case "engine-contexts":
@@ -216,8 +221,10 @@
       case "settings-profile": return try settingsProfile(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
+      case "settings-adblock": return try settingsAdBlock(a)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
+        if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
@@ -1014,6 +1021,8 @@
           "firstResponder": win.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
           "activationPolicy": NSApp.activationPolicy().rawValue,
           "screenFrame": win.screen.map { rect($0.frame) } ?? [],
+          "mainScreenVisibleFrame": NSScreen.main.map { rect($0.visibleFrame) } ?? [],
+          "mainScreenName": NSScreen.main?.localizedName ?? "", "mainScreenScale": NSScreen.main?.backingScaleFactor ?? 0,
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           // The optional content toolbar (commandbar-completion §4.6).

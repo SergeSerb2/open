@@ -73,9 +73,10 @@ class CefMediaControllerHandler : public virtual CefBaseRefCounted {
   virtual void OnMediaStateChanged(CefRefPtr<CefBrowser> browser) {}
 
   ///
-  /// EM-4, declared for the embedder's own Picture in Picture window and not
-  /// called yet. Return true to show video Picture in Picture of |browser| in
-  /// the embedder's window (OnPictureInPictureOpened) instead of Chromium's.
+  /// Return true to show Picture in Picture of |browser| in the embedder's
+  /// window (OnPictureInPictureOpened) instead of Chromium's: video Picture in
+  /// Picture (EM-4) and, for Chrome style browsers, Document Picture in
+  /// Picture (EM-7).
   ///
   /*--cef()--*/
   virtual bool ShouldHostPictureInPicture(CefRefPtr<CefBrowser> browser) {
@@ -83,8 +84,9 @@ class CefMediaControllerHandler : public virtual CefBaseRefCounted {
   }
 
   ///
-  /// EM-4, declared and not called yet. Video Picture in Picture of |browser|
-  /// opened in |window|. Synchronous, inside Chromium's session start: call
+  /// Picture in Picture of |browser| opened in |window| (a video, or a
+  /// document: CefPictureInPictureWindow::GetState "kind"). Synchronous,
+  /// inside Chromium's session start: call
   /// CefPictureInPictureWindow::SetWindowFrame before returning, and do not
   /// close the window from inside this call.
   ///
@@ -94,8 +96,7 @@ class CefMediaControllerHandler : public virtual CefBaseRefCounted {
       CefRefPtr<CefPictureInPictureWindow> window) {}
 
   ///
-  /// EM-4, declared and not called yet. The value of
-  /// CefPictureInPictureWindow::GetState changed.
+  /// The value of CefPictureInPictureWindow::GetState changed.
   ///
   /*--cef()--*/
   virtual void OnPictureInPictureChanged(
@@ -103,9 +104,8 @@ class CefMediaControllerHandler : public virtual CefBaseRefCounted {
       CefRefPtr<CefPictureInPictureWindow> window) {}
 
   ///
-  /// EM-4, declared and not called yet. The Picture in Picture session of
-  /// |window| ended (closed, source navigated, crashed or destroyed). |window|
-  /// is invalid afterwards.
+  /// The Picture in Picture session of |window| ended (closed, source
+  /// navigated, crashed or destroyed). |window| is invalid afterwards.
   ///
   /*--cef()--*/
   virtual void OnPictureInPictureClosed(
@@ -213,9 +213,11 @@ class CefMediaController : public virtual CefBaseRefCounted {
 };
 
 ///
-/// EM-4, declared and not implemented yet: one session of video Picture in
-/// Picture shown in the embedder's own window. The methods of this class must
-/// be called on the browser process UI thread.
+/// One session of Picture in Picture shown in the embedder's own window: a
+/// video (EM-4) or, with GetState "kind" "document", a Document Picture in
+/// Picture page (EM-7: GetVideoView is the page's view, "naturalWidth" and
+/// "naturalHeight" are the size the page asked for, and only "close" runs).
+/// The methods of this class must be called on the browser process UI thread.
 ///
 /*--cef(source=library,added=experimental)--*/
 class CefPictureInPictureWindow : public virtual CefBaseRefCounted {

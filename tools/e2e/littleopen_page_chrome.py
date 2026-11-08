@@ -104,7 +104,8 @@ def run(factory, results, tmp, h):
             answers = [e for e in events if e['type'] == 'dialogAnswer']
             return dict(ok=bool(resumed) and state['parent'] == row['window'] and ev('completed') == 1 and len(answers) == 1 and current()['firstFrameRead']['content'] == 0
                         and current()['firstFrameRead']['browserID'] is None,
-                        state=state, answers=answers, firstFrame=current()['firstFrameRead'])
+                        state=state, answers=answers, firstFrame=current()['firstFrameRead'],
+                        resumed=bool(resumed), completed=ev('completed'))
         gate('little_dialog_early_once', early)
         for close in ['key', 'button']:
             def unload(close=close):
@@ -179,7 +180,8 @@ def run(factory, results, tmp, h):
                 gone=wait(lambda:not ps()['visible'] and ps()['pending']==0,timeout=3)
                 events=[e for e in call('events') if e['type']=='permissionAnswer']
                 if action == 'miniaturize': app.call('little-open-action',id=row['id'],action='deminiaturize')
-                return dict(ok=bool(gone) and ps()['decisions']==before+1 and len(events)==1 and events[0]['decision']=='dismiss',state=state,events=events)
+                return dict(ok=bool(gone) and ps()['decisions']==before+1 and len(events)==1 and events[0]['decision']=='dismiss',
+                            state=state,events=events,dismissed=bool(gone),after=ps())
             gate('little_permission_dismiss_' + action,dismissed)
         def hidden_dialog():
             page(); app.call('little-open-action',id=row['id'],action='miniaturize')

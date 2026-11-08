@@ -110,9 +110,11 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
       ?? ordered.first?.window ?? app.frontWindowController?.window
   }
   func extensionManagerDidChange(_ manager: OEExtensionManager) {
+    app.settingsPresenter.refreshAdBlockWarning()
     record(["event": "changed", "context": manager.context?.identifier ?? ""])
   }
   func extensionManagerDidBecomeReady(_ manager: OEExtensionManager) {
+    app.settingsPresenter.refreshAdBlockWarning()
     record(["event": "ready", "context": manager.context?.identifier ?? ""])
     table(manager).rebuild(manager, overrides: app.keyBindings)
   }
