@@ -1189,6 +1189,18 @@ commands. The runner never builds. It refuses hardened-runtime Apps and Apps
 mounted from images, per the Section 16 no-crash rule. Use the normal development
 App from `tools/build.sh`, not a release artifact.
 
+Use `--preflight --out <preflight.json>` to check the same App, release CLIs,
+resource bundles, signatures and prepared helpers without launching the App or
+any measurement CLI. The JSON has `mode: preflight`, `preflight: PASS`, empty
+measurement rows and executable hashes. This is preparation evidence only.
+
+For a lead-granted stopped-machine window, add `--quiet-start`. It refuses
+immediately if load1 exceeds 4 or an Open/App helper, release CLI, `xcodebuild`
+or `siso` process exists. It never waits for load. The default whole-run deadline
+is 2,220 seconds (37 minutes), with up to three minutes reserved for cleanup.
+`--max-seconds` can set a shorter deadline. An expired deadline leaves an
+incomplete FAIL receipt; it does not accept or silently omit remaining rows.
+
 The caller owns the quiet lock. The runner takes only the on-screen lock, once
 per App/native-window workload. It checks `/tmp/open-onscreen-priority` before
 each hold. It never waits for low load. A loaded-machine failure stays FAIL,

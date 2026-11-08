@@ -533,7 +533,34 @@ def preflight(app, groups):
         raise RuntimeError('Refusing App on a mounted image; use tools/build.sh Release')
 
 
-def priority_wait():
+def quiet_start():
+    # Operator guard for the lead's 2026-11-07 quiet window, not a product budget.
+    load1 = os.getloadavg()[0]
+    listing = subprocess.check_output(['/bin/ps', '-ax', '-o', 'pid=,comm='], text=True, timeout=10)
+    blocked = []
+    names = {'Open', 'xcodebuild', 'siso', *needed_products(GROUPS)}
+    for line in listing.splitlines():
+        fields = line.strip().split(None, 1)
+        if len(fields) == 2:
+            name = Path(fields[1]).name
+            if name in names or name.startswith('Open Helper'):
+                blocked.append({'pid': int(fields[0]), 'name': name})
+    check = {'load1': load1, 'limit': 4, 'blocking_processes': blocked}
+    if load1 > 4 or blocked:
+        raise RuntimeError('Quiet start refused (no wait): ' + json.dumps(check))
+    return check
+
+
+def time_left(deadline, maximum):
+    if deadline is None:
+        return maximum
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError('budget run reached its time limit; remaining workloads were not run')
+    return min(maximum, remaining)
+
+
+def priority_wait(deadline):
     flag = Path('/tmp/open-onscreen-priority')
     while flag.exists():
         try:
@@ -542,14 +569,14 @@ def priority_wait():
         except FileNotFoundError:
             return
         print('Waiting for on-screen priority holder (no load wait).', file=sys.stderr, flush=True)
-        time.sleep(15)
+        time.sleep(time_left(deadline, 15))
 
 
-def invoke(group, app, scratch):
+def invoke(group, app, scratch, deadline):
     output = scratch / 'receipt.json'
     argv = [sys.executable, str(Path(__file__).resolve()), '--worker', group, '--app', str(app), '--out', str(output)]
     if group in SCREEN:
-        priority_wait()
+        priority_wait(deadline)
         argv = ['/usr/bin/lockf', '-k', '/tmp/open-onscreen-e2e.lock', *argv]
     with (scratch / 'worker.log').open('w') as log:
         mask = signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGTERM, signal.SIGINT, signal.SIGHUP))
@@ -562,7 +589,7 @@ def invoke(group, app, scratch):
                                    preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_SETMASK, mask))
             signal.pthread_sigmask(signal.SIG_SETMASK, mask)
             # Queue wait is outside the worker's measured load interval.
-            job.wait(timeout=3600)
+            job.wait(timeout=time_left(deadline, 3600))
         finally:
             signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGTERM, signal.SIGINT, signal.SIGHUP))
             if job is not None and job.poll() is None:
@@ -600,8 +627,14 @@ def main():
     parser.add_argument('--out', type=Path, required=True, help='JSON receipt; adjacent .logs directory retains raw harness logs')
     parser.add_argument('--only', choices=GROUPS, help='diagnostic subset; omitted runs every workload once')
     parser.add_argument('--fail-demo', action='store_true', help='copy the cold command-open limit to 1 ms in this receipt only')
+    parser.add_argument('--preflight', action='store_true', help='check paths, signatures and helpers; launch no App or measurement CLI')
+    parser.add_argument('--quiet-start', action='store_true', help='refuse unless load1 <=4 and no Open, release CLI, xcodebuild or siso process exists; never wait')
+    parser.add_argument('--max-seconds', type=float, default=2220,
+                        help='whole-run deadline before cleanup (default 2220: 37 min, plus at most 3 min cleanup reserve)')
     parser.add_argument('--worker', choices=GROUPS, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if not math.isfinite(args.max_seconds) or args.max_seconds <= 0:
+        parser.error('--max-seconds must be finite and positive')
     for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(number, interrupt)
     app = args.app.resolve()
@@ -610,7 +643,10 @@ def main():
         worker(args.worker, app, output)
         return 0
     groups = (args.only,) if args.only else GROUPS
+    started = time.monotonic()
+    deadline = started + args.max_seconds
     result = dict(schema=1, app=str(app), groups=groups, partial=bool(args.only), fail_demo=args.fail_demo,
+                  mode='preflight' if args.preflight else 'measure', max_seconds=args.max_seconds,
                   revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                   host=os.uname().nodename, rows=[], receipts=[], complete=False)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -620,6 +656,8 @@ def main():
         print_table([])
         return 1
     try:
+        if args.quiet_start:
+            result['quiet_start'] = quiet_start()
         preflight(app, groups)
         artifacts = [app / 'Contents/MacOS/Open', *(BIN / name for name in needed_products(groups))]
         result['artifact_sha256'] = {}
@@ -632,12 +670,18 @@ def main():
         result['source_sha256'] = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                                    for path in (Path(__file__).resolve(), ROOT / 'tools/verification/budgets_app.py',
                                                 ROOT / 'tools/e2e/engine_e2e.py')}
+        if args.preflight:
+            result['preflight'] = 'PASS'
+            print('Preflight PASS: App, {} release CLIs, bundles and required helpers resolve; no App or measurement CLI launched.'.format(
+                len(needed_products(groups))), file=sys.stderr)
+            return 0
         logs.mkdir(mode=0o700, exist_ok=False)
         for group in groups:
+            time_left(deadline, 3600)
             print('Measuring ' + group + '; load1=' + format(os.getloadavg()[0], '.2f'), file=sys.stderr, flush=True)
             scratch = logs / group
             scratch.mkdir()
-            receipt = invoke(group, app, scratch)
+            receipt = invoke(group, app, scratch, deadline)
             result['receipts'].append(receipt)
             result['rows'].extend(rows_from(receipt, args.fail_demo))
             atomic_json(output, result)
@@ -648,6 +692,7 @@ def main():
         result['error'] = str(error)
         print(str(error), file=sys.stderr)
     finally:
+        result['elapsed_seconds'] = round(time.monotonic() - started, 3)
         atomic_json(output, result)
         print_table(result['rows'])
     return 0 if result['complete'] and all(r['status'] == 'PASS' for r in result['rows']) else 1
