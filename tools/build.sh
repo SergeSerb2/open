@@ -17,6 +17,7 @@ export PATH="/opt/homebrew/bin:$PATH"
 
 # Idempotent: exits at once when Vendor/cef/ holds the selected engine.
 "$ROOT/tools/fetch-cef.sh"
+"$ROOT/tools/fetch-adblock-lists.sh"
 
 cd "$ROOT"
 xcodegen generate --quiet --spec project.yml

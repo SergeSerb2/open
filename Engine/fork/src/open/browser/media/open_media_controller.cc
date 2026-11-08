@@ -103,6 +103,8 @@ CefRefPtr<OpenMediaController> OpenMediaController::GetOrCreate(
     content::WebContents* contents) {
   // EM-4: Chrome's video Picture in Picture window factory asks Open first.
   GetMediaHooks().create_video_overlay_window = &MaybeCreateVideoOverlayWindow;
+  GetMediaHooks().host_document_picture_in_picture =
+      &MaybeHostDocumentPictureInPicture;
   MediaControllerHolder::CreateForWebContents(contents);
   return MediaControllerHolder::FromWebContents(contents)->controller();
 }

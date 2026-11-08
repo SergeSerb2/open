@@ -134,7 +134,15 @@ keep the visible frame. Whole-screen vs width-only is not decided by this one da
 point (both give 320); for portrait videos they differ, and the lead's both-axes rule
 is kept. Guess elsewhere, as before.
 
-Phase 1 (what the App shows today: Chromium's own window, `pipwin.py`, real App,
+Phase 2 in the real App (Section 3 Step 11, 2026-11-07, head b6c75921, distribution
+`e171318e…`): auto-PiP of `video-file.html` on a tab leave, 1x AW2726DM main display
+(screen 2560 × 1440, visible frame 2560 × 1410). Open's window, from the App's own
+automation (`pip` `openWindow`, no screen capture): frame top-left `[2230, 1250, 320, 180]`,
+right inset 10, bottom inset 10, level 3. Arc item 13: `[2230, 1250, 320, 180]`. Error
+0 / 0 / 0 / 0 pt (probe `.re/section3/tools/parity-pip-real.py`). Corner and edge are
+the layer settings proven above (continuous r 6, 1 pt white 0.12).
+
+Phase 1 (what the App showed before Steps 9–10: Chromium's own window, `pipwin.py`, real App,
 1.5 s after the leave, pointer away): `NativeWidgetMacFramelessNSWindow` 501 × 282 at
 bottom-left (2027, 32), i.e. top-left (2027, 1126), 32 pt from the right and bottom;
 square corners (alpha 255 at the corner pixel); no hairline on the left, right or

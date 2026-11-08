@@ -207,6 +207,9 @@ targets:
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     postBuildScripts:
+      - name: Embed verified ad-block lists
+        script: '"$SRCROOT/tools/embed-adblock.sh"'
+        basedOnDependencyAnalysis: false
       - name: Embed CEF framework and helpers
         script: '"$SRCROOT/tools/embed-cef.sh"'
         basedOnDependencyAnalysis: false

@@ -67,7 +67,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         if listServer == nil { listServer = try SyntheticListServer() }
         var policy = AdBlockDownloadPolicy(); policy.attempts = 1; policy.requestTimeout = 2; policy.resourceTimeout = 3
         let store = try AdBlockStore(root: root, policy: policy)
-        for profile in settings.model.profiles { try await store.openProfile(profile.id, scheduleUpdates: false) }
+        for profile in settings.model.profiles { try await store.openProfile(profile.id, directory: ProfileDirectories(root: root).adBlockDirectory(dataDirectoryName: profile.dataDirectoryName), scheduleUpdates: false) }
         settings.attach(adBlockStore: store)
         await settings.adBlock?.openSelectedProfile()
     }
@@ -646,10 +646,10 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let regional = ad.store.catalog.lists.first { $0.category == "regional" && !$0.urls.isEmpty }!
                 await ad.setList(regional.id, enabled: true)
                 try require(ad.errorText.isEmpty, "regional list failed: \(ad.errorText)")
-                let directory = ad.store.listDirectory(for: vm.selectedProfileID)
-                let catalog = try JSONDecoder().decode(AdBlockProfileState.self, from: Data(contentsOf: directory.appendingPathComponent("catalog-state.json")))
+                let directory = try ad.store.listDirectory(for: vm.selectedProfileID)
+                let catalog = try JSONDecoder().decode(AdBlockProfileState.self, from: Data(contentsOf: directory.deletingLastPathComponent().appendingPathComponent("catalog-state.json")))
                 try require(catalog.enabledBlockLists.contains(regional.id), "regional choice not on disk")
-                let allowFile = directory.appendingPathComponent("exclusions.json"), before = try Data(contentsOf: allowFile)
+                let allowFile = directory.deletingLastPathComponent().appendingPathComponent("exclusions.json"), before = try Data(contentsOf: allowFile)
                 ad.setExcluded("https://x/path", excluded: true)
                 try require(!ad.errorText.isEmpty && (try Data(contentsOf: allowFile)) == before, "bad host changed file")
                 ad.setExcluded("example.org", excluded: true)
@@ -883,7 +883,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try await env.prepareAdBlock();let ad=vm.adBlock!
                 let created=vm.profiles.create(name:"Example New Profile")!
                 await ad.openSelectedProfile();ad.setExcluded("example.org",excluded:true)
-                let file=ad.store.listDirectory(for:created.id).appendingPathComponent("exclusions.json")
+                let file=try ad.store.directory(for:created.id).appendingPathComponent("exclusions.json")
                 try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"new profile was not attached")
                 try ad.store.closeProfile(created.id);ad.setExcluded("example.net",excluded:true)
                 try require(ad.errorText == "Ad block settings are still loading for this Profile.","store fault was mislabeled as invalid host")
@@ -998,8 +998,8 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(ad.errorText == "Ad block settings are still loading for this Profile." && env.actions.log.count == calls,"loading host control wrote or showed an internal fault")
                 await ad.openSelectedProfile()
                 try require(ad.isReady && ad.openedProfiles.contains(created.id),"successful open did not enable edits")
-                let directory = ad.store.listDirectory(for: created.id)
-                let state = try JSONDecoder().decode(AdBlockProfileState.self, from: Data(contentsOf: directory.appendingPathComponent("catalog-state.json")))
+                let directory = try ad.store.listDirectory(for: created.id)
+                let state = try JSONDecoder().decode(AdBlockProfileState.self, from: Data(contentsOf: directory.deletingLastPathComponent().appendingPathComponent("catalog-state.json")))
                 try require(Set(state.enabledBlockLists) == Set(["EasyList", "EasyPrivacy"]) && Set(state.lists.keys) == Set(state.enabledBlockLists) && state.lists.values.allSatisfy { !$0.sources.isEmpty && $0.bytes > 0 }, "ready Profile did not publish downloaded filter receipts")
                 struct Current: Decodable { struct Reference: Decodable { let generation: Int }; let live: Reference }
                 let current = try JSONDecoder().decode(Current.self, from: Data(contentsOf: directory.appendingPathComponent("current.json")))
@@ -1009,7 +1009,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                     try require(list == SyntheticListServer.validFixture, "ready Profile did not use the local filter fixture")
                 }
                 ad.setExcluded("example.org",excluded:true)
-                let file=ad.store.listDirectory(for:created.id).appendingPathComponent("exclusions.json")
+                let file=try ad.store.directory(for:created.id).appendingPathComponent("exclusions.json")
                 try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"ready host change did not persist")
                 let deleted = await vm.profiles.delete(id:created.id); try require(deleted && !ad.openedProfiles.contains(created.id),"deleted Profile remained ready")
             case "settings-caches":

@@ -7,16 +7,30 @@ import OpenAdBlock
 
 /// Shared command-bar backend. Profile stores open on their own actor, on use.
 @MainActor
-final class AppStores {
+final class AppStores: ProfileDataOwner {
   unowned let app: AppDelegate
   private var histories: [ProfileID: HistoryStore] = [:]
   private var currentProfile: ProfileID?
   private var currentSuggest: SuggestEngine?
   lazy var boosts = AppBoosts(app: app)
-  lazy var adBlock = try? AdBlockStore(root: app.directories.root)
+  private var adBlockStorage: AdBlockStore?
+  private var attemptedAdBlock = false
+  var adBlock: AdBlockStore? {
+    if !attemptedAdBlock {
+      attemptedAdBlock = true
+      let bundle = Bundle.main.resourceURL?.appendingPathComponent("AdBlock")
+      adBlockStorage = try? AdBlockStore(root: app.directories.root,
+        bundledDefaultsDirectory: bundle.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil })
+    }
+    return adBlockStorage
+  }
   lazy var favicons = try? FaviconStore(databaseURL: app.directories.root.appendingPathComponent("State/favicons.sqlite3"))
   lazy var sidebarFavicons = favicons.map { StoredFaviconCache(store: $0) }
-  init(app: AppDelegate) { self.app = app }
+  init(app: AppDelegate) { self.app = app; app.profileTeardown.register(self) }
+
+  func retireProfile(_ profileID: ProfileID, directory: String) async {
+    await adBlockStorage?.retireProfile(profileID)
+  }
 
   func history(for profileID: ProfileID?) -> HistoryStore? {
     let profile = profileID == nil ? app.model.defaultProfile : profileID.flatMap { app.model.profile(id: $0) }
