@@ -64,13 +64,16 @@ context, parent-context, no-offer, no-save and unchanged-store assertions.
 Those checks pass in the focused run. The full run exercises the Work Profile
 left focused by P-17. No security preference is disabled for P-19.
 
-The HTTPS-First warning appears but disappears before its action buttons can
-be exercised. Its native parent is present. A bounded readiness wait and a
-warning-specific accessibility query did not establish working buttons.
-`https-dialog-buttons-results.json`, `https-specific-dialog-results.json`
-and `https-dialog-ui-results.json` retain those failures. Cause diagnosis and
-the three warning decisions remain pending. The warning's existing
-close-on-deactivation behavior remains enabled.
+The HTTPS-First warning was registered during navigation completion. The
+native modal manager then received the same cross-site commit and closed it.
+`https-close-trace.log` records `shown native=1`, then `cross-domain navigation
+closes modal count=1`, closing reason 0 and model destruction. Chromium's
+normal `TabDialogManager` path sets `close_on_navigate=false` for this ordering
+(`ask_before_http_dialog_controller.cc:270`). The native manager closes its
+dialogs at `web_contents_modal_dialog_manager.cc:203`. Patch 0809 defers the
+hosted warning until every observer has seen that commit. A weak tab reference
+and navigation generation cancel a stale deferred show. Runtime verification
+of this fix and all three warning decisions remain pending.
 
 ## Current distribution
 
