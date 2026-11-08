@@ -168,7 +168,7 @@ def run(factory, results, tmp, api):
         restored = await_state(lambda s: s['visible'])
         record('W17_session_restore', restored and restored['tab'] == welcome and restored['engineInternalPages'] == 0
                and not app.call('tab-state', tab=welcome)['loaded'], state=restored)
-        app.call('command', id='archive-tab')
+        app.call('key', key='w', modifiers=['cmd'])
         archived = api.wait_until(lambda: next((r for r in app.call('archive-list')['rows'] if r['id'] == welcome), None), timeout=8, step=.1)
         record('W18_archive_ordinary_tab', archived and archived['url'] == 'open://welcome', row=archived)
         app.call('command', id='restore-last-closed-tab')
