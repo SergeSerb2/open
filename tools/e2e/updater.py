@@ -456,8 +456,10 @@ def exercise_windowless_alerts(opts, folder, results, launch, configure, public,
                 acknowledged = (during.get('completedChecks') == before['completedChecks']
                     and settled['completedChecks'] == before['completedChecks'] + 1)
                 if variant == 'error-manual' and event:
-                    tabs = wait(lambda: app.call('tabs'), lambda rows: any(t['url'] ==
-                        'https://github.com/SergeSerb2/open/releases/latest' for t in rows), 'manual download page missing')
+                    # The alert action opens the model tab before acknowledging.
+                    # Record a wrong/missing destination as FAIL so the deliberate
+                    # broken-UI run can finish every acceptance family.
+                    tabs = app.call('tabs')
                     destination = len(app.call('shell-windows')) == 1 and any(t.get('selected') and t['url'] ==
                         'https://github.com/SergeSerb2/open/releases/latest' for t in tabs)
                 else:
