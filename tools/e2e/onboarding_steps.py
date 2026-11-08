@@ -92,7 +92,10 @@ def run(factory, results, tmp, h):
         action('save-card'); until(lambda: state()['savePanel'])
         action('card-save', path=str(card_path)); until(lambda: card_path.is_file())
         width, height, pixel = h.read_image(str(card_path))
-        results['steps_card_png'] = dict(ok=(width,height)==(1200,750) and pixel(600,375)!=pixel(1,1), size=[width,height], load=os.getloadavg())
+        screenshot_width, screenshot_height, _ = h.read_image(str(evidence/'ready-light.png'))
+        gate('card_png', lambda s: s['size']==[1200,750] and s['nonflat'],
+            dict(size=[width,height],nonflat=pixel(600,375)!=pixel(1,1)),
+            dict(size=[screenshot_width,screenshot_height],nonflat=True))
         # No model, name or global blocker write before Get Started.
         pending = dict(snapshot=snapshot().exists(), name=app.call('defaults', key=keys[0], persistent=True))
         blocker_after = pending_blocker.read_bytes() if pending_blocker.exists() else None
@@ -110,9 +113,12 @@ def run(factory, results, tmp, h):
             and app.call('tab-state', tab=welcome_id)['section']=='today' and tabs[0]['id']==welcome_id, load=os.getloadavg())
         adblock = json.loads(Path(app.user_data,'adblock-settings.json').read_text())
         saved_name = app.call('defaults', key=keys[0], persistent=True)
-        results['steps_final_data'] = dict(ok=saved_name=='Example' and adblock.get('nativeAdBlockEnabled') is False
-            and len([t for t in tabs if t['url'] in ('https://mail.google.com/','https://github.com/')])==2
-            and 'keyColor' in json.dumps(stored), load=os.getloadavg(), blocker=adblock, savedName=saved_name)
+        focused = next(s for s in stored['spaces'] if s['id']==stored['windows'][0]['focusedSpaceID'])
+        data = dict(name=saved_name, blocker=adblock.get('nativeAdBlockEnabled'),
+            favorites=[t['url'] for t in tabs if t['section']=='favorites'], style=focused['theme'].get('style'))
+        gate('final_data', lambda s: s.get('name')=='Example' and s.get('blocker') is False
+            and s.get('favorites')==['https://mail.google.com/','https://github.com/']
+            and s.get('style',{}).get('colorCount')==1 and bool(s.get('style',{}).get('keyColor')), data, pending)
         gate('handoff_done', lambda s: not s['active'] and not s['dim']['exists'] and s['screen']=='done', final, handoff)
         results['steps_browser_key'] = dict(ok=any(w.get('key') for w in app.call('windows') if w.get('class')=='BrowserWindow'), load=os.getloadavg())
         until(lambda: app.call('welcome')['playlist']=='stopped' and not app.call('welcome')['animating'], timeout=38)
@@ -144,13 +150,13 @@ def run(factory, results, tmp, h):
         prepared = [w for w in app.call('windows') if w['class']=='BrowserWindow']
         hidden_browser = lambda windows: bool(windows) and all((not w['visible'] or w['alpha']==0)
             and not w['key'] and not w['main'] for w in windows)
-        gate('import_browser_hidden', hidden_browser, prepared, [dict(visible=True,alpha=1,key=True,main=True)])
         action('next'); after_import = screen('theme')
         gate('import_skips_favorites', lambda s: s.get('screen')=='theme', after_import, favorites)
         results['steps_import_report'] = dict(ok=report['outcome'].get('Favorites')==1 and report['outcome'].get('Imported tabs')==7 and not report['completed'], load=os.getloadavg(), outcome=report['outcome'])
         skip_to_ready(); action('get-started')
         until(lambda: not state()['active'] and not state()['dim']['exists'])
         revealed = [w for w in app.call('windows') if w['class']=='BrowserWindow']
+        gate('import_browser_hidden', hidden_browser, prepared, revealed)
         gate('import_browser_revealed', lambda ws: bool(ws) and any(w['visible'] and w['alpha']==1 and w['key'] for w in ws), revealed, prepared)
         # Empty source skips Import. Escape returns to the actual preceding step.
         launch(directory=empty); action('next'); no_data = screen('favorites')
