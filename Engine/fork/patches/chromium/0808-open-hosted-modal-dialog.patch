@@ -2,16 +2,16 @@
 +++ b/components/constrained_window/native_web_contents_modal_dialog_manager_views.cc
 @@ -5,6 +5,8 @@
  #include "components/constrained_window/native_web_contents_modal_dialog_manager_views.h"
- 
+
  #include <memory>
 +
 +#include "open/browser/tab_strip/open_hosted_window_hooks.h"
- 
+
  #include "components/constrained_window/constrained_window_views.h"
  #include "components/web_modal/web_contents_modal_dialog_host.h"
 @@ -102,6 +104,9 @@
    CHECK(host_);
- 
+
    constrained_window::UpdateWebContentsModalDialogPosition(widget, host_);
 +  if (auto prepare = open_engine::GetHostedWindowHooks().prepare_modal_dialog) {
 +    prepare(native_delegate_->GetWebContents(), dialog());
@@ -19,8 +19,8 @@
    if (host_->ShouldActivateDialog()) {
      widget->Show();
      Focus();
-@@ -158,6 +163,9 @@
- 
+@@ -158,5 +163,8 @@
+
    for (views::Widget* widget : observed_widgets_) {
      constrained_window::UpdateWebContentsModalDialogPosition(widget, host_);
 +    if (auto prepare = open_engine::GetHostedWindowHooks().prepare_modal_dialog) {
@@ -28,4 +28,3 @@
 +    }
    }
  }
- 
