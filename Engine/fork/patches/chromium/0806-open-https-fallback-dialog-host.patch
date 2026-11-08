@@ -1,0 +1,82 @@
+diff --git a/chrome/browser/ssl/ask_before_http_dialog_controller.cc b/chrome/browser/ssl/ask_before_http_dialog_controller.cc
+index 54cb810f9a23d281400e87697e5cf745210bbaf8..ea1addff5bfc1ce0d17a44112d7f686b9ee3bd8d 100644
+--- a/chrome/browser/ssl/ask_before_http_dialog_controller.cc
++++ b/chrome/browser/ssl/ask_before_http_dialog_controller.cc
+@@ -36,6 +36,11 @@
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "components/constrained_window/constrained_window_views.h"
++#include "components/web_modal/web_contents_modal_dialog_host.h"
++#include "components/web_modal/web_contents_modal_dialog_manager.h"
++#include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
++#include "open/browser/autofill/open_autofill_hooks.h"
+ #include "chrome/browser/ui/tabs/public/tab_dialog_manager.h"
+ #include "chrome/browser/ui/tabs/public/tab_features.h"
+ #include "ui/views/bubble/bubble_dialog_model_host.h"
+@@ -208,6 +213,42 @@ void AskBeforeHttpDialogController::ShowDialog(
+   }
+   is_suspended_ = false;
+ 
++#if !BUILDFLAG(IS_ANDROID)
++  auto& open_hooks = open_engine::GetAutofillHooks();
++  const bool is_open = open_hooks.is_open && open_hooks.is_open(web_contents);
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
++  auto* tab_features = tab ? tab->GetTabFeatures() : nullptr;
++  auto* tab_dialog_manager = tab_features ? tab_features->tab_dialog_manager() : nullptr;
++  const bool use_native_modal = is_open || !tab_dialog_manager ||
++                                !tab_dialog_manager->GetHostWidget();
++  if (use_native_modal) {
++    auto* manager = web_modal::WebContentsModalDialogManager::FromWebContents(
++        constrained_window::GetTopLevelWebContents(web_contents));
++    auto* host = manager && manager->delegate()
++                     ? manager->delegate()->GetWebContentsModalDialogHost(
++                           constrained_window::GetTopLevelWebContents(web_contents))
++                     : nullptr;
++    if (!host || !host->GetHostView() ||
++        !web_contents->GetTopLevelNativeWindow()) {
++      // A detached/closing page cannot display a child dialog. Treat
++      // this as Cancel, never proceed without a warning or enter a Views
++      // factory that CHECKs a missing host.
++      RecordHttpsFirstModeUKM(
++          navigation_source_id_, fallback_reason_,
++          security_interstitials::https_only_mode::BlockingResult::
++              kInterstitialDontProceed);
++      metrics_helper_->RecordUserDecision(
++          security_interstitials::MetricsHelper::DONT_PROCEED);
++      navigation_source_id_ = ukm::kInvalidSourceId;
++      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++          FROM_HERE,
++          base::BindOnce(&AskBeforeHttpDialogController::OnGoBackButtonClicked,
++                         weak_ptr_factory_.GetWeakPtr()));
++      return;
++    }
++  }
++#endif
++
+   std::unique_ptr<ui::DialogModel> dialog_model =
+       CreateDialogModel(request_url);
+ 
+@@ -242,11 +283,17 @@ void AskBeforeHttpDialogController::ShowDialog(
+   // another window.
+   tab_dialog_params->close_on_detach = false;
+ 
+-  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
+-  CHECK(tab);
+-  dialog_widget_ =
+-      tab->GetTabFeatures()->tab_dialog_manager()->CreateAndShowDialog(
+-          model_host, std::move(tab_dialog_params));
++  if (use_native_modal) {
++    // Open hosts pages in AppKit, with no Views primary-window widget.
++    // Keep the HTTPS warning and its decisions through the real native
++    // WebContentsModalDialogHost instead of CHECKing a nonexistent widget.
++    dialog_widget_ = constrained_window::ShowWebModalDialogViewsOwned(
++        model_host, web_contents,
++        views::Widget::InitParams::CLIENT_OWNS_WIDGET);
++  } else {
++    dialog_widget_ = tab_dialog_manager->CreateAndShowDialog(
++        model_host, std::move(tab_dialog_params));
++  }
+   dialog_widget_->MakeCloseSynchronous(
+       base::BindOnce(&AskBeforeHttpDialogController::CloseDialogWidget,
+                      weak_ptr_factory_.GetWeakPtr()));

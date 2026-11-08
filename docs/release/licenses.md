@@ -38,8 +38,10 @@ review and the U-8 public source location also remain open.
 | Unicode bidirectional tables | Unicode 16.0.0 (unicode-bidi 0.3.18) | Unicode-3.0 | Ships: IDNA bidirectional property data. | `third_party/rust/chromium_crates_io/vendor/unicode-bidi-v0_3/src/char_data/tables.rs`, `UNICODE_VERSION = (16, 0, 0)`; licenses/Unicode-3.0.txt plus the crate terms and copyright notice. |
 | Unicode normalization tables | Unicode 18.0.0 as labelled by unicode-normalization 0.1.26 | Unicode-3.0 | Ships: generated normalization tables. This is the vendored source's own version constant, not a claim about the system Unicode version. | `third_party/rust/chromium_crates_io/vendor/unicode-normalization-v0_1/src/tables.rs`, `UNICODE_VERSION = (18, 0, 0)` in the committed vendor patch; licenses/unicode-ident-v1-LICENSE-UNICODE.txt plus the crate terms/copyright notice. |
 | Open-generated sounds (own work) | v1; tools/generate-sounds.py | Open-owned | Ships: open-event.caf and open-capture.caf; synthesized from seeded PCM, no reference audio. | `Packages/OpenKit/Sources/OpenFeatures/Resources/Sounds/`; reproducible source and PCM SHA-256 pins in `tools/generate-sounds.py`. No upstream sound license. |
+| Open Intro (own work) | v2; tools/generate-intro-sound.py | Open-owned | Ships: original 20 s stereo AAC score and its PCM measurement reference; deterministic synthesis, no reference audio. | `Packages/OpenKit/Sources/OpenOnboarding/Resources/Onboarding/`; source, fixed seed and PCM SHA-256 pin in `tools/generate-intro-sound.py`. No upstream sound license. |
 | Other Open-owned resources | main source snapshot | Open-owned | Ships: JS runtimes, JSON settings/catalog metadata, scripting definition. No copied fonts, sounds or image artwork. | See the complete resource map below. Derived emoji/PSL files have separate rows. System fonts, symbols, SQLite and Apple frameworks are OS-provided, not redistributed source dependencies. |
-| adblock (Brave adblock-rust) | 0.8.11 | MPL-2.0 | Ships: browser-process network/cosmetic matching; the parser supports resources, but no uBO asset payload ships. | `third_party/rust/adblock/v0_8/README.chromium`, `third_party/rust/chromium_crates_io/vendor/adblock-v0_8/`; https://crates.io/crates/adblock/0.8.11 ; licenses/MPL-2.0.txt. Modified MPL Cargo.toml is in the vendor patch; public exact-source location UNSET (U-8). |
+| adblock (Brave adblock-rust) | 0.8.11 | MPL-2.0 | Ships: browser-process network/cosmetic matching; redirect payloads have their own GPL row below. | `third_party/rust/adblock/v0_8/README.chromium`, `third_party/rust/chromium_crates_io/vendor/adblock-v0_8/`; https://crates.io/crates/adblock/0.8.11 ; licenses/MPL-2.0.txt. Modified MPL Cargo.toml is in the vendor patch; public exact-source location UNSET (U-8). |
+| uBlock Origin resources / scriptlets | 3762a26fd65df422080c116e6a70d13bc8d57d62 | GPL-3.0 | Ships: redirect stubs only (47 resources; no scriptlet templates), plus original redirect-source text and copyright/license notices under AdBlock/Source. | `Engine/fork/adblock/resources-pins.txt`; exact complete corresponding upstream source: https://codeload.github.com/gorhill/uBlock/tar.gz/3762a26fd65df422080c116e6a70d13bc8d57d62 ; source paths `src/web_accessible_resources/`, `src/js/redirect-resources.js`; output SHA-256 `6d4a87b8f0e44e0ffad66c5b66694c4a1da27383eaa11acae218030a29d9575e`; licenses/GPL-3.0.txt. Public distribution review remains U-6 / fork-infra Q-2. |
 | json-rust string escaping excerpt | Embedded in adblock 0.8.11; original upstream revision not recorded | MIT | Ships: adblock resource argument string escaping, adapted from json-rust. | `adblock-v0_8/src/resources/resource_storage.rs:23` explicitly attributes json-rust; https://github.com/maciejhirsz/json-rust ; licenses/MIT-json-rust.txt. The license copy pin is provenance for the text, not a claim about the excerpt revision; review this with U-6. |
 | rust-url parser excerpt | Embedded in adblock 0.8.11; original source header 2013–2016 | Apache-2.0 | Ships: parser code retained by adblock from rust-url. | `adblock-v0_8/src/url_parser/parser.rs` copyright/license header; licenses/rust-url-parser-NOTICE.txt, licenses/Apache-2.0.txt (Apache choice). This is separate from the url 2.5.8 crate row. |
 | Rust: base64 | 0.13.1 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/base64/v0_13/README.chromium`, `third_party/rust/chromium_crates_io/vendor/base64-v0_13/`; https://crates.io/crates/base64/0.13.1 ; licenses/Apache-2.0.txt. |
@@ -164,21 +166,17 @@ texts does not select a license or close U-6. The snapshot commit in the
 pin URLs identifies the exact distributed files; the different commit in
 their headers identifies the upstream source used to generate those files.
 
-## uBlock assets: §7.3(b), not shipped
+## uBlock redirect assets: §7.3(b)
 
-No uBlock Origin resources/scriptlets payload ships in today's app or engine
-distribution. The Rust crate's parser/assembler is code, not a copy of uBO's
-resource source. The bundled EasyList/EasyPrivacy filter text is separate
-from those assets. Optional extension installs and downloaded user data
-are not application payloads. The 2026-11-07 bundle audit predates #241's
-seed-list addition; the current filter pins and embed script are listed above.
-
-`licenses/GPL-3.0.txt` is included for the bundled filter lists. If uBO
-assets are added, add the exact pin and a public corresponding-source URL
-in a row named `uBlock Origin resources / scriptlets`, bundle their source
-text, pass `--ubo-source`, and include the full GPL text. The generator
-refuses that row without the source input. Do not infer uBO asset shipping
-from the Rust resources parser, the filter lists or a catalog URL.
+The app now ships the pinned redirect resources in the row above. The build
+stages original text sources and LICENSE.txt from the same hash-verified uBO
+archive, embeds them under `AdBlock/Source`, and passes that directory as
+`--ubo-source` to the acknowledgements generator. The exact complete upstream
+archive is linked in the row above; binary stub bodies are encoded unchanged
+by the crate in resources.json. The locked assembly driver is Open-owned
+build code in `tools/adblock-resources/`. No scriptlet templates ship.
+`licenses/GPL-3.0.txt` remains in the generated acknowledgements. This local
+bundle does not close U-6 or authorize a public release.
 
 The Sparkle checkout at the exact pin confirms bspatch is in its shared
 bsdiff library, while sais is used by bsdiff in delta-creation tools. Those
@@ -197,10 +195,12 @@ on OpenAdBlock, so its resources do ship transitively today.
 | Bundle resource | Repository source | Ownership / license |
 |---|---|---|
 | OpenKit_OpenSuggest.bundle/Contents/Resources/public_suffix_list.dat | Sources/OpenSuggest/Resources/public_suffix_list.dat | PSL, MPL-2.0 |
-| OpenKit_OpenAdBlock.bundle/Contents/Resources/Resources/{catalog.json,list-pins.txt,public_suffix_list.dat} | Sources/OpenAdBlock/Resources/ | Open-owned catalog/hash metadata; PSL is MPL-2.0 |
+| OpenKit_OpenAdBlock.bundle/Contents/Resources/Resources/{catalog.json,list-pins.txt,resources-pins.txt,resources.json,public_suffix_list.dat} | Sources/OpenAdBlock/Resources/ | Open-owned catalog/hash metadata; PSL is MPL-2.0; resources.json is GPL-3.0 |
 | AdBlock/{easylist.txt,easyprivacy.txt} | Vendor/adblock/ staged from the commit-pinned URLs in Sources/OpenAdBlock/Resources/list-pins.txt | The EasyList authors; GPL-3.0-or-later OR CC-BY-SA-3.0 (later CC versions also permitted); unmodified headers retained |
+| AdBlock/{resources.json,Source/} | Vendor/adblock/ generated from resources-pins.txt | uBlock Origin redirect stubs and original text sources/notices; GPL-3.0 |
 | OpenKit_OpenSpaceEditor.bundle/Contents/Resources/emoji-index.json | Sources/OpenSpaceEditor/Resources/emoji-index.json | Derived Unicode 17.0 data; Unicode-3.0 |
 | OpenKit_OpenFeatures.bundle/Contents/Resources/Sounds/{open-capture.caf,open-event.caf} | Sources/OpenFeatures/Resources/Sounds/ | Open-owned generated audio |
+| OpenKit_OpenOnboarding.bundle/Contents/Resources/Onboarding/{open-intro.m4a,open-intro-reference.json} | Sources/OpenOnboarding/Resources/Onboarding/ | Open-owned generated intro audio and PCM measurements |
 | OpenKit_OpenBoosts.bundle/Contents/Resources/{boost-applier.js,zap-picker.js} | Sources/OpenBoosts/Resources/ | Open-owned runtime source |
 | OpenKit_OpenTranslate.bundle/Contents/Resources/translate-runtime.js | Sources/OpenTranslate/Resources/ | Open-owned runtime source |
 | OpenKit_OpenMedia.bundle/Contents/Resources/pip-site-rules.json | Sources/OpenMedia/Resources/pip-site-rules.json | Open-owned site rules |

@@ -1106,7 +1106,7 @@ it never destroys an engine under a lock.
 | Concurrent builds | 1 per process: one shared build runner for all Profiles, so a burst of toggles in several Profiles queues | Peak transient memory is one build (~80 MiB measured for the defaults) |
 | Stale builds | A build checks an atomic "latest load id" for its Profile before it parses and before it writes the cache, and drops itself when stale | 100-7; also bounds wasted memory |
 | Text lifetime | List texts are freed right after `open_adblock_build` returns, before serialize and the cache write; the DAT is written from the Rust `Vec<u8>` through a `base::span`, with no `std::string` copy | 100-5 |
-| Resources JSON | 4 MiB read cap (bundled file; Step 7 records its real size) | Guess at headroom; the uBO resources set is about 1 MiB today (guess) |
+| Resources JSON | 4 MiB read cap (bundled file; Step 7: 142,493 bytes, 47 redirect resources) | Headroom above the pinned payload; source and output hashes are recorded in §9.3 |
 
 **Budgets (measured as `phys_footprint` of the browser process,
 `footprint` tool or `vmmap --summary`; the step that gates each row is
@@ -2698,6 +2698,48 @@ app update is the only way it changes). Tombstone: the pre-revision
 "resources update with the lists on the §9.5 schedule" rule is
 superseded by lead ruling 7.
 
+**Step 7 resources as built (2026-11-08).** Official uBO commit
+`3762a26fd65df422080c116e6a70d13bc8d57d62` confirms both input paths:
+`src/web_accessible_resources/` and `src/js/redirect-resources.js`.
+`Engine/fork/adblock/resources-pins.txt` pins the official source archive
+(`addfeba80c8e231cd4882160c01b64aaf2b632b3399972fc5c0819c2158b7991`)
+and output (`6d4a87b8f0e44e0ffad66c5b66694c4a1da27383eaa11acae218030a29d9575e`).
+The redirect index SHA-256 is
+`870666664a8cc95a4d55566c440d71a5ee00e0f3f4326a15287aa55f138b547a`.
+`Engine/fork/adblock/resources-inputs.sha256` records each input file's hash;
+the source archive pin verifies all of them before assembly.
+`tools/fetch-adblock-resources.py` copies the checked-in Cargo driver and
+lockfile from `tools/adblock-resources/` into `/tmp`, fetches locked crates,
+then runs `cargo run --offline --locked`. It uses crates.io `adblock =0.8.11`
+with D-3's features. The lock holds `rmp` at the fork's 0.8.11 (0.8.15
+removed APIs required by `rmp-serde` 0.15). No scriptlet assembler is called.
+The crate's serialized `Vec<Resource>` is 142,493 bytes: 47 kept, 0 dropped;
+all are `ResourceType::Mime`, with `Template=0` and `Mime(FnJavascript)=0`.
+Kinds: ApplicationJavascript 31, ApplicationJson 1, AudioMp3 2, ImageGif 1,
+ImagePng 3, TextCss 1, TextHtml 1, TextPlain 1, TextXml 4, Unknown 1,
+VideoMp4 1. The driver prints these counts before and after filtering.
+
+`tools/fetch-adblock-lists.sh` stages the verified output in `Vendor/adblock/`
+and the ignored SwiftPM resource directory; `tools/embed-adblock.sh` copies
+it into `Open.app/Contents/Resources/AdBlock/`. The package's pins receipt
+mirrors the engine-side file, with byte equality required at staging.
+M5 has Cargo 1.99.1 in `~/.cargo/bin`; M1 has no Cargo installed (checked
+2026-11-08). A matching output cache needs no Rust. The verified source archive is cached
+too, for bundling original source text and LICENSE.txt under `AdBlock/Source`
+for acknowledgements. Both matching caches avoid network use. A clean or
+stale output cache needs Cargo and pinned inputs; M1 can receive the verified
+142,493-byte output and source archive before its build. Never substitute unverified bytes.
+The assembler reads only `/tmp` inputs. The bundled source text is license
+material, not an engine input: 42 original text files, 136,725 bytes (the
+kept redirect stubs' text, redirect index and LICENSE.txt).
+
+Every new Swift generation has `_resources`, independently of
+`enabledBlockLists`. Old generations remain verifiable and gain the current
+bundle on the next publication (open, update, reset or list change). An app
+resource-pin change also republishes on open without changing enabled lists.
+Copyable debug info includes `resources=6d4a87b8f0e4`.
+Engine resources-after-DAT acceptance N-19 remains E3's separate gate.
+
 ### 9.4 The 46-list catalog (committed data file)
 
 Create `Engine/fork/adblock/catalog.json` **once** at Step 7 by
@@ -3259,7 +3301,7 @@ App and its production API:
       context already exists for the <=2 MiB incremental engine window.
 - [ ] OTR shares its parent's engine and follows later parent exclusions.
 - [ ] Settings list toggle publishes a generation, advances load_generation
-      and changes blocking. All lists off loads a valid zero-rule generation.
+      and changes blocking. All lists off verifies a no-engine generation, with no loaded resources or error.
 - [ ] Deleting a Profile during held real HTTP with its native engine
       loaded retires the context; no crash; folder absent after relaunch.
 - [ ] Debug copy has the 11-key native schema and no path, page URL or site.
@@ -4465,12 +4507,22 @@ are measurements for optimization, not final gate acceptance.
 ### Step 4 as built (2026-11-08, integrated engine)
 
 Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
-It integrates main `cdd147ca` (0403, Section 12's 06xx and native Profile
-0701) and App adapter `cf700584`. The CEF series preserves every main entry,
-plus ad-block 0310/0311/0314; 0601/0602 precede 0701 in numeric order.
-The integrated dev build of `cefsimple cefclient` passes. Built-artifact
-engine-status reports 8 PASS, 0 FAIL, 0 WARN: 28 patches, 109 overlays,
-47 required exports. Distribution and App acceptance are separate gates.
+Source now includes main `d26300e6` (Section 15's Chromium 0801–0810),
+the final App adapter `fcd1ef25`, and Step 7 resources. Every main patch
+is retained. The engine applies Chromium's 08xx before the CEF series,
+including ad-block 0310/0311/0314; 0601/0602 precede 0701 within CEF.
+There are no Section 15 08xx entries in the CEF series.
+
+The earlier integrated dev build of `cefsimple cefclient` passed
+built-artifact engine-status: 8 PASS, 0 FAIL, 0 WARN, with 28 patches,
+109 overlays and 47 required exports. The runtime receipts below precede
+Section 15's merge and must be rerun on the merged engine. The root is
+read-only during the lead's clone hold. After release: apply/build,
+headless/API/N/COUNT/footprint/G-2/G-6, zero-list proof, then distribution
+and App acceptance. Before distribution and again before the done report,
+fetch main and check `Engine/fork` changes since the last merged main.
+Any new engine change requires merge, rebuild and engine reproof first.
+The distribution receipt must identify its main commit and framework SHA.
 
 **Request path and lifetime.** Open's outermost factory proxy checks
 subresources and redirects on one matcher sequence. Main documents pass
@@ -4561,13 +4613,24 @@ Receipts: `.re/s13/e3/integrated-headless-summary.json`,
 `integrated-headless-pa-phases.json` and `integrated-verdict-identity.json`.
 
 **Valid empty generation.** All lists off publishes a valid zero-file
-manifest in the Swift store. The service now loads a zero-rule engine
-instead of rejecting that manifest and retaining old blocking rules.
-Resources-only manifests remain invalid. The real production API flow
-fails before the fix (async load deadline) and passes all 21 rows after it.
-All eight additional text/DAT/cap initial/resumed corpus dumps remain
-baseline-identical. Receipts: `.re/s13/e3/empty-generation-before.log`,
-`empty-generation-after.log` and `empty-corpus-identity.json`.
+manifest in the Swift store. The first fix loaded a zero-rule engine
+instead of retaining old blocking rules; its API flow passed 21 rows and
+eight additional full-corpus dumps remained identical. Step 7 now includes
+`_resources` even when no list is enabled. That resources-only generation
+failed the old loader through the real API (async load deadline).
+
+The lead's 2026-11-08 12:29 ruling replaces the zero-rule engine with a
+verified no-engine generation. Both zero-file and resources-only manifests
+are verified normally. With zero lists the service skips registry lookup,
+DAT work and engine/resource construction, clears the matcher and reclaims
+freed pages after its old holder is destroyed. Status advances
+`load_generation`, with `list_count=0`, `engine_loaded=false`,
+`resources_loaded=0` and empty `last_error`. The valid generation is a
+successful API load. Nonempty generations retain the normal build path.
+New native no-engine/restore and App request proofs remain pending.
+Historical receipts: `.re/s13/e3/empty-generation-before.log`,
+`empty-generation-after.log` and `empty-corpus-identity.json`; Step 7
+reproduction: `empty-resources-before.log`.
 
 **COUNT-closed-document erratum.** The original pagehide stimulus observed
 no requests. Its replacement waited for three blocked fetches and then
@@ -4631,9 +4694,13 @@ blocking-on median 118.2 ms versus off 144.7 ms. G-5 busy CPU failed at
 Receipt: `.re/s13/e3/integrated-page-loaded-r1-page-scopes.json`. These
 loaded numbers do not establish the quiet gate or a cause for the miss.
 
-**Remaining delivery gates.** G-5 CPU and quiet timing, recorded
-distribution, real App acceptance and the full verify gate remain pending
-in E3. N-18 currently proves hook reachability only: no HTTP/3
+**Remaining delivery gates.** The no-engine generation revision,
+recorded distribution, real App acceptance (including bundled resources
+and DAT reapplication) and the full verify gate remain pending in E3.
+The lead's 2026-11-08 12:27 ruling requires one more quiet load1 <=12
+opportunity after the App build. If none occurs, retain both loaded CPU
+receipts (12.756 ms at load1 48–50 and 8.576 ms at 40–42) and route the
+quiet G-5 row to Section 16 under ruling 2a; it does not block this PR. N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 

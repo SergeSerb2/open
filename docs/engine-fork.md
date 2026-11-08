@@ -297,8 +297,10 @@ translator generates their C API and wrappers. `OEAdBlock.h` exposes
 main-thread OpenEngine categories with no CEF types. The App configures
 each regular or private context through those categories. Private contexts
 have separate service settings and share the parent's immutable engine.
-Valid empty generations load a zero-rule engine; a resources-only
-generation remains invalid. Native API and lifetime proofs pass on the
+The Step 7 revision accepts verified zero-list generations, including
+resources-only manifests, without building or retaining an engine. It
+clears the matcher, reports no error and advances the load generation.
+Native/App revalidation of this revision is pending. Native API and lifetime proofs pass on the
 integrated build; real App acceptance and distribution remain pending.
 
 Open's Chromium patches can change lines that CEF's own patches added

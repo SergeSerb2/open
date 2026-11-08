@@ -179,13 +179,6 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
     }
     generation.file_hashes[*name] = *sha;
   }
-  // Settings can publish an empty generation when every list is disabled.
-  // Load an empty engine so the previous rules stop applying. A resources-only
-  // manifest is still invalid; resources do not count as an enabled list.
-  if (entries.empty() && !files->empty()) {
-    *error = "read manifest.json: no lists";
-    return std::nullopt;
-  }
   size_t total_bytes = 0;
   for (const Entry& entry : entries) {
     total_bytes += static_cast<size_t>(entry.bytes);
@@ -336,6 +329,15 @@ OpenAdBlockService::BuildResult BuildOnBackground(
   }
   result.generation = generation->number;
   result.list_count = static_cast<uint32_t>(generation->texts.size());
+  // Step 7 includes the verified resources file even with all lists off.
+  // Publish that generation as no-engine, before registry lookup, parsing or
+  // DAT work. The input buffers die on this runner before the reply.
+  if (generation->lists.empty()) {
+    result.empty_generation = true;
+    result.build_ms = timer.Elapsed().InMilliseconds();
+    VLOG(1) << "OpenAdBlock: verified empty generation; no engine build or cache";
+    return result;
+  }
 
   // §6.6: another Profile's live engine with the same inputs.
   const std::string key = EngineKey(*generation);
@@ -723,35 +725,43 @@ void OpenAdBlockService::OnBuilt(
     }
     return;
   }
-  const bool loaded = !!result.engine;
+  const bool success = !!result.engine || result.empty_generation;
   status_.last_build_ms = result.build_ms;
   status_.last_error = result.error;
-  if (loaded) {
-    status_.engine_loaded = true;
+  if (success) {
+    status_.engine_loaded = !!result.engine;
     status_.engine_from_dat = result.from_dat;
     status_.engine_shared = result.shared;
     status_.generation = result.generation;
     status_.list_count = result.list_count;
     status_.dat_size_bytes = result.dat_size_bytes;
-    status_.dat_policy = result.lossless ? "dat" : "text-only";
+    status_.dat_policy = result.empty_generation ? "" : result.lossless ? "dat" : "text-only";
     status_.lossy_kinds = result.lossy_kinds;
     status_.resources_loaded = result.resources_loaded;
     status_.resources_version = result.resources_version;
     PostToMatcher(base::BindOnce(
-        [](std::shared_ptr<const EngineHolder> engine,
+        [](bool empty_generation, std::shared_ptr<const EngineHolder> engine,
            OpenAdBlockMatcher* matcher) {
           matcher->SetEngine(std::move(engine));
+          if (empty_generation) {
+            // SetEngine releases its old holder on the build runner. Reclaim
+            // after that queued destruction, so all-lists-off retains the
+            // footprint of no engine, rather than freed allocator pages.
+            AdBlockBuildTaskRunner()->PostTask(FROM_HERE, base::BindOnce([] {
+              partition_alloc::MemoryReclaimer::Instance()->ReclaimAll();
+            }));
+          }
         },
-        std::move(result.engine)));
+        result.empty_generation, std::move(result.engine)));
   }
   VLOG(1) << "OpenAdBlock: loaded " << result.list_count << " lists, "
-          << (result.shared ? "shared" : result.from_dat ? "dat" : "text")
+          << (result.empty_generation ? "empty" : result.shared ? "shared" : result.from_dat ? "dat" : "text")
           << ", " << result.build_ms << " ms"
           << (result.error.empty() ? "" : ", " + result.error);
   NotifyStatus();
   if (done) {
-    std::move(done).Run(loaded ? AdBlockLoadResult::kLoaded
-                               : AdBlockLoadResult::kFailed);
+    std::move(done).Run(success ? AdBlockLoadResult::kLoaded
+                              : AdBlockLoadResult::kFailed);
   }
 }
 

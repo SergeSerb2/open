@@ -93,6 +93,9 @@ class OpenAdBlockService {
     ~BuildResult();
 
     std::shared_ptr<const EngineHolder> engine;
+    // Verified generation with no enabled lists. Success without creating an
+    // engine, loading resources, or entering the engine registry.
+    bool empty_generation = false;
     bool from_dat = false;
     // Found in the process-wide registry (another Profile's engine).
     bool shared = false;

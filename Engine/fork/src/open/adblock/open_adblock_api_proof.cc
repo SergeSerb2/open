@@ -20,6 +20,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "open/adblock/open_adblock_service.h"
+#include "open/adblock/open_adblock_selftest.h"
 
 #if !defined(OFFICIAL_BUILD)
 namespace open_engine {
@@ -47,7 +48,8 @@ class AdBlockApiProof final : public CefRequestContextHandler,
   }
 
   void OnRequestContextInitialized(CefRefPtr<CefRequestContext>) override {
-    Post(&AdBlockApiProof::Configure);
+    empty_proof_ = base::PathExists(root_.Append("restored-current.json"));
+    Post(&AdBlockApiProof::Configure, empty_proof_ ? base::Seconds(6) : base::TimeDelta());
   }
 
   void OnReadyToRelease() override { context_ = nullptr; }
@@ -81,6 +83,7 @@ class AdBlockApiProof final : public CefRequestContextHandler,
     Row(schema, "status has exact privacy-safe keys");
     Row(status && !status->GetBool("enabled") && !status->GetBool("engine_loaded") &&
         status->GetDouble("load_generation") == 0, "context starts disabled and empty");
+    if (empty_proof_) RecordOpenAdBlockMemoryPhase("api-no-engine");
     Row(CefSetOpenAdBlockExcludedDomains(context_, {"Example.COM.", "example.com"}) &&
         CefSetOpenAdBlockEnabled(context_, true) &&
         CefSetOpenAdBlockListDirectory(context_, root_.value()),
@@ -91,8 +94,9 @@ class AdBlockApiProof final : public CefRequestContextHandler,
     auto status = CefGetOpenAdBlockStatus(phase_ == 4 ? otr_ : context_);
     const bool ready = status && (phase_ == 3
         ? !status->GetString("last_error").empty()
-        : status->GetBool("engine_loaded") && status->GetDouble("load_generation") ==
-              (phase_ == 1 ? 1 : 2));
+        : status->GetDouble("load_generation") ==
+              (phase_ == 1 ? 1 : phase_ == 5 ? 3 : phase_ == 4 ? live_generation_ : 2) &&
+          ((empty_proof_ && phase_ == 2) || status->GetBool("engine_loaded")));
     if (!ready) {
       if (base::TimeTicks::Now() < deadline_) {
         Post(&AdBlockApiProof::Poll, base::Milliseconds(10));
@@ -116,12 +120,24 @@ class AdBlockApiProof final : public CefRequestContextHandler,
                          CefRefPtr<AdBlockApiProof>(this)));
     } else if (phase_ == 2) {
       Row(true, "explicit reload publishes generation 2");
-      Row(CefSetOpenAdBlockListDirectory(context_, root_.Append("missing").value()),
-          "invalid directory load accepted asynchronously");
-      Wait(3);
+      if (empty_proof_) {
+        Row(!status->GetBool("engine_loaded") && !status->GetBool("engine_shared") &&
+            !status->GetBool("engine_from_dat") && status->GetInt("list_count") == 0 &&
+            status->GetInt("resources_loaded") == 0 && status->GetString("last_error").empty(),
+            "all lists off publishes no engine or resources without error");
+        Post(&AdBlockApiProof::RestoreLists, base::Seconds(6));
+      } else {
+        FailNextLoad();
+      }
+    } else if (phase_ == 5) {
+      Row(status->GetBool("engine_loaded") && status->GetInt("list_count") > 0 &&
+          status->GetDouble("load_generation") > 2 && status->GetString("last_error").empty(),
+          "lists restored through production API advance generation");
+      live_generation_ = 3;
+      FailNextLoad();
     } else if (phase_ == 3) {
       const auto error = status->GetString("last_error").ToString();
-      Row(status->GetBool("engine_loaded") && status->GetDouble("load_generation") == 2 &&
+      Row(status->GetBool("engine_loaded") && status->GetDouble("load_generation") == live_generation_ &&
           error.find('/') == std::string::npos && error.find(root_.value()) == std::string::npos,
           "failed load keeps engine and hides paths");
       Row(CefSetOpenAdBlockListDirectory(context_, ""), "empty directory unload accepted");
@@ -144,6 +160,21 @@ class AdBlockApiProof final : public CefRequestContextHandler,
           "OTR changes leave parent settings intact");
       CloseOtr();
     }
+  }
+  void RestoreLists() {
+    RecordOpenAdBlockMemoryPhase("api-empty-after-reclaim");
+    std::string restored;
+    if (!base::ReadFileToString(root_.Append("restored-current.json"), &restored) ||
+        !base::WriteFile(root_.Append("current.json"), restored)) {
+      Row(false, "publish restored fixture generation"); Finish(); return;
+    }
+    Row(CefReloadOpenAdBlockLists(context_), "restore lists reload accepted");
+    Wait(5);
+  }
+  void FailNextLoad() {
+    Row(CefSetOpenAdBlockListDirectory(context_, root_.Append("missing").value()),
+        "invalid directory load accepted asynchronously");
+    Wait(3);
   }
   void SameDirectory() {
     auto status = CefGetOpenAdBlockStatus(context_);
@@ -201,6 +232,8 @@ class AdBlockApiProof final : public CefRequestContextHandler,
   CefRefPtr<CefRequestContext> context_, otr_;
   base::TimeTicks deadline_;
   int phase_ = 0;
+  int live_generation_ = 2;
+  bool empty_proof_ = false;
   bool ok_ = true;
   IMPLEMENT_REFCOUNTING(AdBlockApiProof);
 };

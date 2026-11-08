@@ -1,0 +1,21 @@
+--- a/chrome/browser/ui/views/autofill/popup/popup_base_view.cc
++++ b/chrome/browser/ui/views/autofill/popup/popup_base_view.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/autofill/popup/popup_base_view.h"
++
++#include "open/browser/autofill/open_autofill_hooks.h"
+ 
+ #include <memory>
+ #include <string_view>
+@@ -330,6 +332,9 @@
+     return false;
+   }
+ 
++  if (auto attach = open_engine::GetAutofillHooks().attach_popup) {
++    attach(GetWebContents(), GetWidget()->GetNativeWindow());
++  }
+   GetWidget()->Show();
+ 
+   // Showing the widget can change native focus (which would result in an

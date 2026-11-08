@@ -3,10 +3,17 @@
 // found in the LICENSE file.
 
 #include "open/browser/tab_strip/open_browser_window.h"
+#include "open/browser/tab_strip/open_hosted_window_hooks.h"
+#include "open/browser/autofill/open_autofill_bubble_handler.h"
+#include "open/browser/autofill/open_autofill_handler_registry.h"
+#include "open/browser/autofill/open_autofill_hooks.h"
+#include "content/public/browser/web_contents.h"
 
 #include <limits>
 
 #import <AppKit/AppKit.h>
+
+#include <algorithm>
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
@@ -109,16 +116,27 @@ class HiddenFindBar : public FindBar {
   gfx::Range selected_range_;
 };
 
-// Dialog host for browser- and tab-modal Chrome dialogs (Web Store install
-// prompt, auth). Without a Views host view they open as free-standing
-// windows, as with Alloy; patch P3 sends install prompts to the embedder.
-class HiddenDialogHost : public web_modal::WebContentsModalDialogHost {
+// Real host for WebAuthn and HTTP authentication. Placement follows Chrome's
+// top-center rule (Arc's exact placement is not yet measured).
+class OpenWebContentsModalDialogHost : public web_modal::WebContentsModalDialogHost {
  public:
-  gfx::NativeView GetHostView() const override { return gfx::NativeView(); }
-  gfx::Point GetDialogPosition(const gfx::Size& size) override {
-    return gfx::Point();
+  explicit OpenWebContentsModalDialogHost(base::RepeatingCallback<gfx::NativeView()> view)
+      : view_(std::move(view)) {}
+  ~OpenWebContentsModalDialogHost() override {
+    for (auto& observer : observers_) observer.OnHostDestroying();
   }
-  gfx::Size GetMaximumDialogSize() override { return gfx::Size(800, 600); }
+  gfx::NativeView GetHostView() const override { return view_.Run(); }
+  gfx::Point GetDialogPosition(const gfx::Size& size) override {
+    const auto maximum = GetMaximumDialogSize();
+    return gfx::Point(std::max(0, (maximum.width() - size.width()) / 2), 0);
+  }
+  gfx::Size GetMaximumDialogSize() override {
+    NSView* view = GetHostView().GetNativeNSView();
+    return view ? gfx::Size(view.bounds.size.width, view.bounds.size.height) : gfx::Size();
+  }
+  void NotifyPositionRequiresUpdate() override {
+    for (auto& observer : observers_) observer.OnPositionRequiresUpdate();
+  }
   void AddObserver(web_modal::ModalDialogHostObserver* observer) override {
     if (observer && !observers_.HasObserver(observer)) {
       observers_.AddObserver(observer);
@@ -129,8 +147,8 @@ class HiddenDialogHost : public web_modal::WebContentsModalDialogHost {
   }
 
  private:
-  base::ObserverList<web_modal::ModalDialogHostObserver>::Unchecked
-      observers_;
+  base::RepeatingCallback<gfx::NativeView()> view_;
+  base::ObserverList<web_modal::ModalDialogHostObserver> observers_;
 };
 
 }  // namespace
@@ -142,6 +160,7 @@ struct OpenBrowserWindow::HostState {
   NSWindow* __weak observed_window = nil;
   id __strong become_key_observer = nil;
   id __strong resign_key_observer = nil;
+  id __strong resize_observer = nil;
 
   NSWindow* window() const { return view.window; }
 
@@ -153,6 +172,8 @@ struct OpenBrowserWindow::HostState {
     if (resign_key_observer) {
       [center removeObserver:resign_key_observer];
     }
+    if (resize_observer) [center removeObserver:resize_observer];
+    resize_observer = nil;
     become_key_observer = nil;
     resign_key_observer = nil;
     observed_window = nil;
@@ -162,7 +183,37 @@ struct OpenBrowserWindow::HostState {
 OpenBrowserWindow::OpenBrowserWindow(Profile* profile)
     : profile_(profile),
       location_bar_(std::make_unique<contextual_tasks::LocationBarStub>()),
-      host_(std::make_unique<HostState>()) {}
+      host_(std::make_unique<HostState>()),
+      autofill_handler_(std::make_unique<OpenAutofillBubbleHandler>()) {
+  GetAutofillHooks().attach_popup = [](content::WebContents* contents,
+                                     gfx::NativeWindow popup_window) {
+    if (!IsOpenWebContents(contents)) return;
+    NSWindow* parent = contents->GetNativeView().GetNativeNSView().window;
+    NSWindow* popup = popup_window.GetNativeNSWindow();
+    // NativeWidgetMac only resolves Views parents. Hosted tabs live in the
+    // shell's AppKit window, so attach this non-activating Views popup there.
+    if (parent && popup && parent != popup && !popup.parentWindow) {
+      [parent addChildWindow:popup ordered:NSWindowAbove];
+    }
+  };
+  GetHostedWindowHooks().prepare_modal_dialog = [](
+      content::WebContents* contents, gfx::NativeWindow dialog_window) {
+    if (!IsOpenWebContents(contents)) return;
+    NSView* page = contents->GetNativeView().GetNativeNSView();
+    NSView* host = page.superview ?: page;
+    NSWindow* parent = host.window;
+    NSWindow* dialog = dialog_window.GetNativeNSWindow();
+    if (!parent || !dialog || parent == dialog) return;
+    // NativeWidgetMac only discovers Views parents. Keep Chromium's modal
+    // manager, focus and decisions; supply the missing AppKit relationship.
+    if (!dialog.parentWindow) [parent addChildWindow:dialog ordered:NSWindowAbove];
+    if (dialog.parentWindow != parent) return;
+    const NSRect page_screen = [parent convertRectToScreen:
+        [host convertRect:host.bounds toView:nil]];
+    [dialog setFrameTopLeftPoint:NSMakePoint(
+        NSMidX(page_screen) - NSWidth(dialog.frame) / 2, NSMaxY(page_screen))];
+  };
+}
 
 OpenBrowserWindow::~OpenBrowserWindow() {
   host_->StopObserving();
@@ -171,10 +222,13 @@ OpenBrowserWindow::~OpenBrowserWindow() {
     browser_->GetFeatures().TearDownPreBrowserWindowDestruction();
     browser_ = nullptr;
   }
+  dialog_host_.reset();
+  autofill_handler_.reset();
 }
 
 void OpenBrowserWindow::SetBrowser(Browser* browser) {
   browser_ = browser;
+  autofill_handler_->SetBrowser(browser_);
   if (CanActivateBrowser() && IsActive()) {
     if (RefuseUnsafeActivationForAutomation(browser_)) {
       return;
@@ -219,6 +273,12 @@ void OpenBrowserWindow::SetHostView(CefWindowHandle handle) {
                           weak->OnHostWindowKeyChanged(false);
                         }
                       }];
+  host_->resize_observer =
+      [center addObserverForName:NSWindowDidResizeNotification
+                          object:window queue:nil usingBlock:^(NSNotification*) {
+        if (weak && weak->dialog_host_)
+          weak->dialog_host_->NotifyPositionRequiresUpdate();
+      }];
   if (window.isKeyWindow) {
     OnHostWindowKeyChanged(true);
   }
@@ -449,8 +509,7 @@ PinnedToolbarActions* OpenBrowserWindow::GetPinnedToolbarActions() {
 }
 
 autofill::AutofillBubbleHandler* OpenBrowserWindow::GetAutofillBubbleHandler() {
-  // Same as WebUIBrowserWindow: no autofill bubbles without Views.
-  return nullptr;
+  return autofill_handler_.get();
 }
 
 bool OpenBrowserWindow::UpdateToolbarSecurityState() {
@@ -465,10 +524,13 @@ OpenBrowserWindow::PreHandleKeyboardEvent(
 
 bool OpenBrowserWindow::HandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
-  // A key the page and the tab's CEF client left unhandled: give the main
-  // menu a chance, as CefBrowserPlatformDelegateNativeMac does for Alloy.
+  // Renderer acknowledgements arrive after NSApplication's original dispatch.
+  // AppKit's menu fallback must see shortcuts only: replaying plain editing
+  // input here can invoke a menu action after that dispatch has ended.
   NSEvent* ns_event = event.os_event.Get();
-  if (ns_event.type == NSEventTypeKeyDown) {
+  const bool shortcut = ns_event.modifierFlags &
+      (NSEventModifierFlagCommand | NSEventModifierFlagControl);
+  if (ns_event.type == NSEventTypeKeyDown && shortcut) {
     return [[NSApp mainMenu] performKeyEquivalent:ns_event];
   }
   return false;
@@ -530,7 +592,15 @@ std::unique_ptr<FindBar> OpenBrowserWindow::CreateFindBar() {
 web_modal::WebContentsModalDialogHost*
 OpenBrowserWindow::GetWebContentsModalDialogHost() {
   if (!dialog_host_) {
-    dialog_host_ = std::make_unique<HiddenDialogHost>();
+    dialog_host_ = std::make_unique<OpenWebContentsModalDialogHost>(base::BindRepeating(
+        [](base::WeakPtr<OpenBrowserWindow> window) -> gfx::NativeView {
+          if (!window) return gfx::NativeView();
+          auto* contents = window->browser_
+              ? window->browser_->tab_strip_model()->GetActiveWebContents() : nullptr;
+          NSView* page = contents ? contents->GetNativeView().GetNativeNSView() : nil;
+          NSView* parent = page.superview ?: window->host_->view;
+          return gfx::NativeView(parent);
+        }, weak_ptr_factory_.GetWeakPtr()));
   }
   return dialog_host_.get();
 }

@@ -308,8 +308,12 @@ def real_engine(factory, results, wait):
                     list_started.set()
                     release_lists.wait(timeout=40)
                 name = Path(urllib.parse.urlsplit(self.path).path).name
-                body = (b'[Adblock Plus 2.0]\n||demand.supply^$script\n' if synthetic_lists.is_set() else pinned[name])
+                body = (b'[Adblock Plus 2.0]\n||demand.supply/ad.js$script\n'
+                        b'||demand.supply/resource.js$script,redirect=noopjs\n'
+                        if synthetic_lists.is_set() else pinned[name])
                 mime = 'text/plain'
+            elif self.path.startswith('/resource.js'):
+                body, mime = b'window.__resourceNetwork=true;', 'application/javascript'
             elif self.path.startswith('/ad.js'):
                 body, mime = b'window.__adLoaded=true;', 'application/javascript'
             elif self.path.startswith('/control.js'):
@@ -396,6 +400,39 @@ def real_engine(factory, results, wait):
             and ('net::ERR_BLOCKED_BY_CLIENT' in errors) == blocked
             and reached == (not blocked), before=before, after=after,
             completion=completed, networkErrors=errors, adReachedServer=reached)
+    def resource_manifest(profile):
+        root = Path(app.user_data) / 'Profiles' / profile['directory'] / 'AdBlock' / 'lists'
+        live = json.loads((root / 'current.json').read_text())['live']
+        generation = root / 'generations' / str(live['generation'])
+        manifest_bytes = (generation / 'manifest.json').read_bytes()
+        manifest = json.loads(manifest_bytes)
+        resource = next(f for f in manifest['files'] if f['listID'] == '_resources')
+        body = (generation / resource['file']).read_bytes()
+        return dict(generation=live['generation'],
+                    manifestVerified=hashlib.sha256(manifest_bytes).hexdigest() == live['manifestSHA256'],
+                    resourceSHA256=hashlib.sha256(body).hexdigest(),
+                    resourceVerified=resource['file'] == 'resources.json'
+                        and resource['bytes'] == len(body) and resource['sha256'] == resource_digest,
+                    datPresent=(generation / 'engine.dat').is_file())
+    def resource_probe(tab, name, redirected):
+        before = count(tab)
+        app.call('events')
+        requests.clear()
+        completion = app.call('eval', tab=tab, js='window.__resourceNetwork=false;new Promise(resolve=>{const s=document.createElement("script");s.onload=()=>resolve("load");s.onerror=()=>resolve("error");s.src="http://demand.supply/resource.js?probe=' + name + '";document.body.append(s)})')
+        if redirected: wait(lambda: count(tab) > before, timeout=3)
+        network_script = app.call('eval', tab=tab, js='window.__resourceNetwork===true')
+        reached = any(p.startswith('/resource.js?probe=') for p in requests)
+        evidence = dict(completion=completion, before=before, after=count(tab),
+                        networkScriptRan=network_script, resourceReachedServer=reached)
+        def verdict(value, stub):
+            return (value['completion'] == 'load' and value['networkScriptRan'] == (not stub)
+                    and value['resourceReachedServer'] == (not stub)
+                    and (value['after'] > value['before'] if stub else value['after'] == value['before']))
+        row(name, verdict(evidence, redirected) and not verdict(evidence, not redirected), **evidence)
+    resource_digest = next(line.split()[2] for line in
+        (repo / 'Engine/fork/adblock/resources-pins.txt').read_text().splitlines()
+        if line.startswith('resources.json '))
+    resource_count = len(json.loads((repo / 'Vendor/adblock/resources.json').read_bytes()))
     try:
         app = factory(urls=('about:blank',), fresh=True, load_extensions=False, extra_args=args,
                       extra_env={'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.1',
@@ -413,6 +450,13 @@ def real_engine(factory, results, wait):
         app.call('profiles-shell', profile=original['id'], action='adblock-open')
         app.call('settings-adblock', enabled=True)
         assert loaded(original['id'])
+        bundle_resource = Path(app.executable).parents[1] / 'Resources' / 'AdBlock' / 'resources.json'
+        manifest = resource_manifest(original)
+        row('bundled_resources_native_load', hashlib.sha256(bundle_resource.read_bytes()).hexdigest() == resource_digest
+            and manifest['manifestVerified'] and manifest['resourceVerified']
+            and manifest['resourceSHA256'] == resource_digest
+            and status(original['id'])['resources_loaded'] == resource_count,
+            expectedResources=resource_count, status=status(original['id']), manifest=manifest)
         tab = app.call('open', url='about:blank')['id']
         visit(tab, 'enabled_blocks', True)
         app.call('settings-adblock', host='open-adblock.test', excluded=True)
@@ -477,6 +521,10 @@ def real_engine(factory, results, wait):
         app.call('settings-adblock', list='EasyPrivacy', listEnabled=False)
         assert wait(lambda: status(other['id'])['load_generation'] > previous_generation
                     and status(other['id'])['list_count'] == 0, timeout=40)
+        empty = status(other['id'])
+        row('all_lists_off_has_no_engine', not empty['engine_loaded'] and not empty['engine_shared']
+            and not empty['engine_from_dat'] and empty['resources_loaded'] == 0
+            and empty['last_error'] == '', status=empty)
         visit(other_tab, 'all_lists_disabled_allows', False)
         # Both contexts already exist. Price only the empty → shared engine
         # transition, after idle reclaim, rather than Profile/window creation.
@@ -530,6 +578,58 @@ def real_engine(factory, results, wait):
             and not request_verdict(observations[negative], True)
             and not request_verdict(observations[positive], False)
             for positive, negative in pairs), pairs=pairs)
+
+        # N-19 through the real App: publish a small lossless redirect list via
+        # the real downloader, then relaunch from its verified on-disk DAT.
+        app.quit()
+        synthetic_lists.set()
+        source_env = {'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % server.server_port,
+                      'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.1'}
+        app = factory(urls=('about:blank',), fresh=True, load_extensions=False,
+                      extra_args=args, extra_env=source_env)
+        for key, value in keys.items():
+            app.call('defaults', key=key, value=None)
+            app.call('defaults', key=key, value=value)
+        app.call('settings-pane', pane='advanced')
+        app.call('settings-adblock', enabled=True)
+        resource_profile = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Default')
+        assert wait(lambda: status(resource_profile['id'])['load_generation'] > 1
+                    and status(resource_profile['id'])['dat_policy'] == 'dat', timeout=40)
+        text_status = status(resource_profile['id'])
+        manifest = resource_manifest(resource_profile)
+        row('resources_text_generation', text_status['resources_loaded'] == resource_count
+            and manifest['manifestVerified'] and manifest['resourceVerified'] and manifest['datPresent'],
+            status=text_status, manifest=manifest)
+        resource_tab = app.call('open', url='about:blank')['id']
+        visit(resource_tab, 'resources_text_blocks', True)
+        resource_probe(resource_tab, 'resources_text_stub', True)
+        app.call('save')
+        app.quit()
+        app = factory(urls=('about:blank',), load_extensions=False, extra_args=args, extra_env=source_env)
+        assert loaded(resource_profile['id'])
+        dat_status = status(resource_profile['id'])
+        row('resources_reapplied_after_dat_relaunch', dat_status['engine_from_dat']
+            and dat_status['resources_loaded'] == resource_count
+            and dat_status['load_generation'] == text_status['load_generation'], status=dat_status)
+        resource_tab = app.call('open', url='about:blank')['id']
+        visit(resource_tab, 'resources_dat_blocks', True)
+        resource_probe(resource_tab, 'resources_dat_stub', True)
+        app.call('profiles-shell', profile=resource_profile['id'], action='adblock-open')
+        before_empty = dat_status['load_generation']
+        for list_id in ('EasyList', 'EasyPrivacy'):
+            app.call('settings-adblock', list=list_id, listEnabled=False)
+        assert wait(lambda: status(resource_profile['id'])['load_generation'] > before_empty
+                    and status(resource_profile['id'])['list_count'] == 0, timeout=40)
+        empty = status(resource_profile['id'])
+        visit(resource_tab, 'resources_all_lists_off_allows', False)
+        resource_probe(resource_tab, 'resources_no_engine_rejects_stub_control', False)
+        row('resources_only_generation_has_no_engine', not empty['engine_loaded']
+            and empty['resources_loaded'] == 0 and empty['last_error'] == '', status=empty)
+        app.call('settings-adblock', list='EasyList', listEnabled=True)
+        assert wait(lambda: status(resource_profile['id'])['load_generation'] > empty['load_generation']
+                    and status(resource_profile['id'])['engine_loaded'], timeout=40)
+        visit(resource_tab, 'one_list_restored_blocks', True)
+        resource_probe(resource_tab, 'one_list_restored_stub', True)
 
         # Real scheduled HTTP load with an already-loaded native context. The
         # same Settings delete sheet retires the store and the engine together.
