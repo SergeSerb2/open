@@ -3298,7 +3298,7 @@ App and its production API:
       context already exists for the <=2 MiB incremental engine window.
 - [ ] OTR shares its parent's engine and follows later parent exclusions.
 - [ ] Settings list toggle publishes a generation, advances load_generation
-      and changes blocking. All lists off loads a valid zero-rule generation.
+      and changes blocking. All lists off verifies a no-engine generation, with no loaded resources or error.
 - [ ] Deleting a Profile during held real HTTP with its native engine
       loaded retires the context; no crash; folder absent after relaunch.
 - [ ] Debug copy has the 11-key native schema and no path, page URL or site.

@@ -163,6 +163,13 @@ the clipboard before returning `copiedDebugInfo`. With native support, these
 actions configure the production engine through the App adapter. The real
 request flow uses no support override.
 
+The real ad-block flow also checks the bundled resource pin and the active
+generation's `_resources` entry. It serves a synthetic redirect rule through
+the real downloader, verifies its stub with server and native-count witnesses,
+then relaunches from DAT and repeats the request. With all lists off, the
+verified generation has no engine or loaded resources and requests reach the
+server. Enabling one list advances the generation and restores blocking.
+
 For a placeholder engine, `OEBrowserContext.adBlockSupported` is false, so the
 store's engine callback stays nil and launch opens no Profile in the store or
 starts its update schedule. No requests are blocked in that build.

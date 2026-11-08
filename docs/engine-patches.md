@@ -563,6 +563,11 @@ Enable/exclusion changes reset factories in loaded storage partitions using
 Chromium's proxy-transition path. OTR settings are separate and its engine
 can be shared with its parent.
 
+The Step 7 revision treats verified zero-list generations, including a
+resources-only manifest, as successful no-engine loads. It verifies inputs,
+skips registry/DAT/build work, drops the matcher engine and reclaims its
+freed pages on the build runner. Native/App revalidation is pending.
+
 `OEAdBlock.h` exposes main-thread categories on OEBrowserContext/OEWebContent.
 Pre-init values apply through a weak ready callback; closed contexts return
 defaults. The status snapshot has 11 scalar keys and fixed error summaries,
