@@ -1145,12 +1145,32 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                     assert shown, 'HTTPS-First did not show a native warning'
                     window = shown['number']
                     import re
-                    buttons = app.call('child-dialog-button', window=window)['buttons']
-                    assert any(re.fullmatch(r'go back', label, re.I) for label in buttons), 'HTTPS warning has no Go back button'
-                    continue_label = next((label for label in buttons if re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I)), None)
-                    assert continue_label, 'HTTPS warning has no Continue button'
                     texts = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == window)
                     assert any(re.search(r'HTTPS|secure connection', text, re.I) for text in texts), 'new child was not the HTTPS warning'
+                    if action == 'close':
+                        parent = shown['parent']
+                        # Closing a tab with a live warning destroys its modal
+                        # controller inside DestroyTabFeatures(). This is the
+                        # real path that crashed the earlier PW-HF1 cleanup.
+                        app.call('close', tab=tab)
+                        assert wait(lambda: all(t['id'] != tab for t in app.call('tabs')), timeout=5, step=.05)
+                        assert app.call('ping')['pid'] == app.pid
+                        assert any(w['number'] == parent and w.get('visible') for w in app.call('windows'))
+                        assert not any(w['number'] == window and w.get('visible') for w in app.call('windows'))
+                        tab = None
+                        guard.check()
+                        return {'warning': 'dialog', 'action': 'close-tab', 'appAlive': True,
+                                'parentWindowStillVisible': True, 'warningClosed': True,
+                                'distributionSHA256': engine_distribution_sha256}
+                    # A native widget can become visible before its AX button
+                    # tree is ready. Require both specific actions before input.
+                    def ready_buttons():
+                        labels = app.call('child-dialog-button', window=window)['buttons']
+                        return labels if (any(re.fullmatch(r'go back', label, re.I) for label in labels)
+                                          and any(re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I) for label in labels)) else None
+                    buttons = wait(ready_buttons, timeout=5, step=.05)
+                    assert buttons, 'HTTPS warning actions did not become ready'
+                    continue_label = next(label for label in buttons if re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I))
                     app.call('snapshot', window=window, path=os.path.join(tmp, 'PW-HF-%s-warning.png' % action))
                     if action == 'continue':
                         pressed = app.call('child-dialog-button', window=window, label=continue_label)
@@ -1170,10 +1190,12 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                     # Closing this row's own tab also disposes its native modal
                     # if an assertion fails before the dialog gets an answer.
                     guard.check()
-                    app.call('close', tab=tab)
+                    if tab is not None:
+                        app.call('close', tab=tab)
             row('PW-HF1', lambda: https_first_warning('continue'))
             row('PW-HF2-return', lambda: https_first_warning('return'))
             row('PW-HF2-escape', lambda: https_first_warning('escape'))
+            row('PW-HF3-tab-close', lambda: https_first_warning('close'))
             guard.check(); results['P-15'] = {'ok': True, 'allExecutedRowsAlive': True}
         finally:
             if app: app.quit()

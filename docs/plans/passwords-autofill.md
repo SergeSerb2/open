@@ -836,6 +836,7 @@ the engine and navigates from localhost to a separate fixture origin.
 | PW-HF1 | Enable HTTPS-First in the disposable profile, navigate to the HTTP login fixture, activate the native warning's named Continue button with `child-dialog-button` | The real dialog press succeeds, the warning closes, and the exact `http://` fixture URL and form finish loading |
 | PW-HF2-return | Open the same native warning on a new fixture origin, press Return | The warning closes and the previous localhost page finishes loading; Open stays alive with no new crash report |
 | PW-HF2-escape | Repeat on another fixture origin, press Esc | Same Go back result and crash checks as Return |
+| PW-HF3-tab-close | Close the owned tab while its native HTTPS warning is still open | The warning and tab close, the parent window stays visible, Open answers ping, and no new crash report appears |
 
 ### 9.3 Suite `--only secrets-import`
 
