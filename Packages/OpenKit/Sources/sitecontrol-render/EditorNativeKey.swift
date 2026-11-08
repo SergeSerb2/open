@@ -18,11 +18,19 @@ import OpenDesign
             }
             base = URL(fileURLWithPath: path,isDirectory: true)
         } else { base = fm.temporaryDirectory }
+        // Shared-screen holds must stop after the first focus loss. Other
+        // callers retain the existing bounded three-attempt policy.
+        let configured = ProcessInfo.processInfo.environment["OPEN_VERIFY_FOCUS_ATTEMPTS"]
+        guard configured == nil || configured == "1" || configured == "3" else {
+            return [.init(name:"native focus attempts must be 1 or 3",pass:false)]
+        }
+        let maximumAttempts = configured == "1" ? 1 : 3
         var retained: [Flows.Check] = []
-        for attempt in 1...3 {
+        for attempt in 1...maximumAttempts {
             let checks = runAttempt(base: base,attempt: attempt,review: review)
             let interruptions = checks.filter(\.interrupted)
-            if interruptions.isEmpty || checks.contains(where: { !$0.pass && !$0.interrupted && !$0.info }) || attempt == 3 { return retained+checks }
+            if configured == "1", !interruptions.isEmpty { CLI.report(retained+checks) }
+            if interruptions.isEmpty || checks.contains(where: { !$0.pass && !$0.interrupted && !$0.info }) || attempt == maximumAttempts { return retained+checks }
             // A fresh registered app, model and window per attempt, as in e2e.
             // Historical interruptions stay visible but never count as passes.
             retained += interruptions.map { .init(name:$0.name,pass:false,info:true,interrupted:true) }
@@ -83,6 +91,10 @@ import OpenDesign
         NSApp.setActivationPolicy(.regular)
         var checks: [Flows.Check] = []
         func check(_ name: String,_ pass: Bool) { checks.append(focusCheck(name,pass: pass)) }
+        var mayContinue: Bool {
+            ProcessInfo.processInfo.environment["OPEN_VERIFY_FOCUS_ATTEMPTS"] != "1"
+                || !checks.contains(where: \.interrupted)
+        }
         autoreleasepool {
             let p = EditorStage(onScreen: true)
             defer { p.controller.close();p.parent.close() }
@@ -93,20 +105,28 @@ import OpenDesign
             let before = p.parent.isKeyWindow && !p.panel.isKeyWindow
             p.drag();p.tap("editor.font.0");p.tap("editor.tool.case")
             check("F25 pointer pad/buttons/font cells keep the native browser window key (parentReady=\(p.nativeParentReady), parentMain=\(p.parent.isMainWindow))",before && p.parent.isKeyWindow && !p.panel.isKeyWindow)
+            guard mayContinue else { return }
             p.tap("editor.color.advanced")
             guard let popup = p.view.advancedPopover else { check("F24 advanced popover opens after colors are ready=\(p.session.colorsReady)",false);return }
             let frame = p.panel.convertFromScreen(popup.panel.frame)
             check("F24 advanced window frame is (-34,258,250,232)",abs(frame.minX+34)<0.01 && abs(p.panel.frame.height-frame.maxY-258)<0.01 && frame.size == CGSize(width:250,height:232))
+            guard mayContinue else { return }
             check("F25 advanced pointer use keeps browser key",p.parent.isKeyWindow && !popup.panel.isKeyWindow)
+            guard mayContinue else { return }
             p.key(53,"\u{1b}",window:popup.panel);p.settle(0.25)
             check("F24 Esc closes only the advanced popover",!p.view.advanced && p.controller.panel != nil)
+            guard mayContinue else { return }
             p.tap("editor.color.advanced");p.mouse(.leftMouseDown,point:CGPoint(x:400,y:300),in:p.backdrop);p.mouse(.leftMouseUp,point:CGPoint(x:400,y:300),in:p.backdrop);p.settle(0.25)
             check("F24 native outside click closes the advanced popover",!p.view.advanced)
+            guard mayContinue else { return }
             p.menu("Rename this Boost…");p.settle()
             check("F25 rename text sheet becomes key",p.controller.activeAlert?.window.isKeyWindow == true && !p.parent.isKeyWindow)
+            guard mayContinue else { return }
             p.alert("Cancel");p.panel.makeKey();p.settle()
             check("F25 native floating-window key entry focuses Done",p.panel.isKeyWindow && p.panel.firstResponder === p.view.control(id:"editor.done"))
+            guard mayContinue else { return }
             p.key(48,"\t");check("F25 Tab follows Done with the name menu",p.panel.firstResponder === p.view.control(id:"editor.name"))
+            guard mayContinue else { return }
             p.tap("editor.tool.code");p.settle(0.3)
             if let code = p.view.codeView {
                 p.parent.makeKeyAndOrderFront(nil)
@@ -116,6 +136,7 @@ import OpenDesign
                 p.mouse(.leftMouseDown,point:CGPoint(x:80,y:20),in:code.editor);p.settle()
                 check("F25 click into code makes the native editor key",p.panel.isKeyWindow && !p.parent.isKeyWindow && p.panel.firstResponder === code.editor)
             } else { check("F25 code view exists",false) }
+            guard mayContinue else { return }
             p.controller.setCodeMode(false,animated:false);p.panel.makeKey();p.settle()
             checks.append(checkDoneKeyReturn(first: p))
         }

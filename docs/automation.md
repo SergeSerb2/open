@@ -1252,12 +1252,19 @@ the Update Theme action name. A3 undo/redo compares against that ledger.
 The `peek` suite opens Settings ▸ Links and uses `defaults` to write the
 canonical `open.links.openPeekShiftClick` key bound by that pane; there is no
 Settings switch UI driver. It then proves a real Shift-click does not Peek.
-The `commandbar` suite includes `settings_live.py`: native New Profile menu
+The `commandbar` and `app-actions` suites include `settings_live.py`: native New Profile menu
 and sidebar sheet, Cmd+, typing guard and Escape, local action errors, actual
 1024 px App icon application/cache/reset, restore after content with measured
 cost, Peek migration/precedence, and global sleep reconciliation on create and
 launch. `OPEN_SETTINGS_FAIL_IN_SHEET=1` forces a failure with Create Profile
 open; finally cancels the sheet, restores exact saved preferences, and quits.
+`settings_view_boosts_library` runs View Boosts and checks that the real Library
+opens on Boosts with no Advanced error. It rejects the former unavailable-error
+assertion, closes the Library through the App's Cmd+W path, and restores
+`open.library.lastSection` with the other saved preferences.
+For a shared-screen hold, `OPEN_VERIFY_FOCUS_ATTEMPTS=1` makes the native
+Site Control editor harness stop after its first foreground interruption.
+Unset or `3` retains its existing three-attempt limit; other values fail.
 
 The sleep suite uses existing `sleep-clock` and `sleep-tick` hooks to pass the
 30 s freeze deadline and 48 h without changing production delays. Never
