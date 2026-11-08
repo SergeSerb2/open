@@ -277,6 +277,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Runs at the first of applicationDidFinishLaunching and
   /// engineDidInitialize (their order is not fixed).
   private func showWindowsIfNeeded(ignoringLittleOpen: Bool = false) {
+    #if OPEN_AUTOMATION
+    // Validate the packaged engine before its first on-screen launch.
+    if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_OFFSCREEN_SMOKE"] == "1" { return }
+    #endif
     prepareData()
     if isFirstRun && !firstRunSaved && windowControllers.isEmpty {
       if firstRunWindowController == nil {
