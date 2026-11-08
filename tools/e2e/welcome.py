@@ -244,7 +244,7 @@ def run(factory, results, tmp, api):
         app.call('first-run', action='settings-next')
         app.call('first-run', action='settings-run')
         imported = api.wait_until(lambda: app.call('first-run') if
-            app.call('first-run').get('settingsStep') == 'report' else None, timeout=25, step=.1)
+            app.call('first-run').get('settingsStep') == 'Report' else None, timeout=25, step=.1)
         app.call('first-run', action='settings-done')
         settings_state = app.call('settings-state')
         if settings_state['settingsVisible']:
@@ -256,7 +256,7 @@ def run(factory, results, tmp, api):
         imported_tab = app.call('tab-state', tab=ids['t0'])
         record('W28_import_ordinary_internal_tab', imported and imported_page
                and imported_tab['url'] == 'open://welcome' and not imported_tab['loaded']
-               and imported_page['engineInternalPages'] == 0, state=imported_page, tab=imported_tab)
+               and imported_page['engineInternalPages'] == 0, state=imported_page, tab=imported_tab, report=imported)
         app.call('welcome', action='reveal', card=4)
         app.call('welcome', action='replay', card=4)
         screenshot('welcome-replay-four')
