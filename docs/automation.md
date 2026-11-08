@@ -150,17 +150,22 @@ opening Settings, a store, or a native context. `profiles` contains the store's
 `storeReady` (`AdBlockStore.isProfileOpen`), enabled state and excluded domains,
 plus each existing regular and OTR context's
 `adBlockEnabled`, `listDirectorySet`, `listDirectoryMatchesProfile`,
-`excludedDomains`, and `adBlockStatus`. Directory checks are booleans; this query
+`excludedDomains`, `adBlockStatus`, and existing pages' native `blockedCount`
+and `identifier`. Directory checks are booleans; this query
 never returns paths or page URLs. Excluded domains are available only through
 automation; copyable debug info contains their count instead.
 
 `settings-adblock` uses the real Settings actions. It accepts `enabled`, or
-`host` with `excluded`, and `copyDebug: true` exercises Copy Debug Info while
-restoring the clipboard before returning `copiedDebugInfo`. The OpenEngine
-ad-block API is currently a placeholder: `adBlockStatus.engine` is `pending`
-and no requests are blocked until the Section 13 E2 engine binding lands.
-`OEBrowserContext.adBlockSupported` is false, so the store's engine callback stays
-nil and launch opens no Profile in the store or starts its update schedule.
+`host` with `excluded`. `list` with `listEnabled` awaits the real Settings list
+action; `resetLists: true` awaits Reset. The response includes list IDs and
+enabled states. `copyDebug: true` exercises Copy Debug Info while restoring
+the clipboard before returning `copiedDebugInfo`. With native support, these
+actions configure the production engine through the App adapter. The real
+request flow uses no support override.
+
+For a placeholder engine, `OEBrowserContext.adBlockSupported` is false, so the
+store's engine callback stays nil and launch opens no Profile in the store or
+starts its update schedule. No requests are blocked in that build.
 Command-service Settings initialization also leaves the store unattached when
 the engine is unsupported; showing Settings attaches it on demand.
 Opening Settings → Advanced still opens the selected Profile (`ready: true`).

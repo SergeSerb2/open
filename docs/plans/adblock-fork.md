@@ -3700,6 +3700,15 @@ sum). Reload via CDP: count resets and re-accumulates to the same
 value. `history.pushState` + a manual fetch of `banner.js`: count
 increments, no reset.
 
+The closed-document row uses a real top-level pagehide handler and native
+document IDs. Matched keepalive URLs must add three to the old count and
+reach the server zero times; unmatched control URLs must leave that count
+unchanged and complete three server GETs. The new count stays zero at
+commit, load and the late reading. The allowed and wrong-document negative
+controls must fail the positive predicate. See "COUNT-closed-document
+erratum" in "Step 4 as built" for the exact witnesses and the unusable
+outgoing unload CDP predicate.
+
 Real-lists case (Step 7+): point `--open-adblock-dir` at a dir holding
 the staged `easylist.txt` + `easyprivacy.txt` renamed per §9.2
 (`EasyList.txt`/`EasyPrivacy.txt` — file names only need the `.txt`
@@ -4560,15 +4569,38 @@ navigated; its predicate incorrectly rejected an old-document reading of
 8 before the new commit. The 21:12-21:14 run is diagnostic only because it
 may overlap another section's crash dialog. It does not count as a full N run.
 
-The final predicate uses a real pagehide handler with a localStorage
-sentinel and three keepalive requests. Every native reading carries the
-primary document's committed navigation id. The new id must have count 0
-at commit, at load and at least two seconds after all three blocked CDP
-completions. Any old count must carry the old id. A same-document
-replaceState obtains the late native reading without resetting the count.
-Both a completed allowed-request control and a temporary wrong-document
-engine must fail this predicate. Timing inference cannot substitute for
-identity. The positive and both negative runtime proofs remain pending.
+The subsequent CDP predicate required three outgoing request events,
+three terminal events and three `ERR_BLOCKED_BY_CLIENT` errors. It is
+**not usable at unload (DevTools rebinds to the incoming RFH at
+ReadyToCommitNavigation)**. Chromium's
+`content/browser/devtools/render_frame_devtools_agent_host.cc:531-558`
+calls `UpdateFrameHost(request->GetRenderFrameHost())`; lines 1015-1053
+bind the renderer channel to that host. In E3's r2/r3 runs, real top-level
+pagehide fired and the allowed server received three GETs, but the Network
+domain reported zero outgoing starts and terminals. The old predicate and
+its failed receipts remain in `.re/s13/e3/count-proof-cdp-unload-unusable.py`
+and `count-identity-r3-focused-results.json`.
+
+The lead replaced that observer requirement on 2026-11-08 at 10:45.
+The row uses a real top-level pagehide handler, a localStorage sentinel
+and three keepalive GETs. The blocked variant sends matched URLs: the
+server must receive zero, and the outgoing document's native count must
+rise by exactly three from its pre-unload value. The allowed control uses
+the same page with unmatched URLs: the server must finish exactly three
+GETs, and the outgoing native count must remain unchanged. A native
+`before-commit` reading records the outgoing count before reset. Every
+reading carries its committed document id. The new id must have count zero
+at commit, at load and at least two seconds after the native/server
+witnesses; `replaceState` obtains the late reading without resetting it.
+The allowed variant must fail the positive blocking predicate. A temporary
+wrong-document variant must fail because its new-document count is nonzero.
+Neither control changes the shipping policy. The production positive and
+allowed control passed on 2026-11-08: blocked old id 2 counted 5 -> 8
+with zero server GETs; allowed old id 2 stayed at 5 with three completed
+GETs. New id 4 stayed at zero at commit, load and the late readings
+(4.014/4.012 seconds after the witnesses). Receipt:
+`.re/s13/e3/count-native-positive-focused-results.json`. The temporary
+wrong-document control and counted full N run remain pending.
 
 **Remaining delivery gates.** Counted full N, G-4 after idle, page G-5
 (<=9 ms CPU and blocking-on wall faster than off), CDP URL edges,
