@@ -1,6 +1,6 @@
 # Passwords, autofill, and imported Arc secrets: implementation plan
 
-Status: App integration implemented, 2026-11-08; password suite passes, remaining H acceptance stopped at the Widevine component prerequisite. No App PR yet. See `docs/engine-spike/passwords-acceptance.md`. Original plan: 2026-10-26. Closes the two P0 gaps in [status.md](../status.md) §3.1 (gap 1: Open's own password manager; gap 2: writing imported Arc passwords, cookies, cards, and addresses) and the §5.4 decision "Password manager approach".
+Status: App integration implemented, 2026-11-08; password suite passes; H2 features (including Widevine) and runnable page checks pass, but Little Open save-sheet reentrancy stops final acceptance. The prepared presenter fix needs runtime validation after M5 clearance. No App PR yet. See `docs/engine-spike/passwords-acceptance.md`. Original plan: 2026-10-26. Closes the two P0 gaps in [status.md](../status.md) §3.1 (gap 1: Open's own password manager; gap 2: writing imported Arc passwords, cookies, cards, and addresses) and the §5.4 decision "Password manager approach".
 
 Readers: the engine lead (fork patches, §4), the OpenEngine owner (§5), and shell implementers (§6, §8). Each step in §10 is one PR.
 
@@ -568,7 +568,7 @@ Accessibility: the panel has role `AXSheet`, label = title text. The title is `A
 
 Queue rules (`Packages/OpenKit/Sources/OpenFeatures/SavePromptPresenter.swift`, one per window):
 
-1. Show at once when the prompt's page is the focused pane of a visible window and no sheet is open on that window.
+1. Schedule one coalesced next-main-turn pass when the prompt's page is the focused pane of a visible window and no sheet is open on that window. Guard sheet presentation/removal against re-entry. Compare page identity within the presenter's own window; its sheet's key-window transfer does not mean that page lost focus.
 2. Else queue it (FIFO, at most 3 per window; a new prompt for the same page replaces the older one, which the engine has already withdrawn; a fourth prompt drops the oldest unanswered, which the engine then answers "ignored" on release). Show it when its page becomes the focused pane.
 3. Peek pages attach to the window that shows the Peek; Little Open pages to the Little Open window.
 4. `withdrawSavePrompt` removes the prompt from the queue or closes the sheet without an answer.

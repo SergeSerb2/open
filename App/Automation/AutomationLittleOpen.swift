@@ -180,6 +180,7 @@ extension AutomationController {
     case "close-button": controller.window?.standardWindowButton(.closeButton)?.performClick(nil)
     case "miniaturize": controller.window?.miniaturize(nil)
     case "deminiaturize": controller.window?.deminiaturize(nil)
+    case "hide": controller.window?.orderOut(nil)
     case "focus": app.littleOpenCoordinator.resurface(controller.session.id); NSApp.activate()
     case "dismiss-intro": controller.dismissIntro()
     case "picker": controller.showSpacePicker()

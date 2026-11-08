@@ -528,7 +528,7 @@ before the queued creation. It returns `opened` and `after` state. Text is limit
 to 8,192 UTF-8 bytes; 8,193 bytes fail. Submit requires nonempty text. The submit
 hook waits for the real navigation intent before resuming creation. The close
 hook continues through the production cancellation guard. Normal creation uses
-neither hook. See [the deferred Browser report](little-open/deferred-browser.md).
+neither hook. `little-open-action {id:"…", action:"hide"}` orders out that owned window; `focus` resurfaces it. The save-sheet stress flow uses these native lifecycle actions without system input. See [the deferred Browser report](little-open/deferred-browser.md).
 
 ## Window pixels
 
@@ -1432,6 +1432,7 @@ PW-KC1 (Keychain failure). The harness starts the fixture server, maps
 Each row records its load averages and checks App liveness and new Open crash
 reports. App death stops the suite. Strict runs (`--stop-on-app-death`) also stop on the first row failure or foreground interruption, with no retry.
 The harness restores all shared defaults it changes in `finally`.
+`--passwords-m-only` runs only the M rows and writes `results-passwords-m-debug.json` for Debug; it cannot be combined with `--passwords-rows`. It does not replace full engine/storage acceptance.
 
 PW-HF1 checks the engine's runtime `supportsSecretsImport` capability before
 it exercises the 08xx HTTPS-First fix. The distribution SHA-256 stays in the
