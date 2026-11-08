@@ -7,9 +7,8 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/logging.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.h"
 #include "base/functional/bind.h"
+#include "base/logging.h"
 #if !defined(OFFICIAL_BUILD)
 #include "open/adblock/open_adblock_selftest.h"
 #endif
@@ -19,6 +18,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "partition_alloc/memory_reclaimer.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
 
@@ -86,12 +86,10 @@ class IdleReclaimer {
     ++count_;
     VLOG(1) << "OpenAdBlock: idle reclaim runs=" << count_
             << " elapsed_us=" << timer.Elapsed().InMicroseconds()
-            << " idle_ms=" << (now - last_activity_).InMilliseconds()
+            << " idle_ms=" << (now - last_activity_).InMilliseconds();
 #if !defined(OFFICIAL_BUILD)
-            << " cpu_us=" << (base::ThreadTicks::Now() - cpu_start).InMicroseconds()
-#endif
-        ;
-#if !defined(OFFICIAL_BUILD)
+    VLOG(1) << "OpenAdBlock: idle reclaim cpu_us="
+            << (base::ThreadTicks::Now() - cpu_start).InMicroseconds();
     RecordOpenAdBlockMemoryPhase("after-idle-reclaim");
 #endif
   }

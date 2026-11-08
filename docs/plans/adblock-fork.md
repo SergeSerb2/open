@@ -1858,7 +1858,7 @@ medians unless stated:
 | G-2 | Check cost on real URLs, at both caps | `--open-adblock-selftest --open-adblock-bench=<corpus file> --open-adblock-bench-cap=<8192\|16384>` (non-official only): each corpus URL 10× through the real shim on the matcher sequence, real lists. **Warm-up (review r2 N-2):** repetition 1 of every URL is warm-up and is left out of mean, p99 and max, because a first-use regex compile can hold the engine for up to 6.78 ms (F-35) whatever the cap is. The bench prints the first-pass max on its own line; no gate reads it (G-6 still counts such stalls in page loads) | at each cap, over repetitions 2–10: mean ≤ 8 µs, p99 ≤ 60 µs, max ≤ 1 ms |
 | G-3 | Long URLs, at both caps | same bench with synthetic 8 KiB, 16 KiB, 100 KiB and 2 MiB URLs (path of random letters), each checked 10× under the same warm-up rule as G-2 (repetition 1 excluded, first-pass max reported apart), so G-3 measures the cap, not a first compile | each ≤ 1 ms over repetitions 2–10, at each cap |
 | G-4 | Added request latency | one **process-wide** histogram (fixed log-scale buckets from 1 µs to 100 ms, atomic counters, no locks), fed by every factory on the matcher sequence with the time from `CreateLoaderAndStart` arrival to the forward. **Print site (review r2 N-9):** printed at `--v=1` synchronously on the UI thread from `OpenAdBlockService::Shutdown()` (§6.3), once per process (the first `Shutdown()` prints; `cefsimple` has one context). A normal quit after the loads therefore always prints it, where a matcher task could be dropped by `SKIP_ON_SHUTDOWN` (§7.6); the self-test bench also prints it at the end of its own run. Runs: `corpus.html?sample=0`, five loads in one process (the G-5 on-launch), then quit normally and read the print. G-4 keeps load 1: a first regex compile delays one request of about 1,000, so it moves p99 only if more than 1 % of requests compile, and G-6 counts those stalls | p50 ≤ 50 µs, p99 ≤ 500 µs over all requests of the five loads |
-| G-5 | Page wall time | `corpus.html?sample=0` (exactly 200 requests), `performance.now()` at `load` over CDP, real lists, blocking on vs off. **Process and warm-up (review r2 N-2):** the five loads of each condition share one `cefsimple` process (two launches: on, then off). That is how the harness really runs them: one CDP target reloads the page, and G-4's process-wide histogram is fed by the same on-loads. Five fresh processes would fold process start and first regex compiles into wall time, which is not the per-page cost this gate prices (real browsing is warm). Load 1 of each condition is warm-up: its wall time and busy time are reported apart, and the gate reads loads 2–5 only | median delta (on minus off, loads 2–5) ≤ 5 ms; median matcher busy time of loads 2–5 ≤ 3 ms per load |
+| G-5 | Page wall time | `corpus.html?sample=0` (exactly 200 requests), `performance.now()` at `load` over CDP, real lists, blocking on vs off. **Process and warm-up (review r2 N-2):** the five loads of each condition share one `cefsimple` process (two launches: on, then off). That is how the harness really runs them: one CDP target reloads the page, and G-4's process-wide histogram is fed by the same on-loads. Five fresh processes would fold process start and first regex compiles into wall time, which is not the per-page cost this gate prices (real browsing is warm). Load 1 of each condition is warm-up: its wall time and busy time are reported apart, and the gate reads loads 2–5 only | blocking on faster than off; median busy thread CPU of loads 2–5 ≤ 9 ms per 200-request load, off the UI thread; quiet load1 ≤ 12 (§13.5.1 item 2a) |
 | G-6 | Stalls | log every check > 1 ms with its URL length and duration (no cause: the shim cannot see a regex compile inside the crate) during the G-5 runs and the Step 9 soak | ≤ 1 per 1,000 checks; none > 10 ms |
 | G-7 | Off costs nothing | the same page in a Profile with blocking off vs a build without P-3 | delta within run-to-run spread; report both medians |
 
@@ -3833,7 +3833,7 @@ median reported. Machine: record `sysctl -n machdep.cpu.brand_string`.
 |---|---|---|
 | DAT load (warm start) | second launch with `engine.dat` present; time from process start to `OpenAdBlockSmoke` first-load line, minus the same measure with ad blocking off | ≤ 250 ms added (F-15 says ~47 ms deserialize; the rest is harness noise — investigate above 250) |
 | Text build (cold) | delete `engine.dat`; same measure | ≤ 1500 ms added, and the first page still paints during it (§10 rule 1 — assert the page's `load` event fires before the status shows `engine_loaded` if the build is slow; if it does not, that is a finding, not a failure) |
-| Page overhead | Revised 2026-10-26: gate G-5 (§7.8) on `corpus.html?sample=0`, exactly 200 real corpus URLs (review r1 finding 4), replacing the short-path `many.html` | ≤ 5 ms added per load; matcher busy ≤ 3 ms per load |
+| Page overhead | Revised 2026-10-26: gate G-5 (§7.8) on `corpus.html?sample=0`, exactly 200 real corpus URLs (review r1 finding 4), replacing the short-path `many.html` | blocking on faster than off; busy thread CPU ≤ 9 ms per 200-request load, off the UI thread; quiet load1 ≤ 12 (§13.5.1 item 2a) |
 | Request checks | gates G-1…G-4, G-6, G-7 (§7.8) | as stated there |
 | Cosmetic query | time 100 cosmetic queries on the matcher sequence in the selftest on the real lists and print the mean; plus the renderer-side sync call (C-G1, C-G2) | ≤ 100 µs/page query (as built: 77–79 µs; hide selectors are always sorted in the shim, and that sort is inside the measured cost); C-G1/C-G2 as in §11 Step 5 |
 | Memory | §6.6 budgets: one engine, a second Profile with the same lists, text-build transient | as in §6.6 |
@@ -3873,6 +3873,14 @@ budget and what must be tried first. They replace the matching rows of
    measured off the UI thread. If 5 ms is not reachable after a real
    attempt, the breakdown goes to the lead; the section does not raise
    the budget itself. G-5 wall already passes.
+
+2a. **G-5 ruling (2026-11-07 20:58, lead):** accepted for v1 at
+≤ 9 ms busy thread CPU per 200-request load, off the UI thread; G-5 wall
+(blocking on faster than off) is a hard gate. The final number comes from
+a quiet run (load1 ≤ 12); the remaining cost is the proxy's Mojo decode and
+re-issue (~3.3 ms), client callbacks (~2.5 ms) and the crate check (~2.3 ms);
+a throttle-based interception for allowed subresources is post-v1.
+
 3. **G-6** (first-use regex compiles up to 15 ms). Compile or warm every
    regex filter in the background engine build, before the new engine is
    swapped in, so that no compile runs on the request path. The gate
@@ -4566,10 +4574,13 @@ Open patches, 117/117 CEF patches, and 98 matching overlay files.
 **Final implementation.** The matcher remains on one ThreadPool sequence.
 Parsed GURLs and factory initiators are reused. Ordinary requests avoid a
 ResourceRequest copy. Response pipes remain proxied through completion. The
-attempted post-response fusion violates Mojo's unwritten-endpoint rule
-(`mojo/public/c/system/message_pipe.h:330-338`) and aborted worker-script
-completion in the earlier CDP run. Its removal is built in `5d4d15a5`;
-repaired N-case and page receipts are in progress. Every network regex
+attempted post-response client-pipe handoff in `38242581` violated Mojo's
+unwritten-endpoint precondition (`mojo/public/c/system/message_pipe.h:330-338`):
+the pipe had already carried response messages. N-9 caught the resulting
+worker-script completion failure. Commit `dc98292e` removed the handoff;
+the repair is built in `5d4d15a5`. This reverted optimization is an as-built
+deviation; normal response callbacks remain. Repaired N-case receipts are
+in progress. Every network regex
 program compiles on the build runner before publication; no warm match
 grows its caches. The discard policy stays disabled because cleanup would
 discard programs and cause request-path recompiles. Regex builders now use
@@ -4725,7 +4736,7 @@ changes and the fusion repair built in 59 s, with engine-status 8 PASS,
 0 FAIL, 0 WARN. The working results below replace their earlier estimates.
 The decision record is `.re/s13/e1/GATES.md`. Final low-load receipts,
 G-5 callback/GURL scopes, N-cases and distribution remain pending. The
-new footprint gate follows ruling4a; CPU budgets remain unchanged.
+new footprint gate follows ruling 4a; the G-5 budget follows ruling 2a.
 
 
 **Default builder, text round trip and reclaim: working receipt (20:36).**
