@@ -64,8 +64,9 @@ it was retried after the earlier read finished. Raw output stays in `.re/`.
 
 ## Clear download history
 
-`DownloadsCenter` owns a bounded, session-only list; the App has no persisted
-download-history store. Settings removes finished, cancelled and failed entries
+`DownloadsCenter` owns a session-only list with bounded terminal history; the
+App has no persisted download-history store. Active transfers are not evicted.
+Settings removes finished, cancelled and failed entries
 for the chosen Profile and range, using their start time. Running and paused
 transfers stay in the list, and downloaded files stay on disk. Library Downloads
 reads the same provider, so cleared rows disappear there too.
@@ -76,4 +77,8 @@ this context since launch”). The required main merge brought Section 10's #222
 engine records without deleting files. Settings now invokes that API for the
 selected Profile and range, then clears the matching App rows after successful
 engine completion. It preserves main's independent cookies/cache choices and
-its additional Last 4 weeks range.
+its additional Last 4 weeks range. API evidence:
+`Engine/OpenEngine/include/OpenEngine/OEBrowserContext.h`; native download
+removal maps to `Remover::DATA_TYPE_DOWNLOADS` in
+`Engine/fork/src/open/browser/profiles/open_profile_context.cc` (Section 10,
+#222).

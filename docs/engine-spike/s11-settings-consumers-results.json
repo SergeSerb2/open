@@ -1,0 +1,461 @@
+{
+  "implementationCommit": "a72c4602dc196df23a07712cc54b650cd25c6978",
+  "mergedMainCommit": "eaa70c2865aff7dd5bd1a3b05d09eca5486b698f",
+  "engineFrameworkSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+  "date": "2026-11-07",
+  "functional": {
+    "relaunch": {
+      "machine": "M1",
+      "rows": {
+        "relaunch_fixture": true,
+        "relaunch_soak": true,
+        "restore_off_one_default_centered": true,
+        "restore_off_preserves_sidebar_no_little": true,
+        "restore_off_recent_space_selection": true,
+        "restore_on_preserves_sidebar_no_little": true,
+        "restore_on_windows_frames_selection": true
+      },
+      "cleanup": true,
+      "interruptions": 0,
+      "receipt": ".re/settings-consumers/m1-final/final-relaunch-m1.json",
+      "soak": {
+        "count": 20,
+        "passed": 20,
+        "aborts": 0
+      },
+      "freshFallbackMatchesWindow": true
+    },
+    "downloads": {
+      "machine": "M1",
+      "rows": {
+        "cancel": true,
+        "cancel_save_from_library": true,
+        "clear_combined_history_downloads": true,
+        "clear_downloads_All time": true,
+        "clear_downloads_Last 24 hours": true,
+        "clear_downloads_Last 4 weeks": true,
+        "clear_downloads_Last 7 days": true,
+        "clear_downloads_Last hour": true,
+        "clear_validate_before_mutation_All time": true,
+        "clear_validate_before_mutation_Last 24 hours": true,
+        "clear_validate_before_mutation_Last 4 weeks": true,
+        "clear_validate_before_mutation_Last 7 days": true,
+        "clear_validate_before_mutation_Last hour": true,
+        "completed_subtitle": true,
+        "completion_motion": true,
+        "completion_reduced": true,
+        "copy_file_url": true,
+        "failed_subtitle": true,
+        "finished_menu_order": true,
+        "folder_unique": true,
+        "hide": true,
+        "home_progress": true,
+        "home_recent_entry": true,
+        "home_recent_new_window": true,
+        "home_running_entry": true,
+        "idle_observer_canary": true,
+        "idle_zero": true,
+        "live_subtitle": true,
+        "menu_cancel": true,
+        "missing_folder_fallback": true,
+        "open_copy_reveal": true,
+        "open_file": true,
+        "pause": true,
+        "profile_folder": true,
+        "quit_close": true,
+        "quit_empty": true,
+        "quit_keep_warn_false": true,
+        "quit_keep_warn_true": true,
+        "resume": true,
+        "running_menu_order": true,
+        "save_accept": true,
+        "save_cancel": true,
+        "save_sheet": true,
+        "shortcut": true,
+        "trash": true,
+        "unknown_total": true
+      },
+      "cleanup": true,
+      "interruptions": 0,
+      "receipt": ".re/settings-consumers/m1-final/final-downloads-m1.json"
+    },
+    "history": {
+      "machine": "M1",
+      "rows": {
+        "history_back_forward_guess": true,
+        "history_clear_removes_suggestions": true,
+        "history_commandbar_link_source": true,
+        "history_default_profile_without_window": true,
+        "history_empty_cmd_t_no_history": true,
+        "history_enqueue_cost": true,
+        "history_front_profile_cmd_y": true,
+        "history_front_profile_commandbar": true,
+        "history_front_profile_menu_reopen": true,
+        "history_idle_no_work": true,
+        "history_internal_excluded": true,
+        "history_library_clear_all": true,
+        "history_library_delete_profile": true,
+        "history_library_live_cmd_y": true,
+        "history_library_new_profile_live": true,
+        "history_link_commit": true,
+        "history_main_frame_only": true,
+        "history_manual_profile_while_open": true,
+        "history_peek_profile_guess": true,
+        "history_popup_profile": true,
+        "history_profile_isolation": true,
+        "history_range_0": true,
+        "history_range_1": true,
+        "history_range_2": true,
+        "history_redirect_final_once": true,
+        "history_relaunch_persists": true,
+        "history_reload_no_visit": true,
+        "history_same_document": true,
+        "history_settings_clear_profile": true,
+        "history_title_updates_one_row": true,
+        "history_typed_commit": true
+      },
+      "cleanup": true,
+      "interruptions": 0,
+      "receipt": ".re/settings-consumers/m1-final/final-history-m1.json"
+    },
+    "window": {
+      "machine": "M5",
+      "rows": {
+        "all_spaces_strip_order": true,
+        "background_lazy": true,
+        "background_tagged_pointer": true,
+        "card_edges_1x": true,
+        "card_edges_appearance": true,
+        "card_edges_themed": true,
+        "chrome_capture_compare": true,
+        "chrome_card_material": true,
+        "chrome_dark_rings": true,
+        "chrome_inactive_material": true,
+        "close_unloaded_pinned": true,
+        "close_window_keeps_tabs": true,
+        "comparison": true,
+        "drag_undo_same_mode": true,
+        "drag_undo_single": true,
+        "engine_close_host_activation": true,
+        "first_frame_timeout_continues": true,
+        "focus_preserves_find": true,
+        "focus_preserves_inactive_dismiss": true,
+        "focus_preserves_inactive_load": true,
+        "focus_preserves_sidebar": true,
+        "frame_save_debounced": true,
+        "fullscreen": true,
+        "fullscreen_hover_reveal": true,
+        "fullscreen_key_readiness": true,
+        "fullscreen_key_readiness_negative": true,
+        "hide_reveal": true,
+        "html_fullscreen_from_window": true,
+        "html_fullscreen_in_native": true,
+        "kernel_process_start": true,
+        "keys_keep_peek_lazy": true,
+        "last_window_relaunch": true,
+        "last_window_reopen": true,
+        "launch_waiter_early_exit": true,
+        "malloc_zones_early": true,
+        "motion_card_in_token": true,
+        "motion_card_out_token": true,
+        "motion_card_real_peak": true,
+        "motion_delay_negative_control": true,
+        "motion_end_frame_curves": true,
+        "motion_hide_release_continues": true,
+        "motion_reduce_motion": true,
+        "motion_show_panel_right_edge": true,
+        "motion_sidebar_toggle": true,
+        "motion_space_switch": true,
+        "multiple_window_png": true,
+        "multiple_windows": true,
+        "native_window": true,
+        "navigation_before_engine": true,
+        "quit_before_engine": true,
+        "resize_300": true,
+        "resize_limits": true,
+        "resize_lost_up_key": true,
+        "resize_lost_up_sheet_hides": true,
+        "reveal_timing": true,
+        "selected_only_0": true,
+        "selected_only_1": true,
+        "selected_only_2": true,
+        "selected_only_3": true,
+        "selected_only_4": true,
+        "space_header_url_field": true,
+        "toggle_sidebar": true,
+        "traffic_light_actions": true,
+        "traffic_light_look": true,
+        "traffic_light_stale_hover": true,
+        "traffic_lights": true,
+        "width_cmd_s_restores_start": true,
+        "width_double_click_reset": true,
+        "width_hidden_commit": true,
+        "width_hide_while_pressed": true,
+        "width_live_limits": true,
+        "width_show_before_release": true,
+        "width_toolbar_floor": true,
+        "width_visible_commit_once": true,
+        "window_before_engine_0": true,
+        "window_before_engine_1": true,
+        "window_before_engine_2": true,
+        "window_before_engine_3": true,
+        "window_before_engine_4": true,
+        "window_close_preserves_other_host": true,
+        "window_persistence": true,
+        "window_png": true
+      },
+      "cleanup": true,
+      "interruptions": 0,
+      "screen": {
+        "mainScreenName": "AW2726DM",
+        "mainScreenScale": 1,
+        "mainScreenVisibleFrame": [
+          0,
+          0,
+          2560,
+          1410
+        ]
+      },
+      "receipt": ".re/settings-consumers/final-window.json",
+      "debugTimingSkipped": {
+        "cold_fresh_profile": {
+          "median_ms": {
+            "engineStart": 553,
+            "engineStarted": 649,
+            "firstContentfulPaint": 825,
+            "main": 379,
+            "modelLoaded": 390,
+            "sidebarDrawn": 552
+          },
+          "reason": "Release timing budgets are not evaluated in Debug",
+          "samples": 5,
+          "status": "SKIP"
+        },
+        "warm_existing_profile": {
+          "median_ms": {
+            "engineStart": 562,
+            "engineStarted": 654,
+            "firstContentfulPaint": 839,
+            "main": 382,
+            "modelLoaded": 393,
+            "sidebarDrawn": 561
+          },
+          "reason": "Release timing budgets are not evaluated in Debug",
+          "samples": 5,
+          "status": "SKIP"
+        }
+      },
+      "blocked": {
+        "engine_failure_alert": {
+          "reason": "TANDEM 8b: altered-loader negative requires first qualification off screen or on M1; lead blocked M1 at 16:52",
+          "status": "BLOCKED"
+        }
+      },
+      "load": [
+        31.1953125,
+        24.7822265625,
+        20.2763671875
+      ]
+    }
+  },
+  "negative": {
+    "negative-restore": {
+      "rows": {
+        "restore_off_one_default_centered": false,
+        "restore_off_preserves_sidebar_no_little": false,
+        "restore_off_recent_space_selection": false,
+        "restore_on_preserves_sidebar_no_little": false,
+        "restore_on_windows_frames_selection": false
+      },
+      "cleanup": true,
+      "interruptions": 0
+    },
+    "negative-clear-quit": {
+      "rows": {
+        "clear_combined_history_downloads": false,
+        "clear_downloads_All time": false,
+        "clear_downloads_Last 24 hours": false,
+        "clear_downloads_Last 4 weeks": false,
+        "clear_downloads_Last 7 days": false,
+        "clear_downloads_Last hour": false,
+        "clear_validate_before_mutation_All time": false,
+        "clear_validate_before_mutation_Last 24 hours": false,
+        "clear_validate_before_mutation_Last 4 weeks": false,
+        "clear_validate_before_mutation_Last 7 days": false,
+        "clear_validate_before_mutation_Last hour": false
+      },
+      "cleanup": true,
+      "interruptions": 0
+    },
+    "negative-history": {
+      "rows": {
+        "history_default_profile_without_window": false,
+        "history_front_profile_cmd_y": false,
+        "history_front_profile_commandbar": false,
+        "history_front_profile_menu_reopen": false,
+        "history_manual_profile_while_open": false
+      },
+      "cleanup": true,
+      "interruptions": 0
+    },
+    "negative-quit": {
+      "rows": {
+        "quit_keep_warn_false": false,
+        "quit_keep_warn_true": false
+      },
+      "cleanup": true,
+      "interruptions": 0
+    }
+  },
+  "negativePatchSHA256": "244e3172fd3a6aff96f20b94b069eaaacadc641cc481daaea579513db2fa4b1f",
+  "quitSettingAudit": "INCONCLUSIVE; specific Downloads alert retained for both values; no generic warning UI",
+  "openSettingsEdits": 0,
+  "timingRuling": {
+    "check": "commandbar-render",
+    "rows": [
+      150,
+      151
+    ],
+    "load": [
+      35.1,
+      37.0,
+      28.3
+    ],
+    "cpuP95MS": 10.86,
+    "inlineOverheadMS": 0.347,
+    "disposition": "Non-blocking per Section 11 lead 2026-11-07 17:08: main fails the same rows under load; skip quiet retry (TANDEM 4l)."
+  },
+  "verification": [
+    {
+      "name": "build",
+      "result": "PASS",
+      "seconds": "103"
+    },
+    {
+      "name": "commands-demo",
+      "result": "PASS",
+      "seconds": "6"
+    },
+    {
+      "name": "roundtrip",
+      "result": "PASS",
+      "seconds": "1"
+    },
+    {
+      "name": "space-legacy",
+      "result": "PASS",
+      "seconds": "1"
+    },
+    {
+      "name": "space-editor",
+      "result": "PASS",
+      "seconds": "380"
+    },
+    {
+      "name": "space-pad-compare",
+      "result": "PASS",
+      "seconds": "2"
+    },
+    {
+      "name": "suggest-check",
+      "result": "PASS",
+      "seconds": "28"
+    },
+    {
+      "name": "commands-dump",
+      "result": "PASS",
+      "seconds": "1"
+    },
+    {
+      "name": "route",
+      "result": "PASS",
+      "seconds": "20"
+    },
+    {
+      "name": "favicons",
+      "result": "PASS",
+      "seconds": "4"
+    },
+    {
+      "name": "media-demo",
+      "result": "PASS",
+      "seconds": "0"
+    },
+    {
+      "name": "sleep-demo",
+      "result": "PASS",
+      "seconds": "1"
+    },
+    {
+      "name": "adblock-perf",
+      "result": "PASS",
+      "seconds": "1"
+    },
+    {
+      "name": "adblock-catalog",
+      "result": "PASS",
+      "seconds": "1"
+    },
+    {
+      "name": "profiles",
+      "result": "PASS",
+      "seconds": "4"
+    },
+    {
+      "name": "settings-preview",
+      "result": "PASS",
+      "seconds": "87"
+    },
+    {
+      "name": "sidebar-render",
+      "result": "PASS",
+      "seconds": "113"
+    },
+    {
+      "name": "sidebar-compare",
+      "result": "PASS",
+      "seconds": "167"
+    },
+    {
+      "name": "commandbar-render",
+      "result": "FAIL",
+      "seconds": "45"
+    },
+    {
+      "name": "features-render",
+      "result": "PASS",
+      "seconds": "106"
+    },
+    {
+      "name": "extensions-render",
+      "result": "PASS",
+      "seconds": "10"
+    },
+    {
+      "name": "sitecontrol-render",
+      "result": "FAIL",
+      "seconds": "389"
+    },
+    {
+      "name": "boosts",
+      "result": "PASS",
+      "seconds": "5"
+    },
+    {
+      "name": "verify-secrets-fixture",
+      "result": "PASS",
+      "seconds": "8"
+    }
+  ],
+  "verificationLoadSnapshots": [
+    "16:25  up 2 days,  7:09, 7 users, load averages: 9.72 12.09 14.79",
+    "16:33  up 2 days,  7:17, 7 users, load averages: 6.04 7.76 11.41",
+    "16:37  up 2 days,  7:21, 7 users, load averages: 12.25 9.02 11.05",
+    "16:38  up 2 days,  7:22, 7 users, load averages: 12.79 10.05 11.29",
+    "16:40  up 2 days,  7:24, 7 users, load averages: 13.16 11.50 11.69",
+    "16:43  up 2 days,  7:27, 7 users, load averages: 9.57 11.23 11.59",
+    "16:50  up 2 days,  7:33, 7 users, load averages: 17.15 21.97 17.33",
+    "16:59  up 2 days,  7:43, 7 users, load averages: 30.86 26.32 21.42",
+    "17:14  up 2 days,  7:58, 7 users, load averages: 13.03 21.07 24.41"
+  ]
+}
