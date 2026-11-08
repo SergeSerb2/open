@@ -5,6 +5,7 @@ import OpenDesign
 @MainActor
 final class WelcomePageView: NSScrollView {
   static let duration = 8.5
+  static let cardTextHeight: CGFloat = 80
   static let copy: [(String, String)] = [
     ("Open your first tab", "Click New Tab in the sidebar or press ⌘T, then type a site or a search."),
     ("Pin what matters", "Drag a tab above the line to pin it. Today's tabs tidy themselves away."),
@@ -20,6 +21,7 @@ final class WelcomePageView: NSScrollView {
   private(set) var cards: [WelcomeCardView] = []
   private let shortcuts = NSButton(title: "Learn Essential Shortcuts", target: nil, action: nil)
   private let settings = NSButton(title: "Settings", target: nil, action: nil)
+  var footerFrame: NSRect { shortcuts.frame.union(settings.frame) }
   private var observers: [NSObjectProtocol] = []
   private var completion: Timer?
   var hasCompletion: Bool { completion != nil }
@@ -94,15 +96,23 @@ final class WelcomePageView: NSScrollView {
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
   override func layout() {
     super.layout()
-    let width = max(200, contentSize.width), column = min(960, max(180, width - 64)), x = (width - column) / 2
-    let cardWidth = (column - 20) / 2, cardHeight = cardWidth * 10 / 16 + 108
-    let height = 80 + 92 + 32 + 2 * cardHeight + 20 + 32 + 32 + 64
-    canvas.frame = CGRect(x: 0, y: 0, width: width, height: max(contentSize.height, height))
-    heading.frame = CGRect(x: x, y: 80, width: column, height: 42)
-    subheading.frame = CGRect(x: x, y: 122, width: column, height: 42)
+    let width = max(200, contentSize.width), height = contentSize.height
+    let column = min(960, max(180, width - 64)), x = (width - column) / 2
+    let top: CGFloat = height <= 820 ? 56 : 80
+    // At 640 pt the 76 pt header and two 80 pt text blocks leave exactly
+    // 120 pt per illustration. Add breathing room as the viewport grows.
+    let headerBlock: CGFloat = 76 + min(24, max(0, height - 640))
+    let cardWidth = (column - 20) / 2
+    let available = (height - top - headerBlock - 2 * Self.cardTextHeight - 20 - 56 - 32) / 2
+    let imageHeight = min(max(available, 120), column / 2 * 10 / 16)
+    let cardHeight = imageHeight + Self.cardTextHeight, gridTop = top + headerBlock
+    let footerTop = gridTop + 2 * cardHeight + 20 + 24
+    canvas.frame = CGRect(x: 0, y: 0, width: width, height: max(height, footerTop + 32 + 32))
+    heading.frame = CGRect(x: x, y: top, width: column, height: 38)
+    subheading.frame = CGRect(x: x, y: top + 38, width: column, height: 38)
     for i in 0..<4 { cards[i].frame = CGRect(x: x + CGFloat(i % 2) * (cardWidth + 20),
-      y: 204 + CGFloat(i / 2) * (cardHeight + 20), width: cardWidth, height: cardHeight) }
-    shortcuts.frame = CGRect(x: x, y: 204 + 2 * cardHeight + 52, width: 240, height: 32)
+      y: gridTop + CGFloat(i / 2) * (cardHeight + 20), width: cardWidth, height: cardHeight) }
+    shortcuts.frame = CGRect(x: x, y: footerTop, width: 240, height: 32)
     settings.frame = CGRect(x: x + 264, y: shortcuts.frame.minY, width: 100, height: 32)
     updateColors(); syncVisibility()
   }
@@ -114,8 +124,17 @@ final class WelcomePageView: NSScrollView {
     let primary = palette?.foregroundPrimary.nsColor ?? (dark ? .white : .black)
     let secondary = palette?.foregroundSecondary.nsColor ?? primary.withAlphaComponent(0.6)
     heading.textColor = primary; subheading.textColor = secondary
-    let fill = backgroundColor.blended(withFraction: 0.04, of: dark ? .white : .black) ?? backgroundColor
-    for card in cards { card.apply(fill: fill, primary: primary, secondary: secondary, dark: dark) }
+    let fill = backgroundColor.blended(withFraction: dark ? 0.04 : 0.06, of: dark ? .white : .black) ?? backgroundColor
+    let tint: NSColor
+    if let style {
+      let field = ThemeField.Evaluator(style: style, windowSize: CGSize(width: 1000, height: 1000), isActive: true)
+      let (red, green, blue) = field.color(u: 0.12, v: 0.5)
+      tint = NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
+    } else { tint = NSColor(srgbRed: 0.24, green: 0.29, blue: 0.48, alpha: 1) }
+    for card in cards {
+      card.apply(fill: fill, primary: primary, secondary: secondary,
+        background: backgroundColor, sidebarTint: tint, dark: dark)
+    }
   }
   func syncVisibility() {
     let shown = !closed && window?.isVisible == true && window?.isMiniaturized == false
@@ -221,13 +240,14 @@ final class WelcomeCardView: NSControl {
   }
   override func accessibilityPerformPress() -> Bool { replay?(); return true }
   override func layout() {
-    super.layout(); let imageHeight = bounds.width * 10 / 16
+    super.layout(); let imageHeight = max(0, bounds.height - WelcomePageView.cardTextHeight)
     illustration.frame = CGRect(x: 0, y: 0, width: bounds.width, height: imageHeight)
-    heading.frame = CGRect(x: 20, y: imageHeight + 16, width: max(0, bounds.width - 40), height: 23)
-    detail.frame = CGRect(x: 20, y: imageHeight + 44, width: max(0, bounds.width - 40), height: 57)
+    heading.frame = CGRect(x: 16, y: imageHeight + 6, width: max(0, bounds.width - 32), height: 21)
+    detail.frame = CGRect(x: 16, y: imageHeight + 29, width: max(0, bounds.width - 32), height: 51)
   }
-  func apply(fill: NSColor, primary: NSColor, secondary: NSColor, dark: Bool) {
+  func apply(fill: NSColor, primary: NSColor, secondary: NSColor,
+    background: NSColor, sidebarTint: NSColor, dark: Bool) {
     layer?.backgroundColor = fill.cgColor; heading.textColor = primary; detail.textColor = secondary
-    illustration.apply(dark: dark)
+    illustration.apply(background: background, sidebarTint: sidebarTint, dark: dark)
   }
 }

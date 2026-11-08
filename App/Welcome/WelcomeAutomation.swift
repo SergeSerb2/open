@@ -65,6 +65,7 @@ extension AutomationController {
       "hostCount": all.count, "engineContentCreationCount": factory.contentCreationCount,
       "tab": factory.selectedTab?.id.description ?? "",
       "urlField": factory.controller?.sidebar.displayedURLText ?? "",
+      "layout": page.map { welcomeLayout($0) } as Any? ?? NSNull(),
       "cards": page?.cards.map { ["label": $0.accessibilityLabel() ?? "", "role": $0.accessibilityRole()?.rawValue ?? "",
         "hovered": $0.isHovered, "trackingAreas": $0.trackingAreas.count,
         "actions": $0.accessibilityCustomActions()?.map(\.name) ?? []] as [String: Any] } ?? [],
@@ -72,6 +73,33 @@ extension AutomationController {
       "hosts": factory.welcomeHosts.map { id, host in ["tab": id.description, "visible": host.page.visible,
         "animating": host.page.animating, "playlist": host.page.playlistPlaying ? "playing" : "stopped"] as [String: Any] }
     ]
+  }
+
+  private func welcomeLayout(_ page: WelcomePageView) -> [String: Any] {
+    func rect(_ value: NSRect) -> [Double] {
+      [Double(value.minX), Double(value.minY), Double(value.width), Double(value.height)]
+    }
+    func components(_ color: NSColor) -> [Double] {
+      guard let rgb = color.usingColorSpace(.sRGB) else { return [] }
+      return [Double(rgb.redComponent), Double(rgb.greenComponent), Double(rgb.blueComponent), Double(rgb.alphaComponent)]
+    }
+    let cards: [[String: Any]] = page.cards.map { card in
+      let copy = NSAttributedString(string: card.detail.stringValue,
+        attributes: [.font: card.detail.font ?? NSFont.systemFont(ofSize: 14)])
+      let required = copy.boundingRect(with: NSSize(width: max(0, card.detail.bounds.width - 4), height: 10_000),
+        options: [.usesLineFragmentOrigin, .usesFontLeading])
+      return ["frame": rect(card.frame), "illustration": rect(card.illustration.frame),
+        "detail": rect(card.detail.frame), "requiredTextHeight": Double(ceil(required.height)),
+        "title": rect(card.heading.frame), "requiredTitleWidth": Double(ceil(card.heading.attributedStringValue.size().width)),
+        "labels": card.illustration.drawnLabels, "paints": card.illustration.paintColors.mapValues(components),
+        "scale": card.illustration.sceneScale]
+    }
+    return ["viewport": [Double(page.contentSize.width), Double(page.contentSize.height)],
+      "document": rect(page.canvas.frame), "scrollOrigin": [Double(page.contentView.bounds.minX), Double(page.contentView.bounds.minY)],
+      "headerTop": Double(page.heading.frame.minY), "headerBottom": Double(page.subheading.frame.maxY),
+      "gridTop": Double(page.cards[0].frame.minY), "columnWidth": Double(page.cards[0].bounds.width * 2 + 20),
+      "footer": rect(page.footerFrame), "footerGap": Double(page.footerFrame.minY - (page.cards.map { $0.frame.maxY }.max() ?? 0)),
+      "background": components(page.backgroundColor), "cards": cards]
   }
 }
 #endif

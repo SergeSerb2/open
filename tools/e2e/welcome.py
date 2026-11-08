@@ -25,7 +25,9 @@ def run(factory, results, tmp, api):
     before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     saved = {key: before.get(key) for key in keys}
     for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-    server, origin = api._fixture_server('Welcome')
+    fixture_page = Path(tmp) / 'welcome-navigation.html'
+    fixture_page.write_text('<!doctype html><title>Welcome navigation</title><h1>Welcome navigation</h1>')
+    destination = fixture_page.as_uri()
 
     def record(name, ok, **details):
         results[name] = dict(ok=bool(ok), loadAverage=list(os.getloadavg()), **details)
@@ -163,13 +165,14 @@ def run(factory, results, tmp, api):
         record('W14_commandbar_label', bar.get('presented') and bar.get('text') == 'Welcome to Open', state=bar)
         app.call('key', key='escape')
         app.call('key', key='l', modifiers=['cmd'])
-        app.call('key', text=origin + '/from-welcome')
+        app.call('key', text=destination)
         app.call('key', key='return')
         navigated = api.wait_until(lambda: app.call('tab-state', tab=welcome) if
-            app.call('tab-state', tab=welcome)['url'] == origin + '/from-welcome' else None, timeout=10, step=.1)
+            app.call('tab-state', tab=welcome)['url'] == destination else None, timeout=10, step=.1)
         app.call('wait', tab=welcome)
         record('W15_same_tab_web_navigation', navigated and navigated['id'] == welcome
-               and app.eval(welcome, 'location.href') == origin + '/from-welcome'
+               and app.eval(welcome, 'location.href') == destination
+               and app.eval(welcome, 'document.title') == 'Welcome navigation'
                and not state()['visible'] and state()['hostCount'] == 0,
                tab=app.call('tab-state', tab=welcome), state=state())
         app.call('menu-perform', id='open-basics')
@@ -244,7 +247,7 @@ def run(factory, results, tmp, api):
         app.call('first-run', action='settings-next')
         app.call('first-run', action='settings-run')
         imported = api.wait_until(lambda: app.call('first-run') if
-            app.call('first-run').get('settingsStep') == 'report' else None, timeout=25, step=.1)
+            app.call('first-run').get('settingsStep') == 'Report' else None, timeout=25, step=.1)
         app.call('first-run', action='settings-done')
         settings_state = app.call('settings-state')
         if settings_state['settingsVisible']:
@@ -256,7 +259,7 @@ def run(factory, results, tmp, api):
         imported_tab = app.call('tab-state', tab=ids['t0'])
         record('W28_import_ordinary_internal_tab', imported and imported_page
                and imported_tab['url'] == 'open://welcome' and not imported_tab['loaded']
-               and imported_page['engineInternalPages'] == 0, state=imported_page, tab=imported_tab)
+               and imported_page['engineInternalPages'] == 0, state=imported_page, tab=imported_tab, report=imported)
         app.call('welcome', action='reveal', card=4)
         app.call('welcome', action='replay', card=4)
         screenshot('welcome-replay-four')
@@ -268,6 +271,39 @@ def run(factory, results, tmp, api):
         record('W23_reduce_motion_replay_static', reduced_replay['activeCard'] == 4 and not reduced_replay['animating']
                and reduced_replay['animationCount'] == 0 and not reduced_replay['pendingCompletion'], state=reduced_replay)
         screenshot('welcome-reduce-motion')
+        appearance_before = app.call('space-manager-lifecycle')['appAppearance']
+        try:
+            for appearance in ('dark', 'light'):
+                app.call('appearance', name=appearance)
+                for width, height in ((1280, 800), (1000, 700)):
+                    app.call('window-frame', frame=[80, 60, width, height])
+                    # Let AppKit finish layout and the appearance transaction.
+                    time.sleep(.3)
+                    design = state()
+                    gates = design_gates(design, appearance)
+                    capture = screenshot('welcome-%dx%d-%s' % (width, height, appearance))
+                    record('W31_design_%dx%d_%s' % (width, height, appearance), all(gates.values()),
+                           gates=gates, layout=design['layout'], screenshot=capture)
+                # The guarantee refers to the content viewport, below chrome.
+                # Adjust the outer window to exercise the exact lower boundary.
+                viewport_height = state()['layout']['viewport'][1]
+                app.call('window-frame', frame=[80, 60, 1000, 700 + 640 - viewport_height])
+                time.sleep(.3)
+                boundary = state()
+                gates = design_gates(boundary, appearance)
+                record('W32_content_640_' + appearance, all(gates.values())
+                       and abs(boundary['layout']['viewport'][1] - 640) <= .5,
+                       gates=gates, layout=boundary['layout'])
+            # Exercise the other header inset and the illustration size cap.
+            app.call('window-frame', frame=[80, 60, 1280, 1100])
+            time.sleep(.3)
+            tall = state()
+            gates = design_gates(tall, 'light')
+            record('W33_tall_content', all(gates.values()) and tall['layout']['viewport'][1] > 820,
+                   gates=gates, layout=tall['layout'])
+        finally:
+            original = 'dark' if 'Dark' in appearance_before else 'light' if 'Aqua' in appearance_before else 'system'
+            app.call('appearance', name=original)
         app.call('key', key='t', modifiers=['cmd'])
         bar = app.call('commandbar-state')
         record('W24_cmd_t_native_context', bar.get('presented') and bar.get('mode') == 'newTab', state=bar)
@@ -277,7 +313,6 @@ def run(factory, results, tmp, api):
             api._restore_defaults(app, saved)
         finally:
             if app: app.quit()
-            server.shutdown(); server.server_close()
         for source in Path(tmp).glob('open.log*'):
             shutil.copyfile(source, evidence / source.name)
         (evidence / 'welcome-checks.json').write_text(json.dumps(dict(results), indent=2))
@@ -289,6 +324,53 @@ COPY = [
     ("A Space for every part of life", "Spaces give you separate sidebars for work, projects, and home. Swipe with two fingers to switch."),
     ("Two tabs side by side", "Drag a tab from the sidebar onto the page to make a Split View.")
 ]
+
+
+def design_gates(state, appearance):
+    """Acceptance from the real native view frames and rendered layer colors."""
+    layout = state['layout']
+    width, height = layout['viewport']
+    document = layout['document']
+    footer = layout['footer']
+    cards = layout['cards']
+    dark = appearance == 'dark'
+    ink = 1 if dark else 0
+    contrast = .04 if dark else .06
+    surface = [(1 - contrast) * c + contrast * ink for c in layout['background'][:3]] + [1]
+
+    def near(actual, expected, tolerance=.005):
+        return len(actual) == len(expected) and all(abs(a - b) <= tolerance for a, b in zip(actual, expected))
+
+    color_ok = len(cards) == 4
+    for card in cards:
+        paint = card['paints']
+        color_ok = color_ok and near(paint.get('surface', []), surface) \
+            and near(paint.get('row', []), [ink, ink, ink, .14 if dark else .10]) \
+            and near(paint.get('active', []), [61/255, 107/255, 1, .9]) \
+            and abs(paint.get('sidebar', [0, 0, 0, 0])[3] - .55) <= .005
+        if 'otherSidebar' in paint:
+            color_ok = color_ok and abs(paint['otherSidebar'][3] - .55) <= .005
+        if 'text' in paint:
+            color_ok = color_ok and near(paint['text'], [ink, ink, ink, .75])
+        if 'activeText' in paint:
+            color_ok = color_ok and near(paint['activeText'], [1, 1, 1, 1])
+    return {
+        'fits_without_scroll': height >= 639.5 and document[3] <= height + .5
+            and document[2] <= width + .5 and near(layout['scrollOrigin'], [0, 0], .5),
+        'header_inset': abs(layout['headerTop'] - (56 if height <= 820 else 80)) <= .5,
+        'footer_spacing': abs(layout['footerGap'] - 24) <= .5
+            and footer[1] + footer[3] <= height - 31.5,
+        'illustration_limits': len(cards) == 4 and all(119.5 <= c['illustration'][3]
+            <= layout['columnWidth']/2 * 10/16 + .5 for c in cards),
+        'undistorted_scenes': len(cards) == 4 and all(c['scale'][0] > 0
+            and abs(c['scale'][0] - c['scale'][1]) < .001 for c in cards),
+        'copy_fits': len(cards) == 4 and all(c['requiredTextHeight'] <= c['detail'][3]
+            and c['requiredTitleWidth'] <= c['title'][2] for c in cards),
+        'contrast': bool(color_ok),
+        'only_permitted_labels': [c['labels'] for c in cards] == [['+ New Tab'], [], ['Home'], []],
+        'static_without_pending_work': not state['animating'] and state['animationCount'] == 0
+            and not state['pendingCompletion'],
+    }
 
 
 def negative_gates(factory, results, tmp, api):
@@ -315,10 +397,10 @@ def negative_gates(factory, results, tmp, api):
         results[name] = dict(ok=bool(rejected), expected='production assertion rejects deliberately broken gate',
                              loadAverage=list(os.getloadavg()), **details)
     try:
-        for mutation in ('native', 'playlist', 'visibility', 'reduce', 'external', 'hover'):
+        for mutation in ('native', 'playlist', 'visibility', 'reduce', 'external', 'hover', 'layout', 'contrast', 'labels'):
             app = factory(urls=('about:blank',), fresh=True,
                           extra_env={'OPEN_E2E_WELCOME_MUTATION': mutation,
-                                     'OPEN_E2E_REDUCE_MOTION': '1' if mutation == 'reduce' else '0'})
+                                     'OPEN_E2E_REDUCE_MOTION': '1' if mutation in ('reduce', 'layout', 'contrast', 'labels') else '0'})
             blank = app.call('tabs')[0]['id']
             app.call('wait', tab=blank)
             initial = state()
@@ -362,6 +444,15 @@ def negative_gates(factory, results, tmp, api):
                     repeated = state()
                     record('N_stationary_hover_one_replay', len(repeated['playedCards']) > before_hover + 1,
                            beforeCount=before_hover, state=repeated)
+                elif mutation in ('layout', 'contrast', 'labels'):
+                    visible()
+                    app.call('appearance', name='dark')
+                    app.call('window-frame', frame=[80, 60, 1000, 700])
+                    time.sleep(.3)
+                    broken = state()
+                    gates = design_gates(broken, 'dark')
+                    gate = {'layout': 'fits_without_scroll', 'contrast': 'contrast', 'labels': 'only_permitted_labels'}[mutation]
+                    record('N_design_' + mutation, not gates[gate], gates=gates, layout=broken['layout'])
             app.quit(); app = None
         # Force an early exception after a specific owned window appears.
         app = factory(urls=('about:blank',), fresh=True)

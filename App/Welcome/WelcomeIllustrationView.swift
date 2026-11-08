@@ -11,39 +11,59 @@ final class WelcomeIllustrationView: NSView {
     let values: [Any]
     let times: [NSNumber]
   }
+  private enum Paint: String { case panel, sidebar, otherSidebar, row, active, canvas }
   let kind: Int
   private let scene = CALayer()
   private var tracks: [Track] = []
+  private var fills: [(CALayer, Paint)] = []
   private var panels: [CALayer] = []
-  private var textLayers: [(CATextLayer, NSColor)] = []
-  private var spacePanel: CALayer?
+  private var textLayers: [(CATextLayer, Bool)] = []
+  private var appliedBackground: NSColor?
+  private var appliedTint: NSColor?
+  private var appliedDark: Bool?
   private(set) var running = false
-  private var dark = false
   var animationCount: Int { tracks.reduce(0) { $0 + ($1.layer.animationKeys()?.count ?? 0) } }
+  #if OPEN_AUTOMATION
+  var drawnLabels: [String] { textLayers.compactMap { $0.0.string as? String } }
+  var paintColors: [String: NSColor] {
+    var result: [String: NSColor] = [:]
+    for (layer, paint) in fills where result[paint.rawValue] == nil {
+      if let color = layer.backgroundColor { result[paint.rawValue] = NSColor(cgColor: color) }
+    }
+    if let color = layer?.backgroundColor { result["surface"] = NSColor(cgColor: color) }
+    for (text, white) in textLayers {
+      if let color = text.foregroundColor { result[white ? "activeText" : "text"] = NSColor(cgColor: color) }
+    }
+    return result
+  }
+  var sceneScale: [CGFloat] { [scene.transform.m11, scene.transform.m22] }
+  #endif
 
   init(kind: Int) {
     self.kind = kind; super.init(frame: .zero); wantsLayer = true
     scene.anchorPoint = .zero; scene.bounds = CGRect(x: 0, y: 0, width: 320, height: 200)
     layer?.addSublayer(scene); build(); finish()
+    apply(background: .white, sidebarTint: .systemBlue, dark: false)
     setAccessibilityElement(false)
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   override func layout() {
     super.layout()
+    let scale = min(bounds.width / 320, bounds.height / 200)
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    scene.position = .zero
-    scene.transform = CATransform3DMakeScale(bounds.width / 320, bounds.height / 200, 1)
+    scene.position = CGPoint(x: (bounds.width - 320 * scale) / 2, y: (bounds.height - 200 * scale) / 2)
+    scene.transform = CATransform3DMakeScale(scale, scale, 1)
     CATransaction.commit()
   }
-  private func box(_ rect: CGRect, color: NSColor, radius: CGFloat = 4, parent: CALayer? = nil) -> CALayer {
-    let item = CALayer(); item.frame = rect; item.backgroundColor = color.cgColor; item.cornerRadius = radius
-    (parent ?? scene).addSublayer(item); return item
+  private func box(_ rect: CGRect, paint: Paint, radius: CGFloat = 4, parent: CALayer? = nil) -> CALayer {
+    let item = CALayer(); item.frame = rect; item.cornerRadius = radius
+    fills.append((item, paint)); (parent ?? scene).addSublayer(item); return item
   }
-  private func text(_ value: String, rect: CGRect, size: CGFloat = 8, color: NSColor = .white, parent: CALayer? = nil) -> CATextLayer {
+  private func text(_ value: String, rect: CGRect, white: Bool = false, parent: CALayer) -> CATextLayer {
     let item = CATextLayer(); item.frame = rect; item.string = value
-    item.font = NSFont.systemFont(ofSize: size, weight: .medium); item.fontSize = size
-    item.foregroundColor = color.cgColor; item.contentsScale = 2; item.alignmentMode = .left
-    (parent ?? scene).addSublayer(item); textLayers.append((item, color)); return item
+    item.font = NSFont.systemFont(ofSize: 9, weight: .medium); item.fontSize = 9
+    item.contentsScale = 2; item.alignmentMode = .left
+    parent.addSublayer(item); textLayers.append((item, white)); return item
   }
   private func track(_ item: CALayer, _ key: String, _ values: [Any], _ times: [Double]) {
     tracks.append(Track(layer: item, key: key, values: values, times: times.map(NSNumber.init(value:))))
@@ -53,39 +73,35 @@ final class WelcomeIllustrationView: NSView {
     track(item, "position", values.map { NSValue(point: $0) }, times)
   }
   private func build() {
-    let blue = NSColor(srgbRed: 0.19, green: 0.35, blue: 0.88, alpha: 1)
-    let purple = NSColor(srgbRed: 0.52, green: 0.36, blue: 0.76, alpha: 1)
-    let mint = NSColor(srgbRed: 0.31, green: 0.63, blue: 0.54, alpha: 1)
-    let frame = box(CGRect(x: 24, y: 23, width: 272, height: 154), color: .white, radius: 9)
+    let frame = box(CGRect(x: 24, y: 23, width: 272, height: 154), paint: .panel, radius: 9)
     panels.append(frame)
     frame.shadowPath = CGPath(roundedRect: frame.bounds, cornerWidth: 9, cornerHeight: 9, transform: nil)
     frame.shadowColor = NSColor.black.cgColor; frame.shadowOpacity = 0.12; frame.shadowRadius = 8
     frame.shadowOffset = CGSize(width: 0, height: -3)
-    let sidebar = box(CGRect(x: 0, y: 0, width: 86, height: 154), color: blue.withAlphaComponent(0.17), radius: 9, parent: frame)
-    for i in 0..<3 { _ = box(CGRect(x: 8 + i * 9, y: 141, width: 5, height: 5), color: blue.withAlphaComponent(0.45), radius: 3, parent: sidebar) }
-    _ = text("Open", rect: CGRect(x: 10, y: 119, width: 58, height: 12), size: 9, color: blue, parent: sidebar)
-    for i in 0..<3 {
-      _ = box(CGRect(x: 10 + i * 22, y: 104, width: 14, height: 14), color: [blue, purple, mint][i].withAlphaComponent(0.42), parent: sidebar)
+    let sidebar = box(CGRect(x: 0, y: 0, width: 86, height: 154), paint: .sidebar, radius: 9, parent: frame)
+    for i in 0..<3 { _ = box(CGRect(x: 8 + i * 9, y: 141, width: 5, height: 5), paint: .row, radius: 3, parent: sidebar) }
+    for i in 0..<2 { _ = box(CGRect(x: 9, y: 119 - i * 14, width: 68 - i * 12, height: 7), paint: .row, radius: 3, parent: sidebar) }
+    _ = box(CGRect(x: 9, y: 70, width: 68, height: 1), paint: .row, radius: 0, parent: sidebar)
+    let row = box(CGRect(x: 7, y: 39, width: 72, height: 20), paint: .active, parent: sidebar)
+    if kind == 0 {
+      _ = text("+ New Tab", rect: CGRect(x: 7, y: 4, width: 60, height: 12), white: true, parent: row)
+    } else {
+      _ = box(CGRect(x: 9, y: 8, width: 47, height: 4), paint: .row, radius: 2, parent: row)
     }
-    _ = box(CGRect(x: 9, y: 70, width: 68, height: 1), color: blue.withAlphaComponent(0.22), radius: 0, parent: sidebar)
-    let row = box(CGRect(x: 7, y: 39, width: 72, height: 20), color: blue.withAlphaComponent(0.14), parent: sidebar)
-    if kind != 0 { _ = box(CGRect(x: 6, y: 6, width: 8, height: 8), color: blue, radius: 3, parent: row) }
-    _ = text(kind == 0 ? "+ New Tab" : "A favorite site", rect: CGRect(x: kind == 0 ? 7 : 19, y: 4, width: 55, height: 12), color: blue, parent: row)
-    let page = box(CGRect(x: 94, y: 9, width: 170, height: 136), color: blue.withAlphaComponent(0.04), radius: 5, parent: frame)
-    let hero = box(CGRect(x: 14, y: 70, width: 142, height: 52), color: blue.withAlphaComponent(0.15), radius: 4, parent: page)
-    let line = box(CGRect(x: 14, y: 52, width: 95, height: 5), color: blue.withAlphaComponent(0.24), radius: 2, parent: page)
-    _ = line
-    for i in 0..<3 { _ = box(CGRect(x: 14, y: 37 - i * 9, width: 135 - i * 9, height: 3), color: blue.withAlphaComponent(0.12), radius: 1, parent: page) }
-    let cursor = box(CGRect(x: 0, y: 0, width: 9, height: 13), color: blue, radius: 2, parent: frame)
+    let page = box(CGRect(x: 94, y: 9, width: 170, height: 136), paint: .canvas, radius: 5, parent: frame)
+    _ = box(CGRect(x: 14, y: 70, width: 142, height: 52), paint: .row, parent: page)
+    _ = box(CGRect(x: 14, y: 52, width: 95, height: 5), paint: .row, radius: 2, parent: page)
+    for i in 0..<3 { _ = box(CGRect(x: 14, y: 37 - i * 9, width: 135 - i * 9, height: 3), paint: .row, radius: 1, parent: page) }
+    let cursor = box(CGRect(x: 0, y: 0, width: 9, height: 13), paint: .active, radius: 2, parent: frame)
     cursor.transform = CATransform3DMakeRotation(-0.35, 0, 0, 1)
     switch kind {
     case 0:
-      let command = box(CGRect(x: 45, y: 68, width: 190, height: 49), color: .white, radius: 7, parent: frame)
-      command.borderWidth = 1; command.borderColor = blue.withAlphaComponent(0.2).cgColor; panels.append(command)
-      _ = text("Search or enter a URL", rect: CGRect(x: 12, y: 29, width: 166, height: 12), color: blue.withAlphaComponent(0.65), parent: command)
-      let typed = "example.com"
-      for (i, letter) in typed.enumerated() {
-        let glyph = text(String(letter), rect: CGRect(x: 12 + i * 8, y: 9, width: 9, height: 14), size: 11, color: blue, parent: command)
+      let command = box(CGRect(x: 45, y: 68, width: 190, height: 49), paint: .panel, radius: 7, parent: frame)
+      panels.append(command)
+      _ = box(CGRect(x: 12, y: 31, width: 100, height: 4), paint: .row, radius: 2, parent: command)
+      // Abstract typed marks preserve the demo without inventing a site label.
+      for i in 0..<11 {
+        let glyph = box(CGRect(x: 12 + i * 8, y: 13, width: 6, height: 3), paint: .row, radius: 1, parent: command)
         let t = 0.30 + Double(i) * 0.025
         opacity(glyph, [0, 0, 1, 1], [0, t, t + 0.01, 1])
       }
@@ -101,23 +117,19 @@ final class WelcomeIllustrationView: NSView {
       position(cursor, [CGPoint(x: 110, y: 18), CGPoint(x: 57, y: 57), CGPoint(x: 57, y: 57), CGPoint(x: 57, y: 92), CGPoint(x: 110, y: 18)], [0, 0.18, 0.25, 0.65, 1])
     case 2:
       let mask = CALayer(); mask.frame = sidebar.bounds; mask.backgroundColor = NSColor.white.cgColor; sidebar.mask = mask
-      let second = box(sidebar.bounds.offsetBy(dx: 86, dy: 0), color: NSColor(srgbRed: 0.88, green: 0.82, blue: 0.96, alpha: 1), radius: 9, parent: sidebar)
-      spacePanel = second
-      _ = text("Home", rect: CGRect(x: 10, y: 119, width: 68, height: 12), size: 9, color: purple, parent: second)
-      for i in 0..<4 {
-        _ = box(CGRect(x: 9, y: 87 - i * 18, width: 68, height: 12), color: purple.withAlphaComponent(0.18), parent: second)
-      }
+      let second = box(sidebar.bounds.offsetBy(dx: 86, dy: 0), paint: .otherSidebar, radius: 9, parent: sidebar)
+      _ = text("Home", rect: CGRect(x: 10, y: 119, width: 68, height: 12), parent: second)
+      for i in 0..<4 { _ = box(CGRect(x: 9, y: 87 - i * 18, width: 68, height: 12), paint: .row, parent: second) }
       position(second, [second.position, second.position, CGPoint(x: 43, y: 77), CGPoint(x: 43, y: 77)], [0, 0.25, 0.62, 1])
-      let dots = box(CGRect(x: 27, y: 8, width: 33, height: 5), color: .clear, parent: sidebar)
-      for i in 0..<3 { _ = box(CGRect(x: i * 12, y: 0, width: 5, height: 5), color: blue.withAlphaComponent(0.25), radius: 3, parent: dots) }
-      let dot = box(CGRect(x: 0, y: 0, width: 5, height: 5), color: blue, radius: 3, parent: dots)
+      let dots = CALayer(); dots.frame = CGRect(x: 27, y: 8, width: 33, height: 5); sidebar.addSublayer(dots)
+      for i in 0..<3 { _ = box(CGRect(x: i * 12, y: 0, width: 5, height: 5), paint: .row, radius: 3, parent: dots) }
+      let dot = box(CGRect(x: 0, y: 0, width: 5, height: 5), paint: .active, radius: 3, parent: dots)
       position(dot, [dot.position, dot.position, CGPoint(x: 14.5, y: 2.5), CGPoint(x: 14.5, y: 2.5)], [0, 0.25, 0.62, 1])
-      track(hero, "backgroundColor", [blue.withAlphaComponent(0.15).cgColor, blue.withAlphaComponent(0.15).cgColor, purple.withAlphaComponent(0.24).cgColor, purple.withAlphaComponent(0.24).cgColor], [0, 0.25, 0.62, 1])
       opacity(cursor, [0, 0], [0, 1])
     default:
-      let secondPage = box(CGRect(x: 182, y: 9, width: 82, height: 136), color: mint.withAlphaComponent(0.2), radius: 5, parent: frame)
-      _ = box(CGRect(x: 9, y: 72, width: 64, height: 50), color: mint.withAlphaComponent(0.4), parent: secondPage)
-      for i in 0..<4 { _ = box(CGRect(x: 9, y: 54 - i * 10, width: 62 - i * 5, height: 3), color: mint.withAlphaComponent(0.35), radius: 1, parent: secondPage) }
+      let secondPage = box(CGRect(x: 182, y: 9, width: 82, height: 136), paint: .canvas, radius: 5, parent: frame)
+      _ = box(CGRect(x: 9, y: 72, width: 64, height: 50), paint: .row, parent: secondPage)
+      for i in 0..<4 { _ = box(CGRect(x: 9, y: 54 - i * 10, width: 62 - i * 5, height: 3), paint: .row, radius: 1, parent: secondPage) }
       opacity(secondPage, [0, 0, 1, 1], [0, 0.52, 0.70, 1])
       track(page, "bounds.size.width", [170, 170, 82, 82], [0, 0.45, 0.70, 1])
       page.anchorPoint = CGPoint(x: 0, y: 0.5); page.position.x = 94; page.masksToBounds = true
@@ -128,15 +140,30 @@ final class WelcomeIllustrationView: NSView {
     }
     if kind != 2 { opacity(cursor, [1, 1, 0, 0], [0, 0.76, 0.87, 1]) }
   }
-  func apply(dark: Bool) {
-    guard self.dark != dark else { return }; self.dark = dark
+  func apply(background: NSColor, sidebarTint: NSColor, dark: Bool) {
+    guard appliedDark != dark || appliedBackground?.isEqual(background) != true || appliedTint?.isEqual(sidebarTint) != true else { return }
+    appliedDark = dark; appliedBackground = background; appliedTint = sidebarTint
+    let contrast: NSColor = dark ? .white : .black
+    let surface = background.blended(withFraction: dark ? 0.04 : 0.06, of: contrast) ?? background
+    let blue = NSColor(srgbRed: 61.0 / 255, green: 107.0 / 255, blue: 1, alpha: 0.9)
+    let row = contrast.withAlphaComponent(dark ? 0.14 : 0.10)
+    let otherTint = sidebarTint.blended(withFraction: 0.35, of: blue) ?? sidebarTint
     CATransaction.begin(); CATransaction.setDisableActions(true)
-    for (text, color) in textLayers {
-      text.foregroundColor = (dark ? color.blended(withFraction: 0.55, of: .white) ?? color : color).cgColor
+    layer?.backgroundColor = surface.cgColor
+    for (item, paint) in fills {
+      let color: NSColor
+      switch paint {
+      case .panel: color = surface
+      case .sidebar: color = sidebarTint.withAlphaComponent(0.55)
+      case .otherSidebar: color = otherTint.withAlphaComponent(0.55)
+      case .row: color = row
+      case .active: color = blue
+      case .canvas: color = background
+      }
+      item.backgroundColor = color.cgColor
     }
-    spacePanel?.backgroundColor = (dark ? NSColor(srgbRed: 0.26, green: 0.23, blue: 0.36, alpha: 1)
-      : NSColor(srgbRed: 0.88, green: 0.82, blue: 0.96, alpha: 1)).cgColor
-    for panel in panels { panel.backgroundColor = (dark ? NSColor(srgbRed: 0.19, green: 0.21, blue: 0.27, alpha: 1) : .white).cgColor }
+    for (text, white) in textLayers { text.foregroundColor = (white ? NSColor.white : contrast.withAlphaComponent(0.75)).cgColor }
+    for panel in panels { panel.borderWidth = 1; panel.borderColor = row.cgColor }
     CATransaction.commit()
   }
   func play(duration: Double) {
