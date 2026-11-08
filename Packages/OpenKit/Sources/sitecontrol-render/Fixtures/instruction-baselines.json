@@ -6,6 +6,94 @@
       "osBuild": "26B5112a",
       "coldOpenInstructions": 95035968,
       "simpleEditorOpenInstructions": 135203676
+    },
+    {
+      "cpuBrand": "Apple M5 Pro",
+      "osBuild": "26B123",
+      "coldOpenInstructions": 92533938,
+      "simpleEditorOpenInstructions": 133208064,
+      "calibration": {
+        "ruling": "2026-11-08 09:30",
+        "sourceHead": "cdd147cac296ea4ea8a9da244299636aee28deb9",
+        "binarySHA256": "53ca47693e1ae9bf3b8c1800b6019c2ef81bc3bf381d1532b863341f176c73f0",
+        "method": "Five back-to-back unchanged-main pairs. Accepted = rounded-up median of ten run medians; ceiling = ceil(accepted x1.10). Full check procedure; no outlier removal.",
+        "coldSamples": [
+          92494287,
+          93335648,
+          92542494,
+          92541418,
+          92502418,
+          92470901,
+          92570936,
+          92561231,
+          92462013,
+          92526458
+        ],
+        "simpleEditorSamples": [
+          133851524,
+          133230208,
+          133113330,
+          132926967,
+          133260271,
+          133588461,
+          133149444,
+          133301521,
+          133143982,
+          133185919
+        ],
+        "load1": [
+          {
+            "start": 13.96728515625,
+            "end": 20.18701171875,
+            "peak": 20.65673828125
+          },
+          {
+            "start": 20.18701171875,
+            "end": 19.7314453125,
+            "peak": 23.3251953125
+          },
+          {
+            "start": 19.7314453125,
+            "end": 16.4033203125,
+            "peak": 19.81005859375
+          },
+          {
+            "start": 16.4033203125,
+            "end": 16.93212890625,
+            "peak": 18.14501953125
+          },
+          {
+            "start": 16.93212890625,
+            "end": 17.43115234375,
+            "peak": 18.42626953125
+          },
+          {
+            "start": 17.43115234375,
+            "end": 20.82080078125,
+            "peak": 21.76318359375
+          },
+          {
+            "start": 20.82080078125,
+            "end": 22.12841796875,
+            "peak": 29.265625
+          },
+          {
+            "start": 22.12841796875,
+            "end": 17.3388671875,
+            "peak": 22.12841796875
+          },
+          {
+            "start": 17.3388671875,
+            "end": 17.994140625,
+            "peak": 21.1708984375
+          },
+          {
+            "start": 17.994140625,
+            "end": 13.3310546875,
+            "peak": 17.994140625
+          }
+        ]
+      }
     }
   ]
 }
