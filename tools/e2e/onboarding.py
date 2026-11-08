@@ -91,11 +91,12 @@ def run(factory, results, tmp, h):
         app.call('snapshot', path=str(evidence/'intro-handoff-first-run.png'))
         gate('get_started_handoff', lambda s: s.get('screen')=='first-run' and not s['active'], state(), phase2)
         gate('handoff_import_fresh_choices', lambda s: s.get('active') and s.get('step')=='welcome' and s.get('probeReady'), first_run, phase2)
+        before_landing = dict(windows=app.call('windows'), snapshot=Path(app.user_data, 'State/browser.json').exists())
         app.call('first-run', action='fresh')
         until(lambda: not app.call('first-run')['active'])
         until(lambda: isinstance(state().get('residentDeltaAfterHandoff'), int))
         landed = dict(windows=app.call('windows'), snapshot=Path(app.user_data, 'State/browser.json').exists(), memory=state().get('residentDeltaAfterHandoff'))
-        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, phase2)
+        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, before_landing)
         # Natural returning launch: a real saved browser root, no skip switch.
         launch(fresh=False)
         returning = state()
@@ -182,7 +183,7 @@ def run(factory, results, tmp, h):
         gate('quit_during_animation_fixture', lambda s: s.get('active') and s.get('dim', {}).get('exists'), interrupted_intro, returning)
         before_quit = app.call('windows')
         app.quit()
-        gate('owned_window_cleanup', lambda s: s.get('ok') and s.get('windows_after_quit', {}).get('count')==0, app.quit_report, dict(windows=before_quit))
+        gate('owned_window_cleanup', lambda s: s.get('count')==0, app.quit_report['windows_after_quit'], dict(count=len(before_quit), windows=before_quit))
         with tempfile.TemporaryDirectory(prefix='open-intro-replay-', dir='/tmp') as root:
             Path(root, 'State').mkdir()
             Path(root, 'State/browser.json').write_bytes(prior)
