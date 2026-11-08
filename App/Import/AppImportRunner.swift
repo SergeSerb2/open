@@ -9,11 +9,16 @@ import OpenBoosts
 /// The sole App import implementation. Settings merges; first run installs.
 /// History streams through the existing Profile stores after the landing gate.
 @MainActor
-final class AppImportRunner {
+final class AppImportRunner: ProfileDataOwner {
   unowned let app: AppDelegate
   private(set) var lastOutcome: ImportOutcome?
   private var running = false
   var secretsFixtureInProgress = false
+  var retiredSecretsProfiles = Set<ProfileID>()
+  var retiredSecretsDirectories = Set<String>()
+  var secretsSinks: [ProfileID: AppSecretsImportSink] = [:]
+  var secretsTask: Task<ArcSecretsImportReport, any Error>?
+  var secretsTaskProfiles = Set<ProfileID>()
   var extensionAttempt: AppImportExtensionAttempt?
   var installingExtension = false
   #if OPEN_AUTOMATION
@@ -30,6 +35,7 @@ final class AppImportRunner {
   init(app: AppDelegate) {
     self.app = app
     unfinishedSecretsImportAtLaunch = (try? SecretsImportLedger(dataRoot: app.directories.root).unfinished) != nil
+    app.profileTeardown.register(self)
   }
 
   func run(plan: ImportPlan, firstRun: Bool) async -> ImportOutcome {
@@ -201,7 +207,9 @@ final class AppImportRunner {
         }
         let merged = try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings, profiles: plan.archive || plan.history, archivedIDsByProfile: archivedIDs,
+          searchSettings: plan.searchSettings,
+          profiles: plan.archive || plan.history || (plan.secretsConsented && canImportPasswordsAndCookies),
+          archivedIDsByProfile: archivedIDs,
           importedAt: Date(), saving: {
             for profile in app.model.profiles { try app.directories.ensureProfileDirectories(for: profile) }
             try app.snapshotStore.saveNow(model: app.model)

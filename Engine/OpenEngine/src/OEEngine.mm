@@ -590,10 +590,7 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   // quit and the three-second renderer timeout path.
   for (OEBrowser* browser in self.browsers) [browser close];
   NSArray<OEBrowserContext*>* retained = [self oe_allContexts];
-  for (OEBrowserContext* context in retained) {
-    [context oe_closeAutofill];
-    [context oe_invalidate];
-  }
+  for (OEBrowserContext* context in retained) [context oe_invalidate];
   if ([_configuration.additionalSwitches containsObject:@"--open-automation"]) {
     NSUInteger closed = 0;
     for (OEBrowserContext* context in retained)

@@ -166,10 +166,10 @@ def _run(factory, results, tmp, h):
             try:
                 app.call('import-secrets-fixture')
             except RuntimeError as error:
-                failed_closed = 'OEErrorDomain:8' in str(error)
+                failed_closed = 'OEErrorDomain:10' in str(error)
             counts = all_credentials()
             row('I-negative-mock-key', failed_closed and all(not any(v.values()) for v in counts.values()) and zero_consent(),
-                profiles=counts, errorCode=8 if failed_closed else 0)
+                profiles=counts, errorCode=10 if failed_closed else 0)
             app.quit()
 
             launch(fresh=True)
@@ -223,7 +223,61 @@ def _run(factory, results, tmp, h):
                           and value['requiredUnpartitioned'] == 3 for value in echo), profiles=echo)
             app.quit()
 
+            # Delete through the real Settings confirmation and ProfileTeardown.
+            # Reassign the fixture Space first: Profiles with Spaces cannot be deleted.
+            for variant in ('completed', 'in-progress'):
+                launch(fresh=True); spaces = setup()
+                args = {} if variant == 'completed' else dict(pause='after-logins', pauseProfile='Profile 1')
+                app.call('import-secrets-fixture', **args)
+                if args:
+                    assert h.wait_until(lambda: app.call('import-secrets-state')['stage'] == 'paused-after-logins',
+                                        timeout=30, step=.1), 'fixture checkpoint not reached'
+                default_before = credentials('Default')
+                work_before = credentials('Work')
+                before_ledger = (Path(app.user_data) / 'State/secrets-import.json').read_bytes()
+                work = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Work')
+                folders = [Path(app.user_data) / kind / work['directory'] for kind in ('Profiles', 'Engine')]
+                # Disposable roots live outside Application Support, so Chromium's
+                # cache is inside the Engine folder (ProfileDirectories contract).
+                had_folders = all(p.is_dir() for p in folders[:2])
+                app.call('space-profile', space=spaces['Work'], profile='Default')
+                profile_space('Default')
+                app.call('profiles-shell', action='show', profile='Work')
+                app.call('profiles-shell', action='press', label='Delete Profile')
+                assert h.wait_until(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5), 'Profile deletion sheet missing'
+                app.call('profiles-shell', action='type-delete', text='Work')
+                app.call('profiles-shell', action='press', label='Delete')
+                def deletion_done():
+                    state = app.call('profiles-shell')
+                    return not state['deleting'] and state['sheet'] == 0 and all(p['id'] != work['id'] for p in state['profiles'])
+                deleted = h.wait_until(deletion_done, timeout=30, step=.1)
+                stopped = h.wait_until(lambda: not app.call('import-secrets-state')['activeBatch'], timeout=5)
+                state = app.call('import-secrets-state')
+                inactive = work['directory'] not in app.call('engine-contexts')
+                gone_before_quit = all(not p.exists() for p in folders)
+                # A queued request for a retired destination must fail before
+                # it can obtain a context or replace the counts ledger.
+                refused = False
+                try:
+                    app.call('import-secrets-fixture', map={'Profile 1': work['id']})
+                except RuntimeError:
+                    refused = True
+                unchanged = (Path(app.user_data) / 'State/secrets-import.json').read_bytes() == before_ledger
+                app.call('save'); app.quit(); launch()
+                gone_after_relaunch = all(not p.exists() for p in folders)
+                unchanged = unchanged and (Path(app.user_data) / 'State/secrets-import.json').read_bytes() == before_ledger
+                row('I-9-' + variant, deleted and stopped and had_folders and work_before['logins'] > 0
+                    and default_before == expected and credentials('Default') == default_before
+                    and gone_before_quit and gone_after_relaunch and inactive and refused and unchanged
+                    and state['retiredProfiles'] == 1 and state['cachedSinks'] == 1 and zero_consent(),
+                    defaultCounts=credentials('Default'), importedBeforeDelete=work_before['logins'],
+                    foldersAbsent=gone_after_relaunch, ledgerUnchanged=unchanged, retiredRequestRefused=refused)
+                app.quit()
+
             for identifier, pause in [('I-5', 'after-logins'), ('I-6', 'during-cookies')]:
+                if os.environ.get('OPEN_E2E_NO_CRASH_PROBES') == '1':
+                    results[identifier] = {'status': 'DEFERRED', 'reason': 'M1-only by rule; not run'}
+                    continue
                 launch(fresh=True); spaces = setup()
                 app.call('import-secrets-fixture', pause=pause)
                 assert h.wait_until(lambda: app.call('import-secrets-state')['stage'] == 'paused-' + pause, timeout=30, step=.1), 'fixture checkpoint not reached'

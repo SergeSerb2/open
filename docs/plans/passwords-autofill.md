@@ -34,7 +34,7 @@ An Arc user who switches to Open keeps their logins and can keep saving and fill
 6. "Manage Passwords" (command bar), the Passwords row, and the dropdown footer open `chrome://password-manager/passwords` for the right profile (P-13, P-14).
 7. Nothing crashes on any password, card, address, or passkey path in a hosted tab (P-15; §2 names one crash that exists today and one rule that prevents another).
 8. A persistent cookie and a session cookie survive quit and relaunch; `Cookies` stores them encrypted (C-1…C-3).
-9. Import of a synthetic two-profile Arc fixture writes each record to the mapped Open profile only; a second run adds 0 records; a forced stop after any step and a re-run end in the same state (I-1…I-8).
+9. Import of a synthetic two-profile Arc fixture writes each record to the mapped Open profile only; a second run adds 0 records; a forced stop after any step and a re-run end in the same state. Deleting a destination Profile cancels its import and keeps its folders absent after relaunch (I-1…I-9).
 10. No code path reads, creates, or writes "Chromium Safe Storage". Real secrets are never written under Chromium's mock key (K-1…K-3, P-22, I-8).
 11. No unit tests. Every check runs the real app (AGENTS.md rule 6).
 
@@ -845,6 +845,16 @@ The fixture extends `SyntheticSecretsFixture`: two Arc profile directories (`Def
 | I-6 | Same with the kill during the cookie step | Same as I-5 |
 | I-7 | `/echo-cookies` in each profile after a relaunch | Each profile sends only its imported cookie names |
 | I-8 | Wizard on a mock-key build (with or without the e2e flag) | Passwords step shows "can't be imported yet"; no consent token is created (automation counts adapter calls) |
+| I-9-completed | Import into Work, reassign its Space to Default, delete Work through Settings, quit and relaunch | Work's App and engine folders (including the cache) stay absent, its context is gone, the ledger is unchanged, a request for the deleted destination is refused, and Default's counts stay unchanged; no crash |
+| I-9-in-progress | Hold Work's real fixture batch after its logins step with `pause:"after-logins", pauseProfile:"Profile 1"`; delete through the same Settings flow, quit and relaunch | The runner cancels and drains the batch, drops Work's sink, and passes the same folder, ledger and Default checks as I-9-completed; no crash |
+
+`AppImportRunner` registers once as a `ProfileDataOwner`. Retirement remembers
+both the Profile ID and directory for the rest of the process. It cancels and
+awaits the mapped secrets task, drains outstanding engine writes, and releases
+the sink and cookie reload callback. Only `ProfileTeardown` removes folders.
+Cancellation is checked before each ledger write, including the final write.
+I-5 and I-6 intentionally kill Open and run only on the M1. On the M5, set
+`OPEN_E2E_NO_CRASH_PROBES=1`; those rows report "M1-only by rule; not run".
 
 `openkit verify-secrets-fixture` (CLI) prints the same per-kind counts with a counting sink.
 

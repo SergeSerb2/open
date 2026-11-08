@@ -69,14 +69,15 @@ adapter, metadata-probe invocation, and secret-read invocation. Synthetic import
 never increments them. The wizard's capability remains
 `supportsSecretsImport && !usesMockKeychain`, including in fixture runs.
 
-For SIGKILL recovery only, `import-secrets-fixture {pause:"after-logins"}`
+For recovery or in-progress deletion, `import-secrets-fixture {pause:"after-logins"}`
 starts the same importer in a task and returns immediately. Poll
 `import-secrets-state` for `stage:"paused-after-logins"`: the Default Profile's
 login ledger step is durable and done. `pause:"during-cookies"` splits the real
 cookie sink call into two durable engine batches and pauses after the first;
 the whole cookie step remains pending in the ledger. Poll for
 `paused-during-cookies`, then SIGKILL only the owned App PID and relaunch that
-root. A pause expires after 60 seconds. Both forms use
+root on the M1 only. On the M5 use the held batch for normal Profile deletion;
+never kill the App there. A pause expires after 60 seconds. Both forms use
 `<data root>/State/secrets-import.json`; a normal rerun starts a new run ID and
 replays all steps against the stores' duplicate checks.
 
@@ -92,14 +93,16 @@ The reference step does not read any Arc secret file or Keychain item.
 Run the real App suite, after the lead clears any screen hold:
 
 ```sh
-/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only secrets-import
+OPEN_E2E_NO_CRASH_PROBES=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only secrets-import
 ```
 
 The suite starts the existing passwords fixture server on loopback with a
 temporary TLS certificate. Only its owned App maps `*.example.com` there.
-It checks I-1…I-8, actual fill gestures, the WebUI credential update service,
-SIGKILL recovery, wizard state, and cookie request isolation after relaunch. It also proves
-`OEErrorMockKeychain` (code 8) and zero writes without
+It checks I-1…I-9, actual fill gestures, the WebUI credential update service,
+wizard state, Profile deletion, and cookie request isolation after relaunch.
+I-5/I-6 SIGKILL recovery runs only on the M1, without `OPEN_E2E_NO_CRASH_PROBES`;
+the M5 command above marks them "M1-only by rule; not run". It also proves
+`OEErrorMockKeychain` (code 10) and zero writes without
 `--open-allow-mock-keychain-secrets`. Result rows contain counts and booleans
 only. It preserves shared defaults in `finally`.
 I-2 and I-4 use the native dropdown helpers from `tools/e2e/passwords.py`
@@ -107,6 +110,12 @@ I-2 and I-4 use the native dropdown helpers from `tools/e2e/passwords.py`
 suggestions and rejects foreign Profile suggestions through accessibility;
 no field text enters the result. I-8 reads the shared wizard model's text and
 button state through `first-run settings-inspect`; it does not use OCR.
+I-9 deletes Work through the Settings confirmation after a completed import
+and while its batch is held after logins. The fixture command's optional
+`pauseProfile` names the source directory (`Default` by default or `Profile 1`).
+`import-secrets-state` also returns `activeBatch`, `cachedSinks`, and
+`retiredProfiles`. Each deletion row checks folder absence before quit and
+after relaunch, unchanged Default counts, and an unchanged counts ledger.
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.

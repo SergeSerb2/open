@@ -5,6 +5,32 @@ import OpenModel
 import OpenSettings
 
 extension AppImportRunner {
+  func retireProfile(_ profileID: ProfileID, directory: String) async {
+    retiredSecretsProfiles.insert(profileID)
+    retiredSecretsDirectories.insert(directory.lowercased())
+    // Cancel the whole run, including Profiles not yet reached by the reader.
+    // Await it so no pending step can update the ledger after we return.
+    let task = secretsTaskProfiles.contains(profileID) ? secretsTask : nil
+    task?.cancel()
+    let sink = secretsSinks.removeValue(forKey: profileID)
+    await sink?.retire()
+    _ = await task?.result
+  }
+
+  func runSecretsBatch(sinks: [String: any OpenImport.SecretsImportSink],
+                       operation: @escaping @MainActor () async throws -> ArcSecretsImportReport) async throws -> ArcSecretsImportReport {
+    try Task.checkCancellation()
+    guard secretsTask == nil else { throw ArcSecretsImportError.invalidSinkResult }
+    let profiles = Set(sinks.values.compactMap { $0.openProfileID.map(ProfileID.init(rawValue:)) })
+    guard retiredSecretsProfiles.isDisjoint(with: profiles) else { throw CancellationError() }
+    let task = Task { @MainActor in try await operation() }
+    secretsTask = task; secretsTaskProfiles = profiles
+    defer { secretsTask = nil; secretsTaskProfiles = [] }
+    return try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: { task.cancel() }
+  }
+
   var canImportPasswordsAndCookies: Bool {
     OEEngine.shared.supportsSecretsImport && !OEEngine.shared.usesMockKeychain
   }
@@ -16,16 +42,21 @@ extension AppImportRunner {
   /// Resolve through the normal factory even when a Profile has no live tab.
   /// No fallback to Default, and never use an incognito factory for a writer.
   func secretsSink(for profile: Profile) throws -> AppSecretsImportSink {
+    guard !retiredSecretsProfiles.contains(profile.id),
+      !retiredSecretsDirectories.contains(profile.dataDirectoryName.lowercased()),
+      app.model.profile(id: profile.id) === profile else { throw CancellationError() }
     guard let factory = app.frontStandardWindowController.flatMap({ app.hostFactories[$0.windowID] })
       ?? app.hostFactories.values.first(where: { !$0.isIncognito }),
       !factory.isIncognito, let context = factory.context(for: profile.id), !context.isEphemeral
     else { throw ArcSecretsImportError.invalidSinkResult }
-    return AppSecretsImportSink(profileID: profile.id, context: context) { [weak app] in
+    let sink = AppSecretsImportSink(profileID: profile.id, context: context) { [weak app] in
       guard let app else { return }
       for factory in app.hostFactories.values where !factory.isIncognito {
         for host in factory.hosts.values where host.profileID == profile.id && !host.closed { host.reload() }
       }
     }
+    secretsSinks[profile.id] = sink
+    return sink
   }
 
   /// Only a plan produced by the explicit consent button can enter here.
@@ -44,6 +75,7 @@ extension AppImportRunner {
       try Task.checkCancellation()
       var sinks: [String: any OpenImport.SecretsImportSink] = [:]
       for (sourceID, directory) in imported.sourceProfileDirectories {
+        guard !retiredSecretsProfiles.contains(profileMapping[sourceID] ?? sourceID) else { throw CancellationError() }
         guard let target = app.model.profile(id: profileMapping[sourceID] ?? sourceID) else { continue }
         sinks[directory] = try secretsSink(for: target)
       }
@@ -60,8 +92,11 @@ extension AppImportRunner {
       var key = deriveChromiumKey(passwordBytes: password)
       zeroSecretBytes(&password)
       defer { zeroSecretBytes(&key) }
-      let report = try await ArcSecretsImporter(arcUserData: plan.directory.appendingPathComponent("User Data"),
-        ledger: SecretsImportLedger(dataRoot: app.directories.root)).run(key: key, consent: consent, sinks: sinks)
+      let importer = ArcSecretsImporter(arcUserData: plan.directory.appendingPathComponent("User Data"),
+        ledger: SecretsImportLedger(dataRoot: app.directories.root))
+      let report = try await runSecretsBatch(sinks: sinks) {
+        try await importer.run(key: key, consent: consent, sinks: sinks)
+      }
       let total = report.total
       return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
         "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines)
