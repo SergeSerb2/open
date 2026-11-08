@@ -5,6 +5,7 @@ No global input or real user data. No preference keys are changed by this suite.
 """
 import json
 import os
+import plistlib
 import shutil
 import subprocess
 import time
@@ -12,10 +13,18 @@ from pathlib import Path
 
 
 def run(factory, results, tmp, api):
+    if os.environ.get('OPEN_E2E_WELCOME_NEGATIVE') == '1':
+        return negative_gates(factory, results, tmp, api)
     root = Path(api.ROOT)
     evidence = root / '.re/handoff/sections/s17/c4'
     evidence.mkdir(parents=True, exist_ok=True)
     app = None
+    domain = 'io.github.sergeserb2.open'
+    keys = ('open.settings.lastPane', 'open.library.lastSection')
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    saved = {key: before.get(key) for key in keys}
+    for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
     server, origin = api._fixture_server('Welcome')
 
     def record(name, ok, **details):
@@ -175,16 +184,51 @@ def run(factory, results, tmp, api):
         shortcut_window = api.wait_until(lambda: next((w for w in app.call('windows')
             if w['visible'] and 'Essential' in w['title']), None), timeout=5, step=.1)
         record('W26_footer_shortcuts', shortcut_window, window=shortcut_window)
-        app.call('key', key='w', modifiers=['cmd'])
+        app.call('key', key='w', modifiers=['cmd'], window=shortcut_window['number'])
         app.call('window-focus', id=browser_window, activate=True)
-        await_state(lambda s: s['visible'])
+        assert await_state(lambda s: s['visible']), 'Welcome did not return after Shortcuts'
         app.call('welcome', action='link', link='settings')
-        settings_window = api.wait_until(lambda: next((w for w in app.call('windows')
-            if w['visible'] and w['title'] == 'Settings'), None), timeout=5, step=.1)
-        record('W27_footer_settings', settings_window, window=settings_window)
-        app.call('key', key='w', modifiers=['cmd'])
+        settings_state = api.wait_until(lambda: (lambda s: s if s['settingsVisible'] and s['pane'] == 'general' else None)(
+            app.call('settings-state')), timeout=5, step=.1)
+        settings_window = next((w for w in app.call('windows') if settings_state and w['number'] == settings_state['settings']), None)
+        record('W27_footer_settings', settings_state and settings_window and settings_window['visible'],
+               window=settings_window, state=settings_state)
+        if os.environ.get('OPEN_E2E_WELCOME_FAIL_FOOTER') == '1':
+            raise RuntimeError('intentional early failure with owned Settings window open')
+        app.call('key', key='w', modifiers=['cmd'], window=settings_window['number'])
         app.call('window-focus', id=browser_window, activate=True)
-        await_state(lambda s: s['visible'])
+        assert await_state(lambda s: s['visible']), 'Welcome did not return after Settings'
+        # The shared importer treats the internal URL as an ordinary model tab.
+        from firstrun import fixture
+        source = Path(tmp) / 'arc-welcome-synthetic'
+        ids = fixture(source)
+        sidebar_path = source / 'StorableSidebar.json'
+        sidebar = json.loads(sidebar_path.read_text())
+        items = sidebar['sidebar']['containers'][1]['items']
+        for item in items:
+            if isinstance(item, dict) and item.get('id') == ids['t0']:
+                item['data']['tab']['savedURL'] = 'open://welcome'
+                item['data']['tab']['savedTitle'] = 'Welcome to Open'
+        sidebar_path.write_text(json.dumps(sidebar))
+        app.call('first-run', action='settings-import', directory=str(source))
+        app.call('first-run', action='settings-select', history=False)
+        app.call('first-run', action='settings-next')
+        app.call('first-run', action='settings-run')
+        imported = api.wait_until(lambda: app.call('first-run') if
+            app.call('first-run').get('settingsStep') == 'report' else None, timeout=25, step=.1)
+        app.call('first-run', action='settings-done')
+        settings_state = app.call('settings-state')
+        if settings_state['settingsVisible']:
+            app.call('key', key='w', modifiers=['cmd'], window=settings_state['settings'])
+        app.call('window-focus', id=browser_window, activate=True)
+        app.call('space', space=ids['alpha'])
+        app.call('select', tab=ids['t0'])
+        imported_page = await_state(lambda s: s['visible'])
+        imported_tab = app.call('tab-state', tab=ids['t0'])
+        record('W28_import_ordinary_internal_tab', imported and imported_page
+               and imported_tab['url'] == 'open://welcome' and not imported_tab['loaded']
+               and imported_page['engineInternalPages'] == 0, state=imported_page, tab=imported_tab)
+        app.call('welcome', action='reveal', card=4)
         app.call('welcome', action='replay', card=4)
         screenshot('welcome-replay-four')
         app.quit(); app = factory(urls=(), extra_env={'OPEN_E2E_REDUCE_MOTION': '1'})
@@ -200,9 +244,11 @@ def run(factory, results, tmp, api):
         record('W24_cmd_t_native_context', bar.get('presented') and bar.get('mode') == 'newTab', state=bar)
         app.call('key', key='escape')
     finally:
-        if app:
-            app.quit()
-        server.shutdown(); server.server_close()
+        try:
+            api._restore_defaults(app, saved)
+        finally:
+            if app: app.quit()
+            server.shutdown(); server.server_close()
         for source in Path(tmp).glob('open.log*'):
             shutil.copyfile(source, evidence / source.name)
         (evidence / 'welcome-checks.json').write_text(json.dumps(dict(results), indent=2))
@@ -214,3 +260,83 @@ COPY = [
     ("A Space for every part of life", "Spaces give you separate sidebars for work, projects, and home. Swipe with two fingers to switch."),
     ("Two tabs side by side", "Drag a tab from the sidebar onto the page to make a Split View.")
 ]
+
+
+def negative_gates(factory, results, tmp, api):
+    """Break-and-revert receipt driver. Requires an intentionally mutated build.
+
+    The temporary build switches live only in the ignored receipt patch. They
+    are removed before the final build. Without that patch each row must fail.
+    All paths still launch and exercise the real App with temporary model roots.
+    """
+    evidence = Path(api.ROOT) / '.re/handoff/sections/s17/c4/negative'
+    evidence.mkdir(parents=True, exist_ok=True)
+    app = None
+
+    def state(): return app.call('welcome')
+    def visible(): return api.wait_until(lambda: state() if state()['visible'] else None, timeout=5, step=.1)
+    def record(name, rejected, **details):
+        results[name] = dict(ok=bool(rejected), expected='production assertion rejects deliberately broken gate',
+                             loadAverage=list(os.getloadavg()), **details)
+    try:
+        for mutation in ('native', 'playlist', 'visibility', 'reduce', 'external'):
+            app = factory(urls=('about:blank',), fresh=True,
+                          extra_env={'OPEN_E2E_WELCOME_MUTATION': mutation,
+                                     'OPEN_E2E_REDUCE_MOTION': '1' if mutation == 'reduce' else '0'})
+            blank = app.call('tabs')[0]['id']
+            app.call('wait', tab=blank)
+            initial = state()
+            if mutation == 'external':
+                before = len(app.call('tabs'))
+                delivered = subprocess.run(['/usr/bin/open', '-a', app.bundle, 'open://welcome'],
+                                            capture_output=True, timeout=15)
+                landed = api.wait_until(lambda: len(app.call('tabs')) > before, timeout=5, step=.1)
+                record('N_external_refusal', delivered.returncode == 0 and landed, tabs=app.call('tabs'))
+            else:
+                inserted = app.call('welcome', action='insert')
+                if mutation == 'native':
+                    native_gate = inserted['visible'] and inserted['engineContentCreationCount'] == initial['engineContentCreationCount']
+                    record('N_native_host_engine_absence', not native_gate
+                           and inserted['engineContentCreationCount'] > initial['engineContentCreationCount'], state=inserted)
+                elif mutation == 'playlist':
+                    visible()
+                    ended = api.wait_until(lambda: state() if state()['completionCount'] >= 4 else None, timeout=38, step=.1)
+                    finite_gate = ended and ended['playlist'] == 'stopped' and not ended['animating'] and ended['animationCount'] == 0
+                    record('N_playlist_stops', ended and not finite_gate and ended['playedCards'][:4] == [1, 2, 3, 4], state=ended)
+                elif mutation == 'visibility':
+                    visible(); app.call('welcome', action='replay', card=1)
+                    app.call('select', tab=blank)
+                    hidden = state()
+                    record('N_hidden_tab_stops', hidden['animationCount'] > 0 and any(h['animating'] for h in hidden['hosts']), state=hidden)
+                    app.call('select', tab=inserted['tab']); visible()
+                    app.call('welcome', action='replay', card=1)
+                    app.call('command', id='minimize-window')
+                    mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=4, step=.1)
+                    hidden = state()
+                    record('N_minimize_stops', mini and hidden['animating'] and hidden['animationCount'] > 0, state=hidden)
+                elif mutation == 'reduce':
+                    shown = visible()
+                    static_gate = shown and shown['reduceMotion'] and not shown['animating'] and shown['animationCount'] == 0
+                    record('N_reduce_motion_static', shown and not static_gate and shown['animating'], state=shown)
+            app.quit(); app = None
+        # Force an early exception after a specific owned window appears.
+        app = factory(urls=('about:blank',), fresh=True)
+        app.call('welcome', action='insert'); visible()
+        app.call('welcome', action='link', link='settings')
+        settings = app.call('settings-state')
+        forced = False
+        try:
+            if settings['settingsVisible'] and settings['pane'] == 'general':
+                raise RuntimeError('intentional failure with Settings open')
+        except RuntimeError as error:
+            forced = str(error) == 'intentional failure with Settings open'
+        finally:
+            app.quit()
+        report = app.quit_report
+        record('N_owned_window_cleanup_after_failure', forced and report['ok']
+               and not report['remaining_processes'] and report['windows_after_quit']['count'] == 0,
+               cleanup=report)
+        app = None
+    finally:
+        if app: app.quit()
+        (evidence / 'results.json').write_text(json.dumps(dict(results), indent=2))

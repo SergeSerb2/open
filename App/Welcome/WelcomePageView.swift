@@ -74,7 +74,9 @@ final class WelcomePageView: NSScrollView {
     }
     observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
       object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated {
-        guard let self else { return }; if self.reduceMotion { self.stop() }; self.updateColors()
+        guard let self else { return }
+        if self.reduceMotion { self.stop(); self.cards.forEach { $0.illustration.finish() } }
+        self.updateColors()
       } })
     updateColors()
   }
