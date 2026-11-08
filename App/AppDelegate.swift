@@ -329,6 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
     factory.attach(controller)
     windowControllers.append(controller)
+    updater?.userDriver.attach(controller)
     if session == nil { media.attach(factory); tabSleep.attach(factory) }
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
@@ -771,7 +772,7 @@ extension AppDelegate: CommandDispatcher {
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     guard allowsFirstRunCommand(id) else { return false }
     if id == "settings", settingsShortcutCaptured { return false }
-    if id == "check-for-updates" { return updater?.canCheckForUpdates ?? true }
+    if id == "check-for-updates" { return true }
     if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift

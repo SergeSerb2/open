@@ -12,6 +12,7 @@
   import OpenExtensionsUI
   import OpenSpaceEditor
   import Synchronization
+  import MachO
 
   /// Executes automation commands (docs/automation.md) on the main actor.
   /// Every command answers `{"id":…, "ok":true, "result":…}` or
@@ -95,6 +96,33 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "updater-view-tree":
+        var seen: Set<ObjectIdentifier> = []
+        var webViews: [String] = []
+        let webClasses = ["WKWebView", "WebView"].compactMap(NSClassFromString)
+        func visit(_ view: NSView) {
+          guard seen.insert(ObjectIdentifier(view)).inserted else { return }
+          if webClasses.contains(where: { view.isKind(of: $0) }) { webViews.append(NSStringFromClass(type(of: view))) }
+          for child in view.subviews { visit(child) }
+        }
+        for window in NSApp.windows { if let content = window.contentView { visit(content.superview ?? content) } }
+        let notes = app.updater?.userDriver.updateWindow?.notes?.text
+        return ["webViewCount": webViews.count, "webViewClasses": webViews,
+          "viewCount": seen.count, "notesViewClass": notes.map { NSStringFromClass(type(of: $0)) } ?? "",
+          "notesIsTextView": notes is NSTextView]
+      case "updater-banner-width":
+        guard let width = a["width"] as? Double, (164...400).contains(width), let controller = app.frontWindowController else { throw Failure(message: "expected banner width 164...400") }
+        controller.model.setSidebarWidth(windowID: controller.windowID, width: width)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        return width
+      case "updater-menu":
+        guard let (menu, index) = findMenuItem("check-for-updates", in: NSApp.mainMenu), let item = menu.item(at: index) else { throw Failure(message: "missing update menu item") }
+        let enabled = menuEnabled(item)
+        return ["title": item.title, "enabled": enabled, "badgeCount": item.badge?.itemCount ?? 0,
+          "canCheck": app.updater?.canCheckForUpdates ?? true]
+      case "updater-act": return app.updater?.userDriver.performAutomationAction(a["action"] as? String ?? "") ?? false
+      case "updater-background-check": app.updater?.checkInBackgroundForAutomation(); return true
+      case "updater-images": return (0..<_dyld_image_count()).compactMap { _dyld_get_image_name($0).map { String(cString: $0) } }
       case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
@@ -1576,6 +1604,7 @@
     func windowText(_ window: NSWindow) -> [String] {
       var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
       func walk(_ object: NSObject, depth: Int) {
+        if window.title.hasPrefix("Open Update"), let view = object as? NSView, view.isHiddenOrHasHiddenAncestor { return }
         guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
         for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue"] {
           let selector = NSSelectorFromString(name)
@@ -1682,7 +1711,7 @@
         let enabled = menuEnabled(item)
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
           "modifierMask": item.keyEquivalentModifierMask.rawValue,
-          "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+          "badgeCount": item.badge?.itemCount ?? 0, "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
     func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {

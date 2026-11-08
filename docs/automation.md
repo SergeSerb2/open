@@ -1182,3 +1182,30 @@ PR-7 stays blocked pending an approved engine-fix distribution hash. After the
 lead clears a prior crash dialog, resume remaining rows with
 `--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
 write a separate receipt so the primary crash evidence survives.
+
+
+### Custom update UI
+
+`updater-state` includes `sessionInProgress` and a `ui` object. It reports the real driver phase,
+window numbers, progress, byte counts, notes text, banner kind, and last toast.
+`updater-menu` validates the real menu item and returns its title, badge,
+enabled state, and `canCheck` in the same main-actor turn.
+`updater-images` returns the current process's dyld image list. It does not
+attach a debugger. Sparkle's eager WebKit link can appear in that list.
+`updater-view-tree` walks the App's real window/view trees. It reports WebKit
+view counts and the actual notes view class. A9 requires zero WebKit views and
+an NSTextView while the updater shows notes.
+
+`updater-banner-width width=164...400` changes the real model sidebar width.
+It lets the loopback suite check both normal and narrow banner copy and layout.
+
+`updater-background-check` asks the real Sparkle updater to check its feed in
+the background. It is available only in automation builds. It does not inject
+appcast items or driver callbacks.
+
+`updater-act action=primary|later|close|banner|dismiss-banner|notes-link|alert-first|alert-second`
+uses the current update UI's actions. `action=cleanup` closes update surfaces.
+`action=settings-help|settings-check` invokes General's actual view-model actions.
+The loopback suite owns its app copies, signing fixtures, preferences, and port.
+It restores the shared defaults domain in `finally` and checks process/window
+cleanup even when a check fails.
