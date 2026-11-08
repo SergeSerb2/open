@@ -11967,6 +11967,8 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument('--features-passwords-engine-safety', action='store_true',
+                    help='features: prove ignored save offers with main App code and no password delegate')
     ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
@@ -11978,6 +11980,8 @@ def main():
     opts = ap.parse_args()
     if opts.firstrun_boosts_only and opts.only != "firstrun":
         ap.error("--firstrun-boosts-only requires --only firstrun")
+    if opts.features_passwords_engine_safety and opts.only != 'features':
+        ap.error('--features-passwords-engine-safety requires --only features')
     # Startup itself may migrate legacy Peek choices before the socket answers.
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
@@ -12039,6 +12043,8 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.features_passwords_engine_safety:
+        extra.append('--open-allow-mock-keychain-secrets')
     if opts.only == "extensions-e2":
         import extensions_e2
         dirs = extensions_e2.fixtures(ROOT, tmp, opts.extensions)
@@ -12330,7 +12336,7 @@ def main():
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
-            app = factory(urls=("about:blank" if opts.only == "extensions-p3" else "https://example.com/",))
+            app = factory(urls=("about:blank" if opts.only == "extensions-p3" or opts.features_passwords_engine_safety else "https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
@@ -12352,7 +12358,11 @@ def main():
                     import extensions_e2
                     extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
                 else:
-                    feature_checks(app, opts.style, results["features"], tmp)
+                    if opts.features_passwords_engine_safety:
+                        runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_engine_safety.py'))['run'](
+                            app, results['features'], tmp, globals())
+                    else:
+                        feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
 
