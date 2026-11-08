@@ -1197,6 +1197,12 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                                           and any(re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I) for label in labels)) else None
                     buttons = wait(ready_buttons, timeout=5, step=.05)
                     assert buttons, 'HTTPS warning actions did not become ready'
+                    # Views maps AXPress to mouse events. Its default input
+                    # protection rejects those during the first 500 ms after
+                    # show/movement (metrics_mac.cc, DefaultInputProtectionPolicy).
+                    # Preserve that guard; send the real action after cooldown.
+                    time.sleep(.65)
+                    assert ready_buttons(), 'HTTPS warning disappeared before input'
                     continue_label = next(label for label in buttons if re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I))
                     app.call('snapshot', window=window, path=os.path.join(tmp, 'PW-HF-%s-warning.png' % action))
                     if action == 'continue':
@@ -1210,9 +1216,18 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                         return (not app.tab(tab)['loading'] and
                                 app.eval(tab, 'location.href === %s && document.readyState === "complete" && !!document.querySelector("#username")' % json.dumps(expected)))
                     assert wait(settled, timeout=15, step=.1), 'HTTPS warning decision did not load the expected page'
+                    histograms = app.call('devtools', tab=tab, method='Browser.getHistograms',
+                                          params={'query': 'interstitial.https_first_mode.decision', 'delta': False})
+                    histogram = next(v for v in histograms['histograms'] if v['name'] == 'interstitial.https_first_mode.decision')
+                    decisions = {v['low']: v['count'] for v in histogram['buckets']}
+                    assert decisions.get(1 if action == 'continue' else 2, 0) >= 1, 'HTTPS decision metric was not recorded'
+                    if action != 'continue':
+                        assert decisions.get(1, 0) == 0, 'Go back unexpectedly proceeded'
                     guard.check()
                     return {'warning': 'dialog', 'action': action, 'continuedToFixture': action == 'continue',
-                            'returnedToPreviousPage': action != 'continue', 'distributionSHA256': engine_distribution_sha256}
+                            'returnedToPreviousPage': action != 'continue',
+                            'proceedDecisions': decisions.get(1, 0), 'dontProceedDecisions': decisions.get(2, 0),
+                            'distributionSHA256': engine_distribution_sha256}
                 finally:
                     # Closing this row's own tab also disposes its native modal
                     # if an assertion fails before the dialog gets an answer.
@@ -1227,7 +1242,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
             row('PW-HF5-navigate', lambda: https_first_warning('navigate'))
             row('PW-HF6-space', lambda: https_first_warning('space'))
             row('PW-HF7-quit', lambda: https_first_warning('quit'))
-            guard.check(); results['P-15'] = {'ok': True, 'allExecutedRowsAlive': True}
+            guard.check(); results['P-15'] = {'ok': True, 'allExecutedRowsEndedAsExpected': True}
         finally:
             if app: app.quit()
 

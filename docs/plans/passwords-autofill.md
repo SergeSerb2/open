@@ -837,6 +837,10 @@ the engine and navigates from localhost to a separate fixture origin.
 | PW-HF2-return | Open the same native warning on a new fixture origin, press Return | The warning closes and the previous localhost page finishes loading; Open stays alive with no new crash report |
 | PW-HF2-escape | Repeat on another fixture origin, press Esc | Same Go back result and crash checks as Return |
 | PW-HF3-tab-close | Close the owned tab while its native HTTPS warning is still open | The warning and tab close, the parent window stays visible, Open answers ping, and no new crash report appears |
+| PW-HF4-window-close | Close the warning's parent window while the warning is open | The window and warning close; Open still answers ping with no new crash report |
+| PW-HF5-navigate | Navigate the warning's tab back to the localhost fixture | The requested form loads, the warning closes, and Open stays alive with no new crash report |
+| PW-HF6-space | Switch to another Space while the warning is open | The other Space becomes focused, the warning becomes hidden, and Open stays alive with no new crash report |
+| PW-HF7-quit | Quit Open directly while the warning is open, before normal harness surface dismissal | Open exits normally; no owned process, window, or new crash report remains |
 
 ### 9.3 Suite `--only secrets-import`
 
