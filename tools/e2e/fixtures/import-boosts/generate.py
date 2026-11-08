@@ -180,6 +180,8 @@ def write(root, sidebar=True):
         fields = boost(name, futureFixtureField='unknown') if name == 'enabled' else boost(name)
         if name == 'disabled':
             fields['forkedFromBoostID'] = IDS['enabled']
+            fields['data'] = json.dumps(dict(json.loads(fields['data']),
+                css='body{border-top:7px solid rgb(9,8,7)!important}'))
         if name == 'malformed':
             fields['data'] = 'malformed JSON'
         if name == 'enabled':

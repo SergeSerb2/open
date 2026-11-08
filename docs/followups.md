@@ -11,13 +11,12 @@
   the old receipt at `.re/handoff/sections/s17/c4/final/welcome-overlap-1.json`
   if the timeout recurs. — Section 17 lead-requested follow-up.
 
-- Import Arc Boosts — C2 adds the bounded Firestore cache reader, synthetic CLI
-  flow and locked CLI persistence. App persistence, live apply, re-import and
-  shared Undo remain BLOCKED (Section 12 AppBoosts). Wire only through
-  `app.stores.boosts.store(for:)` and `refresh(profile:)`; never create another
-  App BoostStore. Confirm color/zoom conversion, absent local enablement policy,
-  account-to-Default Profile assignment and a populated real cache sample.
-  See [storage evidence](re/boosts-store.md). — Section 14 C2, 2026-11-06
+- Import Arc Boosts — App wiring closed: first run and Settings use the sole
+  `app.stores.boosts` owner, add-only stable IDs, live refresh and shared
+  Undo/Redo. Missing local enablement imports disabled. Schema follow-ups remain:
+  confirm color/zoom conversion and account-to-Default Profile assignment with
+  a populated, redacted real cache sample. See [storage evidence](re/boosts-store.md).
+  — Section 14 C7, 2026-11-08
 
 Small items found during review and verification. Each line: area — issue — where found.
 
