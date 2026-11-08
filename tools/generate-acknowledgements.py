@@ -98,6 +98,28 @@ def check_versions(rows):
         pin = re.search(r'exactVersion:\s*["\']?([0-9.]+)', spec)
         if not pin or by_name['Sparkle'][1] != pin[1]:
             raise ValueError('update the Sparkle inventory to the exact linked pin before generating credits')
+    # The seed lists are shipped data, separately credited from uBO scriptlets.
+    # Refuse stale inventory when the immutable URLs or checksums change.
+    list_pins = read_text(ROOT / 'Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt', MIB)
+    entries = [line.split() for line in list_pins.splitlines()
+               if line.strip() and not line.lstrip().startswith('#')]
+    if len(entries) != 2 or any(len(entry) != 3 for entry in entries):
+        raise ValueError('expected exactly two bundled filter-list pins')
+    if {entry[0] for entry in entries} != {'easylist.txt', 'easyprivacy.txt'}:
+        raise ValueError('unexpected bundled filter-list names')
+    for filename, url, sha in entries:
+        name = 'EasyList' if filename == 'easylist.txt' else 'EasyPrivacy'
+        match = re.fullmatch(r'https://raw\.githubusercontent\.com/easylist/easylist/([a-f0-9]{40})/'
+                             + re.escape(filename), url)
+        row = by_name.get(name)
+        if (not match or not re.fullmatch(r'[a-f0-9]{64}', sha) or not row
+                or state(row) != 'Ships:' or match[1] not in row[1]
+                or url not in row[4] or sha not in row[4]):
+            raise ValueError('update the ' + name + ' inventory to the shipped seed pin')
+        if ('GPL-3.0-or-later' not in row[2] or 'CC-BY-SA-3.0' not in row[2]
+                or any('licenses/' + text not in row[4]
+                       for text in ('GPL-3.0.txt', 'CC-BY-SA-3.0.txt'))):
+            raise ValueError(name + ' needs both upstream license alternatives and full texts')
 
 
 def public_source_location(path):
