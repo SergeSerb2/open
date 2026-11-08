@@ -196,7 +196,7 @@ That launch ran at load1 12.249→14.151. It is functional metadata evidence, no
 
 The auxiliary entry controls and traces are historical research evidence from before the new interposer ban. They supply no product change and will not be reused. The attempted broader trace failed its loader-only check before NSApplication/window creation: `Open-2026-11-08-022918.ips`, SIGABRT, `_tlv_bootstrap_error` from the research library's `wrap_mmap`. It is a research-instrument failure, excluded from the evidence above. All launch work stopped immediately. The lead was notified, and research remained stopped overnight until the morning's explicit M5 clearance. `DYLD_INSERT_LIBRARIES` and interposer experiments remain prohibited on every machine.
 
-The overnight audit established **security re-assessment, with executable ctime advancing during full runs**. At that point the exact writer was unresolved. The unchanged bundle and before-engine control do not support bundle size or nested-code count alone as the reason for a ctime advance on every full launch. They do not exclude those factors from the scan's duration. Nearby `syspolicyd` bastion/XProtect messages have private target paths and do not prove that either service wrote Open's metadata. No product or harness writer has yet been demonstrated, so no fix is proposed.
+The overnight audit established **security re-assessment, with executable ctime advancing during full runs**. At that point the exact writer was unresolved. The unchanged bundle and before-engine control do not support bundle size or nested-code count alone as the reason for a ctime advance on every full launch. They do not exclude those factors from the scan's duration. Nearby `syspolicyd` bastion/XProtect messages have private target paths and do not prove that either service wrote Open's metadata. No product or harness writer had been demonstrated at that point. The morning follow-up below identifies the writer and records fix options.
 
 **Open question at 02:32:** which writer in or after engine init advances the executable's ctime? The morning follow-up below resolves it.
 
@@ -264,4 +264,13 @@ Raw evidence is in `.re/s16/launch-fixes/pre-main/ctime-writer/`: `summary.json`
 
 The earlier Release build of diagnostic source `0922a78c`, after merging main `caf42f74`, exited 65 in 7.3 seconds at load1 5.11→5.18. Main required missing world/site-control headers and a security-state callback in the authorized engine view. Validation stopped at that external block; no other engine root was used or fetched.
 
-The lead refreshed `open-engine-s8-main` in the morning to main's engine SHA-256 `47af3007153a883fac2acd10e491451de0abcac030c4fbebb14f15f1052115d9`. Main `cdd147ca` merged cleanly in `fc007a04`. The Debug build through `s16-heavy.sh`, with that authorized root exported, passes in 87.8 seconds at load1 44.08→28.67. Media, firstrun, window, updater and full M5 verify-all validation are in progress. The real current-Debug functional launch and cleanup also pass. Earlier updater 21/21 and menu 107-route evidence still belongs to the earlier pinned cohort. It is not current-head acceptance. PR #251 is not ready to merge.
+The lead refreshed `open-engine-s8-main` in the morning to main's engine SHA-256 `47af3007153a883fac2acd10e491451de0abcac030c4fbebb14f15f1052115d9`. Main `cdd147ca` merged cleanly in `fc007a04`. The Debug build through `s16-heavy.sh`, with that authorized root exported, passes in 87.8 seconds at load1 44.08→28.67. The current Debug functional launch and cleanup also pass.
+
+| M5 functional suite | Result | Load1 before → after |
+|---|---|---|
+| Media |31 PASS, 1 BLOCKED: camera/microphone permission; 0 FAIL; cleanup PASS|156.23→35.27|
+| Firstrun |87 PASS, 6 BLOCKED: pending Boost integration; 0 FAIL; cleanup PASS|9.51→6.91|
+| Window |83 PASS, including pixel rows; 2 Release budget rows SKIP in Debug; fingerprint/cleanup PASS|10.11→12.03|
+| Updater |21/21 PASS; defaults restored; cleanup PASS|24.46→30.73|
+
+Full M5 verify-all on `20ded861` was cancelled by the T3 restart after 15 PASS checks, before Settings preview completed. This is INTERRUPTED, not a full-gate pass. The queued floor cleanup failure proof never launched. Cleanup found no owned process, no extra executable hard link, and removed the owned verify scratch directory; shared locks were retained. Evidence is in `.re/s16/launch-fixes/validation-20261108/`. The lead prioritized the separate `s16/codesign-clone-off` fix before finishing #251. Earlier pinned-cohort timings/menu proofs remain historical. PR #251 is not ready to merge.
