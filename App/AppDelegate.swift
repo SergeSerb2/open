@@ -493,7 +493,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     return BrowserModel(profiles: [profile], spaces: [space], windows: [window])
   }
 
-  /// Shell window lifetime cannot be undone as a sidebar edit. Preserve an
+  /// Shell window lifetime and the setup-created Welcome tab are not sidebar
+  /// edits. Preserve an
   /// enclosing caller's disabled registration state, including on early return.
   private func withoutWindowUndo<T>(_ body: () -> T) -> T {
     let wasEnabled = undoManager.isUndoRegistrationEnabled
@@ -546,7 +547,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       // Retain its ID across a failed second save so retry cannot add a duplicate.
       if firstRunWelcomeID.flatMap({ model.tab(id: $0) }) == nil,
         let space = onboardingWindowController?.steps?.focusedSpace ?? model.spaces.first {
-        firstRunWelcomeID = WelcomeTab.insert(into: model, spaceID: space.id)
+        // Keep the import's native Undo as the first user action after setup.
+        firstRunWelcomeID = withoutWindowUndo { WelcomeTab.insert(into: model, spaceID: space.id) }
       }
       try snapshotStore.saveNow(model: model)
       onboardingWindowController?.steps?.persistName()
