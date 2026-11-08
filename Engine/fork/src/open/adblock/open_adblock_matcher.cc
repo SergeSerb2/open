@@ -176,6 +176,15 @@ bool OpenAdBlockMatcher::HasEngine() const {
   return !!engine_;
 }
 
+#if !defined(OFFICIAL_BUILD)
+bool OpenAdBlockMatcher::SharesEngineWithForDiagnostics(
+    const OpenAdBlockMatcher& other) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(other.sequence_checker_);
+  return engine_ && engine_ == other.engine_;
+}
+#endif
+
 std::string OpenAdBlockMatcher::RegexCompileCountsText() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!engine_) {

@@ -29,6 +29,7 @@ source_set("adblock") {
     sources += [
       "open_adblock_selftest.cc",
       "open_adblock_selftest.h",
+      "open_adblock_profile_proof.h",
     ]
     deps = [
       "//base/allocator/partition_allocator/src/partition_alloc",

@@ -55,3 +55,8 @@ open_libcef_deps = [
   # (docs/plans/page-platform.md EP-2).
   "//components/shared_highlighting/core/common",
 ]
+
+# Headless native Profile/OTR receipt path; absent in official builds.
+if (!is_official_build) {
+  open_libcef_mac_sources += [ "//open/browser/profiles/open_adblock_profile_proof.cc" ]
+}

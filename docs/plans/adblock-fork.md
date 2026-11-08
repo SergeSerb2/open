@@ -4532,10 +4532,108 @@ using 4,358,248 program bytes. Text program bytes drop from 32,376,108 to
 verdict dumps. Sixteen separator, IDN, Unicode-path and fallback inputs also
 have identical results in all eight before/after, text/DAT, cap combinations.
 
-DAT serializes Arc values independently. Re-sharing rules by all twelve
+DAT serializes Arc values independently. Re-sharing rules by all eleven
 immutable fields restores 262 duplicate references, reducing DAT regex objects
 from 1,195 to 1,000 and program bytes from 8,524,772 to 7,251,132. All four
 full-corpus dumps remain identical. Working load1 27-50 receipts still exceed
 the 50 MiB footprint budget (about 62 MiB DAT, 68-72 MiB text); the resolver,
 earlier buffer release and final quiet receipts remain pending. These values
 are measurements for optimization, not final gate acceptance.
+
+
+### Step 4 as built (2026-11-07, final receipts in progress)
+
+The assigned `open-engine-s10` root builds `cefsimple cefclient` with the
+Step 4 series. Initial bring-up took 112 s. Removing P-3, rebuilding, and
+running the real CDP cases produced 24 FAIL and 6 PASS controls. P-3 was
+restored and rebuilt. The resolver/OTR build took 133 s; a small native-close
+hook rebuild took 57 s. Engine status is 8 PASS, 0 FAIL, 0 WARN: 24 active
+Open patches, 117/117 CEF patches, and 98 matching overlay files.
+
+**Final implementation.** The matcher remains on one ThreadPool sequence.
+Parsed GURLs and factory initiators are reused. Ordinary requests avoid a
+ResourceRequest copy. Response pipes fuse after the final response unless
+upload callbacks still need the proxy. Every network regex program compiles
+on the build runner before publication; no warm match grows its caches.
+The discard policy stays disabled because cleanup would discard programs
+and cause request-path recompiles. The adblock-only regex builder disables
+eager DFA and one-pass accelerators and caps its lazy DFA cache at 8 KiB.
+A preferred 64 KiB NFA ceiling retries the upstream 10 MiB limit on
+`CompiledTooBig`, rather than changing a valid rule's verdict. The real
+623,832-byte user-regex fixture blocks correctly through that fallback.
+The 1/2 KiB cache candidates missed the first-pass CPU limit; all candidates
+had identical verdicts. No regex API is changed to byte matching.
+
+Only crate-generated ABP syntax uses ASCII separator/wildcard classes,
+including generated word/digit classes. User `/regex/` filters retain their
+semantics. Chromium documents canonical GURL specs as ASCII and percent-
+escaped (`url/gurl.h:25-26,109`). The pinned lists contain 25 user regex
+lines (19 EasyList, 6 EasyPrivacy), optimized to 16 program objects. Their
+4,358,248 program bytes are 13.46% of the pre-ASCII 32,376,108-byte total.
+The generated-pattern change reduces total text program bytes to 7,254,660.
+
+DAT deserialization duplicated Arc-backed rules and their compiled programs.
+Re-sharing exact values across all eleven NetworkFilter fields restores
+262 duplicate references; checking only the serialized id would be unsafe.
+DAT programs fall from 1,195 to 1,000 and 8,524,772 to 7,251,132 bytes.
+The DAT input buffer itself is released. Text, resource JSON and UTF-8
+conversion buffers are also freed before compilation. The resolver now uses
+Chromium's registry data, including private registries, through CXX. The
+`addr`, `psl` and `psl-types` closure and third PSL snapshot are removed.
+Shim version 4 invalidates old cache receipts. Stale work is checked before
+parse and before cache write, including after serialization (100-7).
+
+**Identity.** Every optimization retains byte-identical full-result JSONL
+for all 20,311 corpus URLs, for text/DAT and both caps. The final resolver
+build also matches: 16 KiB SHA-256 `10c74cb476adccafc4f750bbc2ae6c1a85363b9945a6fe1470507e9dc845fe02`;
+8 KiB `ba80db77c8651ce7ec35b71bfeade9e04624d4f564ada4cf8fde16c229f475b6`.
+Receipts: proxy, compile-only, ASCII, DAT re-sharing and resolver identity
+files in `.re/s13/e1/`. Sixteen synthetic IDN, Unicode-path, separator,
+wildcard, user-regex and fallback cases also match across eight headless
+before/after × text/DAT × cap dumps. The CDP URL-edge flow is queued.
+
+**Native OTR lifetime.** The existing native Profile close overlay shuts
+the per-context service down before calling the shell handler, even when a
+CEF OTR wrapper remains retained. It uses 0310's idempotent shutdown; no new
+upstream patch is needed and 0701 remains reverse-applicable. The real CEF
+Profile/primary-OTR proof has 14 PASS rows: same parent, distinct services,
+`engine_shared=1`, exact matcher-holder identity, one close callback,
+service destruction and no recreation, repeated shutdown, cancellation of
+a pending load, parent still active, and ordered parent deletion with both
+matchers disabled. Receipt: `otr-profile-proof.log` (load1 41.6–42.5).
+
+**Working memory, load1 39–48, without quiet lock.** These are optimization
+measurements, not final gate receipts. Footprint is the browser's
+`task_info` physical-footprint delta from before-load to settled-load with
+one engine and one context. Both endpoints and PA statistics are in the
+raw logs. Text: 68.3–73.5 MiB; DAT: 59.2–59.4 MiB. The 50 MiB limit still
+fails; the stretch is 40 MiB. No budget has changed.
+
+| Component, 16 KiB working run | Text | DAT |
+|---|---:|---:|
+| PA allocated before engine (browser other) | 12.42 MiB | 12.46 MiB |
+| Rules/build residue PA allocated delta, before regex | 38.99 MiB | 36.82 MiB |
+| Immutable regex program bytes (crate counter) | 6.92 MiB | 6.92 MiB |
+| Regex PA delta beyond program bytes (cache, metadata, rounding) | 6.55 MiB | 6.58 MiB |
+| Net PA allocation growth after the full corpus (caches plus other) | 0.60 MiB | 0.65 MiB |
+| Settled PA allocated delta | 52.48 MiB | 50.33 MiB |
+| Settled PA resident delta | 71.80 MiB | 57.47 MiB |
+| Settled physical-footprint delta | 73.47 MiB | 59.20 MiB |
+
+PA phase differences include concurrent browser allocations and allocator
+rounding. The regex counter measures immutable programs; PA does not tag
+cache allocations separately, so the residuals above are bounds/combined
+categories, not exact cache ownership. `resolver-pa-components.json` records
+the byte counts. The remaining text/DAT footprint difference is resident
+allocator/build residue, not a retained DAT buffer. After exact re-sharing,
+DAT costs less than text in these runs.
+
+**Pending gates and delivery.** The final N-case flow, CDP URL edges and
+five-run quiet-lock headless/page receipts are queued without a heavy slot
+or engine lock. Working G-2 maxima still vary with load; they are not final
+acceptance. Sample 0's 200 URLs are all below 8 KiB (max 6,376 bytes), so
+G-4…G-7 exercise identical inputs under either cap; G-1…G-3 explicitly run
+both caps. N-18 remains hook reachability only (no HTTP/3 endpoint), and the
+accepted N-21 early-hints preload gap remains R-14. Distribution and App
+build/verification wait for the lead to clear Section 12's engine-lock
+priority, imposed at 19:42. No engine job or engine-lock waiter remains.

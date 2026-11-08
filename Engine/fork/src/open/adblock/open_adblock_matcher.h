@@ -103,6 +103,9 @@ class OpenAdBlockMatcher
   bool HasEngine() const;
   // Matcher sequence only; non-official receipts, no per-check overhead.
   std::string RegexCompileCountsText() const;
+#if !defined(OFFICIAL_BUILD)
+  bool SharesEngineWithForDiagnostics(const OpenAdBlockMatcher& other) const;
+#endif
 
   // One network check (G-1: never on the UI or IO thread). A null engine
   // or an invalid URL allows.

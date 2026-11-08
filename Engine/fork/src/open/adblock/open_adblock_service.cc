@@ -351,9 +351,15 @@ OpenAdBlockService::BuildResult BuildOnBackground(
                                                  rust::Str(resources))) {
         FillReport(*engine, *generation, result);
         result.lossless = true;  // only a lossless build writes a DAT
-        result.engine = MakeEngineHolder(std::move(engine));
         result.from_dat = true;
         result.dat_size_bytes = dat->size();
+        // The crate owns decoded structures. Release all input buffers before
+        // compiling regexes; no DAT or list-text copy stays with the engine.
+        generation->texts = {};
+        std::string().swap(generation->resources_json);
+        resources = rust::String();
+        dat.reset();
+        result.engine = MakeEngineHolder(std::move(engine));
       } else {
         // A cache problem next to the text build below (review 98-5): the
         // walk's reason, or "decode" when the crate refused it.
@@ -368,8 +374,10 @@ OpenAdBlockService::BuildResult BuildOnBackground(
       return result;
     }
     auto engine = BuildFromText(*generation);
-    // The texts are no longer needed: free them before serializing.
+    // Inputs have been consumed. Release their storage before serialization
+    // and regex warming; only hashes and metadata remain resident.
     generation->texts = {};
+    std::string().swap(generation->resources_json);
     const open_adblock::OpenBuildReport report =
         open_adblock::open_adblock_build_report(*engine);
     if (!report.refused.empty()) {
@@ -387,6 +395,10 @@ OpenAdBlockService::BuildResult BuildOnBackground(
     if (result.lossless) {
       rust::Vec<uint8_t> serialized =
           open_adblock::open_adblock_serialize(*engine);
+      if (is_stale()) {
+        // A superseded build must not write a DAT after serialization (100-7).
+        return result;
+      }
       if (serialized.empty()) {
         result.error = "write engine.dat: serialization failed";
       } else {
@@ -493,6 +505,10 @@ void OpenAdBlockService::Shutdown() {
   AdBlockCosmeticsTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(
                      [](scoped_refptr<OpenAdBlockMatcher> matcher) {
+#if !defined(OFFICIAL_BUILD)
+                       VLOG(1) << "OpenAdBlock: "
+                               << matcher->RegexCompileCountsText();
+#endif
                        matcher->SetEnabled(false);
                        matcher->SetEngine(nullptr);
                      },

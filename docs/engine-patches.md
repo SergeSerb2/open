@@ -467,7 +467,25 @@ User Boost JavaScript runs in the main world on purpose (docs/boosts.md). Open's
 
 ## P8. Native ad-block engine
 
-Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a `URLLoaderThrottle`, cosmetic delivery over `cef.mojom`). Until it lands, `OEBrowserContext.requestFilter` is the stepping stone that plan names (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
+Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a URLLoaderFactory proxy, cosmetic delivery over Mojo). Step 4 is built on `s13/step4-engine`; final gates and distribution are pending. Until the App adapter lands, `OEBrowserContext.requestFilter` is the stepping stone that plan names (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
+
+### Step 4 implementation (2026-11-07)
+
+| Piece | As built | Verification |
+|---|---|---|
+| P-3, `cef/0311` | Open appends the outermost URLLoaderFactory before Chrome/WebRequest. Subresources, redirect hops, WebSocket and WebTransport checks run on the matcher sequence. Main documents pass through. | Removing P-3 produces 24 FAIL and 6 PASS control rows; restoring it builds. Final N-case rerun is pending. |
+| Proxy cost | Reuse parsed GURLs and factory initiators; avoid the ordinary ResourceRequest copy. Fuse the loader/client pipes after the final response, retaining the proxy while upload callbacks remain outstanding. | Four full-corpus verdict dumps match before/after. Final paired page timing is pending. |
+| Rust crate patches | Compile every network regex on the build runner before publication, with no warm match. Keep program-discard cleanup disabled because it would cause request-path compiles. Limit lazy DFA caches to 8 KiB; disable eager DFA and one-pass accelerators for adblock only. A preferred 64 KiB NFA ceiling retries at the upstream 10 MiB ceiling on `CompiledTooBig`. | Full corpus adds zero compiles. A valid 623,832-byte user program takes the fallback and matches correctly. 1/2 KiB caches missed the first-pass CPU limit and were rejected. |
+| Generated ABP patterns | Use ASCII separator and wildcard classes only in crate-generated expressions. Complete user `/regex/` expressions keep their semantics. GURL specs are ASCII and percent-escaped (`url/gurl.h:25-26,109`). | Text program bytes 32,376,108 → 7,254,660. All 20,311 result rows match for text/DAT and both caps. The pinned lists contain 25 user regex lines, optimized into 16 programs (4,358,248 bytes; 13.46% of the old total). |
+| DAT sharing | Re-share immutable NetworkFilter objects only when all eleven fields match. Deserialization had duplicated Arc-backed objects and their regex programs. | 262 duplicate references restored; DAT programs 1,195 → 1,000, bytes 8,524,772 → 7,251,132. Full-result dumps remain identical. |
+| Domain resolver, 97-2 | CXX callback to Chromium `registry_controlled_domains`, including private registries. Drop `embedded-domain-resolver`, `addr`, `psl`, `psl-types`; regenerate vendor closure and GN. Shim version 4 invalidates old DAT receipts. | Owned-root build and engine-status 8/8 PASS. Four full-corpus dumps match the pre-resolver verdicts. |
+| OTR lifetime | 0310 exposes idempotent service shutdown. The existing native `ProfileContextClosed` overlay hook shuts it down before notifying the shell. No new upstream patch or overlap with 0701. | Real native parent/OTR: distinct services, identical engine holder, `engine_shared=1`, pending-load cancellation, retained-wrapper close, repeated shutdown, and ordered parent deletion: 14 PASS. |
+
+No list text, resources JSON or DAT input buffer remains in the engine holder.
+Inputs are released before regex compilation. The text path also checks the
+latest load id after serialization and before writing its DAT (100-7).
+Working footprint still exceeds the 50 MiB limit; see the Step 4 plan receipts.
+No threshold was changed.
 
 ### Security review (Step 1, 2026-10-26)
 

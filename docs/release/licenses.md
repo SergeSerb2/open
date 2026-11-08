@@ -15,7 +15,6 @@ the generator omits them from the shipped component paragraphs.
 | adblock's Rust dependencies | see Engine/fork/licenses/THIRD_PARTY.md — not yet linked | MIT / Apache-2.0 / Unicode-3.0, as each README.chromium records | Linked with adblock | Vendored in the same patch; each crate's license file and generated README.chromium are in the tree. seahash ships upstream's MIT text through an Open crate patch |
 | regex (Chromium-vendored crate) | 1.13.1 — not yet linked | Apache-2.0 (MIT OR Apache-2.0) | adblock's pattern matching, built with std, unicode and the regex-automata engines, without perf-literal | Chromium vendors it as test-only; Open ships it (docs/engine-patches.md "Security review"). License and security review: U-6 |
 | aho-corasick (Chromium-vendored crate) | 1.1.5 — not in the build | Unlicense OR MIT | Not used: regex is built without perf-literal | Listed for the U-6 security review only |
-| psl (embedded Public Suffix List data) | 2.1.245 — vendored with adblock | Apache-2.0 code; the generated data in `src/list.rs` is derived from the Public Suffix List, MPL-2.0 | adblock's first-party and third-party decisions | Third PSL snapshot in the app (Chromium's and Swift's differ). Follow-up: a resolver backed by Chromium's `registry_controlled_domains` drops it (review 97-2). License and security review: U-6 |
 | Advisories on vendored ad-block crates (local RustSec DB, 2026-10-24) | — | — | For the U-6 security review | `idna` 0.2.3: RUSTSEC-2024-0421 (masked Punycode labels); adblock uses it only for rule domains (`filters/network.rs:833`, `filters/cosmetic.rs:194`), request hosts go through url 2.5.8 and idna 1.1.0, so the impact is list-side host confusion. `rmp-serde` 0.15.5: RUSTSEC-2022-0092 (`Raw`/`RawRef` unsound); adblock does not use them. `paste` 1.0.15: RUSTSEC-2024-0436 (unmaintained); a build-time proc macro |
 | Public Suffix List | 2026-10-22_08-36-41_UTC; commit 8437e5262f13305f94087abe699b4fe2be1d1de8 | MPL-2.0 | OpenSuggest URL-versus-search decisions; same snapshot in OpenAdBlock | https://publicsuffix.org/list/public_suffix_list.dat is the upstream source; Open's exact bundled snapshot and any modified MPL files require a public source-offer location. That location is not chosen yet (U-8 below) |
 | FFmpeg (Chromium bundled) | Chromium 156.0.8078.48 pin | LGPL-2.1 (Chromium build) | H.264/AAC with proprietary_codecs=true and ffmpeg_branding="Chrome" | https://chromium.googlesource.com/chromium/src/+/d0c02bfad08ec92a6ffcf989e53cd995e6381a4c/third_party/ffmpeg/ ; full component license and notices must be included in the generated Chromium credits |
@@ -88,3 +87,8 @@ MPL source changes must remain available as source at the public location
 chosen under U-8; a commit in the current private repository is not enough.
 The inventory and artifacts do not close the release plan's license/patent
 review gate. Public distribution waits for the user's §10 confirmation.
+
+The Section 13 Step 4 engine branch removes adblock's embedded PSL and its
+`addr`, `psl` and `psl-types` crates. Its CXX resolver uses Chromium's existing
+registry data, including private registries. Swift's separate PSL remains.
+The final distribution must carry this source and license inventory together.

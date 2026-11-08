@@ -34,6 +34,7 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "open/adblock/open_adblock_matcher.h"
 #include "open/adblock/open_adblock_service.h"
+#include "open/adblock/open_adblock_profile_proof.h"
 #include "open/adblock/open_adblock_url_loader_factory.h"
 #include "open/adblock/rust/src/lib.rs.h"
 #include "partition_alloc/partition_root.h"
@@ -1200,6 +1201,13 @@ void RunDiagnostic(base::WeakPtr<OpenAdBlockService> service,
 void RunOpenAdBlockSelftest(OpenAdBlockService* service,
                             base::FilePath adblock_root,
                             base::OnceCallback<void(bool)> done) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          "open-adblock-profile-proof")) {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(&RunOpenAdBlockProfileProof, adblock_root,
+                                 std::move(done)), base::Seconds(1));
+    return;
+  }
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           "open-adblock-diagnostic")) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(

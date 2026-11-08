@@ -29,9 +29,9 @@ use adblock::Engine;
 /// Bumped on any change to `ParseOptions`, permissions, crate or regex
 /// features, or bridge semantics: a cached DAT from another format is never
 /// loaded (§5.5, review 100-1(a)).
-const SHIM_VERSION: u32 = 3;
+const SHIM_VERSION: u32 = 4;
 /// The adblock crate's features (third_party/rust/adblock/v0_8/BUILD.gn).
-const CRATE_FEATURES: &str = "embedded-domain-resolver,full-regex-handling,resource-assembler";
+const CRATE_FEATURES: &str = "chromium-domain-resolver,full-regex-handling,resource-assembler";
 /// The regex crate's features (the adblock-v0_8 crate patch, review 97-1).
 const REGEX_FEATURES: &str =
     "perf-backtrack,perf-cache,perf-dfa,perf-inline,perf-onepass,std,unicode";
@@ -179,6 +179,11 @@ mod ffi {
         list_count: u32,
     }
 
+    unsafe extern "C++" {
+        include!("open/adblock/rust/domain_resolver.h");
+        fn open_adblock_domain_start(host: &str) -> usize;
+    }
+
     extern "Rust" {
         type OpenAdblockEngine;
 
@@ -259,7 +264,27 @@ pub fn open_adblock_engine_format() -> String {
     )
 }
 
+struct ChromiumDomainResolver;
+
+impl adblock::url_parser::ResolvesDomain for ChromiumDomainResolver {
+    fn get_host_domain(&self, host: &str) -> (usize, usize) {
+        // C++ returns a byte offset in the supplied host; keep this safe even
+        // if a future resolver changes its bounds or UTF-8 assumptions.
+        let start = ffi::open_adblock_domain_start(host);
+        let start = if host.is_char_boundary(start) { start } else { 0 };
+        (start, host.len())
+    }
+}
+
+fn ensure_domain_resolver() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        let _ = adblock::url_parser::set_domain_resolver(Box::new(ChromiumDomainResolver));
+    });
+}
+
 pub fn open_adblock_create_empty() -> Box<OpenAdblockEngine> {
+    ensure_domain_resolver();
     OpenAdblockEngine::new(Engine::new(true), 0, BuildReport::default())
 }
 
@@ -358,6 +383,7 @@ fn check_build_limits(list_texts: &[String]) -> Result<(), String> {
 /// task runner only. Lists over the R3-2 limits are not parsed: the engine
 /// is empty and the build report says why (`refused`).
 pub fn open_adblock_build(list_texts: &[String], resources_json: &str) -> Box<OpenAdblockEngine> {
+    ensure_domain_resolver();
     if let Err(refused) = check_build_limits(list_texts) {
         let report = BuildReport { refused, ..Default::default() };
         return OpenAdblockEngine::new(Engine::new(true), 0, report);
