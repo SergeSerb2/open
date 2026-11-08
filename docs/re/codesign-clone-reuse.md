@@ -76,6 +76,16 @@ load1 9.17→13.68. Its CEF SHA-256 is
 This is a provisional control: any new main engine patch must be incorporated
 and rebuilt before final matched evidence and distribution.
 
+After the restart, the overlay metadata hardening was applied with
+`engine-apply --all` (`hardening-apply.json`, exit 0). A focused build of
+`open_code_sign_clone.o` and `code_sign_clone_manager.o` passed in 22 seconds
+(`changed-objects.json`). The earlier full build was deliberately interrupted
+with 30,928 steps done and zero failed; the resumed job keeps those outputs.
+The S16 root audit was repeated (`root-path-resume-audit.json`): no s8 path
+remains in state, `.gclient`, `args.gn` or `build.ninja`. `engine-status`
+reported 7 PASS, 0 FAIL and the existing CEF series-order warning. That status
+still refers to the previous distribution; it does not prove the new binary.
+
 Runtime verification is pending the engine build. Required rows are stable
 ctime/link count across three full runs after priming; seven simple relaunches
 without ChangetimeScan; same-inode copy invalidation; two install paths;

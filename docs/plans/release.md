@@ -770,8 +770,8 @@ still runs and launches helpers. Creating/removing the link advances the
 original executable's ctime; on the measured ad-hoc builds this invalidates
 the next LaunchServices launch's `syspolicyd` change-time assessment.
 
-The blocked candidate merges `MacAppCodeSignClone` into `--disable-features`
-in Open's wrapper for every process. It preserves existing entries. This relies
+The rejected App-side candidate merged `MacAppCodeSignClone` into
+`--disable-features` for every process and preserved existing entries. It relied
 on the supported updater
 waiting for host termination before replacing the bundle. Sparkle 2.10.1's
 `Autoupdate/AppInstaller.m:401–417` listens for termination; lines 739–743
