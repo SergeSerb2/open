@@ -165,6 +165,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private lazy var privateDownloads = IncognitoDownloads()
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
+  var recordedOpenWorldMessages: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
   func standaloneSurfaceVisibilityChanged() {
     // Setting even the same window re-enters Chromium's SetHostView path.
@@ -448,6 +449,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard let context, context.state == .live else { return nil }
     app.profileTeardown.didLoad(profileID: profileID, directory: directory)
     app.extensionPrompts.register(context.extensions)
+    app.stores.boosts.adapter.record(context, profile: profileID)
     return WebsiteAppearance.prepare(context)
   }
   func retireProfile(_ id: ProfileID, directory: String) {
@@ -502,6 +504,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return nil
     }
     if let host = hosts[tabID], !host.closed { return host }
+    // Synchronous before OEWebContent creation, including restored tabs. This
+    // preserves the first document's document-start scripts without delaying
+    // the snapshot-backed sidebar or loading Boosts merely for a context.
+    if !isIncognito && !context.isEphemeral { app.stores.boosts.adapter.prepare(context, profile: profileID) }
     let config = OEWebContentConfiguration(context: context)
     // Sidebar and Little Open pages attach to a hidden Chrome window (P1).
     // Other non-model hosts (Peek) remain Alloy.
@@ -533,6 +539,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    app.stores.boosts.hostClosed(host)
     savePrompts?.pageDidClose(AnyHashable(host.content.identifier))
     pageChrome.cancel(host.content)
     if pageContextMenu?.belongs(to: host.content) == true { pageContextMenu?.cancel(); pageContextMenu = nil }
@@ -707,6 +714,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       }
     }
     switch intent {
+    case .customizePage(let id):
+      guard !isIncognito, app.stores.boosts.canEdit(tabID: id) else { return false }
+      app.stores.boosts.editCurrent(tabID: id); return true
     case .dismissAutoArchiveBanner: app.dismissAutoArchiveEducation(); return true
     case .openProfileSettings(let id):
       guard model.profile(id: id) != nil else { return false }
@@ -799,7 +809,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
-    case .showSiteControls, .shareSpace, .customizePage:
+    case .showSiteControls, .shareSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }
@@ -868,6 +878,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !isClosing else { return }
     for host in Array(welcomeHosts.values) { host.close() }
     welcomeHosts.removeAll()
+    controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
     savePrompts?.cancelAll()
     iconPicker?.close(); iconPicker = nil
@@ -970,6 +981,8 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
+    if let panel = controller?.boostEditor?.panel, candidate === panel || candidate.sheetParent === panel { return true }
+    if let panel = controller?.boostEditor?.view?.advancedPopover?.panel, candidate === panel { return true }
     if candidate === controller?.themeEditor?.panel || candidate === controller?.spaceCreationController?.themeEditor?.panel { return true }
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }

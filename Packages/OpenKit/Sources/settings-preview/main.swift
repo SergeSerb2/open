@@ -211,7 +211,7 @@ import CryptoKit
         for scale in scales {try await render(SuggestNoticeSheet(model:noticeEnvironment.settings.profiles).buttonStyle(SettingsButtonStyle()),size:CGSize(width:400,height:180),scale:scale,dark:false,to:output.appendingPathComponent("sheet-suggestion-notice@\(scale)x.png"))}
         settings.profiles.select(settings.model.profiles[0].id)
         let empty=try PreviewEnvironment();defer {empty.close()};empty.downloadFeed.downloads=[]
-        for section in [LibrarySection.archive,.downloads,.captures,.history] {
+        for section in [LibrarySection.archive,.downloads,.captures,.boosts,.history] {
             empty.library.section=section;await empty.library.reload()
             for scale in scales {try await render(LibraryContent(viewModel:empty.library),size:CGSize(width:960,height:640),scale:scale,dark:true,to:output.appendingPathComponent("library-\(section.rawValue)-empty@\(scale)x.png"))}
         }

@@ -347,7 +347,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. `presentation` is `popover` or `card`; `frame` gives the card rectangle in window coordinates. Pass a Little Open window number in `window` to inspect or answer its prompt. With an answer, call `performClick` on the real button |
 | `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
 | `events` | optional Little Open `window` number | Drain that Little Open window's page log, or the front browser window's log otherwise: `change`, `load`, `loadError`, `open`, `dialog`, `dialogAnswer`, `permission`, `permissionAnswer`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no). Also drain the shared `savePrompt` completion log, which remains available after the final browser window closes. |
-| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
+| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames`, `world` (`page` default or `open`) | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
 | `download-dir` / `downloads` | `path` | Where downloads go; list downloads |
@@ -641,6 +641,8 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 | `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
 
 The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
+
+Each `mini-players` card also has `timing`: `event` (`leave` or `engine`), `handledAt` / `insertedAt` (system uptime seconds), and `handledTurn` / `insertedTurn`. The App records handling before publishing a leave and insertion immediately after `MediaControlsView` adds the card. Turns count main-run-loop `afterWaiting` observations; insertion within zero or one turn passes the speed gate. The observer runs only with an explicit automation socket or the e2e harness's `OPEN_E2E_OWNER_PID`, schedules no work and never wakes the run loop. Missing endpoints are null; absent evidence is an empty object. These fields measure insertion, not animation completion or the automation polling round trip. For Auto-PiP, `media.decision.at` records the start of the coordinator's leave handling, before policy evaluation or the PiP request; `pip.enteredAt - media.decision.at` is the full leave-to-enter interval.
 
 ## Notifications (page-platform Step 7)
 
@@ -1108,7 +1110,84 @@ relaunches that profile, and repeats the drag after repair.
 `popup-quit` first quits the App to exercise restoration without the socket.
 Frame preferences are restored after quit through the shared defaults fallback.
 
+## Open-world scripts and messages
 
+`eval` accepts `world: "page"` (default) or `"open"`, through OpenWeb's
+`evaluateJavaScript(_:in:)`. Invalid world names fail. Open evaluation targets
+only the current main-frame document and grants no user gesture.
+`script-add` accepts the same world names. Open-world scripts always run at
+document start and in the main frame, even with `end` or `allFrames` set.
+With `css: true`, the stylesheet keeps its original source and receives no
+JavaScript transport prelude.
+
+`open-world-messages` accepts `tab`, optional `clear: true`, and optional `subscribe: true/false`
+(to exercise the OpenWeb callback). It returns
+`messages` and `callbacks` (type, payloadJSON, documentID, content), and `statistics` (accepted,
+oversized, rateLimited, invalid). The App retains only the last 64 messages
+across its factory; clearing removes that page's receipt, not engine counters.
+The recorder is automation-only and never persists payloads.
+
+Example: add an Open script containing
+`__openNative.postMessage("picker:ready", JSON.stringify({boostID:"fixture"}))`,
+navigate to a matching page, then read `open-world-messages`. Page and extension
+worlds see `typeof __openNative === "undefined"`.
+
+
+## Site settings, data and security (E1/E2/E3)
+
+All four commands use the selected page's OpenWeb profile/content; optional
+`tab` selects another page. These commands do not open Site Control UI.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `site-settings` | `origin` HTTP(S) URL | `[{kind,state}]` effective exceptions that differ from the global default |
+| `site-setting` | `origin`, `kind` Chromium name, `state:allow\|block\|ask\|session` | Boolean acceptance; each kind supports only registered states |
+| `site-data-clear` | `origin`, `kinds:[cookies,cache,storage]` (any subset) | Waits for every backend, then returns true or an error. Empty kinds is valid. HTTP cache eviction is origin-specific. |
+| `security-state` | Optional `tab` | `{level,certificates:[{bytes,sha256}]}`; leaf first, no certificate subject or private data |
+
+`events` records change bit 16 for visible security/certificate updates.
+The `sitedata` suite uses isolated loopback HTTP origins and a temporary
+self-signed TLS server; valid HTTPS uses a public control because no new local
+trust root is installed. Run it under the on-screen lock after the lead clears
+any screen HOLD:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sitedata
+```
+
+## Boost runtime and simple editor (Section 12)
+
+| Command | Arguments | Result |
+|---|---|---|
+| `boosts` | `action: list\|get`, optional `profile` UUID, `boost` UUID for get | Values from the App's loaded Profile store. No mutation API. |
+| `boost-library` | `action: rename\|enabled\|delete`, `boost` UUID, `name` or `enabled` | Requires a visible Boosts Library row; calls its real LibraryActions boundary after confirmation. It does not prove native button or confirmation input. |
+| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type\|customize`, optional `boost`, `tab` for open | Real simple/Code editor and session (`mode: simple|code`). Private or non-http(s) tabs refuse open. `customize` invokes the selected tab’s real Customize Page sidebar action and returns its success. `incognito-state` exposes read-only `boostScriptIDs` for private script-isolation checks. |
+
+`drag` takes 2–512 finite `[x,y]` points within the color pad, in editor-view
+coordinates. It sends mouse down, drag through the final point, then mouse up.
+`key` uses the normal `key` arguments and always routes through OEApplication.
+`tap` takes a native control ID (`editor.color.invert`, `editor.undo`), a plan alias
+(`font.Avenir`, `size`, `case`, `firstRun.makeABoost`), `menu.<native title>`, or
+`alert.Done|Cancel|Delete`. Menus and alerts use their real native actions.
+`type text=...` edits the active rename sheet or visible CSS/JS text view through
+App key events (16 KiB limit). Empty text clears the selected field through Delete.
+
+State includes the Boost value, bound tab/Profile, interstitial, global and scope
+state, undo state, controls, panel frame/key state, specific active alert, and
+refresh generation/completion, timing, delivered/skipped page counts, JavaScript
+delivery count and apply-failure count. Code state adds `loadedJS` (the current
+document's installed script, or null) and `refreshToRun`. The `boosteditor` suite exercises
+B1–B3, B5 and B6–B10, plus navigation/close, ten-page refresh, Library, saved-script,
+Edit Boost for a disabled saved Boost, discard/wake refresh, Library metadata
+reconciliation, Undo/Redo preservation, and Library Delete. The ten-page timing
+row requires ten live matching pages with nine hidden pages. B26 saves a Boost,
+restores the selected matching tab without a launch URL, and checks CSS and JS
+from that document's first inline script. Global off is its negative control.
+B4 is blocked by P7.
+B5 proves that CSS applies live, JS waits for reload, and Refresh to Run follows
+the loaded document rather than the latest stored text. Every row includes a real negative control. The suite restores all
+preference keys in `finally` and uses
+an ephemeral local fixture server plus the runner's isolated roots/cleanup.
 ## Space editors (Section 4)
 
 Theme commands use the real App model and the same window controller as the
@@ -1189,3 +1268,5 @@ PR-7 stays blocked pending an approved engine-fix distribution hash. After the
 lead clears a prior crash dialog, resume remaining rows with
 `--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
 write a separate receipt so the primary crash evidence survives.
+
+Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.

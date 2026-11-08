@@ -41,3 +41,16 @@ _cef_is_open_profile_context_live
 _cef_set_open_profile_handler
 _cef_clear_open_profile_browsing_data
 _cef_delete_open_profile
+
+# P7: reserved Open renderer world.
+_cef_is_page_script_context
+_cef_get_open_script_context
+_cef_is_open_script_context
+_cef_get_script_document_identifier
+_cef_set_browser_extra_info
+
+# Site Control E1/E2/E3 (cef_site_control.h).
+_cef_get_changed_site_settings
+_cef_set_site_setting
+_cef_clear_site_data
+_cef_get_site_security_level

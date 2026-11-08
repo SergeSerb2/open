@@ -2,6 +2,7 @@
 
 #include <mutex>
 
+#include "include/cef_open_browser_info.h"
 #include "include/cef_request_context_handler.h"
 #include "include/cef_resource_request_handler.h"
 #include "include/wrapper/cef_helpers.h"
@@ -28,7 +29,11 @@
 }
 
 - (id)copyWithZone:(NSZone*)zone {
-  return self;
+  OEUserScript* copy = [[OEUserScript alloc] initWithIdentifier:_identifier
+      source:_source kind:_kind injectionTime:_injectionTime
+      matchPatterns:_matchPatterns mainFrameOnly:_mainFrameOnly];
+  copy.world = _world;
+  return copy;
 }
 
 @end
@@ -617,13 +622,13 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 #pragma mark User scripts
 
 - (NSArray<OEUserScript*>*)userScripts {
-  return [_scripts copy];
+  return [[NSArray alloc] initWithArray:_scripts copyItems:YES];
 }
 
 - (void)addUserScript:(OEUserScript*)script {
   if (_state == OEBrowserContextStateClosed || _oe_closing) return;
   [self removeUserScriptWithIdentifier:script.identifier broadcast:NO];
-  [_scripts addObject:script];
+  [_scripts addObject:[script copy]];
   [self oe_broadcastScripts];
 }
 
@@ -655,6 +660,7 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   for (OEUserScript* s in _scripts) {
     CefRefPtr<CefDictionaryValue> d = CefDictionaryValue::Create();
     d->SetString("source", OECef(s.source));
+    d->SetBool("openWorld", s.world == OEScriptWorldOpen);
     d->SetBool("css", s.kind == OEUserScriptKindStyleSheet);
     d->SetBool("end", s.injectionTime == OEUserScriptInjectionTimeDocumentEnd);
     d->SetBool("mainFrameOnly", s.mainFrameOnly);
@@ -669,14 +675,17 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   return list;
 }
 
-// Sends the script list to the current renderer of every web content. New
-// renderers get it from extra_info (creation) or OnRenderViewReady.
+// Update the stored snapshot before notifying current renderers. Replacement
+// renderers receive it before document start; OnRenderViewReady also resends it.
 - (void)oe_broadcastScripts {
   if (_state == OEBrowserContextStateClosed || _oe_closing) return;
+  // OTR web contents have their own context. Match that exact owner, so updates
+  // cover its browsers without installing a parent profile's scripts there.
   for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
     if (webContent.context != self || !webContent.oe_browser) {
       continue;
     }
+    CefSetBrowserExtraInfo(webContent.oe_browser, [webContent oe_extraInfo]);
     CefRefPtr<CefProcessMessage> msg =
         CefProcessMessage::Create(kOEMsgScriptsUpdate);
     msg->GetArgumentList()->SetList(0, [self oe_scriptsValue]);
