@@ -22,6 +22,7 @@ def run(factory, results, tmp, env):
     app = None
     saved = {}
     keys = {"open.advanced.enableBoosts": True,
+            "open.advanced.restoreWindowsOnLaunch": True,
             "open.boosts.hasDismissedInterstitial": False,
             "open.boosts.hasDismissedJSNotice": False,
             "open.boosts.codeEditorSize": "480x588",
