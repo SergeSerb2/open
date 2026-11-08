@@ -296,6 +296,14 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 14: multi-profile import boundaries
 
+- Extension install icon diagnostic — Chromium `shortcuts::SetIconForFile` →
+  `NSWorkspace setIcon` → `ISMutableIcns addCGImage` emitted an `os_log_fault`
+  during `extensions-ui` CRX installation on 2026-11-07. The `ExcUserFault_*`
+  report has `bug_type: 309`, `isSimulated: 1`; the lead confirmed no App crash
+  or crash dialog. An icon size/format mismatch is a guess, not a proven cause.
+  Follow up in the engine icon writer; ignore these simulated reports in crash
+  monitors, while retaining real Open/Open Helper crash detection. — Section 14 C5.
+
 - **Closed — import automation local CRX completion.** Engine 0704 (#223)
   supplies `installLocalCRX(_:completion:)`. The import now maps installed,
   cancelled and failed directly, checks the installed ID and preserves
