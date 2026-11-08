@@ -813,10 +813,15 @@ contain, per item (verify with `grep` before upload, §9.4 check A-12):
 
 Rules: `sparkle:version` is the build number (§8.1), never the marketing
 version. `minimumSystemVersion` is `26.0` while macOS 26+ is the platform.
-Release notes are one Markdown file per release (§8.3) rendered to HTML by
-`generate_appcast`'s notes handling (a same-named `.md`/`.html` beside the
-archive) or linked with `<sparkle:releaseNotesLink>`; pick whichever the
-pinned tool emits and verify the link resolves before upload.
+
+2026-11-08 erratum: release notes stay as Markdown for Open's update UI.
+`tools/release.sh` limits `docs/release/notes/<marketing>.md` to 64 KiB
+(65,536 UTF-8 bytes). It puts a same-named `.md` beside the archive and uses
+Sparkle 2.10.1's `--embed-release-notes`. The tool emits
+`<description sparkle:format="markdown">`. The script verifies that the
+description matches the source Markdown. No HTML conversion or external
+release-notes link is needed.
+
 Run `generate_appcast` over a folder that holds only this release's DMG,
 its delta, and its notes file, with `--download-url-prefix
 https://github.com/SergeSerb2/open/releases/download/v<marketing>/` and
@@ -838,7 +843,7 @@ chosen repository before U-5 or the first public release.
   `.delta` for that build. Releases host large files; Pages does not.
 - Feed on GitHub Pages as a project site for the same repo, which serves
   `https://sergeserb2.github.io/open/appcast.xml`. Commit only
-  `appcast.xml` (and `appcast-beta.xml`, §6.6) plus release-notes HTML to a
+  `appcast.xml` (and `appcast-beta.xml`, §6.6) plus release-notes Markdown to a
   dedicated `gh-pages` branch (or `docs/` on that branch); never commit a
   DMG to git. Enable Pages once [USER] (§10): repo Settings → Pages →
   deploy from the `gh-pages` branch. The feed URL is stable across releases;

@@ -98,6 +98,7 @@ public final class AdBlockStore {
     }
 
     public func isRetired(_ profile: ProfileID) -> Bool { retired.contains(profile) }
+    public func isProfileOpen(_ profile: ProfileID) -> Bool { states[profile] != nil && !retired.contains(profile) }
     public func isUpdating(_ profile: ProfileID) -> Bool { busy.contains(profile) }
 
     /// The caller supplies ProfileDirectories.adBlockDirectory, including its dataDirectoryName.
@@ -105,6 +106,13 @@ public final class AdBlockStore {
     public func openProfile(_ profile: ProfileID, directory requested: URL, scheduleUpdates: Bool = true) async throws {
         try checkActive(profile)
         if states[profile] != nil { return }
+        // Settings and after-paint startup can open the same Profile together.
+        // With no state yet, its only possible operation is the initial open.
+        if let opening = operations[profile] {
+            try await opening.value
+            try checkActive(profile)
+            return
+        }
         let directory = temporaryRoot.map { $0.url.appendingPathComponent(profile.description).appendingPathComponent("AdBlock") } ?? requested
         let lists = directory.appendingPathComponent("lists", isDirectory: true)
         try await perform(profile) {

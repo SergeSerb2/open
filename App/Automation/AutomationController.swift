@@ -225,6 +225,7 @@
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-adblock": return try settingsAdBlock(a)
+      case "settings-adblock-engine": return settingsAdBlockEngine()
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
         if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }

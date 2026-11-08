@@ -219,7 +219,10 @@ credits from the official engine, `docs/release/license-audit.md`, and
 `docs/engine-patches.md` → Security review.
 Review the adblock, regex and aho-corasick notes and the list-parser fuzz work.
 Confirm the MPL source offer, any GPL assets, and H.264/AAC distribution posture
-in the release PR. Counsel is the user's choice.
+in the release PR. Confirm the license choice for the bundled filter lists; Open
+distributes them unmodified. Review the EasyList and EasyPrivacy pins, headers,
+and GPL-3.0-or-later / CC BY-SA 3.0 alternatives in the inventory.
+Counsel is the user's choice.
 
 This fills a written review decision in the PR. It does not fill a credential.
 Set `Public MPL source location:` in `docs/release/licenses.md` under U-8.
