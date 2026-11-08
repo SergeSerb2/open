@@ -87,6 +87,19 @@ checks without a build or notary submission. See the user-step guide for setup.
 `OPEN_RELEASE_HEAVY_WRAPPER` may select a section scheduler instead of the
 default `heavy.sh`; Section 16 uses its mandatory two-token wrapper.
 
+**2026-11-08 clone/update erratum.** The executable-ctime candidate is blocked
+by its live-swap safety gate (§6.0). The normal Sparkle install waits for host
+termination, but the ad-hoc test with the clone disabled failed after replacement.
+New navigation timed out and Chromium reported invalid process signature
+validation (`-67065`); the enabled-clone control passed. Work stopped for lead
+review. See [the evidence report](../re/codesign-clone-off.md).
+For this one lead-authorized test, temporary hardened-runtime copies with
+DLV may run on the M5 only after their plain launch-and-quit succeeds under
+the screen lock. This does not change `release.sh`'s M1-only smoke guard and
+does not authorize launching an exact release artifact. Neither hardened copy
+was launched: the earlier failure triggered the required stop. Signed and
+notarized release acceptance remains separate.
+
 The §9 dry-run errata are explicit: the main dev engine may be packaged while
 A-1 records mode-SKIP; its measured size may exceed the production hard limit
 while A-7 records mode-SKIP; sample credits remain an incomplete local preview
@@ -739,6 +752,61 @@ and rollback for a browser — too much security surface) and Mac App Store
 updates (Open is Developer ID only; Chromium does not fit the sandbox).
 Arc ships Sparkle 2.9.4 the same way (bundle-anatomy §3, fact); Open uses
 its own feed, key, and hosting. Never copy Arc's feed URL or public key.
+
+### 6.0 Executable ctime and live-update safety
+
+Chromium's `MacAppCodeSignClone` keeps a hard link to the running executable
+inside a valid cloned bundle. This preserves static/dynamic code-signature
+validation when an update replaces the installed bundle while the browser
+still runs and launches helpers. Creating/removing the link advances the
+original executable's ctime; on the measured ad-hoc builds this invalidates
+the next LaunchServices launch's `syspolicyd` change-time assessment.
+
+The blocked candidate merges `MacAppCodeSignClone` into `--disable-features`
+in Open's wrapper for every process. It preserves existing entries. This relies
+on the supported updater
+waiting for host termination before replacing the bundle. Sparkle 2.10.1's
+`Autoupdate/AppInstaller.m:401–417` listens for termination; lines 739–743
+check `_targetTerminated`, and `finishInstallationAfterHostTermination`
+asserts it before final installation (lines 764–800). Downloads, extraction
+and initial preparation may happen while Open runs; bundle replacement does
+not occur in that stage.
+
+The actual replacement is a whole-directory operation, not a file copy over
+the running bundle. `SUPlainInstaller.m:235–245` tries an atomic swap;
+`Sparkle/SUFileManager.m:360–362` implements it with
+`renamex_np(..., RENAME_SWAP)`. The fallback renames the old bundle away and
+the new one into place (`SUPlainInstaller.m:279–311`). Old temporary bundles
+are removed by `performCleanup`. Both replacement paths belong to final
+installation after host termination. Open uses Sparkle's standard updater
+and does not implement a separate live-bundle installer.
+
+**Merge gate:** test main/branch with both ad-hoc and hardened-runtime,
+temporary disable-library-validation copies. First plain-launch and quit
+each hardened copy; never launch the exact release artifact. The stress
+case swaps a copied bundle while its old browser remains alive, removes
+the old staging bundle, then requires fresh renderer, GPU and utility
+processes to launch and render new sites. Preserve App/tab/process state,
+AMFI/signing logs and the crash-report baseline. Any helper failure with
+the clone disabled stops this fix for lead review. No alternative fix is
+selected automatically. This stress case is deliberately stronger than
+Sparkle's normal host-termination order; it also exposes the trade-off for
+manual or external updates while Open is running.
+
+**2026-11-08 result: STOP, do not merge this candidate.** On the M5, the
+enabled-clone ad-hoc control passed the swap, removal of the old bundle, and
+three new sites with fresh renderer, GPU and utility PIDs. The disabled-clone
+build passed its plain functional run with unchanged executable ctime and link
+count, but failed the first new site's load after the same swap. Chromium logged
+`base/mac/process_requirement.cc:159`: "Signature validation of current process
+failed", OSStatus `-67065`, at 11:06:19, immediately after replacement. No new
+crash report or helper code-signing kill was found; this was a load/validation
+failure, not an observed SIGKILL. Both runs cleaned up all owned processes and
+windows. The hardened-runtime cases, seven-launch scan/timing proof, remaining
+functional suites and full gate were not run after the stop. The source ordering
+of Sparkle's normal install does not establish safety for live replacement.
+No alternate fix was selected. Full receipts, loads and limits are in
+[the evidence report](../re/codesign-clone-off.md).
 
 ### 6.1 Dependency (one new dependency, with reason)
 
