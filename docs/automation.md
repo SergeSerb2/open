@@ -576,6 +576,8 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 
 The App accepts `--pip-site-rules=FILE` in Debug and automation builds; the `media` suite writes a rules file that disallows `blocked.localhost` and gives `inaudible.localhost` `activatesWhenInaudible` (Chromium maps `*.localhost` to the loopback server).
 
+Each `mini-players` card also has `timing`: `event` (`leave` or `engine`), `handledAt` / `insertedAt` (system uptime seconds), and `handledTurn` / `insertedTurn`. The App records handling before publishing a leave and insertion immediately after `MediaControlsView` adds the card. Turns count main-run-loop `afterWaiting` observations; insertion within zero or one turn passes the speed gate. The observer runs only with an explicit automation socket or the e2e harness's `OPEN_E2E_OWNER_PID`, schedules no work and never wakes the run loop. Missing endpoints are null; absent evidence is an empty object. These fields measure insertion, not animation completion or the automation polling round trip. For Auto-PiP, `media.decision.at` records the start of the coordinator's leave handling, before policy evaluation or the PiP request; `pip.enteredAt - media.decision.at` is the full leave-to-enter interval.
+
 ## Notifications (page-platform Step 7)
 
 Commands in `App/Automation/AutomationNotifications.swift`.

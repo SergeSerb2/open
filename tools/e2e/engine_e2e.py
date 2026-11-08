@@ -5631,6 +5631,41 @@ def process_cpu_window(app, seconds=60):
             'complete': before.keys() == after.keys() == common}
 
 
+def _media_idle_cpu(app, audio):
+    """Four interleaved paused-card/no-card pairs, with the OS sampler used by measure."""
+    def players(): return app.call("mini-players")
+    def paused(): return any(c["tab"] == audio and c["playback"] == "paused" for c in players()["cards"])
+    app.call("media-action", tab=audio, action="pause")
+    if not wait_until(paused, timeout=3, step=.02):
+        raise RuntimeError("idle CPU fixture has no paused mini player")
+    samples = {"with": [], "without": []}
+    animations, pending = [], []
+    for _ in range(4):
+        time.sleep(6)
+        view = players(); animations.append(view["animations"]); pending.append(view["pendingCollapse"])
+        samples["with"].append(process_cpu_window(app, seconds=8))
+        app.call("media-action", tab=audio, action="close")
+        if not wait_until(lambda: not players()["cards"], timeout=3, step=.02):
+            raise RuntimeError("idle CPU fixture did not remove the card")
+        time.sleep(6)
+        samples["without"].append(process_cpu_window(app, seconds=8))
+        app.call("media-action", tab=audio, action="play")
+        wait_until(lambda: any(c["tab"] == audio for c in players()["cards"]), timeout=3, step=.02)
+        app.call("media-action", tab=audio, action="pause")
+        if not wait_until(paused, timeout=3, step=.02):
+            raise RuntimeError("idle CPU fixture did not restore the paused card")
+    # Retain the existing 0.5 percentage-point tolerance and four-pair floor comparison.
+    floors = {k: min(x["total_cpu_percent"] for x in v) for k, v in samples.items()}
+    browser = {k: min(x["by_kind"].get("browser", 0) for x in v) for k, v in samples.items()}
+    return {"ok": abs(floors["with"] - floors["without"]) <= .5
+            and abs(browser["with"] - browser["without"]) <= .5
+            and all(x["complete"] for v in samples.values() for x in v)
+            and animations == [0] * 4 and pending == [0] * 4,
+            "minWith": floors["with"], "minWithout": floors["without"],
+            "browserMinWith": browser["with"], "browserMinWithout": browser["without"],
+            "restAnimations": animations, "pendingCollapse": pending, "samples": samples}
+
+
 def measure(app_factory, results, tmp):
     def mb(x):
         return round(x / 1048576, 1)
@@ -5651,6 +5686,24 @@ def measure(app_factory, results, tmp):
         results['idle_cpu_empty_task_manager'] = app.call('metrics', interval=10)
     finally:
         app.quit()
+
+    # D-11: the same paused-card speed gate as the media suite, on a local fixture.
+    server, port = _media_server()
+    app = app_factory(urls=("http://127.0.0.1:%d/audio.html" % port,), fresh=True)
+    keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
+    saved = {key: app.call("defaults", key=key) for key in keys}
+    try:
+        for key in keys: app.call("defaults", key=key, value=None)
+        audio = app.call("tabs")[0]["id"]
+        app.call("wait", tab=audio)
+        app.eval(audio, "start()")
+        wait_until(lambda: app.call("media", tab=audio)["playback"] == "playing", timeout=10, step=.05)
+        new_tab(app, "about:blank")
+        wait_until(lambda: app.call("mini-players")["cards"], timeout=3, step=.02)
+        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
+    finally:
+        _restore_defaults(app, saved)
+        app.quit(); server.shutdown(); server.server_close()
 
     # Cold-ish launch: profile already exists (second launch), one restored
     # tab. Process start to first contentful paint of that tab.
@@ -5790,9 +5843,10 @@ def media_checks(factory, results, tmp):
         app.call("close", tab=tab)
     # Start from the defaults the checks expect; a run killed mid-check (or another suite) can leave
     # these keys behind in the shared defaults domain.
-    for key in ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop"):
-        app.call("defaults", key=key, value=None)
+    keys = ("open.advanced.enablePictureInPictureOnLeave", "open.pip.autoDisabledHosts", "open.pip.keepOnTop")
+    saved = {key: app.call("defaults", key=key) for key in keys}
     try:
+        for key in keys: app.call("defaults", key=key, value=None)
         app.call("window-frame", frame=[80, 60, 1280, 820])
         home = app.call("tabs")[0]["id"]
         app.call("wait", tab=home)
@@ -5811,16 +5865,20 @@ def media_checks(factory, results, tmp):
         app.call("media-action", tab=audio, action="toggle-mute")
 
         # E-M3: the card appears when the source leaves the screen, and goes when it comes back.
-        select(home)
         t0 = time.monotonic()
+        select(home)
         listed = wait_until(lambda: audio in ids(), timeout=1, step=.005)
         appear_ms = (time.monotonic() - t0) * 1000
         card = players()["cards"][0] if listed else None
+        timing = (card or {}).get("timing", {})
+        turns = timing.get("insertedTurn", -2) - timing.get("handledTurn", 0) if timing.get("insertedTurn") is not None else -2
+        insert_ms = (timing["insertedAt"] - timing["handledAt"]) * 1000 if timing.get("insertedAt") is not None else None
         select(audio)
         gone = wait_until(lambda: not ids(), timeout=1, step=.01)
-        results["media_card_on_leave"] = {"ok": bool(listed) and bool(gone) and appear_ms < 1000
+        results["media_card_on_leave"] = {"ok": bool(listed) and bool(gone) and timing.get("event") == "leave" and 0 <= turns <= 1
+            and insert_ms is not None and insert_ms >= 0
             and card is not None and set(["favicon", "previous", "play", "next", "volume"]) <= set(card["buttons"]),
-            "appearMs": round(appear_ms, 1), "load": os.getloadavg(), "card": card}
+            "appearMs": round(appear_ms, 1), "insertMs": insert_ms, "insertTurns": turns, "load": os.getloadavg(), "card": card}
 
         # E-M4: the card's controls reach the page (Chromium's media session; next/previous route to the page's handlers).
         # Real clicks need Open frontmost. LaunchServices can answer the socket before it grants the
@@ -5867,34 +5925,8 @@ def media_checks(factory, results, tmp):
         for t in extra: close_tab(t)
         wait_until(lambda: ids() == [audio], timeout=3, step=.02)
 
-        # E-M15 / D-11: idle CPU with a paused card on screen equals idle CPU without it.
-        # Alternate the two states (paused card shown / hidden by a sidebar toggle-free Space switch is not
-        # equivalent, so the card leaves by selecting its own tab and comes back by leaving it again).
-        app.call("media-action", tab=audio, action="pause")
-        wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=3, step=.02)
-        def cpu(x): return round(sum(max(p["cpu"], 0) for p in x["tasks"]), 2)
-        def browser_cpu(x): return round(sum(max(p["cpu"], 0) for p in x["tasks"] if p.get("kind") == 1), 2)
-        samples = {"with": [], "without": [], "browserWith": [], "browserWithout": [], "load": []}
-        card_view = players()
-        rest_animations = []
-        for _ in range(4):
-            time.sleep(6); rest_animations.append(players()["animations"]); x = app.call("metrics", interval=8)
-            samples["with"].append(cpu(x)); samples["browserWith"].append(browser_cpu(x)); samples["load"].append(os.getloadavg()[0])
-            app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
-            time.sleep(6); x = app.call("metrics", interval=8)
-            samples["without"].append(cpu(x)); samples["browserWithout"].append(browser_cpu(x)); samples["load"].append(os.getloadavg()[0])
-            # Back to a shown paused card: play (clears the dismissal), pause again.
-            app.call("media-action", tab=audio, action="play"); wait_until(lambda: audio in ids(), timeout=3, step=.02)
-            app.call("media-action", tab=audio, action="pause")
-            wait_until(lambda: (lambda c: c if c and c[0]["playback"] == "paused" else None)(players()["cards"]), timeout=3, step=.02)
-        # Other work on the Mac only adds CPU, so compare the floor of four interleaved pairs; the
-        # structural part (no animation keys, no pending collapse) holds in every sample.
-        results["media_idle_cpu"] = {"ok": abs(min(samples["with"]) - min(samples["without"])) <= 0.5
-            and abs(min(samples["browserWith"]) - min(samples["browserWithout"])) <= 0.5
-            and card_view["pendingCollapse"] == 0 and rest_animations == [0] * len(rest_animations),
-            "minWith": min(samples["with"]), "minWithout": min(samples["without"]),
-            "browserMinWith": min(samples["browserWith"]), "browserMinWithout": min(samples["browserWithout"]),
-            "restAnimations": rest_animations, "samples": samples}
+        # E-M15 / D-11: same OS sampling and paused-card fixture as `measure`.
+        results["media_idle_cpu"] = _media_idle_cpu(app, audio)
         app.call("media-action", tab=audio, action="close"); wait_until(lambda: not ids(), timeout=3, step=.02)
         close_tab(audio)
 
@@ -5908,13 +5940,14 @@ def media_checks(factory, results, tmp):
         latency = (p.get("enteredAt") or 0) - (p.get("requestedAt") or 0) if p.get("enteredAt") else None
         decision = m(video)["decision"]
         leave_to_request = (p.get("requestedAt") or 0) - (decision["at"] if decision else 0)
+        leave_to_enter = (p["enteredAt"] - decision["at"]) if p.get("enteredAt") and decision else None
         pip_windows = p.get("windows", [])
         # Phase 1 shows Chromium's frameless window; phase 2 (EM-4) Open's own window and no Chromium one.
         phase = p.get("phase", 1)
         shown = len(pip_windows) >= 1 if phase == 1 else bool((p.get("openWindow") or {}).get("visible")) and not pip_windows
         results["media_auto_pip_on_leave"] = {"ok": opened["state"] == "active" and opened.get("automatic") is True and opened.get("tab") == video
-            and latency is not None and latency <= 0.5 and shown and abs(leave_to_request) < 0.05, "phase": phase,
-            "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request,
+            and leave_to_enter is not None and 0 <= leave_to_enter <= 0.5 and shown, "phase": phase,
+            "pip": p, "requestToEnterSeconds": latency, "leaveToRequestSeconds": leave_to_request, "leaveToEnterSeconds": leave_to_enter,
             "load": os.getloadavg(), "windowsBefore": windows_before, "decision": decision, "audibleAfterPlayMs": video_audible_ms,
             "autoPiPSetting": app.call("defaults", key="open.advanced.enablePictureInPictureOnLeave")}
         # Sleep feed (§4.10): the PiP source is protected.
@@ -6362,6 +6395,7 @@ def media_checks(factory, results, tmp):
         state = m(a1) if kept else {}
         results["media_mute_survives_relaunch"] = {"ok": bool(kept) and state.get("modelMuted") is True, "state": state}
     finally:
+        _restore_defaults(app, saved)
         app.quit(); server.shutdown(); server.server_close()
 
 

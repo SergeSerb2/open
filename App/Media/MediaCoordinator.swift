@@ -23,6 +23,23 @@ final class MediaCoordinator {
   /// Automation evidence: when each tab's PiP request started and entered (system uptime).
   private(set) var pipTimes: [ItemID: (requested: TimeInterval, entered: TimeInterval?)] = [:]
   private(set) var pipRequests = 0
+  #if OPEN_AUTOMATION
+  struct CardTiming {
+    let event: String
+    let handledAt: TimeInterval
+    let handledTurn: UInt64
+    var insertedAt: TimeInterval?
+    var insertedTurn: UInt64?
+  }
+  private(set) var cardTimings: [ItemID: CardTiming] = [:]
+  private var timingTurn: UInt64 = 0
+  private var timingObserver: CFRunLoopObserver?
+
+  private func noteCardEvent(_ id: ItemID, event: String) {
+    guard timingObserver != nil else { return }
+    cardTimings[id] = CardTiming(event: event, handledAt: ProcessInfo.processInfo.systemUptime, handledTurn: timingTurn)
+  }
+  #endif
   /// Tabs Open asked to leave PiP (system uptime). A report that still says "in PiP" before the
   /// page's exit lands is not a new manual PiP.
   private var pendingExit: [ItemID: TimeInterval] = [:]
@@ -52,6 +69,15 @@ final class MediaCoordinator {
       // The bundled file is part of OpenMedia; this branch only keeps a broken bundle from crashing.
       rules = try! PiPSiteRules(data: Data(#"{"version":1,"disallow":[],"sites":[]}"#.utf8))
     }
+    #if OPEN_AUTOMATION
+    if app.options.automationSocket != nil || ProcessInfo.processInfo.environment["OPEN_E2E_OWNER_PID"] != nil {
+      // Counts turns without scheduling or waking the run loop. Only automated runs install it.
+      timingObserver = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.afterWaiting.rawValue, true, 0) { [weak self] _, _ in
+        MainActor.assumeIsolated { self?.timingTurn += 1 }
+      }
+      if let timingObserver { CFRunLoopAddObserver(CFRunLoopGetMain(), timingObserver, .commonModes) }
+    }
+    #endif
     // D-8: phase 2 replaces Chromium's PiP window only when the engine supports it (fork EM-4).
     if OEEngine.shared.supportsShellPictureInPicture {
       let delegate = PictureInPictureDelegate(coordinator: self)
@@ -62,8 +88,21 @@ final class MediaCoordinator {
 
   // MARK: Windows
 
+  #if OPEN_AUTOMATION
+  isolated deinit { if let timingObserver { CFRunLoopObserverInvalidate(timingObserver) } }
+  #endif
+
   func attach(_ factory: EngineWebContentHostFactory) {
     guard let controller = factory.controller else { return }
+    #if OPEN_AUTOMATION
+    if timingObserver != nil {
+      controller.sidebar.mediaControls.onCardInserted = { [weak self] id in
+        guard let self, self.cardTimings[id]?.insertedAt == nil else { return }
+        self.cardTimings[id]?.insertedAt = ProcessInfo.processInfo.systemUptime
+        self.cardTimings[id]?.insertedTurn = self.timingTurn
+      }
+    }
+    #endif
     controller.context.media = store
     // The window controller refreshes after every selection, Space, split and visibility change.
     // Keep any hook another owner installed (the sleep adapter's AppVisibilityProvider).
@@ -84,6 +123,9 @@ final class MediaCoordinator {
     let old = displayed[windowID] ?? []
     guard now != old || displayed[windowID] == nil else { return }
     displayed[windowID] = now
+    #if OPEN_AUTOMATION
+    for id in old.subtracting(now) { noteCardEvent(id, event: "leave") }
+    #endif
     if factory.controller?.context.displayedTabIDs != now { factory.controller?.context.displayedTabIDs = now }
     for id in now.subtracting(old) {
       if let effect = session.displayed(tabID: id) { apply(effect) }
@@ -104,11 +146,17 @@ final class MediaCoordinator {
 
   func contentChanged(_ host: EngineWebContentHost, changes: OEWebContentChange) {
     guard !changes.isDisjoint(with: [.media, .audio, .mediaCapture, .pictureInPicture, .live, .crash]) else { return }
+    #if OPEN_AUTOMATION
+    if cardTimings[host.tabID] == nil { noteCardEvent(host.tabID, event: "engine") }
+    #endif
     sync(host)
   }
 
   /// A tab's page closed: tab close, archive, unload (sleep), crash teardown, window close.
   func hostClosed(tabID: ItemID) {
+    #if OPEN_AUTOMATION
+    cardTimings[tabID] = nil
+    #endif
     store.remove(tabID: tabID); pendingExit[tabID] = nil; decisions[tabID] = nil; pipTimes[tabID] = nil
     exitWaits.removeValue(forKey: tabID)?.cancel()
     var minimized = false
@@ -179,6 +227,7 @@ final class MediaCoordinator {
   // MARK: Auto-PiP
 
   private func leave(_ host: EngineWebContentHost, factory: EngineWebContentHostFactory) {
+    let leftAt = ProcessInfo.processInfo.systemUptime
     let content = host.content, id = host.tabID
     guard let url = content.url else { return }
     let media = content.mediaSession
@@ -186,7 +235,7 @@ final class MediaCoordinator {
       tabID: id, url: url, state: Self.state(media), audible: content.isAudible, event: .selection,
       settings: settings, rules: rules, session: session,
       disablePictureInPicture: media?.isPictureInPictureDisabled ?? false)
-    decisions[id] = (decision, ProcessInfo.processInfo.systemUptime)
+    decisions[id] = (decision, leftAt)
     guard decision == .open else { return }
     request(content, tabID: id, automatic: true)
   }
