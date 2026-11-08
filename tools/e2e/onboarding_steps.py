@@ -173,10 +173,17 @@ def run(factory, results, tmp, h):
         action('choose-default', yes=False); action('next'); blank = screen('ready')
         results['steps_every_skip'] = dict(ok=blank['name']=='' and blank['favorites']==[] and blank['blocker'] is False and blank['title']=='Welcome to Open.', state=blank, load=os.getloadavg())
         # A real write failure keeps Ready open and D3 unset; retry reuses choices.
+        for _ in range(4): action('back')
+        screen('favorites'); action('toggle-favorite', index=0); action('toggle-favorite', index=6)
+        for _ in range(3): action('next')
+        screen('defaultBrowser'); action('choose-default', yes=False); action('next'); screen('ready')
         snapshot().mkdir(); action('get-started'); failure = state()
         gate('save_error', lambda s: s['active'] and s['screen']=='ready' and 'could not save' in s['error'], failure, blank)
         assert app.call('first-run')['completed'] is False
         snapshot().rmdir(); action('get-started'); until(lambda: not state()['active']); assert app.call('first-run')['completed']
+        retried_tabs = app.call('tabs')
+        results['steps_save_retry_no_duplicates'] = dict(ok=len([t for t in retried_tabs if t['section']=='favorites'])==2
+            and len([t for t in retried_tabs if t['url']=='open://welcome'])==1, load=os.getloadavg())
         # Already default is a read-only automation outcome. No system prompt runs.
         launch(directory=empty, OPEN_AUTOMATION_DEFAULT_BROWSER='already'); skip_to_ready()
         already = state(); action('back'); offered = screen('defaultBrowser'); shot('already-default-light')

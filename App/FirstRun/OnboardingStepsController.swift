@@ -54,6 +54,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var backButton: OnboardingButton?
   private var nameField: NSTextField?
   private var favoriteButtons: [OnboardingFavoriteButton] = []
+  private var blockerSwitch: NSSwitch?
   private var cardButtons: [OnboardingButton] = []
   private var presetStrip: PresetStripView?
   private var colorPad: OpenSpaceEditor.ColorPadView?
@@ -136,7 +137,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     controls.subviews.forEach { $0.removeFromSuperview() }; footer.subviews.forEach { $0.removeFromSuperview() }
     cardButtons.forEach { $0.removeFromSuperview() }; cardButtons.removeAll()
     if step != .ready { confetti?.removeFromSuperlayer(); confetti = nil }
-    nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; favoriteButtons = []
+    nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; favoriteButtons = []; blockerSwitch = nil
     titleLabel.stringValue = stepTitle; descriptionLabel.stringValue = detail
     if step == .importData {
       let host = NSHostingController(rootView: FirstRunView(model: firstRun, startsProbe: false, embeddedImport: true))
@@ -172,6 +173,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       label.frame = NSRect(x: 0, y: 12, width: 300, height: 30); controls.addSubview(label)
       let toggle = NSSwitch(frame: NSRect(x: 330, y: 8, width: 52, height: 32)); toggle.state = blocker ? .on:.off
       toggle.setAccessibilityLabel("Block ads and trackers"); toggle.target = self; toggle.action = #selector(blockerChanged(_:)); controls.addSubview(toggle)
+      blockerSwitch = toggle
       let note = NSTextField(wrappingLabelWithString: "You can change this later in Settings ▸ Advanced.")
       note.font = .systemFont(ofSize: 13); note.textColor = .secondaryLabelColor; note.frame = NSRect(x: 0, y: 68, width: 380, height: 44); controls.addSubview(note)
     }
@@ -309,7 +311,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     if favoriteButtons.indices.contains(index) { favoriteButtons[index].selected = selectedFavorites.contains(index) }
     updatePreview(); if !reduceMotion { let spring = CASpringAnimation(keyPath: "transform.scale"); spring.fromValue = 0.96; spring.toValue = 1; spring.mass = 1; spring.stiffness = pow(2 * .pi / 0.3, 2); spring.damping = 2*0.7*sqrt(spring.stiffness); spring.duration = spring.settlingDuration; preview.layer?.add(spring, forKey: "favorites") }
   }
-  func setBlocker(_ on: Bool) { blocker = on; updatePreview() }
+  func setBlocker(_ on: Bool) { blocker = on; blockerSwitch?.state = on ? .on:.off; updatePreview() }
   @objc private func blockerChanged(_ sender: NSSwitch) { setBlocker(sender.state == .on) }
   func chooseDefault(_ yes: Bool) { defaultYes = yes; render(direction: 0) }
   @objc private func defaultChanged(_ sender: NSButton) { chooseDefault(sender.tag == 0) }
