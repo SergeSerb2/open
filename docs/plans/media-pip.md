@@ -2699,6 +2699,25 @@ Branch `s3/item15` (child branch `s3/item15-speed`). Receipts with every run and
   `commandbar-render` under load passed the §4.4c paired method: main / head median CPU p95
   8.909 / 8.318 ms (−6.6 %).
 
+### 14.8 Section 3 close-out (items 10–13, 17–19)
+
+- **Item 10, View Media.** The Window item opens the Library's Media section (#151; e2e
+  `media_view_media_menu`). Arc's item runs `viewScreenshotsAndCaptures:`, and Arc's Library
+  "Media" grid shows captures and screenshots, not playback media (settings-library §6.4). So it
+  needs no OpenMedia source.
+- **Item 11.** e2e `media_two_card_collapse` (#234) closes #110 code review C5 on the synthetic
+  path. A real-pointer pass stays a hand check.
+- **Item 12.** The tooltip text was decoded in Step 2b. The speaker animation waits for a capture
+  (`docs/followups.md`, Media D8).
+- **Item 13.** E-M11 passes (`media_now_playing`), so EM-9 is not needed.
+- **Soak** on main ce503e80: e2e `media` 32/32 ×3, `sidebar-render` ×3 and `features-render` ×3
+  PASS. 0 orphan processes after each run. 0 new crash reports.
+- **Regressions** on main ce503e80: full `verify-all` PASS. e2e `features`, `shell`, `window`,
+  `sidebar`, `sidebar-completion`, `toolbar`, `numbering` and `measure` PASS. `app-actions` and
+  `commandbar` each have one failing row, `settings_advanced_action_error`, from Section 12's
+  #249: Boost editing became available, and the row still expects "not available". It is not
+  media.
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).
