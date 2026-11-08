@@ -41,6 +41,13 @@ import time
 import traceback
 from pathlib import Path
 
+# The -I shebang drops this folder from sys.path. Put it first so sibling
+# suites (engine_activation, downloads, extensions_p3, ...) import when the
+# script runs directly.
+_E2E_DIR = os.path.dirname(os.path.realpath(__file__))
+if sys.path[:1] != [_E2E_DIR]:
+    sys.path.insert(0, _E2E_DIR)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
 _ACTIVE_FOCUS_TRACKER = None
@@ -917,21 +924,34 @@ def feature_checks(app, style, results, tmp):
     def crash_recovery():
         if os.environ.get("OPEN_E2E_NO_CRASH_PROBES") == "1":
             return {"status": "DEFERRED", "reason": "Crash probes prohibited for this run"}
+        pid = app.call("ping")["pid"]
+        sibling_title = app.eval(t, "document.title")
         c = new_tab(app, "https://example.com/", background=True)
         try:
-            app.call("navigate", tab=c, url="chrome://crash")
-        except Exception:
-            pass
-        time.sleep(2)
-        st = app.page(c).get("crash")
-        model_crashed = app.tab(c)["crashed"]
-        app.call("navigate", tab=c, url="https://example.com/")
-        app.call("wait", tab=c, timeout=20)
-        after = app.page(c)
-        app.call("close", tab=c)
-        return {"ok": st != 0 and model_crashed and after["crash"] == 0 and after["url"] == "https://example.com/",
-                "crash_state": st, "model_crashed": model_crashed,
-                "after_reload": {"crash": after["crash"], "url": after["url"]}}
+            # Blink's chrome_debug_urls.cc handles chrome://kill with SIGTERM
+            # on macOS. CEF reports TS_PROCESS_WAS_KILLED; Open exposes crash
+            # state 2 and the same model crashed flag, without a fault/.ips or
+            # a macOS crash dialog (chrome://crash dereferences null instead).
+            app.call("navigate", tab=c, url="chrome://kill")
+            wait_until(lambda: app.page(c).get("crash") == 2 and app.tab(c)["crashed"], timeout=5, step=.05)
+            st = app.page(c).get("crash")
+            model_crashed = app.tab(c)["crashed"]
+            sibling_alive = app.eval(t, "document.title") == sibling_title and not app.tab(t)["crashed"]
+            app_alive = app.call("ping")["pid"] == pid
+            # Keep the original recovery navigation on the same sidebar tab.
+            app.call("navigate", tab=c, url="https://example.com/")
+            app.call("wait", tab=c, timeout=20)
+            after = app.page(c)
+            model_recovered = not app.tab(c)["crashed"]
+            title = app.eval(c, "document.title")
+            return {"ok": st == 2 and model_crashed and sibling_alive and app_alive and model_recovered
+                          and after["crash"] == 0 and after["url"] == "https://example.com/" and title == "Example Domain",
+                    "termination_url": "chrome://kill", "crash_state": st, "model_crashed": model_crashed,
+                    "sibling_alive": sibling_alive, "same_app_pid": app_alive,
+                    "after_reload": {"crash": after["crash"], "url": after["url"], "title": title,
+                                     "model_recovered": model_recovered}}
+        finally:
+            app.call("close", tab=c)
 
     for name, fn in [("js_dialogs", dialogs), ("permissions", permissions), ("popups_new_tabs", popups_and_new_tabs),
                      ("find_in_page", find), ("zoom", zoom),
@@ -5823,6 +5843,10 @@ def media_checks(factory, results, tmp):
             "appearMs": round(appear_ms, 1), "load": os.getloadavg(), "card": card}
 
         # E-M4: the card's controls reach the page (Chromium's media session; next/previous route to the page's handlers).
+        # Real clicks need Open frontmost. LaunchServices can answer the socket before it grants the
+        # foreground, and an app that never became active resigns nothing, so the focus guard would not
+        # see it: establish the precondition through the exact-PID activation path (as tabstrip does).
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         select(home)
         wait_until(lambda: audio in ids(), timeout=2, step=.01)
         app.call("media-click", tab=audio, target="play")
@@ -5846,6 +5870,8 @@ def media_checks(factory, results, tmp):
         second = wait_until(lambda: (lambda w: w if len(w) >= 2 else None)(app.call("shell-windows")), timeout=5, step=.05)
         second_cards = ids() if second else None
         if second:
+            # Close Window needs the new window key (a menu command): activate it first.
+            app.call("window-focus", id=app.call("window-state")["id"], activate=True)
             app.call("command", id="close-window")
             wait_until(lambda: len(app.call("shell-windows")) == 1, timeout=5, step=.05)
         app.call("space", space=home_space)
@@ -6230,7 +6256,94 @@ def media_checks(factory, results, tmp):
             results["media_pip_keep_on_top"] = {"status": "BLOCKED", "reason": "EM-4: the Keep Window on Top menu is in Open's own PiP window"}
         select(fv); wait_pip("closed")
         close_tab(fv)
-        results["media_document_pip"] = {"status": "BLOCKED", "reason": "EM-7: Document PiP disposition"}
+        # Item 11 (#110 code review C5): with two cards in an expanded stack, Close or Back to Tab on the
+        # top card, then the pointer over the tab list: the other card must collapse. Synthetic pointer on
+        # the real tracking-area path (mouse hover delivers enter/exit to the views under the point).
+        def two_card_pass(target):
+            a, b = open_tab(base + "audio.html?c5=a" + target), open_tab(base + "audio.html?c5=b" + target)
+            start(a); start(b)
+            select(home)
+            both = wait_until(lambda: (lambda c: c if set(c) >= {a, b} else None)(ids()), timeout=3, step=.02)
+            top = (both or [b])[0]
+            other = a if top == b else b
+            app.call("media-click", tab=top, target=target)
+            # Back to Tab selects the top card's tab: it shows, so its card leaves (Close removes it too).
+            gone = wait_until(lambda: top not in ids(), timeout=3, step=.02)
+            app.call("hover", node=home)
+            def collapsed():
+                p = players()
+                card = next((c for c in p["cards"] if c["tab"] == other), None)
+                return p if card and not p["expanded"] and not card["expanded"] else None
+            rest = wait_until(collapsed, timeout=2, step=.02)
+            p = players()
+            for t in (a, b):
+                close_tab(t)
+            return {"ok": bool(both) and bool(gone) and bool(rest), "top": top, "gone": bool(gone),
+                    "stackExpanded": p["expanded"], "cards": [{k: c.get(k) for k in ("tab", "expanded")} for c in p["cards"]]}
+        c5_close = two_card_pass("close")
+        c5_title = two_card_pass("title")
+        results["media_two_card_collapse"] = {"ok": c5_close["ok"] and c5_title["ok"], "close": c5_close, "backToTab": c5_title}
+
+        # E-M13 (EM-7): documentPictureInPicture.requestWindow() opens Open's Document PiP panel (28 pt top
+        # bar, the PiP page in it at the requested size); the page's element moves into it, and Close
+        # gives it back (the PiP document's pagehide). A navigation of the opener closes the panel.
+        # requestWindow needs a user gesture: Runtime.evaluate with userGesture.
+        def gesture_eval(tab, js):
+            r = app.call("devtools", tab=tab, method="Runtime.evaluate",
+                         params={"expression": js, "userGesture": True, "returnByValue": True, "awaitPromise": True})
+            return (r or {}).get("result", {}).get("value")
+        def doc_window(): return pip().get("documentWindow")
+        dp = open_tab(base + "docpip.html")
+        dp_opened = gesture_eval(dp, "start()")
+        dp_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] and w["pageSize"] == w["requested"]
+                                     else None)(doc_window()), timeout=3, step=.02)
+        dp_page = app.eval(dp, "JSON.stringify(__pip)")
+        # The PiP page learns its size from the panel a moment after requestWindow resolves.
+        dp_size = wait_until(lambda: (lambda v: v if v == [400, 300] else None)(app.eval(dp,
+            "documentPictureInPicture.window ? [documentPictureInPicture.window.innerWidth, documentPictureInPicture.window.innerHeight] : null")),
+            timeout=3, step=.02)
+        dp_moved = app.eval(dp, "document.getElementById('player') === null")
+        dp_level = dp_win["level"] if dp_win else None
+        app.call("pip-action", action="close")
+        dp_gone = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        dp_back = wait_until(lambda: app.eval(dp, "__pip.closed === 1 && document.getElementById('player') !== null"), timeout=3, step=.05)
+        # Failure path: the opener navigates while its Document PiP is open (Chromium's rule closes it).
+        dp_reopened = gesture_eval(dp, "start()")
+        dp_win2 = wait_until(lambda: doc_window(), timeout=3, step=.02)
+        app.eval(dp, "location.href = 'plain.html'; true")
+        dp_nav_gone = wait_until(lambda: doc_window() is None, timeout=5, step=.02)
+        results["media_document_pip"] = {"ok": dp_opened is True and bool(dp_win) and dp_win["topBarHeight"] == 28
+            and dp_win["requested"] == [400, 300] and dp_win["pageSize"] == [400, 300] and dp_win["class"].endswith("PiPPanel")
+            and json.loads(dp_page)["opened"] == 1 and dp_size == [400, 300]
+            and dp_moved is True and bool(dp_gone) and dp_back is True and dp_reopened is True and bool(dp_win2) and bool(dp_nav_gone),
+            "window": dp_win, "page": dp_page, "innerSize": dp_size, "moved": dp_moved, "level": dp_level, "closed": bool(dp_gone), "elementBack": dp_back,
+            "navigationCloses": bool(dp_nav_gone), "videoPiP": pip()["state"]}
+        close_tab(dp)
+
+        # EM-6 + EM-7, the Meet path: a playing page that registers "enterpictureinpicture" gets Chromium's
+        # own auto-PiP on a tab leave (the hidden tab strip tells Chromium's helper; no setter needed), and
+        # its handler opens Document PiP in Open's panel. Open's rule yields (decision chromiumAutoPiP). Back
+        # on the tab, Chromium closes its auto PiP. Chromium auto-PiPs only https:// and file:// pages.
+        fx_file = "file://" + os.path.join(ROOT, "tools", "e2e", "fixtures", "media") + "/"
+        meet = open_tab(fx_file + "meet-like.html")
+        meet_heard, _ = start_heard(meet)
+        select(home)
+        meet_win = wait_until(lambda: (lambda w: w if w and w["visible"] and w["pageInWindow"] and w["pageSize"] == w["requested"]
+                                       else None)(doc_window()), timeout=3, step=.02)
+        meet_auto = app.eval(meet, "JSON.stringify(__auto)")
+        meet_decision = (m(meet).get("decision") or {}).get("value")
+        # Chromium marks the opener as in PiP while its Document PiP is open, so Open's session holds the
+        # tab (no mini player card, protected from sleep) until the panel goes.
+        meet_session = {k: pip().get(k) for k in ("state", "tab", "automatic")}
+        select(meet)
+        meet_closed = wait_until(lambda: doc_window() is None, timeout=3, step=.02)
+        meet_session_after = wait_until(lambda: (lambda p: p if p["state"] != "active" else None)(pip()), timeout=3, step=.02)
+        results["media_meet_auto_pip"] = {"ok": meet_heard and bool(meet_win) and json.loads(meet_auto)["entered"] == 1
+            and meet_decision == "chromiumAutoPiP" and meet_session == {"state": "active", "tab": meet, "automatic": False}
+            and bool(meet_closed) and bool(meet_session_after) and meet_win["requested"] == [320, 240] and meet_win["topBarHeight"] == 28,
+            "window": meet_win, "auto": meet_auto, "decision": meet_decision, "session": meet_session,
+            "closedOnReturn": bool(meet_closed), "sessionAfter": (meet_session_after or {}).get("state")}
+        close_tab(meet)
         # Item 16 (criterion 6) with section 8's sleep controller (#156): a paused tab whose mini player
         # shows survives a pass that sleeps an idle background tab; after Close (the card goes) the same
         # pass may sleep it. The controller's clock moves; no wall-clock wait.
@@ -11916,7 +12029,11 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
-    if opts.only == "extensions-ui":
+    if opts.only == "extensions-ui" and os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") == "adblock":
+        from settings_adblock import fixtures
+        extra += ["--load-extension=" + ",".join(fixtures(ROOT, tmp)),
+                  "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "extensions-ui" and os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") != "adblock":
         probe_copy = Path(tmp) / "action-probe-ui"
         shutil.copytree(Path(ROOT) / "tools/e2e/fixtures/action-probe", probe_copy)
         probe_manifest = json.loads((probe_copy / "manifest.json").read_text())
@@ -12064,7 +12181,10 @@ def main():
             shell_checks(factory, results["shell"], tmp)
         elif opts.only == "relaunch":
             results["relaunch"] = CheckedResults(tracker)
-            relaunch_checks(factory, results["relaunch"], tmp)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
+                factory, results["relaunch"], tmp, sys.modules[__name__], opts.config)
+            if os.environ.get('OPEN_RELAUNCH_SETTINGS_ONLY') != '1':
+                relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)

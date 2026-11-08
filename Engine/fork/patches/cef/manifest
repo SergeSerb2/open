@@ -24,3 +24,6 @@ paths: cef/tests/cefsimple/simple_app.cc
 paths: cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
 # 0701-open-profile-lifecycle.patch
 paths: cef/libcef/browser/chrome/chrome_browser_context.cc cef/libcef/browser/request_context_impl.h
+# 0704 overlay ownership (no upstream pathspec block):
+# src/cef/include/cef_extension_manager.h
+# src/open/browser/extensions/open_extension_manager.mm
