@@ -297,6 +297,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     !closed && owner?.webContent(page, showContextMenu: menu) == true
   }
   func webContent(_ page: OEWebContent, didUpdateFindResult result: OEFindResult) { if !closed { owner?.webContent(page, didUpdateFindResult: result) } }
+  func webContent(_ page: OEWebContent, didReceiveOpenWorldMessage type: String, payloadJSON: String, documentID: String) {
+    if !closed { owner?.webContent(page, didReceiveOpenWorldMessage: type, payloadJSON: payloadJSON, documentID: documentID) }
+  }
   func webContent(_ page: OEWebContent, didRequestFullscreen fullscreen: Bool) { if !closed { owner?.webContent(page, didRequestFullscreen: fullscreen) } }
   /// Chromium's history swiper (page-platform EP-1): the factory records it; Step 12 draws Open's
   /// indicator from it.

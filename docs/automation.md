@@ -347,7 +347,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. `presentation` is `popover` or `card`; `frame` gives the card rectangle in window coordinates. Pass a Little Open window number in `window` to inspect or answer its prompt. With an answer, call `performClick` on the real button |
 | `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
 | `events` | optional Little Open `window` number | Drain that Little Open window's page log, or the front browser window's log otherwise: `change`, `load`, `loadError`, `open`, `dialog`, `dialogAnswer`, `permission`, `permissionAnswer`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no). Also drain the shared `savePrompt` completion log, which remains available after the final browser window closes. |
-| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
+| `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames`, `world` (`page` default or `open`) | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
 | `download-dir` / `downloads` | `path` | Where downloads go; list downloads |
@@ -1109,6 +1109,51 @@ relaunches that profile, and repeats the drag after repair.
 `OPEN_E2E_E2_FORCE_FAILURE=popup` stops the suite with its native popup open;
 `popup-quit` first quits the App to exercise restoration without the socket.
 Frame preferences are restored after quit through the shared defaults fallback.
+
+## Open-world scripts and messages
+
+`eval` accepts `world: "page"` (default) or `"open"`, through OpenWeb's
+`evaluateJavaScript(_:in:)`. Invalid world names fail. Open evaluation targets
+only the current main-frame document and grants no user gesture.
+`script-add` accepts the same world names. Open-world scripts always run at
+document start and in the main frame, even with `end` or `allFrames` set.
+With `css: true`, the stylesheet keeps its original source and receives no
+JavaScript transport prelude.
+
+`open-world-messages` accepts `tab`, optional `clear: true`, and optional `subscribe: true/false`
+(to exercise the OpenWeb callback). It returns
+`messages` and `callbacks` (type, payloadJSON, documentID, content), and `statistics` (accepted,
+oversized, rateLimited, invalid). The App retains only the last 64 messages
+across its factory; clearing removes that page's receipt, not engine counters.
+The recorder is automation-only and never persists payloads.
+
+Example: add an Open script containing
+`__openNative.postMessage("picker:ready", JSON.stringify({boostID:"fixture"}))`,
+navigate to a matching page, then read `open-world-messages`. Page and extension
+worlds see `typeof __openNative === "undefined"`.
+
+
+## Site settings, data and security (E1/E2/E3)
+
+All four commands use the selected page's OpenWeb profile/content; optional
+`tab` selects another page. These commands do not open Site Control UI.
+
+| Command | Arguments | Result |
+|---|---|---|
+| `site-settings` | `origin` HTTP(S) URL | `[{kind,state}]` effective exceptions that differ from the global default |
+| `site-setting` | `origin`, `kind` Chromium name, `state:allow\|block\|ask\|session` | Boolean acceptance; each kind supports only registered states |
+| `site-data-clear` | `origin`, `kinds:[cookies,cache,storage]` (any subset) | Waits for every backend, then returns true or an error. Empty kinds is valid. HTTP cache eviction is origin-specific. |
+| `security-state` | Optional `tab` | `{level,certificates:[{bytes,sha256}]}`; leaf first, no certificate subject or private data |
+
+`events` records change bit 16 for visible security/certificate updates.
+The `sitedata` suite uses isolated loopback HTTP origins and a temporary
+self-signed TLS server; valid HTTPS uses a public control because no new local
+trust root is installed. Run it under the on-screen lock after the lead clears
+any screen HOLD:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --style chrome --only sitedata
+```
 
 ## Boost runtime and simple editor (Section 12)
 
