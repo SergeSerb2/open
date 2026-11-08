@@ -823,7 +823,7 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | P-19 | Private window with the focused Space's Profile as parent, sign in | The context is off the record and has that parent; no sheet, no private save, and both private and parent stores stay unchanged |
 | P-20 | `webauthn.html` with a DevTools virtual authenticator (`WebAuthn.enable`, `WebAuthn.addVirtualAuthenticator`, ctap2, usb) | `create` and `get` resolve |
 | P-21 | `webauthn.html` without a virtual authenticator | Chromium's WebAuthn dialog shows as a child window (`windows`, `snapshot`); Esc closes it; the promise rejects with `NotAllowedError` |
-| P-22 | Relaunch without `--open-allow-mock-keychain-secrets` (mock-key build); sign in on a new fixture site | No sheet, no `savePrompt` event; `logins` unchanged; `canEnablePasswordSaving` is false |
+| P-22 | Relaunch without `--open-allow-mock-keychain-secrets` (mock-key build); sign in on a new fixture site in an empty Profile | No sheet, no `savePrompt` event; zero logins in that Profile and unchanged parent store; `canEnablePasswordSaving` is false |
 | P-23 | On `login.html` with a saved login, `eval` `navigator.credentials.get({password: true})` | Resolves to `null` within 2 s; no dialog window |
 
 HTTPS-First regression rows use `credentials.supportsSecretsImport` from the

@@ -133,3 +133,14 @@ Each automatic-policy row now uses an empty synthetic Profile, requires a
 new password-save offer and the real sheet-button answer, checks both saved
 logins and blocked-site counts, and checks that its parent Profile store stays
 unchanged. Chromium's matching and save behavior remain enabled.
+
+P-22 also needs a new credential, rather than an existing sibling-host match.
+The D6 red run kept the same Space and measured login counts 1 before quit,
+1 after relaunch, and 2 only after submission, with no sheet or prompt event.
+Chromium's `password_manager.cc:237-271,1746-1770` deliberately saves PSL/grouped
+matches without a prompt. The corrected row uses an empty Profile after the
+same no-opt-in relaunch and retains no-sheet/no-event/disabled-capability checks,
+requires zero logins/blocked sites, and checks the parent store is unchanged.
+The real-App focused P-22 and PW-MOCK-offers rows pass on framework `619324d3`;
+no engine policy or persisted preference changed. Raw D6 receipts retain both
+that red run and the isolated pass. Full-suite acceptance is recorded separately.
