@@ -445,11 +445,11 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   override func draw(_ dirtyRect: NSRect) {
     NSColor.quaternaryLabelColor.withAlphaComponent(0.08).setFill(); let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 10, yRadius: 10); outline.fill()
     if selected { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1).setStroke(); outline.lineWidth = 2; outline.stroke() }
-    let icon = NSRect(x: bounds.midX-16, y: 29, width: 32, height: 32)
+    let icon = NSRect(x: bounds.midX-16, y: 8, width: 32, height: 32)
     if let siteImage { siteImage.draw(in: icon) } else { NSColor.quaternaryLabelColor.setFill(); NSBezierPath(roundedRect: icon, xRadius: 7, yRadius: 7).fill(); (String(title.prefix(1)) as NSString).draw(at: NSPoint(x: icon.minX+9, y: icon.minY+6), withAttributes: [.font: NSFont.systemFont(ofSize: 19, weight: .semibold), .foregroundColor: NSColor.labelColor]) }
-    let style = NSMutableParagraphStyle(); style.alignment = .center
-    (title as NSString).draw(in: NSRect(x: 2, y: 7, width: bounds.width-4, height: 17), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.labelColor, .paragraphStyle: style])
-    if selected { ("✓" as NSString).draw(at: NSPoint(x: bounds.width-19, y: bounds.height-20), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .bold), .foregroundColor: NSColor.systemBlue]) }
+    let style = NSMutableParagraphStyle(); style.alignment = .center; style.lineBreakMode = .byWordWrapping
+    (title as NSString).draw(in: NSRect(x: 2, y: 44, width: bounds.width-4, height: 30), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.labelColor, .paragraphStyle: style])
+    if selected { ("✓" as NSString).draw(at: NSPoint(x: bounds.width-19, y: 3), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .bold), .foregroundColor: NSColor.systemBlue]) }
   }
 }
 
