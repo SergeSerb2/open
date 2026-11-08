@@ -4,6 +4,8 @@ All sources are generated fixtures. Results contain counts and booleans only.
 No Keychain access, source override, DB mutation, or system input is used.
 """
 import contextlib
+import base64
+import hashlib
 import http.server
 import json
 import os
@@ -23,6 +25,12 @@ def fixture_server(h, tmp):
                     '-subj', '/CN=Open secrets fixture', '-keyout', key, '-out', cert],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     os.chmod(key, 0o600)
+    # Match passwords_fixture_server: a broad certificate-error bypass can
+    # leave a certificate error that Chromium's password manager refuses.
+    # Trust only this run's generated public key for the HTTPS fixture.
+    public_key = subprocess.check_output(['openssl', 'x509', '-in', cert, '-pubkey', '-noout'], timeout=10)
+    spki = subprocess.check_output(['openssl', 'pkey', '-pubin', '-outform', 'DER'], input=public_key, timeout=10)
+    pin = base64.b64encode(hashlib.sha256(spki).digest()).decode('ascii')
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), handler)
     server.daemon_threads = True
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -34,7 +42,7 @@ def fixture_server(h, tmp):
         # Keep the source credential's exact HTTPS origin (port 443). Only
         # this App's resolver maps it to a private, unprivileged loopback port.
         yield ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % server.server_port,
-               '--ignore-certificate-errors', '--no-proxy-server', '--open-e2e']
+               '--ignore-certificate-errors-spki-list=' + pin, '--no-proxy-server', '--open-e2e']
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=5)
 
@@ -158,9 +166,10 @@ def _run(factory, results, tmp, h):
 
         try:
             launch(fresh=True, allow=False)
-            for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed', 'open.import.lastArcDir'):
+            for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed',
+                        'open.import.lastArcDir', 'open.settings.lastPane'):
                 saved[key] = app.call('defaults', key=key, persistent=True)
-                app.call('defaults', key=key, value=None if key == 'open.import.lastArcDir' else True)
+                app.call('defaults', key=key, value=None if key in ('open.import.lastArcDir', 'open.settings.lastPane') else True)
             spaces = setup()
             failed_closed = False
             try:

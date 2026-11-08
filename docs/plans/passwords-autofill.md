@@ -631,7 +631,7 @@ Chromium's HTTP auth dialog is web-modal too. With H-7 it shows, and the passwor
    - `canEnablePasswordSaving` and `canEnableCreditCardsSaving` return NO.
    - `canImportPasswordsAndCookies` is false (§7.4); the wizard shows its "can't be imported yet" copy.
    - The e2e harness passes `--open-allow-mock-keychain-secrets`, which permits password/card prompts and their `canEnable*` switches. It never permits imported real secrets.
-   - Errata (lead decision, 2026-11-06): all four §5.3 import methods fail closed with `OEErrorMockKeychain = 8` unless the process has that switch AND every record passes a browser-process fixture check before any write. Both login `signon_realm` and `origin_url` hosts must be `example.com`, a subdomain of `example.com`, `localhost`, or `127.0.0.1`. Cookie domains, after removing a leading dot, must match that host allowlist. Card numbers must be one of the public test values `4111111111111111`, `5555555555554444`, or `378282246310005`. Addresses are allowed with the switch. One non-fixture record rejects the whole batch without writes. Real-key engines do not apply the fixture check. The real wizard still refuses on mock-key engines (§7.4), even with the switch; only synthetic imports use this exception.
+   - Errata (lead decision, 2026-11-06): all four §5.3 import methods fail closed with `OEErrorMockKeychain = 10` unless the process has that switch AND every record passes a browser-process fixture check before any write. Both login `signon_realm` and `origin_url` hosts must be `example.com`, a subdomain of `example.com`, `localhost`, or `127.0.0.1`. Cookie domains, after removing a leading dot, must match that host allowlist. Card numbers must be one of the public test values `4111111111111111`, `5555555555554444`, or `378282246310005`. Addresses are allowed with the switch. One non-fixture record rejects the whole batch without writes. Real-key engines do not apply the fixture check. The real wizard still refuses on mock-key engines (§7.4), even with the switch; only synthetic imports use this exception.
 5. Release builds: release.md §4.4 already treats repeated Keychain prompts as a defect. §9.5 adds the checks.
 
 ### 7.2 At rest
@@ -672,6 +672,10 @@ Profile folders are created with mode 0700 (`S_IRWXU` in `base::CreateDirectory`
 - `OESavePrompt.username` is never logged; the automation event log records `kind` and `displayHost` only, and only for fixture hosts.
 
 ## 8. Import write path
+
+**Section 15 App/fixture errata (2026-11-08):** Address and card fixture GUIDs must be valid UUID strings. Address street tokens use stored type 77 (`ADDRESS_HOME_STREET_ADDRESS`), not derived type 30 (`ADDRESS_HOME_LINE1`); name type 7 remains stored. A cookie partition key must use canonical schemeful-site serialization. The synthetic Secure cookie uses a canonical HTTPS localhost partition site. These fixture corrections are documented with source evidence in [the import fixture notes](../re/import-secrets-fixture.md).
+
+`AppImportRunner` registers once as a `ProfileDataOwner`. Retirement marks both the Profile ID and directory as retired, cancels and awaits a mapped import task, drains pending sink writes, and drops the sink context and reload callback before folder removal. A retired destination is refused before context lookup. Cancellation checks before ledger begin, step commit, and finish prevent late ledger writes. The runner does not remove Profile folders or change the ledger during retirement. The same tracked task owns real consented imports and synthetic imports.
 
 ### 8.1 Shape and profile mapping
 

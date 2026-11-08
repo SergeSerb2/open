@@ -273,8 +273,16 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Reference captures and system grants.** [Page-chrome §7](re/page-chrome.md#7-captures-that-would-settle-the-remaining-questions) still needs user-operated Arc captures. Permission width/edge and Downloads ring geometry/recent interval remain guesses. Combined camera/microphone and real macOS authorization/delivery remain BLOCKED under the no-credential-prompt rule; notifications/MIDI fixtures do not prove them (#180). Owner: user captures / lead, with the owning engine sections for system grants.
 
 
-- First run / Section 7: passwords and cookies remain capability OFF until the
-  engine supplies its secret writer. F10 uses the disabled selection and the
+- Section 15 user hand check — after U-1/U-2, use the signed build with the user
+  present to import the user's real Arc secrets through the App's explicit
+  consent step. Check the real Keychain approval/denial paths, per-Profile
+  storage, repeat-import counts, and the report without recording secret values.
+  Synthetic fixture acceptance does not close this gate. Agents must not run
+  this import, read the real Keychain, or decrypt real Arc secrets.
+
+- First run / Section 7: passwords and cookies remain capability OFF on
+  mock-key builds, including builds with the synthetic-fixture allow switch.
+  F10 uses the disabled selection and the
   shared skip action's code path, with no real Keychain request. A missing
   alternate-icon cache requires reselection; launch never renders replacement
   SwiftUI artwork. The first-run Release 250 ms budget and imported-tab 700 ms
