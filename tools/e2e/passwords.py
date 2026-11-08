@@ -1037,6 +1037,28 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 return {'canEnablePasswordSaving': False, 'loginsUnchanged': True}
             row('P-22', mock_guard)
 
+            def mock_offer_guards():
+                # P-22 relaunched without the synthetic-secret opt-in. Use an
+                # empty Profile so duplicate suppression cannot explain a
+                # missing card offer, then prove addresses still save there.
+                home = next(s for s in app.call('spaces') if s['focused'])['id']
+                space = app.call('space-create', title='Mock guard', profile='Mock guard')
+                try:
+                    app.call('space', space=space)
+                    initial = app.call('credentials')
+                    assert initial['usesMockKeychain'] and not initial['canEnableCreditCardsSaving']
+                    assert initial['cards'] == 0 and initial['addresses'] == 0
+                    assert initial['addressesSavingEnabled']
+                    no_prompt(urls['card'])
+                    counts(cards=0)
+                    prompt('address', urls['address'], 'save')
+                    counts(addresses=1)
+                    return {'mockOptInAbsent': True, 'cardSaveOffer': False, 'cards': 0,
+                            'addressSaveOffer': True, 'addresses': 1, 'freshProfile': True}
+                finally:
+                    app.call('space', space=home)
+            row('PW-MOCK-offers', mock_offer_guards, ['P-22'])
+
             def cookie_names():
                 tab = load(urls['echo_cookies'])
                 names = app.eval(tab, 'JSON.parse(document.body.innerText)')
