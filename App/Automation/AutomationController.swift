@@ -142,9 +142,10 @@
         updaterModalEvents.removeAll()
         updaterModalObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
           object: nil, queue: .main) { [weak self] notification in
+          guard let presented = notification.object as? NSWindow else { return }
           MainActor.assumeIsolated {
             guard let self, let alert = self.app.updater?.userDriver.alert,
-              notification.object as? NSWindow === alert.window else { return }
+              presented === alert.window else { return }
             // CEF may hold main-queue tasks inside a native modal loop. Observe
             // the real alert and press its button from that loop, as Downloads does.
             RunLoop.main.perform(inModes: [.modalPanel]) { [weak self, weak alert] in
