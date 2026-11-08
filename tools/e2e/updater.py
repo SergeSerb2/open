@@ -408,6 +408,12 @@ def capture_pair(app, opts, name, number, results=None):
     folder.mkdir(parents=True, exist_ok=True)
     captures = []
     for appearance in ('light', 'dark'):
+        if 'banner' in name:
+            browser = next(w for w in app.call('shell-windows') if w['number'] == number)
+            app.call('window-focus', id=browser['id'], activate=True)
+            wait(lambda: app.call('windows'),
+                 lambda rows: any(w['number'] == number and w['key'] for w in rows),
+                 'banner capture window is not key')
         app.call('appearance', name=appearance)
         if 'banner' in name:
             # Real-window review captures show the settled sidebar appearance.
