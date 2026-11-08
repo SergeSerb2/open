@@ -928,8 +928,11 @@ void FinishIdleProof(base::OnceCallback<void(bool)> done,
        " first=" + std::to_string(first) + " last=" + std::to_string(last) +
        " extra=" + std::to_string(last - first) + " process_cpu_us=" +
        std::to_string(ProcessCpuMicroseconds() - cpu));
-  const uint64_t expected = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      "open-adblock-idle-purge-off") ? 0 : 1;
+  const auto& command = *base::CommandLine::ForCurrentProcess();
+  const bool disabled =
+      command.HasSwitch("open-adblock-idle-purge-off") ||
+      command.HasSwitch("open-adblock-idle-off-proof");
+  const uint64_t expected = disabled ? 0 : 1;
   std::move(done).Run(written && first == expected && last == first);
 }
 
@@ -1329,6 +1332,21 @@ void RunDiagnostic(base::WeakPtr<OpenAdBlockService> service,
 void RunOpenAdBlockSelftest(OpenAdBlockService* service,
                             base::FilePath adblock_root,
                             base::OnceCallback<void(bool)> done) {
+  const auto& command = *base::CommandLine::ForCurrentProcess();
+  if (command.HasSwitch("open-adblock-idle-off-proof")) {
+    // Headless blocking-off control: do not load an engine or run checks.
+    // Use the same process CPU/count observer as the post-corpus idle proof.
+    service->SetEnabled(false);
+    Line("idle off status " + AdBlockStatusText(service->GetStatus()));
+    unsigned seconds = 60;
+    base::StringToUint(command.GetSwitchValueASCII(
+                          "open-adblock-idle-proof-seconds"), &seconds);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&ReadIdleProofStart, std::move(done), true, seconds),
+        base::Seconds(6));
+    return;
+  }
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           "open-adblock-profile-proof")) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
