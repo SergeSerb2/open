@@ -121,11 +121,6 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     record(["event": "commands", "context": manager.context?.identifier ?? ""])
   }
   func extensionManager(_ manager: OEExtensionManager, didInstall extensionInfo: OEExtension, byUser: Bool) {
-    #if OPEN_AUTOMATION
-    if let attempt = app.importRunner.extensionAttempt, attempt.matches(manager, extensionInfo.identifier) {
-      attempt.completeLocal(.installed)
-    }
-    #endif
     record(["event": "installed", "id": extensionInfo.identifier, "byUser": byUser])
     guard byUser else { return }
     // Registry delivery precedes action-list delivery. Read after Chromium completes this turn.
@@ -142,13 +137,6 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
     }
   }
   func extensionManager(_ manager: OEExtensionManager, didFailToLoadExtensionAt path: URL, error: String) {
-    #if OPEN_AUTOMATION
-    if let attempt = app.importRunner.extensionAttempt, attempt.manager === manager, let file = attempt.localFile {
-      let matches = file.resolvingSymlinksInPath() == path.resolvingSymlinksInPath()
-      record(["event": "importFixtureFailure", "samePath": matches])
-      if matches { attempt.completeLocal(.failed(error)) }
-    }
-    #endif
     record(["event": "loadFailed", "error": error])
     app.frontWindowController?.toasts.show(ToastContent(title: "Couldn't load extension", subtitle: error, lifetime: 6))
   }

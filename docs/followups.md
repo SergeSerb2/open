@@ -295,6 +295,13 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 14: multi-profile import boundaries
 
+- **Closed — import automation local CRX completion.** Engine 0704 (#223)
+  supplies `installLocalCRX(_:completion:)`. The import now maps installed,
+  cancelled and failed directly, checks the installed ID and preserves
+  Chromium's error text. `firstrun`'s `EI_failure_reported_engine` gates the
+  damaged-signature error, result count and next queue item. No install timeout
+  or delegate error event is used. — Section 14 C5, 2026-11-07.
+
 - Import Undo removes created Profiles and sidebar/routing changes from the
   model. Main's Profile deletion path needs typed confirmation and defers loaded
   context data until restart. Undo does not erase Archive/History stores or

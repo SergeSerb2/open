@@ -30,13 +30,11 @@ def run(launch, state, until, row, source, tmp, h, results):
         digest = hashlib.sha256(crx.with_suffix('.der').read_bytes()).digest()[:16].hex()
         identifiers[label] = ''.join(chr(ord('a') + int(c, 16)) for c in digest)
         files[identifiers[label]] = str(crx)
-    # Keep the damaged-signature fixture for the engine completion gate. The
-    # current engine has no completion for this rejection (lead filed it).
+    # Chromium must reject this signed CRX through the completion API.
     failed_file = Path(files[identifiers['failed']])
     if negative != 'queue':
         damaged = bytearray(failed_file.read_bytes()); damaged[-1] ^= 1
         failed_file.write_bytes(damaged)
-    damaged_file = str(failed_file)
     if negative != 'queue':
         # Refuse before calling the engine; no event or timeout is fabricated.
         files[identifiers['failed']] = str(Path(tmp)/'missing-import-fixture.crx')
@@ -209,20 +207,35 @@ def run(launch, state, until, row, source, tmp, h, results):
         current = ext()
         row('EI_settings_section', current['visible'] and len(current['rows']) == 3 and current['showsProfiles'])
         if negative == 'queue': settings_import(fixture)
+        # Keep App preflight rejection separate from Chromium rejection.
+        selected({identifiers['failed']})
+        app_result, _ = queue('accept')
+        rows = install_rows()
+        row('EI_failure_reported_app', rows[identifiers['failed']]['status'] == 'Failed: The local fixture file is missing or unreadable.'
+            and identifiers['failed'] not in set().union(*registries().values())
+            and app_result['summary'] == 'Installed 0 · Skipped 0 · Failed 1'
+            and not app_result['installing'], status=rows[identifiers['failed']]['status'], summary=app_result['summary'])
+        app.call('first-run', action='settings-done')
+        settings_import(fixture)
+        files[identifiers['failed']] = str(failed_file)
+        ext(action='fixtures', files=files)
         result, prompts = queue('accept')
         rows = install_rows(); registry = registries()
         row('EI_already_installed', rows[identifiers['existing']]['status'] == 'Skipped (already installed)'
             and all(p['extension'] != identifiers['existing'] for p in prompts), status=rows[identifiers['existing']]['status'])
-        failure_events = [e for e in app.call('ext-prompt')['events'] if e.get('event') in ('loadFailed', 'importFixtureFailure')]
-        row('EI_failure_reported_app', rows[identifiers['failed']]['status'] == 'Failed: The local fixture file is missing or unreadable.'
+        rendered = ' '.join(r['text'] for r in ext(action='inspect')['text'])
+        signature_error = 'CRX_SIGNATURE_VERIFICATION_FAILED'
+        # OCR can render underscores as spaces; the model must retain the exact error.
+        rendered_error = ''.join(c for c in rendered if c.isalnum()).casefold()
+        signature_visible = signature_error.replace('_', '').casefold() in rendered_error
+        row('EI_failure_reported_engine', rows[identifiers['failed']]['status'].startswith('Failed: ')
+            and signature_error in rows[identifiers['failed']]['status']
+            and signature_visible
             and identifiers['failed'] not in set().union(*registry.values())
             and result['summary'] == 'Installed 1 · Skipped 1 · Failed 1'
-            and rows[identifiers['install']]['status'] == 'Installed',
-            status=rows[identifiers['failed']]['status'], events=failure_events)
-        hrow = dict(status='BLOCKED', reason='engine: installLocalCRX has no completion; lead filed it',
-                    damagedSignatureFixtureRetained=Path(damaged_file).is_file(), load=os.getloadavg())
-        # No false ok/FAIL: this requires an engine-owner hook.
-        results['EI_failure_reported_engine'] = hrow
+            and rows[identifiers['install']]['status'] == 'Installed' and not result['installing'],
+            status=rows[identifiers['failed']]['status'], summary=result['summary'],
+            nextInstalled=rows[identifiers['install']]['status'] == 'Installed', renderedSignature=signature_visible)
         row('EI_target_profile', rows[identifiers['install']]['status'] == 'Installed'
             and identifiers['install'] in registry[work] and identifiers['install'] not in registry[personal]
             and identifiers['existing'] in registry[personal] and identifiers['existing'] not in registry[work],
