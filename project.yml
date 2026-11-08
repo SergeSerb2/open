@@ -207,6 +207,22 @@ targets:
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     postBuildScripts:
+      - name: Embed verified ad-block lists
+        script: '"$SRCROOT/tools/embed-adblock.sh"'
+        basedOnDependencyAnalysis: false
       - name: Embed CEF framework and helpers
         script: '"$SRCROOT/tools/embed-cef.sh"'
+        basedOnDependencyAnalysis: false
+      - name: Generate acknowledgements
+        script: |
+          python3 "$SRCROOT/tools/generate-acknowledgements.py" \
+            "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Credits.rtf" \
+            --app-info-plist "$TARGET_BUILD_DIR/$INFOPLIST_PATH" \
+            --cef-credits "$CEF_ROOT/CREDITS.html"
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Credits.rtf
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Acknowledgements.txt
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/CREDITS.html
         basedOnDependencyAnalysis: false

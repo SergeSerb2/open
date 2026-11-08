@@ -183,6 +183,15 @@ extension EngineWebContentHostFactory {
   }
 }
 
+@MainActor
+func makeSpaceProfileChangeAlert(_ request: ChangeProfileRequest) -> NSAlert {
+  let alert = NSAlert(); alert.alertStyle = .warning
+  alert.messageText = "Change Profile?"; alert.informativeText = request.warning
+  alert.addButton(withTitle: "Change Profile"); alert.addButton(withTitle: "Cancel")
+  alert.showsSuppressionButton = true; alert.suppressionButton?.title = "Don't show again"
+  return alert
+}
+
 extension EngineWebContentHostFactory {
   @discardableResult
   func requestSpaceProfileChange(spaceID: SpaceID, profileID: ProfileID) -> Bool {
@@ -202,10 +211,7 @@ extension EngineWebContentHostFactory {
     if preferences.object(forKey: request.dontShowAgainKey) != nil && !preferences.bool(forKey: request.dontShowAgainKey) {
       apply(); return true
     }
-    let alert = NSAlert(); alert.alertStyle = .warning
-    alert.messageText = "Change Profile?"; alert.informativeText = request.warning
-    alert.addButton(withTitle: "Change Profile"); alert.addButton(withTitle: "Cancel")
-    alert.showsSuppressionButton = true; alert.suppressionButton?.title = "Don't show again"
+    let alert = makeSpaceProfileChangeAlert(request)
     pendingSpaceProfileAlert = alert
     alert.beginSheetModal(for: window) { [weak self] response in
       guard let self else { return }; self.pendingSpaceProfileAlert = nil

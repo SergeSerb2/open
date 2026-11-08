@@ -16,6 +16,8 @@ open_libcef_mac_sources = [
   "//open/browser/extensions/open_extension_popup.h",
   "//open/browser/extensions/open_extensions_toolbar.cc",
   "//open/browser/extensions/open_extensions_toolbar.h",
+  "//open/browser/media/open_document_pip_host.h",
+  "//open/browser/media/open_document_pip_host.mm",
   "//open/browser/media/open_media_controller.cc",
   "//open/browser/media/open_media_controller.h",
   "//open/browser/media/open_media_hooks.h",

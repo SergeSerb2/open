@@ -40,6 +40,10 @@ typedef void (^OEFrameCompletion)(NSData* _Nullable);
     _window = window;
     _videoView = (__bridge NSView*)window->GetVideoView();
     _sourceTitle = @"";
+    CefRefPtr<CefDictionaryValue> state = window->GetState();
+    _kind = state && state->GetString("kind").ToString() == "document"
+                ? OEPictureInPictureKindDocument
+                : OEPictureInPictureKindVideo;
     [self oe_update];
   }
   return self;
@@ -259,7 +263,7 @@ typedef void (^OEFrameCompletion)(NSData* _Nullable);
 }
 
 - (BOOL)supportsShellDocumentPictureInPicture {
-  return NO;
+  return YES;
 }
 
 @end
@@ -309,14 +313,6 @@ typedef void (^OEFrameCompletion)(NSData* _Nullable);
   [self oe_setPictureInPicture:nil];
   [pip oe_invalidate];
   [gPictureInPictureDelegate pictureInPictureDidClose:pip];
-}
-
-@end
-
-@implementation OEWebContent (DocumentPictureInPicture)
-
-- (CGSize)requestedPictureInPictureSize {
-  return CGSizeZero;
 }
 
 @end

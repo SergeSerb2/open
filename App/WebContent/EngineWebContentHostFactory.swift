@@ -1293,7 +1293,9 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       }
       return target.adoptUnownedRequest(request)
     case .newPictureInPicture:
-      return app.media.openDocumentPictureInPicture(opener: webContent, request: request, factory: self)
+      // Alloy-style pages only: a Chrome-style page's Document PiP opens through the engine's
+      // PiP delegate (MediaCoordinator, EM-7). Alloy pages get none.
+      return nil
     case .currentTab, .saveToDisk:
       return nil
     default:
