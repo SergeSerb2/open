@@ -1261,7 +1261,11 @@ open; finally cancels the sheet, restores exact saved preferences, and quits.
 `settings_view_boosts_library` runs View Boosts and checks that the real Library
 opens on Boosts with no Advanced error. It rejects the former unavailable-error
 assertion, closes the Library through the App's Cmd+W path, and restores
-`open.library.lastSection` with the other saved preferences.
+`open.library.lastSection` with the other saved preferences. The outer commandbar
+flow also resets and restores that key before the Settings flows run, so earlier
+History/Archive/Downloads checks do not change the suite’s saved Library section.
+Both cleanup paths attempt restoration and quit even if an earlier cleanup
+action fails.
 For a shared-screen hold, `OPEN_VERIFY_FOCUS_ATTEMPTS=1` makes the native
 Site Control editor harness stop after its first foreground interruption.
 Unset or `3` retains its existing three-attempt limit; other values fail.

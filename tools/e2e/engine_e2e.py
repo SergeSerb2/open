@@ -8234,7 +8234,7 @@ def commandbar_checks(factory, results, tmp, config):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = 'http://127.0.0.1:%d' % server.server_address[1]
     app = factory(urls=(origin + '/start',), fresh=True)
-    settings_keys = ('open.settings.lastPane', 'open.links.littleOpenHotkeyEnabled',
+    settings_keys = ('open.settings.lastPane', 'open.library.lastSection', 'open.links.littleOpenHotkeyEnabled',
                      'open.links.externalInLittleOpen', 'open.general.searchSuggestNoticeDismissed')
     saved_settings_defaults = {key: app.call('defaults', key=key, persistent=True) for key in settings_keys}
     for key in settings_keys: app.call('defaults', key=key, value=None)
@@ -8590,8 +8590,10 @@ def commandbar_checks(factory, results, tmp, config):
         results['settings_persist_relaunch'] = {'ok': app.call('settings-state')['external'] != original_external}
         app.call('settings-toggle', name='external')
     finally:
-        _restore_defaults(app, saved_settings_defaults)
-        app.quit(); server.shutdown(); server.server_close()
+        try:
+            _restore_defaults(app, saved_settings_defaults)
+        finally:
+            app.quit(); server.shutdown(); server.server_close()
 
     import settings_live
     settings_live.run(factory, results, tmp, wait_until, _restore_defaults)

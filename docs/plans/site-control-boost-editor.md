@@ -1487,22 +1487,25 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-07; PR pending): source `2b45f439`
-contains #249's sole `AppBoosts` owner and both required engine merges,
-#202 (`be8c8d52`) and #205 (`0c760e0b`). The factory binds the SCC provider
-through `app.stores.boosts`; no second store exists. The context reads
-`factory.isIncognito`. Matching private-window rows read the session's
+Step 3 verification (child A, 2026-11-08; PR pending): App source
+`6a550750` includes main `cdd147ca`, #249's sole `AppBoosts` owner, and both
+required engine merges, #202 (`be8c8d52`) and #205 (`0c760e0b`). The factory
+binds SCC through `app.stores.boosts`; no second store exists. The context
+reads `factory.isIncognito`. Matching private-window rows read the session
 parent Profile, while creation/edit/toggle/Customize actions stay disabled.
 
-The fresh pre-engine-update receipt on `7a90e70e` had 28 PASS, S2 BLOCKED,
-and S11/S12 FAIL. All S4 and S10 real-store cases passed: editor-saved CSS,
-matching row, live off/on without reload, Edit, boosted glyph, unmatched-host
-negative, and same-parent private disabled rows/action refusals. Omitting
-the binding in a compiled build rejected the saved-row/glyph predicate;
-the first S10 run also rejected the wrong private Profile lookup. These
-receipts are retained as superseded history. New-head acceptance requires
-fresh Debug/Release and real suites against the refreshed `47af3007` engine.
-All 45 literal automation keys are unique, including left/right once.
+Fresh Debug/Release and smoke checks pass on engine `47af3007`. The real
+`sitecontrol` suite records 28 PASS, S2 BLOCKED, S11/S12 known FAIL. All S4 and S10
+real-store cases pass: editor-saved CSS, matching row, live off/on without
+reload, Edit, boosted glyph, unmatched-host negative, and same-parent
+private disabled rows/action refusals. Omitting only the provider binding
+in a compiled build rejects the saved-row/glyph predicate. Source was
+restored byte for byte and rebuilt. The generated rebuild was archived;
+the saved positive Debug App bundle was restored and its original binary
+SHA-256 verified exactly. All 45 literal automation keys are unique,
+including left/right once. The Settings View Boosts row now checks the real
+Library Boosts section and rejects the old Advanced-error assertion.
+Final overlapping-suite counts, loads and the full gate stay in the PR.
 
 S11/S12 are **FAIL, known: material and element colors, follow-up S12-V
 (lead 22:20)**, accepted as known failures for this PR only, not parity.
