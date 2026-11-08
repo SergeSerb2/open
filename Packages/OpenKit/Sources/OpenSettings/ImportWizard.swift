@@ -65,6 +65,8 @@ import OpenImport
         return parts.isEmpty ? "Import finished.":"Imported "+parts.joined(separator:" and ")+"."
     }
     public func reportCount(_ category:String)->Int {outcome?.importedCount(category) ?? 0}
+    public func reportValue(_ category:String)->String {outcome?.failures[category] ?? reportCount(category).formatted()}
+    public func reportUndoFailure() {errorText="Open could not save your data. Try again."}
     public var reportSkipped:String {
         let result=outcome?.counts ?? [:]
         var parts:[String]=[]
@@ -135,7 +137,7 @@ public struct ImportWizard: View {
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.outcome?.failures[name] == nil ? model.reportCount(name).formatted() : (name == "Boosts" ? model.outcome?.failures[name] ?? "Could not be read" : "Could not be read")).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
+                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] == nil ? Color.primary : Color.red)}}
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
