@@ -2,12 +2,11 @@
 
 Run date: 2026-11-07. Machine: M5 Pro, arm64, macOS 27.2.
 Starting main: `df4767ad`. Branch: `s16/release-pipeline`.
-The final artifact uses source head `fd72a41c`, after merging `origin/main`
-`300a5875` in `87647e2f`. Full verification started at `87647e2f`. The only later
-code changes make a missing M1 smoke receipt fail release acceptance, reject
-source DLV drift outside the plugin helper, and select the required Section 16
-scheduler for internal heavy work. The final real release command and Bash 3.2
-syntax check cover those changes.
+The final artifact uses source head `e8ba3901`, after merging `origin/main`
+`ca56dff3` (#223 engine 0704 and #233 gate portability). The final full verifier
+runs on that merged source. Later changes in this branch only update this
+receipt and the release status text. Internal fetch/build commands select
+`OPEN_RELEASE_HEAVY_WRAPPER` with Section 16's mandatory two-token wrapper.
 All App builds use `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
 No engine tree, Keychain, certificate, notary profile, tag, upload or public
 hosting setting was changed. No unit tests or desktop input were used.
@@ -27,7 +26,7 @@ here. This is an explicit evidence gap, not a current confirmation of old facts.
 | C-4 | Confirmed: five helpers; embed script copies CEF and helper bundles and signs copied CEF code. | `tools/embed-cef.sh`; `project.yml` |
 | C-5 | Changed: app now has all seven §4.2 device/privacy entitlements, including photos-library; no CS exception. The five helper dictionaries still match §4.2. | `plutil -lint App/Open.entitlements Helper/Entitlements/*.entitlements`: all six OK |
 | C-6 | Partial: the recorded distribution README confirms required framework/data/snapshot and optional locales/SwiftShader. Shared-tree upstream entitlement files were not read. SwiftShader remains required by Open's release policy. | Recorded `README.txt`, REDISTRIBUTION; `tools/release.sh` bundle check |
-| C-7 | Historical stock-CEF 329/279 MB measurements were not repeated. Initial dev CEF binary was 460,839,664 bytes; the refreshed #222 main view is 460,886,288 bytes, so the old official-size budget cannot apply to this dev-only packaging exercise. Production's 320 MB hard gate stays active. | Recorded framework `stat`; current dry-run size rows below |
+| C-7 | Historical stock-CEF 329/279 MB measurements were not repeated. Initial dev CEF binary was 460,839,664 bytes; the #222 main view was 460,886,288 bytes, and the final #223 main view is 460,893,168 bytes, so the old official-size budget cannot apply to this dev-only packaging exercise. Production's 320 MB hard gate stays active. | Recorded framework `stat`; current dry-run size rows below |
 | C-8 | Release args confirmed: official, PGO 2, ThinLTO, codecs on, Widevine off. Dev args changed: `symbol_level=0`, `enable_widevine=true`; phase 0 / official false remain. Release args override Widevine off. | `Engine/fork/gn/dev.args.gn`, `release.args.gn`; `VERSIONS` |
 | C-9 | Not re-verified: this read-only main engine view has a distrib only. No official out directory or live PGO tree is available under this allowed root. The engine owner must establish the profile's current state. | `open-engine-s8-main/README.txt`; absence of official args/output in the view |
 | C-10 | Confirmed in source: release packaging still fails with `release packaging not wired yet: CEF's make_distrib expects out/Release_GN_arm64`. No engine-distrib command was run against the view. | `Engine/fork/scripts/engine-distrib:29` |
@@ -100,33 +99,40 @@ or acceptance.
 
 Attempt 6 completed packaging on `78617865`, then repeated all 12 phases as
 NO-OP. It predated the strict missing-M1-receipt gate and is not full acceptance.
-Attempt 7 packages the merged source `fd72a41c`. It produces the final app, DMG,
-checksum and signed file feed. All static artifact checks pass. It exits 1 only
-because the lead's M1 screen hold prevents the required supplemental smoke.
-The unchanged second run has 12 NO-OP phases and still exits 1. It does not turn
-pending smoke into a pass. No release app was launched by attempts 6 or 7.
+Attempts 7 and 8 also passed static packaging and stopped at the missing M1
+receipt. They are superseded by the final merged-source attempt below.
 
-Final DMG: 203,098,351 bytes, SHA-256
-`c162948c16da172749ffbfec1b44991f811a772e24129ce9086039c23e169a84`.
-App disk use: 548,470,784 bytes. The dev engine exceeds the official size budget;
-the production 320 MB hard gate stays active. The same DMG and checksum were
-transferred to the detached M1 worktree and passed `shasum -a 256 -c` there.
-No M1 app launch has run. The lead must forward **M1 clear** first.
+Attempt 9 packages `e8ba3901`, after the #223/#233 main merge and source DLV
+guard. It produces the final app, DMG, checksum and signed file feed. All static
+artifact checks pass. It exits 1 only because the lead's M1 screen hold prevents
+the required supplemental smoke. The unchanged second run has 12 NO-OP phases
+and still exits 1. Pending smoke does not become a pass. No release app was
+launched by attempts 6–9.
 
-Attempt 7 load averages: 11.98 / 16.05 / 21.36 → 147.63 / 55.79 / 35.27.
-No-op loads: 211.19 / 93.97 / 51.23 → 210.26 / 97.66 / 53.04.
-These are functional receipts,
-not timing acceptance. Logs: `dry-run-7-final-m5.log`, `dry-run-7-noop.log`.
+Final DMG: 202,582,754 bytes, SHA-256
+`65f6bd643a517267a861a2590e9c15d8989909e7778c332a6d423bf79f9cf287`.
+App disk use: 548,474,880 bytes. The dev engine exceeds the official size budget;
+the production 320 MB hard gate stays active. Manifest dev framework SHA-256:
+`c03a5109fc0d815770743a6c25a92d24bd1632eba6e658e00eb6e46314440c91`.
+An earlier DMG and checksum passed transfer verification on the M1. The final
+DMG has not been transferred or launched there. The lead must forward
+**M1 clear** before any supplemental smoke. The unused detached M1 worktree
+was removed during cleanup; no M1 app was launched.
+
+Attempt 9 load averages: 14.80 / 38.03 / 51.19 → 14.94 / 29.83 / 46.09.
+No-op loads: 14.94 / 29.83 / 46.09 → 14.94 / 29.83 / 46.09.
+These are functional receipts, not timing acceptance.
+Logs: `dry-run-9-final-m5.log`, `dry-run-9-noop.log`.
 
 | §9.4 row | Result | Evidence / limit |
 |---|---|---|
-| A-1 Engine provenance | mode-SKIP | Main dev distribution; manifest records root and framework hash. No official output exists in the permitted view. |
+| A-1 Engine provenance | mode-SKIP | Main #223 dev distribution; manifest records root and framework hash. No official output exists in the permitted view. |
 | A-2 Launch | BLOCKED (script FAIL) | M1 screen hold. No accepted launch of the final artifact's supplemental copy. |
 | A-3 Helpers / JIT | BLOCKED (script FAIL) | Required M1 renderer, GPU and JavaScript smoke has not run. |
 | A-4 Signature | PASS | Inside-out ad-hoc runtime signing; deep/strict verification; all six sealed entitlement dictionaries equal source. |
 | A-5 Gatekeeper | mode-SKIP | Ad-hoc, no notarization acceptance claimed. |
 | A-6 Staple | mode-SKIP | No ticket or credential used. |
-| A-7 Size | mode-SKIP | App 548,470,784 bytes; DMG 203,098,351 bytes. Dev engine is above the production hard limit. |
+| A-7 Size | mode-SKIP | App 548,474,880 bytes; DMG 202,582,754 bytes. Dev engine is above the production hard limit. |
 | A-8 Locales | PASS | Exact `en` set; required resources and arm64-only binaries present. |
 | A-9 Symbols | PASS | No dSYMs in the app. Official symbol archive remains open. |
 | A-10 Automation | PASS | No automation socket string or compile flag in the Release binary/build log. |
@@ -142,46 +148,51 @@ consumption is claimed.
 
 ## Full M5 verifier
 
-`heavy.sh tools/verify-all.sh --with-arc-data` completed: 24 PASS, 1 FAIL,
-0 SKIP. The one failure is command-bar timing row 150: CPU p95 9.97 ms against
-8 ms, at load 21.8 / 31.0 / 28.1. Its other 150 rows pass. No command-bar code
-changed in this branch. Full-run loads: 21.41 / 21.02 / 18.35 →
-12.48 / 16.54 / 21.72. Raw evidence is in the lead project's private
-`.re/s16/release-pipeline/verify-all-2/` folder.
-
-No quiet timing receipt exists. The lead stopped the queued wrapper (PID 85251)
-under the 17:27 ruling before any timing check started. Load later exceeded 200.
-The timing miss stays recorded with its load under TANDEM §3.4l; the lead says it
-is not a PR blocker. Future heavy calls use the mandatory Section 16 token
-wrapper. No targeted timing run may start at load1 > 20.
+The Section 16 wrapper ran `tools/verify-all.sh --with-arc-data` on
+`e8ba3901`: **25 PASS, 0 FAIL, 0 SKIP**, exit 0. Full-run loads were
+14.94 / 29.83 / 46.09 → 16.97 / 13.78 / 22.09. Command-bar rows pass
+151/151: CPU p95 2.85 ms (<8), completion overhead p95 +0.070 ms (≤0.3),
+at printed load 10.0 / 17.2 / 29.8. No threshold or baseline changed.
+Raw evidence: `.re/s16/release-pipeline/verify-all-3/` in the lead project.
 
 | Check | Result | Seconds, including lock waits |
 |---|---|---:|
-| build | PASS | 4 |
-| commands-demo | PASS | 7 |
+| build | PASS | 40 |
+| commands-demo | PASS | 5 |
 | roundtrip | PASS | 1 |
 | space-legacy | PASS | 2 |
-| space-editor | PASS | 398 |
+| space-editor | PASS | 241 |
 | space-pad-compare | PASS | 3 |
-| suggest-check | PASS | 35 |
+| suggest-check | PASS | 32 |
 | commands-dump | PASS | 0 |
-| route | PASS | 17 |
+| route | PASS | 16 |
 | favicons | PASS | 3 |
-| media-demo | PASS | 0 |
-| sleep-demo | PASS | 2 |
+| media-demo | PASS | 1 |
+| sleep-demo | PASS | 1 |
 | adblock-perf | PASS | 1 |
 | adblock-catalog | PASS | 0 |
 | profiles | PASS | 4 |
-| settings-preview | PASS | 88 |
-| sidebar-render | PASS | 117 |
-| sidebar-compare | PASS | 165 |
-| commandbar-render | FAIL | 44 |
-| features-render | PASS | 97 |
-| extensions-render | PASS | 9 |
-| sitecontrol-render | PASS | 340 |
-| boosts | PASS | 4 |
-| import-arc | PASS | 2 |
+| settings-preview | PASS | 82 |
+| sidebar-render | PASS | 111 |
+| sidebar-compare | PASS | 107 |
+| commandbar-render | PASS | 33 |
+| features-render | PASS | 89 |
+| extensions-render | PASS | 7 |
+| sitecontrol-render | PASS | 376 |
+| boosts | PASS | 3 |
+| import-arc | PASS | 3 |
 | verify-secrets-fixture | PASS | 8 |
+
+Earlier full run `verify-all-2` on `87647e2f` had 24 PASS and one timing FAIL:
+command-bar CPU p95 9.97 ms at printed load 21.8 / 31.0 / 28.1. Full-run loads
+were 21.41 / 21.02 / 18.35 → 12.48 / 16.54 / 21.72. That failed attempt stays
+recorded; the final merged run above passes the same strict rows.
+
+No quiet timing receipt exists. The lead stopped queued wrapper PID 85251 under
+the 17:27 ruling before any timing check started; later load exceeded 200.
+TANDEM §3.4l treats that miss under load as nonblocking. The final full gate
+passes without a dedicated timing rerun. Every later heavy call uses the Section
+16 token wrapper. No targeted timing run may start at load1 > 20.
 
 ## Preflight failure cases
 
@@ -223,6 +234,8 @@ script and private keys were deleted. Receipts: `preflight-break-intact.log`,
 | Bash 3.2 syntax | PASS | `/bin/bash` 3.2.57; `/bin/bash -n tools/release.sh` exits 0. |
 | Whitespace | PASS | `git diff --check` exits 0. |
 | Source entitlement plists | PASS | `plutil -lint App/Open.entitlements Helper/Entitlements/*.entitlements`: six OK. |
+| M5 launch refusal | PASS | Final merged `--dry-run --smoke-only` exits 1 at the M1-only guard; no launch. |
+| Source DLV drift | PASS | Four real temporary-input CLI cases refuse DLV in generic/GPU/renderer/alerts source before build or key access. |
 | U-7 verification command | PASS, local fixture | Exact guide command downloads the dry DMG, compares its approved checksum/length and verifies the enclosure with the throwaway public key. No production endpoint or update consumption claimed. |
 
 ## Review checklist
@@ -236,7 +249,7 @@ script and private keys were deleted. Receipts: `preflight-break-intact.log`,
 | Callback can close caller | N/A | No application callback code changed |
 | Double close/free | N/A | No application allocation/lifetime code changed |
 | Unique UI IDs | N/A | No UI IDs added |
-| Flush pending state | PASS | Smoke asks only its own PID to quit; reads saved sidebar state after clean process exit |
+| Flush pending state | BLOCKED for M1 proof | Code asks only its own PID to quit and checks saved sidebar state after clean exit; that runtime smoke awaits M1 clear |
 | Real keyboard paths | N/A | No key route or desktop input added |
 | Key ownership after merge | N/A | No key route changed |
 | Hidden command refusal | N/A | No command visibility changed |
@@ -244,7 +257,7 @@ script and private keys were deleted. Receipts: `preflight-break-intact.log`,
 | Pixel checks | N/A | No image comparison added |
 | Exact dialog identity | N/A | No dialog check added; no generic-window success claim |
 | Timing logic | N/A | No new performance acceptance row; functional polling has a fixed timeout |
-| Isolated data/ports | PASS | Each permitted M1 smoke uses a new data root and ephemeral CDP port; release lock excludes same-version writers |
+| Isolated data/ports | PASS (static) | Code uses a new data root and ephemeral CDP port; release lock excludes same-version writers. Concurrent real-App proof has not run |
 | No human/cleanup | BLOCKED for M1 proof | The earlier exact-artifact probe caused a crash dialog and was withdrawn. Final M5 failure exits clean up keys, mounts and the release lock. Guarded M1 temporary DLV launch/cleanup proof waits for M1 clear. No desktop input. |
 | Reduce Motion | N/A | No motion changed |
 | Interrupted animation | N/A | No animation changed |
