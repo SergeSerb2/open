@@ -12,7 +12,8 @@ final class AppStores {
   private var histories: [ProfileID: HistoryStore] = [:]
   private var currentProfile: ProfileID?
   private var currentSuggest: SuggestEngine?
-  lazy var adBlock = try? AdBlockStore(root: app.directories.root)
+  lazy var adBlock = try? AdBlockStore(root: app.directories.root,
+    bundledDefaultsDirectory: Bundle.main.resourceURL?.appendingPathComponent("AdBlock", isDirectory: true))
   lazy var favicons = try? FaviconStore(databaseURL: app.directories.root.appendingPathComponent("State/favicons.sqlite3"))
   lazy var sidebarFavicons = favicons.map { StoredFaviconCache(store: $0) }
   init(app: AppDelegate) { self.app = app }

@@ -153,6 +153,8 @@ struct ListDownloader: Sendable {
             configuration.connectionProxyDictionary = ["HTTPEnable": 1, "HTTPProxy": host, "HTTPPort": port,
                                                        "HTTPSEnable": 1, "HTTPSProxy": host, "HTTPSPort": port]
         }
+        // Seed repair supplies its pinned raw.githubusercontent.com URL as the
+        // source, so only that call allows the seed host. Runtime policy is unchanged.
         let allowedHosts = Set(redirectHosts.map { $0.lowercased() } + [url.host()?.lowercased() ?? ""])
         let delegate = BoundedTransfer(maximumBytes: policy.maximumSourceBytes, allowedHosts: allowedHosts, debugLoopbackHTTP: debugLoopbackHTTP)
         let queue = OperationQueue()

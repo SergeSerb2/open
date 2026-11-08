@@ -24,7 +24,7 @@ import OpenAdBlock
     public var lists: [BlockList] { store.catalog.lists.filter { query.isEmpty || $0.displayName.localizedCaseInsensitiveContains(query) || $0.id.localizedCaseInsensitiveContains(query) } }
     public var lastError: String? { _ = revision; return store.lastError(for: profileID) == nil ? nil : "The last list update failed. Your previous lists are still active." }
     public func setEnabled(_ on: Bool) {
-        do { try store.setEnabled(on); revision &+= 1; root.actions.setAdBlockEnabled(on, profileID: profileID); errorText = "" }
+        do { try store.setEnabled(on); revision &+= 1; refreshOtherBlocker(); root.actions.setAdBlockEnabled(on, profileID: profileID); errorText = "" }
         catch { errorText = "Could not save ad blocking. Try again when your data folder is available." }
     }
     public func setList(_ id: String, enabled: Bool) async {
@@ -72,10 +72,14 @@ import OpenAdBlock
         catch { errorText = plainError(error,fallback:"List choices could not be reset. Your previous lists are still active.") }
     }
     public func refresh() {
+        refreshOtherBlocker()
         let current=Set(root.model.profiles.map(\.id))
         for id in knownProfiles.subtracting(current) { do {try closeProfile(id)} catch {errorText="Ad block settings are updating. Try deleting this Profile after the update finishes."} }
         knownProfiles.formUnion(current);openedProfiles.formIntersection(current);openedProfiles.remove(profileID);revision &+= 1
         Task { [weak self] in await self?.openSelectedProfile() }
+    }
+    public func refreshOtherBlocker() {
+        hasOtherBlocker = store.isEnabled && root.actions.hasEnabledBlockerExtension(profileID: profileID)
     }
     private func plainError(_ error:any Error,fallback:String)->String {
         let description=String(describing:error)

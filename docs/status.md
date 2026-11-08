@@ -94,7 +94,7 @@ Row count by status (other areas retain their historical counts; §1.16 is refre
 | 1.11 Air Traffic Control | 3 | 0 | 2 | 1 | 0 |
 | 1.12 Boosts and Zap | 1 | 1 | 5 | 1 | 1 |
 | 1.13 Site Control Center | 0 | 6 | 3 | 0 | 0 |
-| 1.14 Ad blocking | 2 | 1 | 3 | 1 | 0 |
+| 1.14 Ad blocking | 3 | 1 | 2 | 1 | 0 |
 | 1.15 Import from Arc | 6 | 2 | 3 | 1 | 1 |
 | 1.16 Extensions | 11 | 0 | 1 | 0 | 2 |
 | 1.17 Engine and platform basics | 19 | 1 | 24 | 1 | 1 |
@@ -367,12 +367,12 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
-| 46-list catalog, upstream URLs, pins, ETag downloads, per-profile lists, global switch | FA AD-3, AD-4, AD-6 | adblock-fork (Swift slice) | `OpenAdBlock/*` | main (store) | verify-all `adblock-perf`, `adblock-catalog` | done (partial) | Spot-check: Step C creates `AdBlockStore` and attaches it to Settings (`App/Stores/AppStores.swift:15`, `AppSettingsActions.swift:21`). Blocking is still off. List pins are stale; refresh is Step 7 work (`docs/followups.md`). |
+| 46-list catalog, upstream URLs, pins, ETag downloads, per-profile lists, global switch | FA AD-3, AD-4, AD-6 | adblock-fork (Swift slice) | `OpenAdBlock/*` | main (store); s13/app-a (bundled snapshots) | verify-all `adblock-perf`, `adblock-catalog`; clean fetch/tamper/offline CLI; M1 AD1 bundled seed | done (partial) | Spot-check: Step C creates `AdBlockStore` and attaches it to Settings (`App/Stores/AppStores.swift:15`, `AppSettingsActions.swift:21`). Blocking is still off. Pins refreshed from official upstreams on 2026-11-07; App builds verify and embed EasyList/EasyPrivacy in Resources/AdBlock and pass that directory to the store. Verified cached snapshots support offline builds; invalid caches fail closed. |
 | Network blocking (adblock-rust in the fork) | FA AD-2, AD-5; `docs/adblock-design.md` | adblock-fork Steps 1–8 (plan revised in #105) | Step 1 on `main`: crate vendored (#97, `Engine/fork/patches/rust/0001-adblock-vendor.patch`); Steps 2–3 in PR #98, #100 | none | Real ad-tech URLs: 5.5 µs per check; in-tree 6.0 µs (#97) | in PR | The App blocks nothing today: "Ad blocking is not active in this build" (`AppSettingsActions.swift:112`). |
 | Cosmetic filtering and scriptlets | FA AD-5 | adblock-fork (cosmetic pull, #105) | — | none | none | planned | Steps 4–8 of the fork plan. |
 | Per-site exclusion | FA AD-7 | adblock-lists | `SiteRules.swift` | main (saved only) | `openkit adblock` | planned (partial) | Settings saves exclusions. No matcher reads them until blocking lands. |
 | Settings: lists by category, advanced, reset, debug info | FA AD-8 | settings §5.5 | `OpenSettings/AdBlockSettingsModel.swift` | main | `settings-preview` (loopback server) | done | Shown in the App (Step C). Debug info says the engine adapter is pending. |
-| Warning when an extension blocker also runs | FA AD-1 | settings (`hasOtherBlocker`) | `OpenSettings` | main (partial) | `settings-preview` | planned (partial) | P3 exposes the live per-Profile registry (#177); `AdBlockSettingsModel.hasOtherBlocker` still has no App assignment. |
+| Warning when an extension blocker also runs | FA AD-1 | settings (`hasOtherBlocker`) | `OpenAdBlock/AdBlockKnownBlockers.swift`, `OpenSettings` | s13/app-a (`AppSettingsActions`, `ExtensionPromptPresenter`) | `settings-preview`; e2e `extensions-ui` scope `adblock` AD1 rows | done | M1 `extensions-ui` scope `adblock`: 11/11 AD1 rows plus engine fingerprint and zero-process/window cleanup; positive warning check fails on the starting commit. Native blocking must be on and the Settings-selected Profile must have an enabled known blocker. Recomputed on Settings open, selected Profile/native switch changes and live registry notifications; copy and layout unchanged. |
 | Auto-disable an extension blocker on allow-listed sites (uBlock on YouTube) | FA AD-7 | none | none | none | none | unplanned | Arc's reason is unknown (FA §7.4 q6). |
 
 ### 1.15 Import from Arc

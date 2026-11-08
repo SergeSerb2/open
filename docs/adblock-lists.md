@@ -99,7 +99,9 @@ The engine must repeat verification at load to cover changes after Swift opens.
 
 The release seed pins live in
 [`list-pins.txt`](../Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt).
-The [official EasyList site](https://easylist.to/) supplies both defaults.
+Both defaults come from the official [easylist/easylist repository](https://github.com/easylist/easylist),
+using immutable `raw.githubusercontent.com` URLs at one pinned `gh-pages`
+commit. The three columns are local name, seed URL, and SHA-256.
 
 ```sh
 # From the repo root. Downloads only from official HTTPS upstreams.
@@ -109,19 +111,22 @@ tools/fetch-adblock-lists.sh --update-pins
 ```
 
 The script stages under ignored `Vendor/adblock/`. It verifies list headers and
-SHA-256 before replacement. List text is never committed. Mutable upstream URLs
-can change during development; an ordinary fetch must then fail its old pin.
-Only explicit `--update-pins` changes committed pins. This occurred during this
-implementation and confirmed that ordinary fetching does not silently repin.
-The app packaging step must copy the verified files into Resources/AdBlock.
-That app packaging and uBO resources remain deferred.
+SHA-256 before replacement. List text is never committed. Normal fetching uses
+exactly the pinned URLs and can reuse verified local files offline; it refuses
+a tampered cache. `--update-pins` resolves the current official `gh-pages`
+commit once, rewrites both URLs and hashes, and prints old → new values.
+This seed policy changed on 2026-11-07 because the live EasyList URL changes
+many times per day. App packaging copies verified files into Resources/AdBlock.
 
 Supply that bundle directory to `AdBlockStore` before opening a Profile. It
 verifies the fixed pins and seeds missing enabled defaults, without a network
 request. A damaged bundle fails its pin check. The real `adblock bundle --dir`
-command repairs a damaged staged default by an unconditional official download,
-then verifies the same fixed pin before replacing it. If upstream changed, repair
-fails safely until a reviewed pin update supplies a new seed snapshot.
+command repairs a damaged staged default by downloading its pinned seed URL,
+then verifies the same fixed pin before replacing it. Its result prints
+`seed_url` for each download. Seed fetches permit only their source host,
+`raw.githubusercontent.com`; they do not add that host to runtime redirect
+allow-lists. A wrong pin fails with expected and actual hashes and preserves
+the existing file.
 
 Runtime updates use live upstream revisions. They validate the header and save
 a new SHA-256 receipt, rather than requiring live revisions to equal the fixed

@@ -176,4 +176,5 @@ func printAdBlockResult(_ result: AdBlockUpdateResult) {
     print(String(format: "%@ status=%@ changed=%@ integrity=%@ bytes=%d downloaded_bytes=%d sha256=%@ etag=%@ duration_ms=%.2f attempts=%d",
         result.id, status, String(result.changed), integrity, result.bytes, result.downloadedBytes, result.sha256,
         result.etags.joined(separator: ","), result.duration * 1000, result.attempts))
+    if let url = result.seedURL { print("\(result.id) seed_url=\(url.absoluteString)") }
 }

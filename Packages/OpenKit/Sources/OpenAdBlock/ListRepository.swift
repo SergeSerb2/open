@@ -32,13 +32,15 @@ public struct AdBlockUpdateResult: Sendable {
     public let statuses: [Int]
     public let attempts: Int
     public let duration: TimeInterval
+    /// Present only for a downloaded release seed, never for runtime updates.
+    public var seedURL: URL? = nil
 }
 
 /// Owns list IO off the main actor. The store serializes operations for each Profile.
 actor ListRepository {
     let policy: AdBlockDownloadPolicy
     let downloader: ListDownloader
-    let pins: [String: String]
+    let pins: [String: AdBlockBundledPin]
     let bundle: URL?
     let ephemeral: Bool
 
@@ -131,7 +133,7 @@ actor ListRepository {
         guard size <= policy.maximumSourceBytes else { throw AdBlockError("\(id): bundled size limit exceeded") }
         let data = try Data(contentsOf: url)
         try checkedList(data, id: id, limit: policy.maximumSourceBytes)
-        guard digest(data) == pins[filename] else { throw AdBlockError("\(id): bundled SHA-256 pin mismatch; run adblock bundle to repair") }
+        guard digest(data) == pins[filename]?.sha256 else { throw AdBlockError("\(id): bundled SHA-256 pin mismatch; run adblock bundle to repair") }
         return data
     }
 
@@ -301,14 +303,17 @@ actor ListRepository {
                     continue
                 } catch { repaired = true }
             }
-            let (response, attempts) = try await downloader.fetch(url: list.urls[0], etag: nil, modified: nil, redirectHosts: list.redirectHosts ?? [])
+            guard let pin = pins[list.id.lowercased() + ".txt"] else { throw AdBlockError("\(list.id): missing bundle pin") }
+            // The downloader allows the source host itself. No catalog redirect hosts
+            // apply to immutable seeds; runtime updateBatch still uses list.urls.
+            let (response, attempts) = try await downloader.fetch(url: pin.seedURL, etag: nil, modified: nil)
             try checkedList(response.data, id: list.id, limit: policy.maximumSourceBytes)
             let hash = digest(response.data)
-            guard hash == pins[list.id.lowercased() + ".txt"] else { throw AdBlockError("\(list.id): downloaded bundle SHA-256 pin mismatch") }
+            guard hash == pin.sha256 else { throw AdBlockError("\(list.id): downloaded bundle SHA-256 pin mismatch expected=\(pin.sha256) actual=\(hash)") }
             try atomicWrite(response.data, to: destination.appendingPathComponent(list.id.lowercased() + ".txt"))
             results.append(AdBlockUpdateResult(id: list.id, changed: true, repaired: repaired, bytes: response.data.count,
                 downloadedBytes: response.data.count, sha256: hash, etags: [response.etag ?? "-"], statuses: [response.status],
-                attempts: attempts, duration: Date().timeIntervalSince(start)))
+                attempts: attempts, duration: Date().timeIntervalSince(start), seedURL: pin.seedURL))
         }
         return results
     }
