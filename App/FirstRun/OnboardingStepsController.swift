@@ -71,7 +71,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   required init?(coder: NSCoder) { nil }
   isolated deinit { tasks.forEach { $0.cancel() }; iconTasks.forEach { $0.cancel() } }
   override func loadView() {
-    let root = OnboardingSurface(); root.onEscape = { [weak self] in self?.back() }
+    let root = OnboardingSurface()
+    for surface in [root, panel, controls, footer] { surface.onEscape = { [weak self] in self?.back() } }
     view = root; root.wantsLayer = true
     root.addSubview(panel); root.addSubview(preview); preview.layer?.masksToBounds = true
     for child in [titleLabel, descriptionLabel, controls, footer] { panel.addSubview(child) }
