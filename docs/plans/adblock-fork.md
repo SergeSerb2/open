@@ -4830,8 +4830,11 @@ binary, text/DAT at both caps. These are working measurements without the
 quiet lock, with overlapping load1 bands (before 22.96–33.73, after
 22.96–35.66). Every one of the 40 full 20,311-result dumps is byte-identical
 to the earlier baseline. Each after-run observes exactly one production
-purge. A 60-second no-repeat observation is still running; G-4/page and
-full N reruns wait for explicit screen clearance.
+purge. Both text and DAT then observed 60 seconds with first purge count 1, last
+count 1 and zero extra runs. Whole-browser CPU during those windows was
+69.212/70.625 ms (about 0.115/0.118% of one core); this is not a claim of
+zero total Chromium CPU. No further purge task ran. G-4/page and full N
+reruns wait for explicit screen clearance.
 
 | Working gate, median of 5 | 16 KiB text / DAT | 8 KiB text / DAT |
 |---|---:|---:|
@@ -4859,4 +4862,13 @@ deserialize/replace/free 135.346, compile 41.442 and build reclaim
 and reclaim 0.882 ms. Raw receipts: `.re/s13/e1/idle-before-summary.json`,
 `idle-after-summary.json`, `idle-before-pa-phases.json`,
 `idle-after-pa-phases.json`, `idle-verdict-identity.json`,
-`idle-production-proof.json` and `idle-paired-headless.log`.
+`idle-production-proof.json`, `idle-sixty-diag-runs.json`,
+`idle-sixty-proof.log` and `idle-paired-headless.log`.
+
+
+The document-ID metadata from `22a692be` also builds in the owned root
+(`count-identity-build.log`, source `b38067cb`): 32 s build, engine-status
+8 PASS, 0 FAIL, 0 WARN. Runtime document attribution, the real pagehide
+stimulus, its allowed and wrong-document negative controls, G-4 after idle,
+full N, CDP URL edges and quiet G-5 remain pending screen clearance. Main
+integration and distribution remain on the Section 13 lead's hold.
