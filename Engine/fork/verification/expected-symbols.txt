@@ -31,6 +31,8 @@ _cef_media_controller_get_for_browser
 
 # P3 live per-profile extension manager (seen with nm in the built distribution).
 _cef_extension_manager_create
+# 0704 (03xx extensions area): completion API; callback wrappers are generated.
+_cef_install_local_crx
 # E12 omnibox session bridge (generated C API).
 _cef_open_omnibox_create
 # Section 10 profiles (generated from cef_open_profile.h).
