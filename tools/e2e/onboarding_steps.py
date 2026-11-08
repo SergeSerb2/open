@@ -203,7 +203,7 @@ def run(factory, results, tmp, h):
         # Every native step's controls have a role and a label. The shared SwiftUI
         # host retains its existing AX labels; native controls are dumped here.
         controls = [c for step_controls in ax_steps.values() for c in step_controls]
-        results['steps_accessibility_labels'] = dict(ok=len(ax_steps)==7 and all(c['label'] for c in controls) and any(c['label']=='Get Started' for c in controls), controls=ax_steps, load=os.getloadavg())
+        results['steps_accessibility_labels'] = dict(ok=len(ax_steps)==7 and all(c['label'] and c['role']!='AXUnknown' for c in controls) and any(c['label']=='Get Started' for c in controls), controls=ax_steps, load=os.getloadavg())
         (evidence/'negative-proofs.json').write_text(json.dumps(negatives, indent=2))
     finally:
         if app and not app.closed: app.quit()

@@ -150,6 +150,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     if step == .favorites {
       for (index, site) in Self.sites.enumerated() {
         let tile = OnboardingFavoriteButton(site.name, primary: false, reduceMotion: reduceMotion) { [weak self] in self?.toggleFavorite(index) }
+        tile.setAccessibilityRole(.checkBox)
         tile.siteImage = siteImages[index]; tile.selected = selectedFavorites.contains(index)
         tile.frame = NSRect(x: (index%4)*100, y: (index/4)*88, width: 88, height: 76)
         controls.addSubview(tile); favoriteButtons.append(tile)
@@ -406,11 +407,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   init(_ title: String, primary: Bool, reduceMotion: Bool, action: @escaping @MainActor () -> Void) {
     prominent = primary; self.reduceMotion = reduceMotion; press = action
     super.init(frame: .zero); self.title = title; isBordered = false; target = self; self.action = #selector(invoke)
-    font = .systemFont(ofSize: 15, weight: primary ? .semibold:.regular); wantsLayer = true; setAccessibilityLabel(title)
+    setButtonType(.momentaryPushIn)
+    font = .systemFont(ofSize: 15, weight: primary ? .semibold:.regular); wantsLayer = true
+    setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(title)
   }
   required init?(coder: NSCoder) { nil }
   override var acceptsFirstResponder: Bool { true }
   @objc private func invoke() { guard isEnabled else { return }; press() }
+  override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; invoke(); return true }
   override func updateTrackingAreas() { super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea); addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)) }
   override func mouseEntered(with event: NSEvent) { hovered = true; animateScale(1.02) }
   override func mouseExited(with event: NSEvent) { hovered = false; animateScale(1) }
