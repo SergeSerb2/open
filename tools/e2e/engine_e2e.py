@@ -550,8 +550,8 @@ def extension_checks(app, style, results):
                                   "darkreader": dr}
     results["content_scripts"]["screenshot"] = shot(app, "%s-content-script-darkreader.png" % style)
 
-    # declarativeNetRequest (uBlock Origin Lite). Control: a profile with no
-    # extensions must load the same URLs.
+    # declarativeNetRequest (uBlock Origin Lite). Control: the features run
+    # disables native blocking and loads the same URLs without extensions.
     probe = ('(async () => { const out = {}; for (const u of ["https://securepubads.g.doubleclick.net/tag/js/gpt.js",'
              ' "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]) { try { await fetch(u, {mode: "no-cors"});'
              ' out[u] = "loaded"; } catch (e) { out[u] = "blocked"; } } return out; })()')
