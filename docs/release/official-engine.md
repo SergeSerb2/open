@@ -327,9 +327,7 @@ Proposed source change, against the inspected CEF 8078 file:
 diff --git a/cef/tools/make_distrib.py b/cef/tools/make_distrib.py
 --- a/cef/tools/make_distrib.py
 +++ b/cef/tools/make_distrib.py
-@@ -896,6 +896,8 @@
-   archive_dirs = []
- 
+@@ -898,4 +898,6 @@
    platform_arch, binary_arch, build_dir_suffix = get_architecture(options)
 +  build_dir_suffix = os.environ.get('OPEN_CEF_BUILD_DIR_SUFFIX',
 +                                   build_dir_suffix)
