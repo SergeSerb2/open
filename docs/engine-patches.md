@@ -526,7 +526,7 @@ the PR. This transport adds no App UI.
 
 ## P8. Native ad-block engine
 
-Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a URLLoaderFactory proxy, cosmetic delivery over Mojo). Step 4 is built on `s13/step4-engine`; final gates and distribution are pending. Until the App adapter lands, `OEBrowserContext.requestFilter` is the stepping stone that plan names (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
+Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a URLLoaderFactory proxy, cosmetic delivery over Mojo). Step 4 is built on `s13/step4-engine`; its main `d26300e6` dev distribution and Debug App build pass. Real App and final browser gates remain pending the cleared-screen rerun. Native blocking uses the production CEF/OpenEngine ad-block API. The existing `OEBrowserContext.requestFilter` remains a separate API (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
 
 ### Step 4 implementation (2026-11-07)
 
@@ -550,8 +550,7 @@ Working same-binary idle measurements meet lead ruling 4a: 16 KiB text/DAT
 purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
 135.291/131.750 µs and zero added regex compiles. See
 `.re/s13/e1/idle-resume-proof.json` and `idle-resume-verdict-identity.json`.
-Final quiet/page gates, document-count proof and distribution remain pending.
-Only lead rulings 2a and 4a replace the original budgets.
+The later main `d26300e6` integration passes 20 native processes and 40 baseline-identical initial/resumed corpus dumps. Its 16 KiB text/DAT physical deltas are 55.157/52.110 MiB steady and 57.094/54.188 MiB after the corpus plus idle purge. G-2 CPU, G-6 and ruling 4a pass. Final page/count and App gates remain pending the cleared-screen rerun. The dev distribution is recorded; the Debug App builds with matching normalized engine code. Only lead rulings 2a and 4a replace the original budgets.
 
 ### Control API (Section 13, 2026-11-07)
 
@@ -567,15 +566,14 @@ can be shared with its parent.
 The Step 7 revision treats verified zero-list generations, including a
 resources-only manifest, as successful no-engine loads. It verifies inputs,
 skips registry/DAT/build work, drops the matcher engine and reclaims its
-freed pages on the build runner. Native/App revalidation is pending.
+freed pages on the build runner. Native zero-file, resources-only and official pinned-input API flows each pass 26 checks; App request acceptance remains pending.
 
 `OEAdBlock.h` exposes main-thread categories on OEBrowserContext/OEWebContent.
 Pre-init values apply through a weak ready callback; closed contexts return
 defaults. The status snapshot has 11 scalar keys and fixed error summaries,
 with no paths or page URLs. The integrated real-CEF API and lifetime flows pass 21 and 14 rows.
 The complete series builds with 8 PASS/0 FAIL/0 WARN in built-artifact
-status. App integration, final page/count receipts and distribution remain
-pending in E3.
+status. The dev distribution has SHA-256 `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`, based on main `d26300e6`. The Debug App builds and its normalized framework code matches. App acceptance and final merged-build page/count receipts remain pending the cleared-screen rerun in E3.
 The new symbols are listed in `verification/expected-symbols.txt`.
 
 ### Security review (Step 1, 2026-10-26)

@@ -4518,12 +4518,22 @@ Other runtime receipts below precede Section 15's merge until their
 merged-build reruns are recorded. The root's clone hold ended at 14:00;
 the M5 screen hold remains active. Headless corpus/footprint/G-2/G-6 passed.
 The same-context explicit-unload control for zero-list memory passed
-offscreen. N/COUNT,
-distribution and App acceptance follow screen clearance.
+offscreen. The dev distribution and Debug App build also passed offscreen;
+the App's normalized engine code matches the recorded framework. Its bundle
+contains the 47 pinned redirect resources. Browser N/COUNT, real App
+acceptance, suites and the full gate follow M5 screen clearance.
 Before distribution and again before the done report,
 fetch main and check `Engine/fork` changes since the last merged main.
 Any new engine change requires merge, rebuild and engine reproof first.
-The distribution receipt must identify its main commit and framework SHA.
+The distribution receipt identifies main `d26300e6` and framework SHA-256
+`8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
+Distribution took 73.991 s at endpoint loads 13.48/15.48/18.08 ->
+13.86/15.23/17.78. The Debug App build took 108.305 s at
+13.59/15.12/17.71 -> 12.66/14.95/17.37. The existing no-window
+CEF command also passes 47 load/matcher/safety checks, including decoded
+limits, trailing-data refusal and bounded fuzz input. These native checks
+do not replace browser N rows or document COUNT witnesses. The current
+browser driver creates windows for every N/COUNT case.
 
 **Request path and lifetime.** Open's outermost factory proxy checks
 subresources and redirects on one matcher sequence. Main documents pass
@@ -4581,7 +4591,7 @@ precise causal CPU delta. Raw control receipts remain in `.re/s13/e1/`.
 **Integrated headless proof.** The final main `d26300e6` build passed five
 runs per cap/input, each followed by another full corpus. Its framework
 SHA-256 is `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`;
-this is a built artifact, not a recorded distribution. All 20 native
+the recorded dev distribution has the same bytes. All 20 native
 processes exited cleanly. The 40 dumps each have 20,311 rows and match
 the pre-integration baseline byte for byte.
 SHA-256: 16 KiB `10c74cb476adccafc4f750bbc2ae6c1a85363b9945a6fe1470507e9dc845fe02`;
@@ -4658,7 +4668,7 @@ delta and does not isolate engine retention. Endpoint load1 is
 22.07 -> 21.55. Evidence:
 `.re/s13/e3/s15-empty-resources-warm-control-evidence.json` and
 `s15-zero-list-official-r2.log`. App request proofs remain pending
-screen clearance and the new distribution.
+screen clearance; the distribution and Debug App build are ready.
 Historical receipts: `.re/s13/e3/empty-generation-before.log`,
 `empty-generation-after.log` and `empty-corpus-identity.json`; Step 7
 reproduction: `empty-resources-before.log`.
