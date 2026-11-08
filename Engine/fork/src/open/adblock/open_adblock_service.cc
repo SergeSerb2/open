@@ -502,6 +502,7 @@ void OpenAdBlockService::Shutdown() {
   if (!g_histogram_printed) {
     g_histogram_printed = true;
     VLOG(1) << "OpenAdBlock: " << AdBlockLatencyHistogramText();
+    VLOG(1) << "OpenAdBlock: " << AdBlockProxyProfileText();
   }
 }
 

@@ -220,6 +220,9 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
   context.matcher = service->matcher();
   context.type = type;
   context.initiator = request_initiator;
+  if (!request_initiator.opaque()) {
+    context.initiator_url = request_initiator.GetURL();
+  }
   context.top_host = std::move(top_host);
   context.subframe_navigation = subframe_navigation;
   if (frame) {

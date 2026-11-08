@@ -20,6 +20,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/data_url.h"
 #include "net/base/net_errors.h"
@@ -74,11 +75,42 @@ std::atomic<uint64_t>& BusyCpuNanoseconds() {
   return nanoseconds;
 }
 
+enum class CpuPart { kRequest, kCallback, kRedirect, kSource, kCheck, kCount };
+std::array<std::atomic<uint64_t>, static_cast<size_t>(CpuPart::kCount)>&
+CpuParts() {
+  static std::array<std::atomic<uint64_t>,
+                    static_cast<size_t>(CpuPart::kCount)> parts{};
+  return parts;
+}
+
+class CpuPartScope {
+ public:
+  explicit CpuPartScope(CpuPart part) : part_(part) {
+#if !defined(OFFICIAL_BUILD)
+    start_ = base::ThreadTicks::Now();
+#endif
+  }
+  ~CpuPartScope() {
+#if !defined(OFFICIAL_BUILD)
+    CpuParts()[static_cast<size_t>(part_)].fetch_add(
+        (base::ThreadTicks::Now() - start_).InNanoseconds(),
+        std::memory_order_relaxed);
+#endif
+  }
+
+ private:
+  [[maybe_unused]] const CpuPart part_;
+#if !defined(OFFICIAL_BUILD)
+  base::ThreadTicks start_;
+#endif
+};
+
 // Adds its own lifetime to the busy counters. Safe in methods that destroy
 // their object: it touches only the stack.
 class BusyScope {
  public:
-  BusyScope() : start_(base::TimeTicks::Now()) {
+  explicit BusyScope(CpuPart part = CpuPart::kCallback)
+      : start_(base::TimeTicks::Now()), part_(part) {
 #if !defined(OFFICIAL_BUILD)
     start_cpu_ = base::ThreadTicks::Now();
 #endif
@@ -90,15 +122,17 @@ class BusyScope {
         static_cast<uint64_t>((base::TimeTicks::Now() - start_).InNanoseconds()),
         std::memory_order_relaxed);
 #if !defined(OFFICIAL_BUILD)
-    BusyCpuNanoseconds().fetch_add(
-        static_cast<uint64_t>(
-            (base::ThreadTicks::Now() - start_cpu_).InNanoseconds()),
-        std::memory_order_relaxed);
+    const uint64_t cpu_ns = static_cast<uint64_t>(
+        (base::ThreadTicks::Now() - start_cpu_).InNanoseconds());
+    BusyCpuNanoseconds().fetch_add(cpu_ns, std::memory_order_relaxed);
+    CpuParts()[static_cast<size_t>(part_)].fetch_add(
+        cpu_ns, std::memory_order_relaxed);
 #endif
   }
 
  private:
   const base::TimeTicks start_;
+  [[maybe_unused]] const CpuPart part_;
 #if !defined(OFFICIAL_BUILD)
   base::ThreadTicks start_cpu_;
 #endif
@@ -149,13 +183,18 @@ OpenRequestType RequestTypeOf(const network::ResourceRequest& request) {
 
 // The party source: the request's initiator when it has a usable one, else
 // the factory's, else the URL itself (first party by construction).
-GURL SourceOf(const network::ResourceRequest& request,
-              const AdBlockFactoryContext& context) {
+const GURL& SourceOf(const network::ResourceRequest& request,
+                     const AdBlockFactoryContext& context,
+                     GURL& other_initiator_url) {
   if (request.request_initiator && !request.request_initiator->opaque()) {
-    return request.request_initiator->GetURL();
+    if (*request.request_initiator == context.initiator) {
+      return context.initiator_url;
+    }
+    other_initiator_url = request.request_initiator->GetURL();
+    return other_initiator_url;
   }
   if (!context.initiator.opaque()) {
-    return context.initiator.GetURL();
+    return context.initiator_url;
   }
   return request.url;
 }
@@ -281,6 +320,17 @@ std::string AdBlockLatencyHistogramText() {
       static_cast<long long>(max_bucket), buckets.c_str());
 }
 
+std::string AdBlockProxyProfileText() {
+  std::string text = "proxy CPU (cumulative us; source/check subset request):";
+  constexpr std::array<const char*, 5> names{
+      "request", "callback", "redirect", "source", "check"};
+  for (size_t i = 0; i < names.size(); ++i) {
+    text += " " + std::string(names[i]) + "=" + std::to_string(
+        CpuParts()[i].load(std::memory_order_relaxed) / 1000);
+  }
+  return text;
+}
+
 AdBlockFactoryContext::AdBlockFactoryContext() = default;
 AdBlockFactoryContext::AdBlockFactoryContext(AdBlockFactoryContext&&) = default;
 AdBlockFactoryContext& AdBlockFactoryContext::operator=(
@@ -297,7 +347,7 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
       int32_t request_id,
       uint32_t options,
-      const network::ResourceRequest& request,
+      bool has_upload,
       mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       const net::MutableNetworkTrafficAnnotationTag& annotation,
       OpenRequestType type,
@@ -308,7 +358,7 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
         client_(std::move(client)),
         request_id_(request_id),
         options_(options),
-        request_(request),
+        has_upload_(has_upload),
         annotation_(annotation),
         type_(type),
         source_(std::move(source)),
@@ -324,12 +374,12 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
   ~OpenAdBlockURLLoader() override = default;
 
   // §7.4 rule 5: start the request on the target now.
-  void StartTarget() {
+  void StartTarget(const network::ResourceRequest& request) {
     target_client_receiver_.reset();
     target_loader_.reset();
     factory_->target()->CreateLoaderAndStart(
         target_loader_.BindNewPipeAndPassReceiver(), request_id_, options_,
-        request_, target_client_receiver_.BindNewPipeAndPassRemote(),
+        request, target_client_receiver_.BindNewPipeAndPassRemote(),
         annotation_);
     target_client_receiver_.set_disconnect_handler(base::BindOnce(
         &OpenAdBlockURLLoader::OnTargetDisconnect, base::Unretained(this)));
@@ -338,15 +388,19 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
   // §7.4 rule 4: a synthetic internal redirect to |new_url| (same origin,
   // GET or HEAD), as WebRequest makes one. The client's FollowRedirect
   // starts the request there.
-  void StartWithRewrite(const GURL& new_url) {
+  void StartWithRewrite(const network::ResourceRequest& request,
+                         const GURL& new_url) {
     rewrite_pending_ = true;
+    // Only a synthetic rewrite needs a mutable copy after this call.
+    // Normal allowed requests are serialized directly from the input.
+    rewrite_request_ = request;
     const net::RedirectInfo info = net::RedirectInfo::ComputeRedirectInfo(
-        request_.method, request_.url, request_.site_for_cookies,
-        request_.update_first_party_url_on_redirect
+        request.method, request.url, request.site_for_cookies,
+        request.update_first_party_url_on_redirect
             ? net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT
             : net::RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL,
-        request_.referrer_policy, request_.referrer.spec(),
-        request_.request_initiator, net::HTTP_TEMPORARY_REDIRECT, new_url,
+        request.referrer_policy, request.referrer.spec(),
+        request.request_initiator, net::HTTP_TEMPORARY_REDIRECT, new_url,
         /*referrer_policy_header=*/std::nullopt,
         /*insecure_scheme_was_upgraded=*/false, /*copy_fragment=*/false,
         /*is_signed_exchange_fallback_redirect=*/false);
@@ -365,20 +419,22 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
   void FollowRedirect(
       network::HttpRequestHeadersUpdateParams headers_update_params,
       const std::optional<GURL>& new_url) override {
-    BusyScope busy;
+    BusyScope busy(CpuPart::kRedirect);
     if (rewrite_pending_) {
       rewrite_pending_ = false;
       // The proxy's own redirect: its URL, never one the client names (a
       // subresource client passes none).
-      request_.url = rewrite_url_;
+      network::ResourceRequest& request = *rewrite_request_;
+      request.url = rewrite_url_;
       for (const std::string& name : headers_update_params.removed_headers) {
-        request_.headers.RemoveHeader(name);
-        request_.cors_exempt_headers.RemoveHeader(name);
+        request.headers.RemoveHeader(name);
+        request.cors_exempt_headers.RemoveHeader(name);
       }
-      request_.headers.MergeFrom(headers_update_params.modified_headers);
-      request_.cors_exempt_headers.MergeFrom(
+      request.headers.MergeFrom(headers_update_params.modified_headers);
+      request.cors_exempt_headers.MergeFrom(
           headers_update_params.modified_cors_exempt_headers);
-      StartTarget();
+      StartTarget(request);
+      rewrite_request_.reset();
       return;
     }
     if (target_loader_) {
@@ -412,10 +468,22 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
     }
     client_->OnReceiveResponse(std::move(head), std::move(body),
                                std::move(cached_metadata));
+    if (!has_upload_) {
+      // Redirects are checked until the final response, and list CSP is
+      // applied above. Nothing else needs interception now. Fuse both
+      // endpoint pairs so completion, transfer and priority callbacks go
+      // directly between the original client and the target.
+      //
+      // Uploads retain the proxy: an OnUploadProgress response callback
+      // can still be alive, and Receiver::Unbind forbids that case.
+      mojo::FusePipes(target_client_receiver_.Unbind(), client_.Unbind());
+      mojo::FusePipes(receiver_.Unbind(), target_loader_.Unbind());
+      Finish();
+    }
   }
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          network::mojom::URLResponseHeadPtr head) override {
-    BusyScope busy;
+    BusyScope busy(CpuPart::kRedirect);
     // §7.5: check the new URL before the client sees it. Covers server
     // redirects and an inner extension proxy's redirects (§7.9).
     const AdBlockFactoryContext& context = factory_->context();
@@ -474,7 +542,8 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
   mojo::Receiver<network::mojom::URLLoaderClient> target_client_receiver_{this};
   const int32_t request_id_;
   const uint32_t options_;
-  network::ResourceRequest request_;
+  const bool has_upload_;
+  std::optional<network::ResourceRequest> rewrite_request_;
   const net::MutableNetworkTrafficAnnotationTag annotation_;
   const OpenRequestType type_;
   const GURL source_;
@@ -520,7 +589,7 @@ void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& annotation) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BusyScope busy;
+  BusyScope busy(CpuPart::kRequest);
   const base::TimeTicks arrival = base::TimeTicks::Now();
   auto pass_through = [&] {
     target_->CreateLoaderAndStart(std::move(receiver), request_id, options,
@@ -539,15 +608,24 @@ void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
     return;
   }
   const OpenRequestType type = RequestTypeOf(request);
-  const GURL source = SourceOf(request, context_);
-  const open_adblock::OpenBlockerResult result = context_.matcher->Check(
-      request.url, source, type, kOpenAdBlockMatchCapBytes);
+  GURL other_initiator_url;
+  const GURL* source;
+  {
+    CpuPartScope cpu(CpuPart::kSource);
+    source = &SourceOf(request, context_, other_initiator_url);
+  }
+  open_adblock::OpenBlockerResult result;
+  {
+    CpuPartScope cpu(CpuPart::kCheck);
+    result = context_.matcher->Check(request.url, *source, type,
+                                      kOpenAdBlockMatchCapBytes);
+  }
   const bool navigation = context_.type == FactoryType::kNavigation;
 
   if (result.matched) {
     // §7.4 rule 3: a stub response for a $redirect match, outside
     // navigations and CORS-mode requests.
-    const bool same_origin = url::IsSameOriginWith(request.url, source);
+    const bool same_origin = url::IsSameOriginWith(request.url, *source);
     if (result.has_redirect && !result.redirect_data_url.empty() &&
         !navigation &&
         (request.mode == network::mojom::RequestMode::kNoCors || same_origin) &&
@@ -568,8 +646,8 @@ void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
   }
 
   auto loader = std::make_unique<OpenAdBlockURLLoader>(
-      this, std::move(receiver), request_id, options, request,
-      std::move(client), annotation, type, source,
+      this, std::move(receiver), request_id, options, !!request.request_body,
+      std::move(client), annotation, type, *source,
       context_.subframe_navigation ? ListCspOf(result) : std::string());
   OpenAdBlockURLLoader* raw = loader.get();
   loaders_.insert(std::move(loader));
@@ -581,9 +659,9 @@ void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
       (request.method == "GET" || request.method == "HEAD") &&
       url::IsSameOriginWith(rewritten, request.url) &&
       rewritten != request.url) {
-    raw->StartWithRewrite(rewritten);
+    raw->StartWithRewrite(request, rewritten);
   } else {
-    raw->StartTarget();
+    raw->StartTarget(request);
   }
   RecordAdBlockRequestLatency(base::TimeTicks::Now() - arrival);
 }

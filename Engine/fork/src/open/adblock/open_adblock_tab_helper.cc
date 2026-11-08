@@ -95,6 +95,8 @@ void OpenAdBlockTabHelper::MaybeLogSmoke() const {
           total_count(), std::string(url.host()).c_str(),
           static_cast<unsigned long long>(AdBlockMatcherBusyMicroseconds()),
           static_cast<unsigned long long>(AdBlockMatcherBusyCpuMicroseconds()));
+  fprintf(stderr, "OpenAdBlockSmoke: %s\n",
+          AdBlockProxyProfileText().c_str());
 #endif
 }
 

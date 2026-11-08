@@ -25,6 +25,7 @@
 #include "open/adblock/open_adblock_types.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/origin.h"
+#include "url/gurl.h"
 
 namespace open_engine {
 
@@ -42,6 +43,9 @@ struct AdBlockFactoryContext {
   content::ContentBrowserClient::URLLoaderFactoryType type =
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource;
   url::Origin initiator;
+  // Parsed once per factory, rather than rebuilding the same source URL
+  // for every subresource. Requests with another initiator still use it.
+  GURL initiator_url;
   // The top frame's host (§7.2's top site). The full host, not only its
   // registrable domain, so an exclusion of a subdomain matches (§6.7).
   std::string top_host;
@@ -64,6 +68,8 @@ std::string AdBlockLatencyHistogramText();
 uint64_t AdBlockMatcherBusyMicroseconds();
 // The same as thread CPU time; 0 in official builds.
 uint64_t AdBlockMatcherBusyCpuMicroseconds();
+// Non-official in-process CPU breakdown; source/check are request subsets.
+std::string AdBlockProxyProfileText();
 
 // The proxy of one URLLoaderFactory (§7.4, §7.5). Lives on the matcher
 // sequence, owns its loaders, and deletes itself when its receivers are gone

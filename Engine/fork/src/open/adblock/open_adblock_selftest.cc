@@ -1087,7 +1087,10 @@ uint64_t MemorySnapshot(const char* phase) {
                       /*populate_discardable_bytes=*/true, &dumper);
       const auto& stats = dumper.stats();
       Line(std::string("memory phase=") + phase + " partition=" +
-           std::to_string(index) + " allocated=" +
+           std::to_string(index) + " root=" +
+           (root == PartitionAllocMalloc::Allocator(index) ? "current" :
+                                                            "original") +
+           " allocated=" +
            std::to_string(stats.total_allocated_bytes) + " active=" +
            std::to_string(stats.total_active_bytes) + " resident=" +
            std::to_string(stats.total_resident_bytes) + " committed=" +
