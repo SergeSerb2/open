@@ -6,6 +6,14 @@ import OpenSettings
 @MainActor
 enum MainMenu {
   private static var initialMenuDelegateKey: UInt8 = 0
+  /// Functional control for first-frame shortcut comparisons, never a user option.
+  static var usesFullMenuControl: Bool {
+    #if OPEN_AUTOMATION
+    ProcessInfo.processInfo.environment["OPEN_SPEED_FULL_MENU_CONTROL"] == "1"
+    #else
+    false
+    #endif
+  }
   static func build(factoryOverride: EngineWebContentHostFactory? = nil) -> NSMenu {
     guard let app = NSApp.delegate as? AppDelegate, app.model != nil else { return NSMenu() }
     let owner = NSApp.keyWindow.flatMap { app.factory(forKeyWindow: $0) }
@@ -16,7 +24,7 @@ enum MainMenu {
       spaces: (factory?.model ?? app.model).spaces.map { SpaceMenuEntry(id: $0.id.description, title: (factory?.model ?? app.model).displayTitle(for: $0)) },
       tabs: (factory.map { f in f.numberedItems.map { TabMenuEntry(id: $0.description, title: f.numberedTitle($0)) } } ?? []),
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"),
-      shortcutsOnly: !app.initialMainMenuCompleted)
+      shortcutsOnly: !app.initialMainMenuCompleted && !usesFullMenuControl)
     menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
     if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
     #if DEBUG || OPEN_AUTOMATION
@@ -30,7 +38,7 @@ enum MainMenu {
       troubleshooting.addItem(archive)
     }
     #endif
-    if !app.initialMainMenuCompleted {
+    if !app.initialMainMenuCompleted && !usesFullMenuControl {
       let completion = InitialMenuCompletion(app: app, menu: menu)
       objc_setAssociatedObject(menu, &initialMenuDelegateKey, completion, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
