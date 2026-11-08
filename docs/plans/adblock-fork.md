@@ -4600,9 +4600,17 @@ with zero server GETs; allowed old id 2 stayed at 5 with three completed
 GETs. New id 4 stayed at zero at commit, load and the late readings
 (4.014/4.012 seconds after the witnesses). Receipt:
 `.re/s13/e3/count-native-positive-focused-results.json`. The temporary
-wrong-document control and counted full N run remain pending.
+wrong-document control also failed as required: its old count stayed at 5,
+its new id rose to 3 after load, and the server received zero GETs. Its
+allowed control still completed three GETs with unchanged old count and
+new count zero. Receipt: `count-native-wrong-focused-results.json`.
+Production was restored and strict engine status passed before running
+that saved private artifact. The counted full integrated N run passed
+all 32 rows (`integrated-N-r2.results.json`), including the native/server
+count predicate, limits, workers, sockets, extension ordering, DAT reload
+and in-flight close/driver-failure cleanup.
 
-**Remaining delivery gates.** Counted full N, G-4 after idle, page G-5
+**Remaining delivery gates.** G-4 after idle, page G-5
 (<=9 ms CPU and blocking-on wall faster than off), CDP URL edges,
 recorded distribution, real App acceptance and the full verify gate remain
 pending in E3. N-18 currently proves hook reachability only: no HTTP/3
