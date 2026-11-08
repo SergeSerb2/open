@@ -44,14 +44,16 @@ actor ListRepository {
     let pins: [String: AdBlockBundledPin]
     let bundle: URL?
     let ephemeral: Bool
+    let resources: BundledResources
 
     init(policy: AdBlockDownloadPolicy, proxy: URL?, bundle: URL?, ephemeral: Bool) throws {
         try policy.validate()
         self.policy = policy; self.downloader = ListDownloader(policy: policy, proxy: proxy)
         self.pins = try AdBlockCatalog.bundledPins(); self.bundle = bundle; self.ephemeral = ephemeral
+        self.resources = try BundledResources(bundle: bundle)
     }
 
-    private var storage: GenerationStorage { GenerationStorage(maximumBytes: max(64 * 1024 * 1024, policy.maximumListBytes), ephemeral: ephemeral) }
+    private var storage: GenerationStorage { GenerationStorage(maximumBytes: max(64 * 1024 * 1024, policy.maximumListBytes), ephemeral: ephemeral, resources: resources) }
 
     /// Build the new layout beside its destination, then publish with one same-volume rename.
     /// Until publication succeeds the old folder is read-only, so a failed copy loses no data.
@@ -131,29 +133,35 @@ actor ListRepository {
         do { pointer = try storage.current(in: directory) }
         catch { pointer = nil; report = "current.json invalid; reseeded/refetched enabled lists" }
         if let pointer {
-            var verified: AdBlockProfileState?
-            do { verified = try storage.verify(pointer.live, directory: directory, catalog: catalog).state }
+            var verified: GenerationManifest?
+            do { verified = try storage.verify(pointer.live, directory: directory, catalog: catalog) }
             catch {
                 let reason = (error as? AdBlockError)?.description ?? "invalid generation manifest"
                 try storage.quarantine(pointer.live, directory: directory)
                 report = "generation \(pointer.live.generation) quarantined: \(reason)"
             }
-            if var restored = verified {
+            if let manifest = verified {
+                var restored = manifest.state
                 restored.lastError = report ?? state.lastError
                 if restored != state { try save(restored, directory: directory) }
+                if try refreshResources(reference: pointer.live, manifest: manifest, state: restored, directory: directory, catalog: catalog) {
+                    return restored
+                }
                 storage.cleanup(keeping: [pointer.live.generation, pointer.previous?.generation].compactMap { $0 }, directory: directory)
                 return restored
             }
             if let previous = pointer.previous {
-                do { verified = try storage.verify(previous, directory: directory, catalog: catalog).state }
+                do { verified = try storage.verify(previous, directory: directory, catalog: catalog) }
                 catch {
                     try storage.quarantine(previous, directory: directory)
                     report! += "; previous generation invalid"
                 }
-                if var restored = verified {
+                if let manifest = verified {
+                    var restored = manifest.state
                     restored.lastError = "\(report!); fell back to generation \(previous.generation)"
                     try save(restored, directory: directory)
                     try storage.activate(previous, previous: nil, directory: directory)
+                    _ = try refreshResources(reference: previous, manifest: manifest, state: restored, directory: directory, catalog: catalog)
                     return restored
                 }
             }
@@ -185,6 +193,18 @@ actor ListRepository {
             throw AdBlockError([report, (error as? AdBlockError)?.description ?? "generation preparation failed"].compactMap { $0 }.joined(separator: "; "))
         }
         return state
+    }
+
+    /// Preserve enabled-list choices and verified list bytes when an app update adds
+    /// resources to a legacy generation or changes the bundled resource pin.
+    private func refreshResources(reference: GenerationReference, manifest: GenerationManifest, state: AdBlockProfileState,
+                                  directory: URL, catalog: AdBlockCatalog) throws -> Bool {
+        guard manifest.files.first(where: { $0.listID == "_resources" })?.sha256 != resources.sha256 else { return false }
+        let staging = try makeStaging(directory)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        _ = try stageCurrent(directory: directory, staging: staging, catalog: catalog)
+        _ = try storage.publish(state: state, inputs: staging.appendingPathComponent("lists"), directory: directory, previous: reference)
+        return true
     }
 
     private func verifiedSeed(id: String, bundle: URL) throws -> Data {
@@ -378,6 +398,17 @@ actor ListRepository {
                 downloadedBytes: response.data.count, sha256: hash, etags: [response.etag ?? "-"], statuses: [response.status],
                 attempts: attempts, duration: Date().timeIntervalSince(start), seedURL: pin.seedURL))
         }
+        let start = Date()
+        let target = destination.appendingPathComponent("resources.json")
+        let wasPresent = FileManager.default.fileExists(atPath: target.path)
+        let existing = boundedData(target, maximum: BundledResources.maximumBytes)
+        let data = try resources.verifiedData()
+        let intact = existing.map { digest($0) == resources.sha256 } ?? false
+        if !intact { try atomicWrite(data, to: target) }
+        results.append(AdBlockUpdateResult(id: "_resources", changed: !intact,
+            repaired: wasPresent && !intact,
+            bytes: data.count, downloadedBytes: 0, sha256: resources.sha256,
+            etags: [], statuses: [], attempts: 0, duration: Date().timeIntervalSince(start)))
         return results
     }
 
