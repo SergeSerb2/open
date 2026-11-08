@@ -86,7 +86,7 @@ remains in state, `.gclient`, `args.gn` or `build.ninja`. `engine-status`
 reported 7 PASS, 0 FAIL and the existing CEF series-order warning. That status
 still refers to the previous distribution; it does not prove the new binary.
 
-Runtime verification is pending the engine build. Required rows are stable
+Normal-App runtime verification remains pending. Required rows are stable
 ctime/link count across three full runs after priming; seven simple relaunches
 without ChangetimeScan; same-inode copy invalidation; two install paths;
 live replacement with a reused clone for ad-hoc and temporary hardened DLV
@@ -138,21 +138,32 @@ no launch gain or live-update safety result.
 
 | Row | Required proof | Current state |
 |---|---|---|
-| a | Executable ctime and link count stay unchanged for three full runs after the first clone | Not run |
+| a | Executable ctime and link count stay unchanged for three full runs after the first clone | Normal App not run; supplemental windowless result below |
 | b | Seven simple relaunches have no attributable ChangetimeScan | Not run; retain the initial clone and assessment warm-up logs separately |
-| c | An in-place executable copy keeps the inode but recreates the clone | Not run |
-| d | Two install paths use distinct clones with no cross-reuse | Not run |
+| c | An in-place executable copy keeps the inode but recreates the clone | Supplemental windowless PASS; normal App pending |
+| d | Two install paths use distinct clones with no cross-reuse | Supplemental windowless PASS; normal App pending |
 | e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Held for M5 clear; plain-launch each hardened copy first, stop on any abort |
-| f | An unwritable cache falls back to a per-run clone and still works | Not run |
+| f | An unwritable cache falls back to a per-run clone and still works | Supplemental windowless PASS; rendering/live-swap fallback pending |
 | g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | Held for M5 clear; wait for load outside all locks |
-| h | Shell, features, updater and engine-status pass | App suites held for M5 clear; final engine-status pending distribution |
+| h | Shell, features, updater and engine-status pass | Engine-status: 7 PASS, 0 FAIL, 1 order WARN; App suites held for M5 clear |
 
-The branch engine job is queued under the machine engine lock. A separate
-build-only continuation waits outside all locks for its successful completion,
-then builds the Release and Debug Apps, compiles the existing e2e helpers and
-prepares temporary DLV copies. It launches no App and starts no suite.
-All screen runners retain the local hold guard. Full `verify-all` also waits
-for screen clearance because it opens windows.
+The rebuilt branch engine passed. The incremental build took 48 seconds;
+its distribution SHA-256 is
+`09c1f661ef7c4caba7f51c6314d1fae7eff9c2b110db97fae790b788fb43a38b`.
+`branch-engine.json` and `branch-engine-status.json` record the series,
+distribution, 7 PASS, 0 FAIL and one numeric-order WARN. The warning records
+the required placement of `0106` after `0801–0810`; it is not hidden or
+reordered. A packaging retry and a corrected status-report output path are
+recorded separately; they did not require a source change or engine rebuild.
+
+`app-branch-264.json` records the Release App build: PASS in 44.46 seconds,
+load1 21.64→23.35. The frozen executable SHA-256 is
+`af2af579cb7964e3d4f124819115b2b1316cbdb21a23a357ee269e78d2842d01`.
+The Debug App build, existing e2e helper compilation, and preparation and
+static signature checks of temporary hardened DLV copies also passed
+(`build-after-engine.json`). This preparation launched no App or suite.
+All normal screen runners retain the local hold guard. Full `verify-all`
+also waits for screen clearance because it opens windows.
 
 ### Supplemental off-screen control
 
@@ -171,5 +182,51 @@ shut down successfully; the AppKit and owned on-screen-window checks found
 no windows. No real crash report appeared. All owned processes, temporary
 paths and test cache paths were removed. Crash-dialog suppression was
 restored. Load1 was 17.17 before the functional run and 18.28 afterward;
-this was not a timing measurement. The branch comparison remains pending
-the rebuilt engine.
+this was not a timing measurement.
+
+### Rebuilt windowless comparison and a retained failure
+
+These runs use the same public-engine caller, not the normal Open executable.
+`offscreen-polled/receipt.json` records the completed comparison against
+matched main `619324d3` and branch `09c1f661`. A separate process polls stat
+at a requested 1 ms interval. The largest observed gap was 3.79 ms. The runs
+take the screen lock, suppress crash dialogs, and create no browser or window.
+Load1 was 9.35→12.24; these are functional checks, not launch measurements.
+
+| Check | Windowless result | Evidence |
+|---|---|---|
+| Matched main negative | ctime changes; link count 1→2→1 | `main-negative.stat-events.json` |
+| Branch first clone | ctime changes once; link count 1→2 | `branch-prime.stat-events.json` |
+| Three branch reuse runs | All six executable stat fields stay unchanged; link count stays 2; same cached bundle inode | `branch-stable-1` through `branch-stable-3` receipts and stat events |
+| Same-inode copy | Device and inode stay fixed, mtime changes, saved identity and clone bundle inode change | `same-inode-copy` receipt and stat events |
+| Separate install | Separate cache path and executable inode, no cross-reuse | `second-install` receipt |
+| Unwritable cache | Mode stays 0500; per-run diagnostic; link count 1→2→1; startup and shutdown succeed | `unwritable-cache` receipt and stat events |
+| Cleanup | No real crash, no visible window, no remaining owned process; owned temporary paths and caches removed; dialog preference restored | `offscreen-polled/receipt.json` |
+
+The first comparison did **not** pass its stable-ctime assertion. Keep
+`offscreen-rebuilt/receipt.json` and its unified log as contrary evidence.
+On its second reuse run, ctime changed while the link count remained 2 and
+the same cached clone was reused. The recorded order was:
+
+| Local time, 2026-11-08 | Observation |
+|---|---|
+| 16:17:59.258146691 | Executable's new ctime |
+| 16:17:59.269782 | Caller saves `startWall`, before calling `OEEngine.startWithConfiguration` |
+| 16:17:59.328922 | Engine logs `Open code-sign clone reused` |
+
+The caller source is `headless-engine.m`; the launch receipt is
+`branch-stable-2.engine.json`. This places that change before the engine
+startup call and its clone reuse. The collected syspolicyd/AMFI/kernel log
+does not identify its writer. Do not attribute it to a specific OS component
+or dismiss it as a harness artifact. A separate xattr diagnostic
+(`offscreen-xattrs2/receipt.json`) had five unchanged reuse runs and unchanged
+executable xattr hashes; the later polled comparison also passed. Neither
+result erases the first failure. Normal-App ctime and seven simple-launch
+scan rows must still pass, and any recurring pre-engine ctime writer needs
+separate attribution before a launch-gain claim.
+
+The initial diagnostic wrapper lacked Python xattr support and stopped before
+starting the caller (`offscreen-xattrs/receipt.json`). Its corrected version
+uses read-only `/usr/bin/xattr`. No product or engine source changed during
+these supplemental checks. No live-swap, helper-rendering, simple-launch scan,
+timing, e2e or full-gate acceptance is claimed by this section.
