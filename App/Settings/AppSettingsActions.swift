@@ -355,10 +355,20 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
     await app.importRunner.installExtension(candidate, window: settingsPresenter.window)
   }
-  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced) }
+  // The store has already persisted and emitted the engine event.
+  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) {
+    if !app.adBlockEngineAdapter.isSupported {
+      status("Ad blocking is not active in this build. Your preferences were saved.", pane: .advanced)
+    }
+  }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
-  func adBlockDebugInfo(profileID: ProfileID) -> String { "App engine filter adapter: pending Step D" }
+  func adBlockDebugInfo(profileID: ProfileID) -> String {
+    guard let profile = app.model.profile(id: profileID),
+      let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return "" }
+    let status = context.adBlockStatus
+    return status.keys.sorted().map { "\($0): \(status[$0]!)" }.joined(separator: "\n")
+  }
   func setTabSleepMode(_ mode: TabSleepMode) {
     app.tabSleep.reconcileSettingsPolicy()
   }
