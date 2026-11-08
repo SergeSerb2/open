@@ -5,9 +5,7 @@
 #ifndef OPEN_ADBLOCK_OPEN_ADBLOCK_COSMETICS_HOST_H_
 #define OPEN_ADBLOCK_OPEN_ADBLOCK_COSMETICS_HOST_H_
 
-namespace service_manager {
-class BinderRegistry;
-}
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace open_engine {
 

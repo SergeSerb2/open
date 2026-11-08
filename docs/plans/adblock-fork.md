@@ -4710,7 +4710,10 @@ network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 Branch `s13/step5-cosmetics` started at Step 4 `dc7b985a` and merged
 Step 4 `f06011e7` before its first build. The lead assigned
 `~/Developer/open-engine-s13b` at 14:00. Engine apply and GN generation
-passed there; the first build is running under the global engine lock.
+passed there. The first build failed after 7,362 s: the cosmetics header
+forward-declared `BinderRegistry` as a class, but Chromium defines it as
+an alias of `BinderRegistryWithArgs<>`. The source now includes its
+defining header. The engine lock is released; rebuild waits behind E3.
 Step 5 remains **in progress**. No cefsimple or App acceptance has run;
 the lead's 14:08 screen hold blocks windowed checks until cleared.
 
@@ -4821,7 +4824,7 @@ reply cap is independent of the 500-token input cap.
 | Extracted fixed observer `node --check` | PASS (syntax only) |
 | Rust sanitizer review against §8.3 and Step 2 refinements | Source reviewed; unchanged; runtime verification pending |
 | Engine apply / GN generation | PASS in assigned s13b: 12 patches applied, 27 retained, 36 overlay files copied; load 51.21/46.27/45.55 at lock acquisition |
-| Build, C-1…C-8/C-10, C-4 ×10, install-before-execute | Build running; runtime PENDING screen clearance; C-9 stays reserved |
+| Build, C-1…C-8/C-10, C-4 ×10, install-before-execute | First build FAIL (BinderRegistry alias conflict); source fix written, rebuild pending. No failed output launched; runtime PENDING; C-9 stays reserved |
 | Contended C-G1/C-G2, T/R/check count, C-G3, worst-case payload | PENDING; no timing result or load receipt exists |
 | Receiver drop, quit-during-load ×5 | PENDING |
 | Real-App EasyList on/excluded/off controls and `adblock` + `page` suites | Authorized with s13b distribution; PENDING build and screen clearance |
