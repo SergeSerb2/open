@@ -53,6 +53,7 @@ struct EngineHolder {
   EngineHolder(const EngineHolder&) = delete;
   EngineHolder& operator=(const EngineHolder&) = delete;
   rust::Box<open_adblock::OpenAdblockEngine> engine;
+  const uint64_t warmed_regex_count;
 };
 std::shared_ptr<const EngineHolder> MakeEngineHolder(
     rust::Box<open_adblock::OpenAdblockEngine> engine);
@@ -100,6 +101,8 @@ class OpenAdBlockMatcher
   bool IsActiveFor(std::string_view top_host) const;
   bool IsEnabled() const;
   bool HasEngine() const;
+  // Matcher sequence only; non-official receipts, no per-check overhead.
+  std::string RegexCompileCountsText() const;
 
   // One network check (G-1: never on the UI or IO thread). A null engine
   // or an invalid URL allows.

@@ -902,6 +902,7 @@ std::string RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
                  std::move(long_warm_cpu), long_first_cpu);
   }
   Line(AdBlockLatencyHistogramText());
+  Line(matcher->RegexCompileCountsText());
   return verdicts;
 }
 
@@ -929,7 +930,15 @@ void BenchAndWrite(scoped_refptr<OpenAdBlockMatcher> matcher,
                       return !verdicts.empty() && base::WriteFile(path, verdicts);
                     },
                     path, std::move(verdicts)),
-                std::move(done));
+                base::BindOnce(
+                    [](base::OnceCallback<void(bool)> done, bool written) {
+                      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+                          FROM_HERE, base::BindOnce(
+                              [](base::OnceCallback<void(bool)> done, bool written) {
+                                RecordOpenAdBlockMemoryPhase("post-checks");
+                                std::move(done).Run(written);
+                              }, std::move(done), written), base::Seconds(2));
+                    }, std::move(done)));
           },
           std::move(done)));
 }
@@ -1270,6 +1279,12 @@ void LoadOpenAdBlockForSmoke(OpenAdBlockService* service,
                     AdBlockStatusText(service->GetStatus()).c_str());
           },
           service->GetWeakPtr()));
+}
+
+void RecordOpenAdBlockMemoryPhase(const char* phase) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("open-adblock-diagnostic")) {
+    MemorySnapshot(phase);
+  }
 }
 
 }  // namespace open_engine

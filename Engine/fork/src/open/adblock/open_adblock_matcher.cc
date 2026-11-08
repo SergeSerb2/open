@@ -8,6 +8,11 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/command_line.h"
+#include "base/strings/string_number_conversions.h"
+#if !defined(OFFICIAL_BUILD)
+#include "open/adblock/open_adblock_selftest.h"
+#endif
 #include "base/no_destructor.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -71,7 +76,25 @@ scoped_refptr<base::SequencedTaskRunner> AdBlockBuildTaskRunner() {
 }
 
 EngineHolder::EngineHolder(rust::Box<open_adblock::OpenAdblockEngine> engine)
-    : engine(std::move(engine)) {}
+    : engine(std::move(engine)),
+      warmed_regex_count([this] {
+        DCHECK(AdBlockBuildTaskRunner()->RunsTasksInCurrentSequence());
+#if !defined(OFFICIAL_BUILD)
+        unsigned cache_capacity = 0;
+        if (base::StringToUint(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+                "open-adblock-regex-cache"), &cache_capacity) && cache_capacity <= (2u << 20)) {
+          open_adblock::open_adblock_set_regex_cache_capacity(*this->engine, cache_capacity);
+        }
+        RecordOpenAdBlockMemoryPhase("rules-before-regex");
+#endif
+        const uint64_t count = open_adblock::open_adblock_warm_regexes(*this->engine);
+#if !defined(OFFICIAL_BUILD)
+        RecordOpenAdBlockMemoryPhase("programs-after-regex");
+#endif
+        return count;
+      }()) {
+  VLOG(1) << "OpenAdBlock: background regex compiles=" << warmed_regex_count;
+}
 EngineHolder::~EngineHolder() = default;
 
 std::shared_ptr<const EngineHolder> MakeEngineHolder(
@@ -151,6 +174,28 @@ bool OpenAdBlockMatcher::IsEnabled() const {
 bool OpenAdBlockMatcher::HasEngine() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return !!engine_;
+}
+
+std::string OpenAdBlockMatcher::RegexCompileCountsText() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!engine_) {
+    return "G-6 regex no engine";
+  }
+  const uint64_t current =
+      open_adblock::open_adblock_regex_compile_count(*engine_->engine);
+  return "G-6 regex warm=" + std::to_string(engine_->warmed_regex_count) +
+         " current=" + std::to_string(current) +
+         " added=" + std::to_string(current - engine_->warmed_regex_count) +
+         " program_limit_fallbacks=" + std::to_string(
+             open_adblock::open_adblock_regex_program_limit_fallbacks(*engine_->engine)) +
+         " program_bytes=" + std::to_string(
+             open_adblock::open_adblock_regex_program_memory_usage(*engine_->engine)) +
+         " user_regex_count=" + std::to_string(
+             open_adblock::open_adblock_complete_regex_count(*engine_->engine)) +
+         " user_regex_program_bytes=" + std::to_string(
+             open_adblock::open_adblock_complete_regex_program_bytes(*engine_->engine)) +
+         " dat_reshared=" + std::to_string(
+             open_adblock::open_adblock_dat_reshared_count(*engine_->engine));
 }
 
 open_adblock::OpenBlockerResult OpenAdBlockMatcher::Check(

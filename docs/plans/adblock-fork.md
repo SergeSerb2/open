@@ -4513,3 +4513,29 @@ removed for the negative proof) has identical text/DAT verdict files:
 One-engine physical-footprint deltas are 56.6–58.0 MiB after a text build
 and 67.2 MiB after DAT load. These are baselines before the four rulings'
 optimizations, not final acceptance. Receipts are in the E1 directory.
+
+**Regex and DAT working checkpoint (E1, 2026-11-07).** Compile all network
+regex programs on the build runner, without a warm match. Disable the crate's
+program-discard cleanup: it discards programs, so enabling it would compile
+again on requests. Bound eager DFA and one-pass accelerators to zero and the
+lazy DFA cache to 8 KiB per program. A preferred 64 KiB NFA ceiling retries
+at the upstream 10 MiB ceiling on `CompiledTooBig`; the real matcher correctly
+blocks a synthetic URL with a 623,832-byte program that takes that fallback.
+The full corpus adds zero regex compiles after publication.
+
+Only generated ABP patterns use explicit ASCII separator and wildcard classes.
+`url/gurl.h:25-26,109` guarantees ASCII percent-escaped canonical specs.
+User-written `/regex/` syntax is unchanged: the pinned source lists contain
+25 such lines (19 EasyList, 6 EasyPrivacy), optimized to 16 compiled objects
+using 4,358,248 program bytes. Text program bytes drop from 32,376,108 to
+7,254,660. Both caps and text/DAT retain byte-identical 20,311-row full-result
+verdict dumps. Sixteen separator, IDN, Unicode-path and fallback inputs also
+have identical results in all eight before/after, text/DAT, cap combinations.
+
+DAT serializes Arc values independently. Re-sharing rules by all twelve
+immutable fields restores 262 duplicate references, reducing DAT regex objects
+from 1,195 to 1,000 and program bytes from 8,524,772 to 7,251,132. All four
+full-corpus dumps remain identical. Working load1 27-50 receipts still exceed
+the 50 MiB footprint budget (about 62 MiB DAT, 68-72 MiB text); the resolver,
+earlier buffer release and final quiet receipts remain pending. These values
+are measurements for optimization, not final gate acceptance.

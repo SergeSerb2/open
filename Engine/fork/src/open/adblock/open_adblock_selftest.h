@@ -23,6 +23,9 @@ void RunOpenAdBlockSelftest(OpenAdBlockService* service,
                             base::FilePath adblock_root,
                             base::OnceCallback<void(bool)> done);
 
+// In-process allocation receipts, enabled only by the diagnostic switch.
+void RecordOpenAdBlockMemoryPhase(const char* phase);
+
 // One line of |status| for harness logs: names, numbers and the error, never
 // page data.
 std::string AdBlockStatusText(const AdBlockStatus& status);

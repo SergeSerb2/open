@@ -995,7 +995,7 @@ index 1f2142d095b58..02794f16d735e 100644
 +[dependencies.rmp]
 +version = "=0.8.11"
 diff --git a/third_party/rust/chromium_crates_io/gnrt_config.toml b/third_party/rust/chromium_crates_io/gnrt_config.toml
-index 1a7fbb295e26a..51d3f3bb341a3 100644
+index 1a7fbb295e26a..eaf1a05c2e7f7 100644
 --- a/third_party/rust/chromium_crates_io/gnrt_config.toml
 +++ b/third_party/rust/chromium_crates_io/gnrt_config.toml
 @@ -113,6 +113,12 @@ removed_librs_template = "removed_lib.rs.hbs"
@@ -1120,18 +1120,24 @@ index 1a7fbb295e26a..51d3f3bb341a3 100644
  [crate.serde]
  build_script_outputs = [ "private.rs" ]
  extra_kv = { allow_unsafe = false }
-@@ -975,7 +1023,10 @@ allow_unsafe = false
+@@ -975,11 +1023,14 @@ allow_unsafe = false
  [crate.termcolor.extra_kv]
  allow_unsafe = false
  
 -[crate.thiserror]
+-build_script_outputs = [ "private.rs" ]
++[crate.thiserror-impl]
+ extra_kv = { allow_unsafe = false }
+ 
+-[crate.thiserror-impl]
 +[crate."thiserror@v1"]  # Open: adblock 0.8.11 needs thiserror 1
 +extra_kv = { allow_unsafe = false }
 +
 +[crate."thiserror@v2"]
- build_script_outputs = [ "private.rs" ]
++build_script_outputs = [ "private.rs" ]
  extra_kv = { allow_unsafe = false }
  
+ [crate.timezone_provider]
 @@ -989,6 +1040,9 @@ extra_kv = { allow_unsafe = true }
  [crate.tinystr.extra_kv]
  allow_unsafe = true
@@ -1168,6 +1174,50 @@ index 1a7fbb295e26a..51d3f3bb341a3 100644
  [crate.utf16_iter]
  license_files = ["LICENSE-APACHE"]
  
+diff --git a/third_party/rust/chromium_crates_io/gnrt_config.toml.open b/third_party/rust/chromium_crates_io/gnrt_config.toml.open
+new file mode 100644
+index 0000000000000..8989a555e6581
+--- /dev/null
++++ b/third_party/rust/chromium_crates_io/gnrt_config.toml.open
+@@ -0,0 +1,38 @@
++# Open fragment. Merged into gnrt_config.toml by the Rust step (fork-infra
++# §7.4). gnrt vendor also writes its own [crate.X] allow_unsafe entries for
++# the new crates; those are tool output, captured in
++# patches/rust/0001-adblock-vendor.patch, and not repeated here.
++# Lead decisions 2026-10-26: docs/engine-patches.md "Security review".
++
++# Chromium: group = 'test' (imported only for libafl). adblock needs regex
++# in the browser process. Built without perf-literal (crate patches
++# adblock-v0_8 and libafl-v0_15; review 97-1 keeps the other perf engines),
++# so aho-corasick keeps Chromium's allow_unsafe = false and leaves the build.
++[crate.regex]
++group = 'safe'
++allow_first_party_usage = false
++extra_kv = { allow_unsafe = true }
++
++# Two epochs now: thiserror 1 (adblock) and 2 (Chromium). Only 2 has the
++# generated private.rs.
++[crate."thiserror@v1"]
++extra_kv = { allow_unsafe = false }
++
++[crate."thiserror@v2"]
++build_script_outputs = [ "private.rs" ]
++extra_kv = { allow_unsafe = false }
++
++# Two epochs: idna 0.2 (adblock, no unsafe) and 1 (url 2.5, uses unsafe).
++[crate."idna@v0_2"]
++extra_kv = { allow_unsafe = false }
++
++[crate."idna@v1"]
++extra_kv = { allow_unsafe = true }
++
++# Two epochs: itertools 0.10 (adblock, no unsafe; review 97-3) and 0.14
++# (Chromium).
++[crate."itertools@v0_10"]
++extra_kv = { allow_unsafe = false }
++
++[crate."itertools@v0_14"]
++extra_kv = { allow_unsafe = true }
 diff --git a/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0001-Use-regex-without-perf-features.patch b/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0001-Use-regex-without-perf-features.patch
 new file mode 100644
 index 0000000000000..d9db75f67f4bc
@@ -1205,6 +1255,344 @@ index 0000000000000..d9db75f67f4bc
 + 
 + [dependencies.rmp-serde]
 + version = "0.15"
+diff --git a/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0002-Warm-network-regexes-before-publishing.patch b/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0002-Warm-network-regexes-before-publishing.patch
+new file mode 100644
+index 0000000000000..cb3858ccf8b5c
+--- /dev/null
++++ b/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0002-Warm-network-regexes-before-publishing.patch
+@@ -0,0 +1,332 @@
++From: Open engine <noreply@open.invalid>
++Subject: [PATCH] Bound regex caches, compile off-thread, and restore DAT sharing
++
++Compile programs without matching; retain compiled programs to avoid
++request-path recompiles. Re-share exact immutable DAT rules before warming.
++
++diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/blocker.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/blocker.rs
++index cb0a791..e0162b0 100644
++--- a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/blocker.rs
+++++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/blocker.rs
++@@ -138,6 +138,34 @@ pub struct Blocker {
++     pub(crate) regex_manager: std::sync::Mutex<RegexManager>,
++ }
++
+++// DAT serialization writes each Arc value independently. Re-share exact
+++// immutable values after loading. Do not trust the serialized id as identity:
+++// compare and hash every field (adblock 0.8.11); HashSet uses randomized hashing.
+++struct ExactNetworkFilter(Arc<NetworkFilter>);
+++impl PartialEq for ExactNetworkFilter {
+++    fn eq(&self, other: &Self) -> bool {
+++        let (a, b) = (&*self.0, &*other.0);
+++        a.mask.bits() == b.mask.bits() && a.filter == b.filter &&
+++        a.opt_domains == b.opt_domains && a.opt_not_domains == b.opt_not_domains &&
+++        a.modifier_option == b.modifier_option && a.hostname == b.hostname &&
+++        a.tag == b.tag && a.raw_line == b.raw_line && a.id == b.id &&
+++        a.opt_domains_union == b.opt_domains_union &&
+++        a.opt_not_domains_union == b.opt_not_domains_union
+++    }
+++}
+++impl Eq for ExactNetworkFilter {}
+++impl std::hash::Hash for ExactNetworkFilter {
+++    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+++        use std::hash::Hash as _;
+++        let a = &*self.0;
+++        a.mask.bits().hash(state); a.filter.hash(state);
+++        a.opt_domains.hash(state); a.opt_not_domains.hash(state);
+++        a.modifier_option.hash(state); a.hostname.hash(state); a.tag.hash(state);
+++        a.raw_line.hash(state); a.id.hash(state);
+++        a.opt_domains_union.hash(state); a.opt_not_domains_union.hash(state);
+++    }
+++}
+++
++ impl Blocker {
++     /// Decide if a network request (usually from WebRequest API) should be
++     /// blocked, redirected or allowed.
++@@ -702,6 +730,74 @@ impl Blocker {
++         self.tags_enabled.iter().cloned().collect()
++     }
++
+++    /// Restore Arc sharing lost by the value-only DAT format. Build runner only,
+++    /// before warming (the regex manager keys programs by these stable pointers).
+++    pub(crate) fn share_deserialized_filters(&mut self) -> usize {
+++        let mut seen = std::collections::HashSet::<ExactNetworkFilter>::new();
+++        let mut shared = 0;
+++        for list in [
+++            &mut self.csp, &mut self.exceptions, &mut self.importants,
+++            &mut self.redirects, &mut self.removeparam, &mut self.filters_tagged,
+++            &mut self.filters, &mut self.generic_hide,
+++        ] {
+++            for bucket in list.filter_map.values_mut() {
+++                for filter in bucket.iter_mut() {
+++                    let key = ExactNetworkFilter(Arc::clone(filter));
+++                    if let Some(existing) = seen.get(&key) {
+++                        if !Arc::ptr_eq(filter, &existing.0) {
+++                            *filter = Arc::clone(&existing.0);
+++                            shared += 1;
+++                        }
+++                    } else {
+++                        seen.insert(key);
+++                    }
+++                }
+++                bucket.shrink_to_fit();
+++            }
+++            list.filter_map.shrink_to_fit();
+++        }
+++        shared
+++    }
+++
+++    /// Open: compile all immutable network regexes before publishing an engine.
+++    /// Keep the caches resident: request-path cleanup must not undo this work.
+++    pub(crate) fn warm_network_regexes(&self) -> usize {
+++        let mut manager = self.borrow_regex_manager();
+++        manager.set_discard_policy(RegexManagerDiscardPolicy {
+++            cleanup_interval: std::time::Duration::ZERO,
+++            discard_unused_time: std::time::Duration::MAX,
+++        });
+++        let mut seen = std::collections::HashSet::new();
+++        for list in [
+++            &self.csp, &self.exceptions, &self.importants, &self.redirects,
+++            &self.removeparam, &self.filters_tagged, &self.filters, &self.generic_hide,
+++        ] {
+++            for bucket in list.filter_map.values() {
+++                for filter in bucket {
+++                    if seen.insert(Arc::as_ptr(filter)) {
+++                        manager.compile(filter);
+++                    }
+++                }
+++            }
+++        }
+++        for filter in &self.tagged_filters_all {
+++            manager.compile(filter);
+++        }
+++        manager.get_compiled_regex_count()
+++    }
+++
+++    pub(crate) fn complete_regex_stats(&self) -> (usize, usize) {
+++        self.borrow_regex_manager().complete_regex_stats()
+++    }
+++
+++    pub(crate) fn regex_program_memory_usage(&self) -> usize {
+++        self.borrow_regex_manager().program_memory_usage()
+++    }
+++
+++    pub(crate) fn compiled_network_regex_count(&self) -> usize {
+++        self.borrow_regex_manager().get_compiled_regex_count()
+++    }
+++
++     pub fn set_regex_discard_policy(
++         &self,
++         new_discard_policy: RegexManagerDiscardPolicy
++diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/engine.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/engine.rs
++index 1dfecae..45fe9d4 100644
++--- a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/engine.rs
+++++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/engine.rs
++@@ -223,6 +223,39 @@ impl Engine {
++         self.cosmetic_cache.hostname_cosmetic_resources(&self.resources, &request.hostname, generichide)
++     }
++
+++    /// Restores exact immutable rule sharing lost in the DAT representation.
+++    pub fn share_deserialized_filters(&mut self) -> usize {
+++        self.blocker.share_deserialized_filters()
+++    }
+++
+++    /// Open: warm on the background build runner after construction or DAT load.
+++    /// Rule or tag mutation requires another warm before publishing the engine.
+++    pub fn warm_network_regexes(&self) -> usize {
+++        self.blocker.warm_network_regexes()
+++    }
+++
+++    pub fn complete_regex_stats(&self) -> (usize, usize) {
+++        self.blocker.complete_regex_stats()
+++    }
+++
+++    pub fn regex_program_memory_usage(&self) -> usize {
+++        self.blocker.regex_program_memory_usage()
+++    }
+++
+++    /// Non-official harness sets this before warming, in a fresh process.
+++    pub fn set_regex_cache_capacity(&self, bytes: usize) {
+++        crate::filters::network::set_regex_cache_capacity(bytes);
+++    }
+++
+++    pub fn regex_program_limit_fallbacks(&self) -> usize {
+++        crate::filters::network::program_limit_fallbacks()
+++    }
+++
+++    /// Cumulative compile count; lets the real request path prove no lazy compiles.
+++    pub fn compiled_network_regex_count(&self) -> usize {
+++        self.blocker.compiled_network_regex_count()
+++    }
+++
++     pub fn set_regex_discard_policy(
++         &mut self,
++         new_discard_policy: RegexManagerDiscardPolicy
++diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/filters/network.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/filters/network.rs
++index c0c6d09..717e71f 100644
++--- a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/filters/network.rs
+++++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/filters/network.rs
++@@ -3,7 +3,17 @@
++
++ use memchr::{memchr as find_char, memmem, memrchr as find_char_reverse};
++ use once_cell::sync::Lazy;
++-use regex::{Regex, RegexSet};
+++use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
+++use std::sync::atomic::{AtomicUsize, Ordering};
+++
+++static REGEX_CACHE_CAPACITY: AtomicUsize = AtomicUsize::new(8192);
+++pub(crate) fn set_regex_cache_capacity(bytes: usize) {
+++    REGEX_CACHE_CAPACITY.store(bytes, Ordering::Relaxed);
+++}
+++static PROGRAM_LIMIT_FALLBACKS: AtomicUsize = AtomicUsize::new(0);
+++pub(crate) fn program_limit_fallbacks() -> usize {
+++    PROGRAM_LIMIT_FALLBACKS.load(Ordering::Relaxed)
+++}
++ use serde::{Deserialize, Serialize};
++ use thiserror::Error;
++
++@@ -187,6 +197,14 @@ pub enum CompiledRegex {
++ }
++
++ impl CompiledRegex {
+++    pub(crate) fn program_memory_usage(&self) -> usize {
+++        match self {
+++            Self::Compiled(r) => r.open_program_memory_usage(),
+++            Self::CompiledSet(r) => r.open_program_memory_usage(),
+++            _ => 0,
+++        }
+++    }
+++
++     pub fn is_match(&self, pattern: &str) -> bool {
++         match &self {
++             CompiledRegex::MatchAll => true, // simple case for matching everything, e.g. for empty filter
++@@ -212,7 +230,7 @@ impl fmt::Display for CompiledRegex {
++     }
++ }
++
++-#[derive(Debug, Clone, Serialize, Deserialize)]
+++#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, std::hash::Hash)]
++ pub enum FilterPart {
++     Empty,
++     Simple(String),
++@@ -1206,11 +1224,14 @@ pub fn compile_regex(
++             escaped_patterns.push(unescaped);
++         } else {
++             let repl = SPECIAL_RE.replace_all(&filter_str, "\\$1");
++-            let repl = WILDCARD_RE.replace_all(&repl, ".*");
+++            // Open: only generated ABP expressions. Matcher inputs are canonical
+++            // GURL::spec() (url/gurl.h:25,109): non-ASCII bytes are percent-encoded.
+++            // ASCII wildcard keeps dot's original exclusion of newline.
+++            let repl = WILDCARD_RE.replace_all(&repl, r"[\x00-\x09\x0B-\x7F]*");
++             // in adblock rules, '^' is a separator.
++             // The separator character is anything but a letter, a digit, or one of the following: _ - . %
++-            let repl = ANCHOR_RE.replace_all(&repl, "(?:[^\\w\\d\\._%-])$1");
++-            let repl = ANCHOR_RE_EOL.replace_all(&repl, "(?:[^\\w\\d\\._%-]|$)");
+++            let repl = ANCHOR_RE.replace_all(&repl, "(?:[^0-9A-Za-z_\\-.%])$1");
+++            let repl = ANCHOR_RE_EOL.replace_all(&repl, "(?:[^0-9A-Za-z_\\-.%]|$)");
++
++             // Should match start or end of url
++             let left_anchor = if is_left_anchor { "^" } else { "" };
++@@ -1225,7 +1246,16 @@ pub fn compile_regex(
++         CompiledRegex::MatchAll
++     } else if escaped_patterns.len() == 1 {
++         let pattern = &escaped_patterns[0];
++-        match Regex::new(pattern) {
+++        match RegexBuilder::new(pattern).size_limit(65536).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
+++            .or_else(|error| match error {
+++                regex::Error::CompiledTooBig(_) => {
+++                    // A memory preference must not turn a valid rule into an allow.
+++                    // Retain the upstream program ceiling, with the bounded DFA cache.
+++                    PROGRAM_LIMIT_FALLBACKS.fetch_add(1, Ordering::Relaxed);
+++                    RegexBuilder::new(pattern).size_limit(10 << 20).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
+++                }
+++                other => Err(other),
+++            }) {
++             Ok(compiled) => CompiledRegex::Compiled(compiled),
++             Err(e) => {
++                 // println!("Regex parsing failed ({:?})", e);
++@@ -1233,7 +1263,14 @@ pub fn compile_regex(
++             }
++         }
++     } else {
++-        match RegexSet::new(escaped_patterns) {
+++        match RegexSetBuilder::new(&escaped_patterns).size_limit(65536).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
+++            .or_else(|error| match error {
+++                regex::Error::CompiledTooBig(_) => {
+++                    PROGRAM_LIMIT_FALLBACKS.fetch_add(1, Ordering::Relaxed);
+++                    RegexSetBuilder::new(&escaped_patterns).size_limit(10 << 20).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
+++                }
+++                other => Err(other),
+++            }) {
++             Ok(compiled) => CompiledRegex::CompiledSet(compiled),
++             Err(e) => CompiledRegex::RegexParsingError(e),
++         }
++diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/regex_manager.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/regex_manager.rs
++index 6e65555..258ef7e 100644
++--- a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/regex_manager.rs
+++++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/regex_manager.rs
++@@ -60,6 +60,7 @@ pub struct RegexDebugEntry {
++
++ struct RegexEntry {
++     regex: Option<CompiledRegex>,
+++    is_complete: bool,
++     last_used: Instant,
++     usage_count: usize,
++ }
++@@ -118,6 +119,23 @@ fn make_regexp(filter: &NetworkFilter) -> CompiledRegex {
++ }
++
++ impl RegexManager {
+++    /// Compile programs only: do not search or grow lazy match caches.
+++    pub(crate) fn compile(&mut self, filter: &NetworkFilter) {
+++        if !filter.is_regex() && !filter.is_complete_regex() {
+++            return;
+++        }
+++        let entry = self.map.entry(filter as *const NetworkFilter).or_insert_with(|| RegexEntry {
+++            regex: None,
+++            is_complete: filter.is_complete_regex(),
+++            last_used: self.now,
+++            usage_count: 0,
+++        });
+++        if entry.regex.is_none() {
+++            entry.regex = Some(make_regexp(filter));
+++            self.compiled_regex_count += 1;
+++        }
+++    }
+++
++     /// Check whether or not a regex network filter matches a certain URL pattern, using the
++     /// [`RegexManager`]'s managed regex storage.
++     pub fn matches(&mut self, filter: &NetworkFilter, pattern: &str) -> bool {
++@@ -142,6 +160,7 @@ impl RegexManager {
++                 self.compiled_regex_count += 1;
++                 let new_entry = RegexEntry {
++                     regex: Some(make_regexp(filter)),
+++                    is_complete: filter.is_complete_regex(),
++                     last_used: self.now,
++                     usage_count: 1,
++                 };
++@@ -210,7 +229,23 @@ impl RegexManager {
++             .collect_vec()
++     }
++
++-    #[cfg(feature = "regex-debug-info")]
+++    pub(crate) fn complete_regex_stats(&self) -> (usize, usize) {
+++        let mut count = 0;
+++        let mut bytes = 0;
+++        for entry in self.map.values().filter(|entry| entry.is_complete) {
+++            if let Some(regex) = &entry.regex {
+++                count += 1;
+++                bytes += regex.program_memory_usage();
+++            }
+++        }
+++        (count, bytes)
+++    }
+++
+++    pub(crate) fn program_memory_usage(&self) -> usize {
+++        self.map.values().filter_map(|entry| entry.regex.as_ref())
+++            .map(CompiledRegex::program_memory_usage).sum()
+++    }
+++
++     pub(crate) fn get_compiled_regex_count(&self) -> usize {
++         self.compiled_regex_count
++     }
 diff --git a/third_party/rust/chromium_crates_io/patches/libafl-v0_15/0001-Use-regex-without-perf-features.patch b/third_party/rust/chromium_crates_io/patches/libafl-v0_15/0001-Use-regex-without-perf-features.patch
 new file mode 100644
 index 0000000000000..97a2f4d0e1af0
@@ -1240,6 +1628,90 @@ index 0000000000000..97a2f4d0e1af0
 + 
 + [dependencies.regex-syntax]
 + version = "0.8.4"
+diff --git a/third_party/rust/chromium_crates_io/patches/regex-v1/0001-Open-bounded-accelerators.patch b/third_party/rust/chromium_crates_io/patches/regex-v1/0001-Open-bounded-accelerators.patch
+new file mode 100644
+index 0000000000000..98315e7443f88
+--- /dev/null
++++ b/third_party/rust/chromium_crates_io/patches/regex-v1/0001-Open-bounded-accelerators.patch
+@@ -0,0 +1,78 @@
++From: Open engine <noreply@open.invalid>
++Subject: [PATCH] Expose bounded eager accelerators for the adblock caller
++
++Only callers of the new builder method change behavior. Other Chromium
++regex callers retain all defaults. Expose immutable program bytes for receipts.
++
++diff --git a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs
++index 3bb08de..836dfe2 100644
++--- a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs
+++++ b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs
++@@ -214,6 +214,17 @@ pub(crate) mod string {
++     }
++
++     impl RegexBuilder {
+++        /// Open: bound eager accelerators separately from the lazy DFA cache.
+++        /// If an accelerator exceeds its budget, meta falls back to another
+++        /// correct engine (ultimately PikeVM), rather than rejecting a pattern.
+++        pub fn open_memory_limits(&mut self, cache_bytes: usize) -> &mut Self {
+++            self.builder.metac = self.builder.metac.clone()
+++                .onepass_size_limit(Some(0))
+++                .dfa_size_limit(Some(0))
+++                .hybrid_cache_capacity(cache_bytes);
+++            self
+++        }
+++
++         /// Create a new builder with a default configuration for the given
++         /// pattern.
++         ///
++@@ -789,6 +800,17 @@ pub(crate) mod string {
++     }
++
++     impl RegexSetBuilder {
+++        /// Open: bound eager accelerators separately from the lazy DFA cache.
+++        /// If an accelerator exceeds its budget, meta falls back to another
+++        /// correct engine (ultimately PikeVM), rather than rejecting a pattern.
+++        pub fn open_memory_limits(&mut self, cache_bytes: usize) -> &mut Self {
+++            self.builder.metac = self.builder.metac.clone()
+++                .onepass_size_limit(Some(0))
+++                .dfa_size_limit(Some(0))
+++                .hybrid_cache_capacity(cache_bytes);
+++            self
+++        }
+++
++         /// Create a new builder with a default configuration for the given
++         /// patterns.
++         ///
++diff --git a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs
++index 627a6c1..cbdac3d 100644
++--- a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs
+++++ b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs
++@@ -195,6 +195,11 @@ impl TryFrom<String> for Regex {
++
++ /// Core regular expression methods.
++ impl Regex {
+++    /// Open: immutable compiled strategy bytes; excludes mutable match caches.
+++    pub fn open_program_memory_usage(&self) -> usize {
+++        self.meta.memory_usage()
+++    }
+++
++     /// Compiles a regular expression. Once compiled, it can be used repeatedly
++     /// to search, split or replace substrings in a haystack.
++     ///
++diff --git a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs
++index 5126a46..4f121bc 100644
++--- a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs
+++++ b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs
++@@ -135,6 +135,11 @@ pub struct RegexSet {
++ }
++
++ impl RegexSet {
+++    /// Open: immutable compiled strategy bytes; excludes mutable match caches.
+++    pub fn open_program_memory_usage(&self) -> usize {
+++        self.meta.memory_usage()
+++    }
+++
++     /// Create a new regex set with the given regular expressions.
++     ///
++     /// This takes an iterator of `S`, where `S` is something that can produce
 diff --git a/third_party/rust/chromium_crates_io/patches/seahash-v3/0001-Add-upstream-MIT-license-text.patch b/third_party/rust/chromium_crates_io/patches/seahash-v3/0001-Add-upstream-MIT-license-text.patch
 new file mode 100644
 index 0000000000000..f697a7bf665d2
@@ -5157,10 +5629,10 @@ index 0000000000000..292fe499e3b25
 +channel = "stable"
 diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/blocker.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/blocker.rs
 new file mode 100644
-index 0000000000000..cb0a791eb5412
+index 0000000000000..e0162b0827027
 --- /dev/null
 +++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/blocker.rs
-@@ -0,0 +1,2325 @@
+@@ -0,0 +1,2421 @@
 +//! Holds [`Blocker`], which handles all network-based adblocking queries.
 +
 +use memchr::{memchr as find_char, memrchr as find_char_reverse};
@@ -5299,6 +5771,34 @@ index 0000000000000..cb0a791eb5412
 +    pub(crate) regex_manager: std::cell::RefCell<RegexManager>,
 +    #[cfg(not(feature = "unsync-regex-caching"))]
 +    pub(crate) regex_manager: std::sync::Mutex<RegexManager>,
++}
++
++// DAT serialization writes each Arc value independently. Re-share exact
++// immutable values after loading. Do not trust the serialized id as identity:
++// compare and hash every field (adblock 0.8.11); HashSet uses randomized hashing.
++struct ExactNetworkFilter(Arc<NetworkFilter>);
++impl PartialEq for ExactNetworkFilter {
++    fn eq(&self, other: &Self) -> bool {
++        let (a, b) = (&*self.0, &*other.0);
++        a.mask.bits() == b.mask.bits() && a.filter == b.filter &&
++        a.opt_domains == b.opt_domains && a.opt_not_domains == b.opt_not_domains &&
++        a.modifier_option == b.modifier_option && a.hostname == b.hostname &&
++        a.tag == b.tag && a.raw_line == b.raw_line && a.id == b.id &&
++        a.opt_domains_union == b.opt_domains_union &&
++        a.opt_not_domains_union == b.opt_not_domains_union
++    }
++}
++impl Eq for ExactNetworkFilter {}
++impl std::hash::Hash for ExactNetworkFilter {
++    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
++        use std::hash::Hash as _;
++        let a = &*self.0;
++        a.mask.bits().hash(state); a.filter.hash(state);
++        a.opt_domains.hash(state); a.opt_not_domains.hash(state);
++        a.modifier_option.hash(state); a.hostname.hash(state); a.tag.hash(state);
++        a.raw_line.hash(state); a.id.hash(state);
++        a.opt_domains_union.hash(state); a.opt_not_domains_union.hash(state);
++    }
 +}
 +
 +impl Blocker {
@@ -5863,6 +6363,74 @@ index 0000000000000..cb0a791eb5412
 +
 +    pub fn tags_enabled(&self) -> Vec<String> {
 +        self.tags_enabled.iter().cloned().collect()
++    }
++
++    /// Restore Arc sharing lost by the value-only DAT format. Build runner only,
++    /// before warming (the regex manager keys programs by these stable pointers).
++    pub(crate) fn share_deserialized_filters(&mut self) -> usize {
++        let mut seen = std::collections::HashSet::<ExactNetworkFilter>::new();
++        let mut shared = 0;
++        for list in [
++            &mut self.csp, &mut self.exceptions, &mut self.importants,
++            &mut self.redirects, &mut self.removeparam, &mut self.filters_tagged,
++            &mut self.filters, &mut self.generic_hide,
++        ] {
++            for bucket in list.filter_map.values_mut() {
++                for filter in bucket.iter_mut() {
++                    let key = ExactNetworkFilter(Arc::clone(filter));
++                    if let Some(existing) = seen.get(&key) {
++                        if !Arc::ptr_eq(filter, &existing.0) {
++                            *filter = Arc::clone(&existing.0);
++                            shared += 1;
++                        }
++                    } else {
++                        seen.insert(key);
++                    }
++                }
++                bucket.shrink_to_fit();
++            }
++            list.filter_map.shrink_to_fit();
++        }
++        shared
++    }
++
++    /// Open: compile all immutable network regexes before publishing an engine.
++    /// Keep the caches resident: request-path cleanup must not undo this work.
++    pub(crate) fn warm_network_regexes(&self) -> usize {
++        let mut manager = self.borrow_regex_manager();
++        manager.set_discard_policy(RegexManagerDiscardPolicy {
++            cleanup_interval: std::time::Duration::ZERO,
++            discard_unused_time: std::time::Duration::MAX,
++        });
++        let mut seen = std::collections::HashSet::new();
++        for list in [
++            &self.csp, &self.exceptions, &self.importants, &self.redirects,
++            &self.removeparam, &self.filters_tagged, &self.filters, &self.generic_hide,
++        ] {
++            for bucket in list.filter_map.values() {
++                for filter in bucket {
++                    if seen.insert(Arc::as_ptr(filter)) {
++                        manager.compile(filter);
++                    }
++                }
++            }
++        }
++        for filter in &self.tagged_filters_all {
++            manager.compile(filter);
++        }
++        manager.get_compiled_regex_count()
++    }
++
++    pub(crate) fn complete_regex_stats(&self) -> (usize, usize) {
++        self.borrow_regex_manager().complete_regex_stats()
++    }
++
++    pub(crate) fn regex_program_memory_usage(&self) -> usize {
++        self.borrow_regex_manager().program_memory_usage()
++    }
++
++    pub(crate) fn compiled_network_regex_count(&self) -> usize {
++        self.borrow_regex_manager().get_compiled_regex_count()
 +    }
 +
 +    pub fn set_regex_discard_policy(
@@ -10593,10 +11161,10 @@ index 0000000000000..d86c50bc70ecc
 +}
 diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/engine.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/engine.rs
 new file mode 100644
-index 0000000000000..1dfecaee1933d
+index 0000000000000..45fe9d4be40ee
 --- /dev/null
 +++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/engine.rs
-@@ -0,0 +1,891 @@
+@@ -0,0 +1,924 @@
 +//! The adblock [`Engine`] is the primary interface for adblocking.
 +
 +use crate::blocker::{Blocker, BlockerOptions, BlockerResult};
@@ -10820,6 +11388,39 @@ index 0000000000000..1dfecaee1933d
 +
 +        let generichide = self.blocker.check_generic_hide(&request);
 +        self.cosmetic_cache.hostname_cosmetic_resources(&self.resources, &request.hostname, generichide)
++    }
++
++    /// Restores exact immutable rule sharing lost in the DAT representation.
++    pub fn share_deserialized_filters(&mut self) -> usize {
++        self.blocker.share_deserialized_filters()
++    }
++
++    /// Open: warm on the background build runner after construction or DAT load.
++    /// Rule or tag mutation requires another warm before publishing the engine.
++    pub fn warm_network_regexes(&self) -> usize {
++        self.blocker.warm_network_regexes()
++    }
++
++    pub fn complete_regex_stats(&self) -> (usize, usize) {
++        self.blocker.complete_regex_stats()
++    }
++
++    pub fn regex_program_memory_usage(&self) -> usize {
++        self.blocker.regex_program_memory_usage()
++    }
++
++    /// Non-official harness sets this before warming, in a fresh process.
++    pub fn set_regex_cache_capacity(&self, bytes: usize) {
++        crate::filters::network::set_regex_cache_capacity(bytes);
++    }
++
++    pub fn regex_program_limit_fallbacks(&self) -> usize {
++        crate::filters::network::program_limit_fallbacks()
++    }
++
++    /// Cumulative compile count; lets the real request path prove no lazy compiles.
++    pub fn compiled_network_regex_count(&self) -> usize {
++        self.blocker.compiled_network_regex_count()
 +    }
 +
 +    pub fn set_regex_discard_policy(
@@ -13510,16 +14111,26 @@ index 0000000000000..7b0f52ced95b0
 +pub mod network;
 diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/filters/network.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/filters/network.rs
 new file mode 100644
-index 0000000000000..c0c6d0966333d
+index 0000000000000..717e71f36888a
 --- /dev/null
 +++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/filters/network.rs
-@@ -0,0 +1,3431 @@
+@@ -0,0 +1,3468 @@
 +//! Filters that take effect at the network request level, including blocking and response
 +//! modification.
 +
 +use memchr::{memchr as find_char, memmem, memrchr as find_char_reverse};
 +use once_cell::sync::Lazy;
-+use regex::{Regex, RegexSet};
++use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
++use std::sync::atomic::{AtomicUsize, Ordering};
++
++static REGEX_CACHE_CAPACITY: AtomicUsize = AtomicUsize::new(8192);
++pub(crate) fn set_regex_cache_capacity(bytes: usize) {
++    REGEX_CACHE_CAPACITY.store(bytes, Ordering::Relaxed);
++}
++static PROGRAM_LIMIT_FALLBACKS: AtomicUsize = AtomicUsize::new(0);
++pub(crate) fn program_limit_fallbacks() -> usize {
++    PROGRAM_LIMIT_FALLBACKS.load(Ordering::Relaxed)
++}
 +use serde::{Deserialize, Serialize};
 +use thiserror::Error;
 +
@@ -13703,6 +14314,14 @@ index 0000000000000..c0c6d0966333d
 +}
 +
 +impl CompiledRegex {
++    pub(crate) fn program_memory_usage(&self) -> usize {
++        match self {
++            Self::Compiled(r) => r.open_program_memory_usage(),
++            Self::CompiledSet(r) => r.open_program_memory_usage(),
++            _ => 0,
++        }
++    }
++
 +    pub fn is_match(&self, pattern: &str) -> bool {
 +        match &self {
 +            CompiledRegex::MatchAll => true, // simple case for matching everything, e.g. for empty filter
@@ -13728,7 +14347,7 @@ index 0000000000000..c0c6d0966333d
 +    }
 +}
 +
-+#[derive(Debug, Clone, Serialize, Deserialize)]
++#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, std::hash::Hash)]
 +pub enum FilterPart {
 +    Empty,
 +    Simple(String),
@@ -14722,11 +15341,14 @@ index 0000000000000..c0c6d0966333d
 +            escaped_patterns.push(unescaped);
 +        } else {
 +            let repl = SPECIAL_RE.replace_all(&filter_str, "\\$1");
-+            let repl = WILDCARD_RE.replace_all(&repl, ".*");
++            // Open: only generated ABP expressions. Matcher inputs are canonical
++            // GURL::spec() (url/gurl.h:25,109): non-ASCII bytes are percent-encoded.
++            // ASCII wildcard keeps dot's original exclusion of newline.
++            let repl = WILDCARD_RE.replace_all(&repl, r"[\x00-\x09\x0B-\x7F]*");
 +            // in adblock rules, '^' is a separator.
 +            // The separator character is anything but a letter, a digit, or one of the following: _ - . %
-+            let repl = ANCHOR_RE.replace_all(&repl, "(?:[^\\w\\d\\._%-])$1");
-+            let repl = ANCHOR_RE_EOL.replace_all(&repl, "(?:[^\\w\\d\\._%-]|$)");
++            let repl = ANCHOR_RE.replace_all(&repl, "(?:[^0-9A-Za-z_\\-.%])$1");
++            let repl = ANCHOR_RE_EOL.replace_all(&repl, "(?:[^0-9A-Za-z_\\-.%]|$)");
 +
 +            // Should match start or end of url
 +            let left_anchor = if is_left_anchor { "^" } else { "" };
@@ -14741,7 +15363,16 @@ index 0000000000000..c0c6d0966333d
 +        CompiledRegex::MatchAll
 +    } else if escaped_patterns.len() == 1 {
 +        let pattern = &escaped_patterns[0];
-+        match Regex::new(pattern) {
++        match RegexBuilder::new(pattern).size_limit(65536).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
++            .or_else(|error| match error {
++                regex::Error::CompiledTooBig(_) => {
++                    // A memory preference must not turn a valid rule into an allow.
++                    // Retain the upstream program ceiling, with the bounded DFA cache.
++                    PROGRAM_LIMIT_FALLBACKS.fetch_add(1, Ordering::Relaxed);
++                    RegexBuilder::new(pattern).size_limit(10 << 20).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
++                }
++                other => Err(other),
++            }) {
 +            Ok(compiled) => CompiledRegex::Compiled(compiled),
 +            Err(e) => {
 +                // println!("Regex parsing failed ({:?})", e);
@@ -14749,7 +15380,14 @@ index 0000000000000..c0c6d0966333d
 +            }
 +        }
 +    } else {
-+        match RegexSet::new(escaped_patterns) {
++        match RegexSetBuilder::new(&escaped_patterns).size_limit(65536).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
++            .or_else(|error| match error {
++                regex::Error::CompiledTooBig(_) => {
++                    PROGRAM_LIMIT_FALLBACKS.fetch_add(1, Ordering::Relaxed);
++                    RegexSetBuilder::new(&escaped_patterns).size_limit(10 << 20).open_memory_limits(REGEX_CACHE_CAPACITY.load(Ordering::Relaxed)).build()
++                }
++                other => Err(other),
++            }) {
 +            Ok(compiled) => CompiledRegex::CompiledSet(compiled),
 +            Err(e) => CompiledRegex::RegexParsingError(e),
 +        }
@@ -18381,10 +19019,10 @@ index 0000000000000..04fd7256046cd
 +}
 diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/regex_manager.rs b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/regex_manager.rs
 new file mode 100644
-index 0000000000000..6e65555eaf474
+index 0000000000000..258ef7e853f44
 --- /dev/null
 +++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/src/regex_manager.rs
-@@ -0,0 +1,297 @@
+@@ -0,0 +1,332 @@
 +//! Compiled regexes can take up large amounts of memory. To reduce the overal memory footprint of
 +//! the [`crate::Engine`], infrequently used regexes can be discarded. The [`RegexManager`] is
 +//! responsible for managing the storage of regexes used by filters.
@@ -18447,6 +19085,7 @@ index 0000000000000..6e65555eaf474
 +
 +struct RegexEntry {
 +    regex: Option<CompiledRegex>,
++    is_complete: bool,
 +    last_used: Instant,
 +    usage_count: usize,
 +}
@@ -18505,6 +19144,23 @@ index 0000000000000..6e65555eaf474
 +}
 +
 +impl RegexManager {
++    /// Compile programs only: do not search or grow lazy match caches.
++    pub(crate) fn compile(&mut self, filter: &NetworkFilter) {
++        if !filter.is_regex() && !filter.is_complete_regex() {
++            return;
++        }
++        let entry = self.map.entry(filter as *const NetworkFilter).or_insert_with(|| RegexEntry {
++            regex: None,
++            is_complete: filter.is_complete_regex(),
++            last_used: self.now,
++            usage_count: 0,
++        });
++        if entry.regex.is_none() {
++            entry.regex = Some(make_regexp(filter));
++            self.compiled_regex_count += 1;
++        }
++    }
++
 +    /// Check whether or not a regex network filter matches a certain URL pattern, using the
 +    /// [`RegexManager`]'s managed regex storage.
 +    pub fn matches(&mut self, filter: &NetworkFilter, pattern: &str) -> bool {
@@ -18529,6 +19185,7 @@ index 0000000000000..6e65555eaf474
 +                self.compiled_regex_count += 1;
 +                let new_entry = RegexEntry {
 +                    regex: Some(make_regexp(filter)),
++                    is_complete: filter.is_complete_regex(),
 +                    last_used: self.now,
 +                    usage_count: 1,
 +                };
@@ -18597,7 +19254,23 @@ index 0000000000000..6e65555eaf474
 +            .collect_vec()
 +    }
 +
-+    #[cfg(feature = "regex-debug-info")]
++    pub(crate) fn complete_regex_stats(&self) -> (usize, usize) {
++        let mut count = 0;
++        let mut bytes = 0;
++        for entry in self.map.values().filter(|entry| entry.is_complete) {
++            if let Some(regex) = &entry.regex {
++                count += 1;
++                bytes += regex.program_memory_usage();
++            }
++        }
++        (count, bytes)
++    }
++
++    pub(crate) fn program_memory_usage(&self) -> usize {
++        self.map.values().filter_map(|entry| entry.regex.as_ref())
++            .map(CompiledRegex::program_memory_usage).sum()
++    }
++
 +    pub(crate) fn get_compiled_regex_count(&self) -> usize {
 +        self.compiled_regex_count
 +    }
@@ -235771,6 +236444,78 @@ index 0000000000000..0740568008268
 +        typ: Some(Type::Icann),
 +    }
 +}
+diff --git a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs
+index 3bb08de8bfe5e..836dfe23736ff 100644
+--- a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs
++++ b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/builders.rs
+@@ -214,6 +214,17 @@ pub(crate) mod string {
+     }
+ 
+     impl RegexBuilder {
++        /// Open: bound eager accelerators separately from the lazy DFA cache.
++        /// If an accelerator exceeds its budget, meta falls back to another
++        /// correct engine (ultimately PikeVM), rather than rejecting a pattern.
++        pub fn open_memory_limits(&mut self, cache_bytes: usize) -> &mut Self {
++            self.builder.metac = self.builder.metac.clone()
++                .onepass_size_limit(Some(0))
++                .dfa_size_limit(Some(0))
++                .hybrid_cache_capacity(cache_bytes);
++            self
++        }
++
+         /// Create a new builder with a default configuration for the given
+         /// pattern.
+         ///
+@@ -789,6 +800,17 @@ pub(crate) mod string {
+     }
+ 
+     impl RegexSetBuilder {
++        /// Open: bound eager accelerators separately from the lazy DFA cache.
++        /// If an accelerator exceeds its budget, meta falls back to another
++        /// correct engine (ultimately PikeVM), rather than rejecting a pattern.
++        pub fn open_memory_limits(&mut self, cache_bytes: usize) -> &mut Self {
++            self.builder.metac = self.builder.metac.clone()
++                .onepass_size_limit(Some(0))
++                .dfa_size_limit(Some(0))
++                .hybrid_cache_capacity(cache_bytes);
++            self
++        }
++
+         /// Create a new builder with a default configuration for the given
+         /// patterns.
+         ///
+diff --git a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs
+index 627a6c1378b29..cbdac3d80d8a0 100644
+--- a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs
++++ b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regex/string.rs
+@@ -195,6 +195,11 @@ impl TryFrom<String> for Regex {
+ 
+ /// Core regular expression methods.
+ impl Regex {
++    /// Open: immutable compiled strategy bytes; excludes mutable match caches.
++    pub fn open_program_memory_usage(&self) -> usize {
++        self.meta.memory_usage()
++    }
++
+     /// Compiles a regular expression. Once compiled, it can be used repeatedly
+     /// to search, split or replace substrings in a haystack.
+     ///
+diff --git a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs
+index 5126a4661ebca..4f121bcd5f49c 100644
+--- a/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs
++++ b/third_party/rust/chromium_crates_io/vendor/regex-v1/src/regexset/string.rs
+@@ -135,6 +135,11 @@ pub struct RegexSet {
+ }
+ 
+ impl RegexSet {
++    /// Open: immutable compiled strategy bytes; excludes mutable match caches.
++    pub fn open_program_memory_usage(&self) -> usize {
++        self.meta.memory_usage()
++    }
++
+     /// Create a new regex set with the given regular expressions.
+     ///
+     /// This takes an iterator of `S`, where `S` is something that can produce
 diff --git a/third_party/rust/chromium_crates_io/vendor/rmp-serde-v0_15/.cargo-checksum.json b/third_party/rust/chromium_crates_io/vendor/rmp-serde-v0_15/.cargo-checksum.json
 new file mode 100644
 index 0000000000000..697c9ce2fbb40

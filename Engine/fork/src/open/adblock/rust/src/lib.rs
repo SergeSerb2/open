@@ -212,6 +212,14 @@ mod ffi {
             ids: &[String],
             exceptions: &[String],
         ) -> OpenHiddenSelectors;
+        fn open_adblock_set_regex_cache_capacity(engine: &OpenAdblockEngine, bytes: u32);
+        fn open_adblock_warm_regexes(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_dat_reshared_count(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_complete_regex_count(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_complete_regex_program_bytes(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_regex_program_memory_usage(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_regex_program_limit_fallbacks(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_regex_compile_count(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo;
     }
 }
@@ -227,6 +235,7 @@ pub struct OpenAdblockEngine {
     inner: Engine,
     list_count: u32,
     serialized_size: AtomicU64,
+    dat_reshared: u64,
     report: BuildReport,
 }
 
@@ -240,7 +249,7 @@ struct BuildReport {
 
 impl OpenAdblockEngine {
     fn new(inner: Engine, list_count: u32, report: BuildReport) -> Box<Self> {
-        Box::new(Self { inner, list_count, serialized_size: AtomicU64::new(0), report })
+        Box::new(Self { inner, list_count, serialized_size: AtomicU64::new(0), dat_reshared: 0, report })
     }
 }
 
@@ -484,6 +493,7 @@ pub fn open_adblock_deserialize(
     }
     match engine.inner.deserialize(dat) {
         Ok(()) => {
+            engine.dat_reshared = engine.inner.share_deserialized_filters() as u64;
             engine.serialized_size.store(dat.len() as u64, Ordering::Relaxed);
             let mut report = BuildReport::default();
             apply_resources(&mut engine.inner, resources_json, &mut report);
@@ -834,4 +844,37 @@ pub fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo {
 fn _assert_send_sync() {
     fn is_send_sync<T: Send + Sync>() {}
     is_send_sync::<OpenAdblockEngine>();
+}
+
+/// Called only on the background build runner, before publishing the engine.
+pub fn open_adblock_warm_regexes(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.warm_network_regexes() as u64
+}
+
+pub fn open_adblock_regex_compile_count(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.compiled_network_regex_count() as u64
+}
+
+pub fn open_adblock_regex_program_limit_fallbacks(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.regex_program_limit_fallbacks() as u64
+}
+
+pub fn open_adblock_regex_program_memory_usage(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.regex_program_memory_usage() as u64
+}
+
+pub fn open_adblock_set_regex_cache_capacity(engine: &OpenAdblockEngine, bytes: u32) {
+    engine.inner.set_regex_cache_capacity(bytes as usize);
+}
+
+pub fn open_adblock_complete_regex_count(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.complete_regex_stats().0 as u64
+}
+
+pub fn open_adblock_complete_regex_program_bytes(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.complete_regex_stats().1 as u64
+}
+
+pub fn open_adblock_dat_reshared_count(engine: &OpenAdblockEngine) -> u64 {
+    engine.dat_reshared
 }
