@@ -1210,6 +1210,20 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                         assert pressed['pressed'], 'Continue button did not accept its real press action'
                     else:
                         key(action, window=window)
+                        if action == 'return':
+                            # Chromium explicitly uses no default button here
+                            # (AskBeforeHttpDialogController::CreateDialogModel).
+                            # On macOS, Return does not click the focused button
+                            # (PlatformStyle::kReturnClicksFocusedControl=false).
+                            # Prove no security decision, then dismiss via Escape.
+                            deadline = time.monotonic()+.5
+                            while time.monotonic() < deadline:
+                                assert any(w['number'] == window and w.get('visible') for w in children()), 'Return unexpectedly closed the warning'
+                                counts = app.call('devtools', tab=tab, method='Browser.getHistograms', params={'query': 'interstitial.https_first_mode.decision', 'delta': False})
+                                metric = next(v for v in counts['histograms'] if v['name'] == 'interstitial.https_first_mode.decision')
+                                assert not any(v['low'] in (1, 2) and v['count'] for v in metric['buckets']), 'Return unexpectedly made a security decision'
+                                time.sleep(.05)
+                            key('escape', window=window)
                     assert wait(lambda: all(w['number'] != window for w in children()), timeout=5, step=.05), 'HTTPS warning stayed open'
                     expected = url if action == 'continue' else baseline
                     def settled():
@@ -1226,6 +1240,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
                     guard.check()
                     return {'warning': 'dialog', 'action': action, 'continuedToFixture': action == 'continue',
                             'returnedToPreviousPage': action != 'continue',
+                            'returnMadeNoDecision': action == 'return', 'escapeCleanup': action == 'return',
                             'proceedDecisions': decisions.get(1, 0), 'dontProceedDecisions': decisions.get(2, 0),
                             'distributionSHA256': engine_distribution_sha256}
                 finally:

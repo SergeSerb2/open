@@ -107,3 +107,15 @@ The engine apply/build/distribution and all 8 strict status checks pass:
 App build and commands-dump check pass. Full password and engine regression
 acceptance are pending. Intentional crash rows are M1-only by rule and are
 not run by this M5 acceptance.
+
+### HTTPS warning Return on macOS (D6)
+
+The real app routes Return to the warning's key `NativeWidgetMacNSWindow` and
+`BridgedContentView`; no App command or menu action runs. The warning stays
+visible and the HTTPS-First decision histogram records SHOW only. This is
+Chromium's configured behavior: `AskBeforeHttpDialogController::CreateDialogModel`
+sets `OverrideDefaultButton(kNone)`, and `ui/views/style/platform_style.h` sets
+`kReturnClicksFocusedControl` false on macOS. PW-HF2-return checks that Return
+makes no decision, then uses real Escape input and checks DONT_PROCEED and the
+previous page. It does not change a security guard or invoke a controller
+callback directly. The red diagnostic and per-run loads are in the D6 handoff.
