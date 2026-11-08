@@ -1,18 +1,25 @@
 import Foundation
 import OpenEngine
 
-/// Checkpoint bounds, checked before AppKit copies page text. The largest
-/// accepted string is 8 KiB; at most eight requests per page are retained.
+/// Bound text before AppKit copies it. Each displayed string is at most 10 KiB
+/// (far below allocator ceilings); at most eight requests per page are retained.
 @MainActor
 enum PageChromeLimits {
-  static let messageBytes = 8192
-  static let promptBytes = 4096
+  static let dialogTextBytes = 10240
   static let urlBytes = 65536
   static let pendingRequests = 8
 
-  static func dialogFailure(_ dialog: OEJavaScriptDialog) -> String? {
-    if dialog.message.utf8.count > messageBytes { return "Page dialog exceeds 8192 UTF-8 bytes." }
-    if dialog.defaultPromptText.utf8.count > promptBytes { return "Page prompt exceeds 4096 UTF-8 bytes." }
-    return nil
+  static func dialogText(_ text: String) -> String {
+    // Chromium may already have cut message characters without a mark. Mark only
+    // cuts made here; an upstream cut has no flag in the received engine request.
+    guard text.utf8.count > dialogTextBytes else { return text }
+    // Reserve the ellipsis's three bytes, then back up past any partial UTF-8 scalar.
+    // The only temporary byte buffer is at most 10,237 bytes.
+    var bytes = Array(text.utf8.prefix(dialogTextBytes - 3))
+    while !bytes.isEmpty {
+      if let prefix = String(bytes: bytes, encoding: .utf8) { return prefix + "…" }
+      bytes.removeLast()
+    }
+    return "…"
   }
 }

@@ -1,0 +1,1218 @@
+{
+  "date": "2026-11-07",
+  "featureSourceHead": "5d932ea75a44d6b0356cf5003a7bb1d17d3d1db3",
+  "mainMerged": "7f405f3b3e5ccf5716d2664b1f6e91e36b219df3",
+  "semantics": {
+    "menuPlacement": "GUESS pending S-9 capture",
+    "dialogByteBound": 10240,
+    "ellipsis": "Only when Open cuts received UTF-8 text; Chromium character-count cuts remain unmarked."
+  },
+  "commands": {
+    "missing": 0,
+    "extra": 0,
+    "different": 0,
+    "allowedMissing": [
+      "Open > Share Arc",
+      "Open > Sign Out",
+      "Open > Privacy Policy",
+      "File > New Note",
+      "File > New Easel",
+      "File > New Note (in Split)",
+      "File > Send to Dia",
+      "Tabs > New ChatGPT Message…",
+      "Window > View Easels & Notes",
+      "Help > Export Arc Notes",
+      "Help > Restore Data"
+    ]
+  },
+  "finalRuns": {
+    "contextMenus": {
+      "machine": "M5",
+      "source": {
+        "clean": true,
+        "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "head": "5d932ea75a44d6b0356cf5003a7bb1d17d3d1db3"
+      },
+      "engine": {
+        "distributionCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "distributionSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+        "distributionUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "embeddedCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "embeddedSHA256": "258649fe5215eef71708e6e2d87db05872d04ac719b680c349d4973de0da34b8",
+        "embeddedUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "requiredSHA256": "",
+        "source": "fork",
+        "stamp": "fork main recorded distribution"
+      },
+      "load": [
+        15.02734375,
+        19.12841796875,
+        19.38671875
+      ],
+      "passed": 35,
+      "failed": [],
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "receipt": ".re/leftovers/postmerge-context-m5.json",
+      "sha256": "e3d5013a0b7adbd0112dc9421de4dd82d8d90153391effbdeff80c8590fb5378"
+    },
+    "pageChrome": {
+      "machine": "M5",
+      "source": {
+        "clean": true,
+        "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "head": "5d932ea75a44d6b0356cf5003a7bb1d17d3d1db3"
+      },
+      "engine": {
+        "distributionCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "distributionSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+        "distributionUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "embeddedCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "embeddedSHA256": "258649fe5215eef71708e6e2d87db05872d04ac719b680c349d4973de0da34b8",
+        "embeddedUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "requiredSHA256": "",
+        "source": "fork",
+        "stamp": "fork main recorded distribution"
+      },
+      "load": [
+        6.2705078125,
+        14.00732421875,
+        17.62548828125
+      ],
+      "passed": 60,
+      "failed": [
+        "little_dialog_early_once",
+        "little_permission_dismiss_miniaturize",
+        "little_permission_dismiss_navigate"
+      ],
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "receipt": ".re/leftovers/postmerge-page-chrome-m5.json",
+      "sha256": "b230c7665c34a30feb89649596c44868cae9471e321b4e8692e1d73d48c2dbf1"
+    }
+  },
+  "manageExtensions": {
+    "action": true,
+    "opened": {
+      "audible": false,
+      "canGoBack": false,
+      "canGoForward": false,
+      "crashed": false,
+      "createdAt": 1794093027.616797,
+      "favicon": false,
+      "faviconReportsCompleted": 0,
+      "faviconReportsRejected": 0,
+      "hasWebContent": true,
+      "iconOverride": null,
+      "id": "420D06F6-1DCD-466C-9FA3-D4A2869F847E",
+      "lastActiveAt": 1794093027.6461802,
+      "loaded": true,
+      "loading": true,
+      "page": {
+        "audible": false,
+        "browser": 1,
+        "browserIndex": 0,
+        "browserPinned": false,
+        "canGoBack": false,
+        "chromeTabId": 387855498,
+        "chromeWindowId": 387855495,
+        "context": "Default",
+        "crash": 0,
+        "ephemeral": false,
+        "extension": "",
+        "favicon": false,
+        "fullscreen": false,
+        "hidden": false,
+        "hostTab": "420D06F6-1DCD-466C-9FA3-D4A2869F847E",
+        "identifier": 3,
+        "kind": "tab",
+        "live": true,
+        "loading": true,
+        "muted": false,
+        "pageBackground": [],
+        "popup": false,
+        "style": "chrome",
+        "title": "",
+        "url": "",
+        "zoom": 0
+      },
+      "pinnedURL": "",
+      "profile": "FE0954A1-AAE9-48B0-95F8-5D3BD3A1B1FA",
+      "progress": 0.1,
+      "rowFaviconHash": "",
+      "rowFaviconSource": "placeholder",
+      "section": "today",
+      "selected": true,
+      "sleepPhase": "live",
+      "space": "71A34437-CC34-4581-8042-7415926B404D",
+      "title": "",
+      "unread": false,
+      "url": "chrome://extensions",
+      "visible": true
+    },
+    "cases": [
+      {
+        "target": "page",
+        "extension": false,
+        "ok": true,
+        "shown": [
+          "Back",
+          "Forward",
+          "Reload",
+          "-",
+          "Save As…",
+          "Print…",
+          "-",
+          "Translate to English",
+          "Capture",
+          "Capture Full Page",
+          "-",
+          "View Page Source",
+          "-",
+          "Manage Extensions",
+          "-",
+          "Inspect"
+        ]
+      },
+      {
+        "target": "link",
+        "extension": false,
+        "ok": true,
+        "shown": [
+          "Open Link in Incognito Window",
+          "Open Link in New Tab",
+          "Open Link in Split View",
+          "Open Link in Peek",
+          "Open Link in Little Open",
+          "Open Link in New Window",
+          "-",
+          "Save Link As…",
+          "Copy Link Address",
+          "-",
+          "Copy",
+          "Search Local Search for “Fixture link”",
+          "Copy Link to Highlight",
+          "Print…",
+          "-",
+          "Manage Extensions",
+          "-",
+          "Inspect",
+          "-",
+          "Speech"
+        ]
+      },
+      {
+        "target": "image",
+        "extension": false,
+        "ok": true,
+        "shown": [
+          "Open Image in New Tab",
+          "Save Image As…",
+          "Copy Image",
+          "Copy Image Address",
+          "-",
+          "Manage Extensions",
+          "-",
+          "Inspect"
+        ]
+      },
+      {
+        "target": "selection",
+        "extension": false,
+        "ok": true,
+        "shown": [
+          "Look Up “bonjour menu contextuel”",
+          "-",
+          "Copy",
+          "Search Local Search for “bonjour menu contextuel”",
+          "Copy Link to Highlight",
+          "Print…",
+          "-",
+          "Manage Extensions",
+          "-",
+          "Inspect",
+          "-",
+          "Speech"
+        ]
+      },
+      {
+        "target": "editable",
+        "extension": false,
+        "ok": true,
+        "shown": [
+          "Look Up “teh”",
+          "-",
+          "Emoji & Symbols",
+          "-",
+          "Undo",
+          "Redo",
+          "-",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Paste and Match Style",
+          "Select All",
+          "-",
+          "Print…",
+          "-",
+          "Writing Direction",
+          "-",
+          "Inspect",
+          "-",
+          "Speech"
+        ]
+      },
+      {
+        "target": "page",
+        "extension": true,
+        "ok": true,
+        "shown": [
+          "Back",
+          "Forward",
+          "Reload",
+          "-",
+          "Save As…",
+          "Print…",
+          "-",
+          "Manage placement probe",
+          "Manage Extensions",
+          "-",
+          "Translate to English",
+          "Capture",
+          "Capture Full Page",
+          "-",
+          "View Page Source",
+          "Inspect"
+        ]
+      },
+      {
+        "target": "link",
+        "extension": true,
+        "ok": true,
+        "shown": [
+          "Open Link in Incognito Window",
+          "Open Link in New Tab",
+          "Open Link in Split View",
+          "Open Link in Peek",
+          "Open Link in Little Open",
+          "Open Link in New Window",
+          "-",
+          "Save Link As…",
+          "Copy Link Address",
+          "-",
+          "Copy",
+          "Search Local Search for “Fixture link”",
+          "Copy Link to Highlight",
+          "Print…",
+          "-",
+          "Manage placement probe",
+          "Manage Extensions",
+          "-",
+          "Inspect",
+          "-",
+          "Speech"
+        ]
+      },
+      {
+        "target": "image",
+        "extension": true,
+        "ok": true,
+        "shown": [
+          "Open Image in New Tab",
+          "Save Image As…",
+          "Copy Image",
+          "Copy Image Address",
+          "-",
+          "Manage placement probe",
+          "Manage Extensions",
+          "-",
+          "Inspect"
+        ]
+      },
+      {
+        "target": "selection",
+        "extension": true,
+        "ok": true,
+        "shown": [
+          "Look Up “bonjour menu contextuel”",
+          "-",
+          "Copy",
+          "Search Local Search for “bonjour menu contextuel”",
+          "Copy Link to Highlight",
+          "Print…",
+          "-",
+          "Manage placement probe",
+          "Manage Extensions",
+          "-",
+          "Inspect",
+          "-",
+          "Speech"
+        ]
+      },
+      {
+        "target": "editable",
+        "extension": true,
+        "ok": true,
+        "shown": [
+          "Look Up “teh”",
+          "-",
+          "Emoji & Symbols",
+          "-",
+          "Undo",
+          "Redo",
+          "-",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Paste and Match Style",
+          "Select All",
+          "-",
+          "Print…",
+          "-",
+          "Writing Direction",
+          "-",
+          "Manage placement probe",
+          "-",
+          "Inspect",
+          "-",
+          "Speech"
+        ]
+      }
+    ]
+  },
+  "dialogCases": {
+    "dialog_message_limit": {
+      "cases": [
+        {
+          "boundary": "at",
+          "kind": "alert",
+          "ok": true,
+          "receivedBytes": 10240,
+          "shownBytes": 10240,
+          "shownTail": "xxxxxxxx",
+          "sourceBytes": 10240,
+          "visible": true
+        },
+        {
+          "boundary": "over",
+          "kind": "alert",
+          "ok": true,
+          "receivedBytes": 10241,
+          "shownBytes": 10240,
+          "shownTail": "ééééééé…",
+          "sourceBytes": 10241,
+          "visible": true
+        },
+        {
+          "boundary": "multibyte",
+          "kind": "alert",
+          "ok": true,
+          "receivedBytes": 10246,
+          "shownBytes": 10238,
+          "shownTail": "xxxxxxx…",
+          "sourceBytes": 10267,
+          "visible": true
+        },
+        {
+          "boundary": "upstream",
+          "kind": "alert",
+          "ok": true,
+          "receivedBytes": 10240,
+          "shownBytes": 10240,
+          "shownTail": "xxxxxxxx",
+          "sourceBytes": 10241,
+          "visible": true
+        },
+        {
+          "boundary": "at",
+          "kind": "confirm",
+          "ok": true,
+          "receivedBytes": 10240,
+          "shownBytes": 10240,
+          "shownTail": "xxxxxxxx",
+          "sourceBytes": 10240,
+          "visible": true
+        },
+        {
+          "boundary": "over",
+          "kind": "confirm",
+          "ok": true,
+          "receivedBytes": 10241,
+          "shownBytes": 10240,
+          "shownTail": "ééééééé…",
+          "sourceBytes": 10241,
+          "visible": true
+        },
+        {
+          "boundary": "multibyte",
+          "kind": "confirm",
+          "ok": true,
+          "receivedBytes": 10246,
+          "shownBytes": 10238,
+          "shownTail": "xxxxxxx…",
+          "sourceBytes": 10267,
+          "visible": true
+        },
+        {
+          "boundary": "upstream",
+          "kind": "confirm",
+          "ok": true,
+          "receivedBytes": 10240,
+          "shownBytes": 10240,
+          "shownTail": "xxxxxxxx",
+          "sourceBytes": 10241,
+          "visible": true
+        },
+        {
+          "boundary": "at",
+          "kind": "prompt",
+          "ok": true,
+          "receivedBytes": 10240,
+          "shownBytes": 10240,
+          "shownTail": "xxxxxxxx",
+          "sourceBytes": 10240,
+          "visible": true
+        },
+        {
+          "boundary": "over",
+          "kind": "prompt",
+          "ok": true,
+          "receivedBytes": 10241,
+          "shownBytes": 10240,
+          "shownTail": "ééééééé…",
+          "sourceBytes": 10241,
+          "visible": true
+        },
+        {
+          "boundary": "multibyte",
+          "kind": "prompt",
+          "ok": true,
+          "receivedBytes": 10246,
+          "shownBytes": 10238,
+          "shownTail": "xxxxxxx…",
+          "sourceBytes": 10267,
+          "visible": true
+        },
+        {
+          "boundary": "upstream",
+          "kind": "prompt",
+          "ok": true,
+          "receivedBytes": 10240,
+          "shownBytes": 10240,
+          "shownTail": "xxxxxxxx",
+          "sourceBytes": 10241,
+          "visible": true
+        }
+      ],
+      "ok": true
+    },
+    "dialog_prompt_limit": {
+      "cases": [
+        {
+          "boundary": "at",
+          "kind": "prompt",
+          "ok": true,
+          "receivedBytes": 10240,
+          "shownBytes": 10240,
+          "shownTail": "xxxxxxxx",
+          "sourceBytes": 10240,
+          "visible": true
+        },
+        {
+          "boundary": "over",
+          "kind": "prompt",
+          "ok": true,
+          "receivedBytes": 10241,
+          "shownBytes": 10240,
+          "shownTail": "ééééééé…",
+          "sourceBytes": 10241,
+          "visible": true
+        },
+        {
+          "boundary": "multibyte",
+          "kind": "prompt",
+          "ok": true,
+          "receivedBytes": 10267,
+          "shownBytes": 10238,
+          "shownTail": "xxxxxxx…",
+          "sourceBytes": 10267,
+          "visible": true
+        }
+      ],
+      "ok": true
+    }
+  },
+  "negativeProofs": {
+    "oldHook": {
+      "machine": "M1",
+      "source": {
+        "clean": true,
+        "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "head": "7de603120819d503fd3ccc6b9ce5890b29e05585"
+      },
+      "engine": {
+        "distributionCodeSHA256": "a9996a49cb9dfceded9ea4601450832ebb656cbec922a0fea07698b8ef36510f",
+        "distributionSHA256": "d94583ef535b4129d1512b4dfdc39dcbdffece3f9cb5c942f903f5fc62347a20",
+        "distributionUUID": "4C4C4444-5555-3144-A114-386E0121ED8E",
+        "embeddedCodeSHA256": "a9996a49cb9dfceded9ea4601450832ebb656cbec922a0fea07698b8ef36510f",
+        "embeddedSHA256": "20da10ab088da205b71cbc23dffd622a8f8e11f164e7dae5565819813a047ba2",
+        "embeddedUUID": "4C4C4444-5555-3144-A114-386E0121ED8E",
+        "requiredSHA256": "",
+        "source": "fork",
+        "stamp": "fork main recorded distribution"
+      },
+      "load": [
+        12.2587890625,
+        26.56689453125,
+        19.931640625
+      ],
+      "passed": 0,
+      "failed": [
+        "cm_manage_extensions"
+      ],
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "receipt": ".re/leftovers/m1/negative-context.json",
+      "sha256": "5df63be195ea61dd31a68a5ad9cb235d87bcae5340071cef09952512020772f0"
+    },
+    "editableGuardRemoved": {
+      "machine": "M1",
+      "source": {
+        "clean": true,
+        "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "head": "7eb4e4c374fd4e95388ea5c3b9003ac11cbb6fcf"
+      },
+      "engine": {
+        "distributionCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "distributionSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+        "distributionUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "embeddedCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "embeddedSHA256": "258649fe5215eef71708e6e2d87db05872d04ac719b680c349d4973de0da34b8",
+        "embeddedUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "requiredSHA256": "",
+        "source": "fork",
+        "stamp": "fork main recorded distribution"
+      },
+      "load": [
+        13.1748046875,
+        25.8681640625,
+        21.3291015625
+      ],
+      "passed": 0,
+      "failed": [
+        "cm_manage_extensions"
+      ],
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "receipt": ".re/leftovers/m1/negative-editable.json",
+      "sha256": "7dd95d05a8d3cb6cb3b7fb3bfc27fff51e283db24e4bf6fe1115a7f13ccaa59a"
+    },
+    "editableSubcases": [
+      {
+        "target": "page",
+        "extension": false,
+        "ok": true
+      },
+      {
+        "target": "link",
+        "extension": false,
+        "ok": true
+      },
+      {
+        "target": "image",
+        "extension": false,
+        "ok": true
+      },
+      {
+        "target": "selection",
+        "extension": false,
+        "ok": true
+      },
+      {
+        "target": "editable",
+        "extension": false,
+        "ok": false
+      },
+      {
+        "target": "page",
+        "extension": true,
+        "ok": true
+      },
+      {
+        "target": "link",
+        "extension": true,
+        "ok": true
+      },
+      {
+        "target": "image",
+        "extension": true,
+        "ok": true
+      },
+      {
+        "target": "selection",
+        "extension": true,
+        "ok": true
+      },
+      {
+        "target": "editable",
+        "extension": true,
+        "ok": false
+      }
+    ],
+    "oldDialogGuards": {
+      "machine": "M1",
+      "source": {
+        "clean": true,
+        "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "head": "e75f41ef216f9313879db6b6ad5a7d31c1f53720"
+      },
+      "engine": {
+        "distributionCodeSHA256": "a9996a49cb9dfceded9ea4601450832ebb656cbec922a0fea07698b8ef36510f",
+        "distributionSHA256": "d94583ef535b4129d1512b4dfdc39dcbdffece3f9cb5c942f903f5fc62347a20",
+        "distributionUUID": "4C4C4444-5555-3144-A114-386E0121ED8E",
+        "embeddedCodeSHA256": "a9996a49cb9dfceded9ea4601450832ebb656cbec922a0fea07698b8ef36510f",
+        "embeddedSHA256": "20da10ab088da205b71cbc23dffd622a8f8e11f164e7dae5565819813a047ba2",
+        "embeddedUUID": "4C4C4444-5555-3144-A114-386E0121ED8E",
+        "requiredSHA256": "",
+        "source": "fork",
+        "stamp": "fork main recorded distribution"
+      },
+      "load": [
+        6.80078125,
+        20.63720703125,
+        14.1416015625
+      ],
+      "passed": 0,
+      "failed": [
+        "dialog_message_limit",
+        "dialog_prompt_limit"
+      ],
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "receipt": ".re/leftovers/m1/negative-dialog.json",
+      "sha256": "5ba9e1371ed2f4067217d4489708493629bcd4ab443c48ebdca0c61226655740"
+    },
+    "refusalReasons": {
+      "dialog_message_limit": [
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes.",
+        "Page dialog exceeds 8192 UTF-8 bytes."
+      ],
+      "dialog_prompt_limit": [
+        "Page prompt exceeds 4096 UTF-8 bytes.",
+        "Page prompt exceeds 4096 UTF-8 bytes.",
+        "Page prompt exceeds 4096 UTF-8 bytes."
+      ]
+    },
+    "intentionalVisibleSheetFailure": {
+      "machine": "M1",
+      "source": {
+        "clean": true,
+        "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "head": "8f856ad3d40d10236531de3504e4d1e69b325aa6"
+      },
+      "engine": {
+        "distributionCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "distributionSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+        "distributionUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "embeddedCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+        "embeddedSHA256": "258649fe5215eef71708e6e2d87db05872d04ac719b680c349d4973de0da34b8",
+        "embeddedUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+        "requiredSHA256": "",
+        "source": "fork",
+        "stamp": "fork main recorded distribution"
+      },
+      "load": [
+        13.21923828125,
+        21.923828125,
+        21.36328125
+      ],
+      "passed": 0,
+      "failed": [
+        "dialog_alert"
+      ],
+      "cleanup": true,
+      "interruptedAttempts": 0,
+      "receipt": ".re/leftovers/m1/early-failure.json",
+      "sha256": "64c7be3bdddca15c974312eec7368d1bac8d0b3f34c9045c7d398438d9515989"
+    }
+  },
+  "unchangedMain": {
+    "machine": "M5",
+    "source": {
+      "clean": true,
+      "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "head": "7f405f3b3e5ccf5716d2664b1f6e91e36b219df3"
+    },
+    "engine": {
+      "distributionCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+      "distributionSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+      "distributionUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+      "embeddedCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+      "embeddedSHA256": "258649fe5215eef71708e6e2d87db05872d04ac719b680c349d4973de0da34b8",
+      "embeddedUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+      "requiredSHA256": "",
+      "source": "fork",
+      "stamp": "fork main recorded distribution"
+    },
+    "load": [
+      5.521484375,
+      7.34912109375,
+      11.064453125
+    ],
+    "passed": 0,
+    "failed": [
+      "little_dialog_early_once",
+      "little_permission_dismiss_miniaturize",
+      "little_permission_dismiss_navigate"
+    ],
+    "cleanup": true,
+    "interruptedAttempts": 0,
+    "receipt": ".re/leftovers/main-page-chrome-m5.json",
+    "sha256": "c894d20a72d1f5fa0192ccefc80f367f1608505c45e83576f1d43e70082fa0c9"
+  },
+  "baselineComparison": {
+    "branch": {
+      "little_dialog_early_once": {
+        "answers": [],
+        "firstFrame": {
+          "browserID": null,
+          "content": 0,
+          "uptime": 198148.6939335,
+          "visible": true
+        },
+        "ok": false,
+        "state": {
+          "buttons": [
+            "OK"
+          ],
+          "held": false,
+          "informativeText": "early",
+          "kind": 0,
+          "message": "early",
+          "parent": 492627,
+          "pending": 1,
+          "promptWidth": 0,
+          "queued": false,
+          "sourceMessageBytes": 5,
+          "sourcePromptBytes": 0,
+          "suppressible": false,
+          "suppressionTitle": "",
+          "text": "",
+          "title": "127.0.0.1 says",
+          "visible": true,
+          "window": 492631
+        }
+      },
+      "little_permission_dismiss_miniaturize": {
+        "events": [],
+        "ok": false,
+        "state": {
+          "anchor": {
+            "edge": 3,
+            "frame": [
+              1355,
+              558,
+              1185,
+              785
+            ],
+            "name": "little-open-content"
+          },
+          "animationDuration": 0.1,
+          "buttons": [
+            "Not Now",
+            "Allow"
+          ],
+          "decisions": 0,
+          "frame": [
+            10,
+            619,
+            320,
+            156
+          ],
+          "help": "Click the lock to change this any time",
+          "keyWindow": 492766,
+          "kinds": 32,
+          "opacity": 1,
+          "origin": "http://little-dismiss-miniaturize.localhost:58060/",
+          "parent": 0,
+          "pending": 1,
+          "pendingPage": 17,
+          "presentation": "card",
+          "promptKey": true,
+          "question": "Allow little-dismiss-miniaturize.localhost to access your MIDI devices?",
+          "selectedPage": 17,
+          "shadowPath": true,
+          "visible": true,
+          "window": 492766
+        }
+      },
+      "little_permission_dismiss_navigate": {
+        "events": [],
+        "ok": false,
+        "state": {
+          "anchor": {
+            "edge": 3,
+            "frame": [
+              1355,
+              558,
+              1185,
+              785
+            ],
+            "name": "little-open-content"
+          },
+          "animationDuration": 0.1,
+          "buttons": [
+            "Not Now",
+            "Allow"
+          ],
+          "decisions": 0,
+          "frame": [
+            10,
+            619,
+            320,
+            156
+          ],
+          "help": "Click the lock to change this any time",
+          "keyWindow": 492755,
+          "kinds": 32,
+          "opacity": 1,
+          "origin": "http://little-dismiss-navigate.localhost:58060/",
+          "parent": 0,
+          "pending": 1,
+          "pendingPage": 16,
+          "presentation": "card",
+          "promptKey": true,
+          "question": "Allow little-dismiss-navigate.localhost to access your MIDI devices?",
+          "selectedPage": 16,
+          "shadowPath": true,
+          "visible": true,
+          "window": 492755
+        }
+      }
+    },
+    "main": {
+      "little_dialog_early_once": {
+        "answers": [],
+        "firstFrame": {
+          "browserID": null,
+          "content": 0,
+          "uptime": 199080.86187916668,
+          "visible": true
+        },
+        "ok": false,
+        "state": {
+          "buttons": [
+            "OK"
+          ],
+          "held": false,
+          "informativeText": "early",
+          "kind": 0,
+          "message": "early",
+          "parent": 495616,
+          "pending": 1,
+          "promptWidth": 0,
+          "queued": false,
+          "sourceMessageBytes": 5,
+          "sourcePromptBytes": 0,
+          "suppressible": false,
+          "suppressionTitle": "",
+          "text": "",
+          "title": "127.0.0.1 says",
+          "visible": true,
+          "window": 495622
+        }
+      },
+      "little_permission_dismiss_miniaturize": {
+        "events": [],
+        "ok": false,
+        "state": {
+          "anchor": {
+            "edge": 3,
+            "frame": [
+              1355,
+              558,
+              1185,
+              785
+            ],
+            "name": "little-open-content"
+          },
+          "animationDuration": 0.1,
+          "buttons": [
+            "Not Now",
+            "Allow"
+          ],
+          "decisions": 0,
+          "frame": [
+            10,
+            619,
+            320,
+            156
+          ],
+          "help": "Click the lock to change this any time",
+          "keyWindow": 495629,
+          "kinds": 32,
+          "opacity": 1,
+          "origin": "http://little-dismiss-miniaturize.localhost:49501/",
+          "parent": 0,
+          "pending": 1,
+          "pendingPage": 4,
+          "presentation": "card",
+          "promptKey": true,
+          "question": "Allow little-dismiss-miniaturize.localhost to access your MIDI devices?",
+          "selectedPage": 4,
+          "shadowPath": true,
+          "visible": true,
+          "window": 495629
+        }
+      },
+      "little_permission_dismiss_navigate": {
+        "events": [],
+        "ok": false,
+        "state": {
+          "anchor": {
+            "edge": 3,
+            "frame": [
+              1355,
+              558,
+              1185,
+              785
+            ],
+            "name": "little-open-content"
+          },
+          "animationDuration": 0.1,
+          "buttons": [
+            "Not Now",
+            "Allow"
+          ],
+          "decisions": 0,
+          "frame": [
+            10,
+            619,
+            320,
+            156
+          ],
+          "help": "Click the lock to change this any time",
+          "keyWindow": 495625,
+          "kinds": 32,
+          "opacity": 1,
+          "origin": "http://little-dismiss-navigate.localhost:49501/",
+          "parent": 0,
+          "pending": 1,
+          "pendingPage": 3,
+          "presentation": "card",
+          "promptKey": true,
+          "question": "Allow little-dismiss-navigate.localhost to access your MIDI devices?",
+          "selectedPage": 3,
+          "shadowPath": true,
+          "visible": true,
+          "window": 495625
+        }
+      }
+    }
+  },
+  "earlierM1Main": {
+    "machine": "M1",
+    "source": {
+      "clean": true,
+      "diffSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "head": "eaa70c2865aff7dd5bd1a3b05d09eca5486b698f"
+    },
+    "engine": {
+      "distributionCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+      "distributionSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+      "distributionUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+      "embeddedCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+      "embeddedSHA256": "258649fe5215eef71708e6e2d87db05872d04ac719b680c349d4973de0da34b8",
+      "embeddedUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+      "requiredSHA256": "",
+      "source": "fork",
+      "stamp": "fork main recorded distribution"
+    },
+    "load": [
+      6.40673828125,
+      11.9150390625,
+      16.8203125
+    ],
+    "passed": 0,
+    "failed": [
+      "little_dialog_early_once",
+      "little_permission_dismiss_miniaturize",
+      "little_permission_dismiss_navigate"
+    ],
+    "cleanup": true,
+    "interruptedAttempts": 0,
+    "receipt": ".re/leftovers/m1/main-page-chrome.json",
+    "sha256": "5b81e5621207cdd2f12e662b93b305da279f29455852d9f428e58c2dbb1e7af3"
+  },
+  "engine": {
+    "distributionCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+    "distributionSHA256": "2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10",
+    "distributionUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+    "embeddedCodeSHA256": "da92acc15f9d4b325cc715634d80abacf48493fa864c8f8e53ff282c11948081",
+    "embeddedSHA256": "258649fe5215eef71708e6e2d87db05872d04ac719b680c349d4973de0da34b8",
+    "embeddedUUID": "4C4C44E5-5555-3144-A153-B35A5B5167DC",
+    "requiredSHA256": "",
+    "source": "fork",
+    "stamp": "fork main recorded distribution"
+  },
+  "m5Verification": {
+    "full": [
+      {
+        "name": "build",
+        "result": "PASS",
+        "seconds": 183
+      },
+      {
+        "name": "commands-demo",
+        "result": "PASS",
+        "seconds": 5
+      },
+      {
+        "name": "roundtrip",
+        "result": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "space-legacy",
+        "result": "PASS",
+        "seconds": 2
+      },
+      {
+        "name": "space-editor",
+        "result": "PASS",
+        "seconds": 9
+      },
+      {
+        "name": "space-pad-compare",
+        "result": "PASS",
+        "seconds": 3
+      },
+      {
+        "name": "suggest-check",
+        "result": "PASS",
+        "seconds": 30
+      },
+      {
+        "name": "commands-dump",
+        "result": "PASS",
+        "seconds": 0
+      },
+      {
+        "name": "route",
+        "result": "PASS",
+        "seconds": 15
+      },
+      {
+        "name": "favicons",
+        "result": "PASS",
+        "seconds": 3
+      },
+      {
+        "name": "media-demo",
+        "result": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "sleep-demo",
+        "result": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "adblock-perf",
+        "result": "PASS",
+        "seconds": 0
+      },
+      {
+        "name": "adblock-catalog",
+        "result": "PASS",
+        "seconds": 0
+      },
+      {
+        "name": "profiles",
+        "result": "PASS",
+        "seconds": 4
+      },
+      {
+        "name": "settings-preview",
+        "result": "PASS",
+        "seconds": 88
+      },
+      {
+        "name": "sidebar-render",
+        "result": "PASS",
+        "seconds": 110
+      },
+      {
+        "name": "sidebar-compare",
+        "result": "PASS",
+        "seconds": 195
+      },
+      {
+        "name": "commandbar-render",
+        "result": "FAIL",
+        "seconds": 47
+      },
+      {
+        "name": "features-render",
+        "result": "PASS",
+        "seconds": 89
+      },
+      {
+        "name": "extensions-render",
+        "result": "PASS",
+        "seconds": 8
+      },
+      {
+        "name": "sitecontrol-render",
+        "result": "PASS",
+        "seconds": 236
+      },
+      {
+        "name": "boosts",
+        "result": "PASS",
+        "seconds": 3
+      },
+      {
+        "name": "import-arc",
+        "result": "PASS",
+        "seconds": 1
+      },
+      {
+        "name": "verify-secrets-fixture",
+        "result": "PASS",
+        "seconds": 5
+      }
+    ],
+    "fullReceipt": ".re/leftovers/verify/summary.txt",
+    "commandbarFull": {
+      "result": "FAIL (timing only)",
+      "cpuP95Ms": 11.1,
+      "inlineOverheadMs": 0.975,
+      "load": [
+        41.9,
+        35.4,
+        26.9
+      ]
+    },
+    "commandbarQuiet": {
+      "result": "PASS",
+      "rows": 151,
+      "cpuP95Ms": 4.75,
+      "inlineOverheadMs": 0.212,
+      "load": [
+        7.3,
+        14.8,
+        19.3
+      ],
+      "receipt": ".re/leftovers/verify-commandbar-quiet/summary.txt"
+    },
+    "mergePolicy": "TANDEM 4.5a: PR 222 full gate passed 25/25; after the overlap merge, rerun Debug and both affected suites."
+  }
+}

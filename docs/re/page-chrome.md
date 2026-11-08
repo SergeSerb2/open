@@ -237,3 +237,11 @@ Verification for this docs-only work: static evidence review and
 `git diff --check`. Build, e2e, and `tools/verify-all.sh` are not run, as the
 research brief explicitly exempts this docs-only PR. No runtime or visual
 acceptance is claimed.
+
+### Section 11 implementation: page menu and dialog bounds (2026-11-07)
+
+Open adds `Manage Extensions` through `PageContextMenuHooks.extensionItems`, excluding editable targets. **GUESS (lead decision):** place it after Chromium's extension contributions in the same group; with no contributions, use a separate group immediately before Inspect. The title is FACT (`features-advanced.md` EX-18); capture S-9 must settle Arc's actual position. Action: the existing `manage-extensions` app command (`App/MainMenu.swift`), opening the extensions page in Today.
+
+Oversized alert, confirm and prompt messages and prompt defaults are shown with at most 10,240 UTF-8 bytes, including a trailing `…` when Open cuts the received text. The cut preserves a complete UTF-8 character. `PageChromeLimits.dialogText` bounds the native sheet text; `PageDialogPresenter` retains the original engine request for its single completion. Other limits are unchanged. Real-App evidence and negative proofs are in `docs/engine-spike/pagechrome-leftovers.md`; these checks prove Open's implementation, not Arc's unrecorded menu placement.
+
+Chromium first applies its own character-count cap to messages without a truncation mark. An ASCII message already cut upstream arrives at the callback with 10,240 bytes and no cut flag; Open preserves that unmarked text. Open adds `…` only when its own 10,240-byte UTF-8 bound cuts the received message or prompt default. The e2e over-bound byte fixture uses multibyte text below Chromium’s character cap so it proves Open’s bound; a separate ASCII case proves the unmarked upstream cut. This is the lead’s 2026-11-07 ruling, verified through the real Chromium callback and native sheet.
