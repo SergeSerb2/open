@@ -185,6 +185,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       } else {
         for (index, text) in ["Yes, make Open my default.", "Not yet. I'm still looking around."].enumerated() {
           let card = OnboardingChoiceCard(selected: defaultYes == (index == 0))
+          card.onEscape = { [weak self] in self?.back() }
           card.frame = NSRect(x: 0, y: index*64, width: 395, height: 52)
           let radio = NSButton(radioButtonWithTitle: text, target: self, action: #selector(defaultChanged(_:)))
           radio.font = .systemFont(ofSize: 15); radio.tag = index; radio.state = defaultYes == (index == 0) ? .on:.off
