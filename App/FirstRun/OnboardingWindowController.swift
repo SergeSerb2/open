@@ -150,7 +150,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     if finishing { return true }
-    closingForHandoff = true; onHandoff = nil
+    closingForHandoff = true
+    onHandoff = nil
     finish()
     // Deferred: this delegate may be retained only by the window it closes.
     Task { @MainActor in
