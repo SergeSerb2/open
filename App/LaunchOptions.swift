@@ -90,18 +90,26 @@ final class LaunchTiming {
   #if OPEN_AUTOMATION
   private var keyProbeTimestamp: TimeInterval?
 
-  /// Queue an owned-window event at the confirmed frame. The normal AppKit /
-  /// Chromium pump must deliver it through OEApplication.sendEvent; no direct
-  /// router call and no desktop input establishes the readiness timestamp.
+  /// Queue an owned-window key dispatch at the confirmed frame. The native
+  /// run loop must service it, and OEApplication.sendEvent routes it normally.
   func postKeyReadinessProbe(to window: NSWindow?) {
-    guard ProcessInfo.processInfo.environment["OPEN_SPEED_KEY_PROBE"] == "1", let window,
-      let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37)
-    else { return }
-    keyProbeTimestamp = event.timestamp
+    guard ProcessInfo.processInfo.environment["OPEN_SPEED_KEY_PROBE"] == "1", let window else { return }
+    let timestamp = ProcessInfo.processInfo.systemUptime
+    let number = window.windowNumber
+    keyProbeTimestamp = timestamp
     mark("keyPosted")
-    NSApp.postEvent(event, atStart: false)
+    // CefInitialize can discard events posted before its pump is installed.
+    // A native run-loop task survives that setup and still exercises sendEvent.
+    RunLoop.main.perform { [weak self] in
+      MainActor.assumeIsolated {
+        guard self != nil,
+          let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: timestamp, windowNumber: number, context: nil,
+            characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37)
+        else { return }
+        NSApp.sendEvent(event)
+      }
+    }
   }
 
   func recordKeyReadiness(_ event: NSEvent, handled: Bool) {
