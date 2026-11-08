@@ -3542,7 +3542,7 @@ first-party host, `127.0.0.2` the third-party host):
 @@||127.0.0.1/ads/important.js
 ||127.0.0.1/ads/redir.js$redirect=noop.js
 ||127.0.0.1/api/data.json$removeparam=utm_source
-||127.0.0.1/generichide.html$generichide
+@@||127.0.0.1/generichide.html$generichide
 127.0.0.1##.ad-slot
 127.0.0.1##.ad-slot-allowed
 127.0.0.1#@#.ad-slot-allowed
@@ -4834,6 +4834,11 @@ template and use its exact `.js` name in the fixture list: an unresolved
 scriptlet cannot increment C-5's resolved-output drop counter. Refresh the
 fixture's byte counts and SHA-256 values. This does not add production
 scriptlets or change the bundled resource policy.
+The `generichide` fixture needs the `@@` exception prefix: adblock 0.8.11
+rejects `$generichide` on a blocking rule (`filters/network.rs`,
+`NetworkFilterError::GenericHideWithoutException`). The earlier fixture
+could not disable generic hiding. The corrected C-3 case keeps the
+domain-specific `.ad-slot` rule and suppresses generic token calls.
 
 The priority lane and no-wait fallback are not added speculatively. Run
 both contended gates first, then apply §8.2 escalation if required.

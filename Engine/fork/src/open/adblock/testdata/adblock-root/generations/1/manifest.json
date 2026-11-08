@@ -4,8 +4,8 @@
     {
       "file": "testlist.txt",
       "listID": "testlist",
-      "bytes": 1133,
-      "sha256": "955ab4d0dc7a2c1b4b98b760143002960c10930fe6fe44d5a8b930ea5ba83958",
+      "bytes": 1135,
+      "sha256": "e46189ec541dbdd43e2a2da56a82a3606e7b8318b5cab9331468c133c644f3af",
       "sourceRevision": "open-test",
       "generation": 1
     },

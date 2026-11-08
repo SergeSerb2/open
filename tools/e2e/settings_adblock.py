@@ -375,7 +375,7 @@ def real_engine(factory, results, wait):
             wait(lambda: app.call('eval', tab=tab, js=cosmetic_state)['display'] == 'none', timeout=10)
         else:
             # Observe after the generic observer's 100 ms batching interval.
-            app.call('eval', tab=tab, js='new Promise(resolve => setTimeout(resolve, 300))')
+            app.call('eval', tab=tab, js='new Promise(resolve => setTimeout(() => resolve(true), 300))')
         state = app.call('eval', tab=tab, js=cosmetic_state)
         cosmetic_observations[name] = state
         row('cosmetic_' + name, cosmetic_verdict(state, hidden), **state)

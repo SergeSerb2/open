@@ -8,7 +8,7 @@
 @@||127.0.0.1/ads/important.js
 ||127.0.0.1/ads/redir.js$redirect=noop.js
 ||127.0.0.1/api/data.json$removeparam=utm_source
-||127.0.0.1/generichide.html$generichide
+@@||127.0.0.1/generichide.html$generichide
 127.0.0.1##.ad-slot
 127.0.0.1##.ad-slot-allowed
 127.0.0.1#@#.ad-slot-allowed
