@@ -159,7 +159,7 @@ let store = try AdBlockStore(
 store.onEngineEvent = { event in
     // The OpenEngine adapter handles configure/enabled/exclusions/reload/closed.
 }
-try await store.openProfile(profileID)
+try await store.openProfile(profileID, directory: directories.adBlockDirectory(dataDirectoryName: profile.dataDirectoryName))
 try store.setEnabled(false)
 try store.setExcluded("news.example.co.uk", excluded: true, profile: profileID)
 try await store.setListEnabled("fi", true, profile: profileID)
@@ -167,6 +167,8 @@ try await store.updateListsNow(profile: profileID)
 let snapshot = store.siteSnapshot(for: profileID)
 let allowed = try snapshot.isAllowlisted(host: "cdn.example.co.uk")
 try store.closeProfile(profileID)
+// Permanent deletion: await the IO barrier before ProfileTeardown removes any folder.
+await store.retireProfile(profileID)
 ```
 
 `isEnabled` is readable; `setEnabled` is the throwing persistence setter.
