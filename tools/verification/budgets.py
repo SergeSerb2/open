@@ -88,6 +88,10 @@ def command(group, scratch):
     return [str(BIN / args[0]), *args[1:]]
 
 
+def needed_products(groups):
+    return sorted({Path(command(group, Path('.'))[0]).name for group in groups if group not in APP})
+
+
 def run_cli(group, scratch, receipt):
     (scratch / 'tmp').mkdir()
     (scratch / 'home').mkdir()
@@ -496,26 +500,26 @@ def preflight(app, groups):
     cli_build = 'OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main ~/Library/Caches/OpenRE/scripts/heavy.sh swift build -c release --package-path Packages/OpenKit'
     if not (app / 'Contents/MacOS/Open').is_file():
         missing.append('Missing App: ' + str(app) + '\n  ' + build)
-    products = {'sidebar-render', 'commandbar-render', 'sitecontrol-render', 'openkit', 'space-editor-render', 'features-render'}
-    for product in sorted(products):
+    products = needed_products(groups)
+    for product in products:
         if not os.access(BIN / product, os.X_OK):
             missing.append('Missing release CLI: ' + product + '\n  ' + cli_build + ' --product ' + product)
     # Keep SwiftPM's bundles beside the release CLIs. Copying a CLI alone can
     # abort in Bundle.module before any harness cleanup can run.
-    for name in ('OpenAdBlock', 'OpenBoosts', 'OpenCommands', 'OpenFeatures', 'OpenMedia',
+    for name in (('OpenAdBlock', 'OpenBoosts', 'OpenCommands', 'OpenFeatures', 'OpenMedia',
                  'OpenSleep', 'OpenSpaceEditor', 'OpenSuggest', 'OpenTranslate', 'openkit',
-                 'sidebar-render', 'sitecontrol-render', 'space-editor-render'):
+                 'sidebar-render', 'sitecontrol-render', 'space-editor-render') if products else ()):
         if not (BIN / ('OpenKit_' + name + '.bundle')).is_dir():
             missing.append('Missing SwiftPM resource bundle: OpenKit_' + name + '.bundle\n  ' + cli_build)
     # Open.__init__ normally compiles these on demand. Refuse before any row so
     # this prebuilt runner cannot build, including helpers, inside a timing lock.
-    for name in ('activate-own-app', 'owned-window-count'):
+    for name in (('activate-own-app', 'owned-window-count') if any(group in APP for group in groups) else ()):
         source = ROOT / 'tools/e2e' / (name + '.swift')
         target = HELPERS / name
         if not target.exists() or target.stat().st_mtime < source.stat().st_mtime:
             missing.append('Missing/stale automation helper: ' + name + '\n  mkdir -p .re/e2e-tools\n  xcrun swiftc -O -swift-version 6 -parse-as-library tools/e2e/' + name + '.swift -o .re/e2e-tools/' + name)
     probe = HELPERS / 'budgets-idle-probe.dylib'
-    if not probe.exists() or probe.stat().st_mtime < (ROOT / 'tools/verification/feature-idle-probe.m').stat().st_mtime:
+    if 'feature-idle' in groups and (not probe.exists() or probe.stat().st_mtime < (ROOT / 'tools/verification/feature-idle-probe.m').stat().st_mtime):
         missing.append('Missing/stale idle observer:\n  xcrun clang -dynamiclib -fblocks -fobjc-arc -Wno-deprecated-declarations tools/verification/feature-idle-probe.m -framework AppKit -framework QuartzCore -framework CoreVideo -o .re/e2e-tools/budgets-idle-probe.dylib')
     if missing:
         raise RuntimeError('\n'.join(missing))
@@ -617,8 +621,7 @@ def main():
         return 1
     try:
         preflight(app, groups)
-        artifacts = [app / 'Contents/MacOS/Open', *(BIN / name for name in (
-            'openkit', 'sidebar-render', 'commandbar-render', 'sitecontrol-render', 'features-render', 'space-editor-render'))]
+        artifacts = [app / 'Contents/MacOS/Open', *(BIN / name for name in needed_products(groups))]
         result['artifact_sha256'] = {}
         for artifact in artifacts:
             digest = hashlib.sha256()
