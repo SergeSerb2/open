@@ -4597,13 +4597,24 @@ Receipts: `.re/s13/e3/integrated-headless-summary.json`,
 `integrated-headless-pa-phases.json` and `integrated-verdict-identity.json`.
 
 **Valid empty generation.** All lists off publishes a valid zero-file
-manifest in the Swift store. The service now loads a zero-rule engine
-instead of rejecting that manifest and retaining old blocking rules.
-Resources-only manifests remain invalid. The real production API flow
-fails before the fix (async load deadline) and passes all 21 rows after it.
-All eight additional text/DAT/cap initial/resumed corpus dumps remain
-baseline-identical. Receipts: `.re/s13/e3/empty-generation-before.log`,
-`empty-generation-after.log` and `empty-corpus-identity.json`.
+manifest in the Swift store. The first fix loaded a zero-rule engine
+instead of retaining old blocking rules; its API flow passed 21 rows and
+eight additional full-corpus dumps remained identical. Step 7 now includes
+`_resources` even when no list is enabled. That resources-only generation
+failed the old loader through the real API (async load deadline).
+
+The lead's 2026-11-08 12:29 ruling replaces the zero-rule engine with a
+verified no-engine generation. Both zero-file and resources-only manifests
+are verified normally. With zero lists the service skips registry lookup,
+DAT work and engine/resource construction, clears the matcher and reclaims
+freed pages after its old holder is destroyed. Status advances
+`load_generation`, with `list_count=0`, `engine_loaded=false`,
+`resources_loaded=0` and empty `last_error`. The valid generation is a
+successful API load. Nonempty generations retain the normal build path.
+New native no-engine/restore and App request proofs remain pending.
+Historical receipts: `.re/s13/e3/empty-generation-before.log`,
+`empty-generation-after.log` and `empty-corpus-identity.json`; Step 7
+reproduction: `empty-resources-before.log`.
 
 **COUNT-closed-document erratum.** The original pagehide stimulus observed
 no requests. Its replacement waited for three blocked fetches and then
@@ -4667,9 +4678,12 @@ blocking-on median 118.2 ms versus off 144.7 ms. G-5 busy CPU failed at
 Receipt: `.re/s13/e3/integrated-page-loaded-r1-page-scopes.json`. These
 loaded numbers do not establish the quiet gate or a cause for the miss.
 
-**Remaining delivery gates.** G-5 CPU and quiet timing, recorded
-distribution, real App acceptance and the full verify gate remain pending
-in E3. N-18 currently proves hook reachability only: no HTTP/3
+**Remaining delivery gates.** The no-engine generation revision,
+recorded distribution, real App acceptance (including bundled resources
+and DAT reapplication) and the full verify gate remain pending in E3.
+The lead's 2026-11-08 12:27 ruling requires one more quiet load1 <=12
+opportunity after the App build. If none occurs, retain both loaded CPU
+receipts (12.756 ms at load1 48–50 and 8.576 ms at 40–42) and route the
+quiet G-5 row to Section 16 under ruling 2a; it does not block this PR. N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
-
