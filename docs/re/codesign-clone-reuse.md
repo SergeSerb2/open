@@ -142,10 +142,10 @@ no launch gain or live-update safety result.
 | b | Seven simple relaunches have no attributable ChangetimeScan | Not run; retain the initial clone and assessment warm-up logs separately |
 | c | An in-place executable copy keeps the inode but recreates the clone | Supplemental windowless PASS; normal App pending |
 | d | Two install paths use distinct clones with no cross-reuse | Supplemental windowless PASS; normal App pending |
-| e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Held for M5 clear; plain-launch each hardened copy first, stop on any abort |
+| e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Ad-hoc pending on cleared M5; hardened DLV pending M1 clear; plain-launch each hardened copy first, stop on any abort |
 | f | An unwritable cache falls back to a per-run clone and still works | Supplemental windowless PASS; rendering/live-swap fallback pending |
-| g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | Held for M5 clear; wait for load outside all locks |
-| h | Shell, features, updater and engine-status pass | Engine-status: 7 PASS, 0 FAIL, 1 order WARN; App suites held for M5 clear |
+| g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | Pending on cleared M5; wait for load outside all locks |
+| h | Shell, features, updater and engine-status pass | Engine-status: 7 PASS, 0 FAIL, 1 order WARN; App suites pending on cleared M5 |
 
 The rebuilt branch engine passed. The incremental build took 48 seconds;
 its distribution SHA-256 is
@@ -162,8 +162,10 @@ load1 21.64→23.35. The frozen executable SHA-256 is
 The Debug App build, existing e2e helper compilation, and preparation and
 static signature checks of temporary hardened DLV copies also passed
 (`build-after-engine.json`). This preparation launched no App or suite.
-All normal screen runners retain the local hold guard. Full `verify-all`
-also waits for screen clearance because it opens windows.
+The lead cleared the M5 in the 16:31 instruction. Normal-App rows and full
+`verify-all` may proceed there. The M1 remains held. Hardened DLV launch and
+live-swap proof must wait for `M1 clear` and run on the M1 only; the ad-hoc
+live-swap matrix is allowed on the M5.
 
 ### Supplemental off-screen control
 
@@ -180,8 +182,8 @@ inode, size and mtime, while link count went from 1 to 2 during initialization
 and back to 1 after cleanup. Its ctime changed. The caller initialized and
 shut down successfully; the AppKit and owned on-screen-window checks found
 no windows. No real crash report appeared. All owned processes, temporary
-paths and test cache paths were removed. Crash-dialog suppression was
-restored. Load1 was 17.17 before the functional run and 18.28 afterward;
+paths and test cache paths were removed. Load1 was 17.17 before the
+functional run and 18.28 afterward;
 this was not a timing measurement.
 
 ### Rebuilt windowless comparison and a retained failure
@@ -190,7 +192,7 @@ These runs use the same public-engine caller, not the normal Open executable.
 `offscreen-polled/receipt.json` records the completed comparison against
 matched main `619324d3` and branch `09c1f661`. A separate process polls stat
 at a requested 1 ms interval. The largest observed gap was 3.79 ms. The runs
-take the screen lock, suppress crash dialogs, and create no browser or window.
+take the screen lock and create no browser or window.
 Load1 was 9.35→12.24; these are functional checks, not launch measurements.
 
 | Check | Windowless result | Evidence |
@@ -201,7 +203,7 @@ Load1 was 9.35→12.24; these are functional checks, not launch measurements.
 | Same-inode copy | Device and inode stay fixed, mtime changes, saved identity and clone bundle inode change | `same-inode-copy` receipt and stat events |
 | Separate install | Separate cache path and executable inode, no cross-reuse | `second-install` receipt |
 | Unwritable cache | Mode stays 0500; per-run diagnostic; link count 1→2→1; startup and shutdown succeed | `unwritable-cache` receipt and stat events |
-| Cleanup | No real crash, no visible window, no remaining owned process; owned temporary paths and caches removed; dialog preference restored | `offscreen-polled/receipt.json` |
+| Cleanup | No real crash, no visible window, no remaining owned process; owned temporary paths and caches removed | `offscreen-polled/receipt.json` |
 
 The first comparison did **not** pass its stable-ctime assertion. Keep
 `offscreen-rebuilt/receipt.json` and its unified log as contrary evidence.
@@ -230,3 +232,49 @@ starting the caller (`offscreen-xattrs/receipt.json`). Its corrected version
 uses read-only `/usr/bin/xattr`. No product or engine source changed during
 these supplemental checks. No live-swap, helper-rendering, simple-launch scan,
 timing, e2e or full-gate acceptance is claimed by this section.
+
+### Harness rule breach and affected receipts
+
+The harness changed a user system setting. That breached the standing rule.
+The original receipts below contain `crash_dialogs_restored: true`; the swap
+receipts also contain a `crash_dialogs` description. These are wrapper fields,
+not independent evidence of system state or dialog behavior. They do not
+establish compliant crash protection. The original receipts remain unchanged,
+including their failures. No normal-App acceptance is gained from these runs.
+
+All times below are on 2026-11-08 in America/Vancouver (UTC−07:00). They are
+the receipt's outer run bounds, not separately measured setting-write times.
+Receipt paths are relative to `.re/s16/` in the project checkout.
+
+| Receipt | Start | End | Recorded result |
+|---|---|---|---|
+| `codesign-clone-off/adhoc-main-plain/receipt.json` | 11:01:23.412 | 11:01:30.787 | PASS |
+| `codesign-clone-off/adhoc-branch-plain/receipt.json` | 11:05:42.965 | 11:05:51.014 | PASS |
+| `codesign-clone-off/adhoc-main-swap/receipt.json` | 11:05:54.975 | 11:06:08.430 | PASS |
+| `codesign-clone-off/adhoc-branch-swap/receipt.json` | 11:06:12.280 | 11:06:40.142 | FAIL |
+| `codesign-clone-reuse/offscreen-main/receipt.json` | 15:13:09.048 | 15:13:18.324 | PASS |
+| `codesign-clone-reuse/offscreen-rebuilt/receipt.json` | 16:17:46.127 | 16:17:59.968 | FAIL; retained ctime change |
+| `codesign-clone-reuse/offscreen-xattrs/receipt.json` | 16:19:27.171 | 16:19:28.526 | FAIL in setup before caller launch |
+| `codesign-clone-reuse/offscreen-xattrs2/receipt.json` | 16:20:02.058 | 16:20:16.905 | DIAGNOSTIC |
+| `codesign-clone-reuse/offscreen-polled/receipt.json` | 16:21:04.944 | 16:21:26.210 | PASS |
+
+The setting calls and their obsolete receipt fields were removed from
+`guard.py`, `offscreen.py`, `stability.py`, both swap harnesses, and all other
+matching harness source. The reuse guard, stability and swap harnesses have
+no execution receipt in this series. The cleanup did not execute a harness
+or read or change a system setting. The lead independently confirmed the
+setting key was absent, as before, in the 16:30 instruction.
+
+No CrashReporter, ReportCrash, launchctl or other system-setting changes are
+allowed. Launch only unmodified, already-passing builds. Never relaunch a
+build that failed to load. Stop at the first new real Open crash report;
+the read-only `.ips` baseline/diff check remains in the harness sources.
+The windowless modified caller is not a permitted substitute for the pending
+normal-App rows. No harness was rerun after the cleanup.
+
+The 16:31 instruction cleared the M5 for normal-App rows a, b, c, d, f, g, h
+and the ad-hoc part of e. The hardened DLV part of e waits for `M1 clear`. In row b,
+retain stat snapshots around install/copy/xattr/codesign setup separately
+from launch. If the pre-engine ctime change recurs, attribute it before any
+gain claim. Check the harness's own setup and read-only Spotlight/mds logs;
+do not change system settings to investigate it.
