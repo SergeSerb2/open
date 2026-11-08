@@ -171,7 +171,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       store.set(origin: snapshot.context.url, kind: row.engine,
         state: store.state(origin: snapshot.context.url, kind: row.engine) == .allow ? .block : .allow)
       factory.app.tabSleep.permissionsChanged(context: context)
-    case .content: break // E1 is not available in this distribution.
+    case .content: break // E1 binding remains a separate follow-up.
     }
   }
   func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) {
@@ -196,7 +196,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard kinds == .cookies, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
           let page = factory?.hosts[tabID]?.content else { return }
     // Main's non-nil-origin API clears host cookies only (not Domain= cookies).
-    // Keep Clear Cache hidden until E2 supplies a scoped cache operation.
+    // E2 now supplies a scoped operation; SCC binding remains a follow-up.
     page.context.clearBrowsingData(origin: snapshot.context.url) {}
   }
   func openURLInNewTab(_ url: URL, tabID: ItemID) {
