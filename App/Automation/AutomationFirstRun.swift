@@ -101,7 +101,13 @@ extension AutomationController {
       "importInProgress": app.importInProgress,
       "historyInProgress": app.importRunner.historyInProgress,
       "historyProcessed": app.importRunner.historyProcessed,
+      "importUndoInProgress": app.importRunner.undoOperations > 0,
+      "importUndoError": app.importRunner.undoError,
       "importAllMilliseconds": app.importRunner.importAllMilliseconds,
+      "importMetrics": app.importRunner.watchdog.state.merging([
+        "historyMilliseconds": app.importRunner.historyMilliseconds,
+        "totalMilliseconds": app.importRunner.totalMilliseconds
+      ]) { _, new in new },
       "completed": UserDefaults.standard.bool(forKey: "open.firstRun.completed")]
     if let outcome = app.importRunner.lastOutcome {
       state["lastOutcome"] = outcome.counts; state["lastFailures"] = outcome.failures
@@ -118,6 +124,7 @@ extension AutomationController {
       state["defaultAttempted"] = current.defaultWasAttempted
       state["outcome"] = current.outcome?.counts ?? [:]
       state["failures"] = current.outcome?.failures ?? [:]
+      state["reportValues"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.reportCategories.map { ($0, current.reportValue($0)) })
       state["phase"] = current.phaseText
       state["progress"] = current.progress ?? NSNull()
       state["browserHasLanded"] = current.browserHasLanded
@@ -142,6 +149,8 @@ extension AutomationController {
         state["settingsStep"] = wizard.step.rawValue
         state["settingsOutcome"] = wizard.outcome?.counts ?? [:]
         state["settingsError"] = wizard.outcome?.errorText ?? ""
+        state["settingsFailures"] = wizard.outcome?.failures ?? [:]
+        state["settingsReportValues"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.reportCategories.map { ($0, wizard.reportValue($0)) })
       }
     }
     return state

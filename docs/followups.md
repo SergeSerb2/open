@@ -301,6 +301,7 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 ## Section 12 Boost App runtime limits
 
 - B5 is **BLOCKED: engine defect, fixed by #202 patch 0602** (lead, 2026-11-07). CEF gives replacement renderers the script list captured at browser creation; the current-list update arrives after the main-world context. Main engine `af4b3cc3…`: reload has Boost version `null`, run count `0`, and no plain control; a fresh tab has version `one`, run count `1`, and the control. Zero focus interruptions; load 14.92/25.27/19.04 → 15.09/25.14/19.03. Evidence: `.re/handoff/sections/s12/B-evidence/M5-nov7-script-reload/`. Engine child E owns the fix and B5 validation. Keep the page-execution assertions; do not substitute postload evaluation.
+- B28 on engine `7a90e70e…` proves that JS save changes future script IDs without live JS/CSS delivery; omitting only the hook fails at unchanged IDs. Its strict reload check still sees old JS at the first inline script, the same B5 replacement-renderer defect (#202 patch 0602). Raw FAIL retained. Evidence: `.re/handoff/sections/s12/B-evidence/private222/script-hook-{negative,positive}-focused.json`; positive hook/live checks pass, zero interruptions.
 - Managed Boost scripts run in the main world until P7 adds isolated-world
   injection and a native page-message channel. Overlay secrecy is not proven.
   Zap entry is refused; existing saved Zap CSS can apply. Do not enable the
@@ -314,11 +315,13 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 14: multi-profile import boundaries
 
-- Import Undo removes created Profiles and sidebar/routing changes from the
-  model. Main #222 now provides typed deletion and awaited native teardown
-  with in-session data removal (0702). Import Undo still does not erase
-  Archive/History stores or engine directories. Owner Section 14: integrate
-  that completed teardown path; do not bypass its boundary.
+- Import Undo (#224) removes created Profiles and sidebar/routing changes from the
+  model, and the Archive rows and History visits/keys that the import inserted
+  ([verification](import-robustness.md)). Main #222 now provides typed Profile
+  deletion and awaited native teardown with in-session data removal (0702).
+  Import Undo still does not remove Profile directories or loaded engine
+  contexts. Owner Section 14: integrate that completed teardown path; do not
+  bypass its typed confirmation or context teardown.
 - Session Favorite keys contain a Profile and window but no Space. When a source
   window focuses another Profile, import uses the Favorite owner's first Space.
   This is an accepted, marked guess. Settings keeps its current windows and selections and

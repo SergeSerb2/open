@@ -97,13 +97,13 @@ Row count by status (other areas retain their historical counts; §1.10–1.11 a
 | 1.12 Boosts and Zap | 1 | 1 | 5 | 1 | 1 |
 | 1.13 Site Control Center | 0 | 6 | 3 | 0 | 0 |
 | 1.14 Ad blocking | 3 | 1 | 2 | 1 | 0 |
-| 1.15 Import from Arc | 6 | 2 | 3 | 1 | 1 |
+| 1.15 Import from Arc | 6 | 5 | 3 | 1 | 1 |
 | 1.16 Extensions | 11 | 0 | 1 | 0 | 2 |
 | 1.17 Engine and platform basics | 19 | 1 | 24 | 1 | 1 |
 | 1.18 Settings and Library | 10 | 0 | 0 | 0 | 2 |
 | 1.19 First run | 4 | 0 | 1 | 0 | 0 |
 | 1.20 Release | 2 | 0 | 7 | 0 | 0 |
-| **Total (mixed audit dates)** | **185** | **11** | **73** | **8** | **11** |
+| **Total (mixed audit dates)** | **185** | **14** | **73** | **8** | **11** |
 
 
 ## 1. Feature tables
@@ -391,6 +391,9 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Extensions: detect and reinstall candidates | import2 §4 | import2 §4.3 errata | `ArcExtensions.swift`; per-Profile `ArcImportResult` metadata and report counts | shared report section; serial target-Profile Web Store queue and existing consent sheets | `firstrun` EI gates; `EI_failure_reported_app` for offline initiation failure; `EI_failure_reported_engine` BLOCKED | App gates verified; engine completion BLOCKED | Explicit click only; Cancel/already installed skip; no install timeout. Missing fixture reports an App error and continues; damaged-CRX engine completion is BLOCKED (lead filed it). Web Store network receipt is INFO. Undo Import keeps separate extension installs. 17 EI gates pass with negative proofs, including nested ProfileRef and live-Default role mapping. Source directories stay separate from live destinations. |
 | Boosts | [storage evidence](re/boosts-store.md) | Section 14 C2 | `OpenImport`, `openkit import-arc`, `AppImportRunner` seam | `s14/boosts-import` (draft) | synthetic Firestore CLI flow; first-run counts/lock refusal | partial | Default Profile assignment is a guess; missing enablement imports disabled; color/zoom conversion deferred. App wiring BLOCKED (Section 12 AppBoosts). |
 | Multi-profile Arc installs | DM §2.6; profiles Q1 | [multi-profile import](import-multiprofile.md) | `ArcImport.swift`; `AppImportRunner.swift`; `BrowserModel.mergeImportedSidebar` | shared first-run/Settings runner | `firstrun` `MP_*`; counts-only real 2-Profile audit | partial (physical Undo deferred) | Observed nested custom Profile refs feed one mapping for Spaces, Favorites, routing, Archive and History. Normal Profile creation allocates live directories; source directories stay separate. Settings maps Arc Default by role to the live Open Default; named Profiles retain stable import IDs. Physical store/context removal after Undo awaits Section 10 deletion (0702). C1c App validation passed: 12 MP rows, all negative proofs, 64 first-run rows, counts-only real-App audit, routing, sidebar and Settings; [receipt](import-multiprofile.md). The final full verifier table is in PR #221. |
+| Re-running import adds no duplicates | DM; import2 §1.12 | [robustness](import-robustness.md) | stable model IDs, Archive IDs, `history_import_keys` | shared App runner | new `import-robust` repeat paths with per-category counts | in PR (App verified) | Settings twice and first run → Settings pass with all category counts, including Profiles and routing. The no-op repeat retains the earlier Undo target and adds no action. |
+| Missing/unreadable stores, partial failure and one Undo | import2 §1.9, §5.4 | [robustness](import-robustness.md) | `ArchiveStore.importRecordsWithUndo`; `HistoryStore.removeImportedHistory` | `AppImportUndo` | new `import-robust` failure and Undo rows | in PR (App verified) | All failure, partial import and native Undo/Redo rows pass; 27 negative proofs fail as intended. Only committed new rows are removed. Physical Profile folders stay a separate follow-up. |
+| Import responsiveness, History speed and idle work | import2 §1.13 | [robustness](import-robustness.md) | utility-worker Archive preparation; batched model notifications | automation-only main-thread watchdog | new `import-robust` timing/idle rows, 100k visits | in PR | Targets: History ≈1.4 s (plan hard limit 3 s), main lag <50 ms, no repeated writes 10 s after completion. Final engine phase timings and loads are recorded in draft #224 and [robustness](import-robustness.md). |
 | Import wizard (Settings ▸ General ▸ Import from Arc…) | — | settings §5.8 | `OpenSettings/ImportWizard.swift`; shared count probe (#66) | shared App runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `settings-preview`; final `firstrun` Settings rows | done (partial) | Live sidebar/archive merge; background History and archive-aware duplicates in this PR. |
 | Import in the first-run flow | — | first-run Steps A–F | `OpenSettings/FirstRun.swift` | native window and runner (#195); History in [#206](https://github.com/SergeSerb2/open/pull/206) | `firstrun` 52/52 ×3; [receipt](first-run/steps-ef-verification.md) | done | Functional flows pass. First-content 250 ms target remains open. |
 | Top Sites, site engagement | — | import2 lead decision: skip | — | — | — | out of scope | |
