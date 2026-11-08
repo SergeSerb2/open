@@ -17,6 +17,16 @@ enum MainMenu {
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
     menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
     if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu {
+      let basics = ClosureMenuItem(title: "Open Basics") { [weak app, weak factory] in
+        guard let app, app.firstRunWindowController == nil else { return }
+        let controller = app.frontWindowController ?? app.makeWindow()
+        let target = factory.flatMap { $0.isClosing ? nil : $0 } ?? controller.flatMap { app.hostFactories[$0.windowID] }
+        target?.openBasics(nil)
+      }
+      basics.identifier = NSUserInterfaceItemIdentifier("open-basics")
+      help.insertItem(basics, at: 0)
+    }
     #if DEBUG || OPEN_AUTOMATION
     if let help = menu.items.first(where: { $0.title == "Help" })?.submenu,
       let troubleshooting = help.items.first(where: { $0.title == "Troubleshooting" })?.submenu {
@@ -28,11 +38,24 @@ enum MainMenu {
       troubleshooting.addItem(archive)
     }
     #endif
+    #if DEBUG
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu {
+      let replay = ClosureMenuItem(title: "Replay Intro") { [weak app] in app?.showOnboarding(replay: true) }
+      replay.identifier = NSUserInterfaceItemIdentifier("replay-intro")
+      help.items.first(where: { $0.title == "Troubleshooting" })?.submenu?.addItem(replay)
+    }
+    #endif
     return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
+    // Native intro responder/default button owns unmodified keys. Do not load
+    // browser command services while the first-run welcome is on screen.
+    if let introWindow = app.onboardingWindowController?.window, event.window === introWindow {
+      if event.modifierFlags.contains(.command), ["t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
+      return false
+    }
     if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
       if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before

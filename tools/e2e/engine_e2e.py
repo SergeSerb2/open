@@ -12102,10 +12102,12 @@ def main():
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
+    ap.add_argument('--features-passwords-engine-safety', action='store_true',
+                    help='features: prove ignored save offers with main App code and no password delegate')
     ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
@@ -12129,6 +12131,8 @@ def main():
         signal.signal(signal.SIGALRM, row_timeout)
     if opts.firstrun_boosts_only and opts.only != "firstrun":
         ap.error("--firstrun-boosts-only requires --only firstrun")
+    if opts.features_passwords_engine_safety and opts.only != 'features':
+        ap.error('--features-passwords-engine-safety requires --only features')
     # Startup itself may migrate legacy Peek choices before the socket answers.
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
@@ -12196,6 +12200,8 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
+    if opts.features_passwords_engine_safety:
+        extra.append('--open-allow-mock-keychain-secrets')
     if opts.only == "extensions-e2":
         import extensions_e2
         dirs = extensions_e2.fixtures(ROOT, tmp, opts.extensions)
@@ -12259,9 +12265,13 @@ def main():
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
         launch_args = [arg for arg in extra if load_extensions or not arg.startswith("--load-extension=")]
-        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only in ("firstrun", "import-robust"))
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
+        if opts.only in ("firstrun", "import-robust") and app.call("onboarding").get("active"):
+            app.call("onboarding", action="skip-intro")
+            app.call("onboarding", action="get-started")
+            wait_until(lambda: app.call("first-run")["active"], timeout=10, step=.05)
         return app
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -12354,6 +12364,14 @@ def main():
                 row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None,
                 result_name=probe_result_name,
                 engine_distribution_sha256=results['engine']['distributionSHA256'])
+        elif opts.only == "onboarding":
+            results["onboarding"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
+                factory, results["onboarding"], tmp, sys.modules[__name__])
+        elif opts.only == "welcome":
+            import welcome
+            results["welcome"] = CheckedResults(tracker)
+            welcome.run(factory, results["welcome"], tmp, sys.modules[__name__])
         elif opts.only == "firstrun":
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
@@ -12489,7 +12507,7 @@ def main():
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
-            app = factory(urls=("about:blank" if opts.only == "extensions-p3" else "https://example.com/",))
+            app = factory(urls=("about:blank" if opts.only == "extensions-p3" or opts.features_passwords_engine_safety else "https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
@@ -12511,7 +12529,11 @@ def main():
                     import extensions_e2
                     extensions_e2.run(app, results["extensions-e2"], tmp, ROOT, wait_until, new_tab, factory, _restore_defaults)
                 else:
-                    feature_checks(app, opts.style, results["features"], tmp)
+                    if opts.features_passwords_engine_safety:
+                        runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_engine_safety.py'))['run'](
+                            app, results['features'], tmp, globals())
+                    else:
+                        feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
 
@@ -12578,14 +12600,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata"):
+    for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
-            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
+            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata")
+    failures = [k for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

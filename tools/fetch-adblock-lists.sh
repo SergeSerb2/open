@@ -74,10 +74,26 @@ PY
   bytes=$((bytes + $(wc -c < "$STAGING/$name")))
 done < "$PINS"
 [[ "$count" == 2 ]] || { echo "expected both bundled lists" >&2; exit 1; }
+# The package receipt mirrors the engine-side canonical pin for SwiftPM callers.
+cmp "$ROOT/Engine/fork/adblock/resources-pins.txt" "$ROOT/Packages/OpenKit/Sources/OpenAdBlock/Resources/resources-pins.txt" || {
+  echo 'resources pins differ between engine and Swift package' >&2; exit 1;
+}
+python3 "$ROOT/tools/fetch-adblock-resources.py" --dest "$STAGING" --cache "$DEST" --include-source
 # Publish only after every fetched file passed verification. Same-filesystem rename per file.
 while read -r name url expected; do
   [[ -z "$name" || "$name" == \#* ]] && continue
   mv -f "$STAGING/$name" "$DEST/$name"
 done < "$PINS"
+mv -f "$STAGING/resources.json" "$DEST/resources.json"
+mv -f "$STAGING/ubo.tar.gz" "$DEST/ubo.tar.gz"
+rm -rf "$DEST/ubo-source"
+mv "$STAGING/ubo-source" "$DEST/ubo-source"
+# SwiftPM CLI/settings-preview callers also need an offline bundled payload.
+# This generated file is ignored; its bytes have passed the same output pin.
+MODULE="$ROOT/Packages/OpenKit/Sources/OpenAdBlock/Resources"
+if ! cmp -s "$DEST/resources.json" "$MODULE/resources.json"; then
+  cp "$DEST/resources.json" "$MODULE/.resources.json.tmp"
+  mv -f "$MODULE/.resources.json.tmp" "$MODULE/resources.json"
+fi
 [[ "$UPDATE" == false ]] || mv -f "$STAGING/list-pins.txt" "$PINS"
 echo "fetch-adblock-lists: $count files, $bytes bytes -> $DEST"

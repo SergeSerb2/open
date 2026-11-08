@@ -33,6 +33,7 @@ struct GenerationManifest: Codable, Sendable {
 struct GenerationStorage: Sendable {
     let maximumBytes: Int
     let ephemeral: Bool
+    let resources: BundledResources
 
     func current(in directory: URL) throws -> CurrentGeneration? {
         try readJSON(CurrentGeneration?.self, at: directory.appendingPathComponent("current.json"), fallback: nil)
@@ -51,13 +52,25 @@ struct GenerationStorage: Sendable {
               digest(bytes) == reference.manifestSHA256 else { throw AdBlockError("manifest SHA-256 mismatch or missing generation") }
         let manifest = try JSONDecoder().decode(GenerationManifest.self, from: bytes)
         let ids = manifest.state.enabledBlockLists
+        let listFiles = manifest.files.filter { $0.listID != "_resources" }
+        let resourceFiles = manifest.files.filter { $0.listID == "_resources" }
         guard manifest.generation == reference.generation, manifest.state.catalogVersion == catalog.version,
-              Set(ids).count == ids.count, manifest.files.count == ids.count,
-              Set(manifest.files.map(\.listID)) == Set(ids),
+              Set(ids).count == ids.count, listFiles.count == ids.count, resourceFiles.count <= 1,
+              Set(listFiles.map(\.listID)) == Set(ids),
               ids.allSatisfy({ id in catalog.lists.contains { $0.id == id && !$0.urls.isEmpty } }) else {
             throw AdBlockError("manifest enabled-list set mismatch")
         }
-        for file in manifest.files {
+        // Legacy generations without resources remain verifiable. The repository
+        // adds the current bundle on its next publication (including Profile open).
+        for file in resourceFiles {
+            guard file.file == "resources.json", file.generation == reference.generation,
+                  file.sourceRevision == [file.sha256],
+                  let data = boundedData(generation.appendingPathComponent(file.file), maximum: BundledResources.maximumBytes),
+                  !data.isEmpty, data.count == file.bytes, digest(data) == file.sha256 else {
+                throw AdBlockError("_resources: size or SHA-256 mismatch")
+            }
+        }
+        for file in listFiles {
             guard file.file == "\(file.listID).txt", file.generation == reference.generation,
                   let receipt = manifest.state.lists[file.listID], receipt.bytes == file.bytes,
                   receipt.sha256 == file.sha256, file.sourceRevision == revisions(receipt),
@@ -100,6 +113,10 @@ struct GenerationStorage: Sendable {
             entries.append(GenerationFile(file: "\(id).txt", bytes: data.count, sha256: receipt.sha256,
                                           listID: id, sourceRevision: revisions(receipt), generation: number))
         }
+        let resourceData = try resources.verifiedData()
+        try atomicWrite(resourceData, to: generation.appendingPathComponent("resources.json"))
+        entries.append(GenerationFile(file: "resources.json", bytes: resourceData.count, sha256: resources.sha256,
+                                      listID: "_resources", sourceRevision: [resources.sha256], generation: number))
         let manifest = GenerationManifest(generation: number, files: entries, state: state)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         let bytes = try encoder.encode(manifest)

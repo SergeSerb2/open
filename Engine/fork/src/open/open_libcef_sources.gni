@@ -52,6 +52,7 @@ open_libcef_mac_sources = [
   "//open/browser/tab_strip/hidden_browser.h",
   "//open/browser/tab_strip/open_browser_window.h",
   "//open/browser/tab_strip/open_browser_window.mm",
+  "//open/browser/tab_strip/open_hosted_window_hooks.h",
   "//open/browser/tab_strip/open_hosted_platform_delegate.h",
   "//open/browser/tab_strip/open_hosted_platform_delegate.mm",
   "//open/browser/tab_strip/open_tab_strip.cc",

@@ -111,7 +111,7 @@
         let sym = dlsym(lib, "CGWindowListCreateImageFromArray")
       else { return nil }
       let create = unsafeBitCast(sym, to: CreateFromArray.self)
-      let numbers = [window.windowNumber] + (window.childWindows ?? []).filter(\.isVisible).map(\.windowNumber)
+      let numbers = [window.windowNumber] + (window.childWindows ?? []).filter { $0.isVisible && $0.identifier?.rawValue != "onboarding-dim" }.map(\.windowNumber)
       var pointers = numbers.map { UnsafeRawPointer(bitPattern: UInt($0)) }
       guard let array = CFArrayCreate(nil, &pointers, pointers.count, nil) else { return nil }
       // kCGWindowImageBoundsIgnoreFraming (1 << 0) | kCGWindowImageBestResolution (1 << 3)

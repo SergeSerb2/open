@@ -1,0 +1,7 @@
+# License: GPL-3.0 (uBlock Origin resources). Distribution review
+# required before any public release — same gate as MPL-2.0, fork-infra Q-2.
+# uBO commit: 3762a26fd65df422080c116e6a70d13bc8d57d62
+# Reproduce with tools/fetch-adblock-resources.py (adblock =0.8.11; locked /tmp driver).
+# name source sha256
+ubo.tar.gz https://codeload.github.com/gorhill/uBlock/tar.gz/3762a26fd65df422080c116e6a70d13bc8d57d62 addfeba80c8e231cd4882160c01b64aaf2b632b3399972fc5c0819c2158b7991
+resources.json assemble:ubo.tar.gz 6d4a87b8f0e44e0ffad66c5b66694c4a1da27383eaa11acae218030a29d9575e

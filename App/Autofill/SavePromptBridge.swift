@@ -56,7 +56,7 @@ extension EngineWebContentHostFactory {
     guard !isClosing, !page.context.isEphemeral else { return }
     attachSavePrompts()
     #if OPEN_AUTOMATION
-    AutomationController.savePromptOwner?.recordRealSavePrompt(prompt, answer: "pending")
+    AutomationController.savePromptOwner?.recordRealSavePrompt(prompt, answer: "pending", owner: self, page: page)
     #endif
     savePrompts?.enqueue(prompt, page: AnyHashable(page.identifier))
   }
@@ -69,7 +69,7 @@ extension EngineWebContentHostFactory {
   func webContent(_ page: OEWebContent, openAutofillPage destination: OEAutofillPage) {
     guard let target = AutofillPage(rawValue: destination.rawValue) else { return }
     #if OPEN_AUTOMATION
-    AutomationController.savePromptOwner?.recordAutofillPage(target)
+    record("autofillPage", page, ["page": target == .passwords ? "passwords" : target == .paymentMethods ? "paymentMethods" : "addresses"])
     #endif
     // Peek hosts retain their source Space even though they are not model tabs.
     let host = hosts.values.first { $0.content === page }

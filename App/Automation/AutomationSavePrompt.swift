@@ -45,20 +45,16 @@ extension AutomationController {
       ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
   }
 
-  func recordRealSavePrompt(_ prompt: OESavePrompt, answer: String) {
+  func recordRealSavePrompt(_ prompt: OESavePrompt, answer: String, owner: EngineWebContentHostFactory? = nil, page: OEWebContent? = nil) {
     guard let host = URL(string: prompt.origin)?.host()?.lowercased(),
           host == "example.com" || host.hasSuffix(".example.com") || host == "localhost" || host == "127.0.0.1" else { return }
     let previous = realSavePromptAnswers.object(forKey: prompt) as String?
     guard previous == nil || previous == "pending", previous != answer else { return }
     realSavePromptAnswers.setObject(answer as NSString, forKey: prompt)
-    savePromptEvents.append(["type": "savePrompt", "kind": prompt.openSavePromptKind.automationName,
-      "displayHost": prompt.displayHost, "answer": answer])
-    if savePromptEvents.count > 2000 { savePromptEvents.removeFirst(savePromptEvents.count - 2000) }
-  }
-
-  func recordAutofillPage(_ page: AutofillPage) {
-    savePromptEvents.append(["type": "autofillPage", "page": page == .passwords ? "passwords" : page == .paymentMethods ? "paymentMethods" : "addresses"])
-    if savePromptEvents.count > 2000 { savePromptEvents.removeFirst(savePromptEvents.count - 2000) }
+    if let owner { realSavePromptFactories.setObject(owner, forKey: prompt) }
+    if let page { realSavePromptPages.setObject(page, forKey: prompt) }
+    realSavePromptFactories.object(forKey: prompt)?.record("savePrompt", realSavePromptPages.object(forKey: prompt),
+      ["kind": prompt.openSavePromptKind.automationName, "displayHost": prompt.displayHost, "answer": answer])
   }
 
   func savePromptDidPresent(_ sheet: SavePromptSheet) {
@@ -87,10 +83,8 @@ extension AutomationController {
             host.utf8.count <= SavePromptSheet.maximumHostBytes,
             !host.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
             let page = factory.selectedContent else { throw Failure(message: "invalid mock kind/host or no focused page (host limit 4096 UTF-8 bytes)") }
-      let request = MockSavePrompt(kind: kind, displayHost: host) { [weak self] answer in
-        guard let self else { return }
-        self.savePromptEvents.append(["type": "savePrompt", "kind": kind.automationName, "displayHost": host, "answer": answer])
-        if self.savePromptEvents.count > 2000 { self.savePromptEvents.removeFirst(self.savePromptEvents.count - 2000) }
+      let request = MockSavePrompt(kind: kind, displayHost: host) { [weak factory, weak page] answer in
+        factory?.record("savePrompt", page, ["kind": kind.automationName, "displayHost": host, "answer": answer])
       }
       presenter.enqueue(request, page: AnyHashable(page.identifier))
     } else if let answer = args["answer"] as? String {

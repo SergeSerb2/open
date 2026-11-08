@@ -12,6 +12,7 @@ bool OpenAutofillPage(content::WebContents* contents, int page);
 void NotifyPasswordSaveKeychainError(content::WebContents* contents);
 void ShowSavePrompt(CefRefPtr<OpenSavePrompt> prompt);
 void WithdrawSavePrompt(content::WebContents* contents);
+void WithdrawPasswordSavePrompt(content::WebContents* contents);
 void NotifyPromptWithdrawn(CefRefPtr<CefBrowser> browser, OpenSavePrompt* prompt);
 void ForgetSavePrompt(content::WebContents* contents, OpenSavePrompt* prompt);
 void InstallNullCredentialDialogHooks();

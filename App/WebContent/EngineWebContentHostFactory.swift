@@ -81,6 +81,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   var contentContainer: NSView { controller!.container }
   private(set) var hosts: [ItemID: EngineWebContentHost] = [:]
+  var welcomeHosts: [ItemID: WelcomeContentHost] = [:]
+  func queueWelcomeDestination(_ id: ItemID, url: URL) { queuedNavigations[id] = url }
   private var developerModeObserver: (any NSObjectProtocol)?
   /// The Capture overlay is up in this window: history swipes pause (§4.4.1).
   private(set) var captureOverlayUp = false
@@ -139,6 +141,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Edit Pinned URL confirmed in the command bar (app-shell §4.1): the pinned URL changes; a tab that
   /// was still on its old pinned page also goes to the new one (guess: no capture of Arc's dialog).
   func updatePinnedURL(_ id: ItemID, to url: URL) {
+    guard !WelcomeTab.isInternal(url) else { return }
     guard let tab = model.tab(id: id), let old = tab.pinnedURL else { return }
     let onPinnedPage = tab.url.host == old.host && tab.url.path == old.path
     guard model.setPinnedURL(id: id, url: url) else { return }
@@ -191,6 +194,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     self.app = app; windowState = state; self.model = model ?? app.model
     self.incognitoSession = incognitoSession
     super.init()
+    WelcomeTab.restoreIcons(in: self.model)
     observerID = self.model.addObserver { [weak self] change in self?.treeChanged(change) }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -499,6 +503,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// created without a renderer and gets the history before it is shown; it loads the current
   /// entry when it shows, or `url` (the fallback) if the engine refuses the history.
   func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?, history: OENavigationHistory?, browser: OEBrowser? = nil) -> (any WebContentHost)? {
+    if WelcomeTab.matches(url ?? model.tab(id: tabID)?.url) {
+      if let host = welcomeHosts[tabID], !host.closed { return host }
+      let host = WelcomeContentHost(tabID: tabID, owner: self)
+      welcomeHosts[tabID] = host
+      return host
+    }
+    // No internal URL (including an unknown open:// route) reaches OpenEngine.
+    if let target = url ?? model.tab(id: tabID)?.url, WelcomeTab.isInternal(target) { return nil }
     guard let context = context(for: profileID) else {
       if let url, model.tab(id: tabID) != nil { queuedNavigations[tabID] = url }
       return nil
@@ -554,6 +566,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.tabSleep.hostClosed(tabID: host.tabID)
   }
   func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool {
+    if let native = host as? WelcomeContentHost {
+      return native.owner === self && native.tabID == tabID && !native.closed
+    }
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
           profile(for: tabID)?.id == host.profileID else { return false }
     // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
@@ -583,6 +598,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func tabStripState() -> [[String: Any]] { mirror.snapshot() }
   @discardableResult
   func ensureContent(for tab: Tab, history: OENavigationHistory? = nil) -> OEWebContent? {
+    guard !WelcomeTab.isInternal(tab.url) else { return nil }
     guard app.engineReady else { queuedNavigations[tab.id] = tab.url; return nil }
     if let host = hosts[tab.id] { return host.content }
     guard let profileID = profile(for: tab.id)?.id else { return nil }
@@ -595,6 +611,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host.content
   }
   private func makeContent(for tab: Tab, url: URL?, requestContext: OEBrowserContext? = nil) -> OEWebContent? {
+    guard !WelcomeTab.isInternal(url ?? tab.url) else { return nil }
     guard app.engineReady else { queuedNavigations[tab.id] = url ?? tab.url; return nil }
     guard let profile = profile(for: tab.id) ?? requestContext.flatMap({ self.profile(for: $0) }) else { return nil }
     tab.live.sleepPhase = .live
@@ -607,6 +624,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private func treeChanged(_ change: TreeChange) {
     guard !isClosing, !app.shutdownPrepared else { return }
     treeChangeCount += 1
+    for (id, host) in welcomeHosts {
+      if model.tab(id: id) == nil { controller?.container.closeHost(for: id); host.close() }
+      else { host.page.updateColors() }
+    }
     if let id = iconPickerSpaceID, focusedSpace?.id != id || model.space(id: id) == nil { iconPicker?.close() }
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
@@ -633,6 +654,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// from a stored back list), so their wake kind and history are right (memory-fork §9.4).
   func markVisibleTabsLive() {
     for tab in visibleTabs {
+      if WelcomeTab.matches(tab.url) { tab.live.sleepPhase = .live; continue }
       if app.tabSleep.wakesThroughController(tab, hasHost: hosts[tab.id].map { !$0.closed } ?? false) { app.tabSleep.wake(tab.id) }
       else { tab.live.sleepPhase = .live }
     }
@@ -642,7 +664,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
-    if focus { selectedContent?.focusPage() }
+    if focus {
+      if let id = selectedTab?.id, let native = welcomeHosts[id] { native.focus() }
+      else { selectedContent?.focusPage() }
+    }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
     findController?.sync()
     savePromptFocusChanged()
@@ -864,6 +889,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func closeAll() {
     guard !isClosing else { return }
+    for host in Array(welcomeHosts.values) { host.close() }
+    welcomeHosts.removeAll()
     controller?.boostEditor?.close(returnFocus: false)
     isClosing = true
     savePrompts?.cancelAll()
@@ -973,6 +1000,12 @@ extension EngineWebContentHostFactory {
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
+    // Welcome is created by the hand-off or Help only; arbitrary internal routes
+    // typed in the command bar never reach a page or a system URL handler.
+    guard !WelcomeTab.isInternal(url) else { return }
+    if current, let tab = selectedTab, WelcomeTab.matches(tab.url) {
+      leaveWelcome(tabID: tab.id, for: url); return
+    }
     app.noteLaunchWindowNavigation(windowState.id)
     if current, selectedContent != nil || selectedTab != nil {
       if let page = selectedContent, let host = hosts.values.first(where: { $0.content === page }) {
@@ -1282,7 +1315,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, createWebContentFor request: OEOpenRequest) -> OEWebContent? {
-    guard app.engineReady else { return nil }
+    guard app.engineReady, request.url.map({ !WelcomeTab.isInternal($0) }) ?? true else { return nil }
     let config = OEWebContentConfiguration(context: request.context)
     config.runtimeStyle = webContent.runtimeStyle
     switch request.disposition {

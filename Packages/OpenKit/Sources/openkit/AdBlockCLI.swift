@@ -20,7 +20,7 @@ func runAdBlock(args: [String]) async throws {
         index += 1
     }
     guard let action = positional.first else {
-        throw AdBlockError("usage: openkit adblock <catalog|update|bundle|status|allowlist|toggle|list|perf|schedule> [--dir ROOT] [--profile UUID]")
+        throw AdBlockError("usage: openkit adblock <catalog|update|reset|bundle|status|allowlist|toggle|list|perf|schedule> [--dir ROOT] [--profile UUID]")
     }
     if action == "catalog" {
         let catalog = try AdBlockCatalog.load()
@@ -94,6 +94,9 @@ func runAdBlock(args: [String]) async throws {
     case "status":
         print(store.debugInfo(profile: profile))
         print("list_directory=\(try store.listDirectory(for: profile).path)")
+    case "reset":
+        try await store.resetListChoices(profile: profile)
+        print("enabled_lists=\(store.enabledListIDs(for: profile).joined(separator: ",")) reload_events=\(reloads)")
     case "toggle":
         guard positional.count == 2, ["on", "off"].contains(positional[1]) else { throw AdBlockError("toggle <on|off>") }
         try store.setEnabled(positional[1] == "on")

@@ -81,6 +81,9 @@ typedef NS_ENUM(NSInteger, OEWebContentCrashState) {
 NS_SWIFT_UI_ACTOR
 @protocol OEWebContentDelegate <NSObject>
 @optional
+/// Offers and withdrawals arrive on a later main-run-loop turn, after
+/// Chromium updates its controller. The callback may answer immediately or
+/// close the page. Retain a queued offer until the shell answers it.
 /// An unanswered prompt is ignored when the shell releases it.
 - (void)webContent:(OEWebContent*)webContent showSavePrompt:(OESavePrompt*)prompt
     NS_SWIFT_NAME(webContent(_:showSavePrompt:));
