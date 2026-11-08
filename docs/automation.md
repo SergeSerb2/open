@@ -147,7 +147,8 @@ A pending Little Open window never borrows a standard window's Browser.
 
 `settings-adblock-engine` reads the applied ad-block configuration without
 opening Settings, a store, or a native context. `profiles` contains the store's
-enabled state and excluded domains, plus each existing regular and OTR context's
+`storeReady` (`AdBlockStore.isProfileOpen`), enabled state and excluded domains,
+plus each existing regular and OTR context's
 `adBlockEnabled`, `listDirectorySet`, `listDirectoryMatchesProfile`,
 `excludedDomains`, and `adBlockStatus`. Directory checks are booleans; this query
 never returns paths or page URLs. Excluded domains are available only through
@@ -159,7 +160,10 @@ restoring the clipboard before returning `copiedDebugInfo`. The OpenEngine
 ad-block API is currently a placeholder: `adBlockStatus.engine` is `pending`
 and no requests are blocked until the Section 13 E2 engine binding lands.
 `OEBrowserContext.adBlockSupported` is false, so the store's engine callback stays
-nil and Settings reports that blocking is not active. The query also returns
+nil and launch opens no Profile in the store or starts its update schedule.
+Opening Settings → Advanced still opens the selected Profile (`ready: true`).
+The placeholder row checks this after first paint and a 5 s observation.
+Settings reports that blocking is not active. The query also returns
 `nativeSupported`, `adapterSupported`, and `bindingInstalled`. Automation builds
 in Debug alone accept `OPEN_ADBLOCK_AUTOMATION_FORCE_SUPPORTED=1` to exercise the adapter
 against the placeholder. This does not change the engine's support property and

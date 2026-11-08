@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import time
 
 KNOWN = 'ddkjiahejlhfcafbddmgiahcphecmpfh'
 WARNING = 'More than one ad blocker is on. Blocking may break sites.'
@@ -133,7 +134,9 @@ def binding(factory, results, wait):
             app.call('defaults', key=key, value=None)
             app.call('defaults', key=key, value=value)
         # Read-only query does not create Settings or open a Profile on our behalf.
-        assert wait(lambda: query()['started'] and all(p['storeReady'] for p in query()['profiles']), timeout=30), query()
+        assert wait(lambda: query()['started'], timeout=30), query()
+        if force_supported or query()['nativeSupported']:
+            assert wait(lambda: all(p['storeReady'] for p in query()['profiles']), timeout=30), query()
     def loaded_profile(name):
         app.call('profiles-shell', action='create', name=name)
         profile = next(p for p in profiles() if p['name'] == name)
@@ -143,17 +146,36 @@ def binding(factory, results, wait):
 
     try:
         launch(fresh=True, force_supported=False)
-        unsupported = query()
+        assert wait(lambda: 'firstContentfulPaint' in app.call('timing'), timeout=30), app.call('timing')
+        # Observe the real post-paint launch without touching Settings. This query
+        # is read-only; opening Settings below is the first permitted store open.
+        launch_state = query()
+        launch_closed = bool(launch_state['profiles']) and all(not p['storeReady'] for p in launch_state['profiles'])
+        observation_start = time.monotonic()
+        while time.monotonic() - observation_start < 5:
+            time.sleep(.1)
+            unsupported = query()
+            launch_closed = launch_closed and all(not p['storeReady'] for p in unsupported['profiles'])
+        observation_seconds = time.monotonic() - observation_start
         app.call('settings-pane', pane='advanced')
+        selected = app.call('settings-state')['selectedProfile']
+        settings_ready = bool(wait(lambda: app.call('settings-adblock')['ready'], timeout=30))
+        settings_state = query()
+        selected_open = state_for(settings_state, selected)['storeReady']
         app.call('settings-adblock', enabled=True)
         honest = app.call('settings-state')['advancedStatus']
         row('placeholder_unbound', unsupported['bindingInstalled'] == unsupported['nativeSupported']
             and unsupported['adapterSupported'] == unsupported['nativeSupported']
-            and (unsupported['nativeSupported'] or ('Ad blocking is not active in this build' in honest
+            and settings_ready and selected_open
+            and (unsupported['nativeSupported'] or (launch_closed
+                and 'Ad blocking is not active in this build' in honest
                 and all(not c['adBlockEnabled'] and not c['listDirectorySet']
                         for p in unsupported['profiles'] for c in p['contexts']))),
             nativeSupported=unsupported['nativeSupported'], bindingInstalled=unsupported['bindingInstalled'],
-            honestStatus='Ad blocking is not active in this build' in honest)
+            honestStatus='Ad blocking is not active in this build' in honest,
+            launchProfiles=launch_state['profiles'], postPaintProfiles=unsupported['profiles'],
+            postPaintObservationSeconds=observation_seconds, launchProfilesClosed=launch_closed,
+            settingsSelectedProfile=selected, settingsReady=settings_ready, settingsSelectedProfileOpen=selected_open)
         app.quit()
         launch(fresh=True)
         initial = settled()
