@@ -17,7 +17,6 @@ final class AppStores: ProfileDataOwner {
   /// A read of existing settings must not open the store or load its PSL.
   var existingAdBlock: AdBlockStore? { adBlockStorage }
   private var attemptedAdBlock = false
-  var existingAdBlock: AdBlockStore? { adBlockStorage }
   var adBlock: AdBlockStore? {
     if !attemptedAdBlock {
       attemptedAdBlock = true
