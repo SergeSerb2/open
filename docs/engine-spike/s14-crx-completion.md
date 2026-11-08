@@ -1,6 +1,6 @@
 # Section 14 C5: import local CRX completion
 
-2026-11-07, M5. Branch `s14/crx-completion`. The full verifier ran on `043588d2` with main through `1714a22e`. The final shared-file merge `a7b3a221` includes main `7f7feb26`; Debug and the affected first-run/extension suites were rerun after it. No engine source changed in this PR.
+2026-11-07, M5. Branch `s14/crx-completion`. The full verifier ran on `043588d2` with main through `1714a22e`. The earlier shared-file merge `a7b3a221` includes main `7f7feb26`; Debug and the affected first-run/extension suites were rerun after it. No engine source changed in this PR.
 
 The automation-only import path now uses `installLocalCRX(_:completion:)`. Installed requires the exact candidate ID. Cancelled skips. Failed preserves Chromium's error text. The hidden browser/page and delegate-event matching are removed. The production Web Store call is unchanged. Consent and readiness have no failure deadline. Undo Import keeps independent extension installations.
 
@@ -112,3 +112,25 @@ Main measured **4.719 ms** and head measured **4.076 ms**. Both meet 8.33 ms. Th
 The entire OpenKit source tree is identical on main and head: git tree `524797eead8d19c6211883f1fed42f2a8d016c35`. The Swift diff audit found no production Web Store logic change. The import-attempt class changes outside the install branch remove fields and a helper already guarded by `OPEN_AUTOMATION`; the report inspection file is fully guarded. No scroll, favicon, OpenKit or engine implementation changed in this PR.
 
 Post-comparison whitespace and cleanup checks PASS. The clean temporary main worktree was removed; no owned App, Helper or features-render process remains. Loads: (65.46, 40.10, 41.46) → (65.46, 40.10, 41.46).
+
+## Final conflict-resolved comparison
+
+GitHub reported a conflict after main #224 landed. The branch merged main `43ee7fb89a2917872e6b21490a7bf8301945bbce` as `7768e9a4149a631827ee795edd9734d6cfbc9460`. The only textual conflict was in `docs/followups.md`: the C5 completion/icon items and main's newer Undo text were both preserved. The first-run harness also kept main's isolated-mode module-loading fix.
+
+Debug was rebuilt and the affected full first-run suite rerun. The main engine view had advanced to framework SHA-256 `7a90e70e40bf33984473b0997f03c5c89f2b6701d18483b7149a4e32c223aee5` (0704 plus Document PiP); that exact current README pin was used for this App rerun. The earlier C5 App receipts retain their original `c03a5109…` pin.
+
+The unchanged new merge base was built in a clean detached worktree, and head was rebuilt separately with the same Release command as above. The FV10 pair was then repeated once on these resolved revisions, main first and head immediately after, with one continuously held screen lock and the same section/heavy slot. Each favicon suite uses its own temporary root.
+
+| Check | Result | Load (1,5,15), before → after |
+|---|---|---|
+| Post-merge Debug | PASS | (27.65, 35.35, 39.34) → (27.60, 33.55, 38.24) |
+| Release: main 43ee7fb8 | PASS | (24.23, 32.51, 37.78) → (17.99, 27.88, 35.31) |
+| Release: head 7768e9a4 | PASS | (17.99, 27.88, 35.31) → (19.78, 25.39, 33.46) |
+| Post-merge full first-run | 87 PASS, 0 FAIL, 6 existing Boost BLOCKED; 18/18 EI PASS; engine/cleanup PASS | (20.27, 25.40, 33.41) → (114.53, 53.89, 41.35) |
+| Final main favicon check | 33 PASS, 0 FAIL; FV10 **1.062 ms p95**, PASS (335 steps) | (11.81, 26.42, 33.61) → (10.54, 25.66, 33.25) |
+| Final head favicon check | 33 PASS, 0 FAIL; FV10 **1.043 ms p95**, PASS (335 steps) | (10.54, 25.66, 33.25) → (9.85, 25.27, 33.07) |
+| Final comparison wrapper/cleanup | PASS | (104.40, 62.75, 45.52) → (9.85, 25.27, 33.07) |
+
+Quiet lock acquired for the final pair: **yes**. Main measured **1.062 ms**, head **1.043 ms**, both below 8.33 ms. The original large miss does not reproduce, and head shows no regression in this pair. Both revisions have the same entire OpenKit tree, `e84af8902fa0b62b1ae60deeffc7f46b94a8bbee`; no production or scroll implementation fix was needed. The original full-verifier FAIL remains preserved above.
+
+Final whitespace, byte-identical completion-mapping restoration and native-process cleanup checks PASS. The second clean comparison worktree was removed; no owned check, App, Helper or features-render process remains. Loads: (9.43, 23.67, 32.22) → (9.43, 23.67, 32.22).
