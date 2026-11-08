@@ -304,17 +304,19 @@ def rows_from(receipt, fail_demo=False):
                 source='docs/status.md F12; docs/first-run/steps-ef-verification.md Release timing')
             rows[-1]['measured']['p95'] = max(values) if values else None
     elif group.startswith('idle-'):
-        # architecture.md / idle-cpu.md: ≈0%, with NO numeric tolerance.
-        # A qualitative target cannot define a numeric PASS/FAIL comparison.
+        # Lead ruling 2026-11-08 09:30, docs/architecture.md performance budgets:
+        # static ten-page total CPU <=0.5%; animated selected page is informational.
         cpu = data.get('cpu', {})
-        add(group + ' ten pages', None, cpu.get('total_cpu_percent'), unit='%', metric='mean',
+        limit = 0.5 if group == 'idle-static' else None
+        add(group + ' ten pages', limit, cpu.get('total_cpu_percent'), unit='%', metric='mean',
             samples='1 × 60 s; settle 90 s', ok=cpu.get('complete', False),
             source='docs/architecture.md; docs/idle-cpu.md; docs/s8-speed-gates.md',
             evidence=cpu)
-        rows[-1]['budget_label'] = '≈0% target (no numeric budget)'
-        rows[-1]['operator'] = None
-        if rows[-1]['status'] == 'PASS':
-            rows[-1]['status'] = 'NO NUMERIC BUDGET'
+        if limit is None:
+            rows[-1]['budget_label'] = 'animated page (no numeric budget)'
+            rows[-1]['operator'] = None
+            if rows[-1]['status'] == 'PASS':
+                rows[-1]['status'] = 'NO NUMERIC BUDGET'
     elif group == 'sitecontrol':
         source = 'Packages/OpenKit/Sources/sitecontrol-render/'
         # Bench.swift / docs/plans/site-control.md §8: strict CPU target <8 ms.
