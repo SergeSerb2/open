@@ -54,6 +54,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var backButton: OnboardingButton?
   private var nameField: NSTextField?
   private var favoriteButtons: [OnboardingFavoriteButton] = []
+  private var cardButtons: [OnboardingButton] = []
   private var presetStrip: PresetStripView?
   private var colorPad: OpenSpaceEditor.ColorPadView?
   private var modeBar: AppearanceModeBar?
@@ -71,7 +72,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   override func loadView() {
     let root = OnboardingSurface(); root.onEscape = { [weak self] in self?.back() }
     view = root; root.wantsLayer = true
-    root.addSubview(panel); root.addSubview(preview)
+    root.addSubview(panel); root.addSubview(preview); preview.layer?.masksToBounds = true
     for child in [titleLabel, descriptionLabel, controls, footer] { panel.addSubview(child) }
     titleLabel.font = .systemFont(ofSize: 32, weight: .semibold); titleLabel.maximumNumberOfLines = 3
     titleLabel.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
@@ -95,6 +96,11 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     skipButton?.frame = NSRect(x: step == .name ? 0:44, y: 0, width: 130, height: 40)
     primary?.frame = NSRect(x: footer.bounds.width-120, y: 0, width: 120, height: 40)
     preview.frame = NSRect(x: width, y: 0, width: view.bounds.width-width, height: view.bounds.height)
+    let cardWidth = min(620, preview.frame.width-96)
+    for (index, button) in cardButtons.enumerated() {
+      button.frame = NSRect(x: preview.frame.midX-46+CGFloat(index)*52,
+        y: view.bounds.midY+cardWidth*0.625/2+24, width: 40, height: 40)
+    }
     host?.view.frame = controls.bounds
     statusLabel?.frame = NSRect(x: 0, y: 150, width: controls.bounds.width, height: 90)
     preview.needsDisplay = true
@@ -128,6 +134,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     guard isViewLoaded else { return }
     host?.view.removeFromSuperview(); host = nil
     controls.subviews.forEach { $0.removeFromSuperview() }; footer.subviews.forEach { $0.removeFromSuperview() }
+    cardButtons.forEach { $0.removeFromSuperview() }; cardButtons.removeAll()
+    if step != .ready { confetti?.removeFromSuperlayer(); confetti = nil }
     nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; favoriteButtons = []
     titleLabel.stringValue = stepTitle; descriptionLabel.stringValue = detail
     if step == .importData {
@@ -181,10 +189,9 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     if step == .ready {
       let shuffle = button("Shuffle card pattern") { [weak self] in self?.shuffleCard() }
       shuffle.image = NSImage(systemSymbolName: "shuffle", accessibilityDescription: "Shuffle card pattern"); shuffle.imagePosition = .imageOnly
-      shuffle.frame = NSRect(x: 0, y: 0, width: 40, height: 40); controls.addSubview(shuffle)
       let save = button("Save card image…") { [weak self] in self?.saveCard() }
       save.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: "Save card image…"); save.imagePosition = .imageOnly
-      save.frame = NSRect(x: 52, y: 0, width: 40, height: 40); controls.addSubview(save)
+      cardButtons = [shuffle, save]; cardButtons.forEach { view.addSubview($0) }
       statusLabel = NSTextField(wrappingLabelWithString: firstRun.errorText ?? ""); if let statusLabel { statusLabel.textColor = .systemRed; controls.addSubview(statusLabel) }
     }
     backButton = nil; skipButton = nil

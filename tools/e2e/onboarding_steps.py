@@ -131,9 +131,17 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='continue')
         until(lambda: app.call('first-run')['step']=='report')
         report = app.call('first-run'); shot('import-report-light')
+        prepared = [w for w in app.call('windows') if w['class']=='BrowserWindow']
+        hidden_browser = lambda windows: bool(windows) and all((not w['visible'] or w['alpha']==0)
+            and not w['key'] and not w['main'] for w in windows)
+        gate('import_browser_hidden', hidden_browser, prepared, [dict(visible=True,alpha=1,key=True,main=True)])
         action('next'); after_import = screen('theme')
         gate('import_skips_favorites', lambda s: s.get('screen')=='theme', after_import, favorites)
         results['steps_import_report'] = dict(ok=report['outcome'].get('Favorites')==1 and report['outcome'].get('Imported tabs')==7 and not report['completed'], load=os.getloadavg(), outcome=report['outcome'])
+        skip_to_ready(); action('get-started')
+        until(lambda: not state()['active'] and not state()['dim']['exists'])
+        revealed = [w for w in app.call('windows') if w['class']=='BrowserWindow']
+        gate('import_browser_revealed', lambda ws: bool(ws) and any(w['visible'] and w['alpha']==1 and w['key'] for w in ws), revealed, prepared)
         # Empty source skips Import. Escape returns to the actual preceding step.
         launch(directory=empty); action('next'); no_data = screen('favorites')
         gate('no_arc_skips_import', lambda s: s['screen']=='favorites', no_data, imported)

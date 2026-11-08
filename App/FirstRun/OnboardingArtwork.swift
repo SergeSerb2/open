@@ -135,7 +135,7 @@ import ImageIO
       OpenCardDrawing.door(in: CGRect(x: center.x+130, y: center.y-90, width: 40, height: 60), alpha: 1)
     case "ready":
       let width = min(620, bounds.width-96); let rect = CGRect(x: center.x-width/2, y: center.y-width*0.625/2, width: width, height: width*0.625)
-      NSGraphicsContext.saveGraphicsState(); let shadow = NSShadow(); shadow.shadowBlurRadius = 35; shadow.shadowOffset = NSSize(width: 0, height: -12); shadow.shadowColor = NSColor.black.withAlphaComponent(0.25); shadow.set(); NSColor.clear.setFill(); NSBezierPath(roundedRect: rect, xRadius: 20, yRadius: 20).fill(); NSGraphicsContext.restoreGraphicsState()
+      NSGraphicsContext.saveGraphicsState(); let shadow = NSShadow(); shadow.shadowBlurRadius = 35; shadow.shadowOffset = NSSize(width: 0, height: -12); shadow.shadowColor = NSColor.black.withAlphaComponent(0.25); shadow.set(); NSColor.black.setFill(); NSBezierPath(roundedRect: rect, xRadius: 20, yRadius: 20).fill(); NSGraphicsContext.restoreGraphicsState()
       card?.draw(in: rect)
     default: break
     }

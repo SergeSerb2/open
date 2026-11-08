@@ -11,6 +11,11 @@ import OpenStore
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
     public var contentView: NSView { root }
     public let windowID: WindowID
+    /// Setup can prepare engine hosts without allowing its hidden browser to activate.
+    public var allowsWindowActivation: Bool {
+        get { (window as? BrowserWindow)?.allowsActivation ?? true }
+        set { (window as? BrowserWindow)?.allowsActivation = newValue }
+    }
     public let model: BrowserModel
     let root: BrowserRootView
     public let background = ThemeBackgroundView(frame: .zero)
@@ -1167,6 +1172,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 /// draws, so the traffic lights can be placed after AppKit's own title bar layout.
 @MainActor
 final class BrowserWindow: NSWindow {
+    var allowsActivation = true
+    override var canBecomeKey: Bool { allowsActivation && super.canBecomeKey }
+    override var canBecomeMain: Bool { allowsActivation && super.canBecomeMain }
     var onLayoutPass: (() -> Void)?
     var onCloseRequest: (() -> Void)?
     override func performClose(_ sender: Any?) {

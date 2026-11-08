@@ -336,6 +336,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
       snapshotStore: session == nil ? snapshotStore : nil, incognitoTitle: title)
+    if isFirstRun, let onboarding = onboardingWindowController, !onboarding.replay {
+      controller.allowsWindowActivation = false
+      controller.window?.alphaValue = 0
+    }
     if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
     factory.attach(controller)
     windowControllers.append(controller)
@@ -344,6 +348,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     MainMenu.targetWindowCommands(factory)
     if session == nil { todayAutoArchive?.attach(context: controller.context) }
     controller.showWindow(nil)
+    if isFirstRun, let onboarding = onboardingWindowController, !onboarding.replay,
+      let window = controller.window { onboarding.hidePreparedBrowser(window) }
     if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }
     return controller
@@ -500,9 +506,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("firstRunLandingStarted")
     let states = model.windows.filter { $0.style == .standard }
     for state in states { createWindowController(state: state) }
-    if let onboarding = onboardingWindowController?.window {
-      for controller in windowControllers { controller.window?.order(.below, relativeTo: onboarding.windowNumber) }
-      onboarding.makeKeyAndOrderFront(nil)
+    if let onboarding = onboardingWindowController, let window = onboarding.window {
+      for controller in windowControllers {
+        controller.allowsWindowActivation = false
+        if let browser = controller.window { onboarding.hidePreparedBrowser(browser) }
+      }
+      window.makeKeyAndOrderFront(nil)
     } else { firstRunWindowController?.window?.makeKeyAndOrderFront(nil) }
   }
 
@@ -533,7 +542,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     prepareLittleOpen()
     showWindowsIfNeeded()
     if let onboarding = onboardingWindowController?.window {
-      for controller in windowControllers { controller.window?.order(.below, relativeTo: onboarding.windowNumber) }
+      for controller in windowControllers {
+        controller.allowsWindowActivation = true
+        controller.window?.order(.below, relativeTo: onboarding.windowNumber)
+        NSAnimationContext.runAnimationGroup { context in
+          context.duration = onboardingWindowController?.intro.reduceMotion == true ? 0.3:0.6
+          context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+          controller.window?.animator().alphaValue = 1
+        }
+      }
       frontWindowController?.window?.makeKey()
       onboardingWindowController?.finish()
     } else { frontWindowController?.window?.makeKeyAndOrderFront(nil) }

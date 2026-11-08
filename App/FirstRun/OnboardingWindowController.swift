@@ -111,6 +111,10 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     window?.makeFirstResponder(content.view)
     (content as? OnboardingStepsController)?.didAttach()
   }
+  func hidePreparedBrowser(_ browser: NSWindow) {
+    browser.alphaValue = 0
+    browser.order(.below, relativeTo: dim.windowNumber)
+  }
   func finish() {
     guard !finishing else { return }; finishing = true
     sound.fadeOut()
