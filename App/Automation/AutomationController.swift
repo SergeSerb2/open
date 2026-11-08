@@ -95,6 +95,7 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
@@ -222,6 +223,7 @@
       case "settings-adblock": return try settingsAdBlock(a)
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
+        if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
