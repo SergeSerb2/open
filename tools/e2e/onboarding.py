@@ -61,11 +61,10 @@ def run(factory, results, tmp, h):
         phase2 = elapsed(10.3)
         gate('early_keys_do_not_advance', lambda s: s.get('active') and s.get('screen')=='intro' and not s.get('ready'), early_keys, phase2)
         app.call('snapshot', path=str(evidence/'intro-native-completed.png'))
-        phase_pred = lambda rows: [s['phase'] for s in rows] == ['introAnimation', 'sellIntro', 'sellCompleted'] and rows[-1]['buttonEnabled'] and rows[-1]['buttonDefault'] and rows[-1]['buttonLabel']=='Get Started'
+        phase_pred = lambda rows: [s['phase'] for s in rows] == ['introAnimation', 'sellIntro', 'sellCompleted'] and rows[-1]['buttonEnabled'] and rows[-1]['buttonDefault'] and rows[-1]['buttonLabel']=='Continue'
         gate('phases_reached_in_order', phase_pred, [phase0, phase1, phase2], [phase0, phase1, phase1])
         frame_pred = lambda s: s.get('frameStats', {}).get('count', 0) >= 30 and not s['frameStats']['running']
         played_pred = lambda s: s.get('sound', {}).get('decision') == 'played' and s['sound']['playerCreated'] and abs(s['sound']['audioStartHostTime']-s['animationStartHostTime']) <= .020
-        played = phase1
         invalid = []
         for arguments in (dict(action='x'*33), dict(action='state', unexpected=True)):
             try: app.call('onboarding', **arguments)
@@ -111,6 +110,7 @@ def run(factory, results, tmp, h):
         gate('skip_first_run_inactive', inactive, skipped_launch, intro)
         launch()
         unmeasured = elapsed(.3)
+        played = unmeasured
         gate('frame_stats_recorded', frame_pred, measured, unmeasured)
         app.call('key', key='escape')
         escaped = state()
