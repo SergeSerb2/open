@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import Security
 
 // OpenWeb: the Swift view of the web engine for OpenKit libraries.
 //
@@ -70,6 +71,9 @@ public protocol WebContent: AnyObject {
     var isCrashed: Bool { get }
     /// 0 = 100%, each step is 20%.
     var zoomLevel: Double { get set }
+    var securityLevel: WebSecurityLevel { get }
+    /// Leaf first; empty for non-TLS or refused oversized chains.
+    var certificateChain: [SecCertificate] { get }
 
     func load(_ url: URL)
     func goBack()
@@ -190,6 +194,10 @@ public protocol WebProfile: AnyObject {
     /// nil allows everything.
     func setRequestFilter(_ filter: RequestFilter?)
     func permission(_ permission: SitePermission, origin: URL) -> SitePermissionState
+    func changedSiteSettings(origin: URL) -> [WebSiteSetting]
+    @discardableResult
+    func setSiteSetting(_ state: WebSiteSettingState, kind: String, origin: URL) -> Bool
+    func clearSiteData(origin: URL, kinds: WebSiteDataKinds) async throws
     func setPermission(_ state: SitePermissionState, for permission: SitePermission, origin: URL)
 }
 

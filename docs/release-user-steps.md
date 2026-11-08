@@ -80,6 +80,45 @@ Agent verification, with approval:
 xcrun notarytool history --keychain-profile "${OPEN_NOTARY_PROFILE:-open-notary}" > /dev/null
 ```
 
+## After U-3: launch check of the first signed build
+
+This step needs no new credential. It answers one launch question that only a
+signed, notarized build can answer.
+
+Local ad-hoc builds pay a Gatekeeper `syspolicyd` `ChangetimeScan` before
+Open's own code runs: median about 150 ms per launch (Section 16 window,
+2026-11-08: 56 of 56 Open launches scanned, 0 of 14 floor-app launches). A full
+Open run also advances the executable's change time, so the next launch scans
+again. Without the scan, the measured sidebar time is near the 250 ms budget.
+The full evidence is in `docs/launch-diagnostics.md` (PR #251).
+
+The question: does the notarized, stapled build installed in `/Applications`
+still pay this scan on every launch?
+
+Steps for the agent, with the user's approval, on the first signed build:
+
+1. Install the stapled DMG's App in `/Applications` (copy from the mounted DMG).
+2. Launch it from the Dock or Finder once, quit it, then launch it twice more the
+   same way. Note the local times of each launch.
+3. After each launch, collect the security log for that minute:
+
+```bash
+log show --start '<YYYY-MM-DD HH:MM:SS>' --end '<YYYY-MM-DD HH:MM:SS>' \
+  --signpost --info --debug \
+  --predicate 'process == "syspolicyd" AND eventMessage CONTAINS[c] "Open.app"'
+```
+
+4. Record for each launch whether a `ChangetimeScan` ran and its duration, and
+   the App's `sidebarDrawn` from its launch receipt.
+5. Record the static state once: `codesign --verify --deep --strict`,
+   `xcrun stapler validate`, `spctl --assess --type execute --verbose=4`, and
+   whether `com.apple.quarantine` is present (absence is a result).
+
+Result rule: if launches 2 and 3 show no scan, the release build meets the
+launch path that the budget assumes, and the ad-hoc cost is a development-only
+effect. If they still scan, the change-time writer inside a full Open run must
+be found and removed before launch work can meet the budget.
+
 ## U-4: Sparkle signing key and backup
 
 This unlocks signed updates. Losing this key prevents installed copies from
