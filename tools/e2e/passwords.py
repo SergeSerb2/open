@@ -755,19 +755,48 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 tab = load(urls['card']); assert popup(tab, '#number')
                 authenticating = app
                 tracker = app.focus_tracker
-                choose()
-                import socket
-                blocked = False
-                hist = []
+                import re, socket, subprocess, threading
+                # Authorization Services can block the App's main thread inside
+                # Return. Observe only frontmost PID/bundle metadata through
+                # LaunchServices while that socket cannot reply. Never send
+                # input to SecurityAgent or change the authentication policy.
+                native = app.call('native-focus-state')
+                offset = native['uptime'] - time.monotonic()
+                observations, observation_errors = [], []
+                finished = threading.Event()
+                def observe_frontmost():
+                    while not finished.is_set():
+                        try:
+                            asn = subprocess.check_output(['/usr/bin/lsappinfo', 'front'], text=True, timeout=1).strip()
+                            if not re.fullmatch(r'ASN:0x[0-9a-fA-F]+-0x[0-9a-fA-F]+', asn):
+                                raise ValueError('invalid LaunchServices application identifier')
+                            info = subprocess.check_output(['/usr/bin/lsappinfo', 'info', '-only', 'bundleID', '-only', 'pid', asn], text=True, timeout=1)
+                            bundle = re.search(r'\bbundleID="([^"\n]*)"', info)
+                            pid = re.search(r'\bpid\s*=\s*(\d+)', info)
+                            if not bundle or not pid: raise ValueError('no frontmost identity')
+                            event = {'event': 'frontmostChanged', 'frontmostBundleID': bundle[1],
+                                     'frontmostPID': int(pid[1]), 'openPID': authenticating.pid,
+                                     'uptime': time.monotonic() + offset}
+                            if not observations or any(event[k] != observations[-1][k] for k in ['frontmostBundleID', 'frontmostPID']):
+                                observations.append(event)
+                        except Exception:
+                            observation_errors.append('frontmost identity unavailable')
+                        finished.wait(.2)
+                observer = threading.Thread(target=observe_frontmost, daemon=True)
+                observer.start()
+                blocked, hist = False, []
                 try:
-                    hist = app.call('devtools', tab=tab, method='Browser.getHistograms',
-                                    params={'query': 'Autofill.PaymentMethods.CheckoutFlow.ReauthUsage', 'delta': False},
-                                    timeout=3)['histograms']
-                except socket.timeout:
-                    # Chromium's non-biometric fallback enters the macOS
-                    # Authorization Services modal loop. Do not answer it.
-                    blocked = True
-                time.sleep(1)
+                    key('down'); time.sleep(.65)
+                    try:
+                        key('return', timeout=3)
+                        hist = app.call('devtools', tab=tab, method='Browser.getHistograms',
+                                        params={'query': 'Autofill.PaymentMethods.CheckoutFlow.ReauthUsage', 'delta': False},
+                                        timeout=3)['histograms']
+                    except socket.timeout:
+                        blocked = True
+                    time.sleep(1)
+                finally:
+                    finished.set(); observer.join(timeout=3)
                 os.kill(app.pid, 0)
                 assert not h['_open_crash_reports']() - guard.baseline, 'card selection created a crash report'
                 # Verified-PID cleanup cancels this owned request before any
@@ -775,6 +804,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 relaunch()
                 assert app.call('credentials-prefs')['cardReauthentication'] is True
                 losses = tracker.loss() if tracker else []
+                losses += [e for e in observations if e['frontmostPID'] != authenticating.pid]
                 auth_changes = [e for e in losses if e.get('event') == 'frontmostChanged'
                                 and e.get('frontmostBundleID') == 'com.apple.SecurityAgent'
                                 and e.get('openPID') == authenticating.pid]
@@ -796,6 +826,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 assert started_metric or auth_changes, 'device authentication did not start for the saved card'
                 return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist,
                         'verifiedSecurityAgentHandoff': bool(auth_changes),
+                        'modalAutomationBlocked': blocked, 'focusObservationErrors': len(observation_errors),
                         'authenticationCompletionRequired': False}
             row('PW-REAUTH-request', card_reauthentication, ['P-12'])
 
