@@ -185,10 +185,12 @@ def run(factory, results, tmp, h):
         replay = state()
         gate('replay_over_browser', lambda s: s.get('active') and s.get('replay'), replay, returning)
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+        assert until(lambda: state()['screen']=='name'), state()
         for _ in range(7):
             screen = state()['screen']
             if screen == 'ready': break
             app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
+            assert until(lambda: state()['screen']!=screen), state()
         app.call('onboarding', action='get-started')
         until(lambda: not state()['active'])
         unchanged = dict(same=snapshot.read_bytes()==prior, firstRun=app.call('first-run')['active'])
