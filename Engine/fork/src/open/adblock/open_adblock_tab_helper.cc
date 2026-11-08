@@ -65,12 +65,20 @@ void OpenAdBlockTabHelper::ResetCounts() {
 
 void OpenAdBlockTabHelper::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (navigation_handle->IsInPrimaryMainFrame() &&
-      navigation_handle->HasCommitted() &&
-      !navigation_handle->IsSameDocument()) {
-    ResetCounts();
-    loaded_ = false;
+  if (!navigation_handle->IsInPrimaryMainFrame() ||
+      !navigation_handle->HasCommitted()) {
+    return;
   }
+  if (navigation_handle->IsSameDocument()) {
+    // A native count reading without resetting the document. The CDP proof
+    // uses replaceState at least two seconds after late requests settle.
+    MaybeLogSmoke("same-document");
+    return;
+  }
+  ResetCounts();
+  loaded_ = false;
+  document_navigation_id_ = navigation_handle->GetNavigationId();
+  MaybeLogSmoke("commit");
 }
 
 void OpenAdBlockTabHelper::DidFinishLoad(
@@ -78,11 +86,11 @@ void OpenAdBlockTabHelper::DidFinishLoad(
     const GURL& validated_url) {
   if (render_frame_host->IsInPrimaryMainFrame()) {
     loaded_ = true;
-    MaybeLogSmoke();
+    MaybeLogSmoke("load");
   }
 }
 
-void OpenAdBlockTabHelper::MaybeLogSmoke() const {
+void OpenAdBlockTabHelper::MaybeLogSmoke(const char* phase) const {
 #if !defined(OFFICIAL_BUILD)
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch("open-adblock-dir")) {
     return;
@@ -91,10 +99,11 @@ void OpenAdBlockTabHelper::MaybeLogSmoke() const {
   // busy_us: process-wide, for the G-5 harness (§7.8).
   fprintf(stderr,
           "OpenAdBlockSmoke: blocked_count=%d url_host=%s busy_us=%llu "
-          "busy_cpu_us=%llu\n",
+          "busy_cpu_us=%llu document_id=%lld phase=%s\n",
           total_count(), std::string(url.host()).c_str(),
           static_cast<unsigned long long>(AdBlockMatcherBusyMicroseconds()),
-          static_cast<unsigned long long>(AdBlockMatcherBusyCpuMicroseconds()));
+          static_cast<unsigned long long>(AdBlockMatcherBusyCpuMicroseconds()),
+          static_cast<long long>(document_navigation_id_), phase);
   fprintf(stderr, "OpenAdBlockSmoke: %s\n",
           AdBlockProxyProfileText().c_str());
 #endif

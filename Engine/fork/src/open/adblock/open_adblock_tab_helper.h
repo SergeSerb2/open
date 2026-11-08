@@ -5,6 +5,8 @@
 #ifndef OPEN_ADBLOCK_OPEN_ADBLOCK_TAB_HELPER_H_
 #define OPEN_ADBLOCK_OPEN_ADBLOCK_TAB_HELPER_H_
 
+#include <cstdint>
+
 #include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -49,8 +51,9 @@ class OpenAdBlockTabHelper
 
   // Development builds with --open-adblock-dir: the smoke harness's count
   // line on stderr (adblock-fork §13.1), the host only (§6.4).
-  void MaybeLogSmoke() const;
+  void MaybeLogSmoke(const char* phase = "count") const;
 
+  int64_t document_navigation_id_ = 0;
   int blocked_ = 0;
   int redirected_ = 0;
   bool loaded_ = false;

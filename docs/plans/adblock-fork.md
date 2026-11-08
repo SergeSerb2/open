@@ -4788,3 +4788,26 @@ added cost, with builder/load differences as limits on the comparison.
 Disk DAT load is 195 ms, including 138.420 ms deserialize, 49.008 ms compile
 and 1.512 ms reclaim. Raw receipts: `default-roundtrip-working-*` and
 `default-roundtrip-verdict-identity.json` in `.re/s13/e1/`.
+
+
+**COUNT-closed-document erratum (2026-11-07 21:15, lead).** The original
+pagehide/keepalive stimulus observed no requests on either control. The
+replacement stimulus waited for three blocked fetches and then navigated;
+its old predicate required every count after the stimulus to be zero. The
+21:12–21:14 diagnostic run saw three blocked requests, then readings 8 and
+0. That predicate also rejects a valid old-document reading before the new
+commit. Timing alone cannot identify the document, so the row remains FAIL.
+That full run is diagnostic only: it may overlap another section's crash
+dialog, and the full N set must run again after explicit screen clearance.
+
+The refined predicate is prepared, not accepted: the engine records the
+primary document's committed navigation id on every count reading. PASS
+requires the new id's count to be zero at commit, at load end, and in a
+native reading at least two seconds after all three real pagehide keepalive
+fetches complete. Every old count (including 8) must carry the old id.
+A same-document replaceState obtains the late native reading without
+resetting counts or changing that id. A control where these fetches are
+allowed and a temporary engine variant which deliberately charges an old
+document's late results to the new document must both make the row FAIL.
+Until the real stimulus and both negative controls pass, this is an open
+verification row; the predicate must not be relaxed by log timing inference.
