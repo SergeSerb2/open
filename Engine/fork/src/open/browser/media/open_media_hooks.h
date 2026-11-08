@@ -10,12 +10,13 @@
 namespace content {
 class VideoOverlayWindow;
 class VideoPictureInPictureWindowController;
+class WebContents;
 }  // namespace content
 
 namespace open_engine {
 
 // Fork hooks for Chrome code (Engine/fork/patches/chromium/0402-open-video-
-// pip-window.patch). Chrome's targets do not link against Open's sources, so
+// pip-window.patch, 0403-open-document-pip-window.patch). Chrome's targets do not link against Open's sources, so
 // the overlay fills these in (OpenMediaController::GetOrCreate, before any
 // page can enter Picture in Picture).
 struct MediaHooks {
@@ -23,6 +24,13 @@ struct MediaHooks {
   // hosts video Picture in Picture itself, nullptr for Chromium's own window.
   std::unique_ptr<content::VideoOverlayWindow> (*create_video_overlay_window)(
       content::VideoPictureInPictureWindowController* controller) = nullptr;
+  // EM-7: takes the Document Picture in Picture child |child| of |opener| and
+  // shows it in the embedder's window (OpenDocumentPipHost) when the opener's
+  // media handler hosts Picture in Picture. Returns false and leaves |child|
+  // alone for Chromium's own window.
+  bool (*host_document_picture_in_picture)(
+      content::WebContents* opener,
+      std::unique_ptr<content::WebContents>& child) = nullptr;
 };
 
 inline MediaHooks& GetMediaHooks() {
@@ -33,6 +41,11 @@ inline MediaHooks& GetMediaHooks() {
 // The overlay's implementation of create_video_overlay_window.
 std::unique_ptr<content::VideoOverlayWindow> MaybeCreateVideoOverlayWindow(
     content::VideoPictureInPictureWindowController* controller);
+
+// The overlay's implementation of host_document_picture_in_picture.
+bool MaybeHostDocumentPictureInPicture(
+    content::WebContents* opener,
+    std::unique_ptr<content::WebContents>& child);
 
 }  // namespace open_engine
 

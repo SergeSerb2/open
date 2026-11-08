@@ -26,7 +26,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
     if !app.isFirstRun || app.firstRunSaved {
-      if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
+      if let store = app.stores.adBlock { vm.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
       else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
     }
     app.defaultBrowserService.onChange = { [weak vm, weak app] state in
@@ -38,8 +38,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return vm
   }
   func modelWasInstalled() { settingsStorage = nil }
+  // Registry callbacks never instantiate Settings or open another Profile.
+  func refreshAdBlockWarning() { settingsStorage?.adBlock?.refreshOtherBlocker() }
+  func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool {
+    guard app.engineReady, let profile = app.model.profile(id: profileID),
+      let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return false }
+    return context.extensions.installedExtensions.contains {
+      $0.isEnabled && AdBlockKnownBlockers.extensionIDs.contains($0.identifier)
+    }
+  }
   func attachBrowserStores() {
-    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store) }
+    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
@@ -66,6 +75,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)
+    if let library, (section ?? library.section) == .history,
+      libraryPresenter?.window?.isVisible != true {
+      library.historyProfileID = app.frontStandardWindowController?.context.focusedSpace?.profileID
+        ?? app.model.defaultProfile?.id ?? library.historyProfileID
+    }
     libraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
   }
   /// Use the Library button's view model and confirmation dialog unchanged.
@@ -309,12 +323,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     if let context {
       let nativeKinds = OEBrowsingDataKinds(rawValue: UInt32(kinds.rawValue))
-      return await withCheckedContinuation { continuation in
+      let error: String? = await withCheckedContinuation { continuation in
         context.clearBrowsingData(nativeKinds, from: begin, to: end) { error in
           continuation.resume(returning: error?.localizedDescription)
         }
       }
+      if let error { return error }
     }
+    if kinds.contains(.downloads) { app.downloadsCenter.clearHistory(profileID: profileID, since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {

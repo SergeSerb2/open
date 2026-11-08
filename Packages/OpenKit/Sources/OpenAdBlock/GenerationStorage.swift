@@ -70,7 +70,8 @@ struct GenerationStorage: Sendable {
     }
 
     func save(_ state: AdBlockProfileState, directory: URL) throws {
-        if !ephemeral { try writeJSON(state, to: directory.appendingPathComponent("catalog-state.json")) }
+        try Task.checkCancellation()
+        if !ephemeral { try writeJSON(state, to: directory.deletingLastPathComponent().appendingPathComponent("catalog-state.json")) }
     }
 
     /// All inputs are validated and durable before state is saved and the single live pointer moves.
@@ -78,12 +79,14 @@ struct GenerationStorage: Sendable {
                  previous: GenerationReference?) throws -> GenerationReference {
         let files = FileManager.default
         let generations = directory.appendingPathComponent("generations", isDirectory: true)
+        try Task.checkCancellation()
         try files.createDirectory(at: generations, withIntermediateDirectories: true)
         let numbers = try files.contentsOfDirectory(atPath: generations.path).compactMap(Int.init)
         let latest = max(numbers.max() ?? 0, previous?.generation ?? 0)
         guard latest < Int.max else { throw AdBlockError("generation number exhausted") }
         let number = latest + 1
         let generation = generations.appendingPathComponent(String(number), isDirectory: true)
+        try Task.checkCancellation()
         try files.createDirectory(at: generation, withIntermediateDirectories: false)
         // A failed/crashed publication leaves an unreferenced directory. Open never promotes it.
         var entries: [GenerationFile] = []
@@ -119,6 +122,7 @@ struct GenerationStorage: Sendable {
     }
 
     func activate(_ reference: GenerationReference, previous: GenerationReference?, directory: URL) throws {
+        try Task.checkCancellation()
         try writeJSON(CurrentGeneration(live: reference, previous: previous), to: directory.appendingPathComponent("current.json"))
         // Cleanup is best-effort AFTER publication. Failure cannot roll back a committed pointer.
         cleanup(keeping: [reference.generation, previous?.generation].compactMap { $0 }, directory: directory)
@@ -127,6 +131,7 @@ struct GenerationStorage: Sendable {
     func cleanup(keeping numbers: [Int], directory: URL) {
         let generations = directory.appendingPathComponent("generations")
         for name in (try? FileManager.default.contentsOfDirectory(atPath: generations.path)) ?? [] {
+            guard !Task.isCancelled else { return }
             guard let number = Int(name), !numbers.contains(number) else { continue }
             try? FileManager.default.removeItem(at: generations.appendingPathComponent(name))
         }
@@ -136,7 +141,9 @@ struct GenerationStorage: Sendable {
         let source = path(reference, in: directory)
         guard FileManager.default.fileExists(atPath: source.path) else { return }
         let target = directory.appendingPathComponent("quarantine/\(reference.generation)-\(UUID().uuidString)")
+        try Task.checkCancellation()
         try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Task.checkCancellation()
         try FileManager.default.moveItem(at: source, to: target)
         try syncPath(source.deletingLastPathComponent())
         try syncPath(target.deletingLastPathComponent())
