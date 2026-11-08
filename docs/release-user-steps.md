@@ -15,6 +15,8 @@ DLV copy on the M1, under its own screen lock. The agent imports the DMG-bound
 `m1-smoke.json` receipt before the final M5 summary. The exact artifact's expected
 Library Validation refusal is static evidence only (§4.4). Never relaunch a build
 that failed to load. If a build crashes, stop on-screen work and tell the lead.
+The first M5 run prepares the artifact, then exits 1 until its required M1 smoke
+receipt exists. A missing or mismatched receipt cannot pass A-2/A-3/A-11.
 
 ## U-1: Apple Developer Program membership
 

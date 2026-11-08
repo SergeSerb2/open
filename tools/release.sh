@@ -1134,7 +1134,7 @@ summary() {
         if [[ $DRY == 1 ]]; then
             launch_status=PASS
             launch_label='M1: supplemental local-only launch copy, disable-library-validation exception, not the shipped signature'
-            if ! m1_receipt_valid; then launch_status=mode-SKIP; launch_label='M1 supplemental smoke pending; copy DMG to detached M1 worktree, run --dry-run --smoke-only, import m1-smoke.json'; fi
+            if ! m1_receipt_valid; then launch_status=FAIL; launch_label='M1 supplemental smoke pending; copy DMG to detached M1 worktree, run --dry-run --smoke-only, import m1-smoke.json'; fi
         elif production_launch_receipt_valid; then
             launch_status=PASS
             launch_label='separately approved lead runtime evidence in acceptance.json, bound to final DMG'

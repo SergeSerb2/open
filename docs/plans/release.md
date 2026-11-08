@@ -103,6 +103,8 @@ under its own screen lock. The script refuses this smoke on the M5. It also
 checks the temporary app/helper DLV entitlement seals before launch. The copy
 and temporary entitlements are deleted. The app in `build/release` and the DMG
 keep exact committed entitlements, enforced by sealed-dictionary comparisons.
+The M5 preparation run exits 1 until a valid M1 smoke receipt for that exact DMG
+exists. Missing or mismatched smoke evidence is FAIL, not a mode-SKIP.
 No mode launches an exact artifact; production runtime acceptance uses a
 separately approved lead receipt bound to the DMG. Never relaunch a failed-to-load
 build. If anything crashes, stop on-screen work
