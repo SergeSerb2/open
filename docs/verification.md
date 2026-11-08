@@ -1173,6 +1173,12 @@ one quiet → screen hold, with no low-load wait inside that hold.
 Keep each gate's existing measured span. Use CPU brand plus macOS build as the
 fixture key, never hostname. Other machine/build references remain unchanged.
 
+Re-baseline rule (lead, 2026-11-08 11:55): the current ceilings are keyed to
+Apple M5 Pro / macOS 26B123. After a macOS update, or on a new machine, the key
+changes and the gate fails with "unknown key". Then record a new key with the
+same five-pair method from unchanged `origin/main`, in its own PR, and keep
+every older key as it is.
+
 This calibration uses unchanged `origin/main` at
 `cdd147cac296ea4ea8a9da244299636aee28deb9`, Apple M5 Pro / `26B123`.
 Five SM6 pairs ran first; five full Site Control pairs followed. A table sample
