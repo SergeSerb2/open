@@ -2,12 +2,13 @@ import AppKit
 import Foundation
 import OpenModel
 
-/// Tab id/title/URL/loading/location KVC resolves the current model on every read.
-/// Specifiers prefer Space → tab ID; favorites use window → tab ID. Closed wrappers retain their last specifier.
+/// Tab KVC resolves the live model or transient Little Open provider on every read.
+/// Little Open specifiers use application → tab ID, without exposing a readable collection.
 @MainActor
 @objc(ScriptTab)
 public final class ScriptTab: NSObject {
     public let tabID: ItemID
+    let isLittleTab: Bool
     var tab: Tab? { ScriptHost.shared.model?.tab(id: tabID) }
     private var lastSpecifier: NSScriptObjectSpecifier?
     private var isCreationPlaceholder = false
@@ -15,36 +16,56 @@ public final class ScriptTab: NSObject {
     private var pendingLocation = "unpinned"
     var pendingURL: String?
     var creationProperties: [String: Any] { pendingURL.map { ["URL": $0] } ?? [:] }
-    init(tab: Tab) { tabID = tab.id; super.init() }
+    init(tab: Tab) { tabID = tab.id; isLittleTab = false; super.init() }
+    init(littleTabID: ItemID) { tabID = littleTabID; isLittleTab = true; super.init() }
     public override init() {
         tabID = ItemID()
+        isLittleTab = false
         isCreationPlaceholder = true
         super.init()
     }
 
     @discardableResult
-    func liveTab() -> Tab? {
-        guard ScriptRead.model() != nil else { return nil }
-        guard let tab else { ScriptFailure.missing("tab", tabID.rawValue.uuidString); return nil }
-        return tab
+    func exists() -> Bool {
+        if isLittleTab {
+            if ScriptHost.shared.littleTab?.exists(tabID) == true { return true }
+        } else {
+            guard ScriptRead.model() != nil else { return false }
+            if tab != nil { return true }
+        }
+        ScriptFailure.missing("tab", tabID.rawValue.uuidString)
+        return false
     }
-    @objc public dynamic var id: String { _ = liveTab(); return tabID.rawValue.uuidString }
+    var canGoBack: Bool { isLittleTab ? ScriptHost.shared.littleTab?.canGoBack(tabID) ?? false : tab?.live.canGoBack ?? false }
+    var canGoForward: Bool { isLittleTab ? ScriptHost.shared.littleTab?.canGoForward(tabID) ?? false : tab?.live.canGoForward ?? false }
+    func supportsModelContainment(_ operation: String) -> Bool {
+        guard isLittleTab else { return true }
+        ScriptFailure.report(ScriptError.makeSpaceUnsupported, "\(operation) is not supported for Little Open tabs; they have no Space or browser window container.")
+        return false
+    }
+    @objc public dynamic var id: String { _ = exists(); return tabID.rawValue.uuidString }
     @objc public dynamic var title: String {
-        get { isCreationPlaceholder ? pendingTitle : liveTab()?.displayTitle ?? "" }
+        get {
+            if isCreationPlaceholder { return pendingTitle }
+            guard exists() else { return "" }
+            return isLittleTab ? ScriptHost.shared.littleTab?.title(tabID) ?? "" : tab?.displayTitle ?? ""
+        }
         set {
             // Cocoa applies creation properties before insertion. The page owns the real title.
             if isCreationPlaceholder { pendingTitle = newValue; return }
+            guard exists() else { return }
             ScriptFailure.report(ScriptError.invalidValue, "title is read-only.")
         }
     }
     @objc public dynamic var URL: String {
         get {
             if isCreationPlaceholder { return pendingURL ?? "about:blank" }
-            return liveTab()?.url.absoluteString ?? ""
+            guard exists() else { return "" }
+            return (isLittleTab ? ScriptHost.shared.littleTab?.url(tabID) : tab?.url)?.absoluteString ?? ""
         }
         set {
             if isCreationPlaceholder { pendingURL = newValue; return }
-            guard liveTab() != nil, let url = ScriptCreation.parsedURL(newValue) else { return }
+            guard exists(), let url = ScriptCreation.parsedURL(newValue) else { return }
             guard let bridge = ScriptHost.shared.engineBridge else {
                 ScriptFailure.report(ScriptError.engineUnavailable, "The page engine is not ready.")
                 return
@@ -52,11 +73,14 @@ public final class ScriptTab: NSObject {
             bridge.navigate(tabID: tabID, to: url)
         }
     }
-    @objc public dynamic var loading: Bool { liveTab()?.live.isLoading ?? false }
+    @objc public dynamic var loading: Bool {
+        guard exists() else { return false }
+        return isLittleTab ? ScriptHost.shared.littleTab?.loading(tabID) ?? false : tab?.live.isLoading ?? false
+    }
     @objc public dynamic var location: String {
         get {
             if isCreationPlaceholder { return pendingLocation }
-            guard liveTab() != nil, let model = ScriptHost.shared.model else { return "unpinned" }
+            guard exists(), supportsModelContainment("location"), let model = ScriptHost.shared.model else { return "" }
             switch ScriptRead.section(of: tabID, model: model) {
             case .favorites?: return "topApp"
             case .spacePinned?: return "pinned"
@@ -65,7 +89,7 @@ public final class ScriptTab: NSObject {
         }
         set {
             if isCreationPlaceholder { pendingLocation = newValue; return }
-            guard liveTab() != nil, let model = ScriptHost.shared.model else { return }
+            guard exists(), supportsModelContainment("location"), let model = ScriptHost.shared.model else { return }
             guard ["topApp", "pinned", "unpinned"].contains(newValue) else {
                 ScriptFailure.report(ScriptError.invalidValue, "\"\(newValue)\" is not a location. Use topApp, pinned, or unpinned.")
                 return
@@ -111,6 +135,13 @@ public final class ScriptTab: NSObject {
     }
 
     private func makeObjectSpecifier() -> NSScriptObjectSpecifier? {
+        if isLittleTab {
+            guard let cls = NSScriptClassDescription(for: NSApplication.self) else { return lastSpecifier }
+            let specifier = NSUniqueIDSpecifier(containerClassDescription: cls, containerSpecifier: nil,
+                key: "appleScriptTabs", uniqueID: tabID.rawValue.uuidString)
+            lastSpecifier = specifier
+            return specifier
+        }
         guard let model = ScriptHost.shared.model, model.tab(id: tabID) != nil else { return lastSpecifier }
         let container: NSScriptObjectSpecifier?
         let cls: NSScriptClassDescription?
