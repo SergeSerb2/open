@@ -1,6 +1,7 @@
 import Foundation
 import OpenAdBlock
 import OpenModel
+import OpenStore
 
 @MainActor
 func runAdBlock(args: [String]) async throws {
@@ -69,7 +70,7 @@ func runAdBlock(args: [String]) async throws {
     store.onScheduledUpdate = { outcome, delay in
         print("scheduled_update=\(outcome) next_delay_seconds=\(Int(delay))")
     }
-    try await store.openProfile(profile, scheduleUpdates: action == "schedule")
+    try await store.openProfile(profile, directory: ProfileDirectories(root: root).adBlockDirectory(dataDirectoryName: profile.description), scheduleUpdates: action == "schedule")
     defer { try? store.closeProfile(profile) }
     if let warning = store.lastError(for: profile) { print("open_warning=\(warning)") }
     switch action {
@@ -92,7 +93,7 @@ func runAdBlock(args: [String]) async throws {
         print("reload_events=\(reloads)")
     case "status":
         print(store.debugInfo(profile: profile))
-        print("list_directory=\(store.listDirectory(for: profile).path)")
+        print("list_directory=\(try store.listDirectory(for: profile).path)")
     case "toggle":
         guard positional.count == 2, ["on", "off"].contains(positional[1]) else { throw AdBlockError("toggle <on|off>") }
         try store.setEnabled(positional[1] == "on")
@@ -129,7 +130,7 @@ func runAdBlock(args: [String]) async throws {
         defer { try? FileManager.default.removeItem(at: benchRoot) }
         do {
             let seed = try AdBlockStore(root: benchRoot)
-            try await seed.openProfile(profile, scheduleUpdates: false)
+            try await seed.openProfile(profile, directory: ProfileDirectories(root: benchRoot).adBlockDirectory(dataDirectoryName: profile.description), scheduleUpdates: false)
             try seed.setEnabled(true)
             try seed.setExcluded("example.com", excluded: true, profile: profile)
             try seed.setExcluded("bücher.de", excluded: true, profile: profile)
@@ -142,7 +143,7 @@ func runAdBlock(args: [String]) async throws {
         for _ in 0..<10 {
             let start = DispatchTime.now().uptimeNanoseconds
             let loaded = try AdBlockStore(root: benchRoot)
-            try await loaded.openProfile(profile, scheduleUpdates: false)
+            try await loaded.openProfile(profile, directory: ProfileDirectories(root: benchRoot).adBlockDirectory(dataDirectoryName: profile.description), scheduleUpdates: false)
             let snapshot = loaded.siteSnapshot(for: profile)
             let loadedAt = DispatchTime.now().uptimeNanoseconds
             for host in hosts { if snapshot.isAllowlisted(normalizedHost: host) { matches += 1 } }
@@ -176,4 +177,5 @@ func printAdBlockResult(_ result: AdBlockUpdateResult) {
     print(String(format: "%@ status=%@ changed=%@ integrity=%@ bytes=%d downloaded_bytes=%d sha256=%@ etag=%@ duration_ms=%.2f attempts=%d",
         result.id, status, String(result.changed), integrity, result.bytes, result.downloadedBytes, result.sha256,
         result.etags.joined(separator: ","), result.duration * 1000, result.attempts))
+    if let url = result.seedURL { print("\(result.id) seed_url=\(url.absoluteString)") }
 }

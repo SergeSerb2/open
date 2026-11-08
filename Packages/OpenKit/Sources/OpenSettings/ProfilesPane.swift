@@ -108,8 +108,6 @@ import OpenDesign
         guard let profile = root.model.profile(id: id) else { return false }
         let directory = profile.dataDirectoryName
         if let block = root.model.deleteBlockReason(for: id) { errorText = block.message; return false }
-        do { try root.adBlock?.closeProfile(id) }
-        catch { errorText = "This Profile’s block lists are updating. Try deleting it after the update finishes."; return false }
         do {
             let undo = root.model.undoManager
             undo?.disableUndoRegistration()
@@ -118,6 +116,9 @@ import OpenDesign
             catch { undo?.enableUndoRegistration(); throw error }
             undo?.enableUndoRegistration()
             guard removed else { return false }
+            // The App's ProfileDataOwner barrier cancels and drains active list IO before wipe.
+            // Settings must permit deletion while an update is running.
+            root.adBlock?.refresh()
             // An older create/redo must not resurrect a permanently deleted Profile.
             undo?.removeAllActions()
             if root.selectedProfileID == id, let first = root.model.defaultProfile { root.selectedProfileID = first.id }
