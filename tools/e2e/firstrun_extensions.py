@@ -83,6 +83,14 @@ def run(launch, state, until, row, source, tmp, h, results):
         app.call('first-run', action='settings-import', directory=str(directory))
         app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
         assert h.wait_until(lambda: state().get('settingsStep') == 'Report', timeout=20), state()
+    def settings_done():
+        # SwiftUI dismisses its native report sheet asynchronously. Wait for
+        # that exact window to go before replacing the wizard on re-import.
+        sheets = {w['attachedSheet'] for w in app.call('windows') if w['visible'] and w['attachedSheet']}
+        assert len(sheets) == 1, 'expected one native Settings import sheet'
+        app.call('first-run', action='settings-done')
+        assert h.wait_until(lambda: not sheets.intersection(
+            w['number'] for w in app.call('windows') if w['visible']), timeout=10), 'Settings import sheet did not dismiss'
     def queue(answer, hold_consent=False):
         ext(action='install')
         prompts = []
@@ -192,7 +200,7 @@ def run(launch, state, until, row, source, tmp, h, results):
             and identifiers['existing'] not in registry[work],
             installedInLiveDefault=identifiers['existing'] in registry[personal],
             absentInOther=identifiers['existing'] not in registry[work])
-        app.call('first-run', action='settings-done')
+        settings_done()
         # Add one tab so Settings import owns a real, independently undoable action.
         modified = json.loads((fixture/'StorableSidebar.json').read_text())
         graph = modified['sidebar']['containers'][1]
@@ -203,7 +211,7 @@ def run(launch, state, until, row, source, tmp, h, results):
             'data': {'tab': {'savedURL': 'https://example.com/extension-import', 'savedTitle': 'Example extension import tab'}}}]
         (fixture/'StorableSidebar.json').write_text(json.dumps(modified))
         settings_import(fixture)
-        if negative == 'queue': app.call('first-run', action='settings-done')
+        if negative == 'queue': settings_done()
         current = ext()
         row('EI_settings_section', current['visible'] and len(current['rows']) == 3 and current['showsProfiles'])
         if negative == 'queue': settings_import(fixture)
@@ -215,7 +223,7 @@ def run(launch, state, until, row, source, tmp, h, results):
             and identifiers['failed'] not in set().union(*registries().values())
             and app_result['summary'] == 'Installed 0 · Skipped 0 · Failed 1'
             and not app_result['installing'], status=rows[identifiers['failed']]['status'], summary=app_result['summary'])
-        app.call('first-run', action='settings-done')
+        settings_done()
         settings_import(fixture)
         files[identifiers['failed']] = str(failed_file)
         ext(action='fixtures', files=files)
@@ -223,7 +231,8 @@ def run(launch, state, until, row, source, tmp, h, results):
         rows = install_rows(); registry = registries()
         row('EI_already_installed', rows[identifiers['existing']]['status'] == 'Skipped (already installed)'
             and all(p['extension'] != identifiers['existing'] for p in prompts), status=rows[identifiers['existing']]['status'])
-        rendered = ' '.join(r['text'] for r in ext(action='inspect')['text'])
+        inspection = ext(action='inspect')
+        rendered = ' '.join(r['text'] for r in inspection['text'])
         signature_error = 'CRX_SIGNATURE_VERIFICATION_FAILED'
         # OCR can render underscores as spaces; the model must retain the exact error.
         rendered_error = ''.join(c for c in rendered if c.isalnum()).casefold()
@@ -242,7 +251,7 @@ def run(launch, state, until, row, source, tmp, h, results):
             installedInTarget=identifiers['install'] in registry[work], absentInOther=identifiers['install'] not in registry[personal])
         row('EI_result_counts', result['summary'] == 'Installed 1 · Skipped 1 · Failed 1'
             and len(prompts) == 1 and not result['canInstall'] and not pending(), summary=result['summary'], prompts=len(prompts))
-        app.call('first-run', action='settings-done')
+        settings_done()
         browser_id = app.call('shell-windows')[0]['id']
         app.call('window-focus', id=browser_id, activate=True)
         app.call('sidebar-key', key='z', modifiers=['command'])
@@ -283,7 +292,7 @@ def run(launch, state, until, row, source, tmp, h, results):
         result = ext()
         row('EI_no_candidates', real_counts['candidates'] == 0 and not result['visible'] and not result['rows']
             and state()['settingsOutcome'].get('Extensions candidates') == 0, sourceCounts=real_counts, sectionShown=result['visible'])
-        app.call('first-run', action='settings-done')
+        settings_done()
         metadata_limits(app, settings_import, state, row, empty, tmp, identifiers['existing'], negative == 'queue')
         if os.environ.get('OPEN_E2E_IMPORT_EXT_NETWORK') == '1' and not negative:
             network_receipt(app, settings_import, ext, empty, tmp, results)
