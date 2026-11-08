@@ -4,7 +4,8 @@ import AppKit
 extension AutomationController {
   func runOnboarding(_ args: [String: Any]) async throws -> [String: Any] {
     let action = args["action"] as? String ?? "state"
-    guard action.utf8.count <= 32, ["state", "skip-intro", "get-started", "replay-intro"].contains(action), Set(args.keys).isSubset(of: ["action"]) else {
+    guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,
+          ["state", "skip-intro", "get-started", "replay-intro"].contains(action), Set(args.keys).isSubset(of: ["action"]) else {
       throw Failure(message: "unknown onboarding action or argument")
     }
     if action == "replay-intro" { app.showOnboarding(replay: true) }

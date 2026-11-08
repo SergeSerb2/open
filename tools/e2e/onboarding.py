@@ -68,7 +68,7 @@ def run(factory, results, tmp, h):
         frame_pred = lambda s: s.get('frameStats', {}).get('count', 0) >= 30 and not s['frameStats']['running']
         played_pred = lambda s: s.get('sound', {}).get('decision') == 'played' and s['sound']['playerCreated'] and abs(s['sound']['audioStartHostTime']-s['animationStartHostTime']) <= .020
         invalid = []
-        for arguments in (dict(action='x'*33), dict(action='state', unexpected=True)):
+        for arguments in (dict(action='x'*33), dict(action='state', unexpected=True), dict(action=7)):
             try: app.call('onboarding', **arguments)
             except RuntimeError: invalid.append(True)
             else: invalid.append(False)
