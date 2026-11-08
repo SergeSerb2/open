@@ -184,9 +184,12 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
         let label = NSTextField(labelWithString: "Open is your default browser."); label.frame = NSRect(x: 0, y: 0, width: 380, height: 30); controls.addSubview(label)
       } else {
         for (index, text) in ["Yes, make Open my default.", "Not yet. I'm still looking around."].enumerated() {
+          let card = OnboardingChoiceCard(selected: defaultYes == (index == 0))
+          card.frame = NSRect(x: 0, y: index*64, width: 395, height: 52)
           let radio = NSButton(radioButtonWithTitle: text, target: self, action: #selector(defaultChanged(_:)))
           radio.font = .systemFont(ofSize: 15); radio.tag = index; radio.state = defaultYes == (index == 0) ? .on:.off
-          radio.frame = NSRect(x: 0, y: index*64, width: 395, height: 52); radio.setAccessibilityLabel(text); controls.addSubview(radio)
+          radio.frame = NSRect(x: 16, y: 0, width: 363, height: 52); radio.setAccessibilityLabel(text)
+          card.addSubview(radio); controls.addSubview(card)
         }
       }
       statusLabel = NSTextField(wrappingLabelWithString: defaultOutcome); if let statusLabel { controls.addSubview(statusLabel) }
@@ -407,6 +410,19 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
 }
 @MainActor private final class OnboardingPanel: OnboardingSurface {
   override func draw(_ rect: NSRect) { (effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 30/255, alpha: 1):.white).setFill(); bounds.fill() }
+  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+}
+@MainActor private final class OnboardingChoiceCard: OnboardingSurface {
+  let selected: Bool
+  init(selected: Bool) { self.selected = selected; super.init(frame: .zero) }
+  required init?(coder: NSCoder) { nil }
+  override var acceptsFirstResponder: Bool { false }
+  override func draw(_ rect: NSRect) {
+    let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 10, yRadius: 10)
+    NSColor.quaternaryLabelColor.withAlphaComponent(0.08).setFill(); outline.fill()
+    (selected ? NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1):NSColor.separatorColor).setStroke()
+    outline.lineWidth = selected ? 2:1; outline.stroke()
+  }
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
 
