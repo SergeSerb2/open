@@ -11968,6 +11968,7 @@ def main():
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
+    ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
@@ -12368,7 +12369,8 @@ def main():
 
     interrupted_attempts = []
     # Never replay a potentially crashing probe row after foreground loss.
-    for attempt in range(1, 2 if opts.only == 'passwords-probe' else 4):
+    focus_attempts = 1 if opts.only == 'passwords-probe' else opts.focus_attempts
+    for attempt in range(1, focus_attempts + 1):
         tracker = FocusTracker(capture_frontmost_command=opts.only == 'split')
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
@@ -12402,7 +12404,7 @@ def main():
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
                                          checks=dict(results.get(opts.only, {}))))
         print("%s attempt %d INTERRUPTED: %s" % (opts.only, attempt, interruption["reason"]), flush=True)
-        if attempt == 3 or opts.only == 'passwords-probe':
+        if attempt == focus_attempts:
             dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
                 "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": attempt})
         elif opts.focus_retry_delay_seconds:

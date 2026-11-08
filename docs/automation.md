@@ -1250,3 +1250,5 @@ lead clears a prior crash dialog, resume remaining rows with
 write a separate receipt so the primary crash evidence survives.
 
 Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.
+
+Shared-screen e2e callers can pass `--focus-attempts 1` to `tools/e2e/engine_e2e.py` to stop the suite after its first foreground interruption, preserving the interrupted receipt and running cleanup. The default remains three attempts; passwords probes always use one.

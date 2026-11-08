@@ -146,7 +146,7 @@ def compare_live(path, state, scale, private, env, negative_path=None):
     fill('Bottom rim',[120,387,1,1],[bx+37,by+bh-1,1,1])
     report=dict(ok=all(p['ok'] for p in probes),elements=probes,capture=reference,snapshot=path,
                 limits={'positionPoints':1,'deltaE00':2},
-                excluded='Different site-setting title/glyph and HTTP Insecure pill; disabled New Boost until provider; Developer Mode per Q14',
+                excluded='Different site-setting title/glyph and HTTP Insecure pill; Developer Mode per Q14',
                 load=list(os.getloadavg()))
     if negative_path:
         negative=compare_live(negative_path,state,scale,private,env)
