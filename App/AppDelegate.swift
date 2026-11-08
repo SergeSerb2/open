@@ -330,7 +330,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       "contextsBeforeEngine": OEEngine.shared.contexts.count,
       "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
     ]
-
   }
 
   /// Capture shortcuts at the confirmed first frame, after AppKit's native

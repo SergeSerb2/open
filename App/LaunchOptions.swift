@@ -84,7 +84,7 @@ final class LaunchTiming {
   static let shared = LaunchTiming()
   /// Opt-in, fixed-count startup probes. No timers or idle logging.
   let speedTraceEnabled = ProcessInfo.processInfo.environment["OPEN_SPEED_TRACE"] == "1"
-  private let speedLog = OSLog(subsystem: "io.github.sergeserb2.open", category: "SpeedTrace")
+  private lazy var speedLog = OSLog(subsystem: "io.github.sergeserb2.open", category: "SpeedTrace")
   let processStartTicks: UInt64
   let hasKernelProcessStart: Bool
   private let millisecondsPerTick: Double
