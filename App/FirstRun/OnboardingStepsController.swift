@@ -62,7 +62,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var statusLabel: NSTextField?
   private(set) var savePanel: NSSavePanel?
   private let started = Date()
-  var focusedSpace: Space? { app.model.windows.first.flatMap { app.model.space(id: $0.focusedSpaceID) } ?? app.model.spaces.first }
+  var focusedSpace: Space? { app.frontWindowController?.context.focusedSpace ?? app.model.windows.first.flatMap { app.model.space(id: $0.focusedSpaceID) } ?? app.model.spaces.first }
   init(app: AppDelegate, firstRun: FirstRunViewModel, replay: Bool, reduceMotion: Bool) {
     self.app = app; self.firstRun = firstRun; self.replay = replay; self.reduceMotion = reduceMotion
     super.init(nibName: nil, bundle: nil)

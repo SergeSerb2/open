@@ -6,12 +6,18 @@ import plistlib
 import runpy
 import shutil
 import time
+import uuid
 
 
 def run(factory, results, tmp, h):
     source = Path(tmp)/'setup-arc-synthetic'
     shutil.rmtree(source, ignore_errors=True)
-    runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
+    ids = runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
+    windows_path = source/'StorableWindows.json'
+    windows = json.loads(windows_path.read_text())
+    windows['windows'].append(dict(id=str(uuid.uuid5(uuid.NAMESPACE_URL,'https://example.com/setup/window-two')).upper(),
+        focusedSpaceID=ids['beta'], expandedItems=[]))
+    windows_path.write_text(json.dumps(windows))
     empty = Path(tmp)/'setup-no-arc'; empty.mkdir(exist_ok=True)
     evidence = Path(h.ROOT)/'.re/handoff/sections/s17/c3'; evidence.mkdir(parents=True, exist_ok=True)
     exported = h.subprocess.run(['defaults','export','io.github.sergeserb2.open','-'], capture_output=True)
@@ -177,6 +183,10 @@ def run(factory, results, tmp, h):
         revealed = [w for w in app.call('windows') if w['class']=='BrowserWindow']
         gate('import_browser_hidden', hidden_browser, prepared, revealed)
         gate('import_browser_revealed', lambda ws: bool(ws) and any(w['visible'] and w['alpha']==1 and w['key'] for w in ws), revealed, prepared)
+        imported_welcome = app.call('welcome')
+        selected_welcome = app.call('tab-state', tab=imported_welcome['tab'])
+        results['steps_import_focused_space'] = dict(ok=len(prepared)==2 and native_welcome(imported_welcome)
+            and selected_welcome['space']==next(s['id'] for s in app.call('spaces') if s['focused']), load=os.getloadavg())
         # Empty source skips Import. Escape returns to the actual preceding step.
         launch(directory=empty); action('next'); no_data = screen('favorites')
         gate('no_arc_skips_import', lambda s: s['screen']=='favorites', no_data, imported)

@@ -51,6 +51,7 @@ import ImageIO
     NSColor.white.withAlphaComponent(alpha).setStroke(); path.lineWidth = rect.width*0.07; path.stroke()
   }
   func png() throws -> Data {
+    // Largest explicitly requested bitmap: 1200 * 750 * 4 = 3,600,000 bytes.
     guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1200, pixelsHigh: 750, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 4800, bitsPerPixel: 32), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { throw CocoaError(.fileWriteUnknown) }
     NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = context
     draw(in: CGRect(x: 0, y: 0, width: 1200, height: 750)); NSGraphicsContext.restoreGraphicsState()
