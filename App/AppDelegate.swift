@@ -408,8 +408,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
     if let state = model.windows.first(where: { $0.id == id && $0.style == .standard }) {
+      // Memory only: the next ordinary save and the quit save persist it. A focus
+      // change alone must not rewrite browser.json (private-window flows leave the
+      // saved session untouched; e2e incognito no_snapshot_history_change).
       state.lastFocusedAt = Date()
-      scheduleSave()
     }
     for (otherID, factory) in hostFactories where otherID != id {
       factory.commandBarSession?.dismiss()
