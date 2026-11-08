@@ -387,6 +387,15 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   }
   NSAssert([NSApp isKindOfClass:[OEApplication class]],
            @"NSApp must be an OEApplication (CefAppProtocol)");
+  // Validate before loading CEF or allowing os_crypt to access any item.
+  if (!configuration.keychainServiceName.length ||
+      [configuration.keychainServiceName isEqualToString:@"Chromium Safe Storage"]) {
+    if (error) *error = [NSError errorWithDomain:OEErrorDomain
+        code:OEErrorInitializationFailed userInfo:@{
+          NSLocalizedDescriptionKey: @"Open requires its own Keychain service name"
+        }];
+    return NO;
+  }
   _configuration = [configuration copy];
 
   _loader = new CefScopedLibraryLoader();
@@ -476,6 +485,7 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   }
   _defaultClient = new OEDefaultClient();
   _running = YES;
+  OEInstallAutofillHandler();
   return YES;
 }
 
@@ -575,6 +585,7 @@ class OEProfileDeletionHandler : public CefOpenProfileDeletionHandler {
   if (!_running) {
     return;
   }
+  OERemoveAutofillHandler();
   // Also cover retained retired wrappers and private sessions, on both normal
   // quit and the three-second renderer timeout path.
   for (OEBrowser* browser in self.browsers) [browser close];

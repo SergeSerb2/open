@@ -27,6 +27,36 @@ paths: chrome/browser/notifications/mac/notification_platform_bridge_mac.cc
 paths: chrome/browser/ui/views/extensions/extension_install_dialog_view.cc chrome/browser/ui/extensions/extension_uninstall_dialog_impl.cc
 # 0306-open-extension-windows-tabs.patch
 paths: chrome/browser/extensions/api/tabs/tabs_api.cc
+
+# 0801-open-password-prompt-routing.patch
+paths: chrome/browser/ui/views/tab_dialogs_views.cc
+
+# 0802-open-address-bubble-handler-lookup.patch
+paths: chrome/browser/ui/autofill/address_bubbles_controller.cc
+
+# 0803-open-autofill-page-routing.patch
+paths: chrome/browser/password_manager/chrome_password_manager_client.cc chrome/browser/ui/autofill/chrome_autofill_client.cc
+
+# 0804-open-null-credential-dialogs.patch
+paths: chrome/browser/ui/views/passwords/account_chooser_dialog_view.cc chrome/browser/ui/views/passwords/auto_signin_first_run_dialog_view.cc chrome/browser/ui/views/passwords/credential_leak_dialog_view.cc chrome/browser/ui/views/autofill/payments/card_unmask_prompt_views.cc chrome/browser/ui/views/autofill/payments/autofill_error_dialog_view_native_views.cc
+
+# 0805-open-autofill-defaults.patch
+paths: components/password_manager/core/browser/features/password_features.cc components/password_manager/core/browser/password_manager.cc components/autofill/core/common/autofill_prefs.cc
+
+# 0806-open-https-fallback-dialog-host.patch
+paths: chrome/browser/ssl/ask_before_http_dialog_controller.cc
+
+# 0807-open-hosted-autofill-popup.patch
+paths: chrome/browser/ui/views/autofill/popup/popup_base_view.cc
+
+# 0808-open-hosted-modal-dialog.patch
+paths: components/constrained_window/native_web_contents_modal_dialog_manager_views.cc
+
+# 0809-open-https-warning-after-commit.patch
+paths: chrome/browser/ssl/https_only_mode_tab_helper.cc, chrome/browser/ssl/https_only_mode_tab_helper.h
+
+# 0810-open-modal-unblock-during-tab-teardown.patch
+paths: chrome/browser/ui/tabs/tab_strip_model.cc
 # 0601-open-script-world.patch
 paths: chrome/common/chrome_isolated_world_ids.h
 

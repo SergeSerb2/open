@@ -126,6 +126,7 @@ unsafe `MovePinnedAction` call. No Chromium debugger was used.
 | P6 | Audible state callback (done 2026-11-02, part of "Media" below) | Correct speaker icon (Web Audio too); OpenSleep needs every audio change | 1–2 days | — |
 | P7 | Isolated-world scripts for Open's page runtimes (implemented, Section 12) | Zap picker and Boost applier out of the page's reach | done | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
+| P9 | Passwords and autofill | Save prompt routing, local stores and bounded import API | Section 15 | P1 |
 
 The extension series as built (P1–P3; excerpt). Two series with their own numbers:
 `Engine/fork/patches/chromium/series` for files outside `src/cef/`, and
@@ -616,6 +617,166 @@ unicode-bidi 0.3.18 5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e2
 unicode-normalization 0.1.26 75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d
 url 2.5.8 ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed
 ```
+
+## P9. Passwords and autofill (Section 15)
+
+This bridge keeps Chromium's password manager, autofill stores, and fill
+dropdowns, and sends save offers and Manage links to OpenEngine. The API is
+`OEAutofill.h`, described in [engine-api.md](engine-api.md#passwords-and-autofill).
+The implementation follows [passwords-autofill.md](plans/passwords-autofill.md)
+Steps 1–2. The save sheet and import wizard belong to their own App changes.
+
+| Patch | Purpose |
+|---|---|
+| `0801-open-password-prompt-routing.patch` | H-1: route password show/hide through Open's controller adapter. |
+| `0802-open-address-bubble-handler-lookup.patch` | H-3: find the address handler through the tab's Browser unowned data, without a BrowserView. |
+| `0803-open-autofill-page-routing.patch` | H-4: send password, address, and payment Manage links to the App. |
+| `0804-open-null-credential-dialogs.patch` | H-6: replace the five credential/autofill factories for Open pages. |
+| `0805-open-autofill-defaults.patch` | Fill on account select on; leak detection and auto-sign-in off; mandatory card re-auth on for new profiles, with no opt-in promo. |
+| `0806-open-https-fallback-dialog-host.patch` | Route the Step 0 HTTPS fallback warning through the native modal host; cancel when a detached page has no host. |
+| `0807-open-hosted-autofill-popup.patch` | H-5: attach native autofill dropdowns to the Open AppKit parent; reserve menu fallback for keyboard shortcuts. |
+| `0808-open-hosted-modal-dialog.patch` | H-7: attach web-modal Views windows to their Open AppKit parent and place them at the page's top center on show and resize; keep Chromium's modal manager, focus, and decisions. |
+| `0809-open-https-warning-after-commit.patch` | H-7: register a hosted HTTPS-First warning after its triggering commit finishes notifying observers; a weak tab reference and navigation generation reject a stale deferred show. Native modal closure and security decisions remain unchanged. |
+| `0810-open-modal-unblock-during-tab-teardown.patch` | H-7: keep the modal blocked-state update when a closing tab's features have already been destroyed, but omit the tab UI event that would dereference those features. Tab removal still emits its normal event. |
+
+New files live in `open/browser/autofill/` and the overlay header
+`cef/include/cef_open_autofill.h`. CEF generates the C API and wrappers when
+`engine-apply` runs. The overlay GN source list adds the implementation to
+`libcef_static`. Chromium hook files use a small installed function table,
+so those targets do not link against CEF. `IsOpenWebContents` identifies a
+live OpenEngine page through the process handler; other CEF clients retain
+Chromium's normal path.
+
+`OpenBrowserWindow` owns and registers a non-null autofill handler. Every
+unimplemented bubble returns an empty view and settles its controller on a
+later turn. Save prompts retain Chromium's existing controllers and answer
+once; the registry holds weak references so releasing the shell's offer
+ignores it. Withdrawal uses prompt identity, so an old withdrawal cannot
+remove a replacement offer. The window also provides the hosted page's
+parent NSView, size, and resize notifications for web-modal dialogs. Its
+top-center placement follows Chrome and remains a guess for Arc.
+
+Navigation does not withdraw an Open save prompt. Chromium 156 keeps the
+password state while the bubble is open (`chrome/browser/ui/passwords/
+manage_passwords_ui_controller.cc:1368-1383`); the adapter constructor calls
+`OnBubbleShown()` (`bubble_controllers/password_bubble_controller_base.cc:13-24`
+under that directory). If Chromium resets that state instead, `DestroyPopups()`
+calls `HideBubble()` (`manage_passwords_ui_controller.cc:1446-1451,1542-1546`),
+which reaches the 0801 hide hook in `chrome/browser/ui/views/
+tab_dialogs_views.cc:77-79`, then `OpenPasswordPromptRouter::Hide` and the prompt
+registry. A replacement offer and WebContents destruction also withdraw it.
+
+Card and address controllers have no navigation reset in this version. Both
+inherit `chrome/browser/ui/autofill/autofill_bubble_controller_base.h:36-61`,
+whose observer callbacks handle visibility and destruction. Its hide and
+destruction paths call the returned view's `Hide()` (`autofill_bubble_controller_base.cc:
+28-44,77-81,149-155` in that directory); H-2's `PromptBubble::Hide()` withdraws
+the Open offer. `BubbleManagerImpl` handles tab backgrounding and preemption
+through those same controller hide methods (`bubble_manager_impl.cc:236-243,
+416-427`). Save/update address actions already check their weak delegate
+(`save_address_bubble_controller.cc:234-253`,
+`update_address_bubble_controller.cc:114-133`).
+
+Stale password answers become ignored before any action: the bubble caches its
+initial state (`chrome/browser/ui/passwords/bubble_controllers/
+common_saved_account_manager_bubble_controller.cc:45-50`), while Save/Never/No
+do not validate the live delegate's form manager (`save_update_bubble_controller.cc:
+140-166`, `common_saved_account_manager_bubble_controller.cc:56-63`, and
+`manage_passwords_ui_controller.cc:915-935,961-975`). Ignored close is safe:
+`OnNoInteraction()` checks the live pending state (`manage_passwords_ui_controller.cc:
+900-913`). Card answers also require a live controller, the same bubble view,
+and the original bubble type before calling `OnSaveButton`, which CHECKs its
+callback (`chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.cc:
+450-455,500-514`). Its close callback uses a weak pointer (`:421-424`). These
+are source checks; navigation and stale-answer runtime acceptance remain for
+the lead's on-screen run.
+
+The Step 0 crash is in `AskBeforeHttpDialogController::ShowDialog` calling
+`TabDialogManager::CreateTabScopedDialog`, which CHECKs its absent Views
+host. See the [probe receipt](engine-spike/results-passwords-probe.json),
+PR-7. The 0806 hook retains the warning and its decisions, and uses
+`constrained_window::ShowWebModalDialogViewsOwned` with Open's real modal
+host. A missing Views host also takes that path for detached pages; if no
+native host remains, it cancels. It does not bypass HTTPS warnings or allow an
+insecure navigation.
+The related callers already use that web-modal path: HTTP auth in
+`chrome/browser/ui/views/login_handler_views.cc:180`, and WebAuthn in
+`chrome/browser/ui/views/webauthn/authenticator_request_dialog_view_controller_views.cc:54`.
+Neither calls `TabDialogManager`; both rely on H-7's real host. The probe's
+HTTPS-fallback crash is not evidence of a Basic-auth failure.
+
+OpenEngine refuses an empty or Chromium Keychain service before CEF starts.
+With the public mock key, password/card offers are ignored before any shell
+delegate call. The fixture prompt switch permits those offers and their
+`canEnable` flags. Mock-key imports require the same switch plus a browser-process
+fixture check of every record (plan §7.1); one non-fixture record rejects the whole
+batch before any write with `OEErrorMockKeychain = 8`. The real import wizard
+still refuses mock-key engines. Off-the-record imports return
+`OEErrorEphemeralContext = 7`; they never write stores. The Keychain-error state
+calls the optional OpenEngine delegate, then settles its shown/hidden lifecycle.
+
+The profile bridge serializes bounded batches through Chromium's stores.
+Existing records win. Login completion waits for AddLogins and reads stored
+keys; address/card completion waits for a read on the same web data service;
+cookies wait for FlushCookieStore. Secret source buffers and bridge-owned
+binary buffers are cleared on acceptance and rejection. No new LOG, VLOG,
+or os_log statement contains a credential value.
+
+Historical offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
+
+- The interrupted, unchanged `c5a7c4be` baseline resumed and built
+  `cefsimple cefclient` successfully in 448 seconds. Its inherited reset
+  audit matched 478 Chromium and 21 CEF tracked files, with no overlay
+  mismatch. The lead waived a separate unchanged-App launch.
+- `engine-apply --all` applied 0801–0806 and regenerated the CEF API.
+  The patched `engine-build --target 'cefsimple cefclient'` passed after
+  fixing a checked-observer list and the cookie completion value type.
+  The first two attempts failed compilation; no runtime flow ran in them.
+- `engine-distrib --run --skip-build` produced the distribution under
+  `$HOME/Developer/open-engine-s15`. Its framework SHA-256 is
+  `3baedcd6e50ba56a02bc2aa295f0e12cf5ceda81af92dbf5f8b9467bd4f5b67a`.
+  `engine-status` passed 8/8: 28 active patches, 63 matching overlays,
+  27 expected symbols, and 117/117 CEF patches.
+- `tools/build.sh Debug` passed with `OPEN_ENGINE_ROOT` set to that s15
+  root. Engine jobs used `/usr/bin/lockf -k /tmp/open-engine-build.lock`
+  and the scripts' ten-worker limit. The App build used heavy letter `b`.
+- `tools/verify-all.sh --only commands-dump` passed its release build
+  (zero warnings and errors) and command check under heavy letter `b`.
+
+No Open process or e2e suite was launched for that historical receipt.
+
+The repaired 2026-11-08 distribution includes 0801–0810, on main
+`cdd147ca`. Framework SHA-256:
+`619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`.
+Strict status passes 8/8 (37 Open patches, 117 CEF patches, 75 overlays,
+43 symbols). The real-App focused rows PW-HF1, PW-HF2-return,
+PW-HF2-escape, PW-HF3-tab-close, PW-HF4-window-close, PW-HF5-navigate,
+PW-HF6-space and PW-HF7-quit pass with no new crash reports and complete
+owned-process cleanup. Continue requires the PROCEED metric and the form;
+Escape requires DONT_PROCEED and the previous page. On macOS, Return has
+no default action; its row verifies no decision, then cancels with Escape.
+The harness waits through Chromium's 500 ms input-protection interval
+before sending an action. It does not change that guard.
+
+Negative proof comes from `Open-2026-11-06-203144.ips`
+(`TabDialogManager::CreateTabScopedDialog` CHECK) and
+`Open-2026-11-07-210523.ips` (`TabUIHelper::GetFavicon` during modal
+unblock after TabFeatures destruction). The crashing `20b0f936` framework
+is permanently refused and was not replayed. These reports and the new
+per-row receipts are retained in the local D5/D6 handoff directories.
+The full real-App password suite on this same distribution passes 77 rows.
+C-2 stays M1-only by rule and PW-KC1 stays a user Keychain hand check.
+The regression runs pass 26 feature rows, 85 page rows and 71 extension UI
+rows. Existing page/extension prerequisite gates remain listed separately
+in the PR's row/load table; intentional crash rows were not run on M5.
+With main's App code and no save-prompt delegate, a real synthetic sign-in
+records one Ignored offer (PasswordManager.SaveUIDismissalReason bucket 0),
+shows no sheet or Chromium bubble, leaves the App alive and produces no
+new crash report. Every selected run passes owned-process cleanup.
+The main-App acceptance was rebuilt after merging main `eb49e472`; no
+compiled fork source changed from the repaired distribution. The shared
+harness now supports bounded direct-child runs and first-App-death stop
+without changing main's onboarding or Welcome dispatch.
 
 ## Tab sleeping (memory fork, Section 8 PR #158)
 
