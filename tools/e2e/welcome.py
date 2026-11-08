@@ -90,7 +90,7 @@ def run(factory, results, tmp, api):
         if not stopped:
             raise AssertionError('Welcome playlist did not finish in order')
         resume_tab = app.call('welcome', action='insert')['tab']
-        resume = pause_resume_playlist(app, blank, api)
+        resume = pause_resume_playlist(app, api)
         record('W34_hidden_playlist_resumes', **resume)
         app.call('close', tab=resume_tab)
         app.call('select', tab=welcome)
@@ -382,23 +382,25 @@ def design_gates(state, appearance):
     }
 
 
-def pause_resume_playlist(app, blank, api):
-    """Exercise removal/reinstallation of a playing native host in the real window."""
+def pause_resume_playlist(app, api):
+    """Hide and restore the actual window while its native playlist is playing."""
     def state(): return app.call('welcome')
     def await_state(predicate, timeout=5):
         return api.wait_until(lambda: (lambda s: s if predicate(s) else None)(state()), timeout=timeout, step=.1)
     initial = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
                           and s['activeCard'] == 1 and s['animating'])
-    tab = state()['tab']
-    app.call('select', tab=blank)
+    window = app.call('window-state')['id']
+    app.call('command', id='minimize-window')
+    mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=4, step=.1)
     paused = await_state(lambda s: not s['visible'] and s['animationCount'] == 0
-                         and all(not host['animating'] for host in s['hosts']))
-    app.call('select', tab=tab)
+                         and not s['pendingCompletion'] and all(not host['animating'] for host in s['hosts']))
+    app.call('window-deminiaturize')
+    app.call('window-focus', id=window, activate=True)
     resumed = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
                           and s['activeCard'] == 1 and s['animating'] and s['pendingCompletion'])
     ended = await_state(lambda s: s['playedCards'] == [1, 1, 2, 3, 4] and not s['animating']
                         and s['playlist'] == 'stopped', timeout=38) if resumed else None
-    return dict(ok=bool(initial and paused and resumed and ended and ended['completionCount'] == 4
+    return dict(ok=bool(initial and mini and paused and resumed and ended and ended['completionCount'] == 4
                         and ended['animationCount'] == 0 and not ended['pendingCompletion']),
                 initial=initial, paused=paused, resumed=resumed, ended=ended, lastState=state())
 
@@ -467,7 +469,7 @@ def negative_gates(factory, results, tmp, api):
                     hidden = state()
                     record('N_minimize_stops', mini and hidden['animating'] and hidden['animationCount'] > 0, state=hidden)
                 elif mutation == 'resume':
-                    resume = pause_resume_playlist(app, blank, api)
+                    resume = pause_resume_playlist(app, api)
                     record('N_hidden_playlist_resumes', not resume['ok'] and resume['paused']
                            and not resume['resumed'], **{k: v for k, v in resume.items() if k != 'ok'})
                 elif mutation == 'reduce':
