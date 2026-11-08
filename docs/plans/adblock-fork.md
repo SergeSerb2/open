@@ -4843,7 +4843,7 @@ Runtime receipts and each milestone checkpoint belong in `.re/s13/e4/`.
 The lead assigned `~/Developer/open-engine-s13b` to E4 and authorized
 its distribution for App acceptance. Before the first apply/build,
 `s13/step5-cosmetics` merged Step 4 `f06011e7`, including main `d26300e6`
-and Section 15 CEF patches 0801–0810. Merge conflicts retained the
+and Section 15 Chromium patches 0801–0810. Merge conflicts retained the
 resource pipeline row, updated Step 4 receipt limits and cosmetic row.
 The earlier no-root/source-only checkpoint remains history.
 
