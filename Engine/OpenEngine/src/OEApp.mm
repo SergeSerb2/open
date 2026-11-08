@@ -3,6 +3,8 @@
 // and audible state come from the fork (CefMediaController, OEMediaSession.mm).
 
 #import "OEInternal.h"
+#import "OEOpenWorld.h"
+#include "include/cef_open_world.h"
 
 #include <map>
 #include <mutex>
@@ -120,6 +122,7 @@ namespace {
 struct RendererScript {
   std::string source;
   bool css = false;
+  bool open_world = false;
   bool document_end = false;
   bool main_frame_only = true;
   std::vector<std::string> patterns;
@@ -222,11 +225,13 @@ class OEApp : public CefApp,
   void OnBrowserDestroyed(CefRefPtr<CefBrowser> browser) override {
     std::lock_guard<std::mutex> lock(mutex_);
     scripts_.erase(browser->GetIdentifier());
+    OEOpenWorldBrowserDestroyed(browser->GetIdentifier());
   }
 
   void OnContextCreated(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefFrame> frame,
                         CefRefPtr<CefV8Context> context) override {
+    if (!CefIsPageScriptContext(context)) return;
     std::string url = frame->GetURL().ToString();
     CefRefPtr<CefV8Value> retval;
     CefRefPtr<CefV8Exception> exception;
@@ -239,7 +244,7 @@ class OEApp : public CefApp,
       }
     }
     for (const RendererScript& s : scripts) {
-      if (s.main_frame_only && !frame->IsMain()) {
+      if ((s.main_frame_only || s.open_world) && !frame->IsMain()) {
         continue;
       }
       bool match = false;
@@ -253,12 +258,13 @@ class OEApp : public CefApp,
         continue;
       }
       std::string code = s.css ? CssWrapper(s.source) : s.source;
-      if (s.document_end) {
+      if (s.document_end && !s.open_world) {
         code =
             "document.addEventListener('DOMContentLoaded',()=>{" + code +
             "\n},{once:true});";
       }
-      context->Eval(code, "openengine://userscript", 1, retval, exception);
+      auto target = s.open_world ? OEOpenWorldContext(browser, frame) : context;
+      if (target) target->Eval(code, "openengine://userscript", 1, retval, exception);
     }
   }
 
@@ -266,6 +272,8 @@ class OEApp : public CefApp,
                                 CefRefPtr<CefFrame> frame,
                                 CefProcessId source_process,
                                 CefRefPtr<CefProcessMessage> message) override {
+    if (source_process != PID_BROWSER) return false;
+    if (OEOpenWorldRendererMessage(browser, frame, message)) return true;
     if (message->GetName() == kOEMsgScriptsUpdate) {
       SetScripts(browser->GetIdentifier(),
                  message->GetArgumentList()->GetList(0));
@@ -298,6 +306,7 @@ class OEApp : public CefApp,
       RendererScript s;
       s.source = d->GetString("source");
       s.css = d->GetBool("css");
+      s.open_world = d->GetBool("openWorld");
       s.document_end = d->GetBool("end");
       s.main_frame_only = d->GetBool("mainFrameOnly");
       CefRefPtr<CefListValue> pats = d->GetList("matches");

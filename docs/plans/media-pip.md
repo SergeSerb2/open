@@ -2671,6 +2671,53 @@ Branch `s3/step11`.
   size); `pip-action close` closes the panel through its close path (`docs/automation.md`).
 - e2e: `media_document_pip` (E-M13; was BLOCKED) and `media_meet_auto_pip` (Step 11 acceptance).
 
+### 14.7 Item 15: speed gates and negative proofs
+
+Branch `s3/item15` (child branch `s3/item15-speed`). Receipts with every run and its load:
+`.re/section3/speed/speed-receipts.md` (local).
+
+- **Card appears in the same run-loop turn** (criterion 2). Under automation only, the App
+  records when it handles a leave or engine event and when `MediaControlsView` inserts that tab's
+  card, with a main-run-loop turn counter (a `CFRunLoopObserver` on `afterWaiting`, which
+  schedules nothing). `mini-players` cards report `timing`. `media_card_on_leave` asserts the
+  event is `leave` and the insert lands within one turn. Final head: 0 turns, 7.1 ms. Negative
+  proof: a 50 ms `asyncAfter` before the insert gives 19 turns, 59.9 ms, FAIL.
+- **Auto-PiP ≤ 500 ms after the leave** (criterion 3). `media_auto_pip_on_leave` asserts leave →
+  enter (`media.decision.at` is the start of the coordinator's leave handling). Final head: 8.6 ms.
+  Negative proof: a 600 ms delay before the request gives 635.7 ms, FAIL.
+- **Idle CPU with a paused card = without it** (D-11). `media` and the new `measure` case share one
+  sampler (`process_cpu_window`, four interleaved pairs, floor difference ≤ 0.5 percentage points,
+  all samples complete, no resting animation, no pending collapse). Final head: media total
+  0.28 / 0.03 %, browser 0.046 / 0.011 %; measure total 0.53 / 0.20 %, browser 0.034 / 0.026 %.
+  Negative proof: a 60 Hz timer in the card gives 16.5 / 0.3 %, FAIL.
+- **Sidebar scroll p95** (`sidebar-render bench --rows 1000 --scale 2`, interleaved with unchanged
+  main `ca56dff3`). Plain rows: head 3.315 / 3.524 ms vs main 4.075 / 4.388 ms (median / mean of
+  per-run p95, load1 21.9–24.9): no regression. Mixed rows: head 3.620 / 3.811 ms, under the
+  4.2 ms budget, but at load1 24–31. The strict load1 ≤ 12 receipt is pending (Section 16's quiet
+  pass). Negative proof: an O(n) loop in row configure gives 10.24 ms, FAIL.
+- **Command bar and suggestions do not regress**: `suggest-check` 56/56 on head and main.
+  `commandbar-render` under load passed the §4.4c paired method: main / head median CPU p95
+  8.909 / 8.318 ms (−6.6 %).
+
+### 14.8 Section 3 close-out (items 10–13, 17–19)
+
+- **Item 10, View Media.** The Window item opens the Library's Media section (#151; e2e
+  `media_view_media_menu`). Arc's item runs `viewScreenshotsAndCaptures:`, and Arc's Library
+  "Media" grid shows captures and screenshots, not playback media (settings-library §6.4). So it
+  needs no OpenMedia source.
+- **Item 11.** e2e `media_two_card_collapse` (#234) closes #110 code review C5 on the synthetic
+  path. A real-pointer pass stays a hand check.
+- **Item 12.** The tooltip text was decoded in Step 2b. The speaker animation waits for a capture
+  (`docs/followups.md`, Media D8).
+- **Item 13.** E-M11 passes (`media_now_playing`), so EM-9 is not needed.
+- **Soak** on main ce503e80: e2e `media` 32/32 ×3, `sidebar-render` ×3 and `features-render` ×3
+  PASS. 0 orphan processes after each run. 0 new crash reports.
+- **Regressions** on main ce503e80: full `verify-all` PASS. e2e `features`, `shell`, `window`,
+  `sidebar`, `sidebar-completion`, `toolbar`, `numbering` and `measure` PASS. `app-actions` and
+  `commandbar` each have one failing row, `settings_advanced_action_error`, from Section 12's
+  #249: Boost editing became available, and the row still expects "not available". It is not
+  media.
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).
