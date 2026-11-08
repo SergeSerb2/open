@@ -148,9 +148,10 @@ export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main # M5 only
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=all \
   tools/verify-all.sh --only space-legacy,space-editor,sidebar-compare
-~/Library/Caches/OpenRE/scripts/heavy.sh \
-  /usr/bin/lockf -k /tmp/open-m5-quiet.lock env OPEN_VERIFY_BREAK=suggest \
-  tools/verify-all.sh --only suggest-check
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock \
+  ~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=suggest \
+  Packages/OpenKit/.build/release/openkit suggest-check
 ```
 
 Run M1 jobs through `m1.sh` in a detached checkout of the pushed branch, per
@@ -158,8 +159,10 @@ TANDEM §4M. Never commit or edit source there. The normal runner retains the
 on-screen lock and owned-window cleanup for the native editor suite. Private
 capture inputs and comparison images remain in ignored `.re/` or private
 receipt directories; the committed references use synthetic fixtures only.
-The lead's 2026-11-07 lock ruling places the heavy slot outside the quiet lock.
-Visual negative proofs take no quiet lock; only the timer proof does.
+The standing lock order is quiet lock, then heavy slot, then screen lock when
+needed. Build first under `heavy.sh` alone. Time the already-built command;
+never hold the quiet lock during a build. Visual negative proofs take no
+quiet lock; only the timer proof does.
 
 #### Recorded controls (2026-11-07)
 
@@ -217,6 +220,46 @@ the original offscreen frame. `5c443a56` limits screen association to explicitly
 keyed verification renders. Ordinary snapshots and motion hosts keep the
 original placement. The reference and color-comparison paths remain keyed.
 
+#### M5 negative proof and quiet control
+
+The M5 visual negative run exited 1 with build PASS and all three selected
+visual gates FAIL. One 1/255 pixel change failed legacy Space 0 and all three
+editor P1 PNG rows (276 functional rows still passed). The 6/255 URL-field
+fill change failed all 13 sidebar states on all three paired attempts. Its
+fill drifts for static-inactive/selected-pinned/yellow were 0.18/0.83/1.40 ΔE00
+on every attempt, above the unchanged 0.15 limit. One static-inactive attempt
+also had text drift up to 0.61; the deliberate fill alone failed every attempt.
+Yellow also exceeded its original absolute cap: 2.04 > 1.95. End load was
+15.22/12.48/12.04.
+
+The separate M5 timer negative run failed only row #31: raw
+694.309/702.882/723.817 ms, reference median 390.280 ms, load 14.5/12.4/12.0.
+The printed calibrated values were 676.020/684.367/704.750 ms; the M5 decision
+used raw times. No cap changed. All three attempts failed.
+
+The M5 quiet command-bar rerun passed 151/151: CPU p95 3.20 ms, inline
+completion +0.114 ms, load 10.3/11.5/11.7. The unchanged trusted-main export
+`7f405f3b3e5ccf5716d2664b1f6e91e36b219df3` ran next under the same lock and
+passed 151/151: CPU p95 3.64 ms, inline completion +0.097 ms, load
+9.7/11.2/11.6. Its exported package's 801 tracked files were checked against
+the Git blobs (including symlinks), and the cached sidebar binary hash matched
+its first full-run receipt. No fresh reference was recorded from branch code.
+
+The later M5 command-bar check in the full run missed only row #151: inline completion
++0.415 ms against +0.3 ms, CPU p95 7.44 ms against 8 ms, load 26.0/23.5/18.3.
+The strict quiet run above passed both rows #150 and #151, with its main
+control in the same session. This meets TANDEM §4b for changes outside the
+command-bar product code. The full-run miss remains in its summary table;
+no timing threshold or comparator was changed.
+
+The first M5 final sequence was interrupted by the lead's lock-order change.
+Its partial receipt remains. The completed negative runs above used the lead's
+temporary heavy-before-quiet ruling, before its 16:50 withdrawal. The standing
+order is documented above; new timing runs build first without quiet, then
+take quiet before heavy for the already-built command. Visual negative proofs
+held no quiet lock. All remaining owned children of the interrupted sequence
+were reaped before the restart.
+
 #### Final M1 full gate
 
 The detached M1 run on `5c443a56` passed **24/24**, with zero FAIL and zero
@@ -229,32 +272,62 @@ byte-identical, with zero drift. The preceding `50bb3808` full run ended
 The receipts were copied back before the owned detached M1 worktree was
 removed. No owned M1 job remains. `CLAUDE.md` remains a symlink to `AGENTS.md`.
 
-| Check | M1 result | Seconds |
-|---|---|---:|
-| `build` | PASS | 39 |
-| `commands-demo` | PASS | 1 |
-| `roundtrip` | PASS | 0 |
-| `space-legacy` | PASS | 2 |
-| `space-editor` | PASS | 160 |
-| `space-pad-compare` | PASS | 3 |
-| `suggest-check` | PASS | 35 |
-| `commands-dump` | PASS | 0 |
-| `route` | PASS | 2 |
-| `favicons` | PASS | 0 |
-| `media-demo` | PASS | 0 |
-| `sleep-demo` | PASS | 1 |
-| `adblock-perf` | PASS | 1 |
-| `adblock-catalog` | PASS | 0 |
-| `profiles` | PASS | 0 |
-| `settings-preview` | PASS | 94 |
-| `sidebar-render` | PASS | 115 |
-| `sidebar-compare` | PASS | 20 |
-| `commandbar-render` | PASS | 41 |
-| `features-render` | PASS | 94 |
-| `extensions-render` | PASS | 7 |
-| `sitecontrol-render` | PASS | 76 |
-| `boosts` | PASS | 4 |
-| `verify-secrets-fixture` | PASS | 4 |
+#### Final M5 full gate and complete tables
+
+The M5 full run on `e21c62e4` (same check source as M1's `5c443a56`) ended
+**23 PASS / 1 FAIL / 0 SKIP**. Only command-bar timing row #151 missed under
+load; the strict quiet branch/main controls above satisfy TANDEM §4b.
+All four portability gates passed. Sidebar passed 624/624, and all 13 paired
+color tables were byte-identical with zero drift. Original M5 color maxima
+were 1.17/1.73/1.95. Timer #31 used raw 400.981 ms against 600 ms; reference
+median 394.832 ms, load 63.3/24.1/16.2. Full-run start load was
+9.65/11.19/11.57; end load was 26.06/26.58/22.09. Neither machine skipped a target.
+
+The table preserves the actual full-run result. Command-bar acceptance comes
+from the separately recorded strict quiet PASS, with no budget change.
+
+| Check | M5 full result | Seconds | M1 full result | Seconds |
+|---|---|---:|---|---:|
+| `build` | PASS | 2 | PASS | 39 |
+| `commands-demo` | PASS | 5 | PASS | 1 |
+| `roundtrip` | PASS | 1 | PASS | 0 |
+| `space-legacy` | PASS | 2 | PASS | 2 |
+| `space-editor` | PASS | 119 | PASS | 160 |
+| `space-pad-compare` | PASS | 4 | PASS | 3 |
+| `suggest-check` | PASS | 31 | PASS | 35 |
+| `commands-dump` | PASS | 1 | PASS | 0 |
+| `route` | PASS | 16 | PASS | 2 |
+| `favicons` | PASS | 3 | PASS | 0 |
+| `media-demo` | PASS | 0 | PASS | 0 |
+| `sleep-demo` | PASS | 1 | PASS | 1 |
+| `adblock-perf` | PASS | 1 | PASS | 1 |
+| `adblock-catalog` | PASS | 0 | PASS | 0 |
+| `profiles` | PASS | 3 | PASS | 0 |
+| `settings-preview` | PASS | 91 | PASS | 94 |
+| `sidebar-render` | PASS | 110 | PASS | 115 |
+| `sidebar-compare` | PASS | 21 | PASS | 20 |
+| `commandbar-render` | FAIL | 41 | PASS | 41 |
+| `features-render` | PASS | 96 | PASS | 94 |
+| `extensions-render` | PASS | 9 | PASS | 7 |
+| `sitecontrol-render` | PASS | 488 | PASS | 76 |
+| `boosts` | PASS | 5 | PASS | 4 |
+| `verify-secrets-fixture` | PASS | 7 | PASS | 4 |
+
+#### Review checklist
+
+| Checklist item | Result | Evidence |
+|---|---|---|
+| 1. Input limits | PASS | Display keys are exact scale/ICC pairs; metadata ≤1 MiB, ICC ≤4 MiB, PNG ≤16 MiB, CPU string ≤256 bytes. Unknown-key CLI proofs fail on both machines. |
+| 1. Allocator ceilings / new product parser boundaries | N/A | No product input parser or allocation path changed; new references are committed synthetic fixtures. |
+| 2. Lifetimes / callbacks | PASS | Keyed snapshot hosts are never ordered; mismatch closes the host before exit. Other hosts keep original placement. No callback, ID, or deferred-state contract changed. |
+| 3. Real keys / focus / visibility paths | N/A | No production key router, menu, focus, or visibility change. |
+| 4. Checks fail with a deliberate break | PASS | One rendered pixel, one fill color, and a real +300 ms timeout fail the required gates on M5 and M1; all original references stay unchanged. |
+| 4. Image comparisons | PASS | Exact PNG bytes; original M5 caps; exact paired geometry/ink and ≤0.15 ΔE00 drift. Both full runs pass the four portable gates. |
+| 4. Specific dialog identity | N/A | No new dialog assertion. Existing editor native-picker checks remain unchanged and pass. |
+| 4. Configured timing / bounded real-time check | PASS | Existing 80/300 ms configuration check retained. One behavior, ≤3 attempts, bounded independent reference, raw time/lateness/load printed. M5 raw <600 ms retained. |
+| 4. Isolated roots / ports / cleanup | PASS | Existing runner uses private per-check scratch roots; real suggestion HTTP fixture uses an ephemeral port. Negative editor runs finish and reap children. Owned M1 worktree removed; no owned dependent job remains at handoff. |
+| 5. UI / motion product behavior | N/A | No product motion change. Original unkeyed host placement is restored; sidebar 624/624 on both machines. No new visual-parity claim. |
+| 6. Docs / comments / follow-ups | PASS | `docs/verification.md`, portability follow-ups, and Machines paragraph agree. `CLAUDE.md` remains a symlink to `AGENTS.md`. M5 built-in proof is explicitly pending. |
 
 ## Section 1 completion (2026-10-28)
 
