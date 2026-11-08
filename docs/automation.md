@@ -42,6 +42,7 @@ on-screen lock around one suite only; take the heavy slot around build steps.
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
+- `OPEN_AUTOMATION_OFFSCREEN_SMOKE=1` starts the packaged engine and socket without browser or first-run windows. Use a disposable data root and the on-screen lock for the first launch after packaging changes. Check `shell-windows` and the owned on-screen window count are both empty, then quit. This mode does not measure normal startup or UI behavior.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
 
 First run is detected once, before data-root preparation, when

@@ -353,28 +353,18 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app`, App source `6af1eacf` includes main `eaa70c28` (#222).
-Fresh M5 Debug/automation Release and engine fingerprint checks pass against
-`2ecaeada`. SCC records 23 PASS, S2/S4/S10 matching-row coverage BLOCKED,
-and S11/S12 FAIL under the lead's interim ruling. Real private context and
-Boost action refusals pass; matching-row coverage waits for the shared runtime.
-P1 p95 is 4.788 ms; three native phase negatives are rejected. Heavy page
-snapshot counts are closed0/open1, with0 for250 title changes. Cleanup
-restores defaults and closes both owned windows without a focus interruption.
-Quiet commandbar passes151/151 on main and branch. Current-engine M5
-regressions pass: extensions72, toolbar10, features19, page85 (four BLOCKED
-and one DEFERRED), commandbar77, split40 and space-editor167. Window has
-83PASS and two known-main startup budget FAIL rows (sidebar385/395ms,
-paint621/622ms). Every cleanup passes, with no interruptions. Startup
-qualification and the final full gate remain pending. A native F25 attempt lost
-focus to UserNotificationCenter PID29564 three times; no native rows count.
-The lead cleared M5 at16:20; the one F25 rerun passes11/11 on its second
-fresh native attempt, with the earlier cmux focus interruption retained.
-A fresh full native check passes1548/1549 with no interruption. F24/F25,
-generation guards and motion pass; the sole timing FAIL is code keystroke
-p95 2.442ms against2ms at load23.827/15.576/16.021, retained under item9.
-Owned cleanup passes. Older-engine, interrupted
-and M1 receipts do not qualify. The PR will record every count and load.
+On `s12/scc-app`, App source `b7811833` includes main `7f7feb26`.
+Fresh M5 Debug/automation Release, package startup and engine fingerprint
+checks pass against `7a90e70e` (code `7d3cb328`). SCC has 23 PASS,
+S2/S4/S10 matching-row coverage BLOCKED, and S11/S12 FAIL under the lead's
+interim ruling. The real private context and Boost action refusals pass.
+P1 p95 is 6.302 ms at load 53.504/39.013/41.036; all three native phase
+controls are rejected. Heavy-page snapshot counts are closed0/open1 and
+zero for 250 title changes. The specific Advanced Settings cleanup proof
+restores defaults, closes two windows and leaves no owned process or focus
+interruption. The plan records current suite counts and loads. S11/S12
+remain open for lead review; startup, quiet commandbar and the final gate
+are pending. Older-engine, M1 and interrupted receipts are excluded.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
@@ -800,7 +790,7 @@ Capture session 2 ran on 2026-10-26 and is committed as findings only (#106; rou
 | Decision | Default today | Source |
 |---|---|---|
 | Folders as `chrome.tabGroups` | Decided in #64: v1 has no tab groups. Folder tabs stay pinned with `groupId: -1`. | `docs/re/arccore-engine.md` §4.3.1; engine-patches P1 |
-| Do Boosts apply in incognito, Peek, Little Open, and Split panes? | Private windows disable Boosts; Section 12 App presenter hook deferred (lead 16:12). Other contexts follow Section 12. | boosts-zap Q4 ("Product to confirm") |
+| Do Boosts apply in incognito, Peek, Little Open, and Split panes? | Private windows disable Boosts through `factory.isIncognito`; S10 verifies the real private context and action refusals. Matching-row coverage waits for the shared Boost provider. Other contexts follow Section 12. | boosts-zap Q4 ("Product to confirm") |
 | Keep Safe Browsing on? | Not decided | engine-patches P5 ("Keep Safe Browsing as a product decision") |
 | Pinned tabs sleep like other tabs (Chrome protects them) | Sleep; say so in Settings | memory-design §5 |
 | Tab-sleep mode names in Settings | Designer names later | memory-fork lead decision |
