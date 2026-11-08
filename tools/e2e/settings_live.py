@@ -10,6 +10,7 @@ def run(factory, results, tmp, wait_until, restore_defaults):
     url = fixture.resolve().as_uri()
     app = factory(urls=(url,), fresh=True)
     keys = ('open.appIcon.selectedID', 'open.advanced.tabSleepMode', 'open.settings.lastPane',
+            'open.library.lastSection',
             'open.general.searchSuggestNoticeDismissed', 'open.links.openPeekShiftClick',
             'open.links.openPeekOtherSites', 'open.peek.shiftClick', 'open.peek.otherSites')
     saved = {key: app.call('defaults', key=key, persistent=True) for key in keys}
@@ -61,11 +62,22 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         s = app.call('settings-state')
         results['settings_general_action_error'] = {'ok': s['pane'] == 'general'
             and s['generalError'] == 'Updates are not set up in this build.', 'error': s['generalError']}
+        library_before = app.call('library-section')
         app.call('menu-perform', id='view-boosts')
+        library = wait_until(lambda: (lambda s: s if s['visible'] and s['section'] == 'boosts' else None)(
+            app.call('library-section')), timeout=5, step=.05)
         s = app.call('settings-state')
-        results['settings_advanced_action_error'] = {'ok': s['pane'] == 'advanced'
-            and s['advancedStatus'] == 'Boost editing is not available in this build.',
-            'status': s['advancedStatus']}
+        legacy_error = 'Boost editing is not available in this build.'
+        legacy_assertion = s['pane'] == 'advanced' and s['advancedStatus'] == legacy_error
+        results['settings_view_boosts_library'] = {'ok': not library_before['visible']
+            and bool(library) and s['library'] > 0 and s['librarySection'] == 'boosts'
+            and s['advancedStatus'] == '' and not legacy_assertion,
+            'library': library, 'window': s['library'], 'advancedStatus': s['advancedStatus'],
+            'negativeClosed': library_before, 'legacyExpectedError': legacy_error,
+            'negativeOldAssertionRejected': not legacy_assertion}
+        app.call('key', key='w', modifiers=['cmd'], window=s['library'], route='app')
+        assert wait_until(lambda: not app.call('library-section')['visible'], timeout=5, step=.05)
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
 
         # The picker action writes the actual preference and replaces NSApp's actual image.
         app.call('settings-pane', pane='appIcon')
