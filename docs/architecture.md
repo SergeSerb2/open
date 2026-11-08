@@ -89,6 +89,8 @@ Launch time starts at the kernel process-start counter, before the first App con
 
 `OPEN_SPEED_TRACE=1` enables fixed startup signposts and precise phase counters. It is off by default. Automation can separately capture loaded images at the confirmed sidebar frame with `OPEN_SPEED_IMAGES=1`. This image scan stays out of primary timing runs. Floor calibration uses a standalone AppKit window and a second variant with the same direct system links as Open. Both use the same kernel origin, LaunchServices path and frame rule. In the macOS 27.2 control, both standalone floor apps load WebKit by the confirmed first frame. Image presence is informational; it does not establish a removable cost.
 
+Launch-path candidates keep the effective registry shortcuts and native Services, Font, Window and Help registration in the first menu. The full menu is ready before it opens. Optional framework initialization, duplicate menu builds and duplicate root layout are separate experiments. Retain a candidate only after matched-engine, interleaved floor/main/branch measurements show a saving without slower web paint or key acceptance. The budgets and measurement boundaries stay unchanged.
+
 ## Testing
 
 No unit tests. Each feature is verified end to end on the real app through the automation channel (`docs/automation.md`, built by the engine spike): open URLs, read tab and sidebar state, run JavaScript in pages, and capture PNGs of our own window. We never drive the user's desktop.
