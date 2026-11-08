@@ -623,9 +623,10 @@ Steps 1–2. The save sheet and import wizard belong to their own App changes.
 | `0804-open-null-credential-dialogs.patch` | H-6: replace the five credential/autofill factories for Open pages. |
 | `0805-open-autofill-defaults.patch` | Fill on account select on; leak detection and auto-sign-in off; mandatory card re-auth on for new profiles, with no opt-in promo. |
 | `0806-open-https-fallback-dialog-host.patch` | Route the Step 0 HTTPS fallback warning through the native modal host; cancel when a detached page has no host. |
+| `0807-open-hosted-autofill-popup.patch` | H-5: attach native autofill dropdowns to the Open AppKit parent; reserve menu fallback for keyboard shortcuts. |
 | `0808-open-hosted-modal-dialog.patch` | H-7: attach web-modal Views windows to their Open AppKit parent and place them at the page's top center on show and resize; keep Chromium's modal manager, focus, and decisions. |
 | `0809-open-https-warning-after-commit.patch` | H-7: register a hosted HTTPS-First warning after its triggering commit finishes notifying observers; a weak tab reference and navigation generation reject a stale deferred show. Native modal closure and security decisions remain unchanged. |
-| `0810-open-modal-unblock-during-tab-teardown.patch` | H-7: keep the modal blocked-state update when a closing tab's features have already been destroyed, but omit the tab UI event that would dereference those features. Tab removal still emits its normal event. Prepared after the 21:05 HTTPS warning cleanup crash; runtime verification pending. |
+| `0810-open-modal-unblock-during-tab-teardown.patch` | H-7: keep the modal blocked-state update when a closing tab's features have already been destroyed, but omit the tab UI event that would dereference those features. Tab removal still emits its normal event. |
 
 New files live in `open/browser/autofill/` and the overlay header
 `cef/include/cef_open_autofill.h`. CEF generates the C API and wrappers when
@@ -710,7 +711,7 @@ cookies wait for FlushCookieStore. Secret source buffers and bridge-owned
 binary buffers are cleared on acceptance and rejection. No new LOG, VLOG,
 or os_log statement contains a credential value.
 
-Offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
+Historical offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
 
 - The interrupted, unchanged `c5a7c4be` baseline resumed and built
   `cefsimple cefclient` successfully in 448 seconds. Its inherited reset
@@ -731,12 +732,29 @@ Offscreen receipt (M5, 2026-11-07), engine source head `b0c70383`:
 - `tools/verify-all.sh --only commands-dump` passed its release build
   (zero warnings and errors) and command check under heavy letter `b`.
 
-The M5 screen hold still blocks real-App acceptance: save delegates and
-counts, card/address prompts, null Credential Management completion,
-HTTPS warning buttons, mock-key prompt suppression, and the `features`,
-`page`, and `extensions-ui` suites are unverified. No Open process or e2e
-suite was launched for this receipt. The engine PR remains pending those
-checks.
+No Open process or e2e suite was launched for that historical receipt.
+
+The repaired 2026-11-08 distribution includes 0801–0810, on main
+`cdd147ca`. Framework SHA-256:
+`619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`.
+Strict status passes 8/8 (37 Open patches, 117 CEF patches, 75 overlays,
+43 symbols). The real-App focused rows PW-HF1, PW-HF2-return,
+PW-HF2-escape, PW-HF3-tab-close, PW-HF4-window-close, PW-HF5-navigate,
+PW-HF6-space and PW-HF7-quit pass with no new crash reports and complete
+owned-process cleanup. Continue requires the PROCEED metric and the form;
+Escape requires DONT_PROCEED and the previous page. On macOS, Return has
+no default action; its row verifies no decision, then cancels with Escape.
+The harness waits through Chromium's 500 ms input-protection interval
+before sending an action. It does not change that guard.
+
+Negative proof comes from `Open-2026-11-06-203144.ips`
+(`TabDialogManager::CreateTabScopedDialog` CHECK) and
+`Open-2026-11-07-210523.ips` (`TabUIHelper::GetFavicon` during modal
+unblock after TabFeatures destruction). The crashing `20b0f936` framework
+is permanently refused and was not replayed. These reports and the new
+per-row receipts are retained in the local D5/D6 handoff directories.
+Full password and regression acceptance is recorded separately from
+these focused results.
 
 ## Tab sleeping (memory fork, Section 8 PR #158)
 
