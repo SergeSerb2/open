@@ -142,9 +142,10 @@ scoped_refptr<base::SequencedTaskRunner> AdBlockBuildTaskRunner() {
 }
 
 void NoteAdBlockEngineActivity(base::TimeTicks now) {
-  static base::NoDestructor<IdleReclaimer> reclaimer;
-  ActiveIdleReclaimer() = reclaimer.get();
-  reclaimer->Activity(now);
+  // Trivially destructible: storage remains valid through process shutdown.
+  static IdleReclaimer reclaimer;
+  ActiveIdleReclaimer() = &reclaimer;
+  reclaimer.Activity(now);
 }
 
 void NoteAdBlockProxyActivity(base::TimeTicks now) {
