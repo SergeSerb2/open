@@ -772,7 +772,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                     while not finished.is_set():
                         try:
                             asn = subprocess.check_output(['/usr/bin/lsappinfo', 'front'], text=True, timeout=1).strip()
-                            if not re.fullmatch(r'ASN:0x[0-9a-fA-F]+-0x[0-9a-fA-F]+', asn):
+                            if not re.fullmatch(r'ASN:0x[0-9a-fA-F]+-0x[0-9a-fA-F]+:?', asn):
                                 raise ValueError('invalid LaunchServices application identifier')
                             info = subprocess.check_output(['/usr/bin/lsappinfo', 'info', '-only', 'bundleID', '-only', 'pid', asn], text=True, timeout=1)
                             bundle = re.search(r'\bbundleID="([^"\n]*)"', info)
@@ -884,25 +884,31 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('P-17', profile_isolation, ['P-2'])
 
             def at_rest():
-                # Read copies of this suite's synthetic data only.
-                paths = list((Path(app.user_data)/'Engine').rglob('Login Data'))
-                assert paths
-                import re
-                fixture_bytes = [re.search(r'id="password"[^>]*data-fixture="([^"]+)"', (fixture_root/name).read_text()).group(1).encode()
-                                 for name in ['login.html', 'change.html']]
-                checked = 0
-                for index, path in enumerate(paths):
-                    assert path.parent.stat().st_mode & 0o777 == 0o700
-                    copy = Path(tmp)/('login-data-%d.sqlite' % index)
-                    source = sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True)
-                    with sqlite3.connect(copy) as database:
-                        source.backup(database)
-                        blobs = database.execute('select password_value from logins where blacklisted_by_user=0').fetchall()
-                        assert all(bytes(b[0]).startswith(b'v10') for b in blobs)
-                        checked += len(blobs)
-                    source.close(); assert all(value not in copy.read_bytes() for value in fixture_bytes)
-                assert checked >= 1
-                return {'encryptedLogins': checked, 'profileMode': '0700', 'fixtureBytesAbsent': True}
+                # Chromium holds exclusive live database locks. Inspect a
+                # gracefully closed store, then restore the running fixture.
+                app.quit()
+                try:
+                    # Read copies of this suite's synthetic data only.
+                    paths = list((Path(app.user_data)/'Engine').rglob('Login Data'))
+                    assert paths
+                    import re
+                    fixture_bytes = [re.search(r'id="password"[^>]*data-fixture="([^"]+)"', (fixture_root/name).read_text()).group(1).encode()
+                                     for name in ['login.html', 'change.html']]
+                    checked = 0
+                    for index, path in enumerate(paths):
+                        assert path.parent.stat().st_mode & 0o777 == 0o700
+                        copy = Path(tmp)/('login-data-%d.sqlite' % index)
+                        source = sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True)
+                        with sqlite3.connect(copy) as database:
+                            source.backup(database)
+                            blobs = database.execute('select password_value from logins where blacklisted_by_user=0').fetchall()
+                            assert all(bytes(b[0]).startswith(b'v10') for b in blobs)
+                            checked += len(blobs)
+                        source.close(); assert all(value not in copy.read_bytes() for value in fixture_bytes)
+                    assert checked >= 1
+                    return {'encryptedLogins': checked, 'profileMode': '0700', 'fixtureBytesAbsent': True}
+                finally:
+                    launch()
             row('P-18', at_rest, ['P-2'])
 
             def private():
@@ -1048,18 +1054,24 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 return cookie_names()
             row('C-2', cookies_killed)
             def encrypted_cookies():
-                paths = list((Path(app.user_data)/'Engine').rglob('Cookies')); assert paths
-                checked = 0
-                for index, path in enumerate(paths):
-                    source = sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True)
-                    with sqlite3.connect(Path(tmp)/('cookies-%d.sqlite' % index)) as database:
-                        source.backup(database)
-                        records = database.execute("select value,encrypted_value from cookies where name in ('oe_persist','oe_session','oe_lax')").fetchall()
-                        assert all(value == '' and bytes(blob).startswith(b'v10') for value, blob in records)
-                        checked += len(records)
-                    source.close()
-                assert checked >= 3
-                return {'encryptedCookies': checked, 'plaintextValuesEmpty': True}
+                # Chromium holds exclusive live database locks. Inspect a
+                # gracefully closed store, then restore the running fixture.
+                app.quit()
+                try:
+                    paths = list((Path(app.user_data)/'Engine').rglob('Cookies')); assert paths
+                    checked = 0
+                    for index, path in enumerate(paths):
+                        source = sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True)
+                        with sqlite3.connect(Path(tmp)/('cookies-%d.sqlite' % index)) as database:
+                            source.backup(database)
+                            records = database.execute("select value,encrypted_value from cookies where name in ('oe_persist','oe_session','oe_lax')").fetchall()
+                            assert all(value == '' and bytes(blob).startswith(b'v10') for value, blob in records)
+                            checked += len(records)
+                        source.close()
+                    assert checked >= 3
+                    return {'encryptedCookies': checked, 'plaintextValuesEmpty': True}
+                finally:
+                    launch()
             row('C-3', encrypted_cookies, ['C-1'])
             results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'Lead decision: user hand check; no synthetic Keychain-error hook and no real Keychain access in this suite'}
             def https_first_warning(action):
