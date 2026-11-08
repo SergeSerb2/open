@@ -56,6 +56,9 @@ def run(factory, results, tmp, api):
         app = factory(urls=('about:blank',), fresh=True)
         blank = app.call('tabs')[0]['id']
         app.call('wait', tab=blank)
+        # Tracking areas use the hardware pointer. Move only our window, as the
+        # window suite does, so a resting pointer cannot cancel the playlist.
+        api.place_away_from_cursor(app, 1280, 800)
         baseline = state()
         time.sleep(2)
         blank_cpu = cpu('blank tab')
@@ -86,6 +89,11 @@ def run(factory, results, tmp, api):
                lastState=state(), lastWindow=app.call('window-state'), lastFocus=app.call('native-focus-state'))
         if not stopped:
             raise AssertionError('Welcome playlist did not finish in order')
+        resume_tab = app.call('welcome', action='insert')['tab']
+        resume = pause_resume_playlist(app, blank, api)
+        record('W34_hidden_playlist_resumes', **resume)
+        app.call('close', tab=resume_tab)
+        app.call('select', tab=welcome)
         completion_count = stopped['completionCount']
         welcome_cpu = cpu('Welcome stopped')
         stable = state()
@@ -374,6 +382,27 @@ def design_gates(state, appearance):
     }
 
 
+def pause_resume_playlist(app, blank, api):
+    """Exercise removal/reinstallation of a playing native host in the real window."""
+    def state(): return app.call('welcome')
+    def await_state(predicate, timeout=5):
+        return api.wait_until(lambda: (lambda s: s if predicate(s) else None)(state()), timeout=timeout, step=.1)
+    initial = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
+                          and s['activeCard'] == 1 and s['animating'])
+    tab = state()['tab']
+    app.call('select', tab=blank)
+    paused = await_state(lambda s: not s['visible'] and s['animationCount'] == 0
+                         and all(not host['animating'] for host in s['hosts']))
+    app.call('select', tab=tab)
+    resumed = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
+                          and s['activeCard'] == 1 and s['animating'] and s['pendingCompletion'])
+    ended = await_state(lambda s: s['playedCards'] == [1, 1, 2, 3, 4] and not s['animating']
+                        and s['playlist'] == 'stopped', timeout=38) if resumed else None
+    return dict(ok=bool(initial and paused and resumed and ended and ended['completionCount'] == 4
+                        and ended['animationCount'] == 0 and not ended['pendingCompletion']),
+                initial=initial, paused=paused, resumed=resumed, ended=ended, lastState=state())
+
+
 def negative_gates(factory, results, tmp, api):
     """Break-and-revert receipt driver. Requires an intentionally mutated build.
 
@@ -398,12 +427,13 @@ def negative_gates(factory, results, tmp, api):
         results[name] = dict(ok=bool(rejected), expected='production assertion rejects deliberately broken gate',
                              loadAverage=list(os.getloadavg()), **details)
     try:
-        for mutation in ('native', 'playlist', 'visibility', 'reduce', 'external', 'hover', 'layout', 'contrast', 'labels'):
+        for mutation in ('native', 'playlist', 'visibility', 'resume', 'reduce', 'external', 'hover', 'layout', 'contrast', 'labels'):
             app = factory(urls=('about:blank',), fresh=True,
                           extra_env={'OPEN_E2E_WELCOME_MUTATION': mutation,
                                      'OPEN_E2E_REDUCE_MOTION': '1' if mutation in ('reduce', 'layout', 'contrast', 'labels') else '0'})
             blank = app.call('tabs')[0]['id']
             app.call('wait', tab=blank)
+            api.place_away_from_cursor(app, 1280, 800)
             initial = state()
             if mutation == 'external':
                 before = len(app.call('tabs'))
@@ -436,6 +466,10 @@ def negative_gates(factory, results, tmp, api):
                     mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=4, step=.1)
                     hidden = state()
                     record('N_minimize_stops', mini and hidden['animating'] and hidden['animationCount'] > 0, state=hidden)
+                elif mutation == 'resume':
+                    resume = pause_resume_playlist(app, blank, api)
+                    record('N_hidden_playlist_resumes', not resume['ok'] and resume['paused']
+                           and not resume['resumed'], **{k: v for k, v in resume.items() if k != 'ok'})
                 elif mutation == 'reduce':
                     shown = visible()
                     static_gate = shown and shown['reduceMotion'] and not shown['animating'] and shown['animationCount'] == 0
