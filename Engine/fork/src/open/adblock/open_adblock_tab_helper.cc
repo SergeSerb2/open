@@ -75,6 +75,11 @@ void OpenAdBlockTabHelper::DidFinishNavigation(
     MaybeLogSmoke("same-document");
     return;
   }
+  // Preserve the outgoing document's final native count before reset. Its
+  // renderer's DevTools agent can already be bound to the incoming document.
+  if (document_navigation_id_) {
+    MaybeLogSmoke("before-commit");
+  }
   ResetCounts();
   loaded_ = false;
   document_navigation_id_ = navigation_handle->GetNavigationId();

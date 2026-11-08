@@ -556,7 +556,7 @@ Only lead rulings 2a and 4a replace the original budgets.
 
 The `cef_open_adblock.h` overlay adds six free functions, with generated C
 API/wrappers and no request-context virtual methods. A libcef overlay in
-`open/browser/profiles/open_adblock_api.cc` forwards control to the existing
+`open/adblock/open_adblock_api.cc` forwards control to the existing
 per-context service and reads the current-document tab helper. Same-path
 configuration is a no-op; empty unloads and cancels pending publication.
 Enable/exclusion changes reset factories in loaded storage partitions using
@@ -566,8 +566,10 @@ can be shared with its parent.
 `OEAdBlock.h` exposes main-thread categories on OEBrowserContext/OEWebContent.
 Pre-init values apply through a weak ready callback; closed contexts return
 defaults. The status snapshot has 11 scalar keys and fixed error summaries,
-with no paths or page URLs. Headless real-CEF API and lifetime flows pass;
-App integration, page counts, the final series and distribution remain held.
+with no paths or page URLs. The integrated real-CEF API and lifetime flows pass 21 and 14 rows.
+The complete series builds with 8 PASS/0 FAIL/0 WARN in built-artifact
+status. App integration, final page/count receipts and distribution remain
+pending in E3.
 The new symbols are listed in `verification/expected-symbols.txt`.
 
 ### Security review (Step 1, 2026-10-26)

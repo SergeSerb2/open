@@ -282,12 +282,23 @@ The app now builds against the fork by default (`tools/fetch-cef.sh`,
 | cef | `0310-open-adblock-service-owner.patch` (ad-block Step 3; Step 4 smoke switches) | Step 4 | `browser/browser_context.{h,cc}`: the per-Profile `open_engine::OpenAdBlockService`, the self-test switches, and (non-official only) the smoke switches `--open-adblock-off`, `--open-adblock-exclude=<a>,<b>` and the `OpenAdBlockSmoke: load result=` line. Idempotent shutdown is also called from the native Profile close overlay before shell notification, including retained OTR wrappers (0701). 0302 also gains `deps += open_libcef_deps` (list in `open/open_libcef_sources.gni`) |
 | cef | `0311-open-adblock-network-hooks.patch` (ad-block Step 4, P-3) | +98/−0 | `browser/chrome/chrome_content_browser_client_cef.{h,cc}`: `WillCreateURLLoaderFactory` appends Open's proxy first (outermost, before Chrome's WebRequest proxy and CEF's own override); `WillInterceptWebSocket`, `CreateWebSocket` and `WillCreateWebTransport` check sockets on the matcher sequence and call Chrome's implementation for allowed ones. The service comes from `CefBrowserContext`, because the context's `Initialize()` runs before its Profile exists (docs/plans/adblock-fork.md "Step 4 as built") |
 | cef | `0314-open-adblock-cefsimple-smoke.patch` (test only, keep last) | +5/−0 | `tests/cefsimple/simple_app.cc`: no window in `--open-adblock-selftest` mode. Run `cefsimple --use-mock-keychain --open-adblock-dir=<root> --open-adblock-selftest`: without the mock keychain, a rebuilt (newly signed) cefsimple waits on a Keychain access prompt at shutdown, and Chrome's 10 s teardown watchdog exits 2 after PASS. The self-test writes `engine.dat` and its receipt into `<root>`: give each concurrent run its own copy of the root |
-| rust | `0001-adblock-vendor.patch` (ad-block Step 1, 2026-10-26) | 7.86 MB, generated | `third_party/rust/**`: `gnrt vendor` + `gen` output for the adblock 0.8.11 closure without the embedded resolver; background regex compilation, generated ASCII ABP expressions and exact DAT sharing. The overlay also serves lossless text builds through DAT and performs build/one-shot idle allocator reclaim. Same-binary purge-off/on receipts at corpus +6 s and following bursts preserve all 80 full verdict dumps; working footprint meets ruling 4a, with final quiet/page/N receipts pending. Upstream regex builder defaults are restored and built; the merged `Cargo.toml` and `gnrt_config.toml`, crate patches (docs/engine-patches.md P8 "Security review") |
+| rust | `0001-adblock-vendor.patch` (ad-block Step 1, 2026-10-26) | generated | `third_party/rust/**`: `gnrt vendor` + `gen` output for the adblock 0.8.11 closure without the embedded resolver; background regex compilation with upstream builder defaults, generated ASCII ABP expressions and exact DAT sharing. The overlay serves lossless text builds through DAT and performs build/one-shot idle allocator reclaim. The integrated engine preserves 40 full initial/resumed verdict dumps; 16 KiB text/DAT steady footprint is 55.188/51.516 MiB, postcorpus+purge 56.875/53.469 MiB (median 5), within ruling 4a. Final page/count/App and distribution gates remain pending. Crate patches: docs/engine-patches.md P8 "Security review". |
 
 Overlay: `open/browser/tab_strip/*` (P1), `open/browser/extensions/*` (P2,
 about 900 lines) and `open/open_libcef_sources.gni`, compiled into
 `libcef_static`, and the API header `cef/include/cef_tab_strip.h`. What each
 part does: [engine-patches.md](engine-patches.md), P1 and P2 status.
+
+Section 13 also compiles the ad-block service, network proxy, CEF API and
+native proof drivers from `open/adblock/`. The production header
+`cef/include/cef_open_adblock.h` exposes six free functions; the CEF
+translator generates their C API and wrappers. `OEAdBlock.h` exposes
+main-thread OpenEngine categories with no CEF types. The App configures
+each regular or private context through those categories. Private contexts
+have separate service settings and share the parent's immutable engine.
+Valid empty generations load a zero-rule engine; a resources-only
+generation remains invalid. Native API and lifetime proofs pass on the
+integrated build; real App acceptance and distribution remain pending.
 
 Open's Chromium patches can change lines that CEF's own patches added
 (`browser_window_features.cc` is one). Three tool changes follow from that:

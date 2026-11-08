@@ -20,9 +20,13 @@ def fixtures(root, tmp):
 
 
 def run(factory, results, tmp, root, wait):
+    if os.environ.get('OPEN_E2E_ADBLOCK_REAL_ONLY') == '1':
+        real_engine(factory, results, wait)
+        return
     binding(factory, results, wait)
     if os.environ.get('OPEN_E2E_ADBLOCK_BINDING_ONLY') == '1':
         return
+    real_engine(factory, results, wait)
     from engine_e2e import _restore_defaults
     app = factory(fresh=True)
     saved = {}
@@ -125,10 +129,10 @@ def binding(factory, results, wait):
     def settled():
         wait(lambda: follows(query()), timeout=3)
         return query()
-    def launch(fresh=False, force_supported=True):
+    def launch(fresh=False, force_supported=False):
         nonlocal app
         app = factory(urls=(origin + '/adapter',), fresh=fresh, load_extensions=False,
-                      extra_env={'OPEN_ADBLOCK_AUTOMATION_FORCE_SUPPORTED': '1' if force_supported else '0'})
+                      extra_env={'OPEN_ADBLOCK_AUTOMATION_FORCE_SUPPORTED': '1'} if force_supported else {})
         for key, value in keys.items():
             if key not in saved: saved[key] = app.call('defaults', key=key, persistent=True)
             app.call('defaults', key=key, value=None)
@@ -177,7 +181,7 @@ def binding(factory, results, wait):
             postPaintObservationSeconds=observation_seconds, launchProfilesClosed=launch_closed,
             settingsSelectedProfile=selected, settingsReady=settings_ready, settingsSelectedProfileOpen=selected_open)
         app.quit()
-        launch(fresh=True)
+        launch(fresh=True, force_supported=not unsupported['nativeSupported'])
         initial = settled()
         row('a_launch_loaded_profiles', follows(initial), state=initial)
         original = next(p for p in profiles() if p['name'] == 'Default')
@@ -224,7 +228,7 @@ def binding(factory, results, wait):
         row('f_copy_debug_no_path_url', bool(copied) and '/' not in copied and '://' not in copied
             and str(Path(app.user_data)) not in copied and 'example.com' not in copied
             and [line.split(':', 1)[0] for line in engine_lines] == sorted(status)
-            and 'list_directory_set:' in copied, keys=sorted(status), noPathsOrURLs='/' not in copied and '://' not in copied)
+            and (query()['nativeSupported'] or 'list_directory_set:' in copied), keys=sorted(status), noPathsOrURLs='/' not in copied and '://' not in copied)
 
         app.call('settings-adblock', enabled=False)
         created = loaded_profile('Adapter New')
@@ -264,6 +268,333 @@ def binding(factory, results, wait):
                     for key, value in saved.items(): app.call('defaults', key=key, value=value)
                 finally:
                     app.quit()
+            if app is not None: _restore_defaults(app, saved)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
+def real_engine(factory, results, wait):
+    """Settings → production CEF API → real requests, with no support override.
+
+    The pinned EasyList contains ||demand.supply^$script; EasyPrivacy does not.
+    Host mapping sends both origins to this private server. No request reaches
+    that public host. Every case has an allowed control script. Preferences are
+    reset at launch and restored in finally; all Profile data is disposable.
+    """
+    import hashlib
+    import http.server
+    import statistics
+    import threading
+    import urllib.parse
+    from engine_e2e import _restore_defaults
+
+    requests = []
+    repo = Path(__file__).resolve().parents[2]
+    pinned = {}
+    for line in (repo / 'Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt').read_text().splitlines():
+        if not line.strip() or line.startswith('#'): continue
+        name, _, digest = line.split()
+        body = (repo / 'Vendor/adblock' / name).read_bytes()
+        assert hashlib.sha256(body).hexdigest() == digest, 'fixture must match the official bundled pin'
+        pinned[name] = body
+    synthetic_lists = threading.Event()
+    hold_lists, list_started, release_lists = (threading.Event() for _ in range(3))
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            if self.path.endswith('.txt'):
+                if hold_lists.is_set():
+                    list_started.set()
+                    release_lists.wait(timeout=40)
+                name = Path(urllib.parse.urlsplit(self.path).path).name
+                body = (b'[Adblock Plus 2.0]\n||demand.supply^$script\n' if synthetic_lists.is_set() else pinned[name])
+                mime = 'text/plain'
+            elif self.path.startswith('/ad.js'):
+                body, mime = b'window.__adLoaded=true;', 'application/javascript'
+            elif self.path.startswith('/control.js'):
+                body, mime = b'window.__controlLoaded=true;', 'application/javascript'
+            else:
+                body = b'''<!doctype html><title>Open ad-block acceptance</title>
+<link rel="icon" href="data:,"><script>window.__done=0;</script>
+<script src="http://demand.supply/ad.js" onload="__done++" onerror="__done++"></script>
+<script src="/control.js" onload="__done++" onerror="__done++"></script>'''
+                mime = 'text/html'
+            self.send_response(200)
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            try: self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError): pass
+        def log_message(self, *_): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    app, saved = None, {}
+    origin = 'http://open-adblock.test'
+    keys = {'open.settings.lastPane': 'general',
+            'open.general.searchSuggestNoticeDismissed': True,
+            'open.links.littleOpenNUXSeen': True}
+    args = ['--host-resolver-rules=MAP open-adblock.test 127.0.0.1:%d, MAP demand.supply 127.0.0.1:%d' %
+            (server.server_port, server.server_port), '--no-proxy-server']
+    def query(): return app.call('settings-adblock-engine')
+    def profile_state(profile): return next(p for p in query()['profiles'] if p['profile'] == profile)
+    def status(profile, private=False):
+        return next(c['adBlockStatus'] for c in profile_state(profile)['contexts'] if c['offTheRecord'] == private)
+    def loaded(profile, private=False):
+        return wait(lambda: (lambda s: s if s['engine_loaded'] else None)(status(profile, private)), timeout=40)
+    def count(tab):
+        page = app.call('tab-state', tab=tab)['page']['identifier']
+        return next(p['blockedCount'] for profile in query()['profiles']
+                    for context in profile['contexts'] for p in context['pages'] if p['identifier'] == page)
+    def browser_footprint():
+        return next(p['footprint'] for p in app.call('metrics', interval=0)['processes']
+                    if p['pid'] == app.pid)
+    def row(name, ok, **evidence):
+        results['AD3_' + name] = dict(ok=bool(ok), **evidence)
+        print('AD3_' + name, 'PASS' if ok else 'FAIL', flush=True)
+    observations = {}
+    def request_verdict(evidence, blocked):
+        state = evidence['scriptState']
+        return (state['control'] and state['ad'] == (not blocked)
+                and (evidence['blockedCount'] > 0 if blocked else evidence['blockedCount'] == 0)
+                and ('net::ERR_BLOCKED_BY_CLIENT' in evidence['networkErrors']) == blocked
+                and evidence['adReachedServer'] == (not blocked))
+    def visit(tab, name, blocked):
+        app.call('devtools', tab=tab, method='Network.enable')
+        app.call('events')
+        requests.clear()
+        app.call('navigate', tab=tab, url=origin + '/' + name)
+        app.call('wait', tab=tab)
+        assert wait(lambda: app.call('eval', tab=tab, js='window.__done===2'), timeout=20)
+        wait(lambda: count(tab) > 0 if blocked else count(tab) == 0, timeout=3)
+        state = app.call('eval', tab=tab, js='({ad:window.__adLoaded===true,control:window.__controlLoaded===true})')
+        events = app.call('events')
+        errors = [e['params'].get('errorText') for e in events
+                  if e['type'] == 'devtools' and e['method'] == 'Network.loadingFailed']
+        native_count = count(tab)
+        evidence = dict(blockedCount=native_count, scriptState=state, networkErrors=errors,
+                        adReachedServer=any(p.startswith('/ad.js') for p in requests))
+        observations[name] = evidence
+        ok = request_verdict(evidence, blocked)
+        row(name, ok, **evidence)
+        return ok
+    def next_request(tab, name, blocked):
+        before = count(tab)
+        app.call('events')
+        requests.clear()
+        completed = app.call('eval', tab=tab, js='new Promise(resolve=>{const s=document.createElement("script");s.onload=()=>resolve("load");s.onerror=()=>resolve("error");s.src="http://demand.supply/ad.js?probe=' + name + '";document.body.append(s)})')
+        if blocked: wait(lambda: count(tab) > before, timeout=3)
+        events = app.call('events')
+        errors = [e['params'].get('errorText') for e in events
+                  if e['type'] == 'devtools' and e['method'] == 'Network.loadingFailed']
+        after = count(tab)
+        reached = any(p.startswith('/ad.js?probe=') for p in requests)
+        row(name, completed == ('error' if blocked else 'load')
+            and (after > before if blocked else after == before)
+            and ('net::ERR_BLOCKED_BY_CLIENT' in errors) == blocked
+            and reached == (not blocked), before=before, after=after,
+            completion=completed, networkErrors=errors, adReachedServer=reached)
+    try:
+        app = factory(urls=('about:blank',), fresh=True, load_extensions=False, extra_args=args,
+                      extra_env={'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.1',
+                                 'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % server.server_port})
+        for key, value in keys.items():
+            saved[key] = app.call('defaults', key=key, persistent=True)
+            app.call('defaults', key=key, value=None)
+            app.call('defaults', key=key, value=value)
+        native = query()['nativeSupported']
+        bound = wait(lambda: query()['bindingInstalled'], timeout=30) if native else False
+        row('native_support_without_override', native and bound)
+        if not native:
+            return  # Placeholder coverage is the separate AD2 flow.
+        original = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Default')
+        app.call('profiles-shell', profile=original['id'], action='adblock-open')
+        app.call('settings-adblock', enabled=True)
+        assert loaded(original['id'])
+        tab = app.call('open', url='about:blank')['id']
+        visit(tab, 'enabled_blocks', True)
+        app.call('settings-adblock', host='open-adblock.test', excluded=True)
+        visit(tab, 'excluded_allows', False)
+        app.call('settings-adblock', host='open-adblock.test', excluded=False)
+        next_request(tab, 'reincluded_next_request_same_document', True)
+        visit(tab, 'reincluded_blocks', True)
+        app.call('settings-adblock', enabled=False)
+        visit(tab, 'global_off_allows', False)
+        app.call('settings-adblock', enabled=True)
+        next_request(tab, 'global_on_next_request_same_document', True)
+        visit(tab, 'global_on_blocks_same_process', True)
+        app.call('settings-adblock', enabled=False)
+        next_request(tab, 'global_off_next_request_same_document', False)
+        app.call('settings-adblock', enabled=True)
+
+        assert wait(lambda: status(original['id'])['load_generation'] > 1, timeout=40)
+        before = status(original['id'])['load_generation']
+        app.call('settings-adblock', list='EasyList', listEnabled=False)
+        assert wait(lambda: status(original['id'])['load_generation'] > before, timeout=40)
+        disabled = status(original['id'])
+        visit(tab, 'list_disabled_allows', False)
+        app.call('settings-adblock', list='EasyList', listEnabled=True)
+        assert wait(lambda: status(original['id'])['load_generation'] > disabled['load_generation'], timeout=40)
+        restored = status(original['id'])
+        visit(tab, 'list_enabled_blocks', True)
+        row('settings_generation_reload', disabled['load_generation'] > before
+            and restored['load_generation'] > disabled['load_generation'],
+            before=before, disabled=disabled['load_generation'], restored=restored['load_generation'])
+
+        app.call('profiles-shell', action='create', name='Engine Independent')
+        other = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Engine Independent')
+        app.call('profiles-shell', profile=other['id'], action='open-url', url='about:blank')
+        other_tab = next(t['id'] for t in app.call('tabs') if t['profile'] == other['id'])
+        assert loaded(other['id'])
+        assert wait(lambda: status(other['id'])['load_generation'] > 1, timeout=40)
+        shared = status(other['id'])
+        row('second_profile_shares_engine', shared['engine_shared'], status=shared)
+        app.call('profiles-shell', profile=other['id'], action='adblock-open')
+        app.call('settings-adblock', host='open-adblock.test', excluded=True)
+        visit(other_tab, 'other_profile_excluded', False)
+        row('profile_exclusions_independent', not profile_state(original['id'])['storeExcludedDomains']
+            and profile_state(other['id'])['storeExcludedDomains'] == ['open-adblock.test'])
+        app.call('settings-adblock', host='open-adblock.test', excluded=False)
+        time.sleep(6)
+        independent_before = [browser_footprint() for _ in range(5)]
+        app.call('settings-adblock', list='EasyList', listEnabled=False)
+        assert wait(lambda: status(other['id'])['list_count'] == 1, timeout=40)
+        time.sleep(6)
+        independent_after = [browser_footprint() for _ in range(5)]
+        visit(other_tab, 'other_profile_list_independent', False)
+        independent = status(other['id'])
+        row('profile_lists_independent', status(original['id'])['list_count'] == 2
+            and independent['list_count'] == 1)
+        independent_delta = statistics.median(independent_after) - statistics.median(independent_before)
+        row('sharing_rejects_different_lists_control', not independent['engine_shared']
+            and independent_delta > 2 * 1024 * 1024,
+            listCount=independent['list_count'], engineShared=independent['engine_shared'],
+            before=independent_before, after=independent_after, deltaBytes=independent_delta,
+            load=os.getloadavg())
+        previous_generation = status(other['id'])['load_generation']
+        app.call('settings-adblock', list='EasyPrivacy', listEnabled=False)
+        assert wait(lambda: status(other['id'])['load_generation'] > previous_generation
+                    and status(other['id'])['list_count'] == 0, timeout=40)
+        visit(other_tab, 'all_lists_disabled_allows', False)
+        # Both contexts already exist. Price only the empty → shared engine
+        # transition, after idle reclaim, rather than Profile/window creation.
+        time.sleep(6)
+        memory_before = [browser_footprint() for _ in range(5)]
+        app.call('settings-adblock', resetLists=True)
+        assert wait(lambda: status(other['id'])['list_count'] == 2, timeout=40)
+        time.sleep(6)
+        memory_after = [browser_footprint() for _ in range(5)]
+        delta = statistics.median(memory_after) - statistics.median(memory_before)
+        row('shared_engine_footprint', status(other['id'])['engine_shared'] and delta <= 2 * 1024 * 1024,
+            before=memory_before, after=memory_after, deltaBytes=delta, load=os.getloadavg())
+        app.call('ext-shortcuts', action='close')
+        app.call('select', tab=other_tab)
+        app.call('menu-perform', id='new-incognito-window')
+        private = wait(lambda: next((w for w in app.call('incognito-state')['windows'] if w['private']), None), timeout=15)
+        assert private
+        app.call('window-focus', id=private['id'], activate=True)
+        private_tab = app.call('open', url='about:blank')['id']
+        assert loaded(other['id'], True)
+        row('otr_shares_parent_engine', status(other['id'], True)['engine_shared'])
+        visit(private_tab, 'otr_parent_enabled_blocks', True)
+        app.call('profiles-shell', profile=other['id'], action='adblock-open')
+        app.call('settings-adblock', host='open-adblock.test', excluded=True)
+        visit(private_tab, 'otr_parent_excluded_allows', False)
+        app.call('settings-adblock', host='open-adblock.test', excluded=False)
+        visit(private_tab, 'otr_parent_reincluded_blocks', True)
+        copied = app.call('settings-adblock', copyDebug=True)['copiedDebugInfo']
+        debug_keys = sorted(status(other['id']))
+        expected_keys = sorted(['enabled', 'engine_loaded', 'engine_from_dat', 'engine_shared',
+                               'dat_policy', 'list_count', 'resources_loaded', 'last_build_ms',
+                               'last_error', 'excluded_count', 'load_generation'])
+        row('debug_copy_privacy', bool(copied) and '/' not in copied and '://' not in copied
+            and 'open-adblock.test' not in copied and app.user_data not in copied
+            and debug_keys == expected_keys, keys=debug_keys)
+        # The inverse controls use actual completed requests from this App.
+        # The same gate must reject the opposite real result, including its
+        # native count, CDP completion and server observation.
+        pairs = [('enabled_blocks', 'global_off_allows'),
+                 ('reincluded_blocks', 'excluded_allows'),
+                 ('global_on_blocks_same_process', 'global_off_allows'),
+                 ('list_enabled_blocks', 'list_disabled_allows'),
+                 ('enabled_blocks', 'other_profile_excluded'),
+                 ('list_enabled_blocks', 'other_profile_list_independent'),
+                 ('list_enabled_blocks', 'all_lists_disabled_allows'),
+                 ('otr_parent_enabled_blocks', 'otr_parent_excluded_allows'),
+                 ('otr_parent_reincluded_blocks', 'otr_parent_excluded_allows')]
+        row('request_gates_reject_inverse_controls', all(
+            request_verdict(observations[positive], True)
+            and request_verdict(observations[negative], False)
+            and not request_verdict(observations[negative], True)
+            and not request_verdict(observations[positive], False)
+            for positive, negative in pairs), pairs=pairs)
+
+        # Real scheduled HTTP load with an already-loaded native context. The
+        # same Settings delete sheet retires the store and the engine together.
+        app.quit()
+        synthetic_lists.set()
+        app = factory(urls=('about:blank',), fresh=True, load_extensions=False, extra_args=args,
+                      extra_env={'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT': 'http://127.0.0.1:%d' % server.server_port,
+                                 'OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE': '0.1'})
+        for key, value in keys.items():
+            app.call('defaults', key=key, value=None)
+            app.call('defaults', key=key, value=value)
+        app.call('settings-pane', pane='advanced')
+        app.call('settings-adblock', enabled=True)
+        default_profile = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Default')
+        # Let Default's one initial scheduled update finish first. The next
+        # update is hours away; the held HTTP request below is the victim's.
+        assert wait(lambda: status(default_profile['id'])['load_generation'] > 1, timeout=40)
+        list_started.clear()
+        hold_lists.set()
+        app.call('profiles-shell', action='create', name='Engine Delete')
+        victim = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Engine Delete')
+        app.call('profiles-shell', profile=victim['id'], action='open-url', url=origin + '/delete')
+        assert loaded(victim['id'])
+        native_before = status(victim['id'])
+        active = wait(lambda: list_started.is_set() and app.call('profiles-shell',
+                      adblockProfile=victim['id'])['adblockProfileUpdating'], timeout=15)
+        assert active, 'victim did not enter the held real list load'
+        app.call('profiles-shell', profile=victim['id'], action='show')
+        app.call('profiles-shell', action='press', label='Delete Profile')
+        assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5)
+        if os.environ.get('OPEN_E2E_ADBLOCK_REAL_FAIL_IN_DELETE_SHEET') == '1':
+            raise AssertionError('forced failure with the real engine deletion sheet open')
+        app.call('profiles-shell', action='press', label='Cancel')
+        assert wait(lambda: app.call('profiles-shell')['sheet'] == 0, timeout=5)
+        folder = Path(app.user_data) / 'Profiles' / victim['directory']
+        cancelled = app.call('profiles-shell', adblockProfile=victim['id'])
+        row('delete_gate_rejects_cancel_control', folder.exists()
+            and victim['directory'] in app.call('engine-contexts')
+            and not cancelled['adblockProfileRetired'] and status(victim['id'])['engine_loaded'],
+            folderPresent=folder.exists(), retired=cancelled['adblockProfileRetired'])
+        app.call('profiles-shell', action='press', label='Delete Profile')
+        assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5)
+        app.call('profiles-shell', action='type-delete', text='Engine Delete')
+        app.call('profiles-shell', action='press', label='Delete')
+        assert wait(lambda: not app.call('profiles-shell')['deleting'] and app.call('profiles-shell')['sheet'] == 0, timeout=30)
+        folder = Path(app.user_data) / 'Profiles' / victim['directory']
+        retired = app.call('profiles-shell', adblockProfile=victim['id'])
+        release_lists.set()
+        app.call('save')
+        app.quit()
+        app = factory(urls=('about:blank',), load_extensions=False)
+        row('delete_during_load_relaunch', bool(active) and native_before['engine_loaded']
+            and retired['adblockProfileRetired'] and not retired['adblockProfileUpdating']
+            and not folder.exists() and victim['directory'] not in app.call('engine-contexts'),
+            nativeEngineLoaded=native_before['engine_loaded'], realHTTPInFlight=bool(active),
+            retired=retired['adblockProfileRetired'], folderAbsentAfterRelaunch=not folder.exists())
+    finally:
+        release_lists.set()
+        try:
+            if app is not None and not app.closed:
+                try:
+                    app.call('profiles-shell', action='cancel')
+                    app.call('ext-shortcuts', action='close')
+                    for key, value in saved.items(): app.call('defaults', key=key, value=value)
+                finally: app.quit()
             if app is not None: _restore_defaults(app, saved)
         finally:
             server.shutdown()
