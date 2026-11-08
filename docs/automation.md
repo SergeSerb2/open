@@ -231,8 +231,15 @@ flag before acquiring the screen lock, as for the other native suites.
 `tools/e2e/onboarding_launch.py --main-app PATH --out FILE` measures five
 interleaved main/branch returning launches on a real saved root, with no skip
 switch. Run it under quiet then screen locks after building both Apps. It
-requires load1 ≤30, confirmed first frames, and every shared numeric launch
+requires load1 ≤12, confirmed first frames, and every shared numeric launch
 mark's branch median within 5 ms of main.
+
+`tools/e2e/onboarding_frames.py --out FILE` interleaves three screen/normal
+blend pairs on one already-built Debug App. Use quiet then screen locks at
+load1 ≤12. It records p50/p95/max/drops and loads, asserts the real layer
+filters and muted player state, and requires an absolute median p95 delta
+below 0.5 ms with no extra screen drops. `OPEN_INTRO_NORMAL_BLEND=1` disables
+the two filters only in automation builds for this comparison.
 
 `first-run` returns `{active, step, completed}` even when there is no browser
 window. Optional `action` drives the same view-model methods as the buttons:

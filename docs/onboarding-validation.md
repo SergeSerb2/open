@@ -1,3 +1,222 @@
+# Onboarding validation — M5, 2026-11-08
+
+Native implementation receipt: `bc50f2fac3b4ddc6452b82b9ff03f6d81892f5c8`. Main `cdd147ca` is merged; the lead’s `dea70ba3` RE merge is retained. Continue bridges to Section 7’s existing 560×520 import/Start Fresh window in this PR. The steps PR replaces that bridge. The stable seam is `OnboardingWindowController.show(content: NSViewController)`.
+
+M5 screen clearance is explicit in CHILD-RULES item 24. M1 screen remains unused. Builds and functional checks run at any load under the required wrappers (updated item 9). Only one owned heavy job runs at a time. All App launches use synthetic Arc fixtures, disposable roots, and silent/off audio. No unit tests, desktop input, Arc assets, engine edits or audible playback.
+
+## Build and native receipts
+
+Both Debug Apps use engine distribution `47af3007153a883fac2acd10e491451de0abcac030c4fbebb14f15f1052115d9`; normalized embedded code is `b6620f962c2b50490d43c45557db0c51389279956d7bc0afa62077edbbdddfba`. Fingerprint checks pass for branch and unchanged main. Raw receipts are in `.re/handoff/sections/s17/c2/resume/`.
+
+| Command / receipt | Result | Load1 / 5 / 15, start → end |
+|---|---|---|
+| Merged Debug build (`build-debug.log`) | PASS | 10.40 / 8.14 / 7.23 → 48.32 / 21.29 / 12.39 |
+| Blend-switch Debug build + engine fingerprint (`build-blend.log`) | PASS | 44.08 / 25.81 / 14.70 → 38.41 / 25.71 / 14.93 |
+| Unchanged main Debug control build (`build-main.log`) | PASS | 6.75 / 17.68 / 28.42 → 16.26 / 17.41 / 26.93 |
+| `engine_e2e.py --only onboarding` (`onboarding.log`) | 66 PASS / 1 INFO; cleanup PASS | 26.99 / 25.20 / 15.65 → 17.27 / 22.84 / 15.37 |
+| `engine_e2e.py --only firstrun` (`firstrun.log`) | 87 PASS / six existing Boost BLOCKED rows; cleanup PASS | 23.97 / 23.62 / 15.94 → 156.23 / 98.17 / 50.65 |
+| Onboarding with `OPEN_ONBOARDING_FORCE_EARLY_FAILURE=1` (`early-failure.log`) | Expected exit 1; forced suite failure; cleanup PASS | 11.72 / 49.92 / 42.11 → 10.99 / 48.51 / 41.70 |
+
+No real Open crash report was created during these native runs. Idle timing waiters were stopped without child Apps or lock holders to allow builds/functional verification; they are not measurement attempts.
+
+## Native onboarding gates
+
+| Gate | Result | Contrasting-state proof | Load1 / 5 / 15 |
+|---|---|---|---|
+| `closing_setup_releases_music_and_dim` | PASS | expected FAIL observed | 20.10 / 23.64 / 15.52 |
+| `device_failure_completes` | PASS | expected FAIL observed | 18.08 / 23.09 / 15.42 |
+| `dim_overlay` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `early_keys_do_not_advance` | PASS | expected FAIL observed | 23.30 / 24.47 / 15.56 |
+| `escape_skips_to_final` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `finish_releases_player` | PASS | expected FAIL observed | 20.10 / 23.64 / 15.52 |
+| `first_launch_shows_intro` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `frame_stats_recorded` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `get_started_handoff` | PASS | expected FAIL observed | 21.85 / 24.09 / 15.58 |
+| `handoff_import_fresh_choices` | PASS | expected FAIL observed | 21.85 / 24.09 / 15.58 |
+| `idle_pauses` | PASS | expected FAIL observed | 21.85 / 24.09 / 15.58 |
+| `intro_browser_shortcuts_guarded` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `light_uses_screen_blend` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `music_continues_after_continue` | PASS | expected FAIL observed | 20.10 / 23.64 / 15.52 |
+| `native_intro_close_quits` | PASS | expected FAIL observed | 17.27 / 22.84 / 15.37 |
+| `native_return_handoff` | PASS | expected FAIL observed | 20.10 / 23.64 / 15.52 |
+| `owned_window_cleanup` | PASS | expected FAIL observed | 18.08 / 23.09 / 15.42 |
+| `phases_reached_in_order` | PASS | expected FAIL observed | 23.30 / 24.47 / 15.56 |
+| `quit_during_animation_fixture` | PASS | expected FAIL observed | 18.08 / 23.09 / 15.42 |
+| `reduce_motion_crossfade_only` | PASS | expected FAIL observed | 19.13 / 23.38 / 15.47 |
+| `replay_default_root_refused` | PASS | expected FAIL observed | 18.08 / 23.09 / 15.42 |
+| `replay_does_not_write` | PASS | expected FAIL observed | 18.08 / 23.09 / 15.42 |
+| `replay_over_browser` | PASS | expected FAIL observed | 18.08 / 23.09 / 15.42 |
+| `replay_temp_root_allowed` | PASS | expected FAIL observed | 18.08 / 23.09 / 15.42 |
+| `resident_3_seconds` | PASS | expected FAIL observed | 23.30 / 24.47 / 15.56 |
+| `returning_inactive` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `scene_click_skips` | PASS | expected FAIL observed | 19.13 / 23.38 / 15.47 |
+| `setting_mutes_without_player` | PASS | expected FAIL observed | 19.13 / 23.38 / 15.47 |
+| `silent_playback_sync` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `skip_first_run_inactive` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `sound_off_mutes_without_player` | PASS | expected FAIL observed | 19.13 / 23.38 / 15.47 |
+| `start_fresh_browser` | PASS | expected FAIL observed | 20.98 / 23.87 / 15.55 |
+| `strict_120hz` | INFO | INFO only | 23.30 / 24.47 / 15.56 |
+| `unknown_automation_input_refused` | PASS | expected FAIL observed | 23.30 / 24.47 / 15.56 |
+
+Silent playback was `played`, with a common-clock scheduled audio/CA delta of 0.000 ms (limit 20 ms), load 20.98 / 23.87 / 15.55. This measures scheduling, not microphone/hardware latency.
+The measured launch’s cold audio preparation exceeded the unchanged 300 ms deadline and correctly failed silently. The dedicated silent launch played successfully. The deadline was not widened.
+Loaded frame run: `{"count": 1839, "drops": 49, "maxMS": 131.24408334260806, "nominalMS": 4.166666666666667, "p50MS": 4.16716665495187, "p95MS": 4.167166684055701, "running": false}`, load 23.30 / 24.47 / 15.56. The strict 120 Hz row is INFO because load1 exceeds 12. Frame intervals come from CADisplayLink callbacks, not a GPU trace.
+
+## Existing first-run suite
+
+| Gate | Result | Load1 / 5 / 15 |
+|---|---|---|
+| `E1_corrupt_sidebar` | PASS | 73.06 / 35.69 / 20.76 |
+| `E1_relaunch` | PASS | 77.94 / 37.32 / 21.42 |
+| `E2_history_failure` | PASS | 146.63 / 63.74 / 32.28 |
+| `EI_already_installed` | PASS | 156.59 / 84.77 / 42.75 |
+| `EI_cancel_skips` | PASS | 156.21 / 82.23 / 41.38 |
+| `EI_candidates` | PASS | 160.17 / 70.78 / 35.33 |
+| `EI_click_required` | PASS | 160.17 / 70.78 / 35.33 |
+| `EI_default_role_mapping` | PASS | 158.03 / 83.83 / 42.18 |
+| `EI_default_role_target` | PASS | 156.59 / 84.77 / 42.75 |
+| `EI_empty_selection` | PASS | 160.17 / 70.78 / 35.33 |
+| `EI_failure_reported_app` | PASS | 156.59 / 84.77 / 42.75 |
+| `EI_failure_reported_engine` | PASS | 156.59 / 84.77 / 42.75 |
+| `EI_finish_without_install` | PASS | 156.21 / 82.23 / 41.38 |
+| `EI_internal_hidden` | PASS | 160.17 / 70.78 / 35.33 |
+| `EI_metadata_limits` | PASS | 154.53 / 88.92 / 45.22 |
+| `EI_no_candidates` | PASS | 154.78 / 85.58 / 43.29 |
+| `EI_profile_labels` | PASS | 160.17 / 70.78 / 35.33 |
+| `EI_result_counts` | PASS | 156.59 / 84.77 / 42.75 |
+| `EI_settings_section` | PASS | 156.59 / 84.77 / 42.75 |
+| `EI_target_profile` | PASS | 156.59 / 84.77 / 42.75 |
+| `EI_undo_keeps_installs` | PASS | 156.59 / 84.77 / 42.75 |
+| `F10_passwords_off` | PASS | 122.10 / 51.15 / 26.88 |
+| `F11_relaunch` | PASS | 73.06 / 35.69 / 20.76 |
+| `F11_save_guard` | PASS | 73.06 / 35.69 / 20.76 |
+| `F12_first_content` | PASS | 164.84 / 96.69 / 49.29 |
+| `F13_copy` | PASS | 164.84 / 96.69 / 49.29 |
+| `F1_welcome` | PASS | 24.05 / 23.64 / 15.99 |
+| `F2_import_choices` | PASS | 25.41 / 23.93 / 16.14 |
+| `F2_probe` | PASS | 24.05 / 23.64 / 15.99 |
+| `F3_import` | PASS | 25.41 / 23.93 / 16.14 |
+| `F4_default_offer` | PASS | 25.41 / 23.93 / 16.14 |
+| `F4_finish` | PASS | 25.41 / 23.93 / 16.14 |
+| `F4_relaunch` | PASS | 26.25 / 24.13 / 16.26 |
+| `F5_settings_reimport` | PASS | 26.25 / 24.13 / 16.26 |
+| `F6_relaunch` | PASS | 62.40 / 32.44 / 19.46 |
+| `F6_start_fresh` | PASS | 51.38 / 29.79 / 18.46 |
+| `F7_choose_folder` | PASS | 66.45 / 33.77 / 20.00 |
+| `F7_no_data` | PASS | 66.45 / 33.77 / 20.00 |
+| `F8_wal_writer` | PASS | 122.10 / 51.15 / 26.88 |
+| `F9_browse_during_history` | PASS | 125.54 / 53.04 / 27.69 |
+| `F9_close_keeps_history` | PASS | 134.25 / 57.29 / 29.49 |
+| `F9_settings_history_only_repeat` | PASS | 139.37 / 60.93 / 31.11 |
+| `MP_archive` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_collision` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_defaultRole` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_favorites` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_history` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_noRepairs` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_profiles` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_reimport` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_routing` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_session` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_spaceProfiles` | PASS | 163.68 / 94.17 / 47.86 |
+| `MP_undoModel` | PASS | 163.68 / 94.17 / 47.86 |
+| `N4_import_save_failure` | PASS | 89.08 / 40.30 / 22.57 |
+| `N4_import_save_retry` | PASS | 89.08 / 40.30 / 22.57 |
+| `N9_indeterminate_animation` | PASS | 25.41 / 23.93 / 16.14 |
+| `R1_settings_import_quit_save` | PASS | 28.08 / 24.54 / 16.45 |
+| `R2_empty_sidebar_continue` | PASS | 34.23 / 25.88 / 16.97 |
+| `R2_empty_sidebar_report` | PASS | 34.23 / 25.88 / 16.97 |
+| `R3_reopen_restarts_probe` | PASS | 40.62 / 27.34 / 17.53 |
+| `all_failed_continue` | PASS | 116.45 / 48.86 / 25.94 |
+| `all_failed_retry` | PASS | 116.45 / 48.86 / 25.94 |
+| `all_failed_unsaved` | PASS | 116.45 / 48.86 / 25.94 |
+| `automation_limits` | PASS | 24.05 / 23.64 / 15.99 |
+| `boost_app_disabled` | BLOCKED | 161.48 / 98.20 / 50.38 |
+| `boost_app_imported_count` | BLOCKED | 161.48 / 98.20 / 50.38 |
+| `boost_app_matching_page` | BLOCKED | 161.48 / 98.20 / 50.38 |
+| `boost_app_page_cleared` | BLOCKED | 161.48 / 98.20 / 50.38 |
+| `boost_app_probe` | PASS | 162.13 / 97.26 / 49.77 |
+| `boost_app_reimport` | BLOCKED | 161.48 / 98.20 / 50.38 |
+| `boost_app_report_empty_zero` | PASS | 161.48 / 98.20 / 50.38 |
+| `boost_app_report_seam` | PASS | 162.13 / 97.26 / 49.77 |
+| `boost_app_report_unavailable_red` | PASS | 161.48 / 98.20 / 50.38 |
+| `boost_app_undo` | BLOCKED | 161.48 / 98.20 / 50.38 |
+| `boost_cli_app_lock` | PASS | 162.13 / 97.26 / 49.77 |
+| `fresh_save_failure` | PASS | 77.94 / 37.32 / 21.42 |
+| `fresh_save_retry` | PASS | 77.94 / 37.32 / 21.42 |
+| `import_manual_archive_stays_archived` | PASS | 151.54 / 66.13 / 33.30 |
+| `import_old_today_repeat` | PASS | 151.54 / 66.13 / 33.30 |
+| `import_settings_today_age` | PASS | 154.70 / 68.21 / 34.23 |
+| `import_today_age_after_relaunch` | PASS | 151.54 / 66.13 / 33.30 |
+| `notnow_finish` | PASS | 102.21 / 43.83 / 23.92 |
+| `notnow_offer` | PASS | 102.21 / 43.83 / 23.92 |
+| `partial_archive_failure` | PASS | 102.21 / 43.83 / 23.92 |
+| `routing_reimport` | PASS | 26.25 / 24.13 / 16.26 |
+| `settings_import_never_policy` | PASS | 26.25 / 24.13 / 16.26 |
+| `settings_merge_live` | PASS | 26.25 / 24.13 / 16.26 |
+| `settings_merge_one_undo` | PASS | 28.08 / 24.54 / 16.45 |
+| `settings_merge_save_rollback` | PASS | 28.08 / 24.54 / 16.45 |
+| `titlebar_clearance` | PASS | 25.41 / 23.93 / 16.14 |
+| `welcome_keyboard_guards` | PASS | 24.05 / 23.64 / 15.99 |
+| `window_size` | PASS | 24.05 / 23.64 / 15.99 |
+
+The six Boost rows are existing harness BLOCKED gates (`Section 12 AppBoosts (app.stores.boosts)`). Expected missing/invalid-extension failures count as PASS because the App reports the correct failure. All 87 boolean gates and cleanup passed; suite exit 0.
+
+## Timing and final full verification
+
+The final numerical tables and complete `verify-all` summary are attached to [PR #248](https://github.com/SergeSerb2/open/pull/248). Local receipts: `resume/blend-comparison.json`, `resume/returning-launch.json`, `resume/verify-final/summary.txt`, and their logs. All attempts and loads are retained, including any initial failure and focused rerun. No baseline or threshold is changed.
+
+`tools/e2e/onboarding_frames.py` interleaves screen/normal blend three times each on the same already-built App. It asserts actual layer filters, uses sound off, records p50/p95/max/drops and start/end loads, and requires an absolute median p95 difference <0.5 ms with no additional summed screen drops. `OPEN_INTRO_NORMAL_BLEND=1` is read only in automation builds. Production uses screen blend unless the authorized fallback is applied and documented in the PR.
+
+`tools/e2e/onboarding_launch.py` seeds a real saved browser.json using main’s Start Fresh flow, then interleaves five main/branch launches each without skip-first-run. It verifies the first frame/foreground and branch onboarding inactivity, retains every common numeric timing mark, and requires branch medians ≤main+5 ms. Both timing tools run under quiet then screen lock, at load1 ≤12. Shared defaults are restored in finally.
+
+Final full command: `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main heavy.sh tools/verify-all.sh`. Functional checks run at any load, inside one owned heavy slot. Its all-product build covers the Package.swift target and resource bundle. License inventory has the original-score row and both new bundle files; there is no dedicated license-bundle verifier.
+
+## Size, decisions and remaining limits
+
+Against Debug main `cdd147ca`, regular App files without following symlinks: main 629,482,377 bytes; branch 630,285,816 bytes; delta **803,439 bytes**. New package Debug objects: 697,160 bytes; new App controller/automation objects: 393,256 bytes; total 1,090,416 bytes. The m4a is 313,428 bytes. No Release App build is required or claimed.
+
+- Continue bridges to Section 7’s existing window here; the steps PR replaces it. Music keeps its clock across Continue and fades only on finish/close.
+- The original −1 dBFS master peak target remains a documented deviation: PCM −2.900217 dBFS. The approved curve meets v2’s −14 LUFS plateau and player volume 0.5 (~−20.02 LUFS heard). No score retune is included.
+- The final suspended chord resolves at 17.75 s, the midpoint of the unspecified final phrase.
+- Existing Boost BLOCKED rows and release-credit preview warnings remain distinct from intro acceptance.
+
+Exact timeline/copy/lighting/window/audio rules: [onboarding.md](onboarding.md). All nine 2x PNGs, including **intro-03.5@2x.png** and **intro-10.2@2x.png**, are under `/Users/serge/.t3/projects/open/.re/handoff/sections/s17/c2/`. Final native initial/completed/Reduce Motion captures are in `resume/`; they replace pre-light native captures as current evidence. Full sound measurements, all 40 half-second RMS bins and historical attempts remain below.
+
+## Review checklist
+
+Source: `docs/review-checklist.md`. Native evidence below comes from the merged-main build; historical pre-light receipts are not substituted for it.
+
+| Review item | Result | Evidence |
+|---|---|---|
+| External sizes and decoded bounds | PASS | Fixed bundled score/reference; renderer path ≤4096 UTF-8 bytes; exact automation allowlist and ≤32-byte action; decoded score ≤965000 stereo frames at 48 kHz; frame samples ≤4096. |
+| Worst single allocation | PASS | Fixed 2x RGBA canvas 16,384,000 bytes; decoded audio <8 MiB. Bounds stated in source. |
+| Boundary input proofs | PASS | Real command path accepts all valid actions; refuses 33-byte/unknown/non-string actions and extra keys. Offline malformed-duration/tail and CLI-shape proofs reject altered inputs. Fixed bundled assets do not accept arbitrary external media. |
+| Unknown/trailing data | PASS | Exact renderer argument shape, argparse, automation key/action allowlists. Native `unknown_automation_input_refused` and its negative pass. |
+| Callback may release owner | PASS | Final owner work deferred to Tasks, weak captures, documented close delegate. |
+| Close / repeated / animated close | PASS | Native intro Cmd-W quits; setup Cmd-W releases music/dim; animation-interruption cleanup and forced early failure clean all owned windows. Idempotent finish/stop guards. |
+| Unique IDs / old generations | N/A | No new external request-ID protocol. Controllers own their NSWindow instances directly. |
+| Flush held state | PASS | Intro writes no snapshot. Existing guarded Section 7 save and browser landing passed; replay preserves saved bytes. |
+| Real key paths | PASS | OEApplication Return, Space, Esc, Cmd-T/L guards, setup Cmd-W and intro Cmd-W exercised through `key route=app`. |
+| Key ownership after main merge | PASS | Merged cdd147ca retains menu/key routes; merged-build native onboarding and firstrun flows pass. |
+| Hidden flags hide actions | PASS | Replay menu is Debug-only; device failure/reduce/measurement and blend override are automation-only. Native button disabled without a default key before its beat. |
+| Each new check rejects broken conditions | PASS | 33/33 real contrasting-state checks reject the same predicates; five offline altered-input failures preserved. |
+| Pixel comparison | N/A | Renders and native PNGs are manual design artifacts. No assertion uses PNG length or file size as a visual comparator. |
+| Specific window assertions | PASS | Actual onboarding ID/size, dim alpha/parent, FirstRunNativeWindow and BrowserWindow checked. Dim is excluded from ordinary window snapshots/lists. |
+| Configured timing/deadline checks | PASS | Single IntroTimeline; recorded common-clock schedule delta 0 ms; configured button/idle deadlines. Loaded strict-120-Hz row is INFO. Separate blend/launch receipts state all loads. |
+| Isolated roots/cache/ports/preferences | PASS | Disposable roots/cache/socket, synthetic Arc source, finally-restored shared defaults; native cleanup passes. |
+| No human-dependent cleanup | PASS | Forced early suite failure while intro+dim visible exits 1 as intended; owned cleanup reports zero windows/processes. No new real Open crash report during native checks. |
+| Reduce Motion | PASS | Real `--reduce-motion` crossfade-only/static-orb predicate and contrasting state pass; native and 2x final PNGs retained. |
+| Interrupted animation uses presentation | PASS | Handoff reads presentation opacity; idle converts local time; skip explicitly selects the final state. |
+| Resize/frame changes | PASS | Nonresizable window; layout disables implicit actions; v2 small-screen sizing. |
+| Real-window visual review | PASS | Final native initial/completed/Reduce Motion PNGs captured from OUR window. Completed PNG viewed; lead approved layout/beats and requested light/spacing fixes, present in final images. No reference-app capture copied. |
+| Docs match implementation | PASS | Exact timeline in docs/onboarding.md; current validation includes every gate, load, historical attempt and peak deviation. |
+| Plan / followups / PR agree | PASS | Current PR records the Section 7 bridge, six existing Boost BLOCKED rows, timing results, full-verifier results and sound peak deviation. Shared status/followups remain lead-owned. |
+
+
+<details>
+<summary>Historical receipts from 2026-11-07 (superseded acceptance state)</summary>
+
 # Onboarding validation
 
 Recorded on the M5, 2026-11-07. Final visual implementation head: `f607d01e`; the final report commit also
@@ -359,3 +578,6 @@ remain open for this draft and are not represented as passes.
 | Real-window visual review | BLOCKED | Pre-light OUR-window PNGs retained; final 2x offscreen frames viewed. M5 native hold prevents final live comparison; original art has no copied Arc capture. |
 | Docs match implementation | PASS | docs/onboarding.md exact beat table; docs/onboarding-validation.md actual results, loads and open peak deviation. |
 | Plan / followups / PR agree | PASS | Draft remains partial. Native hold, full-verifier failure, launch comparison, screen-blend cost and sound peak are explicit. Shared status/followup files are lead-owned. |
+
+</details>
+
