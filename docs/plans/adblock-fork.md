@@ -4507,13 +4507,17 @@ is retained. The engine applies Chromium's 08xx before the CEF series,
 including ad-block 0310/0311/0314; 0601/0602 precede 0701 within CEF.
 There are no Section 15 08xx entries in the CEF series.
 
-The earlier integrated dev build of `cefsimple cefclient` passed
-built-artifact engine-status: 8 PASS, 0 FAIL, 0 WARN, with 28 patches,
-109 overlays and 47 required exports. The runtime receipts below precede
-Section 15's merge and must be rerun on the merged engine. The root is
-read-only during the lead's clone hold. After release: apply/build,
-headless/API/N/COUNT/footprint/G-2/G-6, zero-list proof, then distribution
-and App acceptance. Before distribution and again before the done report,
+The merged dev build of `cefsimple cefclient` passed built-artifact
+engine-status: 8 PASS, 0 FAIL, 0 WARN, with 38 patches, 123 overlays and
+49 required exports. The production API passed 21 rows and native lifetime
+passed 14 rows on this build. The resources-only generation API flow
+passed 24 rows, including no-engine status and restored generation 3.
+Other runtime receipts below precede Section 15's merge until their
+merged-build reruns are recorded. The root's clone hold ended at 14:00;
+the M5 screen hold remains active. Headless corpus/footprint/G-2/G-6 and
+the official-input zero-list memory proof continue offscreen. N/COUNT,
+distribution and App acceptance follow screen clearance.
+Before distribution and again before the done report,
 fetch main and check `Engine/fork` changes since the last merged main.
 Any new engine change requires merge, rebuild and engine reproof first.
 The distribution receipt must identify its main commit and framework SHA.
