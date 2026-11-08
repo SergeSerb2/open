@@ -4616,9 +4616,17 @@ actual canonical ASCII specs, and allow/block verdicts remain identical
 for IDN hosts, escaped UTF-8 paths, separators, end anchors and user regex
 ASCII classes. Receipt: `.re/s13/e3/ascii-edge-page-results.json`.
 
-**Remaining delivery gates.** G-4 after idle, page G-5
-(<=9 ms CPU and blocking-on wall faster than off),
-recorded distribution, real App acceptance and the full verify gate remain
-pending in E3. N-18 currently proves hook reachability only: no HTTP/3
+**Page timing after idle.** The integrated page run observed exactly one
+idle purge before measured load 2. All 15 loads had 200 requests and 200
+terminal events. G-4 passed (p50 <=32 us, p99 <=256 us). G-5 wall passed:
+blocking-on median 118.2 ms versus off 144.7 ms. G-5 busy CPU failed at
+12.756 ms against 9 ms, at measured load1 48.09–49.93. The preceding
+20-minute load1 <=12 opportunity expired without launching a browser.
+Receipt: `.re/s13/e3/integrated-page-loaded-r1-page-scopes.json`. These
+loaded numbers do not establish the quiet gate or a cause for the miss.
+
+**Remaining delivery gates.** G-5 CPU and quiet timing, recorded
+distribution, real App acceptance and the full verify gate remain pending
+in E3. N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
