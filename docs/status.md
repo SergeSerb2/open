@@ -353,7 +353,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app`, the App source `6a550750` includes main `cdd147ca`
+On `s12/scc-app`, the App source `214b4476` includes main `ebbeeb83`
 and #249, #202, #205 and repaired #252. SCC forwards to the sole
 `app.stores.boosts` owner. Private matching rows use the session parent
 Profile, and `factory.isIncognito` guards actions. Fresh Debug/Release,
@@ -373,7 +373,7 @@ loads, negative proofs and full gate results belong to the PR receipt.
 | Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | `app.stores.boosts` via `SiteControlBoostProvider` | S4/S10 real saved matching Boost, toggles/editor/glyph and private refusals; engine47af rerun | implemented; final proof in PR | No second BoostStore. The source reads `factory.isIncognito` and matches private rows through their parent Profile. Private controls are disabled; creation, editing, Customize and toggles refuse. |
 | Extensions section (pin, site access) | FA SC-4 | extensions-ui §3.9 | Shared `OpenExtensionsUI` items; empty SCC Add tile | Per-window context and Cmd+E picker | Fresh M5 engine47af `extensions-ui` and X-13 proof required in the PR | implemented on branch | Same context as the window's strips. Picker focuses the first current item; second Cmd+E closes and third reopens. Arrows and type-select move, Return runs, Esc closes; empty picker focuses Add Extension. |
 | Share and two Capture actions; Copy URL shortcut | FA SC-5 | site-control-boost-editor §3.4 | Four action buttons | Existing App commands | e2e `sitecontrol` S6; `page` | implemented | Fourth action is Capture Full Page. Copy URL stays on ⇧⌘C and the URL field; no SCC Copy button. |
-| Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor §3.8 | `OpenAdBlock.setExcluded`, `didChange` | Reads the shared App store | S2 blocked: Section 13 ad-block adapter | blocked | The App does not bind the store engine events. Opening a Profile in Settings alone does not make blocking available. Unavailable row opens Settings ▸ Advanced and changes no blocking setting. |
+| Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor §3.8 | `OpenAdBlock.setExcluded`, `didChange` | Reads the shared App store | S2 blocked: Section 13 ad-block adapter | blocked | The App adapter binds store engine events only when the engine reports ad-block support; engine 47af3007 does not. Opening a Profile in Settings alone does not make blocking available. Unavailable row opens Settings ▸ Advanced and changes no blocking setting. |
 | Security state (secure or not) | FA SC-7 | site-control-boost-editor §3.9 | Static footer label | HTTPS Secure; HTTP Insecure; other schemes hide | S1/S9 | partial | Engine E3 connection/certificate APIs are available and engine-verified by #205 (sitedata 10/10 with ten negative proofs). SCC consumption remains a follow-up, per lead 22:38. |
 | Clear cookies and cache for the site | app-shell §4.9 | site-control-boost-editor §3.9 | Native ⋯ menu | Existing `clearBrowsingData(origin:)` | e2e `sitecontrol` S5 | partial | Clear Cookies clears host cookies only, then offers Reload. Main's non-nil-origin implementation does not clear the HTTP cache. Engine E2 `clearSiteData(origin:types:)` is available and engine-verified by #205 (sitedata 10/10 with ten negative proofs). Scoped Clear Cache and zoom-reset UI consumption remain separate; SCC wiring is deferred, per lead 22:38. |
 

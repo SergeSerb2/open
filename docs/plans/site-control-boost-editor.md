@@ -1488,7 +1488,7 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 
 
 Step 3 verification (child A, 2026-11-08; PR pending): App source
-`6a550750` includes main `cdd147ca`, #249's sole `AppBoosts` owner, and both
+`214b4476` includes main `ebbeeb83`, #249's sole `AppBoosts` owner, and both
 required engine merges, #202 (`be8c8d52`) and #205 (`0c760e0b`). The factory
 binds SCC through `app.stores.boosts`; no second store exists. The context
 reads `factory.isIncognito`. Matching private-window rows read the session
