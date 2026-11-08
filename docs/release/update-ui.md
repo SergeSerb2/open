@@ -39,8 +39,8 @@ Sparkle 2.10.1 exposes `SUAppcastItem.itemDescriptionFormat` and accepts
 `<description sparkle:format="markdown">`. Its source reads this attribute in
 `SUAppcast.m` and accepts `markdown` in `SUAppcastItem.m`. The published header
 comment omits Markdown. The release pipeline must embed the release Markdown
-in the item description with this attribute. The lead owns that pipeline work
-separately in #256. This UI change does not change `tools/release.sh`.
+in the item description with this attribute. The lead's separate pipeline work
+in #256 now does this. This UI change does not change `tools/release.sh`.
 
 Known launch-cost item: the pinned Sparkle binary eagerly links WebKit. The
 launch-fixes work owns delaying the Sparkle load. This UI keeps the existing

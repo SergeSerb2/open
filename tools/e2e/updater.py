@@ -816,6 +816,11 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                 app.call('updater-act', action='primary')
                 rejected = wait(lambda: app.call('downloads-state'), lambda s: len(s['quitAlerts']) >= 1,
                                 'Sparkle did not request termination')
+                try:
+                    wait(lambda: ax(app, ui(app).get('statusWindow')),
+                         lambda r: 'Install and Relaunch' in r.get('text', []), 'retry button did not return')
+                except AssertionError:
+                    pass  # Record the old code's missing button, then test R3 too.
                 state = ui(app); row = ax(app, state.get('statusWindow'))
                 retry_visible = 'Install and Relaunch' in row.get('text', [])
                 if retry_visible:
@@ -825,6 +830,9 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                                    'retry did not reach the real termination request')
                 else:
                     retried = app.call('downloads-state')
+                if retry_visible:
+                    wait(lambda: ax(app, ui(app).get('statusWindow')),
+                         lambda r: 'Install and Relaunch' in r.get('text', []), 'retry button did not return after second Keep')
                 final = ui(app)
                 results['R2_cancelled_termination_retry'] = {'ok': retry_visible
                     and len(retried['quitAlerts']) > len(rejected['quitAlerts'])
