@@ -217,7 +217,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     var text = "Next"
     if step == .importData { text = firstRun.step == .secretsConsent ? PasswordsImportCopy.allowButton : firstRun.step == .report ? "Next" : firstRun.step == .failed ? "Try Again" : "Import" }
     if step == .ready { text = "Get Started" }
-    let next = button(text, primary: true) { [weak self] in self?.next() }; next.keyEquivalent = "\r"
+    let next = button(text, primary: true) { [weak self] in self?.next() }; next.keyEquivalent = "\r"; next.keyEquivalentModifierMask = []
     next.isEnabled = !firstRun.busy && !defaultPending && !finishing && (step != .importData || firstRun.step == .report || firstRun.hasSelection)
     footer.addSubview(next); primary = next; view.window?.defaultButtonCell = next.cell as? NSButtonCell
     updatePreview(); view.needsLayout = true; view.layoutSubtreeIfNeeded()
@@ -464,6 +464,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   required init?(coder: NSCoder) { nil }
   override var acceptsFirstResponder: Bool { true }
   override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
+  override func keyDown(with event: NSEvent) {
+    let modifiers = event.modifierFlags.intersection([.command, .control, .option])
+    if modifiers.isEmpty, event.keyCode == 49 {
+      if !event.isARepeat { performClick(nil) }
+      return
+    }
+    super.keyDown(with: event)
+  }
   @objc private func invoke() { guard isEnabled else { return }; press() }
   override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; invoke(); return true }
   override func updateTrackingAreas() { super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea); addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)) }

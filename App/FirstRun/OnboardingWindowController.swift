@@ -8,6 +8,20 @@ private final class OnboardingDimWindow: NSWindow {
   override var canBecomeMain: Bool { false }
 }
 
+/// Return belongs to the setup primary action even when a choice has focus.
+private final class OnboardingWindow: NSWindow {
+  var setupPrimary: (@MainActor () -> Void)?
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+    if modifiers.isEmpty, event.keyCode == 36 || event.keyCode == 76,
+       let setupPrimary {
+      if !event.isARepeat { setupPrimary() }
+      return true
+    }
+    return super.performKeyEquivalent(with: event)
+  }
+}
+
 @MainActor
 final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   let intro: IntroView
@@ -36,7 +50,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     if let frame = screen?.frame, frame.width <= size.width && frame.height <= size.height {
       size = NSSize(width: max(1, frame.width-72), height: max(1, frame.height-72))
     }
-    let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+    let window = OnboardingWindow(contentRect: NSRect(origin: .zero, size: size),
       styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
     window.title = "Open"; window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true; window.isRestorable = false
@@ -115,6 +129,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     content.view.frame = intro.bounds; content.view.autoresizingMask = [.width, .height]
     intro.addSubview(content.view)
     window?.makeFirstResponder(content.view)
+    (window as? OnboardingWindow)?.setupPrimary = { [weak content] in
+      (content as? OnboardingStepsController)?.next()
+    }
     (content as? OnboardingStepsController)?.didAttach()
   }
   func hidePreparedBrowser(_ browser: NSWindow) {
