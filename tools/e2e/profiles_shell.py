@@ -221,12 +221,14 @@ def run(factory, results, tmp, api, defaults_before):
                 app.quit()
                 launch(extra_env=dict(env, OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS='0'))
                 ready('Default')
+                # Hold the initial list download before the Profile opens. This also proves
+                # retirement during open, without racing the first scheduled update.
+                hold_downloads.set()
+                download_started.clear()
                 state(action='create', name='Ad Block Network')
                 network = profile('Ad Block Network')
-                ready('Ad Block Network')
-                hold_downloads.set()
                 active = wait(lambda: download_started.is_set() and state()['adblockUpdating'], timeout=10)
-                assert active, 'scheduled update did not enter the held HTTP request'
+                assert active, 'Profile open did not enter the held HTTP request'
                 network_folder = root / 'Profiles' / network['directory']
                 confirm('Ad Block Network')
                 ended = state(adblockProfile=network['id'])
