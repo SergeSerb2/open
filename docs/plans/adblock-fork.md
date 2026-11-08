@@ -4552,8 +4552,11 @@ Open patches, 117/117 CEF patches, and 98 matching overlay files.
 
 **Final implementation.** The matcher remains on one ThreadPool sequence.
 Parsed GURLs and factory initiators are reused. Ordinary requests avoid a
-ResourceRequest copy. Response pipes fuse after the final response unless
-upload callbacks still need the proxy. Every network regex program compiles
+ResourceRequest copy. Response pipes remain proxied through completion. The
+attempted post-response fusion violates Mojo's unwritten-endpoint rule
+(`mojo/public/c/system/message_pipe.h:330-338`) and aborted worker-script
+completion in the final CDP run. Its removal is prepared but awaits an
+engine rebuild after the lead clears Section 12 priority. Every network regex program compiles
 on the build runner before publication; no warm match grows its caches.
 The discard policy stays disabled because cleanup would discard programs
 and cause request-path recompiles. The adblock-only regex builder disables
@@ -4637,3 +4640,26 @@ both caps. N-18 remains hook reachability only (no HTTP/3 endpoint), and the
 accepted N-21 early-hints preload gap remains R-14. Distribution and App
 build/verification wait for the lead to clear Section 12's engine-lock
 priority, imposed at 19:42. No engine job or engine-lock waiter remains.
+
+
+**Quiet-lock headless receipt, before the callback repair rebuild.** Five
+runs per mode/cap completed at load1 29–42. All twenty corpus dumps retain
+the hashes above, and every run adds zero regex compiles. Medians:
+
+| Cap / input | CPU mean / p99 / warm max (µs) | CPU first-pass max (µs) | Wall warm max (µs) | Footprint delta |
+|---|---:|---:|---:|---:|
+| 16 KiB text | 6.893 / 39.042 / 560.250 | 505.000 | 2,515.541 | 73.34 MiB |
+| 16 KiB DAT | 6.361 / 36.791 / 500.250 | 454.500 | 1,698.709 | 59.22 MiB |
+| 8 KiB text | 5.000 / 27.375 / 402.958 | 371.583 | 567.042 | 71.97 MiB |
+| 8 KiB DAT | 4.970 / 27.125 / 392.000 | 374.791 | 565.833 | 59.34 MiB |
+
+The 16 KiB G-2 CPU maximum misses 500 µs in these receipts; 8 KiB's median
+passes. These are lower-load than the earlier load1 92–110 run, but are not
+a load1 ≤4 Step 9 wall-time acceptance. Do not infer quiet-machine behavior
+from them. The cap decision and final page gate remain open until the repaired
+build is measured. Raw data: `final-quiet-diag-runs.json`,
+`final-quiet-summary.json` and per-run logs, including both endpoint loads.
+The queued page and URL-edge jobs were canceled before any browser launched,
+because the fusion build cannot count for page acceptance. The first N-case
+attempt has 8 PASS, a closed-document probe with no observed unload requests,
+and a worker timeout; later rows did not run. It is not a full N-case result.

@@ -347,7 +347,6 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
       mojo::PendingReceiver<network::mojom::URLLoader> receiver,
       int32_t request_id,
       uint32_t options,
-      bool has_upload,
       mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       const net::MutableNetworkTrafficAnnotationTag& annotation,
       OpenRequestType type,
@@ -358,7 +357,6 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
         client_(std::move(client)),
         request_id_(request_id),
         options_(options),
-        has_upload_(has_upload),
         annotation_(annotation),
         type_(type),
         source_(std::move(source)),
@@ -468,18 +466,9 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
     }
     client_->OnReceiveResponse(std::move(head), std::move(body),
                                std::move(cached_metadata));
-    if (!has_upload_) {
-      // Redirects are checked until the final response, and list CSP is
-      // applied above. Nothing else needs interception now. Fuse both
-      // endpoint pairs so completion, transfer and priority callbacks go
-      // directly between the original client and the target.
-      //
-      // Uploads retain the proxy: an OnUploadProgress response callback
-      // can still be alive, and Receiver::Unbind forbids that case.
-      mojo::FusePipes(target_client_receiver_.Unbind(), client_.Unbind());
-      mojo::FusePipes(receiver_.Unbind(), target_loader_.Unbind());
-      Finish();
-    }
+    // Keep forwarding through completion. Mojo pipe fusion requires both
+    // endpoints to be unwritten; the response above has already used client_.
+    // Fusing here would close the completion path (worker scripts then abort).
   }
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
                          network::mojom::URLResponseHeadPtr head) override {
@@ -542,7 +531,6 @@ class OpenAdBlockURLLoader : public network::mojom::URLLoader,
   mojo::Receiver<network::mojom::URLLoaderClient> target_client_receiver_{this};
   const int32_t request_id_;
   const uint32_t options_;
-  const bool has_upload_;
   std::optional<network::ResourceRequest> rewrite_request_;
   const net::MutableNetworkTrafficAnnotationTag annotation_;
   const OpenRequestType type_;
@@ -646,7 +634,7 @@ void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
   }
 
   auto loader = std::make_unique<OpenAdBlockURLLoader>(
-      this, std::move(receiver), request_id, options, !!request.request_body,
+      this, std::move(receiver), request_id, options,
       std::move(client), annotation, type, *source,
       context_.subframe_navigation ? ListCspOf(result) : std::string());
   OpenAdBlockURLLoader* raw = loader.get();
