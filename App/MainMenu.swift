@@ -17,6 +17,16 @@ enum MainMenu {
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
     menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
     if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu {
+      let basics = ClosureMenuItem(title: "Open Basics") { [weak app, weak factory] in
+        guard let app, app.firstRunWindowController == nil else { return }
+        let controller = app.frontWindowController ?? app.makeWindow()
+        let target = factory.flatMap { $0.isClosing ? nil : $0 } ?? controller.flatMap { app.hostFactories[$0.windowID] }
+        target?.openBasics(nil)
+      }
+      basics.identifier = NSUserInterfaceItemIdentifier("open-basics")
+      help.insertItem(basics, at: 0)
+    }
     #if DEBUG || OPEN_AUTOMATION
     if let help = menu.items.first(where: { $0.title == "Help" })?.submenu,
       let troubleshooting = help.items.first(where: { $0.title == "Troubleshooting" })?.submenu {
