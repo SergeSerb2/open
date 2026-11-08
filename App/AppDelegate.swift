@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var asyncEngineCalls: [String: Int] = [:]
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
+  lazy var adBlockEngineAdapter = AdBlockEngineAdapter(app: self)
   lazy var profileTeardown = ProfileTeardown(app: self)
   var pendingMissingProfileTitles: [String] = []
   var missingProfileNotice: NSAlert?
@@ -123,6 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // the engine is ready wait inside OpenEngine.
     showWindowsIfNeeded()
     tabSleep.installSettingsPolicy()
+    adBlockEngineAdapter.installProfilePolicy()
     installScripting()
   }
 
@@ -287,6 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     modelSaveObserver = model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     // Profile creation belongs to the currently installed model, including an import swap.
     tabSleep.installSettingsPolicy()
+    adBlockEngineAdapter.installProfilePolicy()
     purgeScriptingWrappers()
   }
 
@@ -430,11 +433,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
-    if let state = model.windows.first(where: { $0.id == id && $0.style == .standard }) {
+    let standard = model.windows.filter { $0.style == .standard }
+    let mostRecent = standard.max { ($0.lastFocusedAt ?? .distantPast) < ($1.lastFocusedAt ?? .distantPast) }
+    if let state = standard.first(where: { $0.id == id }), state !== mostRecent || state.lastFocusedAt == nil {
+      // Only a switch to another standard window changes recency. Refocusing the
+      // current one (for example after a private window) leaves the saved session
+      // untouched (e2e incognito no_snapshot_history_change). Memory only: the next
+      // ordinary save and the quit save persist it.
       state.lastFocusedAt = Date()
-      scheduleSave()
     }
-    for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
+    for (otherID, factory) in hostFactories where otherID != id {
+      factory.commandBarSession?.dismiss()
+      factory.controller?.boostEditor?.close(returnFocus: false)
+    }
     MainMenu.targetWindowCommands(hostFactories[id])
     settingsPresenter.refreshSpaceManagerContext()
   }
@@ -629,6 +640,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     ExtensionWindowController.closeAll()
     stopAutoArchive()
     tabSleep.stop()
+    adBlockEngineAdapter.stop()
+    stores.boosts.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
     afterPaintTask?.cancel(); afterPaintTask = nil
@@ -731,6 +744,7 @@ extension AppDelegate: CommandDispatcher {
           }
           // Startup T5: the sleep controller starts after first paint, never before.
           self.tabSleep.start()
+          self.adBlockEngineAdapter.startAfterPaint()
           FindBarPrewarm.schedule(afterPaintIn: self)
           self.applicationIcon.restoreAfterContent()
           self.prepareUpdaterAfterPaint()
@@ -741,6 +755,7 @@ extension AppDelegate: CommandDispatcher {
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
       self.tabSleep.start()
+      self.adBlockEngineAdapter.startAfterPaint()
       self.applicationIcon.restoreAfterContent()
       self.prepareUpdaterAfterPaint()
     }
@@ -885,7 +900,7 @@ extension AppDelegate: CommandDispatcher {
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
-    case "view-boosts": settingsPresenter.show(pane: .advanced); settingsPresenter.settings.advanced.statusText = "Boost editing is not available in this build."
+    case "view-boosts": settingsPresenter.showLibrary(section: .boosts)
     case "keyboard-shortcuts-edu":
       // Help ▸ Essential Keyboard Shortcuts: Arc's floating EDU window (commandbar-completion §4.5, CC-27).
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)

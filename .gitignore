@@ -13,6 +13,7 @@ xcuserdata/
 # Downloaded CEF binary distribution
 Vendor/cef/
 Vendor/adblock/
+Packages/OpenKit/Sources/OpenAdBlock/Resources/resources.json
 
 # SwiftPM build output
 .build/

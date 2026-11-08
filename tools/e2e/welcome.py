@@ -56,6 +56,9 @@ def run(factory, results, tmp, api):
         app = factory(urls=('about:blank',), fresh=True)
         blank = app.call('tabs')[0]['id']
         app.call('wait', tab=blank)
+        # Tracking areas use the hardware pointer. Move only our window, as the
+        # window suite does, so a resting pointer cannot cancel the playlist.
+        api.place_away_from_cursor(app, 1280, 800)
         baseline = state()
         time.sleep(2)
         blank_cpu = cpu('blank tab')
@@ -82,9 +85,20 @@ def run(factory, results, tmp, api):
                               and s['playlist'] == 'stopped' and not s['animating'], timeout=38)
         record('W06_finite_playlist_1_to_4', stopped and stopped['activeCard'] == 4
                and stopped['duration'] == 8.5 and stopped['completionCount'] == 4
-               and stopped['animationCount'] == 0 and not stopped['pendingCompletion'], state=stopped)
+               and stopped['animationCount'] == 0 and not stopped['pendingCompletion'], state=stopped,
+               lastState=state(), lastWindow=app.call('window-state'), lastFocus=app.call('native-focus-state'))
         if not stopped:
             raise AssertionError('Welcome playlist did not finish in order')
+        resume_tab = app.call('welcome', action='insert')['tab']
+        resume = pause_resume_playlist(app, api)
+        record('W34_hidden_playlist_resumes', **resume)
+        app.call('close', tab=resume_tab)
+        app.call('select', tab=welcome)
+        occlusion_tab = app.call('welcome', action='insert')['tab']
+        occlusion = occlude_resume_playlist(app, api)
+        record('W35_covered_playlist_resumes', **occlusion)
+        app.call('close', tab=occlusion_tab)
+        app.call('select', tab=welcome)
         completion_count = stopped['completionCount']
         welcome_cpu = cpu('Welcome stopped')
         stable = state()
@@ -373,6 +387,82 @@ def design_gates(state, appearance):
     }
 
 
+def pause_resume_playlist(app, api):
+    """Hide and restore the actual window while its native playlist is playing."""
+    def state(): return app.call('welcome')
+    def await_state(predicate, timeout=5):
+        return api.wait_until(lambda: (lambda s: s if predicate(s) else None)(state()), timeout=timeout, step=.1)
+    initial = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
+                          and s['activeCard'] == 1 and s['animating'])
+    window = app.call('window-state')['id']
+    app.call('command', id='minimize-window')
+    mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=4, step=.1)
+    paused = await_state(lambda s: not s['visible'] and s['animationCount'] == 0
+                         and not s['pendingCompletion'] and all(not host['animating'] for host in s['hosts']))
+    app.call('window-deminiaturize')
+    app.call('window-focus', id=window, activate=True)
+    resumed = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
+                          and s['activeCard'] == 1 and s['animating'] and s['pendingCompletion'])
+    ended = await_state(lambda s: s['playedCards'] == [1, 1, 2, 3, 4] and not s['animating']
+                        and s['playlist'] == 'stopped', timeout=38) if resumed else None
+    return dict(ok=bool(initial and mini and paused and resumed and ended and ended['completionCount'] == 4
+                        and ended['animationCount'] == 0 and not ended['pendingCompletion']),
+                initial=initial, paused=paused, resumed=resumed, ended=ended, lastState=state())
+
+
+def occlude_resume_playlist(app, api):
+    """Cover the native page with another owned Open window, without moving input."""
+    base = app.call('window-state')
+    window = base['id']
+    def state(): return app.call('welcome', window=window)
+    def await_state(predicate, timeout=5):
+        return api.wait_until(lambda: (lambda s: s if predicate(s) else None)(state()), timeout=timeout, step=.1)
+    initial = await_state(lambda s: s['visible'] and s['activeCard'] == 1 and s['playlist'] == 'playing')
+    cover = None
+    covered = None
+    observed = None
+    paused = None
+    try:
+        app.call('command', id='new-window')
+        cover = api.wait_until(lambda: (lambda s: s if s['id'] != window else None)(
+            app.call('window-state')), timeout=5, step=.1)
+        if not cover:
+            raise AssertionError('covering Open window did not open')
+        # Give the cover an independent selection and opaque blank content.
+        app.call('space-create', title='Welcome occlusion cover')
+        app.call('open', url='about:blank')
+        x, y, width, height = base['frame']
+        app.call('window-frame', frame=[x-32, y-32, width+64, height+64], unconstrained=True)
+        covered = app.call('window-state')
+        observed = await_state(lambda s: s['windowState']['occluded'])
+        if observed:
+            paused = await_state(lambda s: s['windowState']['visible'] and s['windowState']['occluded']
+                and not s['windowState']['miniaturized'] and not s['visible'] and not s['animating']
+                and not s['pendingCompletion'] and s['animationCount'] == 0)
+        covered_state = state()
+    finally:
+        if cover:
+            app.call('window-focus', id=cover['id'], activate=True)
+            app.call('window-close')
+        app.call('window-focus', id=window, activate=True)
+    resumed = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
+                          and s['animating'] and s['pendingCompletion'])
+    expected = (observed['playedCards'] + list(range(observed['activeCard'], 5))) if observed else [1, 2, 3, 4]
+    ended = await_state(lambda s: s['playedCards'] == expected and s['playlist'] == 'stopped'
+                        and not s['animating'], timeout=38) if resumed else None
+    cx, cy, cw, ch = covered['frame']
+    bx, by, bw, bh = base['frame']
+    full_cover = cx <= bx and cy <= by and cx+cw >= bx+bw and cy+ch >= by+bh
+    ok = bool(initial and full_cover and ended and ended['completionCount'] == 4
+              and ended['animationCount'] == 0 and not ended['pendingCompletion']
+              and (not observed or paused))
+    return dict(ok=ok, status='observed' if observed else 'INFO',
+                reason=None if observed else 'Open cover did not change NSWindow.occlusionState on this setup',
+                initial=initial, baseWindow=base, coverWindow=covered, fullyCovered=full_cover,
+                coveredState=covered_state, occlusionObserved=bool(observed), paused=paused,
+                resumed=resumed, ended=ended, lastState=state())
+
+
 def negative_gates(factory, results, tmp, api):
     """Break-and-revert receipt driver. Requires an intentionally mutated build.
 
@@ -397,12 +487,13 @@ def negative_gates(factory, results, tmp, api):
         results[name] = dict(ok=bool(rejected), expected='production assertion rejects deliberately broken gate',
                              loadAverage=list(os.getloadavg()), **details)
     try:
-        for mutation in ('native', 'playlist', 'visibility', 'reduce', 'external', 'hover', 'layout', 'contrast', 'labels'):
+        for mutation in ('native', 'playlist', 'visibility', 'resume', 'reduce', 'external', 'hover', 'layout', 'contrast', 'labels'):
             app = factory(urls=('about:blank',), fresh=True,
                           extra_env={'OPEN_E2E_WELCOME_MUTATION': mutation,
                                      'OPEN_E2E_REDUCE_MOTION': '1' if mutation in ('reduce', 'layout', 'contrast', 'labels') else '0'})
             blank = app.call('tabs')[0]['id']
             app.call('wait', tab=blank)
+            api.place_away_from_cursor(app, 1280, 800)
             initial = state()
             if mutation == 'external':
                 before = len(app.call('tabs'))
@@ -425,13 +516,29 @@ def negative_gates(factory, results, tmp, api):
                     visible(); app.call('welcome', action='replay', card=1)
                     app.call('select', tab=blank)
                     hidden = state()
-                    record('N_hidden_tab_stops', hidden['animationCount'] > 0 and any(h['animating'] for h in hidden['hosts']), state=hidden)
+                    hidden_gate = not hidden['visible'] and hidden['animationCount'] == 0 \
+                        and all(not h['animating'] for h in hidden['hosts'])
+                    record('N_hidden_tab_stops', not hidden_gate
+                           and any(h['animating'] for h in hidden['hosts']), state=hidden)
                     app.call('select', tab=inserted['tab']); visible()
                     app.call('welcome', action='replay', card=1)
                     app.call('command', id='minimize-window')
                     mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=4, step=.1)
                     hidden = state()
                     record('N_minimize_stops', mini and hidden['animating'] and hidden['animationCount'] > 0, state=hidden)
+                elif mutation == 'resume':
+                    resume = pause_resume_playlist(app, api)
+                    record('N_hidden_playlist_resumes', not resume['ok'] and resume['paused']
+                           and not resume['resumed'], **{k: v for k, v in resume.items() if k != 'ok'})
+                    app.call('welcome', action='insert'); visible()
+                    occlusion = occlude_resume_playlist(app, api)
+                    if occlusion['occlusionObserved']:
+                        record('N_covered_playlist_resumes', not occlusion['ok'] and occlusion['paused']
+                               and not occlusion['resumed'], **{k: v for k, v in occlusion.items() if k != 'ok'})
+                    else:
+                        results['N_covered_playlist_resumes'] = dict(ok=True, status='INFO',
+                            reason='Setup did not report occlusion; no negative resume acceptance claimed',
+                            loadAverage=list(os.getloadavg()), state=occlusion)
                 elif mutation == 'reduce':
                     shown = visible()
                     static_gate = shown and shown['reduceMotion'] and not shown['animating'] and shown['animationCount'] == 0

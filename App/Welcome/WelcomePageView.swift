@@ -2,6 +2,18 @@ import AppKit
 import QuartzCore
 import OpenDesign
 
+enum WelcomeColors {
+  /// Match a white/black overlay in the content's encoded sRGB space. AppKit's
+  /// calibrated-color blend otherwise changes the requested contrast amount.
+  static func surface(_ background: NSColor, dark: Bool) -> NSColor {
+    guard let rgb = background.usingColorSpace(.sRGB) else { return background }
+    let fraction: CGFloat = dark ? 0.04 : 0.06, ink: CGFloat = dark ? 1 : 0
+    return NSColor(srgbRed: rgb.redComponent * (1 - fraction) + ink * fraction,
+      green: rgb.greenComponent * (1 - fraction) + ink * fraction,
+      blue: rgb.blueComponent * (1 - fraction) + ink * fraction, alpha: 1)
+  }
+}
+
 @MainActor
 final class WelcomePageView: NSScrollView {
   static let duration = 8.5
@@ -44,6 +56,9 @@ final class WelcomePageView: NSScrollView {
   init() {
     super.init(frame: .zero)
     drawsBackground = true; hasVerticalScroller = true; autohidesScrollers = true
+    // The content pane already accounts for browser chrome. A second automatic
+    // titlebar inset offsets the whole page and consumes its bottom margin.
+    automaticallyAdjustsContentInsets = false; contentInsets = NSEdgeInsets()
     borderType = .noBorder; documentView = canvas
     setAccessibilityLabel("Welcome to Open. Here are the basics.")
     heading.font = .systemFont(ofSize: 34, weight: .semibold)
@@ -124,7 +139,7 @@ final class WelcomePageView: NSScrollView {
     let primary = palette?.foregroundPrimary.nsColor ?? (dark ? .white : .black)
     let secondary = palette?.foregroundSecondary.nsColor ?? primary.withAlphaComponent(0.6)
     heading.textColor = primary; subheading.textColor = secondary
-    let fill = backgroundColor.blended(withFraction: dark ? 0.04 : 0.06, of: dark ? .white : .black) ?? backgroundColor
+    let fill = WelcomeColors.surface(backgroundColor, dark: dark)
     let tint: NSColor
     if let style {
       let field = ThemeField.Evaluator(style: style, windowSize: CGSize(width: 1000, height: 1000), isActive: true)

@@ -12,14 +12,17 @@ final class AppStores: ProfileDataOwner {
   private var histories: [ProfileID: HistoryStore] = [:]
   private var currentProfile: ProfileID?
   private var currentSuggest: SuggestEngine?
+  lazy var boosts = AppBoosts(app: app)
   private var adBlockStorage: AdBlockStore?
   private var attemptedAdBlock = false
+  var existingAdBlock: AdBlockStore? { adBlockStorage }
   var adBlock: AdBlockStore? {
     if !attemptedAdBlock {
       attemptedAdBlock = true
       let bundle = Bundle.main.resourceURL?.appendingPathComponent("AdBlock")
       adBlockStorage = try? AdBlockStore(root: app.directories.root,
         bundledDefaultsDirectory: bundle.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil })
+      if let adBlockStorage { app.adBlockEngineAdapter.bind(adBlockStorage) }
     }
     return adBlockStorage
   }

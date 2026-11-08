@@ -144,7 +144,7 @@ final class WelcomeIllustrationView: NSView {
     guard appliedDark != dark || appliedBackground?.isEqual(background) != true || appliedTint?.isEqual(sidebarTint) != true else { return }
     appliedDark = dark; appliedBackground = background; appliedTint = sidebarTint
     let contrast: NSColor = dark ? .white : .black
-    let surface = background.blended(withFraction: dark ? 0.04 : 0.06, of: contrast) ?? background
+    let surface = WelcomeColors.surface(background, dark: dark)
     let blue = NSColor(srgbRed: 61.0 / 255, green: 107.0 / 255, blue: 1, alpha: 0.9)
     let row = contrast.withAlphaComponent(dark ? 0.14 : 0.10)
     let otherTint = sidebarTint.blended(withFraction: 0.35, of: blue) ?? sidebarTint

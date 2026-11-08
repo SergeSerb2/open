@@ -246,6 +246,7 @@ def all_passed(text):
 
 
 def build(root):
+    run(str(root / "tools/fetch-adblock-lists.sh"))
     # A new session protects the Swift build from an app restart. Stop on diagnostics,
     # drain its pipe, and count warning lines even when Swift would otherwise exit 0.
     command = ["nice", "-n", "10", "swift", "build", "-c", "release", "-j",
@@ -651,6 +652,7 @@ def adblock_catalog(cli, root):
     require(list(categories.values()) == [3, 2, 5, 35, 1], "catalog category counts differ")
     require({row[0] for row in rows if row[2] == "true"} == {"EasyList", "EasyPrivacy"}, "catalog defaults differ")
     print("catalog 46/46; categories 3/2/5/35/1; defaults verified")
+    runpy.run_path(str(root / "tools/verification/adblock_resources.py"))["verify"](cli, root)
 
 
 def archive_migration(cli):
@@ -875,17 +877,22 @@ def main():
         profiles(cli)
     elif name == "settings-preview":
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
-        all_passed(run(preview, "check"))
+        # Every Settings preview launch takes the shared screen lock.
+        locked = [sys.executable, str(Path(__file__).resolve()), "onscreen-suite", preview]
+        all_passed(run(*locked, "check", timeout=None, interrupted_exit=2))
         output = Path("settings-panes").resolve()
-        rendered = run(preview, "render", "--out", str(output))
+        rendered = run(*locked, "render", "--out", str(output), timeout=None, interrupted_exit=2)
         require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
                 "missing rendered Previews control evidence")
-        dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
+        dump = run(*locked, "dump-keys", "--root", str(output / "fixture"), timeout=None, interrupted_exit=2)
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 236, "missing settings/library/appearance/detail/sheet/state renders")
+        # The populated and empty Boosts section each add 1x and 2x renders.
+        require(len(pngs) == 240, "missing settings/library/appearance/detail/sheet/state renders")
+        require({f"library-boosts{state}@{scale}x.png" for state in ("", "-empty") for scale in (1, 2)} <= {p.name for p in pngs},
+                "missing Library Boosts renders")
         require({f"sheet-link-rule-profile-work@{scale}x.png" for scale in (1, 2)} <= {p.name for p in pngs},
                 "missing two-Profile destination renders")
         require({f"{state}@{scale}x.png" for state in

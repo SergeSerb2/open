@@ -1160,6 +1160,270 @@ Section 2's existing command-bar budgets unchanged.
 
 For the Section 8 milestone, the lead's final instruction defers full and targeted regression suites to one run on final main. This PR records the completed negative proofs and current-display before/after measurements; it does not claim a new full-suite PASS.
 
+## Instruction calibration (lead ruling, 2026-11-08 09:30)
+
+The SM6, Site Control cold-open and simple-editor instruction ceilings are
+`ceil(main median × 1.10)`. Calibrate each from at least five unchanged-main
+pairs at load1 ≤30. Each pair is two back-to-back release CLI runs. Build first
+under the Section 16 `s16-heavy.sh` wrapper, without a quiet or screen lock.
+Wait for load outside every lock. Hold the quiet lock only while measuring;
+recheck load after acquisition and record start, end and peak load for each run.
+SM6 takes one quiet hold per pair. The five-pair Site Control calibration uses
+one quiet → screen hold, with no low-load wait inside that hold.
+Keep each gate's existing measured span. Use CPU brand plus macOS build as the
+fixture key, never hostname. Other machine/build references remain unchanged.
+
+Re-baseline rule (lead, 2026-11-08 11:55): the current ceilings are keyed to
+Apple M5 Pro / macOS 26B123. After a macOS update, or on a new machine, the key
+changes and the gate fails with "unknown key". Then record a new key with the
+same five-pair method from unchanged `origin/main`, in its own PR, and keep
+every older key as it is.
+
+This calibration uses unchanged `origin/main` at
+`cdd147cac296ea4ea8a9da244299636aee28deb9`, Apple M5 Pro / `26B123`.
+Five SM6 pairs ran first; five full Site Control pairs followed. A table sample
+is one full CLI run's instruction median. The accepted count is the median of
+the ten run medians (round the mean of the two middle values up to one
+instruction). Then round the 10% ceiling up. No outlier removal is permitted.
+
+`sidebar-render sm6-cost` is offscreen: `SM6Measure.swift` sets activation to
+`.prohibited`; `OffscreenRenderer.host` creates a never-ordered host at
+(-20000,-20000). It needs only the quiet lock. Full `sitecontrol-render check`
+also needs the screen lock: `main.swift` calls `EditorFlows.run`, which calls
+`EditorNativeKey.run`; that launches `EditorHarness.app`, sets regular
+activation and calls `makeKeyAndOrderFront`. The standalone editor bench cannot
+record an accepted cost reference (`EditorOpenBench.run`). Keep quiet → screen
+for the full-check pairs and honor screen priority before acquisition.
+
+SM6 keeps one discarded warm-up and five fresh measured child processes in
+every run. All ten runs exited 0 and all 60 child reports confirmed cleanup.
+The instruction baseline was unavailable for this new OS key during sampling;
+its original INFO verdicts are retained in the raw receipts.
+
+| SM6 pair | Run | Run median instructions | Load1 start | End | Peak |
+|---|---|---:|---:|---:|---:|
+| 1 | 1 | 671,256,097 | 12.496 | 12.496 | 12.496 |
+| 1 | 2 | 670,719,279 | 12.496 | 12.496 | 12.496 |
+| 2 | 1 | 670,496,615 | 12.496 | 11.976 | 12.496 |
+| 2 | 2 | 670,580,802 | 11.976 | 11.976 | 11.976 |
+| 3 | 1 | 671,603,177 | 11.976 | 11.497 | 11.976 |
+| 3 | 2 | 671,256,210 | 11.497 | 11.497 | 11.497 |
+| 4 | 1 | 670,797,129 | 11.497 | 11.497 | 11.497 |
+| 4 | 2 | 670,248,900 | 11.497 | 11.938 | 11.938 |
+| 5 | 1 | 670,494,664 | 11.938 | 11.938 | 11.938 |
+| 5 | 2 | 670,627,361 | 11.938 | 11.702 | 11.938 |
+
+SM6 accepted median: **670,673,320**. Ceiling: **737,740,652** instructions.
+
+Raw command logs, every fresh-child report, binary hashes and per-run load
+receipts are in `.re/budget-rulings/`. The versioned fixture retains the ten
+run medians, all ten discarded warm-ups, source head and release binary hash.
+
+Full `sitecontrol-render check` keeps five warm-ups and 30 measured cold opens
+at process entry, followed by its pooled suites and the editor's five warm-ups
+and 20 measured opens. All ten unchanged-main full checks exited 0. Every
+private root was removed and no native helper remained after cleanup. All
+loads below are observed load1; no run was excluded.
+
+| Site Control pair | Run | Cold median instructions | Editor median instructions | Load1 start | End | Peak |
+|---|---|---:|---:|---:|---:|---:|
+| 1 | 1 | 92,494,287 | 133,851,524 | 13.967 | 20.187 | 20.657 |
+| 1 | 2 | 93,335,648 | 133,230,208 | 20.187 | 19.731 | 23.325 |
+| 2 | 1 | 92,542,494 | 133,113,330 | 19.731 | 16.403 | 19.810 |
+| 2 | 2 | 92,541,418 | 132,926,967 | 16.403 | 16.932 | 18.145 |
+| 3 | 1 | 92,502,418 | 133,260,271 | 16.932 | 17.431 | 18.426 |
+| 3 | 2 | 92,470,901 | 133,588,461 | 17.431 | 20.821 | 21.763 |
+| 4 | 1 | 92,570,936 | 133,149,444 | 20.821 | 22.128 | 29.266 |
+| 4 | 2 | 92,561,231 | 133,301,521 | 22.128 | 17.339 | 22.128 |
+| 5 | 1 | 92,462,013 | 133,143,982 | 17.339 | 17.994 | 21.171 |
+| 5 | 2 | 92,526,458 | 133,185,919 | 17.994 | 13.331 | 17.994 |
+
+| Gate, Apple M5 Pro / 26B123 | Accepted median | Ceiling, ceil(median ×1.10) |
+|---|---:|---:|
+| SM6 | 670,673,320 | 737,740,652 |
+| Site Control cold open | 92,533,938 | 101,787,332 |
+| Site Control simple editor | 133,208,064 | 146,528,871 |
+
+The Site Control versioned fixture retains all ten run medians for both spans,
+every run's start/end/peak load, source head and binary hash. Its existing
+CPU-brand/macOS-build lookup and ceiling arithmetic are unchanged. The SM6
+reader accepts the ten run medians and preserves legacy five-sample entries.
+
+### Idle ruling report proof
+
+The real `tools/budgets.sh --report` interface re-rendered the saved November 8
+00:30 window receipt. This does not launch the App or repeat the idle window.
+Static idle is **0.1230% PASS** against ≤0.5% (load1 5.917 → 4.562). Animated
+idle is **3.5927% NO NUMERIC BUDGET** (load1 8.508 → 5.917). The report exits 1
+with 69 PASS, 14 FAIL and 1 NO NUMERIC BUDGET: all other window budget misses
+remain unchanged. Source receipt SHA-256:
+`2b1c2decc6b0766e8ff1b895138880e86b0dd7a0b608819415c5e33e6ce53976`.
+
+### SM6 gate proof
+
+After installing the fixture and its ten-sample reader, the unchanged main
+workload passes. A temporary loop inside `SM6Fixture.measure`, after native
+first layout and before the counters stop, adds 16,000,000 dependent integer
+iterations. It adds measured work; the fixture and comparator stay fixed.
+
+| Control | Median instructions | Ceiling | CLI exit | Load1 start | End | Peak | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Main workload | 675,180,953 | 737,740,652 | 0 | 29.723 | 28.063 | 29.723 | PASS (CLI prints OK) |
+| Injected cost, first | 772,346,206 | 737,740,652 | 1 | 28.935 | 30.061 | 30.061 | Expected FAIL |
+| Injected cost, confirmation | 767,593,738 | 737,740,652 | 1 | 25.674 | 25.674 | 25.674 | Expected FAIL |
+
+The first negative proof peaked at 30.061; a second confirmation stayed at
+25.674. Neither negative sample sets a reference. All three runs reaped their
+children and removed their private roots. The temporary source change was
+restored byte-for-byte; the rebuilt release binary is byte-identical to the
+positive-proof binary. The real CLI also refused an eleven-sample private
+fixture before starting a child; the valid ten-sample fixture passed above.
+
+### Site Control gate proof
+
+After installing the reference, the unchanged main workload passes both gates.
+The temporary negative proof adds 2,500,000 dependent integer iterations inside
+`Bench.run`'s cold-open measured span and 3,500,000 inside the editor's measured
+span. Each loop retains a printed sink so the release compiler cannot remove
+it. The fixture hash is identical in the positive and negative proofs; neither
+the comparator nor reference changes.
+
+| Control | Cold median instructions / ceiling | Editor median instructions / ceiling | CLI exit | Cold load1 | Editor load1 | Verdict |
+|---|---:|---:|---:|---:|---:|---|
+| Main workload | 92,464,623 / 101,787,332 | 133,200,352 / 146,528,871 | 0 | 10.57 | 10.86 | Both PASS |
+| Injected cost | 109,649,251 / 101,787,332 | 157,985,592 / 146,528,871 | 1 | 22.25 | 45.41 | Both expected FAIL |
+
+These are functional proofs at any load, under the screen lock, not calibration
+or latency acceptance. Including the screen queue, the positive proof's load1
+was 5.198 → 10.310 (peak 13.067); the negative proof was 36.883 → 44.658 (peak
+46.940). The negative run has exactly two FAIL rows, both instruction gates.
+Its CPU p95 values, 19.421 ms cold and 20.285 ms editor, remain diagnostic.
+Both runs reaped the renderer, stopped all owned native helpers and removed
+the private root. Both injected source files were restored byte-for-byte to
+main. Final full verification rebuilds and runs the restored source.
+
+
+## Quiet-machine budgets
+
+`tools/budgets.sh --out <receipt.json>` runs the existing performance
+measurements against an already-built Release App and release OpenKit CLIs.
+It prints one table: row, unchanged budget, measured value, samples, PASS/FAIL,
+and load1 at the start and end of the workload. JSON retains all launch samples,
+per-process idle CPU, process churn, cleanup and budget sources. Raw harness
+logs remain in `<receipt.json>.logs/`. Use a new output name for each run.
+
+Build before taking the quiet lock. Follow the current lead's engine and
+heavy-slot rules. On the M5:
+
+```sh
+export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main
+OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Release
+~/Library/Caches/OpenRE/scripts/heavy.sh swift build -c release --package-path Packages/OpenKit
+mkdir -p .re/e2e-tools
+xcrun swiftc -O -swift-version 6 -parse-as-library tools/e2e/activate-own-app.swift -o .re/e2e-tools/activate-own-app
+xcrun swiftc -O -swift-version 6 -parse-as-library tools/e2e/owned-window-count.swift -o .re/e2e-tools/owned-window-count
+xcrun clang -dynamiclib -fblocks -fobjc-arc -Wno-deprecated-declarations tools/verification/feature-idle-probe.m -framework AppKit -framework QuartzCore -framework CoreVideo -o .re/e2e-tools/budgets-idle-probe.dylib
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock tools/budgets.sh --out .re/budgets/m5.json
+```
+
+`--app <path>` defaults to `build/Release/Open.app`. The App needs automation.
+Missing CLIs or missing/stale automation helpers cause refusal with exact build
+commands. The runner never builds. It refuses hardened-runtime Apps and Apps
+mounted from images, per the Section 16 no-crash rule. Use the normal development
+App from `tools/build.sh`, not a release artifact.
+
+Use `--preflight --out <preflight.json>` to check the same App, release CLIs,
+resource bundles, signatures and prepared helpers without launching the App or
+any measurement CLI. It also computes every App socket path from the same
+profile roots the workloads use, including the resolved `/private/tmp` path.
+It refuses any path over 100 encoded bytes, below macOS's 104-byte `sun_path`
+limit. JSON records the paths, the longest path, `mode: preflight`,
+`preflight: PASS`, empty measurement rows and executable hashes. This is
+preparation evidence only.
+
+`--report <saved.json> --out <new.json>` renders the saved worker receipts with
+the current reporting rules and launches nothing. It preserves the original
+values, sample counts, loads, guard settings, executable hashes and source
+provenance. The original receipt stays unchanged. The derived JSON records its
+source receipt hash and the reporter hash. This mode can update a report label
+without repeating a measurement.
+
+For a lead-granted stopped-machine window, add `--quiet-start`. It refuses
+immediately if load1 exceeds `--max-load N` (default 4) or an Open/App helper,
+release CLI, `xcodebuild` or `siso` process exists. The table header and JSON
+record the chosen ceiling and whether the guard is enabled. A lead-approved
+window can use `--quiet-start --max-load 12` per TANDEM 4a. This operator guard
+does not change product budgets. It never waits for load. The default whole-run deadline
+is 2,220 seconds (37 minutes), with up to three minutes reserved for cleanup.
+`--max-seconds` can set a shorter deadline. An expired deadline leaves an
+incomplete FAIL receipt; it does not accept or silently omit remaining rows.
+
+The caller owns the quiet lock. The runner takes only the on-screen lock, once
+per App/native-window workload. It checks `/tmp/open-onscreen-priority` before
+each hold. It never waits for low load. A loaded-machine failure stays FAIL,
+with its loads. Only a lead-arranged quiet M5 run establishes quiet-machine
+acceptance. Follow current screen holds; the command does not clear them.
+
+Workloads use a private, short `/tmp/ob.*` root for profiles, home and temporary
+data. This root does not depend on `--out` or the caller's `TMPDIR`. Logs and
+receipts remain beside `--out`. Each worker removes its data after owned process
+cleanup; the parent removes the run root in `finally`, including preflight.
+App workloads use the existing LaunchServices/socket harness. The keys used by
+these flows are reset before launch and restored with
+their original plist types in `finally`. Each worker reaps owned processes
+before releasing its screen hold. It removes disposable profiles, home and
+temporary data. A launch, crash or cleanup error stops the run before more
+screen work. Tell the lead before any further launch.
+
+Budget inventory (the Python source cites each numeric limit):
+
+| Workload | Existing measurement and limits |
+|---|---|
+| Existing-profile launch | `engine_e2e.py` `warm_existing_profile`, extracted from S16 `run_launch.py`: seven launches; sidebar median ≤250 ms, first paint median ≤700 ms. Also main ≤50 ms and modelLoaded ≤120 ms intermediate marks from the app-shell plan. Kernel process birth and a confirmed sidebar frame are required. Process-cold, warm file caches. |
+| First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh Welcome roots, median first content ≤250 ms, selected imported-tab paint from `firstRunLandingStarted` ≤700 ms. Uses the existing synthetic import fixture with local deterministic saved pages. |
+| Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. Lead ruling, 2026-11-08 09:30: static total CPU ≤0.5%; always print and retain its measured value. The animated row has no numeric ceiling and shows `NO NUMERIC BUDGET` with measured CPU. Missing data or failed cleanup still fails in either row. See `docs/architecture.md` performance budgets. |
+| Site Control | Full `sitecontrol-render check`: cold-open CPU p95 <8 ms; simple-editor CPU p95 <12 ms using the required full-check procedure; both instruction gates; idle <10 ms CPU/2 s; ten-page refresh <100 ms; pad CPU p95 <2 ms; off-main hue <15 ms; ≤61 previews/120 inputs; code highlight CPU p95 <2 ms. Unknown instruction baselines fail closed. |
+| SM6 and mini-player | `sidebar-render check`: one declared warm-up and five fresh processes, accepted instruction ceiling, first-layout wall median ≤120 ms, structural gates, MC8 paused idle CPU ≤0.5%. |
+| Command bar keystrokes | `commandbar-render check` (#132/#135/#136, now 150/151): CPU p95 <8 ms, completion added p95 ≤0.3 ms, ≤1 panel layout pass. Retains the full combined gate. |
+| Live tab switch | `split-app-speed.py` fixture and `split op=bench`: 40 samples each for root single→single and single→split, p95 ≤16 ms. Native layout/CA flush and every-pane first rAF combine by max. Physical presentation is unproved. The separate paired-main 25 ms allowance does not replace 16 ms. |
+| Sidebar | `sidebar-render bench --rows 1000`: scroll and model drag/move p95 ≤8.33 ms. Existing selection toggle p95 ≤1 ms; 50-row bulk move/archive/folder/Space p95 ≤16 ms; Expand All p95 ≤16 ms. |
+| Folder Peek | Existing 50-folder/1,000-row FP10: all three declared attempts, transition p95 ≤2 ms, the open median goal <1 ms, scroll p95 ≤8.33 ms and matched plain ×1.10 +0.05 ms. Standalone invocation uses the strict 2 ms limit without building a pinned parent or taking its exception. Raw native row-layout comparisons remain in the harness verdict. |
+| Suggestions | `openkit suggest-check`: #31 stream <600 ms with its existing up-to-three attempts, all retained; extension actions p95 <0.2 ms; first/inline snapshots CPU p95 <5 ms; completion check p95 ≤0.05 ms. |
+| Ad blocking | `openkit adblock perf`: 1,000 lookups p95 <1 ms and profile-open integrity scan p95 <10 ms, ten groups each. Combined time is informational. |
+| Cold command bar | Existing `app-actions` first-open key route and `openFirstResultsMs`: ≤50 ms, entry to first snapshot applied; excludes frame presentation. |
+| Find | `find_checks.py` F04 native-key timing: first and repeat open p95 ≤1000/120 ms, twenty fresh windows, lazy creation and visible pane proof. This uses the built-in presentation marks and does not build the separate idle observer. |
+| Theme editor | `space-editor-render check`: B1 two-window CPU p95 ≤4 ms/240 ticks; cold texture tile <500 ms and field composition <250 ms. |
+| Feature harnesses | `features-render check`: PiP idle CPU ≤0.5%; `favicon-check`: 1,000-row stored-icon scroll p95 ≤8.33 ms; S8 observer: zero owned resources/events in ten two-second toast/swipe windows across both motion modes. The observer is built before the run. |
+
+Each reused CLI has a harness-exit row. A functional failure or interrupted
+native suite stays visible when timing passes. Missing metrics fail. The runner
+does not retry workloads. Existing internal FP10 and suggest attempts remain;
+raw results are retained and each FP10 attempt is shown separately.
+
+Other values in the named docs are diagnostics or two-build comparisons:
+memory has no budget; ad-block combined time, sleep-pass CPU, engine startup
+marks and editor full-drag wall time have no separate limits. The S8 sidebar
+±10% comparison, MC9 media-versus-parent mean delta and paired-main regressions
+need a reference build and remain separate comparison procedures. First-run
+and imported-content timings use their own fixture, apart from the required
+existing-profile launch.
+
+To prove failure detection, copy the cold-command-open limit to 1 ms for one
+real run. Product thresholds and files do not change:
+
+```sh
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock tools/budgets.sh --only command-open --fail-demo --out .re/budgets/fail-demo.json
+```
+
+The row is labelled `FAIL DEMO`. A budget or harness failure exits 1. A complete
+run exits 0 when all numeric gates pass; `NO NUMERIC BUDGET` rows do not assert
+acceptance and do not cause failure. `--only <workload>` is for diagnosis and marks JSON `partial`.
+Default invocation runs the complete inventory once. No unit tests, desktop
+input, cache purge, threshold edits or engine-tree builds are involved.
+
+A subset on the M1 can prove the command flow after the lead clears its screen
+hold. Label it M1 smoke; its timings do not establish the M5 budgets.
+
 # Renderer recovery without a system crash report (Section 16)
 
 The `features` suite's `crash_recovery` row terminates a real renderer with

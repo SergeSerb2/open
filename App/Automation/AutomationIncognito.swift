@@ -28,6 +28,7 @@ extension AutomationController {
       result["ephemeral"] = factory.selectedContent?.context.isEphemeral ?? false
       result["context"] = factory.selectedContent?.context.identifier ?? ""
       result["originalContext"] = factory.selectedContent?.context.originalContext?.identifier ?? ""
+      result["boostScriptIDs"] = factory.selectedContent?.context.userScripts.filter { $0.identifier.hasPrefix("open.boosts.") }.map(\.identifier) ?? []
       result["appearance"] = factory.window?.effectiveAppearance.name.rawValue ?? ""
       result["extensions"] = factory.focusedBrowser?.extensionActions.map(\.extensionIdentifier) ?? []
       result["tabs"] = factory.orderedTabs.map { ["id": $0.id.description, "url": $0.url.absoluteString] }
