@@ -215,6 +215,10 @@ def run(factory, results, tmp, h):
             app.focus_tracker = h._ACTIVE_FOCUS_TRACKER
             h._ACTIVE_FOCUS_TRACKER.apps.append(app)
             replay_launch = state()
+            replay_launch_windows = app.call('windows')
+            replay_before_finish = dict(same=Path(root,'State/browser.json').read_bytes()==prior,
+                browserVisible=any(w['class']=='BrowserWindow' and w['visible'] and w['alpha']==1 and w['key'] for w in replay_launch_windows),
+                firstRun=app.call('first-run')['active'])
             gate('replay_temp_root_allowed', lambda s: s.get('active') and s.get('screen')=='intro', replay_launch, returning)
             gate('replay_default_root_refused', lambda s: s.get('exit')==64 and s.get('refused'), denied_state, replay_launch)
             app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
@@ -231,7 +235,7 @@ def run(factory, results, tmp, h):
                 browserVisible=any(w['class']=='BrowserWindow' and w['visible'] and w['alpha']==1 and w['key'] for w in replay_windows),
                 firstRun=app.call('first-run')['active'])
             gate('replay_launch_finishes_read_only', lambda s: s['same'] and s['browserVisible'] and not s['firstRun'],
-                 replay_finished, dict(same=True,browserVisible=bool(app.call('onboarding')['active']),firstRun=False))
+                 replay_finished, replay_before_finish)
             app.quit()
         launch('--intro-sound=off')
         before_intro_close = state()
