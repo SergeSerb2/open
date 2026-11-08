@@ -13,7 +13,11 @@ extension AppDelegate {
     onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
     controller.onHandoff = { [weak self] in
       guard let self else { return }
-      if replay { frontWindowController?.window?.makeKeyAndOrderFront(nil) }
+      if replay {
+        onboardingWindowController?.window?.orderOut(nil)
+        frontWindowController?.window?.makeKeyAndOrderFront(nil)
+        onboardingWindowController?.finish()
+      }
       else {
         onboardingHandedOff = true
         showFirstRunSteps()
@@ -41,6 +45,7 @@ extension AppDelegate {
     let controller = FirstRunWindowController(model: viewModel)
     firstRunWindowController = controller; lastFirstRunStep = "welcome"
     controller.showWindow(nil); controller.window?.displayIfNeeded(); controller.startProbeAfterDisplay()
+    if let window = controller.window { onboardingWindowController?.handoff(to: window) }
   }
 }
 

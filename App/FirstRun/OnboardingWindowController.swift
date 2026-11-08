@@ -16,6 +16,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   private let dim: NSWindow
   private var started = false
   private var closingForHandoff = false
+  private var finishing = false
+  private var nextContent: NSViewController?
   private var lifecycle: [Task<Void, Never>] = []
   private let residentBaseline: UInt64
   private var residentAtThree: Int64?
@@ -78,6 +80,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
       if !intro.reduceMotion {
         NSAnimationContext.runAnimationGroup { context in
           context.duration = IntroTimeline.beat("dim").end
+          context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
           dim.animator().alphaValue = 0.85
         }
       }
@@ -90,17 +93,41 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   }
   func handoff() {
     guard !closingForHandoff else { return }; closingForHandoff = true
-    intro.fadeForHandoff(); sound.fadeOut()
-    NSAnimationContext.runAnimationGroup { context in
-      context.duration = IntroTimeline.beat("handoff").end; dim.animator().alphaValue = 0
-    }
+    intro.fadeForHandoff()
     lifecycle.append(Task { [weak self] in
       try? await Task.sleep(for: .seconds(IntroTimeline.beat("handoff").end))
       guard !Task.isCancelled, let self else { return }
-      intro.stop(); dim.close(); close(); onHandoff?()
-      try? await Task.sleep(for: .seconds(IntroTimeline.beat("handoffSound").end))
-      guard !Task.isCancelled else { return }
-      sound.stop()
+      onHandoff?()
+    })
+  }
+  /// Stable seam for setup/basics: replace only the foreground content. The
+  /// original room, dim window and sound keep their current clocks.
+  func show(content: NSViewController) {
+    nextContent?.view.removeFromSuperview(); nextContent = content
+    intro.showBackgroundOnly()
+    content.view.frame = intro.bounds; content.view.autoresizingMask = [.width, .height]
+    intro.addSubview(content.view)
+    window?.makeFirstResponder(content.view)
+  }
+  /// v1 bridge to Section 7's existing window. Later screens use show(content:).
+  func handoff(to legacyWindow: NSWindow) {
+    dim.parent?.removeChildWindow(dim)
+    legacyWindow.addChildWindow(dim, ordered: .below)
+    window?.orderOut(nil)
+  }
+  func finish() {
+    guard !finishing else { return }; finishing = true
+    sound.fadeOut()
+    dim.parent?.removeChildWindow(dim)
+    NSAnimationContext.runAnimationGroup { context in
+      context.duration = IntroTimeline.beat("dimFinish").end
+      context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      dim.animator().alphaValue = 0
+    }
+    lifecycle.append(Task { [weak self] in
+      try? await Task.sleep(for: .seconds(IntroTimeline.beat("dimFinish").end))
+      guard !Task.isCancelled, let self else { return }
+      intro.stop(); sound.stop(); dim.close(); close()
       onRelease?(state, residentBaseline)
     })
   }

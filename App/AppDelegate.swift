@@ -519,6 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return
     }
     lastFirstRunStep = firstRunWindowController?.model.step.rawValue ?? lastFirstRunStep
+    onboardingWindowController?.finish()
     firstRunWindowController?.close(); firstRunWindowController = nil
     prepareLittleOpen()
     showWindowsIfNeeded()

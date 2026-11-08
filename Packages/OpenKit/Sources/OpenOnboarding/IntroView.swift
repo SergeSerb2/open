@@ -91,7 +91,7 @@ public final class IntroView: NSView {
     private let ambient = CALayer()
     private let mark = CALayer()
     private let spillGroup = CALayer()
-    private let button = IntroButton(title: "Get Started", target: nil, action: nil)
+    private let button = IntroButton(title: "Continue", target: nil, action: nil)
     private var tracks: [IntroTrack] = []
     private var orbs: [CALayer] = []
     private var tasks: [Task<Void, Never>] = []
@@ -114,7 +114,7 @@ public final class IntroView: NSView {
         makeScene(scale: scale, increaseContrast: increaseContrast)
         button.isBordered = false; button.bezelStyle = .regularSquare
         button.wantsLayer = true; button.target = self; button.action = #selector(getStarted)
-        button.setAccessibilityLabel("Get Started"); button.setAccessibilityIdentifier("onboarding-get-started")
+        button.setAccessibilityLabel("Continue"); button.setAccessibilityIdentifier("onboarding-continue")
         button.isEnabled = false; button.alphaValue = 0
         addSubview(button)
         layoutScene()
@@ -256,6 +256,16 @@ public final class IntroView: NSView {
         fade.beginTime = hostTime+buttonBeat.start; fade.duration = max(0.001, buttonBeat.end-buttonBeat.start)
         fade.fillMode = .both; fade.isRemovedOnCompletion = false
         button.layer?.add(fade, forKey: "button-fade")
+        if !reduceMotion {
+            let spring = CASpringAnimation(keyPath: "transform.translation.y")
+            let response = IntroTimeline.beat("buttonSpring").end-IntroTimeline.beat("buttonSpring").start
+            let frequency = 2*Double.pi/response
+            spring.mass = 1; spring.stiffness = frequency*frequency; spring.damping = 2*0.9*frequency
+            spring.fromValue = 24; spring.toValue = 0
+            spring.beginTime = hostTime+buttonBeat.start; spring.duration = response
+            spring.fillMode = .both; spring.isRemovedOnCompletion = false
+            button.layer?.add(spring, forKey: "button-spring")
+        }
         button.isEnabled = false
         CATransaction.commit()
         if skipped { skip() }
@@ -298,7 +308,12 @@ public final class IntroView: NSView {
     public func fadeForHandoff() {
         let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = layer?.presentation()?.opacity ?? 1; fade.toValue = 0
         fade.duration = IntroTimeline.beat("handoff").end
-        layer?.opacity = 0; layer?.add(fade, forKey: "handoff")
+        composition.opacity = 0; composition.add(fade, forKey: "handoff")
+        button.alphaValue = 0; button.layer?.add(fade, forKey: "handoff")
+    }
+    /// Later screens reuse the room/orbs without rebuilding or restarting sound.
+    public func showBackgroundOnly() {
+        composition.isHidden = true; button.isHidden = true
     }
     public override func cancelOperation(_ sender: Any?) { skip() }
     public override func keyDown(with event: NSEvent) {
