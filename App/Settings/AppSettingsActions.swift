@@ -26,7 +26,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       focusedProfileID: app.frontStandardWindowController.flatMap { app.hostFactories[$0.windowID]?.focusedProfile?.id })
     vm.routingSnapshotProvider = { [unowned app] in app.linkExecutor.snapshot() }
     if !app.isFirstRun || app.firstRunSaved {
-      if let store = app.stores.adBlock { vm.attach(adBlockStore: store) }
+      if let store = app.stores.adBlock { vm.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
       else { vm.advanced.statusText = "Ad blocking settings could not be opened." }
     }
     app.defaultBrowserService.onChange = { [weak vm, weak app] state in
@@ -38,8 +38,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return vm
   }
   func modelWasInstalled() { settingsStorage = nil }
+  // Registry callbacks never instantiate Settings or open another Profile.
+  func refreshAdBlockWarning() { settingsStorage?.adBlock?.refreshOtherBlocker() }
+  func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool {
+    guard app.engineReady, let profile = app.model.profile(id: profileID),
+      let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return false }
+    return context.extensions.installedExtensions.contains {
+      $0.isEnabled && AdBlockKnownBlockers.extensionIDs.contains($0.identifier)
+    }
+  }
   func attachBrowserStores() {
-    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store) }
+    if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
