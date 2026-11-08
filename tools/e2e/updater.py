@@ -208,7 +208,8 @@ def run(opts, folder, results, apps):
                     for offset in range(0, len(body), 4096):
                         self.wfile.write(body[offset:offset + 4096]); self.wfile.flush()
                         if name.endswith('.zip'):
-                            time.sleep(.025)
+                            # Keep Cancel observable through both real-window captures.
+                            time.sleep(.05)
                 except (BrokenPipeError, ConnectionResetError):
                     pass
             def log_message(self, *_):
