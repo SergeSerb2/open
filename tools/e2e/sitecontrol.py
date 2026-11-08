@@ -166,7 +166,11 @@ def run(factory, results, tmp, env, functional_only=False):
             app.call('site-controls',action='tap',id='action.newBoost')
             if editor().get('interstitial'): editor('tap',id='firstRun.makeABoost')
             assert wait(lambda:editor().get('colorsReady'),timeout=10,step=.05)
-            editor('tap',id='font.Avenir')
+            before_outline=app.eval(tab,'getComputedStyle(document.body).outlineStyle')
+            editor('tap',id='code')
+            assert wait(lambda:editor().get('mode')=='code',timeout=5,step=.02)
+            editor('type',text='body{outline:3px solid red !important}')
+            assert wait(lambda:app.eval(tab,'getComputedStyle(document.body).outlineStyle')=='solid',timeout=5,step=.02)
             boost_id=editor()['boost']['id']; boost_profile=editor()['profile']
             editor('close')
             def stored_boost(): return app.call('boosts',action='get',boost=boost_id,profile=boost_profile)
@@ -174,25 +178,35 @@ def run(factory, results, tmp, env, functional_only=False):
             matching=opened()
             record('S4_boost',empty_negative and matching['boostsVisible']
                    and all(control(matching,c).get('visible') and control(matching,c).get('enabled') for c in (circle,edit_row))
-                   and stored_boost()['isEnabled']
+                   and stored_boost()['isEnabled'] and control(matching,edit_row).get('title')=='Edit '+stored_boost()['name']
                    and matching['urlButtonState'] in ('boosted','openBoosted'),
-                   state=matching,stored=stored_boost(),negativeEmpty=empty_negative)
+                   state=matching,stored=stored_boost(),negativeEmpty=empty_negative,negativeOutline=before_outline)
             app.call('site-controls',action='tap',id=circle)
             assert wait(lambda:not stored_boost()['isEnabled'],timeout=5,step=.02)
             off=wait(lambda:(lambda x:x if x['urlButtonState'] not in ('boosted','openBoosted') else None)(state()),timeout=5,step=.02)
+            outline_off=bool(wait(lambda:app.eval(tab,'getComputedStyle(document.body).outlineStyle')=='none',timeout=5,step=.02))
             off_store=stored_boost()
             app.call('site-controls',action='tap',id=circle)
             assert wait(lambda:stored_boost()['isEnabled'],timeout=5,step=.02)
             on=wait(lambda:(lambda x:x if x['urlButtonState'] in ('boosted','openBoosted') else None)(state()),timeout=5,step=.02)
-            record('S4_toggle_glyph',bool(off and on) and not off_store['isEnabled'] and stored_boost()['isEnabled']
+            outline_on=bool(wait(lambda:app.eval(tab,'getComputedStyle(document.body).outlineStyle')=='solid',timeout=5,step=.02))
+            record('S4_toggle_glyph',outline_off and outline_on and before_outline=='none' and bool(off and on) and not off_store['isEnabled'] and stored_boost()['isEnabled']
                    and all(control(x,edit_row).get('visible') for x in (off,on) if x),
-                   disabled=off,reenabled=on,negativeDisabled=off_store)
+                   disabled=off,reenabled=on,negativeDisabled=off_store,liveCSSDisabled=outline_off,liveCSSReenabled=outline_on)
             editor_closed=not editor().get('open')
             app.call('site-controls',action='tap',id=edit_row)
             edited=editor()
             record('S4_edit',editor_closed and edited.get('open') and edited['boost']['id']==boost_id,
                    editor=edited,negativeClosed=editor_closed)
-            editor('close');opened()
+            editor('close')
+            unmatched=new_tab(app,origin.replace('127.0.0.1','localhost')+'/boost.html')
+            unmatched_state=opened()
+            unmatched_negative=not unmatched_state['boostsVisible'] and unmatched_state['urlButtonState'] not in ('boosted','openBoosted')
+            close();app.call('key',key='w',modifiers=['cmd'],route='app');app.call('select',tab=tab)
+            rematched=opened()
+            record('S4_match_boundary',unmatched_negative and rematched['boostsVisible']
+                   and control(rematched,edit_row).get('visible'),
+                   negativeUnmatched=unmatched_state,matching=rematched)
             # boost.html shares the cookie's origin and does not set it again
             # on reload, so S5 can prove that Clear Cookies removed it.
             close(); app.call('navigate', tab=tab, url=origin+'/boost.html'); app.call('wait', tab=tab)
@@ -289,6 +303,7 @@ def run(factory, results, tmp, env, functional_only=False):
                     and len(menu_rows)==len(boost_commands) and all(not r['enabled'] for r in menu_rows.values())
                     and all(refused_commands.values()) and private_menu_refused
                     and private_customize_refused and private_editor_refused
+                    and app.eval(private_tab,'getComputedStyle(document.body).outlineStyle')=='none'
                     and refused(action='tap',id='action.newBoost'),
                     state=private_state,privateContext=private_context,
                     boostMenus=menu_rows,refusedCommands=refused_commands,negativeDisabledMenu=private_menu_refused,
