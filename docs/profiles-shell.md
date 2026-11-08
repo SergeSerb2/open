@@ -41,6 +41,44 @@ Settings deletion use the normal `app.model`; private window models are
 separate. Repair notices attach only to standard windows, and deletion
 retires hosts only in persistent factories.
 
+## Change Profile with only Library open
+
+Space Manager handles Set Profile before its model-only fallback. A live
+browser keeps its existing path. With every browser closed, the same shared
+`ChangeProfileRequest.warning` alert attaches to Library. Confirm calls
+`moveSpace(id:toProfile:)` in an Undo group named `Change Profile`, then
+schedules save and menu refresh. The model-only sidebar path also uses
+`moveSpace`, so it emits the same Profile change event.
+
+An absent or true `open.profiles.confirmInterProfileMove` asks first. A
+stored false value applies the move without a sheet. Cancel never saves
+“Don't show again”; only confirmation with that box checked stores false.
+The apply callback rechecks the model, source Profile, target and termination.
+
+M5 real-App acceptance at `25332598` passes the exact Library sheet text and
+parent, Escape Cancel, Return confirm, Cmd+Z Undo and both suppression cases.
+The menu selection uses the actual Manager Profile indicator. No browser
+window is created. Restoring the original fallback makes
+`shell_manager_profile_alert` fail: the Profile changes and no sheet appears.
+A forced early failure with that sheet open also passes cleanup: no owned
+processes or windows remain. The [final acceptance receipt](profiles-shell/final-acceptance.json)
+records these rows, the cleanup proof and required regressions.
+
+Required M5 Chrome/Debug regressions:
+
+| Suite | Result | Head |
+|---|---|---|
+| Profiles | 69 PASS; includes durable storage and migration, all five Manager rows and shell cleanup | `25332598` |
+| Incognito | 30 PASS; native 1x light/dark, parent ancestry, isolation and extension opt-in | `25332598` |
+| Sidebar | 20 PASS; existing duplicate durable-storage row stays SKIP because Profiles owns it | `25332598` |
+| Little Open | 39 PASS | `25332598` |
+
+All four runs have zero interruptions and clean owned-process/window shutdown.
+All four suites were rerun after merging main `ca56dff3`, including #231’s
+ProfileDataOwner hook, #229’s page-menu changes, #233’s portable gates and
+#223’s 0704 engine. The App and Vendor fingerprints match distribution
+`c03a5109fc0d815770743a6c25a92d24bd1632eba6e658e00eb6e46314440c91`.
+
 ## Profile page destinations
 
 The Settings actions use the Chromium 156 routes below. The real-App suite
@@ -118,12 +156,18 @@ and Little Open's custom Profile icon. `header-render-*@1x.png` and
 `header-render-*@2x.png` are offscreen two-Profile renders. The Profile icon
 pane and all three deletion states also have offscreen 1x/2x renders.
 
-## Display reruns (2x, lead)
+## Display reruns (2x, lead) — done
 
-The M5 exposes only a native 1x display; the M1 is held. On a native 2x
-display, rerun the command below for `header-{light,dark}-{rest,hover}-2x.png`,
+Native captures were taken on the M1 Pro built-in Retina display on
+2026-11-07, at main `f65327a5`, with the command below (29 PASS, exit 0).
+The eight window PNGs are now committed: `header-{light,dark}-{rest,hover}-2x.png`,
 `manager-{light,dark}-2x.png`, and `little-open-profile-{light,dark}-2x.png`.
-The harness checks the captured pixel/window-point ratio; it never upscales.
+Each width and height is exactly twice its 1x sibling: header 2000 × 1400,
+Manager 1920 × 1280, Little Open 2370 × 1664. The harness checked the native
+pixel/window-point ratio. No image was upscaled. The M5 1x captures retain
+their original provenance; these M1 images do not claim Arc parity.
+[Native dimensions and image hashes](profiles-shell/native-2x.json) retain
+the capture receipt.
 
 ```sh
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock \

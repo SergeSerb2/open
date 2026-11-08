@@ -98,7 +98,11 @@
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
-        let pageEvents = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }?.drainEvents() ?? []
+        // Little Open owns its own page events, even while a main window exists.
+        let owner = (a["window"] as? Int).flatMap { number in
+          app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
+        } ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+        let pageEvents = owner?.drainEvents() ?? []
         let events = savePromptEvents; savePromptEvents.removeAll()
         return pageEvents + events
       case "engine-contexts":
