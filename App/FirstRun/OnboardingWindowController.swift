@@ -130,7 +130,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     intro.addSubview(content.view)
     window?.makeFirstResponder(content.view)
     (window as? OnboardingWindow)?.setupPrimary = { [weak content] in
-      (content as? OnboardingStepsController)?.next()
+      (content as? OnboardingStepsController)?.performPrimaryAction()
     }
     (content as? OnboardingStepsController)?.didAttach()
   }

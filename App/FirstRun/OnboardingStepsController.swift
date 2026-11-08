@@ -244,6 +244,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     if target == .defaultBrowser { firstRun.enterDefaultBrowser() }
     render(direction: back ? -1:1)
   }
+  func performPrimaryAction() {
+    guard primary?.isEnabled == true else { return }
+    next()
+  }
   func next() {
     guard !firstRun.busy, !defaultPending, !finishing else { return }
     switch step {
