@@ -70,9 +70,7 @@ summary is in draft [#224](https://github.com/SergeSerb2/open/pull/224).
 ## Full verifier
 
 <!-- FULL_QUALIFICATION_START -->
-Full `tools/verify-all.sh --with-arc-data` ran once on the M5 at `7509e3b663e0e3b8b57510007bda59a9d9e88063`, with App code unchanged from `c42ba0a4a61638676824e6a95e4738437e1b7ccd` and engine SHA-256 `2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10`. Raw result: **23 PASS / 2 FAIL / 0 SKIP**.
-
-Both FAIL entries are **prelaunch priority deferrals, exit 75**, from the private foreground/priority guard. `space-editor` deferred to Section 3; `sitecontrol-render` deferred to Section 11. Neither target ran assertions or launched its native suite. **RUNNING:** scoped completion of only `space-editor,sitecontrol-render`; currently waiting for screen priority outside all locks. No second full run will start.
+Full `tools/verify-all.sh --with-arc-data` ran **once** on the M5: **23 PASS / 2 FAIL from prelaunch priority deferrals**. No target skipped. Verification head `7509e3b663e0e3b8b57510007bda59a9d9e88063` adds only the published receipt documents to App-qualified `c42ba0a4a61638676824e6a95e4738437e1b7ccd`. Framework context SHA-256 `2ecaeadab71b3da3e5bc65a3f5b77d80c7958e9d0faa8cd305a0fa29496ebb10`.
 
 | Check | Raw result | Seconds | Load 1/5/15, start / guards → finish |
 |---|---|---|---|
@@ -101,6 +99,35 @@ Both FAIL entries are **prelaunch priority deferrals, exit 75**, from the privat
 | boosts | PASS | 4 | 9.23/9.99/15.05 → 9.13/9.95/15.01 |
 | import-arc | PASS | 3 | 9.13/9.95/15.01 → 9.20/9.95/14.98 |
 | verify-secrets-fixture | PASS | 9 | 9.20/9.95/14.98 → 9.02/9.89/14.90 |
+
+The raw FAIL entries above are exit 75 from the private priority guard; no target assertion or native launch ran. After the full run ended, only those deferred targets were resumed with `tools/verify-all.sh --only space-editor,sitecontrol-render`. The native runner retained its normal priority wait and screen lock. No product code or assertion changed. Scoped head `18a4c27e4ffbc53f275a6981da7572458a5cb341` differs from the full-run head only in receipt documentation. The scoped run and its required build all passed:
+
+| Scoped check | Result | Seconds | Load 1/5/15, start / guards → finish |
+|---|---|---|---|
+| build | PASS | 4 | 46.90/28.17/21.03 → 43.70/27.82/20.95 |
+| space-editor | PASS | 143 | 43.70/27.82/20.95 → 43.70/27.82/20.95 → 45.63/38.16/26.40 |
+| sitecontrol-render | PASS | 296 | 45.63/38.16/26.40 → 45.63/38.16/26.40 → 24.90/31.50/26.90 |
+
+**Qualification: all 25 targets have passing receipts across the single full run and the scoped completion of its prelaunch deferrals.** The raw full-run FAIL entries remain preserved; this is not a claim that its original table was all PASS.
+
+Full-run logs remain under `.re/c4b/verify-all-final/`; scoped completion logs remain under `.re/c4b/verify-deferred-final/`. Real Arc data is read through private copies and reports counts only. The earlier interrupted verifier is historical and is not used as this gate.
+
+Inherited renderer timing details remain explicit. `sitecontrol-render` passed 1,549 assertions with four INFO entries; those INFO entries provide no acceptance result.
+
+| Receipt | Observed timing | Recorded load | Status |
+|---|---|---|---|
+| Suggest remote stream | 391 ms; +11 ms past configured 380 ms; below 600 ms gate | 13.1/14.5/19.6 | PASS |
+| Sidebar hover preview | 0.502 s; +2 ms lateness | load1 6.04 | PASS |
+| Command bar rows | main CPU p95 7.49 ms; wall p95 7.93 ms; inline cycles p95 +0.208 ms | 8.99/10.79/16.18 → 8.14/10.36/15.77 (check context) | PASS |
+| Site Control cold open | CPU p95 12.615 ms vs 8 ms; +4.615 ms; wall 12.739 ms | load1 27.04 | Diagnostic |
+| Site Control skeleton | CPU p95 9.080 ms vs 8 ms; +1.080 ms; wall 16.175 ms | load1 24.53 | Diagnostic |
+| Editor open | CPU p95 20.597 ms vs 12 ms; +8.597 ms; wall 38.995 ms | load1 24.81 | INFO, no acceptance |
+| Editor native code keys | main CPU p95 1.792 ms vs 2 ms; -0.208 ms | 24.81/31.60/26.91 | PASS |
+| Editor pad / hue | pad CPU p95 0.087 ms; hue 8.988 ms off-main | load1 24.81 (editor context) | PASS |
+| Editor drag / idle / page refresh | frame p95 1.518 ms, max 4.360 ms; idle 0.231 ms CPU in 2 s; refresh max 0.110 ms | 45.63/38.16/26.40 → 24.90/31.50/26.90 (check context; separate sample load not recorded) | Diagnostic / PASS assertions |
+
+Sidebar SM6 retains diagnostic wall/main-CPU pairs in ms: initial 29.838/29.163; discarded warm-up 66.228/53.193; five measured processes 57.381/52.289, 59.079/51.167, 58.697/54.138, 52.087/48.551, 53.361/49.321. All record load1 6.04. The main-thread instruction median was 670,611,826, with no accepted machine/build cost baseline. Site Control also lacks accepted cold-open/editor instruction baselines (medians 92,650,635 and 134,523,266). These inherited cost diagnostics remain unqualified. High-load timing misses above are reported under the lead's load policy; no tolerance changed.
+
 <!-- FULL_QUALIFICATION_END -->
 
 ## Integration and limits
