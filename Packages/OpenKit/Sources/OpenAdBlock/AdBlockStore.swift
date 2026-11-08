@@ -57,6 +57,10 @@ public final class AdBlockStore {
     private var states: [ProfileID: AdBlockProfileState] = [:]
     private var exclusions: [ProfileID: Set<String>] = [:]
     private var busy = Set<ProfileID>()
+    private var directories: [ProfileID: URL] = [:]
+    private var retired = Set<ProfileID>()
+    private var operations: [ProfileID: Task<Void, any Error>] = [:]
+    private var retirements: [ProfileID: Task<Void, Never>] = [:]
     private var schedules: [ProfileID: Task<Void, Never>] = [:]
     private let repository: ListRepository
     private let lease: DirectoryLease
@@ -83,27 +87,41 @@ public final class AdBlockStore {
         _ = AdBlockSites.shared // Load the PSL once, outside navigation lookup timing.
     }
 
-    public func listDirectory(for profile: ProfileID) -> URL {
-        profileDirectory(profile)
+    public func directory(for profile: ProfileID) throws -> URL {
+        try checkActive(profile)
+        guard let directory = directories[profile] else { throw AdBlockError("profile is not open") }
+        return directory
     }
 
-    private func profileDirectory(_ profile: ProfileID) -> URL {
-        root.appendingPathComponent("Profiles/\(profile.rawValue.uuidString)/adblock", isDirectory: true)
+    public func listDirectory(for profile: ProfileID) throws -> URL {
+        try directory(for: profile).appendingPathComponent("lists", isDirectory: true)
     }
 
-    public func openProfile(_ profile: ProfileID, scheduleUpdates: Bool = true) async throws {
+    public func isRetired(_ profile: ProfileID) -> Bool { retired.contains(profile) }
+    public func isUpdating(_ profile: ProfileID) -> Bool { busy.contains(profile) }
+
+    /// The caller supplies ProfileDirectories.adBlockDirectory, including its dataDirectoryName.
+    /// Private sessions substitute their own temporary directory and never read the supplied path.
+    public func openProfile(_ profile: ProfileID, directory requested: URL, scheduleUpdates: Bool = true) async throws {
+        try checkActive(profile)
         if states[profile] != nil { return }
-        try begin(profile)
-        defer { busy.remove(profile) }
-        let directory = profileDirectory(profile)
-        let state = try await repository.open(directory: directory, catalog: catalog)
-        let legacy = directory.deletingLastPathComponent().appendingPathComponent("AdBlock/exclusions.json")
-        let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"),
-                                  fallback: readJSON([String].self, at: legacy, fallback: []))
-        let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
-        states[profile] = state; exclusions[profile] = normalized
-        onEngineEvent?(.configure(profile: profile, listDirectory: listDirectory(for: profile),
-                                 enabled: isEnabled, excludedDomains: normalized.sorted()))
+        let directory = temporaryRoot.map { $0.url.appendingPathComponent(profile.description).appendingPathComponent("AdBlock") } ?? requested
+        let lists = directory.appendingPathComponent("lists", isDirectory: true)
+        try await perform(profile) {
+            if self.temporaryRoot == nil {
+                try await self.repository.migrate(from: self.root.appendingPathComponent("Profiles/\(profile.rawValue.uuidString)/adblock"), to: directory)
+            }
+            let state = try await self.repository.open(directory: lists, catalog: self.catalog)
+            try self.checkActive(profile)
+            // Preserve the legacy AdBlock/exclusions.json read, including an exclusions-only Profile.
+            let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
+            let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
+            self.directories[profile] = directory
+            self.states[profile] = state; self.exclusions[profile] = normalized
+            self.onEngineEvent?(.configure(profile: profile, listDirectory: lists,
+                                          enabled: self.isEnabled, excludedDomains: normalized.sorted()))
+        }
+        try checkActive(profile)
         NotificationCenter.default.post(name: Self.didChange, object: self)
         if scheduleUpdates {
             let scale = Double(ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE"] ?? "1") ?? 1
@@ -134,15 +152,38 @@ public final class AdBlockStore {
     }
 
     public func closeProfile(_ profile: ProfileID) throws {
+        if retired.contains(profile) { return }
         guard !busy.contains(profile) else { throw AdBlockError("profile operation is in progress") }
+        let directory = directories.removeValue(forKey: profile)
         schedules.removeValue(forKey: profile)?.cancel()
         states.removeValue(forKey: profile); exclusions.removeValue(forKey: profile)
         lastUpdateResults.removeValue(forKey: profile)
         onEngineEvent?(.closed(profile: profile))
-        if temporaryRoot != nil {
-            let path = profileDirectory(profile).deletingLastPathComponent()
+        if temporaryRoot != nil, let directory {
+            let path = directory.deletingLastPathComponent()
             if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
         }
+    }
+
+    /// A permanent barrier: cancel and drain all IO before ProfileTeardown removes the folder.
+    /// Repeated callers await the same barrier, including for Profiles never opened here.
+    public func retireProfile(_ profile: ProfileID) async {
+        if let task = retirements[profile] { await task.value; return }
+        guard retired.insert(profile).inserted else { return }
+        schedules.removeValue(forKey: profile)?.cancel()
+        let operation = operations[profile]
+        operation?.cancel()
+        let task = Task { @MainActor in
+            _ = await operation?.result
+            self.states.removeValue(forKey: profile)
+            self.exclusions.removeValue(forKey: profile)
+            self.directories.removeValue(forKey: profile)
+            self.lastUpdateResults.removeValue(forKey: profile)
+            self.onEngineEvent?(.closed(profile: profile))
+        }
+        retirements[profile] = task
+        await task.value
+        retirements.removeValue(forKey: profile)
     }
 
     public func setEnabled(_ enabled: Bool) throws {
@@ -167,12 +208,13 @@ public final class AdBlockStore {
     }
 
     public func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID) throws {
+        try checkActive(profile)
         guard states[profile] != nil else { throw AdBlockError("profile is not open") }
         let site = try AdBlockSites.shared.registrableDomain(domain)
         var domains = exclusions[profile, default: []]
         if excluded { domains.insert(site) } else { domains.remove(site) }
         if temporaryRoot == nil {
-            try writeJSON(domains.sorted(), to: profileDirectory(profile).appendingPathComponent("exclusions.json"))
+            try writeJSON(domains.sorted(), to: directory(for: profile).appendingPathComponent("exclusions.json"))
         }
         exclusions[profile] = domains
         onEngineEvent?(.exclusions(profile: profile, domains: domains.sorted()))
@@ -180,65 +222,68 @@ public final class AdBlockStore {
     }
 
     public func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID) async throws {
+        try checkActive(profile)
         let list = try catalog.list(id)
         guard !on || !list.urls.isEmpty else { throw AdBlockError("\(id): no public upstream source") }
         guard let state = states[profile] else { throw AdBlockError("profile is not open") }
         if state.enabledBlockLists.contains(id) == on { return }
-        try begin(profile)
-        defer { busy.remove(profile) }
-        do {
-            let (next, results) = try await repository.setEnabled(id, on: on, directory: profileDirectory(profile), state: state, catalog: catalog)
-            states[profile] = next
-            lastUpdateResults[profile] = results
-            onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
-        } catch {
-            var failed = state
-            failed.lastError = (error as? AdBlockError)?.description ?? "list update failed"
-            try await repository.save(failed, directory: profileDirectory(profile))
-            states[profile] = failed
-            throw error
+        let directory = try listDirectory(for: profile)
+        try await perform(profile) {
+            do {
+                let (next, results) = try await self.repository.setEnabled(id, on: on, directory: directory, state: state, catalog: self.catalog)
+                try self.checkActive(profile)
+                self.states[profile] = next
+                self.lastUpdateResults[profile] = results
+                self.onEngineEvent?(.reload(profile: profile, listDirectory: directory))
+            } catch { try await self.recordFailure(error, state: state, profile: profile, directory: directory) }
         }
     }
 
     /// Reset the UI choices through the same verified list-generation path.
     public func resetListChoices(profile: ProfileID) async throws {
+        try checkActive(profile)
         guard let state = states[profile] else { throw AdBlockError("profile is not open") }
-        try begin(profile); defer { busy.remove(profile) }
-        do {
-            states[profile] = try await repository.resetChoices(directory: profileDirectory(profile), state: state, catalog: catalog)
-            onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
-        } catch {
-            var failed = state
-            failed.lastError = (error as? AdBlockError)?.description ?? "list reset failed"
-            try await repository.save(failed, directory: profileDirectory(profile)); states[profile] = failed
-            throw error
+        let directory = try listDirectory(for: profile)
+        try await perform(profile) {
+            do {
+                let next = try await self.repository.resetChoices(directory: directory, state: state, catalog: self.catalog)
+                try self.checkActive(profile)
+                self.states[profile] = next
+                self.onEngineEvent?(.reload(profile: profile, listDirectory: directory))
+            } catch { try await self.recordFailure(error, state: state, profile: profile, directory: directory) }
         }
     }
 
     /// One reload after a changed batch. No reload for 304. A failed batch retains all old lists.
     public func updateListsNow(profile: ProfileID) async throws {
-        guard var state = states[profile] else { throw AdBlockError("profile is not open") }
-        try begin(profile)
-        defer { busy.remove(profile) }
-        let results: [AdBlockUpdateResult]
-        do {
-            if let raw = ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS"],
-               let delay = Double(raw), delay.isFinite, delay > 0, delay <= 60 {
-                try await Task.sleep(for: .seconds(delay))
-            }
-            (state, results) = try await repository.updateBatch(catalog: catalog, directory: profileDirectory(profile), state: state)
-        } catch {
-            let message = (error as? AdBlockError)?.description ?? "list batch: file operation failed"
-            state.lastError = message
-            try await repository.save(state, directory: profileDirectory(profile))
-            states[profile] = state; lastUpdateResults[profile] = []
-            if Task.isCancelled { throw CancellationError() }
-            throw AdBlockError(message)
+        try checkActive(profile)
+        guard let state = states[profile] else { throw AdBlockError("profile is not open") }
+        let directory = try listDirectory(for: profile)
+        try await perform(profile) {
+            do {
+                if let raw = ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS"],
+                   let delay = Double(raw), delay.isFinite, delay > 0, delay <= 60 {
+                    try await Task.sleep(for: .seconds(delay))
+                }
+                let (next, results) = try await self.repository.updateBatch(catalog: self.catalog, directory: directory, state: state)
+                try self.checkActive(profile)
+                self.states[profile] = next; self.lastUpdateResults[profile] = results
+                if results.contains(where: \.changed) {
+                    self.onEngineEvent?(.reload(profile: profile, listDirectory: directory))
+                }
+            } catch { try await self.recordFailure(error, state: state, profile: profile, directory: directory) }
         }
-        states[profile] = state; lastUpdateResults[profile] = results
-        if results.contains(where: \.changed) {
-            onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
-        }
+    }
+
+    private func recordFailure(_ error: any Error, state: AdBlockProfileState, profile: ProfileID, directory: URL) async throws {
+        // Cancellation and deletion must never save a failure receipt or restore dropped state.
+        try checkActive(profile)
+        var failed = state
+        failed.lastError = (error as? AdBlockError)?.description ?? "list operation failed"
+        try await repository.save(failed, directory: directory)
+        try checkActive(profile)
+        states[profile] = failed; lastUpdateResults[profile] = []
+        throw error
     }
 
     /// Build-time/offline seeds have immutable release pins. Runtime list updates instead verify
@@ -261,7 +306,20 @@ public final class AdBlockStore {
         return lines.joined(separator: "\n")
     }
 
-    private func begin(_ profile: ProfileID) throws {
+    private func checkActive(_ profile: ProfileID) throws {
+        guard !retired.contains(profile) else { throw AdBlockError("This Profile was deleted.") }
+        try Task.checkCancellation()
+    }
+
+    /// Track the task that actually performs IO, rather than only the caller's busy bit.
+    /// Cancellation propagates to URLSession and every repository publication boundary.
+    private func perform(_ profile: ProfileID, operation: @escaping @MainActor () async throws -> Void) async throws {
+        try checkActive(profile)
         guard busy.insert(profile).inserted else { throw AdBlockError("profile operation is in progress") }
+        let task = Task { try self.checkActive(profile); try await operation() }
+        operations[profile] = task
+        defer { operations.removeValue(forKey: profile); busy.remove(profile) }
+        try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+        try checkActive(profile)
     }
 }

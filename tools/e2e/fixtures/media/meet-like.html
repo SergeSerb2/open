@@ -10,5 +10,5 @@ navigator.mediaSession.setActionHandler('enterpictureinpicture', async () => {
   const w = await documentPictureInPicture.requestWindow({ width: 320, height: 240 });
   w.document.body.append(v);
 });
-window.start = () => v.play().then(() => true);
+window.start = () => playAll(v);
 </script>

@@ -15,6 +15,10 @@ from extensions_p3 import pack_probe
 
 
 def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions, functional_only=False):
+    from settings_adblock import run as settings_adblock
+    if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") == "adblock":
+        settings_adblock(factory, results, tmp, root, wait_until)
+        return
     from profiles_extensions import run as profiles_extensions
     profiles_extensions(factory, results, tmp, root, wait_until)
     if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") in ("profiles", "profiles-memory"):
