@@ -12181,7 +12181,10 @@ def main():
             shell_checks(factory, results["shell"], tmp)
         elif opts.only == "relaunch":
             results["relaunch"] = CheckedResults(tracker)
-            relaunch_checks(factory, results["relaunch"], tmp)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/session_restore.py'))['run'](
+                factory, results["relaunch"], tmp, sys.modules[__name__], opts.config)
+            if os.environ.get('OPEN_RELAUNCH_SETTINGS_ONLY') != '1':
+                relaunch_checks(factory, results["relaunch"], tmp)
         elif opts.only in ("commandbar", "app-actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)

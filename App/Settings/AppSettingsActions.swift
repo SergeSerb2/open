@@ -75,6 +75,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)
+    if let library, (section ?? library.section) == .history,
+      libraryPresenter?.window?.isVisible != true {
+      library.historyProfileID = app.frontStandardWindowController?.context.focusedSpace?.profileID
+        ?? app.model.defaultProfile?.id ?? library.historyProfileID
+    }
     libraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
   }
   /// Use the Library button's view model and confirmation dialog unchanged.
@@ -318,12 +323,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     if let context {
       let nativeKinds = OEBrowsingDataKinds(rawValue: UInt32(kinds.rawValue))
-      return await withCheckedContinuation { continuation in
+      let error: String? = await withCheckedContinuation { continuation in
         context.clearBrowsingData(nativeKinds, from: begin, to: end) { error in
           continuation.resume(returning: error?.localizedDescription)
         }
       }
+      if let error { return error }
     }
+    if kinds.contains(.downloads) { app.downloadsCenter.clearHistory(profileID: profileID, since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {
