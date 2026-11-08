@@ -128,3 +128,28 @@ The final live-swap matrix replaces main with the matched branch build and
 branch with matched main. Both include #264 and share its public engine API;
 the native difference is `0106`. The harness requires different executable
 SHA-256 values and removes the old staging bundle after the directory swap.
+
+### Required acceptance rows on the rebuilt engine
+
+These rows must use the S16 distribution with `0801–0810`, then `0106`.
+The previous build, object compilation and patch round trip do not count as
+runtime acceptance. The following table records the current state; it claims
+no launch gain or live-update safety result.
+
+| Row | Required proof | Current state |
+|---|---|---|
+| a | Executable ctime and link count stay unchanged for three full runs after the first clone | Not run |
+| b | Seven simple relaunches have no attributable ChangetimeScan | Not run; retain the initial clone and assessment warm-up logs separately |
+| c | An in-place executable copy keeps the inode but recreates the clone | Not run |
+| d | Two install paths use distinct clones with no cross-reuse | Not run |
+| e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Held for M5 clear; plain-launch each hardened copy first, stop on any abort |
+| f | An unwritable cache falls back to a per-run clone and still works | Not run |
+| g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | Held for M5 clear; wait for load outside all locks |
+| h | Shell, features, updater and engine-status pass | App suites held for M5 clear; final engine-status pending distribution |
+
+The branch engine job is queued under the machine engine lock. A separate
+build-only continuation waits outside all locks for its successful completion,
+then builds the Release and Debug Apps, compiles the existing e2e helpers and
+prepares temporary DLV copies. It launches no App and starts no suite.
+All screen runners retain the local hold guard. Full `verify-all` also waits
+for screen clearance because it opens windows.
