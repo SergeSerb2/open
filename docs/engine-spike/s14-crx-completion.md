@@ -89,6 +89,26 @@ The first UI run was interrupted by a monitor that treated `ExcUserFault_*` as a
 
 The final UI wrapper was interrupted by an instruction update while its detached suite continued. Its complete JSON and cleanup result were recovered. That table row uses the suite execution-start load instead of the lost wrapper queue-start load; its exit classification is inferred from the complete result JSON. No real Open/Open Helper crash report appeared during the interruption.
 
-The full verifier retains the `FV10` timing miss (22.624 ms versus 8.33 ms). The queued quiet retry was cancelled before any check ran, so functional rechecks could proceed at the allowed load. No OpenKit source differs from main in this PR, but this is not a separate main runtime baseline. TANDEM §3.4l treats a timing miss with recorded load as non-blocking; a low-load FV10 receipt remains open for the lead. No limit or baseline was changed.
+The full verifier retains its original `FV10` timing miss (22.624 ms versus 8.33 ms). That run is not relabelled PASS. The lead required a main/head comparison before accepting it; the comparison below passes on both revisions. No limit or baseline was changed.
 
 The final quiet-lock UI rerun passed all 71 functional/timing rows with one existing picker BLOCKED row. Popup ready-to-visible p95 was 8.087 ms (limit 16.7 ms), with 20/20 samples, at row load (55.89, 55.72, 53.6). One foreground-loss attempt was discarded and automatically repeated; only the completed replacement is accepted.
+
+## Required FV10 main/head comparison (2026-11-07)
+
+Built unchanged main at the merge base `7f7feb2669e823aa8d12b9263e5cb2067c355761` in a separate detached worktree, then rebuilt head `73b9c67ed50c8f94d69a29968ebb8da5ff6dcca0`. Both builds used `swift build -c release -j 6 --package-path Packages/OpenKit --product features-render`, section token A and `heavy.sh`, with the pinned engine environment. The main worktree stayed clean.
+
+Ran the existing `features-render favicon-check` command once on main, then immediately once on head. This executes the identical `FaviconChecks.scroll` FV10 implementation: 1,000 stored icons, real sidebar rendering, 335 scroll steps, and the unchanged 8.33 ms budget. Both commands ran inside one comparison suite with the same section token, heavy slot and continuously held screen lock. The quiet lock was unavailable after five seconds, so the lead-authorized recorded-load fallback was used. Each command had a separate temporary data root.
+
+| Check | Result | Load (1,5,15), before → after |
+|---|---|---|
+| Release build: unchanged main | PASS | (39.00, 44.27, 48.24) → (26.53, 37.01, 44.38) |
+| Release build: head | PASS | (26.53, 37.01, 44.38) → (15.03, 28.49, 39.89) |
+| Main favicon check | 33 PASS, 0 FAIL; FV10 **4.719 ms p95**, PASS (335 steps) | (17.48, 25.69, 37.55) → (25.30, 27.05, 37.77) |
+| Head favicon check | 33 PASS, 0 FAIL; FV10 **4.076 ms p95**, PASS (335 steps) | (25.30, 27.05, 37.77) → (25.05, 26.88, 37.46) |
+| Pair wrapper and cleanup | PASS | (14.43, 27.91, 39.56) → (25.05, 26.88, 37.46) |
+
+Main measured **4.719 ms** and head measured **4.076 ms**. Both meet 8.33 ms. The original 22.624 ms miss did not reproduce, and this pair shows no head regression. This is one comparison, not a new performance improvement claim.
+
+The entire OpenKit source tree is identical on main and head: git tree `524797eead8d19c6211883f1fed42f2a8d016c35`. The Swift diff audit found no production Web Store logic change. The import-attempt class changes outside the install branch remove fields and a helper already guarded by `OPEN_AUTOMATION`; the report inspection file is fully guarded. No scroll, favicon, OpenKit or engine implementation changed in this PR.
+
+Post-comparison whitespace and cleanup checks PASS. The clean temporary main worktree was removed; no owned App, Helper or features-render process remains. Loads: (65.46, 40.10, 41.46) → (65.46, 40.10, 41.46).
