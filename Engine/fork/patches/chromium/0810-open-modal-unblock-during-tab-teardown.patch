@@ -1,6 +1,6 @@
 --- a/chrome/browser/ui/tabs/tab_strip_model.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_model.cc
-@@ -1415,6 +1415,13 @@
+@@ -1415,5 +1415,12 @@
      return;
    }
    tab_model->SetBlocked(blocked);
@@ -13,4 +13,3 @@
 +  }
    NotifyTabChanged(tab_model, TabChangeType::kBlockedOnly);
  }
-
