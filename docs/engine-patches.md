@@ -474,6 +474,7 @@ Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust 
 | Piece | As built | Verification |
 |---|---|---|
 | P-3, `cef/0311` | Open appends the outermost URLLoaderFactory before Chrome/WebRequest. Subresources, redirect hops, WebSocket and WebTransport checks run on the matcher sequence. Main documents pass through. | Removing P-3 produces 24 FAIL and 6 PASS control rows; restoring it builds. Final N-case rerun is pending. |
+| Idle memory reclaim | One matcher-sequence task after 5 s without engine/proxy activity, at most once/minute; no task remains after the purge until new activity. No Profile/engine reference or request-path purge. | Built in `e12d3554`; 40 before/after corpus dumps identical. Postcorpus physical delta passes ruling 4a; 60 s no-repeat and G-4/page proof pending. |
 | Proxy cost | Reuse parsed GURLs and factory initiators; avoid the ordinary ResourceRequest copy. Retain the loader/client proxy through completion. The attempted response-pipe fusion was removed: Mojo permits fusion only before either endpoint is written, so a post-response fusion closes the completion path. | Four full-corpus verdict dumps match before/after. The final CDP run exposed aborted worker-script loads in the fusion build; the removal is built in `5d4d15a5`. Repaired page/N-case receipts are pending. |
 | Rust crate patches | Compile every network regex on the build runner before publication, with no warm match. Keep program-discard cleanup disabled because it would cause request-path compiles. The earlier candidate bounded caches/accelerators; the lead's 20:16 decision restored all upstream builder defaults in source, retaining program-byte counters. | Built candidate: zero added corpus compiles; smaller caches trade memory for CPU. Restored-default build has zero added compiles in all twenty corpus runs; warm CPU maximum medians 163–176 µs at load14.5–20.7. The preferred 64 KiB ceiling/fallback and cache override are removed. |
 | Generated ABP patterns | Use ASCII separator and wildcard classes only in crate-generated expressions. Complete user `/regex/` expressions keep their semantics. GURL specs are ASCII and percent-escaped (`url/gurl.h:25-26,109`). | Text program bytes 32,376,108 → 7,254,660. All 20,311 result rows match for text/DAT and both caps. The pinned lists contain 25 user regex lines, optimized into 16 programs (4,358,248 bytes; 13.46% of the old total). |
@@ -485,7 +486,7 @@ Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust 
 No list text, resources JSON or DAT input buffer remains in the engine holder.
 Inputs are released before regex compilation. The text path also checks the
 latest load id after serialization and before writing its DAT (100-7).
-Working footprint still exceeds the 50 MiB limit; see the Step 4 plan receipts.
+Working idle-build footprint meets lead ruling 4a: 16 KiB text/DAT 56.36/51.77 MiB steady and 58.27/54.06 MiB after the corpus plus one idle purge (median 5, load1 22.96–35.66). Final quiet/page gates, document-count proof and distribution remain pending; see the Step 4 plan receipts.
 No threshold was changed.
 
 ### Security review (Step 1, 2026-10-26)

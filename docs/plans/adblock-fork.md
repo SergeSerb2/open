@@ -4759,8 +4759,9 @@ hash for text/DAT and both caps.
 The current worst CPU URL is corpus line 366 (3,256 bytes), allowed; no
 winning filter exists. These working CPU rows pass the ruled 500 µs limit.
 They are not final load1 ≤12 acceptance or load1 ≤4 Step 9 wall receipts.
-The 50 MiB footprint budget still fails. The breakdown goes to the lead;
-no budget changes and no additional engine optimization is selected.
+These 20:36 footprint measurements exceeded the then-current 50 MiB
+budget. Lead ruling 4a later replaced it with 57 MiB steady and 60 MiB
+after the corpus plus one idle purge; current measurements are below.
 
 | PA component, median 16 KiB, all roots | Text | DAT |
 |---|---:|---:|
@@ -4811,3 +4812,51 @@ allowed and a temporary engine variant which deliberately charges an old
 document's late results to the new document must both make the row FAIL.
 Until the real stimulus and both negative controls pass, this is an open
 verification row; the predicate must not be relaxed by log timing inference.
+
+
+**Idle purge, working receipt (2026-11-07 21:24).** Built source
+`e12d3554` in 39 s; engine-status 8 PASS, 0 FAIL, 0 WARN. The first compile
+attempt hit Chromium's `NoDestructor` restriction on trivial types; the
+idle state now uses a trivially destructible function-local static with
+process lifetime. A real check activates the matcher-sequence reclaimer.
+Activity updates one timestamp while a task is pending. After five seconds
+without activity, and at most once per minute, one task calls ReclaimAll.
+After it runs, no task remains until new activity. It owns no Profile or
+engine and runs outside the request path. A blocking-off/no-engine process
+never arms it. The matcher runner skips pending tasks at shutdown.
+
+Five before/after rounds interleave the saved pre-idle binary and idle
+binary, text/DAT at both caps. These are working measurements without the
+quiet lock, with overlapping load1 bands (before 22.96–33.73, after
+22.96–35.66). Every one of the 40 full 20,311-result dumps is byte-identical
+to the earlier baseline. Each after-run observes exactly one production
+purge. A 60-second no-repeat observation is still running; G-4/page and
+full N reruns wait for explicit screen clearance.
+
+| Working gate, median of 5 | 16 KiB text / DAT | 8 KiB text / DAT |
+|---|---:|---:|
+| G-2 CPU warm max, µs | 132.291 / 128.834 | 130.792 / 127.500 |
+| G-2 wall warm max, µs | 132.125 / 208.250 | 130.667 / 152.250 |
+| Steady physical delta, MiB (ruling 4a: ≤57) | 56.360 / 51.766 | 55.250 / 51.500 |
+| Postcorpus + one idle purge, MiB (ruling 4a: ≤60) | 58.266 / 54.063 | 57.000 / 53.563 |
+| Added request regex compiles | 0 / 0 | 0 / 0 |
+
+Before→after G-2 CPU maxima are 139.250→132.291 µs and
+123.500→128.834 µs at 16 KiB, 127.334→130.792 µs and
+134.542→127.500 µs at 8 KiB. No material CPU regression is observed in
+these loaded, interleaved receipts. They do not replace quiet acceptance.
+At 16 KiB the idle purge releases 8.125/8.359 MiB physical in
+0.961/0.799 ms thread CPU (text/DAT medians). The postidle allocated
+deltas are 51.340/50.724 MiB. The settled allocation breakdown is
+rules/index/build residual 37.154/36.488, exact programs 6.941/6.941,
+cache/metadata/rounding residual 6.512/6.575 and other −0.209/−0.208 MiB:
+total 50.400/49.814 MiB. These are all-root PA phase deltas, not exact
+ownership tags for the residual.
+
+Text load 412 ms includes parse 140.212, serialize 69.138,
+deserialize/replace/free 135.346, compile 41.442 and build reclaim
+2.066 ms. DAT load 147 ms includes deserialize 100.411, compile 39.892
+and reclaim 0.882 ms. Raw receipts: `.re/s13/e1/idle-before-summary.json`,
+`idle-after-summary.json`, `idle-before-pa-phases.json`,
+`idle-after-pa-phases.json`, `idle-verdict-identity.json`,
+`idle-production-proof.json` and `idle-paired-headless.log`.
