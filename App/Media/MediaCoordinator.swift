@@ -124,7 +124,10 @@ final class MediaCoordinator {
     guard now != old || displayed[windowID] == nil else { return }
     displayed[windowID] = now
     #if OPEN_AUTOMATION
-    for id in old.subtracting(now) { noteCardEvent(id, event: "leave") }
+    if timingObserver != nil {
+      let eligible = Set(store.visibleSources(windowID: windowID, displayed: now).compactMap(\.tabID))
+      for id in old.subtracting(now) where eligible.contains(id) { noteCardEvent(id, event: "leave") }
+    }
     #endif
     if factory.controller?.context.displayedTabIDs != now { factory.controller?.context.displayedTabIDs = now }
     for id in now.subtracting(old) {
@@ -147,7 +150,15 @@ final class MediaCoordinator {
   func contentChanged(_ host: EngineWebContentHost, changes: OEWebContentChange) {
     guard !changes.isDisjoint(with: [.media, .audio, .mediaCapture, .pictureInPicture, .live, .crash]) else { return }
     #if OPEN_AUTOMATION
-    if cardTimings[host.tabID] == nil { noteCardEvent(host.tabID, event: "engine") }
+    if timingObserver != nil, let factory = host.owner {
+      let shown = displayed[factory.windowState.id] ?? []
+      // Preserve the first event of an eligible publication until its card is inserted.
+      // An earlier non-media event (or an ineligible leave) must not supply this timestamp.
+      if !shown.contains(host.tabID),
+         !store.visibleSources(windowID: factory.windowState.id, displayed: shown).contains(where: { $0.tabID == host.tabID }) {
+        noteCardEvent(host.tabID, event: "engine")
+      }
+    }
     #endif
     sync(host)
   }
