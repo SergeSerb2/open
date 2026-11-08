@@ -8,6 +8,8 @@
 #include "cef/libcef/browser/browser_host_base.h"
 #include "cef/libcef/browser/request_context_impl.h"
 #include "cef/libcef/browser/thread_util.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "open/adblock/open_adblock_service.h"
 #include "open/adblock/open_adblock_tab_helper.h"
@@ -23,7 +25,22 @@ open_engine::OpenAdBlockService* ServiceFor(
   // The initialized accessor also rejects a retained, detached OTR wrapper.
   auto* context = static_cast<CefRequestContextImpl*>(request_context.get())
                       ->GetInitializedBrowserContext();
-  return context ? context->open_adblock_service() : nullptr;
+  return context && !context->AsBrowserContext()->ShutdownStarted()
+      ? context->open_adblock_service() : nullptr;
+}
+
+void RefreshFactoriesFor(CefRefPtr<CefRequestContext> request_context) {
+  auto* context = static_cast<CefRequestContextImpl*>(request_context.get())
+                      ->GetInitializedBrowserContext();
+  if (!context) return;
+  // Disabled/excluded documents have no proxy (§7.2). Rebuild their existing
+  // factories when control state changes, as Chromium's WebRequestAPI does
+  // on proxy transitions; otherwise enabling would wait for navigation.
+  // Only touch loaded partitions, and only in this context (including OTR).
+  context->AsBrowserContext()->ForEachLoadedStoragePartition(
+      [](content::StoragePartition* partition) {
+        partition->ResetURLLoaderFactories();
+      });
 }
 
 }  // namespace
@@ -33,7 +50,9 @@ bool CefSetOpenAdBlockEnabled(CefRefPtr<CefRequestContext> request_context,
   CEF_REQUIRE_UIT_RETURN(false);
   auto* service = ServiceFor(request_context);
   if (!service) return false;
+  if (service->IsEnabled() == enabled) return true;
   service->SetEnabled(enabled);
+  RefreshFactoriesFor(request_context);
   return true;
 }
 
@@ -63,7 +82,13 @@ bool CefSetOpenAdBlockExcludedDomains(
   std::vector<std::string> values;
   values.reserve(domains.size());
   for (const auto& domain : domains) values.push_back(domain.ToString());
+  const auto previous = service->GetStatus().excluded_domains;
   service->SetExcludedDomains(std::move(values));
+  // A status observer may close the context inside the setter.
+  auto* current = ServiceFor(request_context);
+  if (current && previous != current->GetStatus().excluded_domains) {
+    RefreshFactoriesFor(request_context);
+  }
   return true;
 }
 

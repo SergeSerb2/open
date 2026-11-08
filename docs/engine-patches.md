@@ -496,6 +496,24 @@ purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
 Final quiet/page gates, document-count proof and distribution remain pending.
 Only lead rulings 2a and 4a replace the original budgets.
 
+### Control API (Section 13, 2026-11-07)
+
+The `cef_open_adblock.h` overlay adds six free functions, with generated C
+API/wrappers and no request-context virtual methods. A libcef overlay in
+`open/browser/profiles/open_adblock_api.cc` forwards control to the existing
+per-context service and reads the current-document tab helper. Same-path
+configuration is a no-op; empty unloads and cancels pending publication.
+Enable/exclusion changes reset factories in loaded storage partitions using
+Chromium's proxy-transition path. OTR settings are separate and its engine
+can be shared with its parent.
+
+`OEAdBlock.h` exposes main-thread categories on OEBrowserContext/OEWebContent.
+Pre-init values apply through a weak ready callback; closed contexts return
+defaults. The status snapshot has 11 scalar keys and fixed error summaries,
+with no paths or page URLs. Headless real-CEF API and lifetime flows pass;
+App integration, page counts, the final series and distribution remain held.
+The new symbols are listed in `verification/expected-symbols.txt`.
+
 ### Security review (Step 1, 2026-10-26)
 
 The engine parses filter lists in the browser process, which is the most privileged process. These are the decisions that let it build there, and the limits on its input. Lead decisions of 2026-10-26.

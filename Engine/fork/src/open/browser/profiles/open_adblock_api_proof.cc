@@ -108,7 +108,12 @@ class AdBlockApiProof final : public CefRequestContextHandler,
         Row(false, "publish next fixture generation"); Finish(); return;
       }
       Row(CefSetOpenAdBlockListDirectory(context_, root_.value()), "same directory accepted");
-      Post(&AdBlockApiProof::SameDirectory, base::Milliseconds(200));
+      // Drain prior build work instead of guessing when an unwanted reload
+      // would finish. The load reply is posted before this barrier's reply.
+      AdBlockBuildTaskRunner()->PostTaskAndReply(
+          FROM_HERE, base::BindOnce([] {}),
+          base::BindOnce(&AdBlockApiProof::SameDirectory,
+                         CefRefPtr<AdBlockApiProof>(this)));
     } else if (phase_ == 2) {
       Row(true, "explicit reload publishes generation 2");
       Row(CefSetOpenAdBlockListDirectory(context_, root_.Append("missing").value()),

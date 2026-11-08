@@ -2807,7 +2807,7 @@ Per document (renderer main thread -> matcher sequence):
 
 Per tab (UI thread):
   OpenAdBlockTabHelper (WebContentsUserData) counts; reset on primary main-frame commit.
-  CefBrowserHost::GetOpenAdBlockBlockedCount() reads it (§11 Step 6).
+  CefGetOpenAdBlockBlockedCount(browser) reads it (§11 Step 6).
 ```
 
 Thread rules (violations are Step-blocking bugs):
@@ -3154,6 +3154,11 @@ No virtual methods are added to `cef_request_context.h` or `cef_browser.h`.
   helper's blocked plus redirected count, or zero without a helper. There
   is no manual reset API; navigation owns resets.
 
+Enable/exclusion changes reset existing factories in the context's loaded
+storage partitions, using Chromium's proxy-transition path. Disabled/excluded
+documents have no proxy (§7.2), so this permits enabling without navigation.
+The next-request network proof remains part of real-App acceptance.
+
 All calls run on the browser-process UI thread. Mutators return false for
 an unavailable or uninitialized context; status returns null. They never
 wait for an engine build and never fall back to Default. The implementation
@@ -3374,7 +3379,7 @@ State this contract in the Step 8 PR even if the Swift file lands later:
   func enabledListIDs(for profile: ProfileID) -> [String]  // default ["EasyList", "EasyPrivacy"]
   func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID)  // publishes a complete generation + reload trigger
   func excludedDomains(for profile: ProfileID) -> [String]
-  func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID)  // persists exclusions.json + OEAdBlockController call
+  func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID)  // persists exclusions.json + adapter event
   func updateListsNow(profile: ProfileID) async  // §9.5 flow: conditional GETs, atomic writes, one reload trigger
   func debugInfo(profile: ProfileID) -> String
 }

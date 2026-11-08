@@ -689,6 +689,7 @@ void OpenAdBlockService::SetListDirectory(base::FilePath adblock_root) {
   adblock_root_.clear();
   latest_load_id_->fetch_add(1, std::memory_order_acq_rel);
   status_ = AdBlockStatus();
+  status_.match_cap_bytes = kOpenAdBlockMatchCapBytes;
   status_.excluded_domains.assign(excluded_domains_.begin(),
                                   excluded_domains_.end());
   PostToMatcher(base::BindOnce([](OpenAdBlockMatcher* matcher) {
