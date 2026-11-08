@@ -1246,3 +1246,6 @@ The row is labelled `FAIL DEMO`. A budget failure exits 1; a complete all-PASS
 run exits 0. `--only <workload>` is for diagnosis and marks JSON `partial`.
 Default invocation runs the complete inventory once. No unit tests, desktop
 input, cache purge, threshold edits or engine-tree builds are involved.
+
+A subset on the M1 can prove the command flow after the lead clears its screen
+hold. Label it M1 smoke; its timings do not establish the M5 budgets.

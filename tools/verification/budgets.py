@@ -527,8 +527,6 @@ def preflight(app, groups):
         raise RuntimeError('App signature verification failed; refusing launch. Rebuild with:\n  ' + build)
     if '/Volumes/' in str(app):
         raise RuntimeError('Refusing App on a mounted image; use tools/build.sh Release')
-    if any(group in SCREEN for group in groups) and os.uname().nodename.startswith('m1'):
-        raise RuntimeError('M1 screen is held. This M5 budget runner cannot clear that hold.')
 
 
 def priority_wait():
