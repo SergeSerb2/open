@@ -928,7 +928,9 @@ void FinishIdleProof(base::OnceCallback<void(bool)> done,
        " first=" + std::to_string(first) + " last=" + std::to_string(last) +
        " extra=" + std::to_string(last - first) + " process_cpu_us=" +
        std::to_string(ProcessCpuMicroseconds() - cpu));
-  std::move(done).Run(written && first == 1 && last == first);
+  const uint64_t expected = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      "open-adblock-idle-purge-off") ? 0 : 1;
+  std::move(done).Run(written && first == expected && last == first);
 }
 
 void ReadIdleProofEnd(base::OnceCallback<void(bool)> done,
@@ -981,12 +983,66 @@ void FinishBenchAfterWrite(base::OnceCallback<void(bool)> done, bool written) {
       base::Seconds(4));
 }
 
+void FinishResumeWrite(base::OnceCallback<void(bool)> done, bool written) {
+  Line("resume-burst verdict_written=" + std::to_string(written));
+  RecordOpenAdBlockMemoryPhase("after-resume");
+  std::move(done).Run(written);
+}
+
+void WriteResumeVerdicts(base::OnceCallback<void(bool)> done,
+                         std::string verdicts) {
+  const auto path = base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
+      "open-adblock-verdict-dump");
+  if (path.empty()) {
+    std::move(done).Run(false);
+    return;
+  }
+  AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce([](base::FilePath path, std::string verdicts) {
+        return !verdicts.empty() && base::WriteFile(path, verdicts);
+      }, path.AddExtensionASCII("resumed"), std::move(verdicts)),
+      base::BindOnce(&FinishResumeWrite, std::move(done)));
+}
+
+void RunResumeItems(scoped_refptr<OpenAdBlockMatcher> matcher,
+                    uint32_t cap,
+                    base::OnceCallback<void(bool)> done,
+                    std::vector<BenchItem> items) {
+  Line("resume-burst begin");
+  AdBlockMatcherTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&RunBench, matcher, std::move(items), cap),
+      base::BindOnce(&WriteResumeVerdicts, std::move(done)));
+}
+
+void ResumeAfterIdle(scoped_refptr<OpenAdBlockMatcher> matcher,
+                      uint32_t cap,
+                      base::OnceCallback<void(bool)> done,
+                      bool initial_ok) {
+  if (!initial_ok) {
+    std::move(done).Run(false);
+    return;
+  }
+  // Read fresh request inputs only after post-idle memory/count observations.
+  // The six-second memory point retains no corpus vector or verdict buffer.
+  // Reading these inputs performs no matcher activity or regex matching.
+  const auto path = base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
+      "open-adblock-bench");
+  AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&ReadBenchFile, path),
+      base::BindOnce(&RunResumeItems, matcher, cap, std::move(done)));
+}
+
 // The matcher never does file IO. The final callback waits for the private
 // verdict file on the build runner before it ends the real binary run.
 void BenchAndWrite(scoped_refptr<OpenAdBlockMatcher> matcher,
                    std::vector<BenchItem> items,
                    uint32_t cap,
                    base::OnceCallback<void(bool)> done) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          "open-adblock-idle-resume-burst")) {
+    done = base::BindOnce(&ResumeAfterIdle, matcher, cap, std::move(done));
+  }
   AdBlockMatcherTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE, base::BindOnce(&RunBench, matcher, std::move(items), cap),
       base::BindOnce(

@@ -10,6 +10,7 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #if !defined(OFFICIAL_BUILD)
+#include "base/command_line.h"
 #include "open/adblock/open_adblock_selftest.h"
 #endif
 #include "base/no_destructor.h"
@@ -142,6 +143,15 @@ scoped_refptr<base::SequencedTaskRunner> AdBlockBuildTaskRunner() {
 }
 
 void NoteAdBlockEngineActivity(base::TimeTicks now) {
+#if !defined(OFFICIAL_BUILD)
+  // Same-binary diagnostic control. Production builds have no switch or
+  // branch here; the enabled path still only records activity.
+  static const bool disabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      "open-adblock-idle-purge-off");
+  if (disabled) {
+    return;
+  }
+#endif
   // Trivially destructible: storage remains valid through process shutdown.
   static IdleReclaimer reclaimer;
   ActiveIdleReclaimer() = &reclaimer;
