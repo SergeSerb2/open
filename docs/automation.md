@@ -1203,7 +1203,7 @@ It lets the loopback suite check both normal and narrow banner copy and layout.
 the background. It is available only in automation builds. It does not inject
 appcast items or driver callbacks.
 
-`updater-act action=primary|later|close|banner|dismiss-banner|notes-link|alert-first|alert-second`
+`updater-act action=primary|cancel-download|later|close|banner|dismiss-banner|notes-link|alert-first|alert-second`
 uses the current update UI's actions. `action=cleanup` closes update surfaces.
 `action=settings-help|settings-check` invokes General's actual view-model actions.
 The loopback suite owns its app copies, signing fixtures, preferences, and port.

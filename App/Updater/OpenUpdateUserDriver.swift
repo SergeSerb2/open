@@ -140,7 +140,11 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     status.column.progress.isIndeterminate = progress == nil
     if let progress { status.column.progress.stopAnimation(nil); status.column.progress.doubleValue = min(1, max(0, progress)) }
     else { status.column.progress.startAnimation(nil) }
-    status.onPrimary = { [weak self] in self?.statusAction() }
+    let expectedPhase = phase
+    status.onPrimary = { [weak self] in
+      guard let self, self.phase == expectedPhase else { return }
+      self.statusAction()
+    }
     status.allowsClose = enabled && !hidden
     status.onClose = { [weak self] in
       guard let self else { return }
@@ -284,6 +288,9 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     case "settings-help": app.settingsPresenter.settings.general.openUpdatesHelp()
     case "settings-check": app.settingsPresenter.settings.general.checkForUpdates()
     case "primary": (status ?? updateWindow)?.column.primary.performClick(nil)
+    case "cancel-download":
+      guard phase == "downloading", let status else { return false }
+      status.column.primary.performClick(nil)
     case "later":
       guard let window = updateWindow, !window.column.secondary.isHidden else { return false }
       window.column.secondary.performClick(nil)

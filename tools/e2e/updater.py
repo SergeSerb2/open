@@ -438,7 +438,7 @@ def exercise_ui(app, opts, results, original):
         and all(0 <= s.get('progress', -1) <= 1 and not s.get('indeterminate') for s in steps)
         and 'Cancel' in ax(app, number).get('text', []), 'steps': steps}
     results['A2_status_snapshots'] = {'ok': True, 'paths': capture_pair(app, opts, 'status-download', number)}
-    app.call('updater-act', action='primary')
+    assert app.call('updater-act', action='cancel-download'), 'download finished before Cancel could be tested'
     cancelled = wait(lambda: ui(app), lambda s: s.get('statusWindow') == 0, 'download Cancel left status open')
     results['A2_cancel_download'] = {'ok': cancelled.get('statusWindow') == 0, 'ui': cancelled}
 
@@ -601,12 +601,14 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                 results['A3_without_notes'] = {'ok': state.get('notes') == '' and 'Download' in row.get('text', []),
                     'ax': row, 'paths': capture_pair(app, opts, 'has-update-no-notes', state['updateWindow'])}
             elif variant == 'critical':
+                blocked = app.call('updater-act', action='later') is False
                 app.call('updater-act', action='close')
-                results['A3_critical'] = {'ok': 'Remind me Later' not in row.get('text', [])
+                results['A3_critical'] = {'ok': blocked and 'Remind me Later' not in row.get('text', [])
                     and ui(app).get('updateWindow') == state['updateWindow'], 'ax': row}
             elif variant == 'minimum':
+                blocked = app.call('updater-act', action='later') is False
                 app.call('updater-act', action='close')
-                results['A3_minimum'] = {'ok': 'Remind me Later' not in row.get('text', [])
+                results['A3_minimum'] = {'ok': blocked and 'Remind me Later' not in row.get('text', [])
                     and ui(app).get('updateWindow') == state['updateWindow'], 'ax': row}
             elif variant == 'information-only':
                 app.call('updater-act', action='primary')
