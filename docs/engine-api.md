@@ -98,7 +98,7 @@ The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) Â
 | `userScripts`, `addUserScript(_:)`, `removeUserScript(identifier:)`, `removeAllUserScripts()` | Boosts and Zap. `OEUserScript`: JavaScript or a style sheet, document start or end, Chrome match patterns, main frame only. Page world by default; Open-world JavaScript runs at document start in the main frame. Changes reach new documents, including replacement renderer processes (0602). |
 | `requestFilter` | `(OEResourceRequest) -> OERequestDecision`, called on the network thread for every request of the context, including service workers. Allowed requests get no per-request handler. |
 | `permissionState(for:origin:)`, `setPermissionState(_:for:origin:)` | Chromium content settings for Site Control Center |
-| `clearBrowsingData(origin:)` | With an origin: the host cookies of that URL's host, any path (`CefCookieManager::DeleteCookies` with a URL and no name; `Domain=` cookies stay), and nothing else: the HTTP cache is untouched. With nil: every cookie and the whole HTTP cache. Per-site cache clearing (Site Control E2) needs a fork patch: DevTools `Storage.clearDataForOrigin` has no HTTP cache type and CEF's `ClearHttpCache` clears every site. |
+| `clearBrowsingData(origin:)` | With an origin: the host cookies of that URL's host, any path (`CefCookieManager::DeleteCookies` with a URL and no name; `Domain=` cookies stay), and nothing else: the HTTP cache is untouched. With nil: every cookie and the whole HTTP cache. Use `clearSiteData(origin:types:completion:)` for per-site cookies, HTTP cache or storage (E2, below). |
 | `clearBrowsingData(_:from:to:completion:)` | Per-Profile Chromium history, cookies and site data, cached files, and download records, from begin through end, inclusive (Chromium semantics). Requires begin < end. Uses Chromium's browsing-data remover and reports its real completion or an error. Site data includes localStorage, IndexedDB, service workers and cache storage. Downloaded files and Open's separate HistoryStore are not removed by this API. |
 | `websiteColorScheme` | `.automatic`, `.light`, `.dark` (EP-9a): Chrome's browser color scheme of the context's profile (`CefRequestContext::SetChromeColorScheme`, user color transparent). Chrome derives `prefers-color-scheme` from it (`GetPreferredColorScheme` in `chrome_content_browser_client.cc`); open pages update without a reload. Chrome keeps the value in the profile's prefs, so the first set always reaches Chromium, later sets only on a change. Chrome's default incognito policy follows device appearance. The setter also calls `CefSetWebsiteColorScheme` (fork 0505, EP-9b, #158/#164), which sets the web preference on both styles and after navigation. |
 | `downloads`, `delegate` | `browserContext(_:decideDestinationFor:suggestedFilename:completion:)`, `browserContext(_:downloadDidUpdate:)`; `OEDownload` has state, bytes, speed, `cancel/pause/resume` |
@@ -449,3 +449,46 @@ and invalid-argument drops are counted without IPC.
 
 OpenWeb mirrors this as `ScriptWorld`, `UserScript.world`,
 `WebContent.evaluateJavaScript(_:in:)`, and `onOpenWorldMessage`.
+
+
+## Site settings, data and connection security (E1/E2/E3)
+
+`OESiteControl.h` adds these main-thread APIs. `App/EngineSiteControlBridge.swift`
+mirrors them through OpenWeb; OpenKit imports no CEF types.
+
+| OpenEngine | OpenWeb | Behavior |
+|---|---|---|
+| `changedSiteSettings(origin:) -> [OESiteSetting]` | `WebProfile.changedSiteSettings(origin:) -> [WebSiteSetting]` | Effective per-origin exceptions that differ from the profile default. Each `kind` is Chromium's registry name, such as `javascript`, `images` or `cookies`. Every scalar ContentSetting in `ContentSettingsRegistry` is visited, including future types; this is not the older permission whitelist. |
+| `setSiteSetting(_:state:origin:) -> Bool` | `setSiteSetting(_:kind:origin:) -> Bool` | `allow`, `block`, `ask`, `session`. Each kind accepts only its registered states. Returns false for an invalid origin, kind/state, or an uninitialized context. A value equal to the global default is omitted from the returned list, but the API has no `default` state to clear an exception. Reset permissions remains a follow-up. |
+| `clearSiteData(origin:types:completion:)` | `clearSiteData(origin:kinds:) async throws` | Bits 1 cookies, 2 cache, 4 storage (`OESiteDataType` / `WebSiteDataKinds`). Empty kinds succeeds; invalid arguments fail. Completion runs once after every selected backend finishes; a backend failure can leave a partial result. Safe before profile initialization; completion may close the profile. |
+| `securityLevel` (`engineSecurityLevel` in Swift) | `WebContent.securityLevel: WebSecurityLevel` | `secure`, `neutral`, `insecure`, `dangerous`, `mixedContent`. Chrome's existing visible-security helper supplies certificate/mixed-content flags and available Safe Browsing verdicts. Major certificate errors take precedence; HTTP, including loopback, is insecure; non-network pages are neutral. This API does not add a Safe Browsing service or policy. |
+| `certificateChain` (`engineCertificateChain` in Swift) | `WebContent.certificateChain: [SecCertificate]` | Chromium's visible TLS chain as `SecCertificateRef` objects, leaf first. Empty on a non-TLS page or refusal. Maximum 32 certificates, 256 KiB per certificate, 1 MiB total. |
+
+Observe `OEWebContentChangeSecurity` / `WebContentChange.security` (bit **16**,
+next after main's selection bit 15), then read both security properties again.
+The native delegate notification is deferred to the next main-loop turn so
+that a delegate may close the page without deleting the active Chromium observer.
+
+`cef_site_control.h` and `open/browser/page/open_site_control.cc` are CEF overlay
+files. They need no new upstream patch: `OpenPageState` already observes each
+WebContents. HTTP cache and DOM/shared storage removal use `BrowsingDataRemover`
+with an exact `url::Origin` and `kOriginInAllContexts`. Storage includes local
+storage, IndexedDB, CacheStorage, service workers, file systems and background
+fetch. HTTP cache is a separate kind from CacheStorage.
+
+Cookies cannot use that origin filter: Chromium's
+`BrowsingDataFilterBuilder::BuildCookieDeletionFilter` rejects `AddOrigin`,
+while an eTLD+1 filter would remove unrelated sibling hosts. The overlay instead
+enumerates canonical cookies and deletes matches for the requested host across
+paths and partitions. This includes parent Domain cookies, which are shared by
+their nature; unrelated host-only cookies stay intact. Cookies also intrinsically
+share schemes and ports. Enumeration refuses more than 10,000 cookies or 64 MiB
+of cookie strings. Origins are capped at 16,384 UTF-16 units, kinds at 128 and
+states at 16. Alternate OpenWeb backends return no exceptions, refuse setters,
+and throw `unsupported` for data removal until they implement these APIs.
+
+The `sitedata` real-App suite covers JavaScript/images, session and invalid/empty
+requests, separate cookie/cache/storage deletion with a second origin preserved,
+server-hit proof of HTTP cache eviction, HTTP/neutral/valid HTTPS/self-signed
+security, TLS certificates and the security change bit. Current distribution
+fingerprints, runtime results and loads are recorded in the PR evidence.
