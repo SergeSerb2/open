@@ -194,7 +194,7 @@ def run(factory, results, tmp, h):
             def cleared(value):
                 return value['outlineWidth'] == '0px' and value['border'] == '0px'
             def reload():
-                app.call('navigate', tab=tab, url=origin); app.call('wait', tab=tab)
+                app.call('devtools', tab=tab, method='Page.reload'); app.call('wait', tab=tab)
             baseline = style()
             first = settings_import()
             assert h.wait_until(lambda: boosted(style()), timeout=10, step=.05)
