@@ -114,6 +114,7 @@ class OEDevToolsClient;
 @class OEMediaState;
 
 @interface OEWebContent ()
+- (void)oe_openWorldMessage:(CefRefPtr<CefProcessMessage>)message;
 @property(nonatomic, readonly) CefRefPtr<CefBrowser> oe_browser;
 /// The fork's media controller, the current OEMediaSession, pending PiP
 /// requests and the tab volume (OEMediaSession.mm; media-pip EM-1b).

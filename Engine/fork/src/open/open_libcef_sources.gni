@@ -6,6 +6,8 @@
 # wired in by Engine/fork/patches/cef/0302-open-hosted-tabs.patch. They get
 # libcef's configs and deps, so they may include cef/libcef and chrome headers.
 open_libcef_mac_sources = [
+  "//open/browser/page/open_site_control.cc",
+  "//open/renderer/open_script_world.cc",
   "//open/browser/extensions/open_extension_window_hooks.h",
   "//open/browser/extensions/open_omnibox.cc",
   "//open/browser/extensions/open_extension_manager.mm",
@@ -25,6 +27,7 @@ open_libcef_mac_sources = [
   "//open/browser/memory/open_navigation_history.h",
   "//open/browser/memory/open_page_lifecycle.cc",
   "//open/browser/page/open_history_swipe_hooks.h",
+  "//open/browser/page/open_browser_info.cc",
   "//open/browser/page/open_history_swipe_mac.mm",
   "//open/browser/page/open_notification_hooks.h",
   "//open/browser/page/open_notifications.cc",
@@ -47,6 +50,7 @@ open_libcef_mac_sources = [
 
 # Open GN targets libcef_static links (also wired in by patch 0302).
 open_libcef_deps = [
+  "//chrome/browser/ssl",
   # Native ad blocking: the per-Profile service (docs/plans/adblock-fork.md).
   "//open/adblock",
 

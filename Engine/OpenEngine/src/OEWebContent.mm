@@ -218,6 +218,11 @@ class OEPageHandler : public CefOpenPageHandler {
                           bool has_selection) override {
     [content_ oe_selectionChanged:has_selection];
   }
+  void OnSecurityStateChanged(CefRefPtr<CefBrowser> browser) override {
+    // Defer delegate work; it may close the WebContents observing this event.
+    OEWebContent* content = content_;
+    dispatch_async(dispatch_get_main_queue(), ^{ [content oe_notify:OEWebContentChangeSecurity]; });
+  }
   void OnHistorySwipe(CefRefPtr<CefBrowser> browser,
                       int phase,
                       int direction,
@@ -260,6 +265,7 @@ class OESelectionCallback : public CefSelectionCallback {
 #pragma mark - OEWebContent
 
 typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable);
+typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 
 @implementation OEWebContent {
   OEWebContentConfiguration* _configuration;
@@ -281,6 +287,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   CefRefPtr<CefRegistration> _devToolsRegistration;
   NSMutableDictionary<NSNumber*, OEDevToolsCompletion>* _devToolsCallbacks;
   int _nextDevToolsId;
+  NSMutableDictionary<NSNumber*, OEOpenWorldCompletion>* _openWorldCallbacks;
+  int _nextOpenWorldID;
   // The DevTools window's own browser (front end), while it is open.
   CefRefPtr<OEDevToolsClient> _devToolsFrontend;
   // The latest panel request through the front end (EP-4b).
@@ -654,7 +662,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   [_oe_hostBrowser oe_setNeedsTabStripSync];
   [self oe_showPageIfVisible];
   [self oe_notify:OEWebContentChangeLive | OEWebContentChangeURL |
-                  OEWebContentChangeLoading];
+                  OEWebContentChangeLoading | OEWebContentChangeSecurity];
 }
 
 - (void)oe_browserClosed {
@@ -667,12 +675,17 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                               userInfo:nil]);
   }
   [_devToolsCallbacks removeAllObjects];
+  NSArray* pending = _openWorldCallbacks.allValues;
+  [_openWorldCallbacks removeAllObjects];
+  for (OEOpenWorldCompletion done in pending) {
+    done(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorWebContentClosed userInfo:nil]);
+  }
   _chromeHost = nullptr;
   _adoptedBrowserView = nullptr;
   _closeRequested = YES;
   [self oe_resetMediaDetaching:YES];
   [[OEEngine shared] oe_unregisterWebContent:self];
-  [self oe_notify:OEWebContentChangeLive];
+  [self oe_notify:OEWebContentChangeLive | OEWebContentChangeSecurity];
   _closingSelf = nil;
 }
 
@@ -1172,6 +1185,94 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   done(dict, nil);
+}
+
+- (void)oe_openWorldMessage:(CefRefPtr<CefProcessMessage>)message {
+  auto args = message->GetArgumentList();
+  if (message->GetName() == "oe.open.message") {
+    NSString* type = OEString(args->GetString(0));
+    NSString* payload = OEString(args->GetString(1));
+    NSString* document = OEString(args->GetString(2));
+    // Re-check at the browser boundary. Renderer limits run before IPC.
+    if ([type lengthOfBytesUsingEncoding:NSUTF8StringEncoding] +
+        [payload lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 65536 ||
+        document.length > 128) return;
+    auto callback = self.onOpenWorldMessage;
+    id<OEWebContentDelegate> delegate = self.delegate;
+    if ([delegate respondsToSelector:@selector(webContent:didReceiveOpenWorldMessage:payloadJSON:documentID:)]) {
+      [delegate webContent:self didReceiveOpenWorldMessage:type
+               payloadJSON:payload documentID:document];
+    }
+    if (callback) callback(type, payload, document);
+    return;
+  }
+  NSNumber* request = @(args->GetInt(0));
+  OEOpenWorldCompletion done = _openWorldCallbacks[request];
+  if (!done) return;
+  [_openWorldCallbacks removeObjectForKey:request];
+  NSString* error = OEString(args->GetString(2));
+  if (error.length) {
+    done(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorJavaScriptException
+        userInfo:@{NSLocalizedDescriptionKey:error}]);
+  } else {
+    NSData* data = [OEString(args->GetString(1)) dataUsingEncoding:NSUTF8StringEncoding];
+    NSError* parseError = nil;
+    id value = [NSJSONSerialization JSONObjectWithData:data
+        options:NSJSONReadingFragmentsAllowed error:&parseError];
+    done(value, parseError);
+  }
+}
+
+- (void)oe_sendOpenWorldRequest:(const char*)name source:(NSString*)source
+                   completion:(OEOpenWorldCompletion)completion {
+  if (!_browser || _closeRequested || source.length > 1024 * 1024 ||
+      _openWorldCallbacks.count >= 64) {
+    completion(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorWebContentClosed
+        userInfo:@{NSLocalizedDescriptionKey:@"Open-world request unavailable or over limit"}]);
+    return;
+  }
+  // OECef uses a C string. Refuse text that would truncate or fail conversion
+  // before it can become a different valid JavaScript program.
+  if (![source canBeConvertedToEncoding:NSUTF8StringEncoding] ||
+      [source rangeOfCharacterFromSet:[NSCharacterSet characterSetWithRange:NSMakeRange(0, 1)]].location != NSNotFound) {
+    completion(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorJavaScriptException
+        userInfo:@{NSLocalizedDescriptionKey:@"Open-world source contains invalid Unicode or NUL"}]);
+    return;
+  }
+  if (!_openWorldCallbacks) _openWorldCallbacks = [NSMutableDictionary dictionary];
+  // Never reuse request IDs; refuse exhaustion instead of accepting stale replies.
+  if (_nextOpenWorldID == INT_MAX) {
+    completion(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorWebContentClosed userInfo:nil]);
+    return;
+  }
+  NSNumber* request = @(++_nextOpenWorldID);
+  _openWorldCallbacks[request] = [completion copy];
+  auto msg = CefProcessMessage::Create(name);
+  msg->GetArgumentList()->SetInt(0, request.intValue);
+  msg->GetArgumentList()->SetString(1, OECef(source));
+  _browser->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
+  __weak OEWebContent* weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    OEWebContent* page = weakSelf;
+    if (!page) return;
+    OEOpenWorldCompletion done = page->_openWorldCallbacks[request];
+    [page->_openWorldCallbacks removeObjectForKey:request];
+    if (done) done(nil, [NSError errorWithDomain:OEErrorDomain code:OEErrorJavaScriptException
+        userInfo:@{NSLocalizedDescriptionKey:@"Open-world request timed out (document may have changed)"}]);
+  });
+}
+
+- (void)evaluateJavaScript:(NSString*)script inWorld:(OEScriptWorld)world
+               completion:(void (^)(id, NSError*))completion {
+  if (world == OEScriptWorldPage) {
+    [self evaluateJavaScript:script completion:completion];
+  } else {
+    [self oe_sendOpenWorldRequest:"oe.open.eval" source:script completion:completion];
+  }
+}
+
+- (void)openWorldMessageStatisticsWithCompletion:(void (^)(NSDictionary*, NSError*))completion {
+  [self oe_sendOpenWorldRequest:"oe.open.stats" source:@"" completion:completion];
 }
 
 - (void)evaluateJavaScript:(NSString*)script

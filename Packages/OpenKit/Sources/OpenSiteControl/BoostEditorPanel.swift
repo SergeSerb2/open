@@ -57,16 +57,16 @@ public final class BoostEditorController: NSObject {
         defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,object: defaults,queue: .main) { [weak view] _ in MainActor.assumeIsolated { view?.refresh() } }
         colorTask = Task { [weak session] in await session?.prepareColors() };return true
     }
-    public func close(animated: Bool = false) {
+    public func close(animated: Bool = false, returnFocus: Bool = true) {
         guard let panel else { return }
         generation += 1;modeGeneration += 1
         if let alert = activeAlert { panel.endSheet(alert.window,returnCode: .cancel);activeAlert = nil }
         colorTask?.cancel();colorTask = nil;view?.closeAdvanced();session?.finish()
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver);self.defaultsObserver = nil }
         self.panel = nil;view = nil;session = nil
-        let finish: @MainActor @Sendable ()->Void = { [weak panel,weak parent] in guard let panel else { return };parent?.removeChildWindow(panel);panel.orderOut(nil);panel.close();if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) } }
+        let finish: @MainActor @Sendable ()->Void = { [weak panel,weak parent] in guard let panel else { return };parent?.removeChildWindow(panel);panel.orderOut(nil);panel.close();if returnFocus && parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) } }
         if animated { NSAnimationContext.runAnimationGroup { context in context.duration = Motion.boostEditorCloseDuration;panel.animator().alphaValue = 0 } completionHandler: { MainActor.assumeIsolated { finish() } } } else { finish() }
-        if parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) };onClose?()
+        if returnFocus && parent?.isVisible == true { parent?.makeKeyAndOrderFront(nil) };onClose?()
     }
     public func boundContextDidChange(tabID: ItemID,profileID: ProfileID) { if let session,session.context.tabID != tabID || session.context.profileID != profileID { close() } }
     public func pageDidNavigate(tabID: ItemID,url: URL?) { if session?.context.tabID == tabID { session?.updatePageURL(url) } }
@@ -74,6 +74,12 @@ public final class BoostEditorController: NSObject {
     public func boundTabDidClose(_ id: ItemID) { if session?.context.tabID == id { close() } }
     public func profileDidClose(_ id: ProfileID) { if session?.context.profileID == id { close() } }
     public func layout(contentRect: CGRect) { if let view { resize(height: view.frame.height) } }
+    /// OEApplication offers Command keys to the browser before NSPanel.sendEvent.
+    /// Keep the editor's private undo stack ahead of the page's edit commands.
+    @discardableResult public func handleKeyDown(_ event: NSEvent) -> Bool {
+        guard let panel, event.window === panel, panel.isKeyWindow else { return false }
+        return handleKey(event)
+    }
     private func resize(height: CGFloat) {
         guard let panel,let parent else { return }
         if view?.isCodeMode == true { return }

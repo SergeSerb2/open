@@ -1,0 +1,27 @@
+diff --git a/cef/libcef/renderer/render_frame_observer.cc b/cef/libcef/renderer/render_frame_observer.cc
+index 6013d1357..263136f87 100644
+--- a/cef/libcef/renderer/render_frame_observer.cc
++++ b/cef/libcef/renderer/render_frame_observer.cc
+@@ -161,7 +161,10 @@ void CefRenderFrameObserver::DidCreateScriptContext(
+   }
+ 
+   // Do this last, in case the client callback modified the window object.
+-  framePtr->OnContextCreated(context);
++  // Queued frame actions belong to the main document, not isolated worlds.
++  if (world_id == 0) {
++    framePtr->OnContextCreated(context);
++  }
+ }
+ 
+ void CefRenderFrameObserver::WillReleaseScriptContext(
+@@ -196,7 +199,9 @@ void CefRenderFrameObserver::WillReleaseScriptContext(
+     handler->OnContextReleased(browserPtr.get(), framePtr.get(), contextPtr);
+   }
+ 
+-  framePtr->OnContextReleased();
++  if (world_id == 0) {
++    framePtr->OnContextReleased();
++  }
+ 
+   CefV8ReleaseContext(context);
+ }

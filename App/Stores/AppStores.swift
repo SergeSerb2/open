@@ -12,6 +12,7 @@ final class AppStores: ProfileDataOwner {
   private var histories: [ProfileID: HistoryStore] = [:]
   private var currentProfile: ProfileID?
   private var currentSuggest: SuggestEngine?
+  lazy var boosts = AppBoosts(app: app)
   private var adBlockStorage: AdBlockStore?
   private var attemptedAdBlock = false
   var existingAdBlock: AdBlockStore? { adBlockStorage }
