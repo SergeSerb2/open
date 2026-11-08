@@ -926,7 +926,17 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 try:
                     state = app.call('incognito-state', private=True)
                     assert state['parent'] == parent, 'private parent differs from the focused Space Profile'
-                    private_before = app.call('credentials')
+                    # A non-default parent's OTR context is created asynchronously.
+                    # The empty private window can be visible before its store is ready.
+                    def private_store_ready():
+                        try:
+                            return app.call('credentials')
+                        except RuntimeError as error:
+                            if str(error) == 'credentials: no profile context':
+                                return None
+                            raise
+                    private_before = wait(private_store_ready, timeout=10, step=.1)
+                    assert private_before, 'private Profile context did not become ready'
                     assert private_before['logins'] == 0
                     # Incognito enables HTTPS-First for public HTTP origins.
                     # Use the real loopback HTTP form here; the dedicated
