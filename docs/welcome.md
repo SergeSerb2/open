@@ -39,11 +39,28 @@ Cards form one keyboard and accessibility element each. Footer buttons open the
 existing Essential Shortcuts and Settings windows. Text can wrap within a card so
 all of the lead's exact copy remains readable in narrow windows.
 
+The centered column is at most 960 pt wide. A 76 pt header and two 80 pt card-text
+blocks leave room for both rows and the footer in a content viewport of 640 pt or
+higher. The header starts 56 pt down through 820 pt content height, then 80 pt.
+Illustrations shrink to 120 pt and grow up to the column's half-width at 16:10.
+Their scenes scale uniformly and remain centered. The footer has 24 pt above it
+and at least 32 pt below it. Shorter viewports retain native scrolling.
+
+Illustrations use the content background with 4% white contrast in dark appearance
+and 6% black in light. Mock sidebars use the Space's theme tint at 55% opacity;
+plain rows use white at 14% or black at 10%. Active elements use `#3D6BFF` at 90%
+with white text. Other mock text uses white or black at 75%. The only mock labels
+are `+ New Tab` and the second Space name, `Home`.
+
 The Debug/automation socket command `welcome` returns `visible`, `activeCard`
 (1–4 or null), `playlist` (`playing`/`stopped`), `animating`, actual card AX labels
 and actions, animation and pending-completion counts, played card order, native
 host count, engine content creation count, and count of engine pages with internal
-URLs. Actions: `insert`, `replay card=N`, `hover card=N`, `reveal card=N`, and
+URLs. Its `layout` field reports actual viewport, document, card, text, and footer
+frames, measured text size, rendered layer colors/labels, and scene scale. The
+suite checks compact layout, contrast, permitted labels, and dark/light captures
+at 1280×800 and 1000×700, plus the 640 pt content boundary. Actions:
+`insert`, `replay card=N`, `hover card=N`, `reveal card=N`, and
 `link link=shortcuts|settings`. Replay invokes the real accessibility action;
 hover delivers an App-local tracking event. Invalid cards and hidden replay fail.
 Each card keeps one tracking area. Repeated entered events beneath a stationary
