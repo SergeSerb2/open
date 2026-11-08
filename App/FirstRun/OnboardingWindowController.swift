@@ -11,8 +11,13 @@ private final class OnboardingDimWindow: NSWindow {
 /// Return belongs to the setup primary action even when a choice has focus.
 private final class OnboardingWindow: NSWindow {
   var setupPrimary: (@MainActor () -> Void)?
+  var setupBack: (@MainActor () -> Void)?
   override func sendEvent(_ event: NSEvent) {
     let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+    if event.type == .keyDown, modifiers.isEmpty, event.keyCode == 53, let setupBack {
+      if !event.isARepeat { setupBack() }
+      return
+    }
     // NSButton consumes plain Return as focus traversal before key equivalents.
     // Keep the primary action at the native window entry point for every field.
     if event.type == .keyDown, modifiers.isEmpty, event.keyCode == 36 || event.keyCode == 76,
@@ -133,6 +138,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     window?.makeFirstResponder(content.view)
     (window as? OnboardingWindow)?.setupPrimary = { [weak content] in
       (content as? OnboardingStepsController)?.performPrimaryAction()
+    }
+    (window as? OnboardingWindow)?.setupBack = { [weak content] in
+      (content as? OnboardingStepsController)?.back()
     }
     (content as? OnboardingStepsController)?.didAttach()
   }
