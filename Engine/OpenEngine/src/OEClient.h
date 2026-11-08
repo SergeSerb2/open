@@ -26,6 +26,9 @@ class OEClient : public CefClient,
   void Detach() { view_ = nil; }
 
   // CefClient
+  bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefFrame> frame, CefProcessId source_process,
+      CefRefPtr<CefProcessMessage> message) override;
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
   CefRefPtr<CefDisplayHandler> GetDisplayHandler() override { return this; }
   CefRefPtr<CefLoadHandler> GetLoadHandler() override { return this; }

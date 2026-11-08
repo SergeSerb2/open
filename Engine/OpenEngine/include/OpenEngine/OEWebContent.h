@@ -52,6 +52,8 @@ typedef NS_OPTIONS(NSUInteger, OEWebContentChange) {
   /// The page's text selection became empty or non-empty (`hasSelection`);
   /// not sent for caret moves that keep that state (page-platform EP-3).
   OEWebContentChangeSelection = 1u << 15,
+  /// Visible connection security or certificate chain changed.
+  OEWebContentChangeSecurity = 1u << 16,
 };
 
 /// Phases of Chromium's history swipe (page-platform EP-1).
@@ -78,6 +80,14 @@ typedef NS_ENUM(NSInteger, OEWebContentCrashState) {
 NS_SWIFT_UI_ACTOR
 @protocol OEWebContentDelegate <NSObject>
 @optional
+/// A message from the Open isolated world. Called on the main thread.
+/// documentID is Chromium's document token; same-document navigation keeps it.
+/// A callback may close the page; the engine retains no iterator across it.
+- (void)webContent:(OEWebContent*)webContent
+    didReceiveOpenWorldMessage:(NSString*)type
+                  payloadJSON:(NSString*)payloadJSON
+                   documentID:(NSString*)documentID
+    NS_SWIFT_NAME(webContent(_:didReceiveOpenWorldMessage:payloadJSON:documentID:));
 /// State changed. Read the new values from the web content's properties.
 - (void)webContent:(OEWebContent*)webContent
          didChange:(OEWebContentChange)changes
@@ -278,9 +288,20 @@ OE_EXPORT @interface OEWebContent : NSObject
 - (void)stopLoading;
 
 #pragma mark JavaScript
-/// Evaluates `script` in the main frame's main world (DevTools protocol
-/// Runtime.evaluate with awaitPromise and a user gesture). The result is a
-/// JSON-compatible Foundation object, or NSNull.
+/// Open evaluates in the main frame's current document without a user gesture.
+/// Both worlds await promises and return JSON values. Open results cap at 1 MiB.
+- (void)evaluateJavaScript:(NSString*)script
+                  inWorld:(OEScriptWorld)world
+               completion:(void (^NS_SWIFT_UI_ACTOR)(id _Nullable, NSError* _Nullable))completion
+    NS_SWIFT_NAME(evaluateJavaScript(_:inWorld:completion:));
+/// Same delivery as the delegate, for OpenWeb consumers. Set nil to unsubscribe.
+@property(nonatomic, copy, nullable) void (^onOpenWorldMessage)(NSString* type, NSString* payloadJSON, NSString* documentID);
+/// Per-page renderer counters (accepted, oversized, rateLimited, invalid).
+- (void)openWorldMessageStatisticsWithCompletion:
+    (void (^NS_SWIFT_UI_ACTOR)(NSDictionary* _Nullable, NSError* _Nullable))completion
+    NS_SWIFT_NAME(openWorldMessageStatistics(completion:));
+/// Evaluates in the main frame's page world through DevTools Runtime.evaluate,
+/// with awaitPromise and a user gesture. Returns JSON-compatible values or NSNull.
 - (void)evaluateJavaScript:(NSString*)script
                 completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(
                                id _Nullable result,

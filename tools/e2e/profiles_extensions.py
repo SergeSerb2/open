@@ -7,15 +7,18 @@ import json
 import math
 import os
 from pathlib import Path
+import runpy
 import statistics
 import subprocess
 import time
 
-from extensions_p3 import pack_probe
+pack_probe = runpy.run_path(str(Path(__file__).with_name("extensions_p3.py")))["pack_probe"]
 
 
-def run(factory, results, tmp, root, wait):
-    from engine_e2e import _fixture_server, _restore_defaults, process_cpu_window
+def run(factory, results, tmp, root, wait, engine):
+    _fixture_server = engine._fixture_server
+    _restore_defaults = engine._restore_defaults
+    process_cpu_window = engine.process_cpu_window
     app = None
     saved = {}
     server = None
@@ -200,7 +203,7 @@ def run(factory, results, tmp, root, wait):
         row('shortcuts_key_profile', ledgers == [{window_a: 1, window_b: 0}, {window_a: 1, window_b: 1}], ledgers=ledgers)
         # Reuse the existing Space-switch gate: native switcher, the installed
         # 0.20 s critically damped spring, and <=0.5 pt remainder at 0.30 s.
-        from engine_e2e import scheduled_spring
+        scheduled_spring = engine.scheduled_spring
         focus(window_a)
         app.call('space', space=work_space)
         attached = strip_ids()
