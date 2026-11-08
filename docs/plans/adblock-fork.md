@@ -4707,11 +4707,12 @@ network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 
 ### Step 5 as built (2026-11-08, code checkpoint; runtime unverified)
 
-Branch `s13/step5-cosmetics` starts at Step 4 `dc7b985a`. No engine root
-has been assigned to E4. This checkpoint is source work only: no engine
-apply, GN generation, build, cefsimple launch or App acceptance has run.
-Step 5 remains **in progress**. Step 4 remains the stack base; its entry
-gate is waived for code preparation only by the E4 brief.
+Branch `s13/step5-cosmetics` started at Step 4 `dc7b985a` and merged
+Step 4 `f06011e7` before its first build. The lead assigned
+`~/Developer/open-engine-s13b` at 14:00. Engine apply and GN generation
+passed there; the first build is running under the global engine lock.
+Step 5 remains **in progress**. No cefsimple or App acceptance has run;
+the lead's 14:08 screen hold blocks windowed checks until cleared.
 
 - `mojom/open_adblock.mojom` carries the initial sorted hide selectors,
   generic exceptions and `generichide`. `OpenAdBlockCosmeticsHost` is a
@@ -4819,10 +4820,11 @@ reply cap is independent of the 500-token input cap.
 | Patch syntax/application against pinned public CEF source fixture | PASS (0311 and 0901; static only) |
 | Extracted fixed observer `node --check` | PASS (syntax only) |
 | Rust sanitizer review against §8.3 and Step 2 refinements | Source reviewed; unchanged; runtime verification pending |
-| GN/build, C-1…C-8/C-10, C-4 ×10, install-before-execute | PENDING: no assigned root; C-9 stays reserved |
+| Engine apply / GN generation | PASS in assigned s13b: 12 patches applied, 27 retained, 36 overlay files copied; load 51.21/46.27/45.55 at lock acquisition |
+| Build, C-1…C-8/C-10, C-4 ×10, install-before-execute | Build running; runtime PENDING screen clearance; C-9 stays reserved |
 | Contended C-G1/C-G2, T/R/check count, C-G3, worst-case payload | PENDING; no timing result or load receipt exists |
 | Receiver drop, quit-during-load ×5 | PENDING |
-| Real-App EasyList on/excluded/off controls and `adblock` + `page` suites | PENDING: lead must authorize this engine in the App |
+| Real-App EasyList on/excluded/off controls and `adblock` + `page` suites | Authorized with s13b distribution; PENDING build and screen clearance |
 
 **Fixture errata.** Remove the domain-specific `.late-ad` rule so C-4
 requires the generic observer. The initial generic element uses

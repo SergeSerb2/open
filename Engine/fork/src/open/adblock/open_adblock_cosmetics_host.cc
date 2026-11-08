@@ -65,6 +65,11 @@ class OpenAdBlockCosmeticsHost final : public mojom::AdBlockCosmetics {
     reply->generichide = resources.generichide;
     VLOG(1) << "OpenAdBlock: document cosmetics selectors="
             << reply->hide_selectors.size()
+            << " dropped_procedural=" << resources.dropped_procedural
+            << " dropped_unsafe=" << resources.dropped_unsafe
+            << " dropped_style=" << resources.dropped_style
+            << " dropped_remove=" << resources.dropped_remove
+            << " dropped_scriptlet=" << resources.dropped_scriptlet
             << " dropped_over_cap=" << resources.dropped_over_cap;
     std::move(callback).Run(std::move(reply));
   }
