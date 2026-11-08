@@ -753,8 +753,19 @@ Negative proof comes from `Open-2026-11-06-203144.ips`
 unblock after TabFeatures destruction). The crashing `20b0f936` framework
 is permanently refused and was not replayed. These reports and the new
 per-row receipts are retained in the local D5/D6 handoff directories.
-Full password and regression acceptance is recorded separately from
-these focused results.
+The full real-App password suite on this same distribution passes 77 rows.
+C-2 stays M1-only by rule and PW-KC1 stays a user Keychain hand check.
+The regression runs pass 26 feature rows, 85 page rows and 71 extension UI
+rows. Existing page/extension prerequisite gates remain listed separately
+in the PR's row/load table; intentional crash rows were not run on M5.
+With main's App code and no save-prompt delegate, a real synthetic sign-in
+records one Ignored offer (PasswordManager.SaveUIDismissalReason bucket 0),
+shows no sheet or Chromium bubble, leaves the App alive and produces no
+new crash report. Every selected run passes owned-process cleanup.
+The main-App acceptance was rebuilt after merging main `eb49e472`; no
+compiled fork source changed from the repaired distribution. The shared
+harness now supports bounded direct-child runs and first-App-death stop
+without changing main's onboarding or Welcome dispatch.
 
 ## Tab sleeping (memory fork, Section 8 PR #158)
 
