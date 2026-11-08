@@ -81,6 +81,7 @@ public final class IntroView: NSView {
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
     public let reduceMotion: Bool
+    private let useScreenBlend: Bool
     public var onGetStarted: (@MainActor () -> Void)?
     public private(set) var animationStartHostTime = 0.0
     public private(set) var skipped = false
@@ -105,8 +106,9 @@ public final class IntroView: NSView {
     public var elapsed: Double { renderTime ?? (animationStartHostTime == 0 ? 0 : max(0, CACurrentMediaTime()-animationStartHostTime)) }
     public var ready: Bool { skipped || elapsed >= IntroTimeline.beat(reduceMotion ? "reduceButton" : "sellCompleted").start }
 
-    public init(reduceMotion: Bool, scale: CGFloat = 2, increaseContrast: Bool = false) {
+    public init(reduceMotion: Bool, scale: CGFloat = 2, increaseContrast: Bool = false, useScreenBlend: Bool = true) {
         self.reduceMotion = reduceMotion
+        self.useScreenBlend = useScreenBlend
         super.init(frame: NSRect(origin: .zero, size: OnboardingTokens.windowSize))
         wantsLayer = true
         layer?.backgroundColor = IntroColors.room.cgColor
@@ -149,7 +151,7 @@ public final class IntroView: NSView {
             let orb = radial(spec.0, diameter: spec.1)
             orb.position = .init(x: spec.2, y: spec.3); orb.opacity = i == 2 ? 0 : spec.4
             ambient.addSublayer(orb); orbs.append(orb)
-            if i == 2 { orb.compositingFilter = "screenBlendMode" }
+            if i == 2, useScreenBlend { orb.compositingFilter = "screenBlendMode" }
             let beat = ["orbBlue", "orbPurple", "orbWarm"][i]
             orbTracks.append(.init(layer: orb, key: "position.x", values: [Double(spec.2), Double(spec.2+35), Double(spec.2-18), Double(spec.2)], fractions: [0, 0.35, 0.7, 1], beat: beat))
             orbTracks.append(.init(layer: orb, key: "position.y", values: [Double(spec.3), Double(spec.3-24), Double(spec.3+18), Double(spec.3)], fractions: [0, 0.35, 0.7, 1], beat: beat))
@@ -157,7 +159,7 @@ public final class IntroView: NSView {
         add(ambient, "opacity", [0, 1], "room", curve: [0, 0, 0.58, 1])
         add(orbs[2], "opacity", [0, 0.22], "spill")
         let spill = radial(0xFFD9A8, diameter: 480); spill.position = .init(x: 640, y: 336)
-        spill.compositingFilter = "screenBlendMode"
+        if useScreenBlend { spill.compositingFilter = "screenBlendMode" }
         spillGroup.frame = full; scene.addSublayer(spillGroup); spillGroup.addSublayer(spill)
         add(spill, "transform.scale", [0.2, 3.5], "spill")
         add(spill, "opacity", [0, 0.45, 0.28], "spill", fractions: [0, 0.65, 1])

@@ -41,8 +41,14 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     window.titlebarAppearsTransparent = true; window.isRestorable = false
     window.tabbingMode = .disallowed; window.isReleasedWhenClosed = false
     window.backgroundColor = IntroColors.room; window.identifier = .init("onboarding")
+    var useScreenBlend = true
+    #if OPEN_AUTOMATION
+    // Same App and scene, only these two render-server filters differ.
+    useScreenBlend = ProcessInfo.processInfo.environment["OPEN_INTRO_NORMAL_BLEND"] != "1"
+    #endif
     intro = IntroView(reduceMotion: options.reduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-      scale: screen?.backingScaleFactor ?? 2, increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+      scale: screen?.backingScaleFactor ?? 2, increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast,
+      useScreenBlend: useScreenBlend)
     intro.frame = NSRect(origin: .zero, size: size); intro.autoresizingMask = [.width, .height]
     window.contentView = intro
     window.setFrame(NSRect(origin: window.frame.origin, size: size), display: false)

@@ -51,8 +51,8 @@ def main():
                 for kind in ('main', 'branch'):
                     env = {'OPEN_E2E_APP_BUNDLE': options.main_app} if kind=='main' else {}
                     load = os.getloadavg()
-                    if load[0] > 30:
-                        raise RuntimeError('paired returning launches require load1 <= 30')
+                    if load[0] > 12:
+                        raise RuntimeError('returning launches require load1 <= 12')
                     app = Open('Debug', 'chrome', data, ['--use-mock-keychain', '--arc-dir='+str(source), '--intro-sound=off'], log,
                                urls=(), extra_env=env, first_run=True)
                     tracker = h['FocusTracker'](); tracker.apps.append(app); app.focus_tracker = tracker
