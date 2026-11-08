@@ -136,10 +136,21 @@ def run(factory, results, tmp, h):
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
         until(lambda: app.call('first-run')['active'])
         before_close = state()
+        before_close_windows = app.owned_windows()
+        close_pid = app.pid
         app.call('key', key='w', modifiers=['command'])
-        closed_pred = lambda s: not s.get('sound', {}).get('playerCreated') and not s.get('dim', {}).get('exists')
-        until(lambda: closed_pred(state()))
-        gate('closing_setup_releases_music_and_dim', closed_pred, state(), before_close)
+        # Closing setup quits after its fade. Once the process exits its socket
+        # is gone too; prove resource/window cleanup without polling that socket.
+        exited = until(lambda: not app.process_path(close_pid))
+        app.quit()
+        closed_pred = lambda s: s.get('exited') and s.get('cleanup') and not s.get('forced') \
+            and s.get('windows')==0 and not s.get('snapshot')
+        gate('closing_setup_releases_music_and_dim', closed_pred,
+            dict(exited=exited, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced',False),
+                 windows=app.quit_report['windows_after_quit']['count'],
+                 snapshot=Path(app.user_data,'State/browser.json').exists()),
+            dict(exited=not before_close['active'], cleanup=False, forced=False,
+                 windows=before_close_windows['count'], snapshot=False))
         launch('--reduce-motion')
         reduced_initial = state()
         reduced = elapsed(1.2)
