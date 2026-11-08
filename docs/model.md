@@ -303,13 +303,23 @@ DTO back before reporting success. BoostStore stamps new records' modification
 time at import, so `protectedEdits` counts newer destination records, including
 unchanged imports. It cannot distinguish those from user edits.
 
-The App has a report-only `recordBoostImport([ProfileID: [Boost]], counts:)`
-seam. It reports source counts and `Not imported in this build`; it writes no
-Boosts. Persistence, live apply, re-import and shared Undo remain **BLOCKED
-(Section 12 AppBoosts)**. Follow-up must use
-`app.stores.boosts.store(for: profileID).upsert(boost)`, then
-`app.stores.boosts.refresh(profile: profileID)` once per Profile. No second App
-BoostStore is allowed: its delayed save could overwrite the sole owner's data.
+The App resolves `boostsByProfile` through the import's `profileMapping` after
+the model lands; Arc Default maps to the live Default by role. It uses only
+`app.stores.boosts.store(for:)`, adds absent stable IDs on a utility worker and
+calls `refresh(profile:)` once per changed Profile. Existing IDs stay untouched,
+including user edits; they count as duplicates. The report's "Boosts" row counts
+additions, while an unreadable cache still shows "Could not be read". Missing
+local enablement keeps imported Boosts disabled.
+
+The one "Import from Arc" action retains only the added Boosts and their store
+references in `AppImportUndo`. Undo calls the existing `BoostStore.delete(id:)`
+for those IDs and flushes the removals before restoring the model, so the
+bootstrap Default cannot load stale Boosts from the shared Default path. It
+then refreshes each Profile. Redo adds them back and refreshes;
+it preserves any same-ID record created since Undo. Store mutations and queued
+file writes run off the main thread. No second App BoostStore or idle work is
+added. `firstrun` proves persistence, computed page styles, disabled state,
+add-only re-import, shared Undo/Redo and user-edited duplicate preservation.
 
 Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md) "Archive and session files (observed)"):
 

@@ -39,9 +39,13 @@ then records `negativeProof: FAIL`: initial mapping/count rows fail on the old
 CLI; later predicates fail with the required state removed, then pass after it
 is restored. The privacy negative uses `--show-titles` on synthetic data only.
 No raw command output enters the JSON receipt. `firstrun_boosts.py` is the
-separate real-App block in the `firstrun` suite; it proves source counts, the
-report-only seam and refusal of an App-held data root. App runtime/Undo rows
-remain explicitly BLOCKED until Section 12 AppBoosts merges.
+separate real-App block in the `firstrun` suite. It proves source counts,
+refusal of an App-held data root, persisted additions, native report rows and
+computed styles on an example.com page served from loopback. The disabled
+Boost has distinct border CSS so enabling it once breaks the disabled gate.
+Real Settings re-import, shared Undo/Redo and a user-edited duplicate each have
+a break-and-restore negative proof. The suite restores every preference it uses
+and closes its owned Apps and ephemeral server in `finally` paths.
 
 `tools/e2e/import_boosts_boundaries.py --cli PATH --report FILE` exercises the
 public command at and just above 20 input limits: strings, documents, map/array
