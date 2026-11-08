@@ -1225,6 +1225,8 @@ write a separate receipt so the primary crash evidence survives.
 
 Actions: `next`, `back`, `skip`, `set-name name=…` (at most 40 characters), `toggle-favorite index=0…11`, `set-theme preset=…`, `set-blocker on=true|false`, `choose-default yes=true|false`, `shuffle-card`, and `get-started` on Ready. Intro actions remain `skip-intro`, `get-started` (Continue), and `replay-intro`.
 
+With an automation socket, default-browser requests use `OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed` (default `declined`) and never open the system prompt. `OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS` delays that stub's completion by at most 5000 ms, so the suite can prove that setup waits for a result before its 1.2-second outcome display.
+
 Automation-only screenshot/export hooks: `set-appearance appearance=light|dark` changes only the onboarding window; `save-card` opens its real save panel, `card-cancel` cancels it, and `card-save path=/absolute/file.png` supplies the native panel service response to the production completion. No desktop input is used. Tests use temporary roots, synthetic `--arc-dir`, and `--intro-sound=silent|off`.
 
 The `first-run` API remains the importer verification seam. Its compatibility actions walk setup's real navigation; the `screen` field names the new screen while `step` names Section 7's import state. No legacy first-run window is shown.
