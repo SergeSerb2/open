@@ -367,7 +367,11 @@ paint621/622ms). Every cleanup passes, with no interruptions. Startup
 qualification and the final full gate remain pending. A native F25 attempt lost
 focus to UserNotificationCenter PID29564 three times; no native rows count.
 The lead cleared M5 at16:20; the one F25 rerun passes11/11 on its second
-fresh native attempt, with the earlier cmux focus interruption retained. Older-engine, interrupted
+fresh native attempt, with the earlier cmux focus interruption retained.
+A fresh full native check passes1548/1549 with no interruption. F24/F25,
+generation guards and motion pass; the sole timing FAIL is code keystroke
+p95 2.442ms against2ms at load23.827/15.576/16.021, retained under item9.
+Owned cleanup passes. Older-engine, interrupted
 and M1 receipts do not qualify. The PR will record every count and load.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |

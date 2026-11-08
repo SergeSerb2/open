@@ -1549,10 +1549,17 @@ load1 37.54. No native rows are accepted from that attempt. Native cleanup
 completed; queued extensions and startup jobs stopped before App launch.
 The lead cleared M5 at 16:20 on November 7. The one F25 rerun passes 11/11 on its second fresh native attempt. Attempt 1
 lost focus to cmux PID 29116 and remains INTERRUPTED, not counted as PASS.
-The native worker cleaned up all owned windows/processes. Startup qualification
+The native worker cleaned up all owned windows/processes. A fresh full native
+run passes 1548/1549 rows without interruption: F24/F25, retained-menu
+generation guards, resize and motion pass. The sole raw FAIL is code keystroke
+CPU p95 2.442 ms against 2 ms at load 23.827/15.576/16.021. Screen-acquisition
+load was 14.726/12.379/15.044. Item 9 keeps this timing miss visible without
+blocking the PR; no limit changed. Owned cleanup passes. Startup qualification
 and the final full gate are pending. The final gate
-waits for the explicit lead message “#224 is on main” (item 14), then a
-main merge, Debug build and key grep. The 17:55 fallback is cancelled.
+waits for the first of the explicit lead message “#224 is on main” or 19:00
+by the system clock on November 7 (item 15), then fetch/merge, Debug build
+and key grep. If #224 lands during the gate, retain the run and report it
+to the lead.
 
 The historical commandbar comparison met TANDEM §4c after a 30-minute quiet
 wait, with CPU p95 medians main/branch 10.88/9.39 ms. It remains in the PR's
