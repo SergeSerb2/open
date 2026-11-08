@@ -48,17 +48,16 @@ is still PRIVATE (`gh repo view --json visibility`, 2026-11-07).
 
 ## uBO decision: §7.3(b)
 
-Do not ship uBlock Origin resources/scriptlets. The adblock crate has a
-parser/assembler, but `ResourceStorage` starts with empty maps. The only
-scriptlet file reference in its assembler is a noncompiled test fixture;
-there is no `include_str!` or `include_bytes!` asset payload in its src tree.
-The OpenAdBlock Swift resource bundle has only catalog.json, list-pins.txt
-and public_suffix_list.dat. The Release application manifest has 356 files/links, and the read-only
-engine distribution manifest has 1,028. Neither contains a uBO resource/scriptlet payload or seed filter DAT.
-Catalog URLs and user-installed extensions do not change this bundle fact.
-The full app list is [license-bundle-files.txt](license-bundle-files.txt).
-The generator omits GPL-3.0 for the current inventory. A future shipped GPL
-row requires the full text, a source URL and explicit source input.
+Superseded by #262 (Section 13, 2026-11-08). The App now ships the pinned
+uBlock Origin redirect resources (uBO 3762a26f, 47 redirect stubs, no
+scriptlet templates) as `AdBlock/resources.json` (SHA-256 6d4a87b8…), with
+the original text sources and uBO's LICENSE.txt under `AdBlock/Source`. They
+are separate, unmodified data files that the engine reads at run time; they
+are not compiled or linked into Open's code. The build passes `AdBlock/Source`
+to the generator as `--ubo-source`, so the GPL-3.0 row and the full GPL-3.0
+text appear in the generated acknowledgements. The exact upstream source
+archive and pins are in [the inventory](licenses.md) ("uBlock redirect
+assets"). Public distribution review stays with U-6.
 
 ## Official-engine blocker
 
