@@ -52,6 +52,7 @@ enum MainMenu {
   /// This records routing only; it does not execute Quit, Print or other commands.
   static func registryShortcutRoutes(_ app: AppDelegate) -> [[String: Any]] {
     let carriers = shortcutSnapshot(NSApp.mainMenu)
+    let knownConflicts = ConflictChecker.check(overrides: app.keyBindings).filter(\.isKnownArcDuplicate)
     return CommandRegistry.active.flatMap { command in
       app.keyBindings.effectiveShortcuts(for: command).map { shortcut -> [String: Any] in
         let context = RoutingContext(isAppActive: command.scope != .global,
@@ -70,10 +71,21 @@ enum MainMenu {
           item["id"] as? String == command.id && item["key"] as? String == shortcut.keyEquivalent
             && item["modifierMask"] as? UInt == shortcut.keyEquivalentModifierMask.rawValue
         }
+        // The registry already records native duplicates such as Show Fonts /
+        // New Tab. Check that their physical key still reaches the same owner;
+        // AppKit can remove the losing native item's duplicate key equivalent.
+        let knownDuplicate = routed != command.id && knownConflicts.contains {
+          $0.shortcut == shortcut && Set($0.commandIDs).isSuperset(of: [command.id, routed])
+        }
+        let routedCarrier = carriers.contains { item in
+          item["id"] as? String == routed && item["key"] as? String == shortcut.keyEquivalent
+            && item["modifierMask"] as? UInt == shortcut.keyEquivalentModifierMask.rawValue
+        }
         return ["id": command.id, "key": shortcut.keyEquivalent,
           "modifierMask": shortcut.keyEquivalentModifierMask.rawValue, "scope": command.scope.rawValue,
-          "routedCommand": routed, "menuCarrier": hasCarrier,
-          "routable": routed == command.id && (command.menuPath == nil || hasCarrier)]
+          "routedCommand": routed, "menuCarrier": hasCarrier, "knownDuplicate": knownDuplicate,
+          "routable": (routed == command.id && (command.menuPath == nil || hasCarrier))
+            || (knownDuplicate && routedCarrier)]
       }
     }
   }
