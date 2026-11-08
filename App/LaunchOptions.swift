@@ -98,8 +98,8 @@ final class LaunchTiming {
     let number = window.windowNumber
     keyProbeTimestamp = timestamp
     mark("keyPosted")
-    // CefInitialize can discard events posted before its pump is installed.
-    // A native run-loop task survives that setup and still exercises sendEvent.
+    // Dispatch after the native loop resumes from engine setup, through the
+    // same sendEvent path used by the App's key automation.
     RunLoop.main.perform { [weak self] in
       MainActor.assumeIsolated {
         guard self != nil,
