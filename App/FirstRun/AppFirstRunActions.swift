@@ -12,10 +12,13 @@ final class AppFirstRunActions: FirstRunActions {
   }
   #if OPEN_AUTOMATION
   private var stubDefault = false
+  private var usesAutomationDefaultBrowser: Bool {
+    app.options.automationSocket != nil || ProcessInfo.processInfo.environment["OPEN_E2E_OWNER_PID"] != nil
+  }
   #endif
   func setAsDefaultBrowser() -> String? {
     #if OPEN_AUTOMATION
-    if app.options.automationSocket != nil {
+    if usesAutomationDefaultBrowser {
       let result = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] ?? "declined"
       stubDefault = result == "success" || result == "already"
       return result == "failed" ? "Automation default-browser failure" : nil
@@ -25,7 +28,7 @@ final class AppFirstRunActions: FirstRunActions {
   }
   func waitForDefaultBrowserRequest() async {
     #if OPEN_AUTOMATION
-    if app.options.automationSocket != nil {
+    if usesAutomationDefaultBrowser {
       let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS"] ?? "0"
       let delay = min(5_000, max(0, Int(raw) ?? 0))
       try? await Task.sleep(for: .milliseconds(delay))
@@ -36,7 +39,7 @@ final class AppFirstRunActions: FirstRunActions {
   }
   func isDefaultBrowser() -> Bool {
     #if OPEN_AUTOMATION
-    if app.options.automationSocket != nil { return stubDefault || ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] == "already" }
+    if usesAutomationDefaultBrowser { return stubDefault || ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] == "already" }
     #endif
     return app.settingsPresenter.isDefaultBrowser()
   }
