@@ -96,8 +96,24 @@ def run(factory, results, tmp, api):
                and not stable['pendingCompletion'] and stable['completionCount'] == completion_count,
                blank=blank_cpu, warmBlank=warm_blank_cpu, welcome=welcome_cpu, state=stable)
         screenshot('welcome-stopped')
+        app.call('welcome', action='hover', card=2, phase='exit')
+        before_hover = len(state()['playedCards'])
         hover = app.call('welcome', action='hover', card=2)
         record('W08_hover', hover['animating'] and hover['activeCard'] == 2 and hover['playlist'] == 'stopped', state=hover)
+        for _ in range(20): app.call('welcome', action='hover', card=2)
+        hover_ended = await_state(lambda s: not s['animating'], timeout=10)
+        stationary = []
+        for _ in range(10):
+            stationary.append(app.call('welcome', action='hover', card=2))
+            time.sleep(1)
+        stable_hover = state()
+        record('W30_stationary_hover_one_replay', hover_ended
+               and all(not s['animating'] and len(s['playedCards']) == before_hover + 1 for s in stationary)
+               and len(stable_hover['playedCards']) == before_hover + 1
+               and stable_hover['animationCount'] == 0 and not stable_hover['pendingCompletion']
+               and stable_hover['cards'][1]['hovered'] and stable_hover['cards'][1]['trackingAreas'] == 1,
+               beforeCount=before_hover, state=stable_hover, stableSeconds=10)
+        app.call('welcome', action='hover', card=2, phase='exit')
         replay = app.call('welcome', action='replay', card=3)
         record('W09_AX_replay', replay['animating'] and replay['activeCard'] == 3 and replay['playlist'] == 'stopped', state=replay)
         for value in (0, 5):
@@ -299,7 +315,7 @@ def negative_gates(factory, results, tmp, api):
         results[name] = dict(ok=bool(rejected), expected='production assertion rejects deliberately broken gate',
                              loadAverage=list(os.getloadavg()), **details)
     try:
-        for mutation in ('native', 'playlist', 'visibility', 'reduce', 'external'):
+        for mutation in ('native', 'playlist', 'visibility', 'reduce', 'external', 'hover'):
             app = factory(urls=('about:blank',), fresh=True,
                           extra_env={'OPEN_E2E_WELCOME_MUTATION': mutation,
                                      'OPEN_E2E_REDUCE_MOTION': '1' if mutation == 'reduce' else '0'})
@@ -338,6 +354,14 @@ def negative_gates(factory, results, tmp, api):
                     shown = visible()
                     static_gate = shown and shown['reduceMotion'] and not shown['animating'] and shown['animationCount'] == 0
                     record('N_reduce_motion_static', shown and not static_gate and shown['animating'], state=shown)
+                elif mutation == 'hover':
+                    visible()
+                    app.call('welcome', action='hover', card=2, phase='exit')
+                    before_hover = len(state()['playedCards'])
+                    for _ in range(20): app.call('welcome', action='hover', card=2)
+                    repeated = state()
+                    record('N_stationary_hover_one_replay', len(repeated['playedCards']) > before_hover + 1,
+                           beforeCount=before_hover, state=repeated)
             app.quit(); app = None
         # Force an early exception after a specific owned window appears.
         app = factory(urls=('about:blank',), fresh=True)

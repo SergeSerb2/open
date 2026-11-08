@@ -46,6 +46,9 @@ host count, engine content creation count, and count of engine pages with intern
 URLs. Actions: `insert`, `replay card=N`, `hover card=N`, `reveal card=N`, and
 `link link=shortcuts|settings`. Replay invokes the real accessibility action;
 hover delivers an App-local tracking event. Invalid cards and hidden replay fail.
+Each card keeps one tracking area. Repeated entered events beneath a stationary
+pointer do not replay it; an exit or hiding the page resets the hover transition.
+Automation can send `hover card=N phase=exit` before the next entered transition.
 
 Run the real-App suite as:
 
