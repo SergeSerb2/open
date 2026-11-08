@@ -51,6 +51,8 @@ def main():
                 for kind in ('main', 'branch'):
                     env = {'OPEN_E2E_APP_BUNDLE': options.main_app} if kind=='main' else {}
                     load = os.getloadavg()
+                    if load[0] > 30:
+                        raise RuntimeError('paired returning launches require load1 <= 30')
                     app = Open('Debug', 'chrome', data, ['--use-mock-keychain', '--arc-dir='+str(source), '--intro-sound=off'], log,
                                urls=(), extra_env=env, first_run=True)
                     tracker = h['FocusTracker'](); tracker.apps.append(app); app.focus_tracker = tracker
@@ -60,6 +62,7 @@ def main():
                         assert not app.call('first-run')['active']
                         if kind=='branch': assert not app.call('onboarding')['moduleActive']
                         marks = app.call('timing')
+                        assert marks.get('firstFrameConfirmed') is True, 'launch first frame unconfirmed'
                         assert not tracker.loss(), 'foreground interrupted'
                         samples.append(dict(kind=kind, attempt=attempt+1, load=load, marks=marks))
                         print(json.dumps(samples[-1]), flush=True)
@@ -68,9 +71,10 @@ def main():
             medians = {kind: {key: statistics.median(row['marks'][key] for row in samples if row['kind']==kind)
                               for key in sorted(names) if all(type(row['marks'][key]) in (int,float) for row in samples)}
                        for kind in ('main', 'branch')}
-            # These are the existing shell launch marks, excluding engine time.
+            # Keep every numeric launch mark shared by both Apps; do not hide
+            # a slower stage by selecting only the earliest shell marks.
             comparison = {key: medians['branch'][key]-medians['main'][key]
-                          for key in ('main', 'modelLoaded', 'windowShown', 'sidebarDrawn') if key in names}
+                          for key in medians['main']}
             report = dict(samples=samples, medians=medians, deltaMS=comparison,
                           ok=bool(comparison) and all(delta <= 5 for delta in comparison.values()))
             Path(options.out).write_text(json.dumps(report, indent=2)+'\n')

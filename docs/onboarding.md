@@ -9,6 +9,12 @@ as `moduleActive: false` without calling into the package.
 The intro uses Open's own doorway/sun mark, procedural grain and synthesized
 score. There are no reference-app assets. All scene and playback beat times
 are in `IntroTimeline.beats`; the Python generator reads the same table.
+The lit door uses a `#FFF3DC` → `#FFC680` gradient at 0.92 opacity. The
+`#FFD9A8` spill peaks at 0.45 and settles at 0.28; it and the warm orb use
+Core Animation's `screenBlendMode`. The final text uses approximately 28 pt
+from the wordmark to the identity line, 18 pt to the first value, 22 pt value
+rows with 6 pt gaps, and 32 pt from the last value to Continue. The settled
+mark/text/button block centers at about 52.4% of the window height.
 
 | Beat | Start (s) | End (s) |
 |---|---:|---:|
@@ -95,5 +101,7 @@ python3 tools/generate-intro-sound.py --check
 
 The renderer samples the same scene tracks as the real view at 0.5, 1.5,
 2.6, 3.5, 5.0, 6.5, 8.0 and 10.2 s, plus the Reduce Motion final frame,
-at 2x. It creates an unshown window for AppKit backing; it never orders it
-front. Real-window acceptance is the separate `onboarding` e2e suite.
+at 2x. `CARenderer` draws that layer tree into a Metal texture, preserving
+the native radial gradients and blend filters. It creates an unshown window
+for AppKit backing; it never orders it front. Real-window acceptance is the
+separate `onboarding` e2e suite.

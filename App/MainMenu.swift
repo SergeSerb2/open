@@ -42,7 +42,7 @@ enum MainMenu {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     // Native intro responder/default button owns unmodified keys. Do not load
     // browser command services while the first-run welcome is on screen.
-    if event.window === app.onboardingWindowController?.window {
+    if let introWindow = app.onboardingWindowController?.window, event.window === introWindow {
       if event.modifierFlags.contains(.command), ["t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       return false
     }

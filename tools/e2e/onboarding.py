@@ -101,6 +101,7 @@ def run(factory, results, tmp, h):
         # Natural returning launch: a real saved browser root, no skip switch.
         launch(fresh=False)
         returning = state()
+        gate('light_uses_screen_blend', lambda s: s.get('blendFilters')==['screenBlendMode', 'screenBlendMode'], phase2, returning)
         gate('intro_browser_shortcuts_guarded', lambda s: s.get('intro', {}).get('active') and not s.get('browsers'), guarded, dict(intro=returning, browsers=app.call('shell-windows')))
         gate('first_launch_shows_intro', lambda s: s.get('active') and s.get('screen')=='intro' and s.get('moduleActive'), intro, returning)
         inactive = lambda s: not s.get('active') and not s.get('moduleActive') and s.get('phase')=='inactive'
@@ -202,8 +203,9 @@ def run(factory, results, tmp, h):
         app.call('key', key='w', modifiers=['command'])
         closed = until(lambda: app.owned_windows()['count'] == 0, timeout=8)
         app.quit()
-        gate('native_intro_close_quits', lambda s: s.get('closed') and s.get('cleanup') and not s.get('forced'),
-             dict(closed=closed, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced', False)),
+        gate('native_intro_close_quits', lambda s: s.get('closed') and s.get('cleanup') and not s.get('forced') and not s.get('snapshot'),
+             dict(closed=closed, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced', False),
+                  snapshot=Path(app.user_data, 'State/browser.json').exists()),
              dict(closed=not before_intro_close['active'], cleanup=False, forced=False))
     finally:
         if app and not app.closed: app.quit()
