@@ -46,6 +46,9 @@ host count, engine content creation count, and count of engine pages with intern
 URLs. Actions: `insert`, `replay card=N`, `hover card=N`, `reveal card=N`, and
 `link link=shortcuts|settings`. Replay invokes the real accessibility action;
 hover delivers an App-local tracking event. Invalid cards and hidden replay fail.
+Each card keeps one tracking area. Repeated entered events beneath a stationary
+pointer do not replay it; an exit or hiding the page resets the hover transition.
+Automation can send `hover card=N phase=exit` before the next entered transition.
 
 Run the real-App suite as:
 
@@ -57,6 +60,7 @@ export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main
 
 Check the shared screen-priority flag before running. Screenshots and detailed
 receipts go to `.re/handoff/sections/s17/c4/`. The suite uses temporary data and
-cache roots, a synthetic loopback site, and owned-process cleanup. It saves, resets, and restores `open.settings.lastPane` and
-`open.library.lastSection` in a `finally` path. The common runner preserves its
+cache roots, a synthetic loopback site, and owned-process cleanup. It saves, resets,
+and restores `open.settings.lastPane`, `open.library.lastSection`, and
+`open.import.lastArcDir` in a `finally` path. The common runner preserves its
 startup preference keys. It changes no Welcome preference keys.

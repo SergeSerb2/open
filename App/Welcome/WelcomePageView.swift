@@ -124,7 +124,7 @@ final class WelcomePageView: NSScrollView {
   }
   private func setVisible(_ shown: Bool) {
     guard shown != visible else { return }; visible = shown
-    if !shown { halt(); return }
+    if !shown { cards.forEach { $0.resetHover() }; halt(); return }
     if reduceMotion { nextPlaylistCard = nil; cards.forEach { $0.illustration.finish() }; return }
     if !started { started = true }
     if let index = nextPlaylistCard { play(index, playlist: true) }
@@ -161,7 +161,10 @@ final class WelcomePageView: NSScrollView {
     if link == "shortcuts" { shortcuts.performClick(nil) }
     else if link == "settings" { settings.performClick(nil) }
   }
-  func reveal(card: Int) { _ = canvas.scrollToVisible(cards[card].frame) }
+  func reveal(card: Int) {
+    let rect = card == 3 ? cards[card].frame.union(settings.frame) : cards[card].frame
+    _ = canvas.scrollToVisible(rect)
+  }
   @objc private func showShortcuts() { openShortcuts?() }
   @objc private func showSettings() { openSettings?() }
 }
@@ -177,6 +180,7 @@ final class WelcomeCardView: NSControl {
   let detail: NSTextField
   var replay: (() -> Void)?
   private var tracking: NSTrackingArea?
+  private(set) var isHovered = false
   init(index: Int, title: String, detail: String) {
     self.index = index; illustration = WelcomeIllustrationView(kind: index)
     heading = NSTextField(labelWithString: title); self.detail = NSTextField(wrappingLabelWithString: detail)
@@ -196,11 +200,21 @@ final class WelcomeCardView: NSControl {
   override var focusRingMaskBounds: NSRect { bounds }
   override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill() }
   override func updateTrackingAreas() {
-    if let tracking { removeTrackingArea(tracking) }
+    super.updateTrackingAreas()
+    // inVisibleRect follows bounds. Replacing this area during layout synthesizes
+    // a new entered event beneath a stationary pointer and restarts the demo.
+    guard tracking == nil else { return }
     let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
-    addTrackingArea(area); tracking = area; super.updateTrackingAreas()
+    addTrackingArea(area); tracking = area
   }
-  override func mouseEntered(with event: NSEvent) { replay?() }
+  func resetHover() { isHovered = false }
+  override func viewDidHide() { super.viewDidHide(); resetHover() }
+  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { resetHover() } }
+  override func mouseEntered(with event: NSEvent) {
+    guard !isHovered else { return }
+    isHovered = true; replay?()
+  }
+  override func mouseExited(with event: NSEvent) { resetHover() }
   override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); replay?() }
   override func keyDown(with event: NSEvent) {
     if event.keyCode == 36 || event.keyCode == 49 { replay?() } else { super.keyDown(with: event) }

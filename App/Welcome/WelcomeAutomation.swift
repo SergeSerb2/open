@@ -10,7 +10,8 @@ extension AutomationController {
     let allowed: Set<String>
     switch action {
     case "state", "insert": allowed = ["action"]
-    case "replay", "hover", "reveal": allowed = ["action", "card"]
+    case "replay", "reveal": allowed = ["action", "card"]
+    case "hover": allowed = ["action", "card", "phase"]
     case "link": allowed = ["action", "link"]
     default: throw Failure(message: "unknown welcome action")
     }
@@ -40,10 +41,12 @@ extension AutomationController {
       }
       let card = page.cards[number - 1]
       if action == "hover" {
-        guard let event = NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [],
+        let phase = args["phase"] as? String ?? "enter"
+        guard ["enter", "exit"].contains(phase) else { throw Failure(message: "hover phase must be enter or exit") }
+        guard let event = NSEvent.enterExitEvent(with: phase == "enter" ? .mouseEntered : .mouseExited, location: .zero, modifierFlags: [],
           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: page.window?.windowNumber ?? 0,
           context: nil, eventNumber: 0, trackingNumber: 0, userData: nil) else { throw Failure(message: "could not create hover event") }
-        card.mouseEntered(with: event)
+        if phase == "enter" { card.mouseEntered(with: event) } else { card.mouseExited(with: event) }
       } else { _ = card.accessibilityPerformPress() }
     default: throw Failure(message: "unknown welcome action")
     }
@@ -63,6 +66,7 @@ extension AutomationController {
       "tab": factory.selectedTab?.id.description ?? "",
       "urlField": factory.controller?.sidebar.displayedURLText ?? "",
       "cards": page?.cards.map { ["label": $0.accessibilityLabel() ?? "", "role": $0.accessibilityRole()?.rawValue ?? "",
+        "hovered": $0.isHovered, "trackingAreas": $0.trackingAreas.count,
         "actions": $0.accessibilityCustomActions()?.map(\.name) ?? []] as [String: Any] } ?? [],
       "engineInternalPages": OEEngine.shared.allWebContents.filter { $0.url.map(WelcomeTab.isInternal) == true }.count,
       "hosts": factory.welcomeHosts.map { id, host in ["tab": id.description, "visible": host.page.visible,
