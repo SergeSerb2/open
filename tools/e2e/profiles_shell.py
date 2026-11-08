@@ -116,6 +116,8 @@ def run(factory, results, tmp, api, defaults_before):
         assert wait(lambda: state()['sheet'] > 0, timeout=5), state()
         before = state()
         assert ('Delete Unused Profiles' if bulk else 'Delete this Profile') in before['sheetText'], before
+        if os.environ.get('OPEN_PROFILES_SHELL_FORCE_DIALOG_FAILURE') == '1':
+            raise AssertionError('intentional early dialog failure for cleanup proof')
         state(action='type-delete', text=token if token is not None else name)
         typed = state()
         assert typed['deleteEnabled'] and typed['deleteAXEnabled'] is True, typed
