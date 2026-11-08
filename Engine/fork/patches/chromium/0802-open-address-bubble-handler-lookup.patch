@@ -1,0 +1,76 @@
+diff --git a/chrome/browser/ui/autofill/address_bubbles_controller.cc b/chrome/browser/ui/autofill/address_bubbles_controller.cc
+index cba56ee71628529ca7b841c91803af516b3bb0b9..c5ae8137fb0874cac835d4880b1ba05ceaec6266 100644
+--- a/chrome/browser/ui/autofill/address_bubbles_controller.cc
++++ b/chrome/browser/ui/autofill/address_bubbles_controller.cc
+@@ -28,6 +28,7 @@
+ #include "chrome/browser/ui/autofill/save_address_bubble_controller.h"
+ #include "chrome/browser/ui/autofill/update_address_bubble_controller.h"
+ #include "chrome/browser/ui/browser_window.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/desktop_to_mobile_promos/ios_promos_utils.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+@@ -55,15 +56,15 @@ AutofillBubbleBase* ShowSaveBubble(
+     content::WebContents* web_contents,
+     bool shown_by_user_gesture,
+     base::WeakPtr<AddressBubbleControllerDelegate> delegate) {
+-  auto browser_window =
+-      BrowserWindow::FindBrowserWindowWithWebContents(web_contents);
+-  if (!browser_window) {
+-    return nullptr;
+-  }
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
++  auto* browser = tab ? tab->GetBrowserWindowInterface() : nullptr;
++  auto* handler = browser
++      ? AutofillBubbleHandler::Get(browser->GetUnownedUserDataHost()) : nullptr;
++  if (!handler) return nullptr;
+   auto controller = std::make_unique<SaveAddressBubbleController>(
+       delegate, web_contents, profile, save_address_bubble_type);
+ 
+-  return browser_window->GetAutofillBubbleHandler()
++  return handler
+       ->ShowSaveAddressProfileBubble(web_contents, std::move(controller),
+                                      shown_by_user_gesture);
+ }
+@@ -74,14 +75,14 @@ AutofillBubbleBase* ShowUpdateBubble(
+     content::WebContents* web_contents,
+     bool shown_by_user_gesture,
+     base::WeakPtr<AddressBubbleControllerDelegate> delegate) {
+-  auto browser_window =
+-      BrowserWindow::FindBrowserWindowWithWebContents(web_contents);
+-  if (!browser_window) {
+-    return nullptr;
+-  }
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
++  auto* browser = tab ? tab->GetBrowserWindowInterface() : nullptr;
++  auto* handler = browser
++      ? AutofillBubbleHandler::Get(browser->GetUnownedUserDataHost()) : nullptr;
++  if (!handler) return nullptr;
+   auto update_controller = std::make_unique<UpdateAddressBubbleController>(
+       delegate, web_contents, profile, original_profile);
+-  return browser_window->GetAutofillBubbleHandler()
++  return handler
+       ->ShowUpdateAddressProfileBubble(
+           web_contents, std::move(update_controller), shown_by_user_gesture);
+ }
+@@ -89,14 +90,14 @@ AutofillBubbleBase* ShowUpdateBubble(
+ #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+ AutofillBubbleBase* ShowSignInPromo(content::WebContents* web_contents,
+                                     const AutofillProfile& autofill_profile) {
+-  auto browser_window =
+-      BrowserWindow::FindBrowserWindowWithWebContents(web_contents);
+-  if (!browser_window) {
+-    return nullptr;
+-  }
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
++  auto* browser = tab ? tab->GetBrowserWindowInterface() : nullptr;
++  auto* handler = browser
++      ? AutofillBubbleHandler::Get(browser->GetUnownedUserDataHost()) : nullptr;
++  if (!handler) return nullptr;
+   // TODO(crbug.com/381390420): Expose the `AutofillBubbleHandler` in
+   // `BrowserWindowInterface` and use that instead.
+-  return browser_window->GetAutofillBubbleHandler()->ShowAddressSignInPromo(
++  return handler->ShowAddressSignInPromo(
+       web_contents, autofill_profile);
+ }
+ #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)

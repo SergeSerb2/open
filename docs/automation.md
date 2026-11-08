@@ -343,6 +343,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `space-profile` | `space`, `profile` name | Production sidebar profile assignment intent; closes old Space hosts |
 | `peek-open`, `peek-expand`, `peek-close`, `peek-state` | `tab`, `url` for open | Production Peek entry, promotion, dismissal and host identity |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
+| `credentials` | optional `profile`: UUID, name, or data directory | Counts only: `logins`, `blockedSites`, local `cards` and `addresses`, `cookies`, saving preferences, `canEnable*`, `supportsSecretsImport`, and `usesMockKeychain`. Uses the existing lazy profile-context factory; no credential values. |
 | `spaces` | — | Spaces with focus and counts |
 | `space` | `space` | Focus a Space |
 | `space-create` | `title`, `profile` | New Space; a new `profile` name creates an Open profile (`BrowserModel.createProfile`) with its own engine context in `Engine/<dir>` |
