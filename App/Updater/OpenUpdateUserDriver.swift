@@ -16,6 +16,9 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   private var choice: ((SPUUserUpdateChoice) -> Void)?
   private var readyReply: ((SPUUserUpdateChoice) -> Void)?
   private var installOnQuit: (() -> Void)?
+  private var retryTermination: (() -> Void)?
+  private var terminationRetryAvailable = false
+  private var terminationWasCancelled = false
   private var acknowledgement: (() -> Void)?
   private var received: UInt64 = 0
   private var expected: UInt64 = 0
@@ -68,13 +71,18 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
       if let url = URL(string: template.replacingOccurrences(of: "{version}", with: version)) { open(url) }
       dismissBanner(); return
     }
-    guard bannerState == .available, alert == nil, let window else { return }
+    guard bannerState == .available else { return }
+    showRestartConfirmation(on: window)
+  }
+  private func showRestartConfirmation(on window: NSWindow?) {
+    guard readyReply != nil || installOnQuit != nil, alert == nil, let window else { return }
     let alert = NSAlert(); alert.messageText = "Open is ready to update!"; alert.informativeText = "Restart required."
     alert.addButton(withTitle: "Restart"); alert.addButton(withTitle: "Cancel")
     self.alert = alert
     alert.beginSheetModal(for: window) { [weak self] response in
       guard let self else { return }; self.alert = nil
       if response == .alertFirstButtonReturn {
+        self.terminationWasCancelled = false
         let reply = self.readyReply; self.readyReply = nil
         if let reply { reply(.install) } else { self.installOnQuit?() }
       } else { self.toast(.cancelledInstall) }
@@ -107,6 +115,12 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   }
   func beginUserCheck() { userInitiated = true; errorShown = false; phase = "checking" }
   func beginBackgroundCheck() { userInitiated = false; errorShown = false; phase = "checking" }
+  func didFinishUpdateCycle() {
+    userInitiated = false
+    // Sparkle's scheduled checks do not call beginBackgroundCheck. Deduplicate
+    // errors within their cycle, then let the next cycle notify the user.
+    errorShown = false
+  }
   func backgroundDownloading() { if !userInitiated { phase = "downloading" } }
   func backgroundPreparing() { if !userInitiated { phase = "extracting" } }
   func backgroundError(_ error: any Error) {
@@ -134,8 +148,9 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     guard let status else { return }
     status.column.prompt.stringValue = label
     status.column.primary.title = button; status.column.primary.isEnabled = enabled; status.column.primary.isHidden = hidden
-    status.column.primary.keyEquivalent = phase == "ready" ? "\r" : ""
-    status.column.primary.bezelColor = phase == "ready" ? .controlAccentColor : nil
+    let installs = phase == "ready" || terminationRetryAvailable
+    status.column.primary.keyEquivalent = installs ? "\r" : ""
+    status.column.primary.bezelColor = installs ? .controlAccentColor : nil
     status.column.progress.isHidden = false
     status.column.progress.isIndeterminate = progress == nil
     if let progress { status.column.progress.stopAnimation(nil); status.column.progress.doubleValue = min(1, max(0, progress)) }
@@ -148,14 +163,23 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     status.allowsClose = enabled && !hidden
     status.onClose = { [weak self] in
       guard let self else { return }
-      if self.phase == "ready" {
+      if self.terminationRetryAvailable { self.closeStatus() }
+      else if self.phase == "ready" {
         let reply = self.readyReply; self.readyReply = nil; self.closeStatus(); reply?(.dismiss)
       } else { self.statusAction() }
     }
     status.column.needsLayout = true; status.show()
   }
   private func statusAction() {
-    if phase == "ready" { let reply = readyReply; readyReply = nil; reply?(.install) }
+    if terminationRetryAvailable, let retryTermination {
+      terminationRetryAvailable = false
+      terminationWasCancelled = false
+      showStatus("Installing update... ", button: "Cancel", progress: nil, enabled: false, hidden: true)
+      retryTermination()
+    } else if phase == "ready" {
+      terminationWasCancelled = false
+      let reply = readyReply; readyReply = nil; reply?(.install)
+    }
     else if let cancel { self.cancel = nil; closeStatus(); cancel() }
   }
   private func closeStatus() { status?.closeSilently(); status = nil }
@@ -169,6 +193,8 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     if let alert { alert.window.makeKeyAndOrderFront(nil) }
     else if let updateWindow { updateWindow.show() }
     else if let status { status.show() }
+    else if terminationRetryAvailable { showTerminationRetry() }
+    else if phase == "ready" { showRestartConfirmation(on: app.frontWindowController?.window) }
     else if !userInitiated, phase == "downloading" { toast(.newUpdatePending) }
     else if !userInitiated, phase == "extracting" || phase == "installing" { toast(.updateAlreadyInProgress) }
   }
@@ -202,6 +228,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     window.show()
   }
   private func answer(_ value: SPUUserUpdateChoice) {
+    if value == .install { terminationWasCancelled = false }
     let reply = choice; choice = nil; closeUpdateWindow(); reply?(value)
   }
   func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {
@@ -264,7 +291,20 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   }
   func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
     phase = "installing"; cancel = nil; readyReply = nil
+    retryTermination = applicationTerminated ? nil : retryTerminatingApplication
+    terminationRetryAvailable = false
     showStatus("Installing update... ", button: "Cancel", progress: nil, enabled: false, hidden: true)
+    if !applicationTerminated, terminationWasCancelled { applicationTerminationCancelled() }
+  }
+  func applicationTerminationCancelled() {
+    // The quit event can arrive before Sparkle reports installation stage 2.
+    terminationWasCancelled = true
+    guard phase == "installing", retryTermination != nil else { return }
+    terminationRetryAvailable = true
+    showTerminationRetry()
+  }
+  private func showTerminationRetry() {
+    showStatus("Ready to Install", button: "Install and Relaunch", progress: 1)
   }
   func showSendingTerminationSignal() { cancel = nil }
   func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) {
@@ -272,6 +312,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   }
   func dismissUpdateInstallation() {
     closeStatus(); closeUpdateWindow(); cancel = nil; choice = nil; readyReply = nil; installOnQuit = nil
+    retryTermination = nil; terminationRetryAvailable = false; terminationWasCancelled = false
     if let alert { if let parent = alert.window.sheetParent { parent.endSheet(alert.window, returnCode: .abort) }; alert.window.orderOut(nil) }
     alert = nil; phase = "idle"; refreshBanners()
   }

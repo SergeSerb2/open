@@ -7,10 +7,15 @@ surfaces recorded in [software-update.md](../re/software-update.md).
 The Open menu shows Check for Updates…, Updating…, or Update Available….
 An available update has a count badge. The command remains enabled during an
 update and brings its current window forward.
+A ready background update opens the restart confirmation from the menu even
+after its sidebar banner is dismissed. Cancel keeps the update pending.
 
 The small status window shows checking, download bytes, preparation progress,
 and Ready to Install. Download can be cancelled. Preparation cannot be
 cancelled. Install and Relaunch asks Sparkle to finish the update.
+If the App delays or cancels termination, the status window restores its enabled
+Install and Relaunch button. It retains Sparkle's retry callback and can close
+while the installation stays pending. The update command restores that window.
 
 The update window shows the current and offered versions. It has Download and
 Remind me Later buttons. Critical and minimum-version updates cannot be
@@ -58,6 +63,8 @@ banner has an automatic dismissal timer.
 User-requested errors show Update error!, OK, and Download manually.
 Background errors use the existing toast system. General has the automatic
 update switch, its help link, Check for Updates…, and the core's status text.
+Background error suppression ends at Sparkle's production cycle boundary:
+one cycle shows at most one error toast, and later failed cycles notify again.
 
 Signed install and relaunch remain a user qualification step. An ad-hoc test
 build cannot prove the production signing, installation, or relaunch path.

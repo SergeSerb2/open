@@ -131,7 +131,7 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
     completedChecks += 1
     lastErrorCode = (error as NSError?)?.code
-    userDriver.userInitiated = false
+    userDriver.didFinishUpdateCycle()
   }
 
   #if OPEN_AUTOMATION

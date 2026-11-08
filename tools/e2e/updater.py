@@ -193,7 +193,7 @@ def run(opts, folder, results, apps):
                 if serve_fixture and self.path == '/download-failure.zip':
                     time.sleep(1)
                     self.send_response(503); self.end_headers(); return
-                name = {'/appcast.xml': 'appcast.xml', '/Open-fixture.zip': 'Open-fixture.zip', '/NoApp.zip': 'NoApp.zip'}.get(self.path)
+                name = {'/appcast.xml': 'appcast.xml', '/Open-fixture.zip': 'Open-fixture.zip', '/NoApp.zip': 'NoApp.zip'}.get(self.path.split('?', 1)[0])
                 if not serve_fixture or name is None:
                     self.send_response(404); self.end_headers(); return
                 body = (folder / name).read_bytes()
@@ -270,6 +270,10 @@ def run(opts, folder, results, apps):
 
             configure(public, origin + '/must-not-request')
             serve_fixture = True
+            if opts.review_only:
+                configure(public, canary)
+                exercise_review_regressions(opts, folder, results, launch, public, origin, original)
+                return
             for channel, expected in [('stable', '900001'), ('beta', '900002')]:
                 write('open.general.updateChannel', channel)
                 write('open.general.automaticallyUpdate', None if channel == 'stable' else True)
@@ -345,6 +349,7 @@ def run(opts, folder, results, apps):
                     app.quit()
                 tracker.checkpoint()
             exercise_variants(opts, folder, results, launch, configure, public, origin, original)
+            exercise_review_regressions(opts, folder, results, launch, public, origin, original)
         finally:
             server.shutdown(); server.server_close(); thread.join(timeout=5)
             results['loopback_server_stopped'] = {'ok': not thread.is_alive(), 'requests': requests}
@@ -404,6 +409,9 @@ def capture_pair(app, opts, name, number, results=None):
     captures = []
     for appearance in ('light', 'dark'):
         app.call('appearance', name=appearance)
+        if 'banner' in name:
+            # Real-window review captures show the settled sidebar appearance.
+            time.sleep(.3)
         path = folder / (name + '-' + appearance + '.png')
         capture = app.call('snapshot', window=number, path=str(path))
         assert capture['method'].startswith('windowserver'), capture
@@ -698,6 +706,139 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
     feed.write_text(base)
 
 
+def installer_processes():
+    """Only Sparkle installers, identified by executable and host argument."""
+    rows = {}
+    for line in subprocess.check_output(['ps', '-axo', 'pid=,args='], text=True).splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) != 2 or DOMAIN not in parts[1]:
+            continue
+        pid = int(parts[0]); path = harness.Open.process_path(pid)
+        if path.endswith('/Autoupdate'):
+            rows[pid] = path
+    return rows
+
+
+def stop_review_installer(app, before, results, copied):
+    # The real Sparkle install is waiting for this live App. Stop only the
+    # installer created inside our exclusive screen run, before quitting Open.
+    owned = getattr(app, 'review_installers', {})
+    assert owned, 'No suite-owned Sparkle installer found; keep the App running'
+    assert app.call('ping'), 'The host must still be alive before installer cleanup'
+    for pid, path in owned.items():
+        if harness.Open.process_path(pid) == path:
+            os.kill(pid, signal.SIGTERM)
+    wait(lambda: [pid for pid, path in owned.items() if harness.Open.process_path(pid) == path],
+         lambda pids: not pids, 'suite-owned Sparkle installer did not stop')
+    after = file_sha256(copied / 'Contents/MacOS/Open')
+    results['R2_no_install_cleanup'] = {'ok': after == app.review_binary_sha,
+        'installerPIDs': sorted(owned), 'hostAliveWhenStopped': True,
+        'binarySHA256Before': app.review_binary_sha, 'binarySHA256After': after}
+
+
+def exercise_review_regressions(opts, folder, results, launch, public, origin, original):
+    """The three review regressions use real Sparkle cycles and native alerts."""
+    import xml.etree.ElementTree as ET
+    import downloads
+    feed = folder / 'appcast.xml'; base = feed.read_text()
+    sparkle = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+    for variant in ('ready-menu', 'termination-retry', 'scheduled-errors'):
+        tree = ET.fromstring(base)
+        if variant == 'scheduled-errors':
+            for item in tree.find('channel').findall('item'):
+                item.find('enclosure').set('url', origin + '/download-failure.zip')
+        feed.write_text(ET.tostring(tree, encoding='unicode'))
+        subprocess.run([str(opts.tools / 'sign_update'), '--ed-key-file', str(folder / 'throwaway.key'), str(feed)],
+                       check=True, capture_output=True)
+        for key in ('SUSkippedVersion', 'SUSkippedMajorVersion', 'SUSkippedMajorSubreleaseVersion'):
+            write(key, None)
+        write('open.general.updateChannel', 'stable')
+        write('open.general.automaticallyUpdate', variant == 'scheduled-errors')
+        write('open.debug.updateFeedURL', origin + '/appcast.xml')
+        write('SULastCheckTime', datetime.datetime(2000, 1, 1) if variant == 'scheduled-errors'
+              else datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))
+        before_installers = installer_processes()
+        app = launch(folder / 'Open.app', allow='1')
+        installing = False
+        try:
+            if variant == 'scheduled-errors':
+                first = wait(lambda: app.call('updater-state'), lambda s: s.get('completedChecks', 0) >= 1
+                             and not s.get('sessionInProgress'), 'first scheduled failure did not finish')
+                first_toasts = app.call('toasts')
+                # A changed feed plus the real General toggle resets Sparkle's
+                # scheduler. Do not call our manual-background automation path:
+                # it resets the old driver's error suppression and hides the bug.
+                app.call('defaults', key='open.debug.updateFeedURL', value=origin + '/appcast.xml?cycle=2')
+                app.call('settings-toggle', name='updates')
+                app.call('settings-toggle', name='updates')
+                second = wait(lambda: app.call('updater-state'), lambda s: s.get('completedChecks', 0) > first['completedChecks']
+                              and not s.get('sessionInProgress'), 'second scheduled failure did not finish')
+                second_toasts = app.call('toasts')
+                results['R3_scheduled_background_errors'] = {'ok': first_toasts['shown'] == 1
+                    and second_toasts['shown'] == 2 and toast_matches(app, 'failedToDownloadUpdate')
+                    and not first['ui']['userInitiated'] and not second['ui']['userInitiated'],
+                    'first': first, 'second': second, 'toastCounts': [first_toasts['shown'], second_toasts['shown']]}
+                continue
+            wait(lambda: app.call('updater-state'), lambda s: s.get('started') and s.get('canCheck'), 'updater not ready')
+            app.call('updater-background-check') if variant == 'ready-menu' else app.call('menu-perform', id='check-for-updates')
+            wait(lambda: ui(app), lambda s: s.get('phase') == 'found', 'review update not found')
+            app.call('updater-act', action='primary')
+            ready = wait(lambda: ui(app), lambda s: s.get('phase') == 'ready', 'review update not ready')
+            if variant == 'ready-menu':
+                app.call('updater-act', action='dismiss-banner')
+                app.call('menu-perform', id='check-for-updates')
+                state = ui(app); row = ax(app, state.get('alertWindow'))
+                if state.get('alertWindow'):
+                    app.call('updater-act', action='alert-second')
+                pending = app.call('updater-state')
+                results['R1_ready_menu_after_dismiss'] = {'ok': all(t in row.get('text', []) for t in
+                    ('Open is ready to update!', 'Restart required.', 'Restart', 'Cancel'))
+                    and pending['sessionInProgress'] and pending['ui']['phase'] == 'ready'
+                    and pending['ui']['banner'] == '' and pending['ui']['alertWindow'] == 0,
+                    'ready': ready, 'alertAX': row, 'pendingAfterCancel': pending}
+                continue
+            # Downloads' existing policy presses the real modal Keep browsing
+            # button; no fake termination callback or synthetic updater state.
+            with downloads.server() as base_url:
+                tab = app.call('tabs')[0]['id']
+                snapshot = json.loads(Path(app.call('save')).read_text())
+                destination = folder / 'retry-downloads'; destination.mkdir(exist_ok=True)
+                app.call('download-settings', profile=snapshot['profiles'][0]['id'], directory=str(destination), ask=False)
+                app.call('download-policy', quit='keep')
+                app.eval(tab, '(() => {let a=document.createElement("a");a.href=%s;a.id="review-download";a.textContent="download";document.body.append(a)})()' % json.dumps(base_url + '/slow'))
+                app.call('click', tab=tab, selector='#review-download')
+                wait(lambda: app.call('downloads-state'), lambda s: s['running'] and any(i['received'] > 0 for i in s['items']),
+                     'real download did not start')
+                app.review_binary_sha = file_sha256(folder / 'Open.app/Contents/MacOS/Open')
+                app.review_installers = {pid: path for pid, path in installer_processes().items() if pid not in before_installers}
+                assert app.review_installers, 'Refuse installation without identified suite-owned installer cleanup'
+                installing = True
+                app.call('updater-act', action='primary')
+                rejected = wait(lambda: app.call('downloads-state'), lambda s: len(s['quitAlerts']) >= 1,
+                                'Sparkle did not request termination')
+                state = ui(app); row = ax(app, state.get('statusWindow'))
+                retry_visible = 'Install and Relaunch' in row.get('text', [])
+                if retry_visible:
+                    app.call('menu-perform', id='check-for-updates')
+                    app.call('updater-act', action='primary')
+                    retried = wait(lambda: app.call('downloads-state'), lambda s: len(s['quitAlerts']) > len(rejected['quitAlerts']),
+                                   'retry did not reach the real termination request')
+                else:
+                    retried = app.call('downloads-state')
+                final = ui(app)
+                results['R2_cancelled_termination_retry'] = {'ok': retry_visible
+                    and len(retried['quitAlerts']) > len(rejected['quitAlerts'])
+                    and 'Install and Relaunch' in ax(app, final.get('statusWindow')).get('text', [])
+                    and app.call('ping'), 'statusAX': row, 'firstQuit': rejected['quitAlerts'],
+                    'secondQuit': retried['quitAlerts'], 'final': final}
+        finally:
+            if installing:
+                stop_review_installer(app, before_installers, results, folder / 'Open.app')
+            close_updates(app); app.quit()
+        results.tracker.checkpoint()
+    feed.write_text(base)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', default='Debug')
@@ -707,6 +848,7 @@ def main():
     parser.add_argument('--openssl', default='/opt/homebrew/opt/openssl@3/bin/openssl'
                         if Path('/opt/homebrew/opt/openssl@3/bin/openssl').exists() else 'openssl')
     parser.add_argument('--force-failure', action='store_true')
+    parser.add_argument('--review-only', action='store_true', help='Only the three real-App review regressions')
     parser.add_argument('--output', type=Path)
     opts = parser.parse_args()
     opts.bundle = (opts.bundle or Path(harness.ROOT) / 'build' / opts.config / 'Open.app').resolve()
