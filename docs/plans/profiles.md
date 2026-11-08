@@ -1610,7 +1610,8 @@ Control ([#214](https://github.com/SergeSerb2/open/pull/214)), lazy contexts and
 per-Profile extension UI ([#217](https://github.com/SergeSerb2/open/pull/217)),
 and native parent-Profile private sessions plus safe in-session deletion
 ([#222](https://github.com/SergeSerb2/open/pull/222), 0701–0703). Local CRX
-automation completion (0704) remains in [#223](https://github.com/SergeSerb2/open/pull/223).
+automation completion (0704) shipped in [#223](https://github.com/SergeSerb2/open/pull/223);
+its [engine receipt](../engine-spike/extensions-local-crx-completion.md) owns that gate.
 The App-store retirement registration seam shipped in [#231](https://github.com/SergeSerb2/open/pull/231).
 The final shell pass shares the Change Profile warning with Library-only
 Space Manager and uses `moveSpace(id:toProfile:)` on every sidebar path.

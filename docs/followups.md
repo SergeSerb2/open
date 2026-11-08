@@ -289,7 +289,7 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - Guess S10-P5 capture (owner user / lead): user Option-Command-clicks a link in a private reference window and records the destination/window/context behavior. Open opens a tab in that same private window; it does not enter persistent Little Open.
 
 - Section 10 whole-App idle goal remains open, owner Section 16 / lead. The [five-launch Profile memory and idle receipt](profiles-memory.md) proves lazy loading and no recurring App counter work in that workload; it does not prove approximately zero whole-App CPU.
-- Section 10 0704 local CRX automation completion remains in [#223](https://github.com/SergeSerb2/open/pull/223), owner Section 10 engine child / lead.
+- Closed, Section 10 0704 — local CRX automation completion shipped in [#223](https://github.com/SergeSerb2/open/pull/223). The [engine receipt](engine-spike/extensions-local-crx-completion.md) owns its validation.
 
 ## Section 10: Air Traffic Control capture gaps
 

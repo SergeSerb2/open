@@ -42,10 +42,12 @@ The negative runs used one temporary Debug build. With `OPEN_INCOGNITO_NEGATIVE=
 
 Each mode ran separately under `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --only incognito`. The modes only select a focused harness flow in committed code; the faulty Swift assignments were restored and are absent from production source. A positive Debug rebuild and full acceptance follow the revert.
 
+Local CRX automation completion (0704) shipped in [#223](https://github.com/SergeSerb2/open/pull/223).
+Its [engine receipt](engine-spike/extensions-local-crx-completion.md) records that gate.
+
 ## Deferred evidence
 
 - Split-extension matrix: the product parent-Profile and spanning content-script rows shipped in #222. Broader spanning/split cases remain engine follow-up evidence; owner: Section 10 lead.
-- Local CRX automation completion (0704) is in [#223](https://github.com/SergeSerb2/open/pull/223); that engine PR owns its evidence.
 - Section 12: fill SiteControlContext.isIncognito from factory.isIncognito; Boosts disabled in private windows (Arc fact: Boosts can't be installed or used in Incognito Mode)
 
 ## Native capture final pass (2026-11-07)
