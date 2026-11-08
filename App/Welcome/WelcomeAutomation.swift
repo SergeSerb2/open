@@ -5,17 +5,26 @@ import Darwin
 
 extension AutomationController {
   func welcome(_ args: [String: Any]) throws -> [String: Any] {
-    let factory = try window
     let action = args["action"] as? String ?? "state"
     let allowed: Set<String>
     switch action {
-    case "state", "insert": allowed = ["action"]
+    case "state": allowed = ["action", "window"]
+    case "insert": allowed = ["action"]
     case "replay", "reveal": allowed = ["action", "card"]
     case "hover": allowed = ["action", "card", "phase"]
     case "link": allowed = ["action", "link"]
     default: throw Failure(message: "unknown welcome action")
     }
     guard Set(args.keys).isSubset(of: allowed) else { throw Failure(message: "unknown welcome argument") }
+    let factory: EngineWebContentHostFactory
+    if let value = args["window"] {
+      guard let id = value as? String, id.utf8.count == 36,
+        let controller = app.windowControllers.first(where: { $0.windowID.description == id }),
+        let target = app.hostFactories[controller.windowID], !target.isClosing else {
+        throw Failure(message: "unknown Welcome window")
+      }
+      factory = target
+    } else { factory = try window }
     switch action {
     case "state": break
     case "insert":
@@ -63,6 +72,11 @@ extension AutomationController {
       "pendingCompletion": page?.hasCompletion == true,
       "animationCount": all.reduce(0) { $0 + $1.cards.reduce(0) { $0 + $1.illustration.animationCount } },
       "hostCount": all.count, "engineContentCreationCount": factory.contentCreationCount,
+      "windowState": ["id": factory.windowState.id.description,
+        "visible": factory.window?.isVisible == true, "miniaturized": factory.window?.isMiniaturized == true,
+        "key": factory.window?.isKeyWindow == true, "main": factory.window?.isMainWindow == true,
+        "occlusionState": factory.window?.occlusionState.rawValue ?? 0,
+        "occluded": factory.window?.occlusionState.contains(.visible) != true] as [String: Any],
       "tab": factory.selectedTab?.id.description ?? "",
       "urlField": factory.controller?.sidebar.displayedURLText ?? "",
       "layout": page.map { welcomeLayout($0) } as Any? ?? NSNull(),

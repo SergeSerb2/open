@@ -67,6 +67,15 @@ Each card keeps one tracking area. Repeated entered events beneath a stationary
 pointer do not replay it; an exit or hiding the page resets the hover transition.
 Automation can send `hover card=N phase=exit` before the next entered transition.
 
+`welcome window=<window UUID>` reads an existing window without focusing it.
+`windowState` includes the raw AppKit occlusion state, key/main state, visibility,
+and minimization. The suite hides a playing window and verifies that restoring it
+restarts the current card and finishes the playlist. It also covers Welcome with
+a second owned Open window. If that cover does not change AppKit's occlusion
+state, the row records INFO with the observed state and still requires the
+playlist to finish after the cover closes. The harness moves only its own window
+away from the read-only hardware pointer position before starting the playlist.
+
 Run the real-App suite as:
 
 ```sh
