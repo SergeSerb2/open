@@ -546,6 +546,8 @@ def run(factory, results, tmp, env):
                 app.quit()
             from boost_profile_retirement import run as profile_retirement
             profile_retirement(factory, results, tmp, env)
+            from boost_script_update import run as script_update
+            script_update(factory, results, tmp, env)
         finally:
             if app and not app.closed:
                 try:

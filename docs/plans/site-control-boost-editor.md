@@ -1165,6 +1165,7 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
     func store(for profile: ProfileID) -> BoostStore
     func preview(_ boost: Boost, tabID: ItemID)                     // §5.3 bound page only
     func refresh(profile: ProfileID)                                // §5.3 all matching pages
+    func updateScripts(profile: ProfileID)                          // future document-start list only; default no-op
     func pageSnapshot(tabID: ItemID) async -> Data?                 // PNG for baseHue
     func zapAvailability(tabID: ItemID) -> Bool                     // required query; false before P7 or without the Open world
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool           // coordinator + send; false if blocked (P7)
@@ -1181,6 +1182,15 @@ As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:
     func browserWindowFrame(tabID: ItemID) -> NSRect?               // §4.2 placement (screen coordinates)
 }
 ```
+
+`updateScripts(profile:)` has a default no-op in a protocol extension (lead,
+2026-11-07). A JS save calls it instead of `refresh(profile:)`. The App updates
+the Profile's matcher and regular-context document-start script lists without
+evaluating live JS or reapplying CSS. OTR contexts are excluded. Undo/Redo,
+reset-all and delete already call `refresh(profile:)`, which also updates the
+script lists. B28 saves a new JS version, checks the old live result and visible
+Refresh to Run, then checks the first inline script after reload for the new
+version. Its hook-disabled negative must fail; F18 and B5 stay unchanged.
 
 `BoostPickerEvent` is declared in OpenBoosts and aliased by OpenSiteControl. The App
 publishes the coordinator’s `lastEvent` after `handle`. Its cases include

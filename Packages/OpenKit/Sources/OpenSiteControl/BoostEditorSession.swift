@@ -67,7 +67,8 @@ public final class BoostEditorSession {
             guard let text = codeDrafts.removeValue(forKey: kind),isEditable else { continue }
             if kind == .css { boost.css = text } else { boost.js = text }
             boost = store.upsert(boost)
-            host.refresh(profile: context.profileID)
+            if kind == .css { host.refresh(profile: context.profileID) }
+            else { host.updateScripts(profile: context.profileID) }
         }
         onChange?()
     }

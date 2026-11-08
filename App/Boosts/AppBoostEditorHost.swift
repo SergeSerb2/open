@@ -15,6 +15,7 @@ final class AppBoostEditorHost: BoostEditorHost {
     boosts.adapter.preview(boost, host: host)
   }
   func refresh(profile: ProfileID) { boosts.refresh(profile: profile) }
+  func updateScripts(profile: ProfileID) { boosts.updateScripts(profile: profile) }
   func pageSnapshot(tabID: ItemID) async -> Data? {
     guard let host = boosts.factory(for: tabID)?.hosts[tabID], !host.closed else { return nil }
     return try? await host.content.takeSnapshot()

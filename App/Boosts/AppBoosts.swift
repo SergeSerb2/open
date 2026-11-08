@@ -114,6 +114,14 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     adapter.refresh(profile: profile, startedAt: start)
     for observer in Array(observers.values) { observer() }
   }
+  /// JS saves change future documents only. Keep persistence/matcher state
+  /// current without evaluating a live page or reapplying its stylesheet.
+  func updateScripts(profile: ProfileID) {
+    guard !isRetired(profile), app.model.profile(id: profile) != nil else { return }
+    let store = store(for: profile)
+    profiles[profile]?.rebuild(values: store.allBoosts())
+    adapter.updateScripts(profile: profile)
+  }
   private func preferencesChanged() {
     let enabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
     guard enabled != boostsGloballyEnabled else { return }

@@ -15,6 +15,7 @@ def fixture_server(tmp):
 <script>document.addEventListener('DOMContentLoaded',()=>{window.boostAtDOMContentLoaded=getComputedStyle(document.documentElement).filter;window.styleAtDOMContentLoaded=!!document.getElementById('open-boosts-style')})</script>""", encoding="utf-8")
     (folder / "boost-first.html").write_text("""<!doctype html><html><head><script>
 window.boostAtFirstScript={filter:getComputedStyle(document.documentElement).filter,style:!!document.getElementById('open-boosts-style'),js:window.boostRestoredFirstDocument??null};
+window.scriptUpdateAtFirstScript={version:window.boostScriptUpdateVersion??null,runs:window.boostScriptUpdateRuns??0};
 </script><title>Restored Boost fixture</title></head><body><h1>Restored Boost</h1></body></html>""", encoding="utf-8")
     (folder / "ads.html").write_text("""<!doctype html><title>Site fixture</title><h1>Site controls</h1><div id="promo-banner">Promo</div><script>document.cookie='f=1';window.clicks=0;document.addEventListener('click',()=>window.clicks++)</script><script src="/ad.js"></script>""", encoding="utf-8")
     (folder / "ad.js").write_text("window.fixtureAdLoaded=true", encoding="utf-8")

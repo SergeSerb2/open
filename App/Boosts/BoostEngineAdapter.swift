@@ -73,10 +73,15 @@ final class BoostEngineAdapter {
     return documentJS[ObjectIdentifier(host)]?[boostID]
   }
   func refresh(profile: ProfileID, startedAt start: TimeInterval) {
+    updateScripts(profile: profile)
+    refreshPages(profile: profile, start: start)
+  }
+  /// The registrations contain regular contexts only; replaceScripts also
+  /// refuses OTR contexts. This path never delivers to existing web contents.
+  func updateScripts(profile: ProfileID) {
     for registration in Array(registrations.values) where registration.profile == profile {
       if let context = registration.context { replaceScripts(context, profile: profile) }
     }
-    refreshPages(profile: profile, start: start)
   }
   func globalSwitchChanged() {
     let start = ProcessInfo.processInfo.systemUptime
