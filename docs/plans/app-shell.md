@@ -504,6 +504,12 @@ Work in order. A step starts only when the step before it passes. Every PR: merg
 | H. Stores + scripting | Merged favicon wiring (#131), committed per-Profile History + live Library (#172), Little Open history (#183), AppleScript H1–H4 (#174); profile-switch host teardown (§4.8). | `App/Stores/*`, `App/LittleOpen/LittleOpenWebContent.swift`, `App/Scripting/*`, `App/Resources/Open.sdef`, `App/Info.plist` | Saved PR evidence: `history` 26/26; `littleopen` history in 34/34 ×3; `applescript` final 137 PASS / 2 external-consent BLOCKED; `page` D4 PASS; bundle `sdef` verified. Script Editor/osascript/JXA remain user consent hand checks in `docs/scripting.md`; app-level Little Open creation returns 1011. |
 | I. Measure + harden | Full `--only measure` on an idle machine, idle CPU, 10-tab memory, signature-stable CEF note. Fix only regressions this plan introduced. | — | Budgets met or each miss named with its `timing` evidence. `tools/verify-all.sh` all PASS. |
 
+Step I idle ruling (lead, 2026-11-08 09:30): the Section 8 ten-page static
+variant must use ≤0.5% total CPU after 90 seconds of settle over a 60-second
+window. Always retain the value and per-process split. The same set with its
+animated selected page remains informational, with no numeric budget. See
+`docs/architecture.md` and `docs/verification.md`.
+
 Split and Peek library work (M4 Steps 1–7) is not re-planned here. If a library piece is missing when its App step starts, land the library piece first in its own PR under the M4 plan, then return.
 
 ## 8. Global acceptance gates (every PR)

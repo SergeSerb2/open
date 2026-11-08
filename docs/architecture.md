@@ -80,8 +80,16 @@ Location: `~/Library/Application Support/Open/`.
 | Cold launch to first web paint (restored tab) | ≤ 700 ms |
 | Tab switch to content visible (live tab) | ≤ 16 ms (one frame) |
 | Sidebar scroll and drag | 120 fps, no dropped frames |
-| Idle CPU (no media playing) | ≈ 0% |
+| Idle CPU, ten pages with static selected page (no media playing) | ≤ 0.5% total CPU |
+| Idle CPU, ten pages with animated selected page | Informational; record measured CPU, no numeric budget |
 | Command bar open to first results | ≤ 50 ms |
+
+Idle ruling (lead, 2026-11-08 09:30): use the existing Section 8 ten-page set,
+90-second settle and 60-second CPU window. The static variant replaces only the
+selected animated page with a static local page. Sum CPU across all App and
+engine processes. Always record the measured value and per-process split. The
+animated variant remains informational; a missing measurement or failed cleanup
+still fails. See `docs/verification.md` for the runner and receipts.
 
 Tactics: build the window and sidebar from the snapshot before the engine finishes starting. Create web content only for visible or recently used tabs. Put tabs to sleep after a period without use (configurable). Load features on first use (command bar panel, settings, Little Open, editors). Ship only the locales we need.
 
