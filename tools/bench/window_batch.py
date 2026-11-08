@@ -35,9 +35,40 @@ def foreign_processes():
   pid,executable=int(fields[0]),fields[1]
   if pid==os.getpid():continue
   name=Path(executable).name
-  if name in ('Open','xcodebuild','siso') or name.startswith('Open Helper'):
+  if name in ('Open','Floor','xcodebuild','siso') or name.startswith('Open Helper'):
    rows.append({'pid':pid,'executable':executable})
  return rows
+
+def floor_processes(bundle):
+ executable=os.path.realpath(str(Path(bundle)/'Contents/MacOS/Floor'))
+ result=set()
+ for line in subprocess.check_output(['ps','-axo','pid=,comm=','-ww'],text=True,timeout=5).splitlines():
+  fields=line.strip().split(None,1)
+  if len(fields)==2 and os.path.realpath(fields[1])==executable:result.add(int(fields[0]))
+ return result
+
+def cleanup_floor(bundle,previous):
+ # LaunchServices children do not belong to open(1)'s process group. Under
+ # the screen lock, new PIDs with this exact executable are our launch's.
+ # Recheck the executable before every signal; never trust a receipt PID.
+ owned=floor_processes(bundle)-previous
+ for sig,seconds in ((signal.SIGTERM,5),(signal.SIGKILL,5)):
+  for pid in owned & floor_processes(bundle):
+   try:
+    os.kill(pid,sig)
+    if sig==signal.SIGTERM:os.kill(pid,signal.SIGCONT)
+   except ProcessLookupError:pass
+  until=time.monotonic()+seconds
+  while owned & floor_processes(bundle) and time.monotonic()<until:time.sleep(.1)
+  if not owned & floor_processes(bundle):break
+ remaining=floor_processes(bundle)-previous
+ assert not remaining,'Owned Floor still alive: '+repr(sorted(remaining))
+ windows=[]
+ for pid in owned:
+  result=json.loads(subprocess.check_output([str(REPO/'.re/e2e-tools/owned-window-count'),str(pid)],text=True,timeout=5))
+  assert result['count']==0,'Owned Floor windows remain: '+repr(result)
+  windows.append(result)
+ return {'ok':True,'terminated_pids':sorted(owned),'windows':windows}
 def check():
  baseline=set(json.loads(Path(os.environ['S16_CRASH_BASELINE_PATH']).read_text()))
  for path in (Path.home()/'Library/Logs/DiagnosticReports').glob('Open*.ips'):
@@ -273,29 +304,39 @@ import engine_e2e as e
 # Bound every call, including launch wait and cleanup, within the batch deadline.
 def expired(*_):raise TimeoutError('Per-sample / whole-batch deadline')
 signal.signal(signal.SIGALRM,expired)
+signal.signal(signal.SIGTERM,expired)
 signal.alarm(max(1,min(90,int(a.deadline-time.time()))))
 name=os.environ['S16_BATCH_VARIANT'];v=cfg['variants'][name]
 log=a.output/f'{which}-{a.sample:03}-{name}.log'
 row={'set':which,'index':a.sample,'variant':name,'load_before':load()}
 assert row['load_before'][0]<=a.max_load,f'Load1 rose above {a.max_load} before launch: release locks immediately'
 if v.get('floor'):
- r=subprocess.run(['/usr/bin/open','-n','-W','-a',v['bundle'],'--env','OPEN_SPEED_IMAGES=0','--stdout',str(log),'--stderr',str(log)],capture_output=True,text=True,timeout=20)
- reports=[]
- for line in log.read_text().splitlines() if log.exists() else []:
-  try:x=json.loads(line)
-  except json.JSONDecodeError:continue
-  if isinstance(x,dict) and 'firstFrameConfirmed' in x:reports.append(x)
- assert len(reports)==1,'Missing floor receipt'
- report=reports[0];assert report['kernelProcessStart'] and report['firstFrameConfirmed']
- assert os.path.realpath(report['executable'])==os.path.realpath(str(Path(v['bundle'])/'Contents/MacOS/Floor'))
- for _ in range(50):
-  try:os.kill(report['pid'],0)
-  except ProcessLookupError:break
-  time.sleep(.1)
- else:raise RuntimeError('Floor PID still alive after 5 s')
- windows=json.loads(subprocess.check_output([str(REPO/'.re/e2e-tools/owned-window-count'),str(report['pid'])],text=True))
- assert windows['count']==0
- row.update(timing=report['timing'],receipt=report,launcher_exit=r.returncode,cleanup={'ok':True,'windows':windows})
+ previous=floor_processes(v['bundle'])
+ assert not previous,'Floor already running before sample'
+ try:
+  r=subprocess.run(['/usr/bin/open','-n','-W','-a',v['bundle'],'--env','OPEN_SPEED_IMAGES=0','--stdout',str(log),'--stderr',str(log)],capture_output=True,text=True,timeout=20)
+  assert r.returncode==0,'Floor launcher failed: '+repr(r.stderr)
+  reports=[]
+  for line in log.read_text().splitlines() if log.exists() else []:
+   try:x=json.loads(line)
+   except json.JSONDecodeError:continue
+   if isinstance(x,dict) and 'firstFrameConfirmed' in x:reports.append(x)
+  assert len(reports)==1,'Missing floor receipt'
+  report=reports[0];assert report['kernelProcessStart'] and report['firstFrameConfirmed']
+  assert os.path.realpath(report['executable'])==os.path.realpath(str(Path(v['bundle'])/'Contents/MacOS/Floor'))
+  for _ in range(50):
+   try:os.kill(report['pid'],0)
+   except ProcessLookupError:break
+   time.sleep(.1)
+  else:raise RuntimeError('Floor PID still alive after 5 s')
+  windows=json.loads(subprocess.check_output([str(REPO/'.re/e2e-tools/owned-window-count'),str(report['pid'])],text=True))
+  assert windows['count']==0
+  row.update(timing=report['timing'],receipt=report,launcher_exit=r.returncode,cleanup={'ok':True,'windows':windows})
+ finally:
+  signal.alarm(0)
+  cleanup=cleanup_floor(v['bundle'],previous)
+  (a.output/f'{which}-{a.sample:03}-{name}.cleanup.json').write_text(json.dumps(cleanup,indent=2))
+  row['cleanup']=cleanup
 else:
  profile=Path(cfg['profile_workdir'])/f'{which}-{a.sample:03}'
  assert len(os.fsencode(str(profile/'automation.sock')))<104
