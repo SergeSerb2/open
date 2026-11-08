@@ -93,6 +93,14 @@ termination, but the ad-hoc test with the clone disabled failed after replacemen
 New navigation timed out and Chromium reported invalid process signature
 validation (`-67065`); the enabled-clone control passed. Work stopped for lead
 review. See [the evidence report](../re/codesign-clone-off.md).
+
+**2026-11-08 follow-up decision.** The unconditional disable is rejected.
+Section 16 is implementing engine patch 0106 to reuse a valid hard-link clone,
+with Chromium's per-run clone as the failure fallback. The live-replacement
+gate must pass with an already reused clone, for ad-hoc and temporary hardened
+DLV copies. The historical failed candidate below remains evidence, not a
+proposed release setting. See [the reuse report](../re/codesign-clone-reuse.md)
+for the design and verification status.
 For this one lead-authorized test, temporary hardened-runtime copies with
 DLV may run on the M5 only after their plain launch-and-quit succeeds under
 the screen lock. This does not change `release.sh`'s M1-only smoke guard and

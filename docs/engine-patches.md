@@ -18,6 +18,17 @@ For this plan:
 
 ## Summary
 
+### Persistent code-sign clone (Section 16, 2026-11-08)
+
+`chromium/0106-open-code-sign-clone-reuse.patch` wires the overlay
+`chrome/browser/mac/open_code_sign_clone.{h,cc}` into the existing clone
+manager. The feature remains enabled. A per-install private cache validates
+the executable's device, inode, size and nanosecond mtime, plus its hard link,
+before reuse. Failed checks retain Chromium's original per-run behavior.
+The cache lease protects a running browser's clone during live replacement.
+Design, rejected-disable evidence and current verification status are in
+[the clone report](re/codesign-clone-reuse.md). Runtime acceptance is pending.
+
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
 The E11 window hook is `chromium/0306-open-extension-windows-tabs.patch`.
