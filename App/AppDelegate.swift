@@ -127,6 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    if isFirstRun && !firstRunSaved, let onboarding = onboardingWindowController {
+      onboarding.window?.makeKeyAndOrderFront(nil)
+      return false
+    }
     if let frontWindowController { frontWindowController.showWindow(nil) }
     else { showWindowsIfNeeded(ignoringLittleOpen: true) }
     return false
@@ -414,6 +418,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func focusWindow(_ id: WindowID, activate: Bool = false) {
+    if isFirstRun && !firstRunSaved, let onboarding = onboardingWindowController {
+      onboarding.window?.makeKeyAndOrderFront(nil)
+      if activate { NSApp.activate() }
+      return
+    }
     didFocusWindow(id)
     windowControllers.first { $0.windowID == id }?.window?.makeKeyAndOrderFront(nil)
     if activate { NSApp.activate() }
