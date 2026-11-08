@@ -1,0 +1,62 @@
+diff --git a/components/password_manager/core/browser/features/password_features.cc b/components/password_manager/core/browser/features/password_features.cc
+index 05023dc1cb6ccbbc83839939896981c4fa030dae..cfcaaffc330693770d502ee29145972ad8fa5f5c 100644
+--- a/components/password_manager/core/browser/features/password_features.cc
++++ b/components/password_manager/core/browser/features/password_features.cc
+@@ -112,7 +112,7 @@ BASE_FEATURE(kFetchChangePasswordUrlForPasswordChange,
+ 
+ BASE_FEATURE(kFillOnAccountSelect,
+              "fill-on-account-select",
+-             base::FEATURE_DISABLED_BY_DEFAULT);
++             base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ #if BUILDFLAG(IS_IOS)
+ BASE_FEATURE(kIosCleanupHangingPasswordFormExtractionRequests,
+diff --git a/components/password_manager/core/browser/password_manager.cc b/components/password_manager/core/browser/password_manager.cc
+index 89cdfdee32ca1c3f70d9bc43cd331572af2e5c33..c876d12942c056038dcdcab6871abd1e46b1cd6b 100644
+--- a/components/password_manager/core/browser/password_manager.cc
++++ b/components/password_manager/core/browser/password_manager.cc
+@@ -552,7 +552,7 @@ void PasswordManager::RegisterProfilePrefs(
+       prefs::kCredentialsEnableService, true,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+   registry->RegisterBooleanPref(
+-      prefs::kCredentialsEnableAutosignin, true,
++      prefs::kCredentialsEnableAutosignin, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+   registry->RegisterBooleanPref(
+       prefs::kWasAutoSignInFirstRunExperienceShown, false,
+@@ -585,7 +585,7 @@ void PasswordManager::RegisterProfilePrefs(
+   registry->RegisterListPref(prefs::kPasswordHashDataList,
+                              PrefRegistry::NO_REGISTRATION_FLAGS);
+   registry->RegisterBooleanPref(
+-      prefs::kPasswordLeakDetectionEnabled, true,
++      prefs::kPasswordLeakDetectionEnabled, false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+   registry->RegisterBooleanPref(
+       prefs::kPasswordDismissCompromisedAlertEnabled, true,
+diff --git a/components/autofill/core/common/autofill_prefs.cc b/components/autofill/core/common/autofill_prefs.cc
+index 99023828d9e5d7d7b4f637fdf0ffdc0e3a084e46..4afa067da52fc5dfc3d17505b6d21c22c565cb67 100644
+--- a/components/autofill/core/common/autofill_prefs.cc
++++ b/components/autofill/core/common/autofill_prefs.cc
+@@ -133,7 +133,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterIntegerPref(
+       kAutofillPaymentMethodsMandatoryReauthPromoShownCounter, 0);
+ #elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+-  registry->RegisterBooleanPref(kAutofillPaymentMethodsMandatoryReauth, false);
++  // Open requires device re-auth for new profiles; existing choices survive.
++  registry->RegisterBooleanPref(kAutofillPaymentMethodsMandatoryReauth, true);
+   registry->RegisterIntegerPref(
+       kAutofillPaymentMethodsMandatoryReauthPromoShownCounter, 0);
+ #elif BUILDFLAG(IS_IOS)
+@@ -374,8 +375,10 @@ bool IsPaymentMethodsMandatoryReauthSetExplicitly(const PrefService* prefs) {
+ 
+ bool IsPaymentMethodsMandatoryReauthPromoShownCounterBelowMaxCap(
+     const PrefService* prefs) {
+-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
+-    BUILDFLAG(IS_CHROMEOS)
++#if BUILDFLAG(IS_MAC)
++  // Open has no re-auth opt-in bubble. The setting stays on the manage page.
++  return false;
++#elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+   return prefs->GetInteger(
+              kAutofillPaymentMethodsMandatoryReauthPromoShownCounter) <
+          kMaxValueForMandatoryReauthPromoShownCounter;

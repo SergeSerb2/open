@@ -1,0 +1,48 @@
+diff --git a/chrome/browser/password_manager/chrome_password_manager_client.cc b/chrome/browser/password_manager/chrome_password_manager_client.cc
+index f7819e353a014cdf7fa0993042263d771e9f0550..fb4a6284119ab1ed11ec516d3837c35646b2f6ce 100644
+--- a/chrome/browser/password_manager/chrome_password_manager_client.cc
++++ b/chrome/browser/password_manager/chrome_password_manager_client.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "open/browser/autofill/open_autofill_hooks.h"
+ #include "chrome/browser/password_manager/chrome_password_manager_client.h"
+ 
+ #include <memory>
+@@ -1408,6 +1409,8 @@ void ChromePasswordManagerClient::UpdateFormManagers() {
+ 
+ void ChromePasswordManagerClient::NavigateToManagePasswordsPage(
+     password_manager::ManagePasswordsReferrer referrer) {
++  auto& hooks = open_engine::GetAutofillHooks();
++  if (hooks.open_page && hooks.open_page(web_contents(), 0)) return;
+ #if BUILDFLAG(IS_ANDROID)
+   password_manager_launcher::ShowPasswordSettings(web_contents(), referrer,
+                                                   /*manage_passkeys=*/false);
+diff --git a/chrome/browser/ui/autofill/chrome_autofill_client.cc b/chrome/browser/ui/autofill/chrome_autofill_client.cc
+index 5220b34d64f6d89b611ccd882a24ebd94f808926..a4bea65979e96c8d1ecc25ebe79b316945bbd734 100644
+--- a/chrome/browser/ui/autofill/chrome_autofill_client.cc
++++ b/chrome/browser/ui/autofill/chrome_autofill_client.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "open/browser/autofill/open_autofill_hooks.h"
+ #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
+ 
+ #include <utility>
+@@ -758,6 +759,14 @@ profile_metrics::BrowserProfileType ChromeAutofillClient::GetProfileType()
+ 
+ void ChromeAutofillClient::ShowAutofillSettings(
+     SuggestionType suggestion_type) {
++  auto& hooks = open_engine::GetAutofillHooks();
++  if (hooks.open_page) {
++    int page = -1;
++    if (suggestion_type == SuggestionType::kManageAddress) page = 2;
++    if (suggestion_type == SuggestionType::kManageCreditCard ||
++        suggestion_type == SuggestionType::kManageIban) page = 1;
++    if (page >= 0 && hooks.open_page(web_contents(), page)) return;
++  }
+ #if BUILDFLAG(IS_ANDROID)
+   switch (suggestion_type) {
+     case SuggestionType::kManageAddress:

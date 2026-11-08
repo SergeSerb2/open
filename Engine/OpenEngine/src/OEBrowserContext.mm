@@ -509,6 +509,7 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 - (void)dealloc {
   // A presenter may retain the manager after this context goes away. Its
   // CEF profile/observers must still close with the owning context.
+  [self oe_closeAutofill];
   [_extensions oe_contextClosed];
   if (_context) CefSetOpenProfileHandler(_context, nullptr);
 }
@@ -559,6 +560,8 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 
 - (void)oe_invalidate {
   if (_state == OEBrowserContextStateClosed && !_context) return;
+  // Close profile-store observers before invalidating the native context.
+  [self oe_closeAutofill];
   _state = OEBrowserContextStateClosed;
   _ready = NO;
   _oe_closing = YES;
