@@ -387,12 +387,13 @@ live Open Default; named Profiles still match stable import IDs only.
 
 ## Section 13 cosmetic filtering checkpoint (2026-11-08)
 
-- Step 5 source is on `s13/step5-cosmetics`; assigned s13b apply and GN
-  generation pass, and the first build is running. All C-cases, contended C-G1/C-G2, C-G3, worst-case
+- Step 5 source is on `s13/step5-cosmetics`; assigned s13b full CEF build,
+  strict status (8/0/0), owned includes, real headless load/empty-root checks
+  (2/2) and distribution pass. All C-cases, contended C-G1/C-G2, C-G3, worst-case
   renderer footprint/style-recalc record, receiver-drop, five quit-load
   runs and real-App on/excluded/off proofs remain pending. App use of the
-  s13b distribution is authorized; windowed checks await build and the
-  lead's explicit M5 screen clearance.
+  s13b distribution is authorized; the App build is running. The M5 screen
+  hold is cleared; windowed checks use the shared screen lock after builds.
 - Scriptlets, `:style()`, `:remove*()` and procedural filters remain
   post-v1 by lead ruling 6. The shared Chrome internal isolated world is
   kept for this milestone; coordinate a dedicated cosmetic world with P7
