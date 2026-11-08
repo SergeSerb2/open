@@ -252,7 +252,9 @@ def run(factory, results, tmp, api, defaults_before):
             thread.join(timeout=5)
 
     try:
-        check_adblock()
+        if not any(os.environ.get(key) == '1' for key in
+                   ('OPEN_PROFILES_SHELL_PAGES_ONLY', 'OPEN_PROFILES_SHELL_REPAIR_ONLY')):
+            check_adblock()
         if os.environ.get('OPEN_PROFILES_SHELL_ADBLOCK_ONLY') == '1':
             return
         launch(fresh=True)
