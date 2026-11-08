@@ -90,7 +90,8 @@ public final class PaneChromeView: NSView {
     func update() {
         let background = (host?.pageBackgroundColor ?? fallbackColor).cgColor
         if layer?.backgroundColor != background { layer?.backgroundColor = background }
-        let text = role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
+        let text = host?.currentURL?.absoluteString == "open://welcome" ? "Welcome to Open"
+            : role == .toolbar && showsFullURL ? host?.currentURL?.absoluteString ?? ""
             : host?.currentURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? ""
         var layoutChanged = false
         if label.stringValue != text { label.stringValue = text; layoutChanged = true }
