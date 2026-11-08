@@ -1,5 +1,12 @@
 # Follow-ups
 
+- Section 15 Arc captures **S-1…S-6** — use the user's combined capture session and a throwaway account. S-1: save/update password, card and address sheets (size, icon, colors, button order); S-2: fill dropdown; S-3: post-save feedback; S-4: generation offer; S-5: Passwords/Credit Cards pages and switch placement; S-6: the internal URL display. Native App acceptance does not prove Arc pixel parity. See [passwords/autofill §13](plans/passwords-autofill.md#13-screenshots-needed-from-the-user-arc-their-own-mac).
+- Section 15 HTTP authentication — replace the hosted Chromium dialog with an Arc-style Open sheet after capture evidence (PW-11). Current WebAuthn/HTTPS-First modal-host checks do not establish HTTP-auth fill/save acceptance.
+- Section 15 **PW-KC1** — user hand check of a real Keychain failure and the "password wasn't saved" toast. No synthetic failure hook or agent access to the real Keychain. Save/fill fixture acceptance uses the mock Keychain only.
+- Section 15 signed-build **K-1…K-3** — after release U-1/U-2, the user checks Open Safe Storage item attributes, prompt-free second launch, and that Open creates no Chromium Safe Storage item. Ad-hoc fixture results do not qualify these checks.
+- Section 15 iCloud passkeys **U-9** — obtain Apple's managed `com.apple.developer.web-browser.public-key-credential` entitlement and provisioning, then run a real iCloud passkey flow. Virtual create/get and native cancellation are covered; real security-key/phone authentication completion and Arc-bound Touch ID passkey migration are not claimed.
+
+
 - Welcome playlist (Section 17, 2026-11-08) — unexplained one-off W06 timeout
   after an earlier attempt lost foreground to another app. The retry used a
   fresh App; the old failure receipt lacked final state. A diagnostic rerun

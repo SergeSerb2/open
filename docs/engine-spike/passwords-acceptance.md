@@ -1,10 +1,33 @@
-# Passwords acceptance: D5
+# Passwords and autofill acceptance (Section 15)
 
 This continues [the D4 dropdown investigation](passwords-dropdown.md).
-Acceptance is still in progress. Raw receipts live in the engine checkout's
-`.re/s15/d5/` directory. No credential values are recorded in those receipts.
+The current App integration uses engine PR #264, framework SHA-256
+`619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`.
+The post-main-merge H run passes the full password suite: **77 PASS**,
+**C-2 M1-only by rule**, **PW-KC1 user hand check**. It has zero interrupted
+attempts, zero new crash reports and clean owned-process/window shutdown.
+The sanitized per-row loads are in [results-passwords.json](results-passwords.json).
+H stopped before PR creation: the features suite passed 17 rows, then failed
+because the Widevine component updater provided no CDM in its bounded wait.
+The first attempt expired at the 120 s row watchdog; the suite correction
+starts the named row and limits the download wait to 60 s, preserving the
+playback acceptance criterion. The corrected attempt reports the missing
+component at load 21.29 / 45.44 / 47.58, with clean owned-process/window
+shutdown and zero interruptions. This is a component prerequisite failure;
+no engine root was changed and no engine regression cause is inferred.
 
-## Confirmed causes
+Per the engine-side stop rule, page, littleopen, settings-preview and the full
+verify-all gate are NOT RUN on this H checkpoint. The new Little Open
+page/save-completion ownership row is also NOT RUN. The App PR remains
+pending this gate; there is no all-suite acceptance claim. Full local rows,
+commands and loads are in `.re/s15/h/REPORT.md`.
+
+The sections below retain D5/D6 diagnosis history. D5's old framework is not
+accepted or replayed. Raw historical receipts remain in the engine checkout's
+`.re/s15/d5/` and `.re/s15/d6/`; H receipts are under `.re/s15/h/` in the App
+checkout. Receipts contain no credential values.
+
+## Historical D5 causes
 
 P-5 submitted the saved password as its new password. Chromium correctly
 selected a metadata-only update. Password-manager internals distinguish that
@@ -73,8 +96,8 @@ normal `TabDialogManager` path sets `close_on_navigate=false` for this ordering
 dialogs at `web_contents_modal_dialog_manager.cc:203`. Patch 0809 defers the
 hosted warning until every observer has seen that commit. A weak tab reference
 and navigation generation cancel a stale deferred show. The next focused
-run crashed during warning cleanup. No warning decision passes on the new
-distribution yet.
+run crashed during warning cleanup. At that D5 checkpoint no warning decision had passed on that
+distribution. The final 619324d3 framework passes the full HF decision/lifetime set.
 
 At 21:05, closing the tab with the warning still open destroyed its
 `AskBeforeHttpDialogController` inside `TabModel::DestroyTabFeatures()`.
@@ -90,12 +113,12 @@ The M5 screen is held until the user dismisses the crash dialog.
 Prepared engine patch 0810 keeps the blocked-state update and skips only
 the UI event after tab features are gone. Modal security checks, fullscreen
 handling, and live-tab notifications stay intact. It applies to a scratch
-copy of the current source. It is not built or runtime verified yet.
+copy of the current source. It was not built or runtime verified at that D5 checkpoint; PR #264 later built it and passed the real warning teardown flows.
 `PW-HF3-tab-close` covers the real tab-close path that crashed the earlier
 PW-HF1 cleanup. The decision rows wait for both named actions to become
 available before sending input. No crash-prone build will be relaunched on M5.
 
-## Current distribution
+## Historical D5 distribution (not accepted)
 
 Both branches include main `cca168124c668000d1a3dd283cd8a70e4540d366`,
 including #204, #222, #223 and #234. Built distribution SHA-256:
@@ -105,7 +128,7 @@ This distribution crashes on warning cleanup and is not accepted.
 The engine apply/build/distribution and all 8 strict status checks pass:
 33 Open patches, 117 CEF patches, 69 overlay files and 34 symbols. The Debug
 App build and commands-dump check pass. Full password and engine regression
-acceptance are pending. Intentional crash rows are M1-only by rule and are
+acceptance were pending at that D5 checkpoint; the H and PR #264 results supersede it. Intentional crash rows are M1-only by rule and are
 not run by this M5 acceptance.
 
 ### HTTPS warning Return on macOS (D6)
