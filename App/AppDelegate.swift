@@ -112,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
     LaunchTiming.shared.phase("settingsRegistered")
-    initialMainMenuCompleted = true
+    completeInitialMainMenu()
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     LaunchTiming.shared.phase("mainMenuBuilt")
     LaunchTiming.shared.phase("initialMenuRetargeted")
@@ -679,6 +679,11 @@ extension AppDelegate: CommandDispatcher {
       guard let self, !Task.isCancelled else { return }
       self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
     }
+  }
+  func completeInitialMainMenu() {
+    initialMainMenuCompleted = true
+    menuRebuildTask?.cancel()
+    menuRebuildTask = nil
   }
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {

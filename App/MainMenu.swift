@@ -5,6 +5,7 @@ import OpenSettings
 /// The registry owns titles, ordering, shortcuts and menu actions.
 @MainActor
 enum MainMenu {
+  private static var initialMenuDelegateKey: UInt8 = 0
   static func build(factoryOverride: EngineWebContentHostFactory? = nil) -> NSMenu {
     guard let app = NSApp.delegate as? AppDelegate, app.model != nil else { return NSMenu() }
     let owner = NSApp.keyWindow.flatMap { app.factory(forKeyWindow: $0) }
@@ -29,6 +30,10 @@ enum MainMenu {
       troubleshooting.addItem(archive)
     }
     #endif
+    if !app.initialMainMenuCompleted {
+      let completion = InitialMenuCompletion(app: app, menu: menu)
+      objc_setAssociatedObject(menu, &initialMenuDelegateKey, completion, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
     return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
@@ -81,6 +86,42 @@ enum MainMenu {
     guard case .browserCommand(let id)? = app.fallbackKeyboard.route(event: event, context: context, overrides: app.keyBindings),
           app.isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
     app.performCommand(id, keyDownTimestamp: event.timestamp); return true
+  }
+}
+
+/// An early menu click must see every item, even before didFinishLaunching.
+/// Populate the existing submenus so AppKit can finish opening the clicked menu.
+@MainActor
+private final class InitialMenuCompletion: NSObject, NSMenuDelegate {
+  weak var app: AppDelegate?
+  weak var root: NSMenu?
+  private var fullMenu: NSMenu?
+  private var previousDelegates: [ObjectIdentifier: any NSMenuDelegate] = [:]
+
+  init(app: AppDelegate, menu: NSMenu) {
+    self.app = app
+    root = menu
+    super.init()
+    for submenu in menu.items.compactMap(\.submenu) {
+      if let delegate = submenu.delegate { previousDelegates[ObjectIdentifier(submenu)] = delegate }
+      submenu.delegate = self
+    }
+  }
+
+  func menuNeedsUpdate(_ menu: NSMenu) {
+    guard let app, let root, fullMenu == nil else { return }
+    app.completeInitialMainMenu()
+    let full = MainMenu.build()
+    fullMenu = full // Retain the full builder's command target while its items are in root.
+    for (old, replacement) in zip(root.items, full.items) {
+      guard let destination = old.submenu, let source = replacement.submenu else { continue }
+      destination.removeAllItems()
+      for item in source.items { source.removeItem(item); destination.addItem(item) }
+      destination.delegate = previousDelegates[ObjectIdentifier(destination)]
+      if destination.title == "Window" { NSApp.windowsMenu = destination }
+      if destination.title == "Help" { NSApp.helpMenu = destination }
+    }
+    previousDelegates[ObjectIdentifier(menu)]?.menuNeedsUpdate?(menu)
   }
 }
 
