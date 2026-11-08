@@ -110,7 +110,8 @@ def run(factory, results, tmp, h):
         gate('welcome_native_selected', native_welcome, welcome, {})
         welcome_id = welcome['tab']
         results['steps_welcome_first_today'] = dict(ok=bool(selected_tabs) and selected_tabs[0]['id']==welcome_id
-            and app.call('tab-state', tab=welcome_id)['section']=='today' and tabs[0]['id']==welcome_id, load=os.getloadavg())
+            and app.call('tab-state', tab=welcome_id)['section']=='today'
+            and [t for t in tabs if t['section']=='today'][0]['id']==welcome_id, load=os.getloadavg())
         adblock = json.loads(Path(app.user_data,'adblock-settings.json').read_text())
         saved_name = app.call('defaults', key=keys[0], persistent=True)
         focused = next(s for s in stored['spaces'] if s['id']==stored['windows'][0]['focusedSpaceID'])
