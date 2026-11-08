@@ -778,8 +778,9 @@ The wizard Report (`ImportWizard.swift`) replaces the single "Passwords and cook
 
 ### 9.1 Fixtures
 
-- Server: `tools/e2e/fixtures/passwords/server.py` (Python standard library, `-I`), one port, started by the harness. Hosts through Open's `additionalSwitches`: `--host-resolver-rules=MAP *.example.com 127.0.0.1:<port>` (rule syntax: `net/dns/mapped_host_resolver.h:41`). Origins: `http://login.example.com`, `http://other.example.com` (cross-site), `http://localhost:<port>` (secure context for cards and passkeys).
-- Pages (our own HTML, synthetic data only): `login.html` (username + password, POST `/login` → 302 `/welcome`), `change.html` (current + new password), `signup.html` (`autocomplete="new-password"`), `iframe.html` (main page on `other.example.com` with the login form in an `http://login.example.com` iframe), `address.html` (shipping form with `autocomplete` tokens), `card.html` (on `localhost`, card number `4111 1111 1111 1111`, a future expiry), `cookies` endpoints (`/set-cookies` sets the cookies in §9.4; `/echo-cookies` returns the names it received as JSON), `webauthn.html` (on `localhost`, `navigator.credentials.create` and `get`).
+- Server: `tools/e2e/fixtures/passwords/server.py` (Python standard library, `-I`), separate ephemeral HTTP and HTTPS ports, started by the harness. Password origins use HTTP through `--host-resolver-rules=MAP *.example.com 127.0.0.1:<http-port>` (rule syntax: `net/dns/mapped_host_resolver.h:41`). Cards and passkeys use `https://localhost:<https-port>`. HTTP localhost is a secure context for some Web APIs, but does not satisfy Chromium's card security-level guard.
+- At harness start, `openssl` generates a throwaway localhost certificate and key in a fresh 0700 temporary directory. Only the e2e App receives `--ignore-certificate-errors-spki-list=<certificate-SPKI-SHA256>`. No global certificate bypass or system trust change is used. Both normal and supervisor cleanup remove the directory.
+- Pages (our own HTML, synthetic data only): `login.html` (username + password, POST `/login` → 302 `/welcome`), `change.html` (current password plus a distinct new password), `signup.html` (`autocomplete="new-password"`), `iframe.html` (main page on `other.example.com` with the login form in an `http://login.example.com` iframe), `address.html` (shipping form with `autocomplete` tokens), `card.html` (HTTPS localhost, public test card and future expiry), `cookies` endpoints (`/set-cookies` sets the cookies in §9.4; `/echo-cookies` returns names only), `webauthn.html` (HTTPS localhost, `navigator.credentials.create` and `get`).
 - Credentials are fixture strings (`fixture-user`, `fixture-password-1`). No real site, no real account.
 
 Automation additions (`docs/automation.md`; App automation only, which the app enables only with its automation flag):
@@ -789,6 +790,7 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | `policy` | `savePrompt`: `record` / `save` / `never` / `dismiss` / `hold` | Answer save sheets automatically or hold them |
 | `save-prompt` | `answer` | Answer the held sheet through the real sheet buttons |
 | `credentials` | `profile` | `OECredentialCounts` |
+| `credentials-prefs` | optional `profile`, strict Boolean saving switches and `cardReauthentication` | Read or change the disposable Profile's engine preferences |
 | `import-secrets-fixture` | `map`: fixture Arc directory → Open profile name (default `{"Default": "Default", "Profile 1": "Work"}`) | Runs `ArcSecretsImporter.runSyntheticFixture` (§8.1) with the real App sinks, returns counts; refuses unless the build is Debug or `--open-e2e` is set |
 | `events` | — | Adds `savePrompt` (`kind`, `displayHost`, `answer`) and `autofillPage` events |
 
@@ -807,14 +809,18 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | P-9 | `address.html` submit | kind `address`; Save → `addresses == 1` |
 | P-10 | Second address form, click a field | Dropdown shows the address; selection fills name, street, city, postal code |
 | P-11 | `card.html` submit | kind `card`; Save → `cards == 1` |
-| P-12 | Card form again, select the card | Number, name, expiry filled; no crash if Chromium offers re-auth (crash risk 1) |
+| P-12 | Card form again, select the card; set `cardReauthentication` false only for this synthetic Profile and restore it in `finally` | Number, name, expiry match in-page |
+| PW-REAUTH-default | Fresh Profile, read `credentials-prefs` | `cardReauthentication` is true |
+| PW-REAUTH-request | Select a saved card with re-auth enabled | Device auth starts; Open remains alive with no new crash; the restored preference survives relaunch. A blocked automation socket is bounded; only a bundle-verified SecurityAgent focus handoff is expected. No system auth input is sent. |
+| PW-CARD-HTTPS | Card page over HTTPS | `window.isSecureContext` and Chromium's secure-context type agree |
+| PW-CARD-HTTP | Same card form over HTTP | No card save offer and no card stored |
 | P-13 | Command bar "Manage Passwords" | A tab at `chrome://password-manager/passwords` in the focused Space; page shows 1 password row (`eval` on the page DOM) |
 | P-14 | Dropdown footer "Manage passwords…" | `autofillPage` event, then the same tab is selected (no second tab) |
 | P-15 | Every flow above | Open's process alive; no crash report in `~/Library/Logs/DiagnosticReports` newer than the run |
 | P-16 | Open the command bar while a dropdown is up; switch Space; hide the sidebar | The dropdown closes each time |
 | P-17 | Second profile (`space-create profile:"Work"`), same login page | No dropdown entry; `credentials(profile:"Work").logins == 0` |
-| P-18 | After the run | `Login Data` copy: `password_value` of every row starts with `v10`; the fixture password bytes are not in the file; `stat` mode of the engine dir is 0700 |
-| P-19 | Incognito window, sign in | No sheet |
+| P-18 | Gracefully close Open, inspect a synthetic `Login Data` copy, then relaunch | Every saved `password_value` starts with `v10`; fixture password bytes are absent; profile directory mode is 0700 |
+| P-19 | Private window with the focused Space's Profile as parent, sign in | The context is off the record and has that parent; no sheet, no private save, and both private and parent stores stay unchanged |
 | P-20 | `webauthn.html` with a DevTools virtual authenticator (`WebAuthn.enable`, `WebAuthn.addVirtualAuthenticator`, ctap2, usb) | `create` and `get` resolve |
 | P-21 | `webauthn.html` without a virtual authenticator | Chromium's WebAuthn dialog shows as a child window (`windows`, `snapshot`); Esc closes it; the promise rejects with `NotAllowedError` |
 | P-22 | Relaunch without `--open-allow-mock-keychain-secrets` (mock-key build); sign in on a new fixture site | No sheet, no `savePrompt` event; `logins` unchanged; `canEnablePasswordSaving` is false |
