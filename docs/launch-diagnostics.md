@@ -142,6 +142,68 @@ Compare the signed cohort's `ChangetimeScan` incidence/duration, AMFI chain resu
 
 No product code or product signing configuration changed.
 
+## Frozen-window scan audit
+
+The original window did pay for a security scan on **56/56 Open primary samples**. Neither floor did: **14/14 floor samples had no observed scan**. Of the Open samples, 50 have `ChangetimeScan` (median **148.188 ms**, range **145.768–151.021 ms**). The first launch of six candidate bundles instead has a full `GatekeeperScan` lasting **3.53–3.73 seconds**. Those scans explain the retained multi-second outliers; they are not missing or scan-free samples.
+
+This audit reads the existing `/tmp/s16w0027/results.json` and unified log from **2026-11-08 00:26:50–00:30:30, GMT−07:00**. It adds no timing set. The query used `log show --start/--end --style ndjson --signpost --info --debug`, with the security/launch-daemon and kernel AMFI/sandbox filter described above. The table covers only the 70 primary samples, not the separate key-readiness set. Sample numbers follow the seven interleaved rounds.
+
+Cells are scan durations in milliseconds. `GK` means a full `GatekeeperScan` rather than `ChangetimeScan`; `0` means neither scan was observed in that sample's pre-main window.
+
+| Variant | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| floor | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| main | 148.188 | 148.222 | 148.649 | 146.413 | 146.401 | 147.815 | 148.084 |
+| update-ui | 149.211 | 146.847 | 148.129 | 147.292 | 147.663 | 148.900 | 149.886 |
+| floor-links | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| branch | GK 3528.084 | 147.303 | 149.549 | 147.237 | 151.021 | 147.619 | 148.164 |
+| eager-menu | GK 3731.917 | 148.463 | 148.445 | 148.346 | 148.650 | 148.560 | 149.411 |
+| eager-optional | GK 3656.449 | 147.255 | 149.733 | 146.624 | 145.850 | 147.684 | 148.373 |
+| double-layout | GK 3622.381 | 147.693 | 147.219 | 145.768 | 147.848 | 148.188 | 149.005 |
+| no-strip | GK 3714.931 | 150.452 | 150.842 | 148.159 | 149.618 | 149.179 | 149.802 |
+| eager-sparkle | GK 3706.494 | 145.865 | 148.599 | 146.896 | 146.937 | 149.680 | 148.358 |
+
+Attribution uses each receipt's PID, RunningBoard's public executable path/PID, and the single-launch pre-main interval. Signpost `Path` fields are private, so this is temporal attribution, not a decoded private path. Every assigned scan has a complete begin/end pair, and none is assigned twice. For example, main sample 1 has an explicit bundle-path `Checking PreventLaunch` at 00:27:13.925884, then `ChangetimeScan` at 00:27:13.931796–14.079984 (148.188 ms). Raw log lines are 2202, 2208 and 2337. Branch sample 1 has `GatekeeperScan` at 00:27:16.847584–20.375668 (3528.084 ms), lines 3562–3869, following RunningBoard's PID 39841 at line 3508.
+
+The 50 change-time samples have a median Open `main` mark of 259 ms. Subtracting each scan leaves a median 110.824 ms. The matched floor's `main` median is 79.545 ms. Thus the scan explains most, but not all, of the main-mark gap. These marks still include application creation; this subtraction does not identify another loader cost or prove a fix gain.
+
+### Executable ctime advances during a full run
+
+A functional launch used an APFS copy of frozen `window-main/Open.app`, never the frozen artifact itself. Before launch, strict signature verification and SHA-256 matched the manifest. Snapshots recursively recorded all 705 bundle entries and separately captured `stat -f '%c %m %N'` for the root, `Contents/MacOS/Open`, each framework/helper and `Contents/Resources`. Separate `xattr -lr` dumps avoid treating the JSON's empty xattr placeholders as evidence.
+
+Only **`Contents/MacOS/Open` changes ctime**, the filesystem metadata change time. The other 704 entries remain unchanged, including the bundle root, frameworks, helpers and resources. The executable's bytes, mtime, size, inode and mode remain unchanged. Its before/after xattr dumps are byte-identical, including `com.apple.provenance` values. Static signature verification alone changes no entry. The frozen source's before/after snapshots also match.
+
+| Observation | Executable ctime, local GMT−07:00 | Other executable evidence |
+|---|---|---|
+| Before full launch |02:11:25.258602646|SHA-256 `61b19063b7d30ba7115a06ec9272f4b3b049cb54f050d3b2d9ec7003e691c48c`|
+| After paint |02:11:53.969511411|mtime remains `1794111024364991895` ns; size 28,656,080 bytes|
+| After clean exit |02:11:54.780675916|Same SHA-256, inode, mode and xattrs|
+
+That launch ran at load1 12.249→14.151. It is functional metadata evidence, not a timing receipt. Two further full runs, with the earlier research trace enabled, also advance executable ctime during the run and again by clean exit. All three full runs close their windows and leave no owned process.
+
+### Cause boundary and controls
+
+| Check or control | Result | What it establishes |
+|---|---|---|
+| Batch/harness static inspection |Launches the bundle in place; copies only profiles per sample. Hash/signature validation is before the batch; no per-sample xattr, signing or touch operation.|No identified per-launch bundle writer in `window_batch.py` or `engine_e2e.Open` constructor/quit paths.|
+| Empty C entry, twice |No ctime advance.|The retained executable/framework bundle can exit without changing its metadata.|
+| Empty entry plus `NSApplication.shared` |No ctime advance.|Application creation alone is insufficient. This control does not call `finishLaunching`.|
+| Same full Open executable with `OPEN_AUTOMATION_QUIT_BEFORE_ENGINE=1` |No ctime advance; clean exit and `terminationSkippedEngine` logged.|The existing AppKit/model/window/finish-launching path and `open -n` registration are insufficient. The observed change needs a later stage.|
+| Entry-only CEF `dlopen`, leaving it resident through exit |No ctime advance.|Mapping CEF alone is insufficient. This is not an engine-initialization control.|
+| Entry-only child `posix_spawn` and `fork` controls |No ctime advance.|A simple child-process operation alone is insufficient.|
+| Entry-only copy of Open's signature-information query |All three Security calls succeed; no ctime advance.|`SecCodeCopySelf`, `SecCodeCopyStaticCode` and `SecCodeCopySigningInformation` alone are insufficient. No identity or Keychain was accessed.|
+| Earlier opt-in metadata-call trace |No matching metadata setter caught in Open or its CEF helpers, while ctime still advances.|No writer identified. Missing calls, direct syscalls and external writers remain possible; this negative result does not prove an OS writer.|
+
+The auxiliary entry controls and traces are historical research evidence from before the new interposer ban. They supply no product change and will not be reused. The attempted broader trace failed its loader-only check before NSApplication/window creation: `Open-2026-11-08-022918.ips`, SIGABRT, `_tlv_bootstrap_error` from the research library's `wrap_mmap`. It is a research-instrument failure, excluded from the evidence above. All launch work stopped immediately. The lead was notified; no M5 on-screen work resumes without “M5 clear”. No further experiments run tonight. `DYLD_INSERT_LIBRARIES` and interposer experiments are now prohibited on every machine.
+
+The established cause of the repeated delay is **security re-assessment, with executable ctime advancing during full runs**. The exact writer is unresolved. The unchanged bundle and before-engine control do not support bundle size or nested-code count alone as the reason for a ctime advance on every full launch. They do not exclude those factors from the scan's duration. Nearby `syspolicyd` bastion/XProtect messages have private target paths and do not prove that either service wrote Open's metadata. No product or harness writer has yet been demonstrated, so no fix is proposed.
+
+**Open question:** which writer in or after engine init advances the executable's ctime?
+
+**Next step:** find the writer without interposers: compare ctime before and after runs that stop at successive engine milestones, using the App's existing launch marks. This is pending screen clearance and a later research session.
+
+Evidence is retained in `.re/s16/launch-fixes/pre-main/launchservices/window-audit/`: `window.ndjson`, `index.py`, `primary-scans.json` (bundle/PID and exact log-line references for every cell), `scan-spans.json`, `audit-summary.json`, the before/live/after `.json`, `.stat` and `.xattr` snapshots, `functional.json`, `appkit-probe.json`, `early-quit.json`, `load-probe.json`, `spawn-probe.json`, `signature-probe.json`, and the two completed trace directories. No new timing set or product change was made.
+
 ## Current-source validation block
 
 After merging main `caf42f74`, the real Release build of diagnostic source `0922a78c` ran through the S16 wrapper against `open-engine-s8-main`. It exited 65 in 7.3 seconds at load1 5.11→5.18. Unchanged main engine sources require absent `cef_open_world.h`, absent `cef_site_control.h`, and `CefOpenPageHandler.OnSecurityStateChanged`. The authorized view is stale. No other engine root was used or fetched.
