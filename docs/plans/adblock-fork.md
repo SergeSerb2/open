@@ -4614,7 +4614,7 @@ fails; the stretch is 40 MiB. No budget has changed.
 
 | Component, 16 KiB working run | Text | DAT |
 |---|---:|---:|
-| PA allocated before engine (browser other) | 12.42 MiB | 12.46 MiB |
+| PA allocated before engine, all roots (browser other) | 24.04 MiB | 24.08 MiB |
 | Rules/build residue PA allocated delta, before regex | 38.99 MiB | 36.82 MiB |
 | Immutable regex program bytes (crate counter) | 6.92 MiB | 6.92 MiB |
 | Regex PA delta beyond program bytes (cache, metadata, rounding) | 6.55 MiB | 6.58 MiB |
@@ -4626,8 +4626,8 @@ fails; the stretch is 40 MiB. No budget has changed.
 PA phase differences include concurrent browser allocations and allocator
 rounding. The regex counter measures immutable programs; PA does not tag
 cache allocations separately, so the residuals above are bounds/combined
-categories, not exact cache ownership. `resolver-pa-components.json` records
-the byte counts. The remaining text/DAT footprint difference is resident
+categories, not exact cache ownership. `resolver-pa-all-roots.json` records
+the byte counts, summing current and original PA roots. The remaining text/DAT footprint difference is resident
 allocator/build residue, not a retained DAT buffer. After exact re-sharing,
 DAT costs less than text in these runs.
 
