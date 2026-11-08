@@ -82,7 +82,8 @@ def run(factory, results, tmp, api):
                               and s['playlist'] == 'stopped' and not s['animating'], timeout=38)
         record('W06_finite_playlist_1_to_4', stopped and stopped['activeCard'] == 4
                and stopped['duration'] == 8.5 and stopped['completionCount'] == 4
-               and stopped['animationCount'] == 0 and not stopped['pendingCompletion'], state=stopped)
+               and stopped['animationCount'] == 0 and not stopped['pendingCompletion'], state=stopped,
+               lastState=state())
         if not stopped:
             raise AssertionError('Welcome playlist did not finish in order')
         completion_count = stopped['completionCount']
