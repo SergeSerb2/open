@@ -1,4 +1,4 @@
-import AVFoundation
+import AVFAudio
 import Foundation
 
 /// Open's generated effects. No resource or audio player is loaded at launch.
