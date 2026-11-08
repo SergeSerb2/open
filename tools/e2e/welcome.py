@@ -425,7 +425,10 @@ def negative_gates(factory, results, tmp, api):
                     visible(); app.call('welcome', action='replay', card=1)
                     app.call('select', tab=blank)
                     hidden = state()
-                    record('N_hidden_tab_stops', hidden['animationCount'] > 0 and any(h['animating'] for h in hidden['hosts']), state=hidden)
+                    hidden_gate = not hidden['visible'] and hidden['animationCount'] == 0 \
+                        and all(not h['animating'] for h in hidden['hosts'])
+                    record('N_hidden_tab_stops', not hidden_gate
+                           and any(h['animating'] for h in hidden['hosts']), state=hidden)
                     app.call('select', tab=inserted['tab']); visible()
                     app.call('welcome', action='replay', card=1)
                     app.call('command', id='minimize-window')
