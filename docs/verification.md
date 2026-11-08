@@ -1191,12 +1191,19 @@ App from `tools/build.sh`, not a release artifact.
 
 Use `--preflight --out <preflight.json>` to check the same App, release CLIs,
 resource bundles, signatures and prepared helpers without launching the App or
-any measurement CLI. The JSON has `mode: preflight`, `preflight: PASS`, empty
-measurement rows and executable hashes. This is preparation evidence only.
+any measurement CLI. It also computes every App socket path from the same
+profile roots the workloads use, including the resolved `/private/tmp` path.
+It refuses any path over 100 encoded bytes, below macOS's 104-byte `sun_path`
+limit. JSON records the paths, the longest path, `mode: preflight`,
+`preflight: PASS`, empty measurement rows and executable hashes. This is
+preparation evidence only.
 
 For a lead-granted stopped-machine window, add `--quiet-start`. It refuses
-immediately if load1 exceeds 4 or an Open/App helper, release CLI, `xcodebuild`
-or `siso` process exists. It never waits for load. The default whole-run deadline
+immediately if load1 exceeds `--max-load N` (default 4) or an Open/App helper,
+release CLI, `xcodebuild` or `siso` process exists. The table header and JSON
+record the chosen ceiling and whether the guard is enabled. A lead-approved
+window can use `--quiet-start --max-load 12` per TANDEM 4a. This operator guard
+does not change product budgets. It never waits for load. The default whole-run deadline
 is 2,220 seconds (37 minutes), with up to three minutes reserved for cleanup.
 `--max-seconds` can set a shorter deadline. An expired deadline leaves an
 incomplete FAIL receipt; it does not accept or silently omit remaining rows.
@@ -1207,8 +1214,12 @@ each hold. It never waits for low load. A loaded-machine failure stays FAIL,
 with its loads. Only a lead-arranged quiet M5 run establishes quiet-machine
 acceptance. Follow current screen holds; the command does not clear them.
 
-App workloads use disposable profiles and the existing LaunchServices/socket
-harness. The keys used by these flows are reset before launch and restored with
+Workloads use a private, short `/tmp/ob.*` root for profiles, home and temporary
+data. This root does not depend on `--out` or the caller's `TMPDIR`. Logs and
+receipts remain beside `--out`. Each worker removes its data after owned process
+cleanup; the parent removes the run root in `finally`, including preflight.
+App workloads use the existing LaunchServices/socket harness. The keys used by
+these flows are reset before launch and restored with
 their original plist types in `finally`. Each worker reaps owned processes
 before releasing its screen hold. It removes disposable profiles, home and
 temporary data. A launch, crash or cleanup error stops the run before more

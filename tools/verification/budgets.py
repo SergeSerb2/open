@@ -92,25 +92,25 @@ def needed_products(groups):
     return sorted({Path(command(group, Path('.'))[0]).name for group in groups if group not in APP})
 
 
-def run_cli(group, scratch, receipt):
-    (scratch / 'tmp').mkdir()
-    (scratch / 'home').mkdir()
-    env = dict(os.environ, TMPDIR=str(scratch / 'tmp') + '/',
-               CFFIXED_USER_HOME=str(scratch / 'home'), OPEN_VERIFY_SUITE_ROOT=str(scratch))
+def run_cli(group, scratch, data_root, receipt):
+    (data_root / 'tmp').mkdir()
+    (data_root / 'home').mkdir()
+    env = dict(os.environ, TMPDIR=str(data_root / 'tmp') + '/',
+               CFFIXED_USER_HOME=str(data_root / 'home'), OPEN_VERIFY_SUITE_ROOT=str(scratch))
     # Caller-supplied benchmark overrides would change the existing workload.
     for key in ('BENCH_SCROLL_LOOPS', 'BENCH_MOVES', 'OPEN_VERIFY_BREAK',
                 'DYLD_INSERT_LIBRARIES', 'SIDEBAR_FOLDER_PEEK_PERF'):
         env.pop(key, None)
     if group == 'feature-idle':
         env['DYLD_INSERT_LIBRARIES'] = str(HELPERS / 'budgets-idle-probe.dylib')
-    argv = command(group, scratch)
+    argv = command(group, data_root)
     receipt['command'] = argv
     logfile = scratch / 'command.log'
     with logfile.open('w') as log:
         mask = signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGTERM, signal.SIGINT, signal.SIGHUP))
         job = None
         try:
-            job = subprocess.Popen(argv, cwd=scratch, env=env, stdin=subprocess.DEVNULL,
+            job = subprocess.Popen(argv, cwd=data_root, env=env, stdin=subprocess.DEVNULL,
                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
                                    preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_SETMASK, mask))
             receipt['pid'] = job.pid
@@ -148,11 +148,11 @@ def run_cli(group, scratch, receipt):
     return logfile.read_text(errors='replace')
 
 
-def worker(group, app, output):
+def worker(group, app, output, data_root):
     """Runs inside the row's screen lock, when required. No builds or load wait."""
     scratch = output.parent
     (scratch / 'worker.pid').write_text(str(os.getpid()))
-    receipt = dict(group=group, load_start=list(os.getloadavg()), cleanup=False)
+    receipt = dict(group=group, load_start=list(os.getloadavg()), cleanup=False, data_root=str(data_root))
     harness = None
     saved = {}
     try:
@@ -182,13 +182,13 @@ def worker(group, app, output):
             extracted = load_module('budgets_app', ROOT / 'tools/verification/budgets_app.py')
             tracker = harness.FocusTracker()
             harness._ACTIVE_FOCUS_TRACKER = tracker
-            receipt['data'] = extracted.run(group, harness, app, scratch)
+            receipt['data'] = extracted.run(group, harness, app, scratch, data_root)
             tracker.apps = harness._OWNED_APPS
             lost = tracker.loss()
             if lost:
                 raise RuntimeError('foreground interrupted during timed App workload')
         else:
-            receipt['text'] = run_cli(group, scratch, receipt)
+            receipt['text'] = run_cli(group, scratch, data_root, receipt)
     except BaseException as error:
         receipt['error'] = str(error)
         receipt['interrupted'] = isinstance(error, InterruptedError)
@@ -234,9 +234,8 @@ def worker(group, app, output):
                     raise RuntimeError('; '.join(cleanup_errors))
             elif receipt.get('pid') and not receipt.get('cli_cleanup'):
                 raise RuntimeError('CLI/native child cleanup did not complete')
-            for name in ('profile', 'home', 'tmp', 'data', 'fixtures'):
-                if (scratch / name).exists():
-                    shutil.rmtree(scratch / name)
+            shutil.rmtree(data_root)
+            receipt['data_root_removed'] = not data_root.exists()
             receipt['cleanup'] = True
         except BaseException as error:
             receipt['cleanup_error'] = str(error)
@@ -533,7 +532,25 @@ def preflight(app, groups):
         raise RuntimeError('Refusing App on a mounted image; use tools/build.sh Release')
 
 
-def quiet_start():
+def socket_preflight(groups, data_root):
+    # engine_e2e.Open uses <user_data>/automation.sock. macOS sun_path has
+    # 104 bytes including its terminator; keep the requested 100-byte ceiling.
+    extracted = load_module('budgets_socket_paths', ROOT / 'tools/verification/budgets_app.py')
+    paths = []
+    for group in groups:
+        if group in APP:
+            for profile in extracted.profile_roots(group, data_root / group):
+                socket = profile / 'automation.sock'
+                for path in {str(socket), str(socket.resolve())}:
+                    paths.append(dict(path=path, bytes=len(os.fsencode(path)), group=group))
+    longest = max(paths, key=lambda entry: entry['bytes']) if paths else None
+    check = dict(limit_bytes=100, longest=longest, paths=paths)
+    if longest and longest['bytes'] > 100:
+        raise RuntimeError('Automation socket preflight refused: ' + json.dumps(check))
+    return check
+
+
+def quiet_start(max_load):
     # Operator guard for the lead's 2026-11-07 quiet window, not a product budget.
     load1 = os.getloadavg()[0]
     listing = subprocess.check_output(['/bin/ps', '-ax', '-o', 'pid=,comm='], text=True, timeout=10)
@@ -545,8 +562,8 @@ def quiet_start():
             name = Path(fields[1]).name
             if name in names or name.startswith('Open Helper'):
                 blocked.append({'pid': int(fields[0]), 'name': name})
-    check = {'load1': load1, 'limit': 4, 'blocking_processes': blocked}
-    if load1 > 4 or blocked:
+    check = {'load1': load1, 'limit': max_load, 'blocking_processes': blocked}
+    if load1 > max_load or blocked:
         raise RuntimeError('Quiet start refused (no wait): ' + json.dumps(check))
     return check
 
@@ -572,9 +589,10 @@ def priority_wait(deadline):
         time.sleep(time_left(deadline, 15))
 
 
-def invoke(group, app, scratch, deadline):
+def invoke(group, app, scratch, data_root, deadline):
     output = scratch / 'receipt.json'
-    argv = [sys.executable, str(Path(__file__).resolve()), '--worker', group, '--app', str(app), '--out', str(output)]
+    argv = [sys.executable, str(Path(__file__).resolve()), '--worker', group, '--app', str(app),
+            '--out', str(output), '--data-root', str(data_root)]
     if group in SCREEN:
         priority_wait(deadline)
         argv = ['/usr/bin/lockf', '-k', '/tmp/open-onscreen-e2e.lock', *argv]
@@ -610,8 +628,9 @@ def invoke(group, app, scratch, deadline):
     return json.loads(output.read_text())
 
 
-def print_table(rows):
-    print('| Row | Budget | Measured | Samples | Result | Load1 start | Load1 end |')
+def print_table(rows, max_load, quiet):
+    print('| Row | Budget | Measured | Samples | Result | Load1 start (max-load {:g}; guard {}) | Load1 end |'.format(
+        max_load, 'on' if quiet else 'off'))
     print('|---|---|---|---|---|---|---|')
     for row in rows:
         budget = row.get('budget_label') or (row['operator'] + ' ' + str(row['budget']) + ' ' + row['unit'])
@@ -627,37 +646,53 @@ def main():
     parser.add_argument('--out', type=Path, required=True, help='JSON receipt; adjacent .logs directory retains raw harness logs')
     parser.add_argument('--only', choices=GROUPS, help='diagnostic subset; omitted runs every workload once')
     parser.add_argument('--fail-demo', action='store_true', help='copy the cold command-open limit to 1 ms in this receipt only')
-    parser.add_argument('--preflight', action='store_true', help='check paths, signatures and helpers; launch no App or measurement CLI')
-    parser.add_argument('--quiet-start', action='store_true', help='refuse unless load1 <=4 and no Open, release CLI, xcodebuild or siso process exists; never wait')
+    parser.add_argument('--preflight', action='store_true', help='check paths, sockets, signatures and helpers; launch no App or measurement CLI')
+    parser.add_argument('--quiet-start', action='store_true', help='refuse above --max-load or with an Open, release CLI, xcodebuild or siso process; never wait')
+    parser.add_argument('--max-load', type=float, default=4,
+                        help='quiet-start load1 ceiling, recorded in the table and JSON (default 4)')
     parser.add_argument('--max-seconds', type=float, default=2220,
                         help='whole-run deadline before cleanup (default 2220: 37 min, plus at most 3 min cleanup reserve)')
     parser.add_argument('--worker', choices=GROUPS, help=argparse.SUPPRESS)
+    parser.add_argument('--data-root', type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not math.isfinite(args.max_seconds) or args.max_seconds <= 0:
         parser.error('--max-seconds must be finite and positive')
+    if not math.isfinite(args.max_load) or args.max_load <= 0:
+        parser.error('--max-load must be finite and positive')
+    if args.data_root is not None and not args.worker:
+        parser.error('--data-root is internal to --worker')
     for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(number, interrupt)
     app = args.app.resolve()
     output = args.out.resolve()
     if args.worker:
-        worker(args.worker, app, output)
+        if args.data_root is None:
+            parser.error('--worker requires --data-root')
+        worker(args.worker, app, output, args.data_root)
         return 0
     groups = (args.only,) if args.only else GROUPS
     started = time.monotonic()
     deadline = started + args.max_seconds
     result = dict(schema=1, app=str(app), groups=groups, partial=bool(args.only), fail_demo=args.fail_demo,
                   mode='preflight' if args.preflight else 'measure', max_seconds=args.max_seconds,
+                  max_load=args.max_load, quiet_start_enabled=args.quiet_start,
                   revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                   host=os.uname().nodename, rows=[], receipts=[], complete=False)
     output.parent.mkdir(parents=True, exist_ok=True)
     logs = output.with_name(output.name + '.logs')
     if output.exists() or logs.exists():
         print('Refusing to overwrite an earlier receipt/logs; choose a new --out path.', file=sys.stderr)
-        print_table([])
+        print_table([], args.max_load, args.quiet_start)
         return 1
+    data_root = None
     try:
         if args.quiet_start:
-            result['quiet_start'] = quiet_start()
+            result['quiet_start'] = quiet_start(args.max_load)
+        # Never derive a Unix socket path from --out or the caller's TMPDIR.
+        # mkdtemp creates a private (0700) root; logs remain beside --out.
+        data_root = Path(tempfile.mkdtemp(prefix='ob.', dir='/tmp'))
+        result['data_root'] = str(data_root)
+        result['socket_paths'] = socket_preflight(groups, data_root)
         preflight(app, groups)
         artifacts = [app / 'Contents/MacOS/Open', *(BIN / name for name in needed_products(groups))]
         result['artifact_sha256'] = {}
@@ -672,29 +707,43 @@ def main():
                                                 ROOT / 'tools/e2e/engine_e2e.py')}
         if args.preflight:
             result['preflight'] = 'PASS'
-            print('Preflight PASS: App, {} release CLIs, bundles and required helpers resolve; no App or measurement CLI launched.'.format(
-                len(needed_products(groups))), file=sys.stderr)
-            return 0
-        logs.mkdir(mode=0o700, exist_ok=False)
-        for group in groups:
-            time_left(deadline, 3600)
-            print('Measuring ' + group + '; load1=' + format(os.getloadavg()[0], '.2f'), file=sys.stderr, flush=True)
-            scratch = logs / group
-            scratch.mkdir()
-            receipt = invoke(group, app, scratch, deadline)
-            result['receipts'].append(receipt)
-            result['rows'].extend(rows_from(receipt, args.fail_demo))
-            atomic_json(output, result)
-            if receipt.get('crashed') or receipt.get('stop_onscreen') or receipt.get('interrupted') or not receipt.get('cleanup'):
-                raise RuntimeError('Stopped after crash/launch/cleanup error in ' + group + '; notify the S16 lead before more screen work')
-        result['complete'] = True
+            longest = result['socket_paths']['longest']
+            print('Preflight PASS: App, {} release CLIs, bundles and required helpers resolve; longest socket {} bytes (limit 100); no App or measurement CLI launched.'.format(
+                len(needed_products(groups)), longest['bytes'] if longest else 0), file=sys.stderr)
+        else:
+            logs.mkdir(mode=0o700, exist_ok=False)
+            for group in groups:
+                time_left(deadline, 3600)
+                print('Measuring ' + group + '; load1=' + format(os.getloadavg()[0], '.2f'), file=sys.stderr, flush=True)
+                scratch = logs / group
+                scratch.mkdir()
+                work = data_root / group
+                work.mkdir(mode=0o700)
+                receipt = invoke(group, app, scratch, work, deadline)
+                result['receipts'].append(receipt)
+                result['rows'].extend(rows_from(receipt, args.fail_demo))
+                atomic_json(output, result)
+                if receipt.get('crashed') or receipt.get('stop_onscreen') or receipt.get('interrupted') or not receipt.get('cleanup'):
+                    raise RuntimeError('Stopped after crash/launch/cleanup error in ' + group + '; notify the S16 lead before more screen work')
+            result['complete'] = True
     except BaseException as error:
         result['error'] = str(error)
         print(str(error), file=sys.stderr)
     finally:
+        if data_root is not None:
+            try:
+                shutil.rmtree(data_root)
+                result['data_root_removed'] = not data_root.exists()
+            except OSError as error:
+                result['error'] = 'private data root cleanup failed: ' + str(error)
+                result['complete'] = False
+                if args.preflight:
+                    result['preflight'] = 'FAIL'
         result['elapsed_seconds'] = round(time.monotonic() - started, 3)
         atomic_json(output, result)
-        print_table(result['rows'])
+        print_table(result['rows'], args.max_load, args.quiet_start)
+    if args.preflight:
+        return 0 if result.get('preflight') == 'PASS' and not result.get('error') else 1
     return 0 if result['complete'] and all(r['status'] == 'PASS' for r in result['rows']) else 1
 
 

@@ -26,13 +26,29 @@ def summary(values):
             'p95': sorted(values)[math.ceil(len(values) * .95) - 1]}
 
 
-def run(kind, h, app_bundle, scratch):
+def profile_roots(kind, data_root):
+    """Share exact App roots with the launch-free socket-path preflight."""
+    profile = Path(data_root) / 'profile'
+    if kind in ('first-run', 'find'):
+        return [profile / str(index) for index in range(5 if kind == 'first-run' else 20)]
+    return [profile]
+
+
+def run(kind, h, app_bundle, scratch, data_root):
     scratch = Path(scratch)
-    profile = scratch / 'profile'
-    profile.mkdir()
+    data_root = Path(data_root)
+    profiles = profile_roots(kind, data_root)
+    profile = profiles[0]
+    (data_root / 'profile').mkdir()
     cleanups = []
 
     def owned_open(*args, **kwargs):
+        # engine_e2e.Open joins user_data with automation.sock. Check again at
+        # the call site so a future workload cannot bypass parent preflight.
+        socket_path = Path(args[2]) / 'automation.sock'
+        for path in (socket_path, socket_path.resolve()):
+            if len(os.fsencode(path)) > 100:
+                raise RuntimeError('automation socket path exceeds 100 bytes: ' + str(path))
         # Let the existing constructor record ownership before cancellation can
         # unwind it. LaunchServices starts the App independently of this mask.
         mask = signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGTERM, signal.SIGINT, signal.SIGHUP))
@@ -62,7 +78,7 @@ def run(kind, h, app_bundle, scratch):
         # five fresh Welcome roots, then selected imported-tab paint relative
         # to firstRunLandingStarted. Reuse its synthetic import schema.
         import firstrun
-        source = scratch / 'fixtures'
+        source = data_root / 'fixtures'
         firstrun.fixture(source)
         sidebar_file = source / 'StorableSidebar.json'
         sidebar = json.loads(sidebar_file.read_text())
@@ -79,8 +95,7 @@ def run(kind, h, app_bundle, scratch):
         local_pages(sidebar)
         sidebar_file.write_text(json.dumps(sidebar))
         samples = []
-        for index in range(5):
-            root = profile / str(index)
+        for root in profiles:
             root.mkdir()
             app = owned_open('Release', 'chrome', str(root),
                          ['--use-mock-keychain', '--arc-dir=' + str(source)],
@@ -192,8 +207,7 @@ def run(kind, h, app_bundle, scratch):
         server, origin = h._static_server(str(Path(h.ROOT) / 'tools/e2e/fixtures/find'))
         samples = []
         try:
-            for index in range(20):
-                profile = scratch / 'profile' / str(index)
+            for profile in profiles:
                 profile.mkdir()
                 app = launch((origin + '/index.html',))
                 try:
