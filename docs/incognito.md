@@ -65,11 +65,12 @@ records the pixel samples, hashes, scale and load. This closes the original
 SSH `screencapture` permission failure. These are synthetic Open fixture
 images; Arc appearance comparison still needs user-operated captures.
 
-M5 Pro, AW2726DM 1x, head `81639e87`: **30 PASS**, exit 0,
+M5 Pro, AW2726DM 1x, head `25332598`: **30 PASS**, exit 0,
 zero interruptions and clean shutdown. Both 1000 × 700 pixel captures
 match a 1000 × 700 point window and pass the same RGB checks through
 `windowserver+devtools`. [M5 capture receipt](engine-spike/incognito/native-1x.json)
-records the scale, dimensions, samples and hashes. The committed 1x images
+records the scale, dimensions, samples, hashes and 0704 engine fingerprint.
+The images are byte-identical to the earlier 1x captures. The committed 1x images
 now come from this final pass.
 
 To repeat 2x, check `/tmp/open-onscreen-priority`, then run:

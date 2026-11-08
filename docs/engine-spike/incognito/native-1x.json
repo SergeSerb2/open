@@ -3,16 +3,16 @@
   "display": "AW2726DM",
   "nativeScale": 1,
   "date": "2026-11-07",
-  "head": "81639e876a248494d16aebdbd7293b234eacc11f",
-  "command": "/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only incognito",
+  "head": "253325987ef86d6ce153d98bd7f71cbcb30165d8",
+  "command": "/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only incognito --engine-sha256 c03a5109fc0d815770743a6c25a92d24bd1632eba6e658e00eb6e46314440c91",
   "passedRows": 30,
   "failedRows": 0,
   "cleanup": true,
   "interruptedAttempts": 0,
   "load": [
-    9.71875,
-    12.08740234375,
-    14.7861328125
+    24.39599609375,
+    21.859375,
+    37.80029296875
   ],
   "captures": {
     "snapshot_dark_1x": {
@@ -79,5 +79,6 @@
       ],
       "sha256": "e36f2d13199632eb8233c7cd853a4b426c085786da48050ddfc5a2cd7d7696f8"
     }
-  }
+  },
+  "engineSHA256": "c03a5109fc0d815770743a6c25a92d24bd1632eba6e658e00eb6e46314440c91"
 }
