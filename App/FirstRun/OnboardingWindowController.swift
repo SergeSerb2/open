@@ -132,7 +132,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     })
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
-    if closingForHandoff { return true }
+    if finishing { return true }
     closingForHandoff = true
     onHandoff = nil
     finish()

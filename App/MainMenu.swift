@@ -42,7 +42,10 @@ enum MainMenu {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     // Native intro responder/default button owns unmodified keys. Do not load
     // browser command services while the first-run welcome is on screen.
-    if event.window === app.onboardingWindowController?.window { return false }
+    if event.window === app.onboardingWindowController?.window {
+      if event.modifierFlags.contains(.command), ["t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
+      return false
+    }
     if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
       if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before
