@@ -190,7 +190,14 @@ public final class ArchiveStore: ArchiveSink {
     /// App import needs a checked result: an unavailable store is a failure,
     /// never a duplicate. The entire Profile batch commits or rolls back.
     public func importRecords(_ records: [ArchivedTabRecord], checking: Bool) async throws -> (inserted: Int, duplicates: Int) {
-        guard !records.isEmpty else { return (0, 0) }
+        let result = try await importRecordsWithUndo(records)
+        return (result.inserted, result.duplicates)
+    }
+
+    /// The receipt includes only inserted stable IDs. Existing Archive rows
+    /// remain outside this import's Undo, including during a partial failure.
+    public func importRecordsWithUndo(_ records: [ArchivedTabRecord]) async throws -> (inserted: Int, duplicates: Int, undo: [ArchivedTabRecord]) {
+        guard !records.isEmpty else { return (0, 0, []) }
         return try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
                 do {
@@ -204,6 +211,7 @@ public final class ArchiveStore: ArchiveSink {
                     guard let insert = db.prepare("INSERT INTO archived_tabs(id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind) VALUES(?,?,?,?,?,?,?,?,?,?)") else { throw archiveFailure() }
                     defer { sqlite3_finalize(insert) }
                     var inserted = 0, duplicates = 0
+                    var undo: [ArchivedTabRecord] = []
                     for record in records {
                         let key = record.id.rawValue.uuidString
                         db.bindText(check, 1, key)
@@ -222,11 +230,11 @@ public final class ArchiveStore: ArchiveSink {
                         db.bindText(insert, 9, record.payloadJSON)
                         db.bindText(insert, 10, record.kind.rawValue)
                         guard sqlite3_step(insert) == SQLITE_DONE else { throw archiveFailure() }
-                        inserted += 1; sqlite3_reset(insert)
+                        inserted += 1; undo.append(record); sqlite3_reset(insert)
                     }
                     guard db.exec("COMMIT") else { throw archiveFailure() }
                     committed = true
-                    continuation.resume(returning: (inserted, duplicates))
+                    continuation.resume(returning: (inserted, duplicates, undo))
                 } catch { continuation.resume(throwing: error) }
             }
         }

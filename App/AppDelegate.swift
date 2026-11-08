@@ -62,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var sleepQuitTask: Task<Void, Never>?
   private var sleepQuitCaptured = false
   lazy var settingsPresenter = AppSettingsActions(app: self)
+  private(set) var updater: UpdaterController?
+  var checkForUpdatesAfterPaint = false
   lazy var applicationIcon = ApplicationIconController(app: self)
   lazy var downloadsCenter = DownloadsCenter(app: self)
   let defaultBrowserService = DefaultBrowserService()
@@ -131,9 +133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
-    if !shutdownPrepared, historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true {
+    if !shutdownPrepared, importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true) {
       historyQuitTask = Task { @MainActor in
         await self.stores.flushHistory()
+        await self.importRunner.flushUndoForQuit()
         self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
         NSApp.terminate(nil)
       }
@@ -219,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       model = Self.makeDefaultModel()
       autoCreatedLaunchWindowID = model.windows.first?.id
     }
+    applyLaunchWindowPreference(to: model)
     let repaired = repairMissingProfiles(in: model)
     if model.windows.isEmpty, let space = model.spaces.first {
       let state = BrowserWindowState(focusedSpaceID: space.id)
@@ -403,6 +407,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
+    if let state = model.windows.first(where: { $0.id == id && $0.style == .standard }) {
+      state.lastFocusedAt = Date()
+      scheduleSave()
+    }
     for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
     MainMenu.targetWindowCommands(hostFactories[id])
     settingsPresenter.refreshSpaceManagerContext()
@@ -673,6 +681,7 @@ extension AppDelegate: CommandDispatcher {
           self.tabSleep.start()
           FindBarPrewarm.schedule(afterPaintIn: self)
           self.applicationIcon.restoreAfterContent()
+          self.prepareUpdaterAfterPaint()
           return
         }
         try? await Task.sleep(for: .milliseconds(50))
@@ -681,7 +690,13 @@ extension AppDelegate: CommandDispatcher {
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
       self.tabSleep.start()
       self.applicationIcon.restoreAfterContent()
+      self.prepareUpdaterAfterPaint()
     }
+  }
+  private func prepareUpdaterAfterPaint() {
+    guard updater == nil else { return }
+    updater = UpdaterController(app: self)
+    if checkForUpdatesAfterPaint { checkForUpdatesAfterPaint = false; updater?.checkForUpdates() }
   }
   func prepareCommandServices() {
     guard !commandServicesPrepared else { return }
@@ -762,6 +777,7 @@ extension AppDelegate: CommandDispatcher {
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     guard allowsFirstRunCommand(id) else { return false }
     if id == "settings", settingsShortcutCaptured { return false }
+    if id == "check-for-updates" { return updater?.canCheckForUpdates ?? true }
     if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift

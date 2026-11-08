@@ -29,6 +29,25 @@ struct DownloadFailure: Error {
     let retryable: Bool
 }
 
+/// Cancellation may arrive before URLSession's continuation has installed its task.
+/// Do not invalidate the session in that gap: creating a task on it would be invalid.
+private final class TransferCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    private var task: URLSessionDataTask?
+    func start(_ task: URLSessionDataTask) {
+        lock.lock(); defer { lock.unlock() }
+        self.task = task
+        if cancelled { task.cancel() }
+        task.resume()
+    }
+    func cancel() {
+        lock.lock(); defer { lock.unlock() }
+        cancelled = true
+        task?.cancel()
+    }
+}
+
 /// One transfer owns one serial delegate queue. Mutable fields are accessed only before resume,
 /// then on that queue. No URLSession cache: 304 evidence comes from the server, not local caching.
 private final class BoundedTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
@@ -126,8 +145,13 @@ struct ListDownloader: Sendable {
         }
         for attempt in 1...policy.attempts {
             try Task.checkCancellation()
-            do { return (try await transfer(url: source, etag: etag, modified: modified, redirectHosts: redirectHosts, debugLoopbackHTTP: debugLoopbackHTTP), attempt) }
+            do {
+                let response = try await transfer(url: source, etag: etag, modified: modified, redirectHosts: redirectHosts, debugLoopbackHTTP: debugLoopbackHTTP)
+                try Task.checkCancellation()
+                return (response, attempt)
+            }
             catch let failure as DownloadFailure {
+                try Task.checkCancellation()
                 if !failure.retryable || attempt == policy.attempts {
                     throw AdBlockError("\(failure.message); attempts=\(attempt)")
                 }
@@ -153,11 +177,14 @@ struct ListDownloader: Sendable {
             configuration.connectionProxyDictionary = ["HTTPEnable": 1, "HTTPProxy": host, "HTTPPort": port,
                                                        "HTTPSEnable": 1, "HTTPSProxy": host, "HTTPSPort": port]
         }
+        // Seed repair supplies its pinned raw.githubusercontent.com URL as the
+        // source, so only that call allows the seed host. Runtime policy is unchanged.
         let allowedHosts = Set(redirectHosts.map { $0.lowercased() } + [url.host()?.lowercased() ?? ""])
         let delegate = BoundedTransfer(maximumBytes: policy.maximumSourceBytes, allowedHosts: allowedHosts, debugLoopbackHTTP: debugLoopbackHTTP)
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: queue)
+        let cancellation = TransferCancellation()
         var request = URLRequest(url: url)
         request.setValue("Open/1 AdBlock", forHTTPHeaderField: "User-Agent")
         if let etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
@@ -165,8 +192,8 @@ struct ListDownloader: Sendable {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 delegate.continuation = continuation
-                session.dataTask(with: request).resume()
+                cancellation.start(session.dataTask(with: request))
             }
-        } onCancel: { session.invalidateAndCancel() }
+        } onCancel: { cancellation.cancel() }
     }
 }

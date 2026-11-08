@@ -38,7 +38,66 @@ machine-wide heavy-job slot script (capacity is set by the lead):
 Do not hold the on-screen lock while waiting for a heavy-job slot. Keep the
 on-screen lock around one suite only; take the heavy slot around build steps.
 
-## Enable
+## Updater core
+
+`updater-state` is a read-only App query. Before the post-paint startup hook it
+returns `created: false, started: false`. Once created, it reports `offReason`
+(`invalid-public-key`, `missing-team-identifier`, `start-failed`, or null),
+`started`, `canCheck`, `lastCheck` (Unix seconds or null), `automaticallyChecks`,
+`automaticallyDownloads`, `automaticPreference`, and `channel` (`stable` or `beta`).
+`foundVersion`, `completedChecks`, and `lastErrorCode` expose Sparkle delegate
+results. Reading the query does not create an updater or request a feed.
+The existing `settings-toggle` command accepts `name=updates` to invoke General's
+toggle model and its preference writer; it returns the new boolean value.
+The `timing` query includes `updaterCreated`, after first content paint (or the
+existing two-second blank-page fallback), always after `sidebarDrawn`.
+
+General's `open.general.automaticallyUpdate` setting defaults to true and controls
+both Sparkle automatic flags live. `open.general.updateChannel=beta` allows beta
+items as well as stable items on the next check. All other values select stable.
+There is no channel UI yet. `check-for-updates` is not a command-bar suggestion
+by design (`SuggestAdapter` exclusions); every dispatch of that ID uses the same
+App updater path. `SUFeedURL` in Info.plist remains the normal feed.
+In `OPEN_AUTOMATION` builds, `open.debug.updateFeedURL` overrides it only with
+`OPEN_UPDATER_ALLOW_ADHOC=1` in the environment or defaults. That opt-in also
+allows a build without a Team ID. Other builds ignore both defaults keys; only
+the environment opt-in can permit ad-hoc signing, and the feed always comes from
+Info.plist. The opt-in never bypasses public-key validation. Unconfigured builds never create Sparkle;
+their update action opens General with “Updates are not set up in this build.”
+
+Build Debug, then run the real-App `updater` suite:
+
+```sh
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/updater.py --config Debug
+```
+
+Check the shared priority flag before acquiring the screen lock. The suite tests
+placeholder/malformed keys, the ad-hoc signing gate, one menu item, command-ID
+dispatch, a signed loopback HTTP feed, stable/beta filtering, and live automatic
+flags. A loopback canary proves the off paths make no feed requests. It generates
+throwaway Ed25519 keys with OpenSSL in TMPDIR and uses Sparkle 2.10.1
+`sign_update --ed-key-file`. `generate_keys -h` confirms its `-f` option imports
+into Keychain, so the suite never uses it. It only changes and re-signs a temporary
+App copy. The server binds only to `127.0.0.1` on an ephemeral port and stops in
+`finally`. No ATS exception is added. Sparkle 2.10.1 rejects `file://` feeds with
+error 2001: “The download request URL must use http or https” (`SPUDownloader.m`).
+The loopback fixture replaces the plan's file feed with the lead's approval.
+It resets touched defaults before launch and restores their original
+plist types in `finally`, including Sparkle's `SU*` preferences and its
+`NSWindow Frame SUUpdateAlert2` geometry entry.
+
+`--force-failure` exits 1 with the real update window open to prove process/window
+cleanup. `--tools PATH` selects the pinned tools folder. `--output PATH` selects
+the private JSON receipt (default `.re/updater/results.json`). Install and relaunch
+are not tested; ad-hoc library validation does not qualify a shipped update.
+For a launch receipt, build main and branch Release with `OPEN_AUTOMATION=1`, then
+use `--config Release --main-bundle /path/to/main/Open.app`. Wait for load1 ≤ 12,
+then take the quiet and screen locks; this pairing needs no heavy slot. Build
+under `heavy.sh` first, without the quiet lock. Time an already built CLI under
+the quiet lock, then a heavy slot. The pairing alternates main/branch five times and
+requires branch median `sidebarDrawn` ≤ main median. Every sample records load.
+
+## Enable automation
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
@@ -95,6 +154,13 @@ launches and the existing OS idle CPU sampler; see [the receipt](profiles-memory
 Both modes reset and restore their shared defaults keys in `finally`.
 
 ## Protocol
+
+Automation builds can run the Cocoa setter preflight without creating native
+windows or starting Chromium. Set `OPEN_AUTOMATION_SCRIPTING_PREFLIGHT` to an
+absolute JSON receipt path and launch the built App with an isolated
+`--user-data-dir`. The App sends actual Apple events to itself, records setter
+round trips/errors and `nativeWindows: 0`, then exits. This launch still takes
+the on-screen lock. See [scripting](scripting.md#little-open-tab-references-2026-11-07).
 
 One JSON object per line in each direction.
 
@@ -196,7 +262,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | Command | Args | Result |
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
-| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
+| `applescript` | `body` (at most 1,048,576 UTF-8 bytes); optional `unavailable` (`model`, `engine`, `window`, `little`) for readiness fixtures | Automation-build TCC fallback: in-process `NSAppleScript` compiles with this bundle's terms and sends real Apple events to current application. Returns `{number,message,text}`. The optional fixture temporarily removes a provider and restores it after the script. This changes no macOS consent. See `docs/scripting.md` for external-sender limits. |
 | `tabs` | optional `sidebar:true` | Plain response is an array; `sidebar:true` adds `{tabs,rows,folders,selectedNode}` native row/state readback. Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
 | `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
 | `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
@@ -280,7 +346,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `dialog-button` | `accept`, `text`, `suppress` | Click the visible sheet's real OK/Cancel button, optionally edit its prompt and suppression checkbox |
 | `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. `presentation` is `popover` or `card`; `frame` gives the card rectangle in window coordinates. Pass a Little Open window number in `window` to inspect or answer its prompt. With an answer, call `performClick` on the real button |
 | `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
-| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
+| `events` | optional Little Open `window` number | Drain that Little Open window's page log, or the front browser window's log otherwise: `change`, `load`, `loadError`, `open`, `dialog`, `dialogAnswer`, `permission`, `permissionAnswer`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no). Also drain the shared `savePrompt` completion log, which remains available after the final browser window closes. |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
@@ -567,10 +633,10 @@ Commands in `App/Automation/AutomationMedia.swift`. `tab` is a tab UUID.
 | `media-action` | `tab`, `action` (`play`, `pause`, `next`, `previous`, `toggle-mute`, `close`, `back-to-tab`, `pip`, `seek` + `value`, `volume` + `value`, `exit-pip` [+ `pause`]); or `action` `mute-all` / `unmute-all` without `tab` | Runs the same `MediaIntent` (or App command) path as the mini player and the command bar. |
 | `mini-players` | `window` (window id, default front) | `cards` in order (tab, kind, playback, pip, expanded, level, frame and shown buttons with frames in window coordinates, top-left origin; `drawerOpen`, `height`, the shown volume `slider` value such as `"25%"` or null, the source's `volume`, `microphoneOn`, `cameraOn`), `expanded`, `stackHeight`, `displayed`, `pendingCollapse`, `animations`. |
 | `media-click` | `window`, `tab`, `target` (`title`, `play`, `next`, `previous`, `volume`, `pip`, `close`, `favicon`, `microphone`, `camera`, and the volume drawer's `volumeLow`, `volumeHigh`, `slider`), `fraction` (slider only, 0…1 of the knob's travel, default 0.5) | Clicks the real card control through `mouse` events built inside Open. Title-row and volume targets hover the card first (`mouse` `hover`, coming from a point off the card, so an earlier hover that left the stack "entered" cannot swallow the enter) and wait for the expanded stack. `slider` sends a press and a release at `fraction` and returns the slider's new `value`. |
-| `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`; phase 2: Open's own window), number, frame, level. |
+| `pip` | — | Session `state` (`idle`, `requesting`, `active`, `minimized`, `closed` + `reason`), `tab`, `automatic`, `snoozed`, `requests`, `requestedAt`/`enteredAt` (system uptime), `now`, and the visible PiP windows (phase 1: Chromium's `NativeWidgetMacFramelessNSWindow`; phase 2: Open's own window), number, frame, level. With a Document PiP (EM-7): `documentWindow` (number, frame, level, visible, opener `tab`, panel `class`, `topBarHeight`, `pageSize`, `pageInWindow`, `requested` size, `valid`). |
 | `capture-permission` | — | macOS camera and microphone authorization for this app (`camera`, `microphone`: `authorized`, `denied`, `restricted`, `notDetermined`). Reading it never prompts. Chromium asks macOS while a status is `notDetermined`, even with fake devices, so e2e `media_recording_card` runs only when both are `authorized` and is BLOCKED otherwise. |
 | `pip-frame` | `path` (default: the temporary directory's `open-pip-frame.png`) | Phase 2: writes the engine's composited picture of Open's PiP video view as a PNG and returns `path` and `bytes`. Not a screen capture: the window server leaves out GPU-process layers on macOS 26. Fails with `no Open PiP window` or `no frame` (2 s timeout). |
-| `pip-action` | `action` (`close`, `back-to-tab`; phase 2 also `minimize`, `menu` [+ `item`]) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. Phase 2: Open's own window, through its real controls' paths; `menu` without `item` lists the window menu (`✓` marks a checked item). |
+| `pip-action` | `action` (`close`, `back-to-tab`; phase 2 also `minimize`, `menu` [+ `item`]) | Phase 1: the session paths that Chromium's own window's Close and Back to Tab end in. Phase 2: Open's own window, through its real controls' paths; `menu` without `item` lists the window menu (`✓` marks a checked item). With a Document PiP open and no video PiP, `close` closes its panel (the × path). |
 | `now-playing` | — | `MPNowPlayingInfoCenter` title, artist, rate, elapsed, `playbackState`, and whether the remote play, pause, toggle, next and previous commands are enabled (read in-process; Chromium's system media controls own them). |
 | `sleep-visibility` | — | The media sleep feed (§4.10): `pictureInPicture`, `mediaControls`, the resulting `visible` set and window states, from `MediaCoordinator.visibility`. |
 

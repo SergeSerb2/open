@@ -1,0 +1,115 @@
+{
+  "machine": "M1 Pro",
+  "display": "built-in Retina",
+  "scale": 2,
+  "date": "2026-11-07",
+  "head": "f65327a5",
+  "suite": "profiles --profiles-shell-only --keep",
+  "result": "29 PASS, exit 0",
+  "captures": [
+    {
+      "path": "header-dark-hover-2x.png",
+      "size": [
+        2000,
+        1400
+      ],
+      "sibling": "header-dark-hover-1x.png",
+      "siblingSize": [
+        1000,
+        700
+      ],
+      "sha256": "505a498a766eeae3c034b818755cbb880c136f5cc8609bccb88dfc9626a57f34"
+    },
+    {
+      "path": "header-dark-rest-2x.png",
+      "size": [
+        2000,
+        1400
+      ],
+      "sibling": "header-dark-rest-1x.png",
+      "siblingSize": [
+        1000,
+        700
+      ],
+      "sha256": "34aab387f78ead60efa3b8fa6b0f1f8d0e3e10db158141bb64e660842410ab5a"
+    },
+    {
+      "path": "header-light-hover-2x.png",
+      "size": [
+        2000,
+        1400
+      ],
+      "sibling": "header-light-hover-1x.png",
+      "siblingSize": [
+        1000,
+        700
+      ],
+      "sha256": "eb79123edc035505a076bb42d4614ce58917d4a4449c81a589e4489cb43804de"
+    },
+    {
+      "path": "header-light-rest-2x.png",
+      "size": [
+        2000,
+        1400
+      ],
+      "sibling": "header-light-rest-1x.png",
+      "siblingSize": [
+        1000,
+        700
+      ],
+      "sha256": "23b72cb4f86b89cfbf356119a31590099c8d1d38ea110be790b9095be9484b11"
+    },
+    {
+      "path": "little-open-profile-dark-2x.png",
+      "size": [
+        2370,
+        1664
+      ],
+      "sibling": "little-open-profile-dark-1x.png",
+      "siblingSize": [
+        1185,
+        832
+      ],
+      "sha256": "b676e11a6644a3ae71be7d361692bfc8ae6900c5a5a364023844d06631befd5c"
+    },
+    {
+      "path": "little-open-profile-light-2x.png",
+      "size": [
+        2370,
+        1664
+      ],
+      "sibling": "little-open-profile-light-1x.png",
+      "siblingSize": [
+        1185,
+        832
+      ],
+      "sha256": "ca31f3cbd2cd12c7f748f0bdafc4df3e82014dc0dbf9e5f07f87a882da4ed315"
+    },
+    {
+      "path": "manager-dark-2x.png",
+      "size": [
+        1920,
+        1280
+      ],
+      "sibling": "manager-dark-1x.png",
+      "siblingSize": [
+        960,
+        640
+      ],
+      "sha256": "950dc61a8b3be6c5999da208dcb043bdee0c11636bcf3c8c8b3959747e0ef81e"
+    },
+    {
+      "path": "manager-light-2x.png",
+      "size": [
+        1920,
+        1280
+      ],
+      "sibling": "manager-light-1x.png",
+      "siblingSize": [
+        960,
+        640
+      ],
+      "sha256": "b1a97b5bfef7e5acef0b88d6e597386eb8af7d61d1a5e761f660d4afba508a5d"
+    }
+  ]
+}

@@ -69,6 +69,13 @@ final class DownloadsCenter: DownloadsProvider {
   private(set) var fileActions: [[String: String]] = []
   var quitAlertPolicy: String?
   private(set) var quitAlerts: [[String: Any]] = []
+  /// Ages a real engine transfer for range-boundary e2e fixtures, never creates rows.
+  func setStartForAutomation(_ key: String, age: TimeInterval) -> Bool {
+    guard entries[key] != nil, age.isFinite, (0...31_536_000).contains(age) else { return false }
+    entries[key]?.snapshot.startedAt = Date().addingTimeInterval(-age)
+    schedulePublish()
+    return true
+  }
   #endif
   private struct Entry {
     let download: OEDownload
@@ -211,6 +218,19 @@ final class DownloadsCenter: DownloadsProvider {
     entries[key]?.download.resume(); entries[key]?.snapshot.state = .inProgress; schedulePublish()
   }
   func remove(_ key: String) { entries[key]?.hidden = true; schedulePublish() }
+  /// Clear session history only. Download files and live engine transfers stay intact.
+  func clearHistory(profileID: ProfileID, since start: Date?, through end: Date) {
+    let removed = Set(entries.compactMap { key, entry -> String? in
+      let item = entry.snapshot
+      guard item.profileID == profileID, item.state != .inProgress, item.state != .paused,
+        item.startedAt <= end, start.map({ item.startedAt >= $0 }) ?? true else { return nil }
+      return key
+    })
+    guard !removed.isEmpty else { return }
+    for key in removed { entries[key] = nil }
+    order.removeAll { removed.contains($0) }
+    schedulePublish()
+  }
   func retry(_ key: String) {
     guard let entry = entries[key], !entry.hidden, entry.snapshot.state == .failed else { return }
     app.settingsPresenter.openURL(entry.download.sourceURL, profileID: entry.snapshot.profileID)
@@ -260,6 +280,8 @@ final class DownloadsCenter: DownloadsProvider {
     }
   }
   /// This runs before sleep capture or any page-beforeunload handling.
+  /// The traced Arc path does not prove a Warn-before-quitting preference gate;
+  /// keep this download-specific warning for both values (downloads-s11.md).
   func shouldKeepBrowsing() -> Bool {
     #if OPEN_AUTOMATION
     if AutomationOwnerWatch.quittingWithoutPrompts {
