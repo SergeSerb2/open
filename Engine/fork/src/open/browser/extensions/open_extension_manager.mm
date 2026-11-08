@@ -35,6 +35,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/load_error_reporter.h"
 #include "extensions/browser/permissions/active_tab_permission_granter.h"
 #include "extensions/browser/ui_util.h"
@@ -48,6 +49,7 @@
 #include "ui/base/accelerators/platform_accelerator_cocoa.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
+#include <cstdint>
 #include <map>
 
 namespace open_engine {
@@ -172,6 +174,12 @@ class Manager : public CefExtensionManager,
     handler_ = nullptr;
     for (auto& prompt : prompts_) if (prompt) prompt->Answer(false);
     prompts_.clear();
+    // Invalidate the install callbacks before releasing their installers. A
+    // late Chromium completion cannot settle a closed request a second time.
+    auto local_installs = std::move(local_installs_);
+    local_installs_.clear();
+    for (auto& [id, request] : local_installs)
+      CompleteLocalInstall(request.callback, 2, "", u"Extension context closed");
     webstore_requestors_.clear();
     uninstall_.reset();
     errors_.Reset();
@@ -314,20 +322,51 @@ class Manager : public CefExtensionManager,
     return true;
   }
   bool InstallLocalCrx(const CefString& path, CefRefPtr<CefBrowser> browser) override {
+    // Keep the old initiation-only API as a wrapper, including its page guard.
+    if (!browser) return false;
+    return InstallLocalCrxWithCompletion(path, browser, nullptr);
+  }
+  bool InstallLocalCrxWithCompletion(const CefString& path,
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefExtensionLocalInstallCallback> callback) {
     CEF_REQUIRE_UIT_RETURN(false);
-    if (!ready_ || profile_->IsOffTheRecord() ||
-        !base::CommandLine::ForCurrentProcess()->HasSwitch("open-automation") ||
-        path.length() > 4096) return false;
+    auto reject = [&](const std::u16string& error) {
+      CompleteLocalInstall(callback, 2, "", error);
+      return false;
+    };
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch("open-automation"))
+      return reject(u"Local CRX installation requires --open-automation");
+    if (!ready_ || !profile_) return reject(u"Extension system is not ready");
+    if (profile_->IsOffTheRecord())
+      return reject(u"Extensions cannot be installed in an ephemeral profile");
+    if (path.empty() || path.length() > 4096)
+      return reject(u"Local CRX path is empty or exceeds 4096 units");
+    const std::string file = path.ToString();
+    if (file.empty() || file.size() > 4096 || file.find('\0') != std::string::npos)
+      return reject(u"Local CRX path is empty, invalid or exceeds 4096 bytes");
+    if (local_installs_.size() >= kMaxPendingInstalls)
+      return reject(u"The 32-install local CRX limit was reached");
+    if (!next_local_install_) return reject(u"Local CRX request IDs exhausted");
     auto host = CefBrowserHostBase::FromBrowser(browser);
     auto* contents = host ? host->GetWebContents() : nullptr;
-    if (!contents || contents->GetBrowserContext() != profile_) return false;
-    auto client = std::make_unique<ExtensionInstallPrompt>(contents,
-        std::make_unique<InstallPromptData>(InstallPromptData::UNSET_PROMPT_TYPE));
+    if (browser && (!contents || contents->GetBrowserContext() != profile_))
+      return reject(u"Local CRX browser is unavailable or belongs to another profile");
+    auto data = std::make_unique<InstallPromptData>(InstallPromptData::UNSET_PROMPT_TYPE);
+    auto client = contents
+        ? std::make_unique<ExtensionInstallPrompt>(contents, std::move(data))
+        : std::make_unique<ExtensionInstallPrompt>(profile_, gfx::NativeWindow(), std::move(data));
     client->SetSkipPostInstallUI(true);
     auto installer = extensions::CrxInstaller::Create(profile_, std::move(client));
     installer->set_allow_silent_install(false);
     installer->set_off_store_install_allow_reason(extensions::CrxInstaller::OffStoreInstallAllowedInTest);
-    installer->InstallCrx(base::FilePath(path.ToString()));
+    const uint64_t key = next_local_install_++;
+    local_installs_.emplace(key, LocalInstall{installer, callback});
+    // Chromium 156 uses AddInstallerCallback, not set_installer_callback. Its
+    // OnceCallback is posted on UI after registration or signature rejection.
+    // The map holds the installer; the callback holds only a weak manager.
+    installer->AddInstallerCallback(base::BindOnce(
+        &Manager::LocalInstallDone, weak_.GetWeakPtr(), key));
+    installer->InstallCrx(base::FilePath(file));
     return true;
   }
   bool CanPrompt() { return handler_ && handler_->CanShowPrompt(); }
@@ -373,6 +412,34 @@ class Manager : public CefExtensionManager,
   }
  private:
   ~Manager() override { DCHECK(!profile_); }
+  static void CompleteLocalInstall(CefRefPtr<CefExtensionLocalInstallCallback> callback,
+      int result, std::string id, const std::u16string& error) {
+    if (!callback) return;
+    // Bound the forwarded message, not only the input path. Largest copy is
+    // 64 Ki UTF-16 units (128 KiB), far below PartitionAlloc's ceiling.
+    Post(base::BindOnce([](CefRefPtr<CefExtensionLocalInstallCallback> callback,
+        int result, std::string id, std::u16string error) {
+      callback->OnComplete(result, id, error);
+    }, callback, result, std::move(id), error.substr(0, kMaxText)));
+  }
+  void LocalInstallDone(uint64_t key,
+                       const std::optional<extensions::CrxInstallError>& error) {
+    auto found = local_installs_.find(key);
+    if (found == local_installs_.end()) return;
+    auto request = std::move(found->second);
+    local_installs_.erase(found);
+    if (!error) {
+      const auto* extension = request.installer->extension();
+      CompleteLocalInstall(request.callback, extension ? 0 : 2,
+          extension ? extension->id() : "", extension ? u"" : u"Installer completed without an extension");
+    } else if (error->type() != extensions::CrxInstallErrorType::SANDBOXED_UNPACKER_FAILURE &&
+               error->detail() == extensions::CrxInstallErrorDetail::USER_CANCELED) {
+      CompleteLocalInstall(request.callback, 1, "", u"");
+    } else {
+      // USER_ABORTED and policy/signature errors are failures, not user Cancel.
+      CompleteLocalInstall(request.callback, 2, "", error->message());
+    }
+  }
   const Extension* Find(const CefString& id) {
     return profile_ && crx_file::id_util::IdIsValid(id.ToString())
         ? registry_.GetSource()->GetInstalledExtension(id) : nullptr;
@@ -493,6 +560,13 @@ class Manager : public CefExtensionManager,
   // Installer-owned, UI-thread only; erased before its completion callback.
   // No real browsing page is used as a referrer for a management install.
   std::map<std::string, content::WebContents*> webstore_requestors_;
+  struct LocalInstall {
+    scoped_refptr<extensions::CrxInstaller> installer;
+    CefRefPtr<CefExtensionLocalInstallCallback> callback;
+  };
+  // Never reused within this manager; weak callbacks cannot reach a replacement.
+  uint64_t next_local_install_ = 1;
+  std::map<uint64_t, LocalInstall> local_installs_;
   std::unique_ptr<extensions::ExtensionUninstallDialog> uninstall_;
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
   base::ScopedObservation<extensions::ExtensionRegistry, extensions::ExtensionRegistryObserver> registry_{this};
@@ -627,4 +701,13 @@ CefRefPtr<CefExtensionManager> CefExtensionManager::Create(
   CefRefPtr<open_engine::Manager> manager = new open_engine::Manager(context, handler);
   manager->Start();
   return manager;
+}
+
+bool CefInstallLocalCrx(CefRefPtr<CefExtensionManager> manager,
+                       const CefString& path, CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefExtensionLocalInstallCallback> callback) {
+  CEF_REQUIRE_UIT_RETURN(false);
+  if (!manager || !callback) return false;
+  return static_cast<open_engine::Manager*>(manager.get())
+      ->InstallLocalCrxWithCompletion(path, browser, callback);
 }
