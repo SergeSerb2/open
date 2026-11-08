@@ -724,15 +724,25 @@ def stop_review_installer(app, before, results, copied):
     # installer created inside our exclusive screen run, before quitting Open.
     owned = getattr(app, 'review_installers', {})
     assert owned, 'No suite-owned Sparkle installer found; keep the App running'
-    assert app.call('ping'), 'The host must still be alive before installer cleanup'
+    alive = bool(app.call('ping'))
     for pid, path in owned.items():
         if harness.Open.process_path(pid) == path:
-            os.kill(pid, signal.SIGTERM)
-    wait(lambda: [pid for pid, path in owned.items() if harness.Open.process_path(pid) == path],
-         lambda pids: not pids, 'suite-owned Sparkle installer did not stop')
+            try: os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError: pass
+    try:
+        wait(lambda: [pid for pid, path in owned.items() if harness.Open.process_path(pid) == path],
+             lambda pids: not pids, 'suite-owned Sparkle installer did not stop')
+    finally:
+        # As in the App harness's process cleanup, kill only an identified
+        # owned survivor. Never let the host quit with a live installer.
+        for pid, path in owned.items():
+            if harness.Open.process_path(pid) == path:
+                try: os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError: pass
     after = file_sha256(copied / 'Contents/MacOS/Open')
-    results['R2_no_install_cleanup'] = {'ok': after == app.review_binary_sha,
-        'installerPIDs': sorted(owned), 'hostAliveWhenStopped': True,
+    results['R2_no_install_cleanup'] = {'ok': alive and after == app.review_binary_sha
+        and all(harness.Open.process_path(pid) != path for pid, path in owned.items()),
+        'installerPIDs': sorted(owned), 'hostAliveWhenStopped': alive,
         'binarySHA256Before': app.review_binary_sha, 'binarySHA256After': after}
 
 
