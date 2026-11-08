@@ -4,6 +4,7 @@ import Metal
 import QuartzCore
 import ImageIO
 import UniformTypeIdentifiers
+import CryptoKit
 
 /// Renders an NSView tree offscreen, without a window, through Core Animation's
 /// own renderer (`CARenderer` into a Metal texture). Unlike `cacheDisplay` or
@@ -24,7 +25,8 @@ final class OffscreenRenderer {
     /// AppKit builds and draws the layer tree normally. The window reports the
     /// requested backing scale, so 2x renders work on a 1x display.
     func render(_ view: NSView, scale: CGFloat) -> CGImage {
-        let window = Self.host(view, scale: scale)
+        let window = Self.host(view, scale: scale,
+                               verificationScreen: ProcessInfo.processInfo.environment["OPEN_VERIFY_DISPLAY_KEY"] != nil)
         let image = snapshot(view, scale: scale)
         window.contentView = nil
         window.close()
@@ -32,12 +34,28 @@ final class OffscreenRenderer {
     }
 
     /// Puts `view` in an offscreen window at `scale` and lays it out.
-    static func host(_ view: NSView, scale: CGFloat) -> ScaledWindow {
+    static func host(_ view: NSView, scale: CGFloat, verificationScreen: Bool = false) -> ScaledWindow {
         let size = view.bounds.size
-        let window = ScaledWindow(contentRect: CGRect(origin: CGPoint(x: -20000, y: -20000), size: size),
-                                  styleMask: [.borderless], backing: .buffered, defer: false)
-        window.scale = scale
+        // Only keyed verification renders use a screen-associated host, never ordered.
+        // Other snapshots and motion suites retain their original offscreen frame.
+        let origin = verificationScreen ? CGPoint.zero : CGPoint(x: -20000, y: -20000)
+        let window = ScaledWindow(contentRect: CGRect(origin: origin, size: size),
+                                  styleMask: [.borderless], backing: .buffered, defer: false,
+                                  screen: verificationScreen ? NSScreen.main : nil)
         window.isReleasedWhenClosed = false
+        if verificationScreen, let expected = ProcessInfo.processInfo.environment["OPEN_VERIFY_DISPLAY_KEY"] {
+            let actual: String
+            if let screen = window.screen, let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304 {
+                let digest = SHA256.hash(data: profile).map { String(format: "%02x", $0) }.joined()
+                actual = "scale-\(Int(screen.backingScaleFactor))-icc-\(digest)"
+            } else { actual = "unavailable" }
+            guard actual == expected else {
+                window.close()
+                FileHandle.standardError.write(Data("verification display changed: expected \(expected), actual host \(actual); no fallback\n".utf8))
+                exit(1)
+            }
+        }
+        window.scale = scale
         window.colorSpace = .sRGB
         window.contentView = view
         view.frame = CGRect(origin: .zero, size: size)
