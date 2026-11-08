@@ -17,7 +17,7 @@ final class UpdateReleaseNotesView: NSView, NSTextViewDelegate {
     let boundedTitle = Self.boundedUTF8(title, limit: 1024)
     heading.stringValue = boundedTitle.isEmpty ? "A new version is available" : boundedTitle
     heading.font = .boldSystemFont(ofSize: 14); heading.isSelectable = true
-    heading.maximumNumberOfLines = 2
+    heading.maximumNumberOfLines = 2; heading.lineBreakMode = .byWordWrapping
     text.isEditable = false; text.isSelectable = true; text.delegate = self
     text.textContainerInset = .zero; text.textContainer?.lineFragmentPadding = 0
     text.isVerticallyResizable = true; text.isHorizontallyResizable = false
@@ -48,11 +48,13 @@ final class UpdateReleaseNotesView: NSView, NSTextViewDelegate {
   private func render() {
     let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     let ink = dark ? NSColor.white : NSColor(srgbRed: 20/255, green: 20/255, blue: 20/255, alpha: 1)
-    let background = dark ? NSColor.black : .white
-    layer?.backgroundColor = background.cgColor; text.backgroundColor = background
+    let background = dark ? NSColor.black : .textBackgroundColor
+    effectiveAppearance.performAsCurrentDrawingAppearance { layer?.backgroundColor = background.cgColor }
+    text.backgroundColor = background
     heading.textColor = ink
     let paragraph = NSMutableParagraphStyle()
     paragraph.minimumLineHeight = 20; paragraph.maximumLineHeight = 20
+    paragraph.paragraphSpacing = 8
     let base: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: ink, .paragraphStyle: paragraph]
     let rendered = NSMutableAttributedString(string: "")
     if source.isEmpty {
@@ -114,9 +116,12 @@ final class UpdateReleaseNotesView: NSView, NSTextViewDelegate {
   }
   override func layout() {
     super.layout()
-    heading.frame = NSRect(x: 32, y: 20, width: bounds.width - 64, height: 40)
-    // Body top/right/bottom/left margins: 12/8/16/0, below the heading.
-    scroll.frame = NSRect(x: 0, y: 72, width: bounds.width - 8, height: max(0, bounds.height - 88))
+    let width = max(1, bounds.width - 64)
+    let headingHeight = min(40, ceil(heading.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: 40)).height ?? 18))
+    heading.frame = NSRect(x: 32, y: 20, width: width, height: headingHeight)
+    let bodyTop = heading.frame.maxY + 12
+    // The heading and body share 32 pt horizontal insets.
+    scroll.frame = NSRect(x: 32, y: bodyTop, width: width, height: max(0, bounds.height - bodyTop - 16))
     if let container = text.textContainer, let manager = text.layoutManager {
       container.containerSize = NSSize(width: scroll.contentSize.width, height: .greatestFiniteMagnitude)
       manager.ensureLayout(for: container)

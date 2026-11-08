@@ -1,7 +1,17 @@
 import AppKit
 
 @MainActor
-final class UpdateColumnView: NSView {
+class UpdateWindowBackgroundView: NSView {
+  override func draw(_ dirtyRect: NSRect) {
+    NSColor.windowBackgroundColor.setFill(); bounds.fill()
+  }
+  override func viewDidChangeEffectiveAppearance() {
+    super.viewDidChangeEffectiveAppearance(); needsDisplay = true
+  }
+}
+
+@MainActor
+final class UpdateColumnView: UpdateWindowBackgroundView {
   let icon = NSImageView()
   let product = NSTextField(labelWithString: "Open")
   let version = NSTextField(labelWithString: "")
@@ -64,6 +74,7 @@ final class UpdateWindowController: NSWindowController, NSWindowDelegate {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 270, height: 334),
       styleMask: style, backing: .buffered, defer: false)
     window.title = title; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+    window.backgroundColor = .windowBackgroundColor
     window.isMovableByWindowBackground = true; window.isReleasedWhenClosed = false
     if status { window.hidesOnDeactivate = true; window.level = .floating }
     super.init(window: window)
@@ -80,7 +91,7 @@ final class UpdateWindowController: NSWindowController, NSWindowDelegate {
     guard let window else { return }
     let panel = UpdateReleaseNotesView(title: title, source: source, format: format)
     panel.openLink = openLink; notes = panel
-    let root = NSView(frame: NSRect(x: 0, y: 0, width: 692, height: 418))
+    let root = UpdateWindowBackgroundView(frame: NSRect(x: 0, y: 0, width: 692, height: 418))
     column.removeFromSuperview(); root.addSubview(column); root.addSubview(panel)
     column.frame = NSRect(x: 0, y: 0, width: 270, height: 418)
     panel.frame = NSRect(x: 282, y: 12, width: 398, height: 394)

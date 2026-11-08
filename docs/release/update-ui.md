@@ -22,7 +22,11 @@ source is limited to the first 64 KiB before parsing. HTML-format descriptions
 are plain text after one bounded tag scan. Only amp, lt, gt, quot, and #39
 entities are decoded. The update UI creates no WebKit view and calls no HTML
 importer. Notes use 12 pt system text, 20 pt lines, white or black backgrounds,
-and #458AFF links. Links open in a new foreground Open tab.
+8 pt paragraph spacing, and #458AFF links. The heading and body share 32 pt
+horizontal insets. The body starts 12 pt below the heading. The notes panel has
+10 pt corners and uses the text background color in light mode and black in
+dark mode. Both windows use the system window background color. Links open
+in a new foreground Open tab.
 
 Sparkle 2.10.1 exposes `SUAppcastItem.itemDescriptionFormat` and accepts
 `<description sparkle:format="markdown">`. Its source reads this attribute in
