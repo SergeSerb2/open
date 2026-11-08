@@ -255,6 +255,7 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Find menu fallbacks.** #187 implements Find and Replace by opening Find, with no replacement controls. Jump to Selection centers the DOM selection’s start element through the existing page-world JavaScript API; no selection means no action. Page scripts can affect it; no isolated-world API was added. `find` covers the merged menu/key flow; these are fallbacks, not proved Arc parity. See [the Find report](engine-spike/find/README.md#scope-and-source-review). Owner: Section 11 follow-up / lead.
 - **Generic Warn-before-quitting UI.** Not implemented because no Arc warning presentation was proved. The 2026-11-07 read-only quit call-path audit remains INCONCLUSIVE about a gate on the Downloads alert, so both switch values keep that alert; owner-death automation quit stays prompt-free. [RE pointers](re/downloads-s11.md#quit-warning-setting-consumer-audit-2026-11-07) include the caller/subscription/presenter chain and unresolved policy, plus the preference registration/action renderer; none proves generic warning UI. Owner: Section 11 follow-up / lead.
 - **Little Open Downloads tray.** Deferred by [routing §0.2](plans/routing-little-open.md#02-out-of-scope-do-not-build); #181 does not add it. Owner: Section 9 / lead.
+- **Closed — AppleScript Little Open creation.** Application `make new tab` now returns a working transient reference. URL, title, loading and page verbs resolve through the Little Open provider; no model tab is created. Unsupported containment/location/select returns 1009; closed references return 1000. M5 real Apple-event acceptance is 208 PASS / 2 external-consent BLOCKED in `applescript` (warm/cold `A15_*`); see [the scripting guide](scripting.md#little-open-tab-references-2026-11-07). External sender consent remains below. — Section 11, 2026-11-07.
 - **External AppleScript/JXA.** External osascript/JXA and Script Editor remain BLOCKED by macOS Automation consent (-1744). Self-scripting PASS in #174 does not close that gate. The user’s numbered Script Editor hand checks are in [the scripting guide](scripting.md#script-editor-and-external-sender-hand-checks). Owner: user hand check / lead.
 - **Join Meeting.** Disabled post-v1; it needs calendar live data (lead decision S2). #178 `context-menus` checks disabled dispatch. Owner: post-v1 / lead.
 - **Blank Window.** #178 leaves the existing New Window path unchanged. A distinct “This Window” sidebar remains a parity GUESS with no proved specification. Owner: Section 11 RE follow-up / lead.
@@ -306,11 +307,28 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 14: multi-profile import boundaries
 
-- Import Undo removes created Profiles and sidebar/routing changes from the
-  model. Main #222 now provides typed deletion and awaited native teardown
-  with in-session data removal (0702). Import Undo still does not erase
-  Archive/History stores or engine directories. Owner Section 14: integrate
-  that completed teardown path; do not bypass its boundary.
+- Extension install icon diagnostic — Chromium `shortcuts::SetIconForFile` →
+  `NSWorkspace setIcon` → `ISMutableIcns addCGImage` emitted an `os_log_fault`
+  during `extensions-ui` CRX installation on 2026-11-07. The `ExcUserFault_*`
+  report has `bug_type: 309`, `isSimulated: 1`; the lead confirmed no App crash
+  or crash dialog. An icon size/format mismatch is a guess, not a proven cause.
+  Follow up in the engine icon writer; ignore these simulated reports in crash
+  monitors, while retaining real Open/Open Helper crash detection. — Section 14 C5.
+
+- **Closed — import automation local CRX completion.** Engine 0704 (#223)
+  supplies `installLocalCRX(_:completion:)`. The import now maps installed,
+  cancelled and failed directly, checks the installed ID and preserves
+  Chromium's error text. `firstrun`'s `EI_failure_reported_engine` gates the
+  damaged-signature error, result count and next queue item. No install timeout
+  or delegate error event is used. — Section 14 C5, 2026-11-07.
+
+- Import Undo (#224) removes created Profiles and sidebar/routing changes from the
+  model, and the Archive rows and History visits/keys that the import inserted
+  ([verification](import-robustness.md)). Main #222 now provides typed Profile
+  deletion and awaited native teardown with in-session data removal (0702).
+  Import Undo still does not remove Profile directories or loaded engine
+  contexts. Owner Section 14: integrate that completed teardown path; do not
+  bypass its typed confirmation or context teardown.
 - Session Favorite keys contain a Profile and window but no Space. When a source
   window focuses another Profile, import uses the Favorite owner's first Space.
   This is an accepted, marked guess. Settings keeps its current windows and selections and

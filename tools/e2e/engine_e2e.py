@@ -11935,7 +11935,7 @@ def main():
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords", "passwords-probe"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -12077,7 +12077,7 @@ def main():
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
         launch_args = [arg for arg in extra if load_extensions or not arg.startswith("--load-extension=")]
-        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only == "firstrun")
+        app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only in ("firstrun", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
         return app
@@ -12165,6 +12165,10 @@ def main():
             results["sitecontrol"] = CheckedResults(tracker)
             import sitecontrol
             sitecontrol.run(factory, results["sitecontrol"], tmp, globals(), functional_only=opts.functional_only)
+        elif opts.only == "import-robust":
+            results["import-robust"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "import_robust.py"))["run"](
+                factory, results["import-robust"], tmp, sys.modules[__name__])
         elif opts.only == 'passwords-probe':
             results[opts.only] = {}
             results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
@@ -12375,14 +12379,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords"):
+    for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords")
+    failures = [k for group in ("import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "space-editor", "incognito", "passwords")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

@@ -36,8 +36,12 @@ extension AutomationController {
       // OCR is restricted to the synthetic fixture run. Production manifest
       // names never enter this command's output or an e2e receipt.
       guard !app.importRunner.extensionFixtures.isEmpty,
-        let window = app.firstRunWindowController?.window ?? app.settingsPresenter.settingsPresenter.window,
-        let root = window.contentView else { throw Failure(message: "synthetic report is not visible") }
+        let host = app.firstRunWindowController?.window ?? app.settingsPresenter.settingsPresenter.window
+      else { throw Failure(message: "synthetic report is not visible") }
+      // Settings presents its import report in a sheet. Capture that report,
+      // rather than the dimmed Settings window behind it.
+      let window = host.attachedSheet ?? host
+      guard let root = window.contentView else { throw Failure(message: "synthetic report is not visible") }
       func scroll(_ view: NSView, depth: Int = 0) {
         guard depth < 64 else { return }
         if let clip = (view as? NSScrollView)?.contentView, let document = clip.documentView {

@@ -8,6 +8,9 @@ import OpenModel
 enum ScriptTarget {
     private static func resolve<T>(_ command: NSScriptCommand, receiver: T?) -> T? {
         if let specifier = command.directParameter as? NSScriptObjectSpecifier {
+            if let (_, id) = ScriptTransientTarget.reference(in: specifier), T.self == ScriptTab.self {
+                return NSApplication.shared.valueInAppleScriptTabsWithUniqueID(id) as? T
+            }
             let value = specifier.objectsByEvaluatingSpecifier
             if let value = value as? T { return value }
             if let values = value as? [T], let receiver, values.contains(where: { ($0 as AnyObject) === (receiver as AnyObject) }) { return receiver }
@@ -20,11 +23,11 @@ enum ScriptTarget {
 
     static func tab(from command: NSScriptCommand, receiver: ScriptTab? = nil) -> ScriptTab? {
         guard ScriptHost.shared.model != nil else { command.fail(ScriptError.notReady, "Open is not ready."); return nil }
-        guard let wrapper: ScriptTab = resolve(command, receiver: receiver), wrapper.tab != nil else {
+        guard let wrapper: ScriptTab = resolve(command, receiver: receiver) else {
             command.fail(ScriptError.objectNotFound, "The tab \(receiver?.tabID.rawValue.uuidString ?? command.directParameter.map { String(describing: $0) } ?? "") does not exist.")
             return nil
         }
-        return wrapper
+        return wrapper.exists() ? wrapper : nil
     }
     static func space(from command: NSScriptCommand, receiver: ScriptSpace? = nil) -> ScriptSpace? {
         guard ScriptHost.shared.model != nil else { command.fail(ScriptError.notReady, "Open is not ready."); return nil }
@@ -93,13 +96,17 @@ enum ScriptCreation {
     }
 
     static func makeLittleTab(properties: [String: Any]) -> ScriptTab? {
-        guard let model = ScriptRead.model() else { return nil }
-        guard let url = parsedURL(properties["URL"] as? String ?? "about:blank") else { return nil }
-        guard let id = ScriptHost.shared.makeLittleTab?(url), let tab = model.tab(id: id) else {
+        guard ScriptRead.model() != nil else { return nil }
+        let url: URL?
+        if let text = properties["URL"] as? String {
+            guard let parsed = parsedURL(text) else { return nil }
+            url = parsed
+        } else { url = nil }
+        guard let provider = ScriptHost.shared.littleTab, let id = provider.make(url: url), provider.exists(id) else {
             ScriptFailure.report(ScriptError.littleUnavailable, "Little windows are not available yet.")
             return nil
         }
-        return record(ScriptHost.shared.tabWrapper(for: tab))
+        return record(ScriptHost.shared.littleTabWrapper(for: id))
     }
 
     static func makeWindow(properties: [String: Any]) -> ScriptWindow? {
@@ -211,10 +218,23 @@ public final class ScriptGetCommand: NSGetCommand {
         if directParameter == nil, let descriptor = appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) {
             directParameter = NSScriptObjectSpecifier(descriptor: descriptor)
         }
-        var specifier = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
+        let requested = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
+        var specifier = requested
         while let current = specifier {
             if current.key == "appleScriptTabs", current.container == nil {
-                return fail(ScriptError.writeOnly, "tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.")
+                guard let unique = current as? NSUniqueIDSpecifier, let id = unique.uniqueID as? String else {
+                    return fail(ScriptError.writeOnly, "tabs of application is write-only; make a new tab on application to create a Little Open window, or read tabs of a window or space.")
+                }
+                guard let tab = NSApplication.shared.valueInAppleScriptTabsWithUniqueID(id) else { return nil }
+                if requested === current { return tab.objectSpecifier }
+                // NSGetCommand rejects even a unique-ID reference through a
+                // write-only element before calling its accessor. Read only the
+                // supported tab properties here; never enumerate application tabs.
+                guard let property = requested as? NSPropertySpecifier, property.container === current,
+                      ["id", "URL", "title", "loading", "location"].contains(property.key) else {
+                    return fail(ScriptError.makeSpaceUnsupported, "This property is not supported for Little Open tabs.")
+                }
+                return tab.value(forKey: property.key)
             }
             specifier = current.container
         }
@@ -245,6 +265,7 @@ public final class ScriptCountCommand: NSCountCommand {
 extension ScriptTab {
     @objc public func select(_ command: NSScriptCommand) -> Any? {
         guard let target = ScriptTarget.tab(from: command, receiver: self), let model = ScriptHost.shared.model else { return nil }
+        guard target.supportsModelContainment("select") else { return nil }
         guard let window = ScriptRead.preferredWindow() else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
         let spaceID = ScriptRead.spaceID(of: target.tabID, model: model) ?? window.focusedSpaceID
         guard model.space(id: spaceID) != nil else { return command.fail(ScriptError.noWindow, "There is no browser window.") }
@@ -255,14 +276,12 @@ extension ScriptTab {
     }
 
     @objc public func goBack(_ command: NSScriptCommand) -> Any? {
-        guard let target = ScriptTarget.tab(from: command, receiver: self), let tab = target.tab else { return nil }
-        guard tab.live.canGoBack else { return nil }
+        guard let target = ScriptTarget.tab(from: command, receiver: self), target.canGoBack else { return nil }
         ScriptTarget.bridge(command)?.goBack(tabID: target.tabID)
         return nil
     }
     @objc public func goForward(_ command: NSScriptCommand) -> Any? {
-        guard let target = ScriptTarget.tab(from: command, receiver: self), let tab = target.tab else { return nil }
-        guard tab.live.canGoForward else { return nil }
+        guard let target = ScriptTarget.tab(from: command, receiver: self), target.canGoForward else { return nil }
         ScriptTarget.bridge(command)?.goForward(tabID: target.tabID)
         return nil
     }
@@ -272,8 +291,7 @@ extension ScriptTab {
         return nil
     }
     @objc public func stopLoading(_ command: NSScriptCommand) -> Any? {
-        guard let target = ScriptTarget.tab(from: command, receiver: self), let tab = target.tab else { return nil }
-        guard tab.live.isLoading else { return nil }
+        guard let target = ScriptTarget.tab(from: command, receiver: self), target.loading else { return nil }
         ScriptTarget.bridge(command)?.stopLoading(tabID: target.tabID)
         return nil
     }
@@ -303,9 +321,10 @@ extension ScriptTab {
         }
     }
     @objc public func close(_ command: NSScriptCommand) -> Any? {
-        guard let target = ScriptTarget.tab(from: command, receiver: self), let model = ScriptHost.shared.model else { return nil }
+        guard let target = ScriptTarget.tab(from: command, receiver: self) else { return nil }
         _ = target.objectSpecifier
-        model.closeTab(id: target.tabID)
+        if target.isLittleTab { ScriptHost.shared.littleTab?.close(target.tabID) }
+        else { ScriptHost.shared.model?.closeTab(id: target.tabID) }
         ScriptHost.shared.tabWrappers[target.tabID] = nil
         return nil
     }
