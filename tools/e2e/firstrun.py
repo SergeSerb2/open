@@ -189,9 +189,12 @@ def run(factory, results, tmp, h):
             and archives()['count'] == 2, counts=counts, png=report_png)
         app.call('first-run', action='continue'); s = until('defaultBrowser')
         default_png = shot('default-browser'); default_copy = copy()
-        row('F4_default_offer', not s['defaultAttempted'] and 'Make Open your default browser?' in default_copy
-            and ('Open is your default browser.' in default_copy if s['defaultBrowser'] else
-                 'Yes, make Open my default.' in default_copy and 'Not yet.' in default_copy), png=default_png, text=default_copy)
+        # OCR preserves the title's visual line wrap in the new setup panel.
+        # Keep the exact words and the no-default-request assertion.
+        default_text = ' '.join(default_copy.split())
+        row('F4_default_offer', not s['defaultAttempted'] and 'Make Open your default browser?' in default_text
+            and ('Open is your default browser.' in default_text if s['defaultBrowser'] else
+                 'Yes, make Open my default.' in default_text and 'Not yet.' in default_text), png=default_png, text=default_copy)
         app.call('first-run', action='finish')
         row('F4_finish', not state()['active'] and state()['completed'] and len(app.call('shell-windows')) == 1)
         # Never invoke the real system-default setter. Setup automation stubs it.
