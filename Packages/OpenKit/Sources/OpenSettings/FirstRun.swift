@@ -23,8 +23,12 @@ public struct PasswordsImportCopy: Sendable {
 
 @MainActor public protocol FirstRunActions: ImportActions {
     func setAsDefaultBrowser() -> String?
+    func waitForDefaultBrowserRequest() async
     func isDefaultBrowser() -> Bool
     func finishFirstRun(imported:Bool)
+}
+public extension FirstRunActions {
+    func waitForDefaultBrowserRequest() async {}
 }
 
 public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
@@ -70,6 +74,10 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func enterDefaultBrowser() {step = .defaultBrowser;errorText=nil;defaultWasAttempted=false;isDefaultBrowser=actions.isDefaultBrowser()}
     /// The App's default-browser service completes asynchronously after its click.
     public func refreshDefaultBrowserStatus() {isDefaultBrowser=actions.isDefaultBrowser()}
+    public func waitForDefaultBrowserRequest() async {
+        await actions.waitForDefaultBrowserRequest()
+        refreshDefaultBrowserStatus()
+    }
     public func makeDefault() {
         guard step == .defaultBrowser,!isDefaultBrowser else {return}
         defaultWasAttempted=true

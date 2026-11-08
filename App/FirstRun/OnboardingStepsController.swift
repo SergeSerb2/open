@@ -30,6 +30,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private(set) var defaultYes = true
   private(set) var cardPattern = 0
   private(set) var defaultPending = false
+  private(set) var defaultResolved = false
   private(set) var finishing = false
   private(set) var confettiPlayed = false
   private var confetti: CAEmitterLayer?
@@ -256,10 +257,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     case .blocker: go(.defaultBrowser)
     case .defaultBrowser:
       if defaultYes && !firstRun.isDefaultBrowser && !replay {
-        defaultPending = true; firstRun.makeDefault(); render(direction: 0)
+        defaultPending = true; defaultResolved = false; firstRun.makeDefault(); render(direction: 0)
         tasks.append(Task { [weak self] in
-          try? await Task.sleep(for: .seconds(1.2)); guard !Task.isCancelled, let self else { return }
-          firstRun.refreshDefaultBrowserStatus(); defaultPending = false; go(.ready)
+          guard let self else { return }
+          await firstRun.waitForDefaultBrowserRequest()
+          guard !Task.isCancelled else { return }
+          defaultResolved = true; render(direction: 0)
+          try? await Task.sleep(for: .seconds(1.2)); guard !Task.isCancelled else { return }
+          defaultPending = false; go(.ready)
         })
       } else { go(.ready) }
     case .ready:
@@ -316,7 +321,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   @objc private func blockerChanged(_ sender: NSSwitch) { setBlocker(sender.state == .on) }
   func chooseDefault(_ yes: Bool) { defaultYes = yes; render(direction: 0) }
   @objc private func defaultChanged(_ sender: NSButton) { chooseDefault(sender.tag == 0) }
-  private var defaultOutcome: String { firstRun.errorText ?? (firstRun.defaultWasAttempted ? (firstRun.isDefaultBrowser ? "Open is your default browser.":"Open is not your default browser yet. You can set it later in Settings."):"") }
+  private var defaultOutcome: String { defaultPending && !defaultResolved ? "":firstRun.errorText ?? (firstRun.defaultWasAttempted ? (firstRun.isDefaultBrowser ? "Open is your default browser.":"Open is not your default browser yet. You can set it later in Settings."):"") }
   private func resetTheme() { themeChanged = false; themeBaseline = focusedSpace?.theme ?? .init(); themeState = ThemeEditorState(style: SpaceStyle.seed(from: themeBaseline)) }
   func editTheme(_ action: ThemeEditorAction) { let old = themeState.style; themeState.apply(action); if old != themeState.style { themeChanged = true }; updateThemeControls(); updatePreview() }
   private func updateThemeControls() { presetStrip?.apply(page: themeState.presetPage); colorPad?.apply(themeState); modeBar?.mode = themeState.appearance }

@@ -216,8 +216,12 @@ def run(factory, results, tmp, h):
         gate('already_default', lambda s: s.get('alreadyDefault') is True and not s['defaultAttempted'], offered, default)
         # Decline and failure both show their outcome before continuing.
         for outcome in ('declined','failed','success'):
-            launch(directory=empty, **{'OPEN_AUTOMATION_DEFAULT_BROWSER': outcome}); action('skip'); action('skip'); action('skip'); action('skip'); screen('defaultBrowser')
-            action('next'); during = state()
+            launch(directory=empty, **{'OPEN_AUTOMATION_DEFAULT_BROWSER': outcome, 'OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS': '500'}); action('skip'); action('skip'); action('skip'); action('skip'); screen('defaultBrowser')
+            action('next'); waiting = state()
+            until(lambda: bool(state()['defaultOutcome']))
+            during = state()
+            gate('default_waits_'+outcome, lambda s: s['screen']=='defaultBrowser' and s['defaultPending']
+                and s['defaultAttempted'] and not s['defaultOutcome'], waiting, during)
             until(lambda: state()['screen']=='ready')
             gate('default_'+outcome, lambda s: s['defaultPending'] and s['defaultAttempted'] and bool(s['defaultOutcome']), during, default)
         # Reduced motion has no offset or emitter, including after back/forward.

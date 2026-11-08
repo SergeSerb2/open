@@ -23,6 +23,17 @@ final class AppFirstRunActions: FirstRunActions {
     #endif
     return app.settingsPresenter.setAsDefaultBrowser()
   }
+  func waitForDefaultBrowserRequest() async {
+    #if OPEN_AUTOMATION
+    if app.options.automationSocket != nil {
+      let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS"] ?? "0"
+      let delay = min(5_000, max(0, Int(raw) ?? 0))
+      try? await Task.sleep(for: .milliseconds(delay))
+      return
+    }
+    #endif
+    await app.settingsPresenter.defaultBrowserRequest?.value
+  }
   func isDefaultBrowser() -> Bool {
     #if OPEN_AUTOMATION
     if app.options.automationSocket != nil { return stubDefault || ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] == "already" }
