@@ -86,9 +86,15 @@ def run(factory, results, tmp, api):
         completion_count = stopped['completionCount']
         welcome_cpu = cpu('Welcome stopped')
         stable = state()
+        app.call('select', tab=blank)
+        await_state(lambda s: not s['visible'])
+        time.sleep(1)
+        warm_blank_cpu = cpu('warm blank tab after Welcome')
+        app.call('select', tab=welcome)
+        assert await_state(lambda s: s['visible']), 'Welcome did not return after idle comparison'
         record('W07_idle_no_pending_work', not stable['animating'] and stable['animationCount'] == 0
                and not stable['pendingCompletion'] and stable['completionCount'] == completion_count,
-               blank=blank_cpu, welcome=welcome_cpu, state=stable)
+               blank=blank_cpu, warmBlank=warm_blank_cpu, welcome=welcome_cpu, state=stable)
         screenshot('welcome-stopped')
         hover = app.call('welcome', action='hover', card=2)
         record('W08_hover', hover['animating'] and hover['activeCard'] == 2 and hover['playlist'] == 'stopped', state=hover)
@@ -101,6 +107,13 @@ def run(factory, results, tmp, api):
             except RuntimeError:
                 refused = True
             record('W10_invalid_card_%d' % value, refused)
+        for arguments in ({'action': 'unknown'}, {'action': 'state', 'unexpected': True}):
+            try:
+                app.call('welcome', **arguments)
+                refused = False
+            except RuntimeError:
+                refused = True
+            record('W29_refuse_' + ('unknown_action' if arguments['action'] == 'unknown' else 'unknown_argument'), refused)
         app.call('select', tab=blank)
         hidden = await_state(lambda s: not s['visible'] and s['animationCount'] == 0)
         record('W11_hidden_tab_stops', hidden and all(not h['animating'] for h in hidden['hosts']), state=hidden)
@@ -272,6 +285,11 @@ def negative_gates(factory, results, tmp, api):
     evidence = Path(api.ROOT) / '.re/handoff/sections/s17/c4/negative'
     evidence.mkdir(parents=True, exist_ok=True)
     app = None
+    domain = 'io.github.sergeserb2.open'
+    exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
+    before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    saved = {'open.settings.lastPane': before.get('open.settings.lastPane')}
+    subprocess.run(['defaults', 'delete', domain, 'open.settings.lastPane'], capture_output=True)
 
     def state(): return app.call('welcome')
     def visible(): return api.wait_until(lambda: state() if state()['visible'] else None, timeout=5, step=.1)
@@ -338,5 +356,8 @@ def negative_gates(factory, results, tmp, api):
                cleanup=report)
         app = None
     finally:
-        if app: app.quit()
+        try:
+            api._restore_defaults(app, saved)
+        finally:
+            if app: app.quit()
         (evidence / 'results.json').write_text(json.dumps(dict(results), indent=2))
