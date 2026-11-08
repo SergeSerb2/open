@@ -12110,6 +12110,7 @@ def main():
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
+    ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument('--stop-on-app-death', action='store_true',
@@ -12147,6 +12148,12 @@ def main():
         ap.error("--only is required unless --engine-fingerprint-only is set")
     if opts.only in ('passwords-probe', 'passwords') and opts.style != 'chrome':
         ap.error('passwords suites require --style chrome')
+    if opts.passwords_rows is not None:
+        allowed = {'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
+                   'PW-HF4-window-close', 'PW-HF5-navigate', 'PW-HF6-space', 'PW-HF7-quit'}
+        selected = opts.passwords_rows.split(',')
+        if opts.only != 'passwords' or not set(selected) <= allowed or len(set(selected)) != len(selected):
+            ap.error('--passwords-rows requires passwords and unique HTTPS-First lifetime row ids')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
@@ -12476,7 +12483,8 @@ def main():
         elif opts.only == "passwords":
             results["passwords"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](
-                factory, results["passwords"], tmp, globals(), results['engine']['distributionSHA256'])
+                factory, results["passwords"], tmp, globals(), results['engine']['distributionSHA256'],
+                row_ids=opts.passwords_rows.split(',') if opts.passwords_rows else None)
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)

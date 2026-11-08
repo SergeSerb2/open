@@ -435,13 +435,15 @@ def run_manage_pages(factory, results, tmp, harness):
         app.quit()
 
 
-def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
+def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_ids=None):
     wait = h['wait_until']
     app = None
     passed = set()
     fixture_root = Path(h['ROOT']) / 'tools/e2e/fixtures/passwords'
 
     def row(name, flow, requires=()):
+        if row_ids is not None and name not in row_ids:
+            return
         h['begin_row'](name)
         guard.check()
         if any(r not in passed for r in requires):
@@ -619,7 +621,7 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                 assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05)
                 return counts(logins=1)
             row('P-2', first_and_save)
-            if 'P-1' not in passed:
+            if 'P-1' not in passed and row_ids is None:
                 results['P-1'] = {'ok': False, 'reason': 'real password prompt did not appear'}
 
             def redirect_prompt():
@@ -1147,20 +1149,45 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
                     import re
                     texts = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == window)
                     assert any(re.search(r'HTTPS|secure connection', text, re.I) for text in texts), 'new child was not the HTTPS warning'
-                    if action == 'close':
+                    if action in ('close', 'window-close', 'navigate', 'space', 'quit'):
                         parent = shown['parent']
                         # Closing a tab with a live warning destroys its modal
                         # controller inside DestroyTabFeatures(). This is the
                         # real path that crashed the earlier PW-HF1 cleanup.
-                        app.call('close', tab=tab)
-                        assert wait(lambda: all(t['id'] != tab for t in app.call('tabs')), timeout=5, step=.05)
-                        assert app.call('ping')['pid'] == app.pid
-                        assert any(w['number'] == parent and w.get('visible') for w in app.call('windows'))
-                        assert not any(w['number'] == window and w.get('visible') for w in app.call('windows'))
-                        tab = None
+                        if action == 'quit':
+                            # Send quit while the warning is live. Open.quit()
+                            # normally dismisses surfaces first, which would
+                            # miss this application teardown path.
+                            app.quitting = True
+                            app.call('quit', timeout=3)
+                            assert app.proc.wait(timeout=10) == 0, 'Open did not quit normally with its warning open'
+                            app.quit()
+                            assert app.quit_report['ok'] and not app.quit_report['forced']
+                            tab = None
+                        elif action == 'window-close':
+                            app.call('window-close')
+                            assert wait(lambda: not any(w['number'] == parent and w.get('visible') for w in app.call('windows')), timeout=5, step=.05)
+                            tab = None
+                        elif action == 'navigate':
+                            app.call('navigate', tab=tab, url=baseline)
+                            assert wait(lambda: app.eval(tab, 'location.href === %s && document.readyState === "complete"' % json.dumps(baseline)), timeout=15, step=.1)
+                        elif action == 'space':
+                            other = app.call('space-create', title='Warning lifetime', profile='Default')
+                            app.call('space', space=other)
+                            assert next(s['id'] for s in app.call('spaces') if s['focused']) == other
+                        else:
+                            app.call('close', tab=tab)
+                            assert wait(lambda: all(t['id'] != tab for t in app.call('tabs')), timeout=5, step=.05)
+                            tab = None
+                        if action != 'quit':
+                            assert app.call('ping')['pid'] == app.pid
+                            assert wait(lambda: not any(w['number'] == window and w.get('visible') for w in app.call('windows')), timeout=5, step=.05), 'warning remained visible after lifetime action'
+                            if action != 'window-close':
+                                assert any(w['number'] == parent and w.get('visible') for w in app.call('windows'))
                         guard.check()
-                        return {'warning': 'dialog', 'action': 'close-tab', 'appAlive': True,
-                                'parentWindowStillVisible': True, 'warningClosed': True,
+                        return {'warning': 'dialog', 'action': action, 'appAlive': action != 'quit',
+                                'normalQuit': action == 'quit', 'warningClosed': True,
+                                'parentWindowStillVisible': action not in ('window-close', 'quit'),
                                 'distributionSHA256': engine_distribution_sha256}
                     # A native widget can become visible before its AX button
                     # tree is ready. Require both specific actions before input.
@@ -1196,13 +1223,18 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
             row('PW-HF2-return', lambda: https_first_warning('return'))
             row('PW-HF2-escape', lambda: https_first_warning('escape'))
             row('PW-HF3-tab-close', lambda: https_first_warning('close'))
+            row('PW-HF4-window-close', lambda: https_first_warning('window-close'))
+            row('PW-HF5-navigate', lambda: https_first_warning('navigate'))
+            row('PW-HF6-space', lambda: https_first_warning('space'))
+            row('PW-HF7-quit', lambda: https_first_warning('quit'))
             guard.check(); results['P-15'] = {'ok': True, 'allExecutedRowsAlive': True}
         finally:
             if app: app.quit()
 
 
-def run(factory, results, tmp, harness, engine_distribution_sha256=None):
+def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids=None):
     guard = PasswordGuard(factory, results, harness)
-    run_save_prompts(guard.launch, guard, tmp, harness)
-    run_manage_pages(guard.launch, guard, tmp, harness)
-    run_engine(guard.launch, guard, tmp, harness, guard, engine_distribution_sha256)
+    if row_ids is None:
+        run_save_prompts(guard.launch, guard, tmp, harness)
+        run_manage_pages(guard.launch, guard, tmp, harness)
+    run_engine(guard.launch, guard, tmp, harness, guard, engine_distribution_sha256, row_ids)
