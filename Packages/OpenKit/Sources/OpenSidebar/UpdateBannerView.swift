@@ -59,7 +59,7 @@ public final class UpdateBannerView: NSView {
             layer?.backgroundColor = RGBA(fill.red * fill.alpha + base.red * (1-fill.alpha), fill.green * fill.alpha + base.green * (1-fill.alpha), fill.blue * fill.alpha + base.blue * (1-fill.alpha)).cgColor
             SelectionShadow.apply(to: layer!, appearance: appearance)
             titleLabel.textColor = style.titleColor(appearance).nsColor
-            subtitleLabel.textColor = appearance == .light ? .labelColor.withAlphaComponent(0.55) : .white.withAlphaComponent(0.70)
+            subtitleLabel.textColor = (appearance == .light ? RGBA.black(0.55) : RGBA.white(0.70)).nsColor
             symbol.contentTintColor = titleLabel.textColor; dismissButton.contentTintColor = titleLabel.textColor
         }
         needsLayout = true

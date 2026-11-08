@@ -398,7 +398,7 @@ def toast_matches(app, kind):
         for t in app.call('toasts')['toasts'])
 
 
-def capture_pair(app, opts, name, number):
+def capture_pair(app, opts, name, number, results=None):
     folder = opts.output.parent.resolve() / 'snapshots'
     folder.mkdir(parents=True, exist_ok=True)
     captures = []
@@ -408,6 +408,12 @@ def capture_pair(app, opts, name, number):
         capture = app.call('snapshot', window=number, path=str(path))
         assert capture['method'].startswith('windowserver'), capture
         captures.append(str(path))
+        if results is not None and 'banner' in name:
+            styles = app.call('updater-view-tree').get('bannerStyles', [])
+            expected = [0, 0, 0, 140] if appearance == 'light' else [255, 255, 255, 179]
+            results['S6_' + name + '_' + appearance + '_secondary_color'] = {
+                'ok': bool(styles) and all(s.get('subtitleColor') == expected for s in styles),
+                'styles': styles, 'expected': expected}
     return captures
 
 
@@ -536,11 +542,11 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                 added = next(w for w in windows if w['id'] != first_window['id'])
                 app.call('window-close', window=added['id'])
                 app.call('window-focus', id=first_window['id'], activate=True)
-                paths = capture_pair(app, opts, 'summary-banner', app.call('shell-windows')[0]['number'])
+                paths = capture_pair(app, opts, 'summary-banner', app.call('shell-windows')[0]['number'], results)
                 app.call('updater-banner-width', width=164)
                 row = ax(app, app.call('shell-windows')[0]['number'])
                 results['A7_narrow'] = {'ok': 'Updated!' in row.get('text', []) and 'What’s new' in row.get('text', []),
-                    'ax': row, 'paths': capture_pair(app, opts, 'summary-banner-narrow', app.call('shell-windows')[0]['number'])}
+                    'ax': row, 'paths': capture_pair(app, opts, 'summary-banner-narrow', app.call('shell-windows')[0]['number'], results)}
                 app.call('updater-act', action='banner')
                 tabs = app.call('tabs')
                 url = 'https://github.com/SergeSerb2/open/releases/tag/v' + original['CFBundleShortVersionString']
@@ -652,7 +658,7 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                         and 'Install and Relaunch' in resumed_ax.get('text', []), 'ax': resumed_ax}
                 else:
                     row = ax(app, app.call('shell-windows')[0]['number'])
-                    paths = capture_pair(app, opts, 'available-banner', app.call('shell-windows')[0]['number'])
+                    paths = capture_pair(app, opts, 'available-banner', app.call('shell-windows')[0]['number'], results)
                     results['A6_available_banner'] = {'ok': state.get('banner') == 'available'
                         and 'Open is ready to update!' in row.get('text', []), 'ui': state, 'ax': row, 'paths': paths}
                     app.call('updater-act', action='banner')
@@ -666,7 +672,7 @@ def exercise_variants(opts, folder, results, launch, configure, public, origin, 
                     app.call('updater-banner-width', width=164)
                     row = ax(app, app.call('shell-windows')[0]['number'])
                     results['A6_narrow'] = {'ok': 'An update is ready!' in row.get('text', []), 'ax': row,
-                        'paths': capture_pair(app, opts, 'available-banner-narrow', app.call('shell-windows')[0]['number'])}
+                        'paths': capture_pair(app, opts, 'available-banner-narrow', app.call('shell-windows')[0]['number'], results)}
                     app.call('updater-act', action='dismiss-banner')
                     wait(lambda: ui(app), lambda s: s.get('banner') == '', 'banner stayed visible')
                     results['A6_dismiss'] = {'ok': domain().get('open.updates.bannerDismissalCount') == 1}

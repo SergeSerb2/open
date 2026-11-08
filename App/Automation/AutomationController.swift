@@ -107,9 +107,14 @@
         }
         for window in NSApp.windows { if let content = window.contentView { visit(content.superview ?? content) } }
         let notes = app.updater?.userDriver.updateWindow?.notes?.text
+        let banners = app.windowControllers.compactMap { controller -> [String: Any]? in
+          guard let banner = controller.sidebar.updateBanner else { return nil }
+          return ["title": banner.titleLabel.stringValue, "subtitle": banner.subtitleLabel.stringValue,
+            "subtitleColor": colorComponents(banner.subtitleLabel.textColor)]
+        }
         return ["webViewCount": webViews.count, "webViewClasses": webViews,
           "viewCount": seen.count, "notesViewClass": notes.map { NSStringFromClass(type(of: $0)) } ?? "",
-          "notesIsTextView": notes is NSTextView]
+          "notesIsTextView": notes is NSTextView, "bannerStyles": banners]
       case "updater-banner-width":
         guard let width = a["width"] as? Double, (164...400).contains(width), let controller = app.frontWindowController else { throw Failure(message: "expected banner width 164...400") }
         controller.model.setSidebarWidth(windowID: controller.windowID, width: width)
