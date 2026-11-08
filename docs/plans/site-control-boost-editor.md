@@ -1475,7 +1475,7 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 
 
 Step 3 verification (child A, 2026-11-07; PR pending): App source
-`b7811833` includes main `7f7feb26` and the required `94bbf6cb`.
+`32638c9c` includes main `cca16812` and the required `94bbf6cb`.
 Fresh M5 Debug, automation Release and Release CLIs pass using
 `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`. All 45 automation
 keys are unique, including one left and one right. The embedded engine
@@ -1501,10 +1501,10 @@ Advanced Settings, restores persistent defaults, closes two windows to
 zero and leaves no owned process, without a focus interruption.
 
 R1-1 keeps signposts and runs forced layout/display/`CATransaction.flush()`
-only with `onFirstDraw`, installed by automation. P1 p95 is 6.302 ms
-(6.512 ms including cold; first cold 28.154 ms),
-at load 53.504/39.013/41.036. Native layout/display/flush delay controls
-measure 58.280/29.229/29.677 ms and all fail the unchanged 8 ms predicate.
+only with `onFirstDraw`, installed by automation. P1 p95 is 4.120 ms
+(4.748 ms including cold; first cold 13.127 ms),
+at load 28.710/31.654/31.197. Native layout/display/flush delay controls
+measure 52.336/25.312/25.375 ms and all fail the unchanged 8 ms predicate.
 Each receipt samples native call counts 3/1/1 inside the callback. Shipping
 presentation keeps normal AppKit scheduling. This measures submission,
 not physical scanout.
@@ -1520,21 +1520,23 @@ Current M5 suites (load1/load5/load15 at acquisition → completion):
 
 | Suite | Result | Load |
 |---|---|---|
-| sitecontrol | 23 PASS; S11_material, S12_elements FAIL; S10_boost_rows BLOCKED; S2_adblock BLOCKED; S4_boost BLOCKED | 69.365/39.959/41.425 → 50.050/38.936/40.971 |
-| extensions-ui | 72 PASS | 40.030/38.815/40.780 → 27.987/34.209/38.647 |
-| toolbar | 10 PASS | 16.073/23.568/32.325 → 15.748/23.252/32.110 |
-| window | 83 PASS; cold_fresh_profile, warm_existing_profile FAIL | 17.829/34.795/37.411 → 15.225/28.523/34.581 |
-| features | 19 PASS | 48.588/31.854/31.132 → 29.015/30.038/30.536 |
-| page | 85 PASS; N1_macos_delivered BLOCKED; N6_click_opens_tab BLOCKED; X1_apple_backend BLOCKED; Z3_smart_zoom DEFERRED; capture_c7_incognito BLOCKED | 16.350/25.320/28.628 → 14.947/22.974/27.407 |
-| commandbar | 77 PASS; settings_advanced_action_error Boost editing is not available in this build. | 36.098/24.471/25.933 → 33.691/25.236/26.125 |
+| sitecontrol | 23 PASS; S11_material, S12_elements FAIL; S10_boost_rows BLOCKED; S2_adblock BLOCKED; S4_boost BLOCKED | 32.000/32.352/31.417 → 25.078/30.776/30.891 |
+| extensions-ui | 71 PASS; popup_ready_visible_p95 FAIL | 30.611/30.663/30.755 → 12.889/23.707/27.949 |
+| toolbar | 10 PASS | 14.918/17.193/23.211 → 16.135/17.357/23.197 |
+| window | 83 PASS; cold_fresh_profile, warm_existing_profile FAIL | 10.244/14.820/21.086 → 8.208/12.597/19.442 |
+| features | 19 PASS | 11.829/12.823/18.879 → 10.129/12.061/18.078 |
+| page | 85 PASS; N1_macos_delivered BLOCKED; N6_click_opens_tab BLOCKED; X1_apple_backend BLOCKED; Z3_smart_zoom DEFERRED; capture_c7_incognito BLOCKED | 14.784/13.029/17.844 → 14.500/13.309/17.491 |
+| commandbar | 77 PASS; settings_advanced_action_error Boost editing is not available in this build. | 20.313/15.173/17.923 → 21.846/16.458/18.263 |
+| split | 40 PASS | 20.968/16.660/17.957 → 20.400/17.323/18.135 |
+| space-editor | 167 PASS | 18.887/17.098/18.046 → 18.212/17.120/17.982 |
 
 All completed suites have clean cleanup and zero interruptions.
 P2 observes ten zero native SCC counters and detects then clears a timer
-canary (1→0). Whole-process CPU is 1.906% over
-2.001s, including engine work, at load 50.050/38.936/40.971.
-S13 closed/open scroll p95 is 4.500/4.800 ms, with
-zero dropped frames; the 12.600 ms slow-frame control is rejected,
-at load 58.546/39.458/41.214.
+canary (1→0). Whole-process CPU is 1.977% over
+2.006s, including engine work, at load 25.078/30.776/30.891.
+S13 closed/open scroll p95 is 4.600/4.400 ms, with
+zero dropped frames; the 12.800 ms slow-frame control is rejected,
+at load 32.663/32.494/31.484.
 
 S11/S12 remain **open: material, R-7 follow-up (lead ruling)**. `.hudWindow`
 and dark #686881 at 0.32 remain **interim (lead 2026-11-06)**. S11 probe
@@ -1549,10 +1551,21 @@ establish parity. The separate borderless child-window `.behindWindow`
 follow-up belongs to the lead. No visual acceptance is claimed. The PR
 lists every failed element and its value for the lead's review.
 
-Startup, quiet commandbar qualification and the final full gate are still
-pending. Raw timing misses retain their load numbers under item 9.
+The final full gate is pending. Raw timing misses retain their load
+numbers under item 9.
 
-Raw window startup medians (ms): `{"cold_fresh_profile": {"engineStart": 425, "engineStarted": 513, "firstContentfulPaint": 712, "main": 272, "modelLoaded": 282, "sidebarDrawn": 423}, "warm_existing_profile": {"engineStart": 452, "engineStarted": 549, "firstContentfulPaint": 756, "main": 311, "modelLoaded": 321, "sidebarDrawn": 451}}`. These exceed the known-main range; the quiet interleaved comparison is still required.
+Raw window startup medians (ms): `{"cold_fresh_profile": {"engineStart": 378, "engineStarted": 452, "firstContentfulPaint": 592, "main": 260, "modelLoaded": 270, "sidebarDrawn": 377}, "warm_existing_profile": {"engineStart": 371, "engineStarted": 442, "firstContentfulPaint": 572, "main": 257, "modelLoaded": 266, "sidebarDrawn": 370}}`. The sidebar and paint medians fall within the TANDEM §4a known-main ranges (≤400/700 ms). The additional interleaved comparison is reported separately below.
+
+The additional current-main interleaved startup comparison ran main/branch/main/branch at launch load1≤30. Pooled cold sidebar/paint medians are main392/629.5ms and branch388/603ms; warm medians are main380.5/595.5ms and branch386.5/590.5ms. The strict warm-sidebar no-slower predicate FAILs by6ms; the other three comparisons PASS. Every raw result and load stays in the PR. No causal load claim or strict comparison pass is made.
+
+Quiet commandbar strict checks pass on both binaries. Builds finished before the lock; measurement ran the prebuilt binaries directly and released the lock. The stopped partial run is INTERRUPTED and excluded.
+
+| Binary | Raw count | CPU p95 ms | Inline overhead p95 ms | Load1/load5/load15, start → end |
+|---|---|---|---|---|
+| main | 151/151 | 4.41 | 0.097 | 7.883/13.395/20.162 → 8.656/12.984/19.739 |
+| branch | 151/151 | 4.31 | 0.255 | 8.656/12.984/19.739 → 8.075/12.354/19.235 |
+
+One bounded extensions-ui repeat has 72 PASS; X-13 True; 20/20 latency samples, p95 6.048041657777503 ms at load 12.158/15.649/17.365. The first run remains 71 PASS/1 FAIL from19/20 samples, p957.464ms at16.578/25.980/28.938. The cause is unproven; diagnostic-only capture keeps every popup state without changing the20-sample/16.7ms predicates.
 
 
 ## 11. Risks and open questions

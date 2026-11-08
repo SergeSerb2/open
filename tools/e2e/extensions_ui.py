@@ -532,15 +532,16 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         if functional_only:
             results["popup_ready_visible_p95"]={"status":"DEFERRED", "reason":"M5 timing receipt required (TANDEM §4M)"}
         else:
-            samples,click_samples = [],[]
+            samples,click_samples,popup_states = [],[],[]
             for i in range(20):
                 p = popup(probe)
+                popup_states.append(p)
                 if p and p["readyToVisibleMs"] is not None: samples.append(p["readyToVisibleMs"])
                 if p and p["clickToVisibleMs"] is not None: click_samples.append(p["clickToVisibleMs"])
                 close()
             p95 = sorted(samples)[math.ceil(.95*len(samples))-1] if samples else None
             results["popup_ready_visible_p95"] = {"ok": len(samples) >= 20 and p95 <= 16.7,
-                "samples": samples, "p95ms": p95, "load": os.getloadavg(),
+                "samples": samples, "popupStates": popup_states, "p95ms": p95, "load": os.getloadavg(),
                 "clickToVisibleSamples":click_samples,"clickToVisibleP95ms":sorted(click_samples)[18] if len(click_samples)>=20 else None}
         # A real packed install owns and displays the same sheet that automation answers.
         crx = pack_probe(root, tmp, prefix="ui-install")

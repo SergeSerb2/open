@@ -353,18 +353,19 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app`, App source `b7811833` includes main `7f7feb26`.
+On `s12/scc-app`, App source `32638c9c` includes main `cca16812`.
 Fresh M5 Debug/automation Release, package startup and engine fingerprint
 checks pass against `7a90e70e` (code `7d3cb328`). SCC has 23 PASS,
 S2/S4/S10 matching-row coverage BLOCKED, and S11/S12 FAIL under the lead's
 interim ruling. The real private context and Boost action refusals pass.
-P1 p95 is 6.302 ms at load 53.504/39.013/41.036; all three native phase
+P1 p95 is 4.120 ms at load 28.710/31.654/31.197; all three native phase
 controls are rejected. Heavy-page snapshot counts are closed0/open1 and
 zero for 250 title changes. The specific Advanced Settings cleanup proof
 restores defaults, closes two windows and leaves no owned process or focus
 interruption. The plan records current suite counts and loads. S11/S12
-remain open for lead review; startup, quiet commandbar and the final gate
-are pending. Older-engine, M1 and interrupted receipts are excluded.
+remain open for lead review. Raw window startup is within the known-main
+range; the extra warm-sidebar comparison misses by6ms. Quiet commandbar
+passes151/151 for main and branch. The final gate is pending. Older-engine, M1 and interrupted receipts are excluded.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
