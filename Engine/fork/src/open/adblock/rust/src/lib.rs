@@ -217,13 +217,11 @@ mod ffi {
             ids: &[String],
             exceptions: &[String],
         ) -> OpenHiddenSelectors;
-        fn open_adblock_set_regex_cache_capacity(engine: &OpenAdblockEngine, bytes: u32);
         fn open_adblock_warm_regexes(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_dat_reshared_count(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_complete_regex_count(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_complete_regex_program_bytes(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_regex_program_memory_usage(engine: &OpenAdblockEngine) -> u64;
-        fn open_adblock_regex_program_limit_fallbacks(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_regex_compile_count(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo;
     }
@@ -881,16 +879,8 @@ pub fn open_adblock_regex_compile_count(engine: &OpenAdblockEngine) -> u64 {
     engine.inner.compiled_network_regex_count() as u64
 }
 
-pub fn open_adblock_regex_program_limit_fallbacks(engine: &OpenAdblockEngine) -> u64 {
-    engine.inner.regex_program_limit_fallbacks() as u64
-}
-
 pub fn open_adblock_regex_program_memory_usage(engine: &OpenAdblockEngine) -> u64 {
     engine.inner.regex_program_memory_usage() as u64
-}
-
-pub fn open_adblock_set_regex_cache_capacity(engine: &OpenAdblockEngine, bytes: u32) {
-    engine.inner.set_regex_cache_capacity(bytes as usize);
 }
 
 pub fn open_adblock_complete_regex_count(engine: &OpenAdblockEngine) -> u64 {

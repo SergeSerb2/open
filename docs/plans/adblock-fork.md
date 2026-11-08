@@ -4631,9 +4631,10 @@ the byte counts, summing current and original PA roots. The remaining text/DAT f
 allocator/build residue, not a retained DAT buffer. After exact re-sharing,
 DAT costs less than text in these runs.
 
-**Pending gates and delivery.** The final N-case flow, CDP URL edges and
-five-run quiet-lock headless/page receipts are queued without a heavy slot
-or engine lock. Working G-2 maxima still vary with load; they are not final
+**Pending gates and delivery.** Headless five-run receipts are complete;
+the final N-case flow, CDP URL edges and page receipts await the callback
+repair build. No page jobs remain queued. Working G-2 maxima vary with load;
+they are not final
 acceptance. Sample 0's 200 URLs are all below 8 KiB (max 6,376 bytes), so
 G-4…G-7 exercise identical inputs under either cap; G-1…G-3 explicitly run
 both caps. N-18 remains hook reachability only (no HTTP/3 endpoint), and the
@@ -4663,3 +4664,51 @@ The queued page and URL-edge jobs were canceled before any browser launched,
 because the fusion build cannot count for page acceptance. The first N-case
 attempt has 8 PASS, a closed-document probe with no observed unload requests,
 and a worker timeout; later rows did not run. It is not a full N-case result.
+
+**Lower-load repeat, same built binary.** Twenty interleaved headless runs
+(five per cap/input) completed under the quiet lock at load1 15.5–20.5.
+All dumps retain the hashes above; every run adds zero regex compiles.
+
+| Cap / input | CPU mean / p99 / warm max (µs) | First-pass CPU max (µs) | Wall warm max (µs) | Physical-footprint delta |
+|---|---:|---:|---:|---:|
+| 16 KiB text | 5.531 / 29.917 / 484.917 | 415.291 | 484.792 | 69.14 MiB |
+| 16 KiB DAT | 6.590 / 37.750 / 503.084 | 447.208 | 626.500 | 60.16 MiB |
+| 8 KiB text | 6.401 / 34.584 / 544.791 | 462.291 | 544.625 | 70.09 MiB |
+| 8 KiB DAT | 5.688 / 32.792 / 465.291 | 434.792 | 490.708 | 62.52 MiB |
+
+These are medians of the per-run statistic. Neither cap passes G-2 in both
+input modes. Latest TANDEM absolute receipts require load1 ≤12, and the
+Step 9 wall requirement remains load1 ≤4. The slowest CPU URLs are allowed
+Vidazoo `bid_url` requests, corpus lines 1529/1530 (6,014/6,376 bytes), both
+below either cap. The current counters do not identify expensive failed
+filter checks. Raw data: `lower-quiet-r2-diag-runs.json` and summary/logs.
+
+The preserved pre-fusion P-3 baseline completed the current CDP flow:
+30 PASS, one closed-document probe FAIL (zero unload requests observed,
+next-document count zero). N-9 workers and upload completion PASS on that
+baseline. This confirms the worker regression; it does not validate the
+unbuilt repair. The closed-document probe also fails on the baseline and
+still needs a reliable stimulus. Receipt: `baseline-p3-control.log`.
+
+**Lead decision 20:16: prepared source, not built.** Restore plain
+`Regex::new` / `RegexSet::new` with their upstream default NFA limit, lazy
+cache, eager DFA and one-pass settings. Keep compile-only warming, program
+retention, ASCII generated forms, DAT sharing, Chromium resolver and early
+input release. A lossless text build now serves the engine deserialized
+from its already-serialized DAT bytes, with resources reapplied; the
+original is dropped on the build runner. Lossy rule sets retain the text
+engine because DAT v0 drops features such as `removeparam`. Decode failure
+also keeps the valid text engine. DAT writes still use the same bytes and
+the stale-load check remains before the write.
+
+After input/serialization buffers and the replaced engine are gone, the
+build runner requests `partition_alloc::MemoryReclaimer::ReclaimAll()`.
+This is the API Chromium uses after backgrounding
+(`base/allocator/partition_alloc_support.cc:1550`); it purges thread caches,
+decommits empty slot spans and discards unused pages. New diagnostics print
+parse, serialize, deserialize, regex compile and reclaim durations, plus PA
+and physical footprint before/after the round trip and reclaim. These
+changes and the fusion repair await explicit engine clearance. Their
+predicted CPU/memory savings are not measurements. The decision record is
+`.re/s13/e1/GATES.md`; final identity, G-5 callback/GURL scopes, build-time
+delta, footprint and distribution remain pending. No budget has changed.

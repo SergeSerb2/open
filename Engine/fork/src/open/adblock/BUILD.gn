@@ -32,7 +32,6 @@ source_set("adblock") {
       "open_adblock_profile_proof.h",
     ]
     deps = [
-      "//base/allocator/partition_allocator/src/partition_alloc",
       "//base/allocator/partition_allocator/src/partition_alloc:allocator_shim",
     ]
   } else {
@@ -40,6 +39,7 @@ source_set("adblock") {
   }
   deps += [
     "//base",
+    "//base/allocator/partition_allocator/src/partition_alloc",
     "//content/public/browser",
     "//crypto",
     "//mojo/public/cpp/bindings",

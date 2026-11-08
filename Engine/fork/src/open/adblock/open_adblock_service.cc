@@ -13,6 +13,9 @@
 #include "base/files/file_util.h"
 #include "open/adblock/open_adblock_engine_registry.h"
 #include "open/adblock/open_adblock_url_loader_factory.h"
+#if !defined(OFFICIAL_BUILD)
+#include "open/adblock/open_adblock_selftest.h"
+#endif
 #include "base/files/important_file_writer.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -24,6 +27,7 @@
 #include "base/values.h"
 #include "crypto/hash.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "partition_alloc/memory_reclaimer.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -342,6 +346,7 @@ OpenAdBlockService::BuildResult BuildOnBackground(
 
   if (prefer_dat) {
     if (std::optional<std::string> dat = ReadMatchingDat(*generation)) {
+      base::ElapsedTimer deserialize_timer;
       auto engine = open_adblock::open_adblock_create_empty();
       const rust::Slice<const uint8_t> bytes(
           reinterpret_cast<const uint8_t*>(dat->data()), dat->size());
@@ -349,6 +354,8 @@ OpenAdBlockService::BuildResult BuildOnBackground(
       rust::String resources = rust::String::lossy(generation->resources_json);
       if (open_adblock::open_adblock_deserialize(*engine, bytes,
                                                  rust::Str(resources))) {
+        VLOG(1) << "OpenAdBlock: build phase=disk_deserialize elapsed_us="
+                << deserialize_timer.Elapsed().InMicroseconds();
         FillReport(*engine, *generation, result);
         result.lossless = true;  // only a lossless build writes a DAT
         result.from_dat = true;
@@ -373,11 +380,13 @@ OpenAdBlockService::BuildResult BuildOnBackground(
     if (is_stale()) {
       return result;
     }
+    base::ElapsedTimer parse_timer;
     auto engine = BuildFromText(*generation);
-    // Inputs have been consumed. Release their storage before serialization
-    // and regex warming; only hashes and metadata remain resident.
+    VLOG(1) << "OpenAdBlock: build phase=text_parse elapsed_us="
+            << parse_timer.Elapsed().InMicroseconds();
+    // The lists have been consumed. Resources must remain until the in-memory
+    // DAT round trip below reapplies them (DAT v0 does not contain resources).
     generation->texts = {};
-    std::string().swap(generation->resources_json);
     const open_adblock::OpenBuildReport report =
         open_adblock::open_adblock_build_report(*engine);
     if (!report.refused.empty()) {
@@ -393,8 +402,11 @@ OpenAdBlockService::BuildResult BuildOnBackground(
       return result;
     }
     if (result.lossless) {
+      base::ElapsedTimer serialize_timer;
       rust::Vec<uint8_t> serialized =
           open_adblock::open_adblock_serialize(*engine);
+      VLOG(1) << "OpenAdBlock: build phase=serialize elapsed_us="
+              << serialize_timer.Elapsed().InMicroseconds();
       if (is_stale()) {
         // A superseded build must not write a DAT after serialization (100-7).
         return result;
@@ -402,6 +414,37 @@ OpenAdBlockService::BuildResult BuildOnBackground(
       if (serialized.empty()) {
         result.error = "write engine.dat: serialization failed";
       } else {
+#if !defined(OFFICIAL_BUILD)
+        RecordOpenAdBlockMemoryPhase("text-before-roundtrip");
+#endif
+        // Serve the compact DAT representation after a text build too. Keep
+        // the original until decode succeeds, then free it on this runner.
+        // This uses the same checked decoder and resource reapplication as a
+        // disk DAT load, including exact immutable rule re-sharing (N-19).
+        base::ElapsedTimer deserialize_timer;
+        auto compact = open_adblock::open_adblock_create_empty();
+        rust::String resources =
+            rust::String::lossy(generation->resources_json);
+        const bool deserialized = open_adblock::open_adblock_deserialize(
+            *compact,
+            rust::Slice<const uint8_t>(serialized.data(), serialized.size()),
+            rust::Str(resources));
+        if (is_stale()) {
+          return result;
+        }
+        if (deserialized) {
+          engine = std::move(compact);
+        } else {
+          // An optional compaction failure must not lose the valid text
+          // engine or alter its verdicts. Retain its original build report.
+          result.error = "compact engine.dat: decode failed; kept text engine";
+        }
+        VLOG(1) << "OpenAdBlock: build phase=text_deserialize elapsed_us="
+                << deserialize_timer.Elapsed().InMicroseconds()
+                << " success=" << deserialized;
+#if !defined(OFFICIAL_BUILD)
+        RecordOpenAdBlockMemoryPhase("text-after-roundtrip");
+#endif
         // Written from the Rust buffer, without a copy.
         std::string_view dat(reinterpret_cast<const char*>(serialized.data()),
                              serialized.size());
@@ -419,9 +462,25 @@ OpenAdBlockService::BuildResult BuildOnBackground(
       }
     }
     // A lossy set writes no DAT (F-31), and an old DAT of this generation is
-    // never read (its receipt would not match).
+    // never read (its receipt would not match). It must retain the text
+    // representation too: a round trip would drop rules such as removeparam.
+    std::string().swap(generation->resources_json);
     result.engine = MakeEngineHolder(std::move(engine));
   }
+  // All text/DAT/resource/serialization buffers and any replaced text engine
+  // are gone. One explicit build-time reclaim releases freed pages; it never
+  // runs on a request, the UI thread, or a repeating adblock timer. Chromium
+  // uses this same API after backgrounding (partition_alloc_support.cc).
+#if !defined(OFFICIAL_BUILD)
+  RecordOpenAdBlockMemoryPhase("before-build-reclaim");
+#endif
+  base::ElapsedTimer reclaim_timer;
+  partition_alloc::MemoryReclaimer::Instance()->ReclaimAll();
+  VLOG(1) << "OpenAdBlock: build phase=reclaim elapsed_us="
+          << reclaim_timer.Elapsed().InMicroseconds();
+#if !defined(OFFICIAL_BUILD)
+  RecordOpenAdBlockMemoryPhase("after-build-reclaim");
+#endif
   OpenAdBlockEngineRegistry::Get().Insert(key, result.engine);
   result.build_ms = timer.Elapsed().InMilliseconds();
   return result;

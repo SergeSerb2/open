@@ -8,14 +8,13 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/command_line.h"
-#include "base/strings/string_number_conversions.h"
 #if !defined(OFFICIAL_BUILD)
 #include "open/adblock/open_adblock_selftest.h"
 #endif
 #include "base/no_destructor.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
@@ -80,14 +79,12 @@ EngineHolder::EngineHolder(rust::Box<open_adblock::OpenAdblockEngine> engine)
       warmed_regex_count([this] {
         DCHECK(AdBlockBuildTaskRunner()->RunsTasksInCurrentSequence());
 #if !defined(OFFICIAL_BUILD)
-        unsigned cache_capacity = 0;
-        if (base::StringToUint(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-                "open-adblock-regex-cache"), &cache_capacity) && cache_capacity <= (2u << 20)) {
-          open_adblock::open_adblock_set_regex_cache_capacity(*this->engine, cache_capacity);
-        }
         RecordOpenAdBlockMemoryPhase("rules-before-regex");
 #endif
+        base::ElapsedTimer compile_timer;
         const uint64_t count = open_adblock::open_adblock_warm_regexes(*this->engine);
+        VLOG(1) << "OpenAdBlock: build phase=regex_compile elapsed_us="
+                << compile_timer.Elapsed().InMicroseconds();
 #if !defined(OFFICIAL_BUILD)
         RecordOpenAdBlockMemoryPhase("programs-after-regex");
 #endif
@@ -195,8 +192,7 @@ std::string OpenAdBlockMatcher::RegexCompileCountsText() const {
   return "G-6 regex warm=" + std::to_string(engine_->warmed_regex_count) +
          " current=" + std::to_string(current) +
          " added=" + std::to_string(current - engine_->warmed_regex_count) +
-         " program_limit_fallbacks=" + std::to_string(
-             open_adblock::open_adblock_regex_program_limit_fallbacks(*engine_->engine)) +
+         " regex_builder=default" +
          " program_bytes=" + std::to_string(
              open_adblock::open_adblock_regex_program_memory_usage(*engine_->engine)) +
          " user_regex_count=" + std::to_string(
