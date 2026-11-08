@@ -1,5 +1,6 @@
 """Setup gates through the real App, shared importer, native window and saved root."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import plistlib
@@ -59,6 +60,8 @@ def run(factory, results, tmp, h):
             s = state()['screen']
             if s == 'ready': return state()
             action('skip' if s in ('name','import','favorites','theme','blocker') else 'next')
+            if s == 'defaultBrowser':
+                until(lambda: state()['screen']=='ready' or not state()['defaultPending'])
         raise AssertionError(state())
     def snapshot(): return Path(app.user_data)/'State/browser.json'
     try:
@@ -221,6 +224,27 @@ def run(factory, results, tmp, h):
         launch(directory=empty, flags=['--reduce-motion']); reduced = skip_to_ready(); shot('ready-reduce-motion')
         gate('reduced', lambda s: s['reduceMotion'] and s['offset']==0 and not s['confettiPlayed'] and not s['confettiActive'], reduced, ready)
         action('set-appearance', appearance='dark'); shot('ready-dark')
+        # Replay exercises all setup choices over the saved browser. None may
+        # reach the importer, model, preferences, blocker or default service.
+        action('get-started'); until(lambda: not state()['active'] and not state()['dim']['exists'])
+        def persisted():
+            return dict(snapshot=hashlib.sha256(snapshot().read_bytes()).hexdigest(),
+                blocker=hashlib.sha256(Path(app.user_data,'adblock-settings.json').read_bytes()).hexdigest(),
+                name=app.call('defaults', key=keys[0], persistent=True),
+                completed=app.call('defaults', key=keys[1], persistent=True))
+        baseline = persisted()
+        action('replay-intro'); action('skip-intro'); action('get-started'); screen('name')
+        action('set-name', name='Replay only'); action('next'); screen('favorites')
+        action('toggle-favorite', index=1); action('next'); screen('theme')
+        action('set-theme', preset=9); action('next'); screen('blocker')
+        action('set-blocker', on=True); action('next'); screen('defaultBrowser')
+        action('choose-default', yes=True); action('next'); screen('ready')
+        replay_ready = state(); action('shuffle-card'); action('get-started')
+        until(lambda: not state()['active'] and not state()['dim']['exists'])
+        replay_saved = persisted()
+        replay_saved['defaultAttempted'] = replay_ready['defaultAttempted']
+        gate('replay_read_only', lambda s: all(s.get(key)==value for key,value in baseline.items())
+            and s.get('defaultAttempted') is False, replay_saved, pending)
         # Native Cmd+W reaches the window delegate and quits without completion.
         launch(directory=empty, OPEN_AUTOMATION_PROBE_DELAY_MS='5000')
         root = snapshot(); pid = app.pid
