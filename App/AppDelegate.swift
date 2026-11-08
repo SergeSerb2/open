@@ -343,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
       snapshotStore: session == nil && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title)
-    if isFirstRun, let onboarding = onboardingWindowController, !onboarding.replay {
+    if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay {
       controller.allowsWindowActivation = false
       controller.window?.alphaValue = 0
     }
@@ -355,7 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     MainMenu.targetWindowCommands(factory)
     if session == nil { todayAutoArchive?.attach(context: controller.context) }
     controller.showWindow(nil)
-    if isFirstRun, let onboarding = onboardingWindowController, !onboarding.replay,
+    if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay,
       let window = controller.window { onboarding.hidePreparedBrowser(window) }
     if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }

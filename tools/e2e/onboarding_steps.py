@@ -23,9 +23,11 @@ def run(factory, results, tmp, h):
     evidence = Path(h.ROOT)/'.re/handoff/sections/s17/c3'; evidence.mkdir(parents=True, exist_ok=True)
     exported = h.subprocess.run(['defaults','export','io.github.sergeserb2.open','-'], capture_output=True)
     domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
-    keys = ('open.onboarding.name', 'open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane')
+    keys = ('open.onboarding.name', 'open.firstRun.completed', 'open.import.lastArcDir', 'open.settings.lastPane',
+            'open.links.externalInLittleOpen')
     saved = {key: domain.get(key) for key in keys}
     app = None
+    external_server = None
     last_intro = None
     negatives = {}
     ax_steps = {}
@@ -305,6 +307,51 @@ def run(factory, results, tmp, h):
         replay_saved['defaultAttempted'] = replay_ready['defaultAttempted']
         gate('replay_read_only', lambda s: all(s.get(key)==value for key,value in baseline.items())
             and s.get('defaultAttempted') is False, replay_saved, pending)
+        # Real macOS URL delivery queues until the final save; it must not
+        # create a browser (or bypass setup through Little Open) beforehand.
+        external_server, external_origin = h._fixture_server('Onboarding external link')
+        launch(directory=empty)
+        app.call('defaults', key='open.links.externalInLittleOpen', value=False)
+        external_url = external_origin+'/queued-during-setup'
+        delivered = h.subprocess.run(['/usr/bin/open', '-a', app.bundle, external_url],
+            capture_output=True, text=True, timeout=15)
+        until(lambda: app.call('routing-log')['pendingCount']==1)
+        queued_external = dict(delivery=delivered.returncode, setup=state(),
+            routing=app.call('routing-log'), windows=app.call('windows'))
+        skip_to_ready()
+        before_finish = app.call('shell-windows')
+        handoff_start = app.call('onboarding', action='get-started')
+        handoff_windows = app.call('shell-windows')
+        # The onboarding controller still exists during its 2.5-second dim
+        # fade. Only pre-save windows may inherit setup's hidden/key guard.
+        app.call('command', id='new-window')
+        new_windows = [w for w in app.call('shell-windows')
+            if w['id'] not in {old['id'] for old in handoff_windows}]
+        created = app.call('window-state')
+        native_created = next((w for w in app.call('windows') if w['number']==created['number']), {})
+        during_fade = state()
+        new_window_observed = dict(start=handoff_start, setup=during_fade,
+            created=created, native=native_created, windows=new_windows)
+        gate('new_window_during_handoff', lambda s: s.get('start',{}).get('screen')=='handoff'
+            and s['start']['dim']['exists'] and s['start']['dim']['alpha']>0
+            and s.get('setup',{}).get('screen')=='handoff' and s['setup']['dim']['exists']
+            and len(s.get('windows',[]))==1
+            and s.get('created',{}).get('id')==s['windows'][0]['id']
+            and s['created']['canBecomeKey'] is True
+            and s['created']['isKeyWindow'] and s.get('native',{}).get('visible') is True
+            and s['native']['alpha']==1,
+            new_window_observed, dict(setup=queued_external['setup'], windows=before_finish))
+        until(lambda: not state()['active'] and not state()['dim']['exists'])
+        until(lambda: app.call('routing-log')['pendingCount']==0
+            and any(t['url']==external_url for t in app.call('tabs')))
+        drained_external = dict(delivery=delivered.returncode, setup=state(),
+            routing=app.call('routing-log'), windows=app.call('windows'))
+        gate('external_url_queued_during_setup', lambda s: s.get('delivery')==0
+            and s.get('setup',{}).get('screen')=='name' and s['setup']['active']
+            and not s.get('routing',{}).get('ready') and s['routing']['pendingCount']==1
+            and s['routing']['queuedCount']==1 and s['routing']['drainedCount']==0
+            and not any(w['class'] in ('BrowserWindow','LittleOpenNativeWindow') for w in s.get('windows',[])),
+            queued_external, drained_external)
         # Native Cmd+W reaches the window delegate and quits without completion.
         launch(directory=empty, OPEN_AUTOMATION_PROBE_DELAY_MS='5000')
         root = snapshot(); pid = app.pid
@@ -326,4 +373,6 @@ def run(factory, results, tmp, h):
         (evidence/'negative-proofs.json').write_text(json.dumps(negatives, indent=2))
     finally:
         if app and not app.closed: app.quit()
+        if external_server:
+            external_server.shutdown(); external_server.server_close()
         h._restore_defaults(None, saved)
