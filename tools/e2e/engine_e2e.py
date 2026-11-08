@@ -41,6 +41,13 @@ import time
 import traceback
 from pathlib import Path
 
+# The -I shebang drops this folder from sys.path. Put it first so sibling
+# suites (engine_activation, downloads, extensions_p3, ...) import when the
+# script runs directly.
+_E2E_DIR = os.path.dirname(os.path.realpath(__file__))
+if sys.path[:1] != [_E2E_DIR]:
+    sys.path.insert(0, _E2E_DIR)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
 _ACTIVE_FOCUS_TRACKER = None
