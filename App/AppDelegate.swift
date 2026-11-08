@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var asyncEngineCalls: [String: Int] = [:]
   private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
+  lazy var adBlockEngineAdapter = AdBlockEngineAdapter(app: self)
   lazy var profileTeardown = ProfileTeardown(app: self)
   var pendingMissingProfileTitles: [String] = []
   var missingProfileNotice: NSAlert?
@@ -118,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     // the engine is ready wait inside OpenEngine.
     showWindowsIfNeeded()
     tabSleep.installSettingsPolicy()
+    adBlockEngineAdapter.installProfilePolicy()
     installScripting()
   }
 
@@ -274,6 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     modelSaveObserver = model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild(); self?.purgeScriptingWrappers() }
     // Profile creation belongs to the currently installed model, including an import swap.
     tabSleep.installSettingsPolicy()
+    adBlockEngineAdapter.installProfilePolicy()
     purgeScriptingWrappers()
   }
 
@@ -580,6 +583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     ExtensionWindowController.closeAll()
     stopAutoArchive()
     tabSleep.stop()
+    adBlockEngineAdapter.stop()
     stores.boosts.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
@@ -683,6 +687,7 @@ extension AppDelegate: CommandDispatcher {
           }
           // Startup T5: the sleep controller starts after first paint, never before.
           self.tabSleep.start()
+          self.adBlockEngineAdapter.startAfterPaint()
           FindBarPrewarm.schedule(afterPaintIn: self)
           self.applicationIcon.restoreAfterContent()
           self.prepareUpdaterAfterPaint()
@@ -693,6 +698,7 @@ extension AppDelegate: CommandDispatcher {
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
       self.tabSleep.start()
+      self.adBlockEngineAdapter.startAfterPaint()
       self.applicationIcon.restoreAfterContent()
       self.prepareUpdaterAfterPaint()
     }

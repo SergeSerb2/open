@@ -444,6 +444,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     guard let context, context.state == .live else { return nil }
     app.profileTeardown.didLoad(profileID: profileID, directory: directory)
+    app.adBlockEngineAdapter.contextCreated(context, profileID: profileID)
     app.extensionPrompts.register(context.extensions)
     app.stores.boosts.adapter.record(context, profile: profileID)
     return WebsiteAppearance.prepare(context)

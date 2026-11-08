@@ -193,12 +193,16 @@ re-import, including user edits. `BoostStore.upsert` sets `updatedAt` to import
 time; the `protectedEdits` count therefore means an existing record is newer
 than its source, not proof of a user edit. No model or store API changes are made.
 
-App persistence, live apply, re-import and shared Undo are **BLOCKED (Section 12
-AppBoosts)**. `AppImportRunner.recordBoostImport([ProfileID: [Boost]], counts:)`
-records counts only. The future implementation must use the sole owner:
-`app.stores.boosts.store(for: profileID).upsert(boost)` for each addition, then
-`app.stores.boosts.refresh(profile: profileID)` once per Profile. It must never
-construct another App BoostStore or write a Boost file directly.
+The App writes through the sole `app.stores.boosts` owner after resolving source
+Profiles to live destinations (Default by role). It calls the owner's store
+`upsert` only for absent stable IDs, then `refresh(profile:)` once per changed
+Profile. Existing records are duplicates and remain untouched. `AppImportUndo`
+retains the additions, removes them with the existing `BoostStore.delete(id:)`
+and restores them on Redo, with a refresh after each batch. Undo flushes the
+removals before the first-run model can reload the bootstrap Default path. No second store or
+new Section 12 hook is needed. These are Open implementation choices, not new
+Arc reverse-engineering findings; see `App/Import/AppImportRunner.swift` and
+`App/Import/AppImportUndo.swift`. Real-App evidence is in `firstrun_boosts.py`.
 
 ## Sample request
 
