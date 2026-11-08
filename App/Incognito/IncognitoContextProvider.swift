@@ -20,7 +20,10 @@ enum IncognitoContextProvider {
         userInfo: [NSLocalizedDescriptionKey: "The parent Profile is unavailable."]))
       return
     }
-    OEEngine.shared.makeIncognitoContext(for: original, completion: completion)
+    OEEngine.shared.makeIncognitoContext(for: original) { [weak app] context, error in
+      if let context, let app { app.adBlockEngineAdapter.contextCreated(context, profileID: parent.id) }
+      completion(context, error)
+    }
   }
 }
 
