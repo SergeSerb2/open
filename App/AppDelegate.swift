@@ -329,11 +329,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       "contextsBeforeEngine": OEEngine.shared.contexts.count,
       "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
     ]
+
+  }
+
+  /// Capture shortcuts at the confirmed first frame, after AppKit's native
+  /// launch run-loop work, and before Chromium starts.
+  func recordFirstFrameMenuProbe() {
     #if OPEN_AUTOMATION
     if ProcessInfo.processInfo.environment["OPEN_SPEED_MENU_PROBE"] == "1" {
       startupEvidence["firstFrameMenuShortcuts"] = MainMenu.shortcutSnapshot(NSApp.mainMenu)
       if ProcessInfo.processInfo.environment["OPEN_SPEED_EARLY_MENU_PROBE"] == "1" {
-        NSApp.mainMenu?.items.first(where: { $0.title == "File" })?.submenu?.update()
+        // Exercise the callback AppKit uses before opening this native menu.
+        if let menu = NSApp.mainMenu?.items.first(where: { $0.title == "File" })?.submenu {
+          menu.delegate?.menuNeedsUpdate?(menu)
+        }
         startupEvidence["earlyMenuItems"] = MainMenu.shortcutSnapshot(NSApp.mainMenu, includeUnkeyed: true)
         startupEvidence["earlyMenuCompleted"] = initialMainMenuCompleted
       }
