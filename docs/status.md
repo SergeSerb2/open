@@ -355,15 +355,16 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app`, the App source `214b4476` includes main `ebbeeb83`
+On `s12/scc-app`, the App source `8c79af17` includes main `72a56736`
 and #249, #202, #205 and repaired #252. SCC forwards to the sole
 `app.stores.boosts` owner. Private matching rows use the session parent
-Profile, and `factory.isIncognito` guards actions. Fresh Debug/Release,
-compiled omitted-provider negative, exact source/binary restoration, and
-real S4/S10 flows pass on engine47af3007. The current `sitecontrol` receipt
+Profile, and `factory.isIncognito` guards actions. Fresh Debug/Release and
+compiled omitted-provider builds pass on engine47af3007, with exact
+source/binary restoration. The fresh merged-head real S4/S10 flows and
+regressions remain pending. The earlier engine47af `sitecontrol` receipt
 has 28 PASS, S2 BLOCKED, and S11/S12 **FAIL, known: material and element
-colors, follow-up S12-V (lead 22:20)**, not parity. S2 requires Section13's
-adapter. E1–E3 APIs are available; SCC binding is deferred under lead22:38.
+colors, follow-up S12-V (lead 22:20)**, not parity. S2 awaits Section13's
+engine support; #247's App adapter remains behind its capability gate. E1–E3 APIs are available; SCC binding is deferred under lead22:38.
 The renamed Settings row checks that View Boosts opens the Library on Boosts
 and rejects the old unavailable-error assertion. Final regression counts,
 loads, negative proofs and full gate results belong to the PR receipt.
