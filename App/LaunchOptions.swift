@@ -87,6 +87,29 @@ final class LaunchTiming {
   private let millisecondsPerTick: Double
   private(set) var marks: [(String, UInt64)] = []
   private var firstFrameConfirmed: Bool?
+  #if OPEN_AUTOMATION
+  private var keyProbeTimestamp: TimeInterval?
+
+  /// Queue an owned-window event at the confirmed frame. The normal AppKit /
+  /// Chromium pump must deliver it through OEApplication.sendEvent; no direct
+  /// router call and no desktop input establishes the readiness timestamp.
+  func postKeyReadinessProbe(to window: NSWindow?) {
+    guard ProcessInfo.processInfo.environment["OPEN_SPEED_KEY_PROBE"] == "1", let window,
+      let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37)
+    else { return }
+    keyProbeTimestamp = event.timestamp
+    mark("keyPosted")
+    NSApp.postEvent(event, atStart: false)
+  }
+
+  func recordKeyReadiness(_ event: NSEvent, handled: Bool) {
+    guard keyProbeTimestamp == event.timestamp else { return }
+    keyProbeTimestamp = nil
+    mark(handled ? "keyAccepted" : "keyRejected")
+  }
+  #endif
 
   private init() {
     var timebase = mach_timebase_info_data_t()

@@ -19,7 +19,13 @@ app.delegate = appDelegate
 AutomationOwnerWatch.install()
 #endif
 // Reserved app shortcuts beat the page (Cmd-T, Cmd-W, Cmd-L, ...).
-app.keyEquivalentHandler = { event in MainMenu.performReservedShortcut(event) }
+app.keyEquivalentHandler = { event in
+  let handled = MainMenu.performReservedShortcut(event)
+  #if OPEN_AUTOMATION
+  LaunchTiming.shared.recordKeyReadiness(event, handled: handled)
+  #endif
+  return handled
+}
 
 let options = LaunchOptions(arguments: CommandLine.arguments)
 LaunchTiming.shared.phase("optionsParsed")
@@ -63,6 +69,9 @@ if appDelegate.terminationRequested {
 LaunchTiming.shared.recordFirstFrame(confirmed: firstFrame.presented)
 if firstFrame.presented {
   LaunchTiming.shared.mark("sidebarDrawn")
+  #if OPEN_AUTOMATION
+  LaunchTiming.shared.postKeyReadinessProbe(to: appDelegate.frontWindowController?.window)
+  #endif
 } else {
   // An off-screen/asleep display may never tick. Presentation confirmation
   // is measurement evidence, not a requirement for starting the browser.
