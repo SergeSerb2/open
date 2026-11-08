@@ -11,6 +11,7 @@ final class FirstRunWindowController: NSWindowController, NSWindowDelegate {
   private var probeTask: Task<Void, Never>?
   private var hasDisplayed = false
   private var probeRequest: UUID?
+  var onClose: (@MainActor () -> Void)?
 
   init(model: FirstRunViewModel, hostedIn: NSWindow? = nil) {
     self.model = model
@@ -60,5 +61,8 @@ final class FirstRunWindowController: NSWindowController, NSWindowDelegate {
   }
   func windowWillClose(_ notification: Notification) {
     probeRequest = nil; probeTask?.cancel(); probeTask = nil
+    // The owner can release another window. Defer beyond this delegate call.
+    let callback = onClose
+    Task { @MainActor in callback?() }
   }
 }

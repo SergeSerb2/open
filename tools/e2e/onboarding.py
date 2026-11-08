@@ -52,7 +52,7 @@ def run(factory, results, tmp, h):
         # Native Return/Space reach OEApplication, and cannot advance early.
         app.call('key', key='return'); app.call('key', key='space')
         early_keys = state()
-        dim = elapsed(.8)
+        dim = elapsed(1.7)
         app.call('snapshot', path=str(evidence/'intro-native-initial.png'))
         phase0 = state()
         phase1 = elapsed(3.5)
@@ -64,6 +64,12 @@ def run(factory, results, tmp, h):
         frame_pred = lambda s: s.get('frameStats', {}).get('count', 0) >= 30 and not s['frameStats']['running']
         played_pred = lambda s: s.get('sound', {}).get('decision') == 'played' and s['sound']['playerCreated'] and abs(s['sound']['audioStartHostTime']-s['animationStartHostTime']) <= .020
         played = phase1
+        invalid = []
+        for arguments in (dict(action='x'*33), dict(action='state', unexpected=True)):
+            try: app.call('onboarding', **arguments)
+            except RuntimeError: invalid.append(True)
+            else: invalid.append(False)
+        gate('unknown_automation_input_refused', lambda s: all(s), invalid, [bool(phase1.get('error'))])
         measured = phase2
         # At 3 s, task_info must report an actual resident delta.
         gate('resident_3_seconds', lambda s: isinstance(s.get('residentDelta3Seconds'), int), phase1, intro)
@@ -87,7 +93,7 @@ def run(factory, results, tmp, h):
         until(lambda: not app.call('first-run')['active'])
         until(lambda: isinstance(state().get('residentDeltaAfterHandoff'), int))
         landed = dict(windows=app.call('windows'), snapshot=Path(app.user_data, 'State/browser.json').exists(), memory=state().get('residentDeltaAfterHandoff'))
-        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, dict(windows=[], snapshot=False))
+        gate('start_fresh_browser', lambda s: s.get('snapshot') and any(w['class']=='BrowserWindow' for w in s.get('windows', [])), landed, phase2)
         # Natural returning launch: a real saved browser root, no skip switch.
         launch(fresh=False)
         returning = state()
@@ -110,7 +116,12 @@ def run(factory, results, tmp, h):
         # Native default button hands off through the real key/menu responder path.
         app.call('key', key='return')
         until(lambda: app.call('first-run')['active'])
-        results['native_return_handoff'] = dict(ok=app.call('first-run')['active'])
+        gate('native_return_handoff', lambda s: s.get('active') and s.get('step')=='welcome', app.call('first-run'), escaped)
+        music_after_continue = state()
+        gate('music_continues_after_continue', lambda s: s.get('sound', {}).get('playerCreated') and s['sound']['decision']=='played' and s.get('screen')=='first-run', music_after_continue, skipped_launch)
+        app.call('first-run', action='fresh')
+        until(lambda: state().get('sound', {}).get('playerCreated') is False)
+        gate('finish_releases_player', lambda s: not s.get('sound', {}).get('playerCreated') and s.get('sound', {}).get('decision')=='played', state(), music_after_continue)
         launch('--reduce-motion')
         reduced_initial = state()
         reduced = elapsed(1.2)
@@ -122,6 +133,7 @@ def run(factory, results, tmp, h):
         muted = lambda s: s.get('sound', {}).get('decision')=='muted' and not s['sound']['playerCreated'] and not s['sound']['playerWasCreated']
         gate('sound_off_mutes_without_player', muted, off, played)
         app.call('mouse', action='click', window=off['window'], x=100, y=200)
+        until(lambda: final(state()))
         gate('scene_click_skips', final, state(), off)
         app.call('defaults', key=keys[0], value=False)
         launch()
@@ -150,16 +162,20 @@ def run(factory, results, tmp, h):
             app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
         app.call('onboarding', action='get-started')
         until(lambda: not state()['active'])
-        results['replay_does_not_write'] = dict(ok=snapshot.read_bytes()==prior and not app.call('first-run')['active'])
+        unchanged = dict(same=snapshot.read_bytes()==prior, firstRun=app.call('first-run')['active'])
+        app.call('open', url='about:blank'); app.call('save')
+        changed = dict(same=snapshot.read_bytes()==prior, firstRun=app.call('first-run')['active'])
+        gate('replay_does_not_write', lambda s: s['same'] and not s['firstRun'], unchanged, changed)
         # A denied replay exits before root preparation. It opens no window,
         # writes no default-root snapshot and reports a concrete refusal.
         denied = h.subprocess.run([app.executable, '--replay-onboarding', '--intro-sound=off'], capture_output=True, text=True, timeout=15)
-        results['replay_default_root_refused'] = dict(ok=denied.returncode==64 and 'requires --user-data-dir' in denied.stderr, exit=denied.returncode)
+        denied_state = dict(exit=denied.returncode, refused='requires --user-data-dir' in denied.stderr)
         app.call('onboarding', action='replay-intro')
         interrupted_intro = state()
-        results['quit_during_animation_fixture'] = dict(ok=interrupted_intro['active'] and interrupted_intro['dim']['exists'])
+        gate('quit_during_animation_fixture', lambda s: s.get('active') and s.get('dim', {}).get('exists'), interrupted_intro, returning)
+        before_quit = app.call('windows')
         app.quit()
-        results['owned_window_cleanup'] = dict(ok=app.quit_report.get('ok') and app.quit_report['windows_after_quit']['count']==0, state=app.quit_report)
+        gate('owned_window_cleanup', lambda s: s.get('ok') and s.get('windows_after_quit', {}).get('count')==0, app.quit_report, dict(windows=before_quit))
         with tempfile.TemporaryDirectory(prefix='open-intro-replay-', dir='/tmp') as root:
             Path(root, 'State').mkdir()
             Path(root, 'State/browser.json').write_bytes(prior)
@@ -169,6 +185,7 @@ def run(factory, results, tmp, h):
             h._ACTIVE_FOCUS_TRACKER.apps.append(app)
             replay_launch = state()
             gate('replay_temp_root_allowed', lambda s: s.get('active') and s.get('screen')=='intro', replay_launch, returning)
+            gate('replay_default_root_refused', lambda s: s.get('exit')==64 and s.get('refused'), denied_state, replay_launch)
             app.quit()
     finally:
         if app and not app.closed: app.quit()

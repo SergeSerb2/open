@@ -78,7 +78,7 @@ public final class IntroSound {
             prepared()
         }
         deadline = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(max(0, prepareDeadline-CACurrentMediaTime())))
+            try? await Task.sleep(for: .seconds(max(0, prepareDeadline-CACurrentMediaTime())), tolerance: .zero)
             guard !Task.isCancelled, let self, !resolved else { return }
             resolve("failed", "timeout"); prepared()
         }
@@ -97,7 +97,7 @@ public final class IntroSound {
         audioStartHostTime = host + deviceStart - device
         resolve("played", mode == .silent ? "silent" : "output")
         releaseTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(player.duration + IntroTimeline.beat("syncLead").end))
+            try? await Task.sleep(for: .seconds(player.duration + IntroTimeline.beat("syncLead").end), tolerance: .zero)
             guard !Task.isCancelled else { return }; self?.stop()
         }
     }
@@ -108,7 +108,7 @@ public final class IntroSound {
         player.setVolume(0, fadeDuration: duration)
         releaseTask?.cancel()
         releaseTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
+            try? await Task.sleep(for: .seconds(duration), tolerance: .zero)
             guard !Task.isCancelled else { return }; self?.stop()
         }
     }

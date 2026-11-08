@@ -115,7 +115,7 @@ modules, peer launches, and benchmarks use that launcher. `tools/run.sh` and
 the release smoke launch also pass the switch. `tools/openctl` connects to
 an existing socket and never launches the App. `verify-all.sh` runs package
 CLIs, not the App. The `firstrun` and `onboarding` suites opt into first run.
-The former uses the intro's real skip/Get Started actions before its existing
+The former uses the intro's real skip/Continue actions before its existing
 Section 7 assertions. Both always pass silent audio unless explicitly off.
 
 The dev launcher `tools/run.sh` always passes `--skip-first-run`. To see first

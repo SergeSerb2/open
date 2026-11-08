@@ -20,6 +20,7 @@ def main():
     parser.add_argument('--main-app', required=True)
     parser.add_argument('--out', required=True)
     options = parser.parse_args()
+    os.environ.pop('OPEN_SKIP_FIRST_RUN', None)
     root = Path(__file__).resolve().parents[2]
     h = runpy.run_path(str(root/'tools/e2e/engine_e2e.py'))
     Open, wait = h['Open'], h['wait_until']

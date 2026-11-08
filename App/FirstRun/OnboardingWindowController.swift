@@ -149,9 +149,13 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     if finishing { return true }
-    intro.stop(); sound.stop(); dim.close()
+    closingForHandoff = true; onHandoff = nil
+    finish()
     // Deferred: this delegate may be retained only by the window it closes.
-    Task { @MainActor in NSApp.terminate(nil) }
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(intro.reduceMotion ? 0.3:2.5))
+      NSApp.terminate(nil)
+    }
     return false
   }
   func stop() { lifecycle.forEach { $0.cancel() }; lifecycle.removeAll(); intro.stop(); sound.stop(); dim.close() }

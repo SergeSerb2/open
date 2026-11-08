@@ -93,6 +93,7 @@ public final class IntroView: NSView {
     private let spillGroup = CALayer()
     private let button = IntroButton(title: "Continue", target: nil, action: nil)
     private var tracks: [IntroTrack] = []
+    private var orbTracks: [IntroTrack] = []
     private var orbs: [CALayer] = []
     private var tasks: [Task<Void, Never>] = []
     private var measureLink: CADisplayLink?
@@ -109,7 +110,8 @@ public final class IntroView: NSView {
         wantsLayer = true
         layer?.backgroundColor = IntroColors.room.cgColor
         scene.bounds = NSRect(origin: .zero, size: OnboardingTokens.windowSize)
-        scene.isGeometryFlipped = true
+        // AppKit already flips the backing layer for this top-down NSView.
+        // Flipping a second time here would invert the entire live scene.
         layer?.addSublayer(scene)
         makeScene(scale: scale, increaseContrast: increaseContrast)
         button.isBordered = false; button.bezelStyle = .regularSquare
@@ -146,6 +148,9 @@ public final class IntroView: NSView {
             let orb = radial(spec.0, diameter: spec.1)
             orb.position = .init(x: spec.2, y: spec.3); orb.opacity = i == 2 ? 0 : spec.4
             ambient.addSublayer(orb); orbs.append(orb)
+            let beat = ["orbBlue", "orbPurple", "orbWarm"][i]
+            orbTracks.append(.init(layer: orb, key: "position.x", values: [Double(spec.2), Double(spec.2+35), Double(spec.2-18), Double(spec.2)], fractions: [0, 0.35, 0.7, 1], beat: beat))
+            orbTracks.append(.init(layer: orb, key: "position.y", values: [Double(spec.3), Double(spec.3-24), Double(spec.3+18), Double(spec.3)], fractions: [0, 0.35, 0.7, 1], beat: beat))
         }
         add(ambient, "opacity", [0, 1], "room", curve: [0, 0, 0.58, 1])
         add(orbs[2], "opacity", [0, 0.22], "spill")
@@ -212,7 +217,6 @@ public final class IntroView: NSView {
     }
     private func text(_ title: String, size: CGFloat, weight: NSFont.Weight, frame: CGRect, scale: CGFloat, alpha: CGFloat) -> CATextLayer {
         let layer = CATextLayer(); layer.frame = frame; layer.contentsScale = scale; layer.alignmentMode = .center
-        layer.isGeometryFlipped = true
         layer.string = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: NSColor.white.withAlphaComponent(alpha)])
         return layer
     }
@@ -239,14 +243,10 @@ public final class IntroView: NSView {
                 track.layer.setValue(track.values.last, forKeyPath: track.key)
                 track.layer.add(track.animation(), forKey: track.key)
             }
-            for (i, orb) in orbs.enumerated() {
-                let drift = CAKeyframeAnimation(keyPath: "position")
-                let p = orb.position
-                drift.values = [p, CGPoint(x: p.x+35, y: p.y-24), CGPoint(x: p.x-18, y: p.y+18), p].map { NSValue(point: $0) }
-                drift.keyTimes = [0, 0.35, 0.7, 1]; drift.timingFunctions = (0..<3).map { _ in .init(name: .easeInEaseOut) }
-                drift.duration = IntroTimeline.beat(["orbBlue", "orbPurple", "orbWarm"][i]).end
-                drift.autoreverses = true; drift.repeatCount = .infinity; drift.beginTime = 0
-                orb.add(drift, forKey: "ambient-drift")
+            for track in orbTracks {
+                let drift = track.animation()
+                drift.autoreverses = true; drift.repeatCount = .infinity
+                track.layer.add(drift, forKey: track.key)
             }
         }
         let buttonBeat = IntroTimeline.beat(reduceMotion ? "reduceButton" : "button")
@@ -255,7 +255,7 @@ public final class IntroView: NSView {
         // NSView's layer is outside the scene; convert the common host time.
         fade.beginTime = hostTime+buttonBeat.start; fade.duration = max(0.001, buttonBeat.end-buttonBeat.start)
         fade.fillMode = .both; fade.isRemovedOnCompletion = false
-        button.layer?.add(fade, forKey: "button-fade")
+        button.layer?.add(fade, forKey: reduceMotion ? "reduce-crossfade" : "button-fade")
         if !reduceMotion {
             let spring = CASpringAnimation(keyPath: "transform.translation.y")
             let response = IntroTimeline.beat("buttonSpring").end-IntroTimeline.beat("buttonSpring").start
@@ -282,7 +282,7 @@ public final class IntroView: NSView {
     private func schedule(at time: Double, action: @escaping @MainActor () -> Void) {
         tasks.append(Task { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(for: .seconds(max(0, animationStartHostTime+time-CACurrentMediaTime())))
+            try? await Task.sleep(for: .seconds(max(0, animationStartHostTime+time-CACurrentMediaTime())), tolerance: .zero)
             guard !Task.isCancelled else { return }; action()
         })
     }
@@ -348,7 +348,10 @@ public final class IntroView: NSView {
                 "drops": intervals.filter { $0 > nominalInterval*1.5 }.count, "nominalMS": nominalInterval*1000, "running": measureLink != nil]
     }
     public var state: [String: Any] {
-        let animationKeys = tracks.flatMap { t in (t.layer.animationKeys() ?? []).map { "\(t.layer.name ?? t.beat):\($0)" } } + orbs.flatMap { $0.animationKeys() ?? [] } + (composition.animationKeys() ?? [])
+        func keys(_ root: CALayer) -> [String] {
+            (root.animationKeys() ?? []) + (root.sublayers ?? []).flatMap(keys) + (root.mask.map(keys) ?? [])
+        }
+        let animationKeys = layer.map(keys) ?? []
         let door = tracks.first { $0.key == "strokeEnd" && $0.layer.name == "door" }!.layer
         let sun = tracks.first { $0.beat == "sun" }!.layer
         return ["phase": skipped ? "sellCompleted" : IntroTimeline.phase(at: elapsed, reduceMotion: reduceMotion), "elapsed": elapsed,
@@ -379,7 +382,11 @@ public final class IntroView: NSView {
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width*4,
                 space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw CocoaError(.fileWriteUnknown) }
         context.scaleBy(x: scale, y: scale)
+        // A raw bitmap context is bottom-up; match AppKit's flipped view context.
+        context.saveGState()
+        context.translateBy(x: 0, y: bounds.height); context.scaleBy(x: 1, y: -1)
         layer?.render(in: context)
+        context.restoreGState()
         // An unshown NSButton has no WindowServer backing contents. Ask the
         // real control to draw itself, then composite that exact native bitmap.
         if button.alphaValue > 0,
@@ -388,7 +395,11 @@ public final class IntroView: NSView {
             rep.size = button.bounds.size; button.cacheDisplay(in: button.bounds, to: rep)
             if let image = rep.cgImage {
                 context.saveGState(); context.setAlpha(button.alphaValue)
-                context.draw(image, in: .init(x: button.frame.minX, y: bounds.height-button.frame.maxY, width: button.frame.width, height: button.frame.height))
+                let b = IntroTimeline.beat("buttonSpring")
+                let seconds = max(0, time-b.start), frequency = 2*Double.pi/(b.end-b.start)
+                let damp = 0.9*frequency, oscillation = frequency*sqrt(1-0.9*0.9)
+                let offset = reduceMotion || time >= b.end ? 0 : 24*exp(-damp*seconds)*(cos(oscillation*seconds)+damp/oscillation*sin(oscillation*seconds))
+                context.draw(image, in: .init(x: button.frame.minX, y: bounds.height-button.frame.maxY-offset, width: button.frame.width, height: button.frame.height))
                 context.restoreGState()
             }
         }
@@ -399,6 +410,12 @@ public final class IntroView: NSView {
     }
     private func apply(at time: Double) {
         for track in tracks { track.layer.setValue(track.value(at: reduceMotion ? IntroTimeline.beat("button").end : time), forKeyPath: track.key) }
+        for track in orbTracks {
+            let period = IntroTimeline.beat(track.beat).end
+            var t = reduceMotion ? 0 : min(time, IntroTimeline.beat("idlePause").start).truncatingRemainder(dividingBy: 2*period)
+            if t > period { t = 2*period-t }
+            track.layer.setValue(track.value(at: t), forKeyPath: track.key)
+        }
         if reduceMotion {
             let fade = IntroTimeline.beat("reduceFade")
             let opacity = Float(min(1, max(0, time/fade.end)))
