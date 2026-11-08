@@ -59,8 +59,16 @@ def run(factory, results, tmp, h):
         h._restore_defaults(None, {key: None for key in keys})
         initial = launch()
         shot('name-light')
+        action('set-name', name='N'*40)
+        at_limit = state()
+        refused = False
+        try: action('set-name', name='N'*41)
+        except RuntimeError: refused = True
+        results['steps_name_limit'] = dict(ok=at_limit['name']=='N'*40 and refused, load=os.getloadavg())
+        pending_blocker = Path(app.user_data,'adblock-settings.json')
+        blocker_before = pending_blocker.read_bytes() if pending_blocker.exists() else None
         action('set-name', name='  Example  ')
-        action('next'); imported = screen('import'); shot('import-light')
+        app.call('key', key='return'); imported = screen('import'); shot('import-light')
         gate('same_window', lambda s: s['screen']=='import' and s['window']==initial['window'] and s['dim']['exists'], imported, initial)
         action('skip'); favorites = screen('favorites'); shot('favorites-empty-light')
         action('toggle-favorite', index=0); action('toggle-favorite', index=6)
@@ -87,7 +95,9 @@ def run(factory, results, tmp, h):
         results['steps_card_png'] = dict(ok=(width,height)==(1200,750) and pixel(600,375)!=pixel(1,1), size=[width,height], load=os.getloadavg())
         # No model, name or global blocker write before Get Started.
         pending = dict(snapshot=snapshot().exists(), name=app.call('defaults', key=keys[0], persistent=True))
-        results['steps_pending_no_writes'] = dict(ok=not pending['snapshot'] and pending['name'] is None, state=pending, load=os.getloadavg())
+        blocker_after = pending_blocker.read_bytes() if pending_blocker.exists() else None
+        results['steps_pending_no_writes'] = dict(ok=not pending['snapshot'] and pending['name'] is None
+            and blocker_before==blocker_after, state=pending, load=os.getloadavg())
         action('get-started')
         handoff = state(); until(lambda: not state()['active'] and not state()['dim']['exists'])
         final = state(); stored = json.loads(snapshot().read_text())

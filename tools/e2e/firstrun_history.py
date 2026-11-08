@@ -83,7 +83,7 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
         row('F9_browse_during_history', before['browserHasLanded'] and before['progress'] is not None
             and browsing['progress'] < 1 and pending_visits == 0
             and not before['importInProgress'] and browsing['historyInProgress'] and bool(loaded)
-            and 'https://example.org' in json.dumps(saved), before=before, after=browsing,
+            and 'https://example.org' not in json.dumps(saved) and not browsing['completed'], before=before, after=browsing,
             importedVisitsWhileBrowsing=pending_visits)
         # Setup now quits on close. Keep its real progress surface open while
         # the existing background import completes; the onboarding suite proves quit.
@@ -94,6 +94,9 @@ pathlib.Path(sys.argv[2]).touch(); time.sleep(180)
             and result['outcome'].get('History') == 5000 and imports() == 5000,
             outcome=result['outcome'], visits=imports())
         app.call('first-run', action='continue'); app.call('first-run', action='finish')
+        final_saved = json.loads((Path(app.user_data)/'State/browser.json').read_text())
+        row('F9_finish_saves_background_browsing', 'https://example.org' in json.dumps(final_saved)
+            and state()['completed'], tab=opened['id'])
         # Same destination through the actual Settings sheet: History only.
         app.call('first-run', action='settings-import', directory=str(large))
         app.call('first-run', action='settings-select', historyOnly=True, history=True)

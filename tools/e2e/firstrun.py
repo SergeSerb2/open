@@ -111,7 +111,7 @@ def run(factory, results, tmp, h):
         found = []
         def walk(value):
             if isinstance(value, dict):
-                if {'id', 'url', 'lastActiveAt'} <= value.keys(): found.append(value['id'])
+                if {'id', 'url', 'lastActiveAt'} <= value.keys() and value['url'] != 'open://welcome': found.append(value['id'])
                 for child in value.values(): walk(child)
             elif isinstance(value, list):
                 for child in value: walk(child)
@@ -189,7 +189,7 @@ def run(factory, results, tmp, h):
                  'Yes, make Open my default.' in default_copy and 'Not yet.' in default_copy), png=default_png, text=default_copy)
         app.call('first-run', action='finish')
         row('F4_finish', not state()['active'] and state()['completed'] and len(app.call('shell-windows')) == 1)
-        # Never invoke the system-default action. No stub replaces the service.
+        # Never invoke the real system-default setter. Setup automation stubs it.
         # Exercise Profile insertion on the model swapped in by first run,
         # before a relaunch could reinstall a missing onProfileCreated hook.
         never_source = Path(tmp) / 'arc-never-profile'
