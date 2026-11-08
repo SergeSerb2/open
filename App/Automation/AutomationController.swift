@@ -115,6 +115,9 @@
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
+      case "onboarding": return try await runOnboarding(a)
+      case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
+        return try await mouse(a, nil)
       case "welcome": return try welcome(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
@@ -128,7 +131,7 @@
         return app.model.spaces.map { ["id": $0.id.description, "title": $0.title ?? "", "profile": $0.profileID.description, "pinned": $0.pinned.count, "today": $0.today.count, "focused": false] as [String: Any] }
       case "tabs" where app.frontWindowController == nil: return [] as [String]
       case "windows" where app.frontWindowController == nil:
-        return NSApp.windows.map { nativeWindow in
+        return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
           return row
@@ -950,7 +953,7 @@
           for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
           try? await Task.sleep(for: .milliseconds(50))
         }
-        return NSApp.windows.map { nativeWindow in
+        return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
           return row
@@ -1841,8 +1844,8 @@
         "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
     }
 
-    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
-      let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
+    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
+      let number = a["window"] as? Int ?? app.onboardingWindowController?.window?.windowNumber ?? w?.window?.windowNumber ?? 0
       guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
       pointerRequestID += 1
       let motionTag = Self.syntheticPointerTag + pointerRequestID
@@ -2023,7 +2026,7 @@
     /// only: the system keyboard is never touched.
     func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
       guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
-        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
+        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
       try await activateForInput(target)
       if let text = a["text"] as? String {
@@ -2131,8 +2134,9 @@
         return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
-      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
+      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
+      guard target.identifier?.rawValue != "onboarding-dim" else { throw Failure(message: "dim window snapshots are excluded") }
       var keyTime: Double?
       var capturedAfterKey: Double?
       let toggle = a["toggleSidebar"] as? Bool == true
