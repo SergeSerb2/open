@@ -6,6 +6,7 @@ import OpenSidebar
 import OpenSpaceEditor
 import OpenCommands
 import OpenStore
+import OpenSiteControl
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
@@ -25,6 +26,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public let context: SidebarContext
     public let container: WebContentContainer
     public let splitController: SplitViewController
+    private var boostEditorSpaceID: SpaceID?
+    public var boostEditor: BoostEditorController? { didSet { boostEditorSpaceID = context.focusedSpace?.id } }
     private var peekStorage: PeekController?
     public var peekController: PeekController {
         if let peekStorage { return peekStorage }
@@ -367,6 +370,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekStorage?.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
         splitController.refresh()
+        if let session = boostEditor?.session {
+            if context.focusedSpace?.id != boostEditorSpaceID || context.focusedSpace?.profileID != session.context.profileID || splitController.focusedTab?.id != session.context.tabID {
+                boostEditor?.close()
+            }
+        }
         // show() binds the focused host now and defers other panes one turn (§5.4).
         // Refreshing placeholders here repeats every pane's chrome/layout work.
         peekStorage?.refresh(); layoutContent(); syncPeekSidebar(); onVisibilityChange?()
@@ -909,6 +917,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // A window-anchored popover the App shows (the translate popover, page-platform §4.7.3)
         // takes Esc and Return before any other route.
         if let keyInterceptor, keyInterceptor(event) { return true }
+        if boostEditor?.handleKeyDown(event) == true { return true }
         // Esc and Return for the capture overlay; Esc and Cmd+C for its result card (§4.6.3, §4.6.5).
         if eventWindow === window, let capture = captureStorage, capture.phase == .selecting || capture.phase == .showing,
            capture.handleKey(event) { return true }
@@ -1113,6 +1122,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
+        boostEditor?.close(returnFocus: false)
         pendingSpaceCreationOptions = nil
         cancelSidebarResize()
         spaceCreationController?.onFinish = nil

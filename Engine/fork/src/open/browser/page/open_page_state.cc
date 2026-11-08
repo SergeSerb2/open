@@ -150,6 +150,12 @@ class OpenPageState : public content::WebContentsObserver,
   }
 
   // content::WebContentsObserver:
+  void DidChangeVisibleSecurityState() override {
+    if (!handler_) return;
+    auto browser = CefBrowserHostBase::GetBrowserForContents(web_contents());
+    auto handler = handler_;
+    if (browser && handler) handler->OnSecurityStateChanged(browser.get());
+  }
   void PrimaryPageChanged(content::Page& page) override {
     SetHasSelection(false);
   }

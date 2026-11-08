@@ -57,3 +57,5 @@ paths: chrome/browser/ssl/https_only_mode_tab_helper.cc, chrome/browser/ssl/http
 
 # 0810-open-modal-unblock-during-tab-teardown.patch
 paths: chrome/browser/ui/tabs/tab_strip_model.cc
+# 0601-open-script-world.patch
+paths: chrome/common/chrome_isolated_world_ids.h

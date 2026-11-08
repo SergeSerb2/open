@@ -22,3 +22,4 @@
 0808-open-hosted-modal-dialog.patch  # H-7: attach and position Views web-modal dialogs in their AppKit parent
 0809-open-https-warning-after-commit.patch  # H-7: defer hosted HTTPS warning beyond its triggering commit; cancel stale shows
 0810-open-modal-unblock-during-tab-teardown.patch  # H-7: keep modal unblock state but omit UI events after tab features are destroyed
+0601-open-script-world.patch  # P7: reserve Open world; keep queued frame actions in the main context
