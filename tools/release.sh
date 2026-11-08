@@ -185,6 +185,21 @@ require_release_inputs() {
     die 'required input files are missing; see FAIL rows above'
 }
 require_release_inputs
+# Read at most 65,537 bytes before hashing sources or running any build phase.
+# The optional destination receives the same validated UTF-8 Markdown bytes.
+validate_release_notes() {
+    python3 - "$@" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]);limit=64*1024
+with p.open('rb') as f:data=f.read(limit+1)
+if len(data)>limit:raise SystemExit(f'FAIL: release notes exceed 64 KiB (65536 bytes): {p}')
+try:data.decode('utf-8')
+except UnicodeDecodeError:raise SystemExit(f'FAIL: release notes must be UTF-8 Markdown: {p}')
+if len(sys.argv)==3:Path(sys.argv[2]).write_bytes(data)
+PY
+}
+validate_release_notes "$ROOT/docs/release/notes/$VERSION.md"
 # Source prerequisite checks are data, not edits to files owned by other steps.
 prerequisites=$(python3 - <<'PY'
 import plistlib,re
@@ -349,7 +364,7 @@ PY
     else
         "$TOOLS/generate_appcast" --help > "$STAGE/generate_appcast-help.txt"
         "$TOOLS/sign_update" -h > "$STAGE/sign_update-help.txt"
-        for flag in --ed-key-file --download-url-prefix --link --channel; do
+        for flag in --ed-key-file --download-url-prefix --link --channel --embed-release-notes; do
             grep -q -- "$flag" "$STAGE/generate_appcast-help.txt" || die "pinned generate_appcast lacks $flag; stop for tool contract drift"
         done
         grep -q -- --ed-key-file "$STAGE/sign_update-help.txt" || die 'OPEN_SPARKLE_KEY_FILE is unsupported by pinned sign_update; see docs/release-user-steps.md U-4'
@@ -489,7 +504,7 @@ notes() {
         [[ $DRY == 1 ]] || die 'replace release-note template placeholders before production'
         log 'WARN: release notes are an explicitly labeled local template'
     fi
-    cp "$source" "$REL/release-notes.md"
+    validate_release_notes "$source" "$REL/release-notes.md"
     if [[ $(head -1 "$STAGE/feed-fetch.txt") == present ]]; then
         python3 - "$STAGE/current-feed.xml" "$BUILD" <<'PY'
 import sys,xml.etree.ElementTree as E
@@ -752,13 +767,9 @@ appcast() {
     rm -rf "$archives"
     mkdir -p "$archives"
     cp "$DMG" "$archives/"
-    # HTML is generated from the exact note text, escaped rather than interpreted
-    # as arbitrary HTML. Sparkle embeds this fragment; no public notes URL is needed.
-    python3 - "$REL/release-notes.md" "$archives/Open-$VERSION.html" <<'PY'
-import html,sys
-from pathlib import Path
-Path(sys.argv[2]).write_text('<pre>'+html.escape(Path(sys.argv[1]).read_text())+'</pre>\n')
-PY
+    # Sparkle 2.10.1 embeds .md notes as <description sparkle:format="markdown">.
+    # Keep the Markdown for Open's update UI; the generator handles XML escaping.
+    cp "$REL/release-notes.md" "$archives/Open-$VERSION.md"
     if [[ -s "$STAGE/previous.txt" ]]; then
         previous_build=$(sed -n '1p' "$STAGE/previous.txt")
         previous=$(sed -n '2p' "$STAGE/previous.txt")
@@ -822,10 +833,10 @@ PY
     fi
     [[ -z "$KEY_DIR" ]] || { rm -rf "$KEY_DIR"; KEY_DIR=; }
     xmllint --noout "$archives/$FEED"
-    python3 - "$archives/$FEED" "$BUILD" "$VERSION" "$CHANNEL" "$DMG" "$download_prefix" "$public" "$STAGE/verify-ed25519" <<'PY'
+    python3 - "$archives/$FEED" "$BUILD" "$VERSION" "$CHANNEL" "$DMG" "$download_prefix" "$public" "$STAGE/verify-ed25519" "$REL/release-notes.md" <<'PY'
 import base64,subprocess,sys,xml.etree.ElementTree as E
 from pathlib import Path
-feed,build,version,channel,dmg,prefix,public,verifier=sys.argv[1:];ns='{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+feed,build,version,channel,dmg,prefix,public,verifier,notes=sys.argv[1:];ns='{http://www.andymatuschak.org/xml-namespaces/sparkle}'
 items=[i for i in E.parse(feed).iter('item') if i.findtext(ns+'version')==build]
 if len(items)!=1:raise SystemExit('feed must contain exactly one current-build item')
 i=items[0];e=i.find('enclosure')
@@ -838,15 +849,18 @@ for enclosure in i.iter('enclosure'):
  if len(base64.b64decode(sig,validate=True))!=64:raise SystemExit('missing/invalid EdDSA signature')
  path=Path(dmg) if enclosure is e else Path(feed).parent/Path(enclosure.get('url','')).name
  subprocess.run([verifier,public,sig,str(path)],check=True)
-if not i.findtext('description') and not i.findtext(ns+'releaseNotesLink'):raise SystemExit('feed has no release notes')
-print('Feed XML, build, marketing, minimum OS, channel, URL, length, signature fields and notes: PASS')
+descriptions=i.findall('description')
+if len(descriptions)!=1 or descriptions[0].get(ns+'format')!='markdown':raise SystemExit('feed must embed release notes with sparkle:format="markdown"')
+description=descriptions[0]
+if len(description) or (description.text or '')!=Path(notes).read_text(encoding='utf-8'):raise SystemExit('feed description differs from release notes Markdown')
+print('Feed XML, build, marketing, minimum OS, channel, URL, length, signature fields and exact Markdown notes: PASS')
 PY
     # This verifies the enclosure signature with the independently selected
     # public key, not merely its base64 shape or the private key's own identity.
     printf 'PASS: all current-item enclosure Ed25519 signatures verified with public key\n' > "$REL/feed-signature-proof.txt"
     cp "$archives/$FEED" "$REL/$FEED"
-    cp "$archives/Open-$VERSION.html" "$REL/Open-$VERSION.html"
-    output "$REL/$FEED" "$REL/Open-$VERSION.html"
+    cp "$archives/Open-$VERSION.md" "$REL/Open-$VERSION.md"
+    output "$REL/$FEED" "$REL/Open-$VERSION.md"
     output "$REL/feed-signature-proof.txt"
     [[ $DRY != 1 ]] || output "$REL/dry-run-public-key.txt"
     local delta found=0
@@ -878,7 +892,7 @@ for label in ['app','dmg']:
  p=r/('notary-'+label+'.json')
  if p.is_file():
   j=json.loads(p.read_text());lines.append('notary_'+label+'='+j.get('id','')+' '+j.get('status',''))
-for pattern in ['Open-*.dmg','Open-*.dmg.sha256','*.delta','appcast*.xml','Acknowledgements.txt','CREDITS.html','release-notes.md','Open-*.html','dry-run-public-key.txt','feed-signature-proof.txt']:
+for pattern in ['Open-*.dmg','Open-*.dmg.sha256','*.delta','appcast*.xml','Acknowledgements.txt','CREDITS.html','release-notes.md','Open-*.md','dry-run-public-key.txt','feed-signature-proof.txt']:
  for p in sorted(r.glob(pattern)):
   h=hashlib.sha256()
   with p.open('rb') as f:
@@ -1258,8 +1272,8 @@ PY
         printf 'fi\n'
         printf 'cp %q %q\n' "$REL/$FEED" "$pages/$FEED"
         printf 'mkdir -p %q\n' "$pages/release-notes"
-        printf 'cp %q %q\n' "$REL/Open-$VERSION.html" "$pages/release-notes/$VERSION.html"
-        printf 'git -C %q add -- %q %q\n' "$pages" "$FEED" "release-notes/$VERSION.html"
+        printf 'cp %q %q\n' "$REL/Open-$VERSION.md" "$pages/release-notes/$VERSION.md"
+        printf 'git -C %q add -- %q %q\n' "$pages" "$FEED" "release-notes/$VERSION.md"
         printf 'git -C %q commit -m %q\n' "$pages" "Publish Open $VERSION ($BUILD) $CHANNEL feed"
         printf 'git -C %q push origin HEAD:gh-pages\n' "$pages"
         printf 'git -C %q worktree remove %q\n' "$ROOT" "$pages"
