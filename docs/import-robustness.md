@@ -159,6 +159,9 @@ and Open data root is synthetic and temporary. Used defaults are reset at
 launch and restored in `finally`. Real Arc verification copies files first
 and reports counts only. Private receipts: `.re/c4/` and `.re/c4b/`.
 
+Final App and Release measurements are in
+[import-robustness-validation.md](import-robustness-validation.md).
+
 ## Lead decisions and remaining boundaries
 
 - A writer lock with a readable committed WAL succeeds through a private copy.
