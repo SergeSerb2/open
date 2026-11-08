@@ -696,16 +696,19 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256):
 
             def iframe():
                 tab = load(urls['iframe'])
+                # DevTools can focus a frame's DOM while AppKit still owns
+                # the first responder. Establish real page focus first.
+                app.call('focus', tab=tab)
                 frame = dev(tab, 'Page.getFrameTree')['frameTree']['childFrames'][0]['frame']['id']
                 context = dev(tab, 'Page.createIsolatedWorld', frameId=frame, worldName='OpenPasswordFixture')['executionContextId']
                 result = dev(tab, 'Runtime.evaluate', contextId=context, expression='Array.from(document.querySelectorAll("input")).every(e=>!e.value)', returnByValue=True)
-                assert result['result']['value'] is True
+                assert result['result']['value'] is True, 'iframe fields filled before a user choice'
                 geometry = dev(tab, 'Runtime.evaluate', contextId=context, expression='(()=>{let r=document.querySelector("#username").getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()', returnByValue=True)['result']['value']
                 offset = app.eval(tab, '(()=>{const r=document.querySelector("iframe").getBoundingClientRect();return [r.x+2,r.y+2]})()')
                 for event in ['mousePressed', 'mouseReleased']:
                     dev(tab, 'Input.dispatchMouseEvent', type=event, x=geometry[0]+offset[0], y=geometry[1]+offset[1], button='left', clickCount=1)
-                assert wait(children, timeout=5, step=.05)
-                return {'emptyOnLoad': True, 'dropdownAfterClick': True}
+                assert wait(children, timeout=5, step=.05), 'cross-origin frame click did not show a credential dropdown'
+                return {'emptyOnLoad': True, 'dropdownAfterClick': True, 'nativePageFocus': True}
             row('P-8', iframe, ['P-2'])
 
             row('P-9', lambda: (prompt('address', urls['address'], 'save'), counts(addresses=1))[1])
