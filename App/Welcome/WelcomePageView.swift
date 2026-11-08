@@ -161,7 +161,10 @@ final class WelcomePageView: NSScrollView {
     if link == "shortcuts" { shortcuts.performClick(nil) }
     else if link == "settings" { settings.performClick(nil) }
   }
-  func reveal(card: Int) { _ = canvas.scrollToVisible(cards[card].frame) }
+  func reveal(card: Int) {
+    let rect = card == 3 ? cards[card].frame.union(settings.frame) : cards[card].frame
+    _ = canvas.scrollToVisible(rect)
+  }
   @objc private func showShortcuts() { openShortcuts?() }
   @objc private func showSettings() { openSettings?() }
 }
