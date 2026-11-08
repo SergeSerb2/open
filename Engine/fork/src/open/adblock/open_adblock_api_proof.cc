@@ -130,9 +130,9 @@ class AdBlockApiProof final : public CefRequestContextHandler,
         FailNextLoad();
       }
     } else if (phase_ == 5) {
-      Row(status->GetBool("engine_loaded") && status->GetInt("list_count") > 0 &&
+      Row(status->GetBool("engine_loaded") && status->GetInt("list_count") == 1 &&
           status->GetDouble("load_generation") > 2 && status->GetString("last_error").empty(),
-          "lists restored through production API advance generation");
+          "one list restored through production API advances generation");
       live_generation_ = 3;
       FailNextLoad();
     } else if (phase_ == 3) {

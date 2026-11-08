@@ -4514,8 +4514,8 @@ passed 14 rows on this build. The resources-only generation API flow
 passed 24 rows, including no-engine status and restored generation 3.
 Other runtime receipts below precede Section 15's merge until their
 merged-build reruns are recorded. The root's clone hold ended at 14:00;
-the M5 screen hold remains active. Headless corpus/footprint/G-2/G-6 and
-the official-input zero-list memory proof continue offscreen. N/COUNT,
+the M5 screen hold remains active. Headless corpus/footprint/G-2/G-6 passed. A same-context explicit-unload
+control for the zero-list memory proof is queued offscreen. N/COUNT,
 distribution and App acceptance follow screen clearance.
 Before distribution and again before the done report,
 fetch main and check `Engine/fork` changes since the last merged main.
@@ -4575,40 +4575,52 @@ runs. Browser CPU medians are 86.103/88.604 ms text/DAT versus 113.418 ms
 without an engine; these loaded whole-browser samples do not establish a
 precise causal CPU delta. Raw control receipts remain in `.re/s13/e1/`.
 
-**Integrated headless proof.** Five runs per cap/input, each followed by
-another full corpus, produce 40 byte-identical dumps of 20,311 rows.
+**Integrated headless proof.** The main `d26300e6` build passed five
+runs per cap/input, each followed by another full corpus. All 20 native
+processes exited cleanly. The 40 dumps each have 20,311 rows and match
+the pre-integration baseline byte for byte.
 SHA-256: 16 KiB `10c74cb476adccafc4f750bbc2ae6c1a85363b9945a6fe1470507e9dc845fe02`;
 8 KiB `ba80db77c8651ce7ec35b71bfeade9e04624d4f564ada4cf8fde16c229f475b6`.
 Every initial and resumed burst adds zero regex compiles, and every run
 observes exactly one production idle purge. These are medians of per-run
-statistics under the quiet lock; endpoint load1 spans 10.35-72.14. They
+statistics under the quiet lock; endpoint load1 spans 21.06-92.65. They
 support the CPU/footprint rulings and are not Step 9's load1 <=4 wall proof.
 
 | Cap / input | CPU mean / p99 / warm max, µs | First CPU max, µs | Warm wall max, µs | Steady / post-corpus+purge, MiB |
 |---|---:|---:|---:|---:|
-| 16 KiB text | 3.699 / 16.000 / 140.125 | 150.000 | 139.958 | 55.188 / 56.875 |
-| 16 KiB DAT | 3.645 / 15.667 / 135.084 | 161.000 | 134.958 | 51.516 / 53.469 |
-| 8 KiB text | 3.575 / 15.792 / 139.042 | 144.041 | 222.291 | 55.313 / 57.063 |
-| 8 KiB DAT | 3.486 / 15.500 / 134.875 | 162.084 | 134.750 | 51.531 / 53.531 |
+| 16 KiB text | 4.148 / 17.792 / 160.583 | 166.958 | 164.500 | 56.625 / 58.453 |
+| 16 KiB DAT | 4.115 / 17.750 / 146.041 | 151.833 | 276.958 | 53.047 / 55.000 |
+| 8 KiB text | 4.957 / 21.209 / 178.833 | 194.416 | 890.209 | 56.625 / 58.532 |
+| 8 KiB DAT | 5.416 / 24.250 / 226.542 | 218.250 | 230.083 | 53.110 / 54.906 |
+
+The following-burst warm CPU max medians are 150.125/145.459 µs
+for 16 KiB text/DAT and 212.791/211.166 µs for 8 KiB. All four
+groups meet the 500 µs CPU limit.
 
 | PA component, median 16 KiB, all roots | Text MiB | DAT MiB |
 |---|---:|---:|
-| Rules/index/build residual allocated delta | 36.804 | 36.493 |
+| Rules/index/build residual allocated delta | 37.158 | 36.822 |
 | Immutable regex programs (exact crate counter) | 6.941 | 6.941 |
-| Regex caches/metadata/rounding residual | 6.505 | 6.573 |
-| Other to settled | -0.214 | -0.182 |
-| Settled allocated delta | 50.048 | 49.807 |
-| Settled resident delta | 52.344 | 49.750 |
-| Post-idle allocated delta | 50.983 | 50.753 |
+| Regex caches/metadata/rounding residual | 6.507 | 6.580 |
+| Other to settled | -0.181 | -0.208 |
+| Settled allocated delta | 50.421 | 50.154 |
+| Settled resident delta | 53.766 | 51.312 |
+| Post-idle allocated delta | 51.328 | 51.074 |
 
 PA phase deltas include concurrent browser allocations and rounding; the
 residuals are not exact ownership tags. Physical footprint is a separate
-`task_info` measure. Median text service load is 438 ms, including parse
-152.177, serialize 72.924, decode/replace/free 144.341, regex compile 45.168
-and build reclaim 2.292 ms. DAT load is 176 ms, including decode 119.588,
-compile 44.057 and reclaim 1.251 ms. Separate medians need not sum.
-Receipts: `.re/s13/e3/integrated-headless-summary.json`,
-`integrated-headless-pa-phases.json` and `integrated-verdict-identity.json`.
+`task_info` measure. Median text service load is 475 ms, including parse
+163.878, serialize 75.855, decode/replace/free 155.433, regex compile 51.279
+and build reclaim 2.928 ms. DAT load is 195 ms, including decode 138.091,
+compile 47.070 and reclaim 1.256 ms. Separate medians need not sum.
+Receipts: `.re/s13/e3/s15-headless-r2-accepted-gates.json`,
+`s15-headless-r2-summary.json` and `s15-headless-r2-pa-phases.json`.
+
+The first merged attempt completed its measured bursts, then exited 1
+when Chromium's 10-second macOS teardown watchdog expired. That failed
+receipt remains in `s15-headless-r1.log`. The unchanged full rerun had
+20 clean exits. The cause of the first shutdown failure is unproven;
+no watchdog or assertion was disabled for the retry.
 
 **Valid empty generation.** All lists off publishes a valid zero-file
 manifest in the Swift store. The first fix loaded a zero-rule engine
