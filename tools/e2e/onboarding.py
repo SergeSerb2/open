@@ -52,6 +52,8 @@ def run(factory, results, tmp, h):
         # Native Return/Space reach OEApplication, and cannot advance early.
         app.call('key', key='return'); app.call('key', key='space')
         early_keys = state()
+        for key in ('t', 'l'): app.call('key', key=key, modifiers=['command'])
+        guarded = dict(intro=state(), browsers=app.call('shell-windows'))
         dim = elapsed(1.7)
         app.call('snapshot', path=str(evidence/'intro-native-initial.png'))
         phase0 = state()
@@ -97,6 +99,7 @@ def run(factory, results, tmp, h):
         # Natural returning launch: a real saved browser root, no skip switch.
         launch(fresh=False)
         returning = state()
+        gate('intro_browser_shortcuts_guarded', lambda s: s.get('intro', {}).get('active') and not s.get('browsers'), guarded, dict(intro=returning, browsers=app.call('shell-windows')))
         gate('first_launch_shows_intro', lambda s: s.get('active') and s.get('screen')=='intro' and s.get('moduleActive'), intro, returning)
         inactive = lambda s: not s.get('active') and not s.get('moduleActive') and s.get('phase')=='inactive'
         gate('returning_inactive', inactive, returning, intro)
@@ -122,6 +125,15 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='fresh')
         until(lambda: state().get('sound', {}).get('playerCreated') is False)
         gate('finish_releases_player', lambda s: not s.get('sound', {}).get('playerCreated') and s.get('sound', {}).get('decision')=='played', state(), music_after_continue)
+        launch()
+        elapsed(.3)
+        app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+        until(lambda: app.call('first-run')['active'])
+        before_close = state()
+        app.call('key', key='w', modifiers=['command'])
+        closed_pred = lambda s: not s.get('sound', {}).get('playerCreated') and not s.get('dim', {}).get('exists')
+        until(lambda: closed_pred(state()))
+        gate('closing_setup_releases_music_and_dim', closed_pred, state(), before_close)
         launch('--reduce-motion')
         reduced_initial = state()
         reduced = elapsed(1.2)
