@@ -218,7 +218,8 @@ public enum MenuBuilder {
         menu.addItem(.separator())
         let services = NSMenu(title: "Services")
         menu.addItem(submenuItem("Services", services))
-        if !target.shortcutsOnly { NSApp?.servicesMenu = services }
+        // Native Services can add user-assigned shortcuts outside the registry.
+        NSApp?.servicesMenu = services
         menu.addItem(.separator())
         add(menu, ["hide-open", "hide-others", "show-all"], target: target, overrides: overrides)
         menu.addItem(.separator())
@@ -269,7 +270,7 @@ public enum MenuBuilder {
 
         let font = NSMenu(title: "Font")
         add(font, ["show-fonts", "font-bold", "font-italic", "font-underline"], target: target, overrides: overrides)
-        if !target.shortcutsOnly { NSFontManager.shared.setFontMenu(font) }
+        NSFontManager.shared.setFontMenu(font)
         let format = NSMenu(title: "Format")
         format.addItem(submenuItem("Font", font))
         menu.addItem(submenuItem("Format", format))
@@ -382,7 +383,7 @@ public enum MenuBuilder {
         add(menu, ["view-downloads", "view-library", "view-media", "view-boosts"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["bring-all-to-front"], target: target, overrides: overrides)
-        if !target.shortcutsOnly { NSApp?.windowsMenu = menu }
+        NSApp?.windowsMenu = menu
         return menu
     }
 
@@ -393,7 +394,7 @@ public enum MenuBuilder {
         let troubleshooting = NSMenu(title: "Troubleshooting")
         add(troubleshooting, ["task-manager", "record-trace", "cancel-trace", "copy-open-info", "reveal-open-data"], target: target, overrides: overrides)
         menu.addItem(submenuItem("Troubleshooting", troubleshooting))
-        if !target.shortcutsOnly { NSApp?.helpMenu = menu }
+        NSApp?.helpMenu = menu
         return menu
     }
 
