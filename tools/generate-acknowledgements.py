@@ -6,6 +6,7 @@ missing/sample Chromium credits and an unset public MPL source location.
 --require-cef-credits enforces both gates for existing release callers.
 """
 import argparse
+import hashlib
 import html.parser
 from pathlib import Path
 import plistlib
@@ -16,12 +17,27 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ['Component', 'Version', 'License', 'How Open uses it', 'Source / offer']
+MIB = 1024 * 1024
+
+
+def read_bytes(path, limit):
+    # Build inputs only. Bound reads before decoding or creating RTF objects;
+    # the largest individual input is the 32 MiB Chromium credits document.
+    with path.open('rb') as source:
+        data = source.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f'input exceeds {limit} bytes: {path.name}')
+    return data
+
+
+def read_text(path, limit):
+    return read_bytes(path, limit).decode('utf-8')
 
 
 def inventory(path):
     rows = []
     inside = False
-    for line in path.read_text(encoding='utf-8').splitlines():
+    for line in read_text(path, 2 * MIB).splitlines():
         if not line.startswith('|'):
             if inside:
                 break
@@ -35,6 +51,8 @@ def inventory(path):
         if len(cells) != 5 or any(not c for c in cells):
             raise ValueError('inventory row needs all five columns: ' + line)
         rows.append(cells)
+        if len(rows) > 2048:
+            raise ValueError('inventory exceeds 2048 components')
     names = [r[0] for r in rows]
     if not rows or len(names) != len(set(names)):
         raise ValueError('missing inventory table or duplicate component')
@@ -42,13 +60,13 @@ def inventory(path):
 
 
 def versions():
-    spec = (ROOT / 'project.yml').read_text(encoding='utf-8')
+    spec = read_text(ROOT / 'project.yml', MIB)
     def setting(name):
         m = re.search(r'^\s+' + name + r':\s*"?([0-9.]+)"?\s*$', spec, re.M)
         if not m:
             raise ValueError('missing ' + name + ' in project.yml')
         return m[1]
-    app = plistlib.loads((ROOT / 'App/Info.plist').read_bytes())
+    app = plistlib.loads(read_bytes(ROOT / 'App/Info.plist', MIB))
     stamp = app.get('OpenEngineStamp')
     if not stamp:
         pins = subprocess.check_output(
@@ -71,11 +89,11 @@ def check_versions(rows):
         raise ValueError('Chromium/CEF inventory versions differ from VERSIONS')
     if pins[0] not in by_name['FFmpeg (Chromium bundled)'][1]:
         raise ValueError('FFmpeg inventory must name the current Chromium pin')
-    psl = (ROOT / 'Packages/OpenKit/Sources/OpenSuggest/Resources/public_suffix_list.dat').read_text()
+    psl = read_text(ROOT / 'Packages/OpenKit/Sources/OpenSuggest/Resources/public_suffix_list.dat', 2 * MIB)
     commit = re.search(r'^// COMMIT: (\w+)$', psl, re.M)
     if not commit or commit[1] not in by_name['Public Suffix List'][1]:
         raise ValueError('PSL inventory commit differs from the shipped source header')
-    spec = (ROOT / 'project.yml').read_text()
+    spec = read_text(ROOT / 'project.yml', MIB)
     if re.search(r'^\s+Sparkle:', spec, re.M):
         pin = re.search(r'exactVersion:\s*["\']?([0-9.]+)', spec)
         if not pin or by_name['Sparkle'][1] != pin[1]:
@@ -84,7 +102,7 @@ def check_versions(rows):
 
 def public_source_location(path):
     matches = re.findall(r'^Public MPL source location:[ \t]*(\S+)[ \t]*$',
-                         path.read_text(encoding='utf-8'), re.M)
+                         read_text(path, 2 * MIB), re.M)
     if len(matches) != 1:
         return None
     location = matches[0]
@@ -92,6 +110,48 @@ def public_source_location(path):
     if url.scheme != 'https' or not url.hostname or url.username or url.password:
         return None
     return location
+
+
+def state(row):
+    """The use column states inclusion, independently of the version string."""
+    for prefix in ('Ships:', 'Build only:', 'Not shipped:'):
+        if row[3].startswith(prefix):
+            return prefix
+    raise ValueError('inventory needs an explicit shipping state: ' + row[0])
+
+
+def license_texts(path, rows):
+    # Each included row names its own texts; adding a crate cannot silently
+    # omit its notice. Identical upstream bytes share one committed file.
+    directory = (path.parent / 'licenses').resolve()
+    pins = dict(re.findall(r'^\| licenses/([\w.-]+\.txt) \| [^|]+ \| `([a-f0-9]{64})` \|$',
+                           read_text(path, 2 * MIB), re.M))
+    names = set()
+    for row in rows:
+        refs = set(re.findall(r'licenses/([\w.-]+\.txt)', row[4]))
+        if not refs and row[2] != 'Open-owned':
+            raise ValueError('included component needs committed license text: ' + row[0])
+        names.update(refs)
+        if len(names) > 256:
+            raise ValueError('inventory exceeds 256 distinct license texts')
+    priority = ['MPL-2.0.txt', 'GPL-3.0.txt', 'MIT-Sparkle.txt', 'BSD-CEF.txt']
+    ordered = [name for name in priority if name in names] + sorted(names - set(priority))
+    result = []
+    total = 0
+    for name in ordered:
+        source = directory / name
+        if source.resolve().parent != directory:
+            raise ValueError('license path leaves inventory directory: ' + name)
+        data = read_bytes(source, 4 * MIB)
+        total += len(data)
+        if total > 16 * MIB:
+            raise ValueError('license texts exceed 16 MiB total')
+        if name not in pins or hashlib.sha256(data).hexdigest() != pins[name]:
+            raise ValueError('license text differs from inventory SHA-256: ' + name)
+        if len(data) < 100:
+            raise ValueError('missing/truncated upstream license: ' + name)
+        result.append((name, data.decode('utf-8')))
+    return result
 
 
 class CreditsParser(html.parser.HTMLParser):
@@ -151,15 +211,23 @@ def main():
     p.add_argument('--marketing-version')
     p.add_argument('--build-number')
     p.add_argument('--engine-stamp')
+    p.add_argument('--app-info-plist', type=Path,
+                   help='read versions and OpenEngineStamp from the built app')
     p.add_argument('--ubo-source', type=Path, help='bundled corresponding-source directory if the conditional GPL row ships')
     a = p.parse_args()
     marketing, build, stamp = versions()
+    if a.app_info_plist:
+        app = plistlib.loads(read_bytes(a.app_info_plist, MIB))
+        marketing, build, stamp = (app[key] for key in
+                                   ('CFBundleShortVersionString', 'CFBundleVersion', 'OpenEngineStamp'))
     marketing, build, stamp = a.marketing_version or marketing, a.build_number or build, a.engine_stamp or stamp
     if not re.fullmatch(r'\d+\.\d+\.\d+', marketing) or not re.fullmatch(r'[1-9]\d*', build):
         raise ValueError('expected SemVer marketing version and positive integer build')
     rows = inventory(a.inventory)
     check_versions(rows)
-    shipped = [r for r in rows if not re.search(r'not yet linked|not bundled', r[1], re.I)]
+    shipped = [r for r in rows if state(r) == 'Ships:']
+    included = [r for r in rows if state(r) != 'Not shipped:']
+    texts = license_texts(a.inventory, included)
     source_location = public_source_location(a.inventory)
     needs_source = any('MPL-2.0' in r[2] for r in shipped)
     warnings = []
@@ -174,13 +242,25 @@ def main():
         row = next(r for r in shipped if r[0] == 'uBlock Origin resources / scriptlets')
         if 'GPL-3.0' not in row[2] or not re.search(r'https://\S+', row[4]):
             raise ValueError('uBlock assets need GPL-3.0 and a public corresponding-source URL')
+        if not any(name == 'GPL-3.0.txt' for name, _ in texts):
+            raise ValueError('uBlock assets need the full committed GPL-3.0.txt text')
         if not a.ubo_source or not a.ubo_source.is_dir():
             raise ValueError('uBlock assets require --ubo-source containing bundled source text')
-        files = [f for f in a.ubo_source.rglob('*') if f.is_file()]
+        files = []
+        for index, f in enumerate(a.ubo_source.rglob('*')):
+            if index >= 8192 or len(f.relative_to(a.ubo_source).parts) > 64:
+                raise ValueError('uBlock source exceeds 8192 paths or 64 directory levels')
+            if f.is_file():
+                files.append(f)
         if not files:
             raise ValueError('uBlock corresponding-source directory is empty')
+        total = 0
         for f in files:
-            f.read_text(encoding='utf-8')
+            data = read_bytes(f, 16 * MIB)
+            total += len(data)
+            if total > 64 * MIB:
+                raise ValueError('uBlock corresponding source exceeds 64 MiB')
+            data.decode('utf-8')
 
     paragraphs = [f'Open {marketing} ({build})', stamp, '']
     for name, version, license_name, use, offer in shipped:
@@ -188,22 +268,19 @@ def main():
     if needs_source:
         paragraphs.extend(['Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)'), ''])
     paragraphs.extend(['License texts', ''])
-    texts = ['MPL-2.0.txt'] + (['GPL-3.0.txt'] if gpl else []) + ['MIT-Sparkle.txt', 'BSD-CEF.txt']
-    if any(row[0] == 'Unicode emoji data' for row in shipped):
-        texts.append('Unicode-3.0.txt')
-    for name in texts:
-        text = (a.inventory.parent / 'licenses' / name).read_text(encoding='utf-8')
-        if len(text) < 500:
-            raise ValueError('missing/truncated upstream license: ' + name)
+    for name, text in texts:
         paragraphs.extend([name, text.rstrip(), ''])
     complete = False
+    cef_bytes = None
     if a.cef_credits.is_file():
-        raw = a.cef_credits.read_text(encoding='utf-8')
+        cef_bytes = read_bytes(a.cef_credits, 32 * MIB)
+        raw = cef_bytes.decode('utf-8')
         complete = len(raw) > 10000 and 'This is sample credits page' not in raw
         if complete:
             parser = CreditsParser()
             parser.feed(raw)
-            paragraphs.extend(['Chromium and third-party credits', ''.join(parser.parts).strip(), ''])
+            paragraphs.extend(['Chromium and third-party credits (HTML twin: CREDITS.html)',
+                               ''.join(parser.parts).strip(), ''])
     if not complete:
         message = 'INCOMPLETE PREVIEW: full Chromium/codec CREDITS.html is missing or is the upstream sample.'
         if a.require_cef_credits:
@@ -218,10 +295,20 @@ def main():
     twin = a.text_output or a.output.with_name('Acknowledgements.txt')
     if a.output.resolve() == twin.resolve():
         raise ValueError('RTF and TXT outputs must be different paths')
+    if any(output.resolve() == (directory / 'CREDITS.html').resolve()
+           for output in (a.output, twin) for directory in (a.output.parent, twin.parent)):
+        raise ValueError('RTF and TXT outputs must not overwrite the HTML twin')
     a.output.parent.mkdir(parents=True, exist_ok=True)
     twin.parent.mkdir(parents=True, exist_ok=True)
     a.output.write_text(rtf(text), encoding='ascii')
     twin.write_text(text, encoding='utf-8')
+    # Keep the exact distribution HTML next to each text output, including
+    # previews. A sample twin is labelled incomplete above, never accepted.
+    if cef_bytes is not None:
+        for directory in {a.output.parent, twin.parent}:
+            target = directory / 'CREDITS.html'
+            if target.resolve() != a.cef_credits.resolve():
+                target.write_bytes(cef_bytes)
     print(f'Generated {a.output} and {twin}')
     print(f"Component paragraphs: {len(shipped)}; conditional GPL: {'included' if gpl else 'omitted (assets not shipped)'}; Chromium credits: {'complete' if complete else 'INCOMPLETE PREVIEW'}")
     if needs_source:
