@@ -52,8 +52,25 @@ WebAuthn produced a visible native Views dialog with no AppKit parent
 (`private-page-and-dialogs-results.json`). Patch 0808 supplies the missing
 parent and page-relative position through
 `open_browser_window.mm:199`, on show and resize. Chromium retains the modal
-manager, focus policy and decision callbacks. Runtime verification of this
-new distribution is pending.
+manager, focus policy and decision callbacks. P-20 create/get and P-21 native
+dialog cancellation pass on this distribution. P-21 also checks that Escape
+leaves its AppKit parent visible (`private-dialogs-retry-1-results.json`).
+
+P-19 initially reached the HTTPS-First path rather than the login form.
+Chromium records interstitial reason 5, `kIncognito`, for that public HTTP
+origin (`components/security_interstitials/core/https_only_mode_metrics.h:262`).
+The row now submits the existing HTTP localhost form. It retains the private
+context, parent-context, no-offer, no-save and unchanged-store assertions.
+Those checks pass in the focused run. The full run exercises the Work Profile
+left focused by P-17. No security preference is disabled for P-19.
+
+The HTTPS-First warning appears but disappears before its action buttons can
+be exercised. Its native parent is present. A bounded readiness wait and a
+warning-specific accessibility query did not establish working buttons.
+`https-dialog-buttons-results.json`, `https-specific-dialog-results.json`
+and `https-dialog-ui-results.json` retain those failures. Cause diagnosis and
+the three warning decisions remain pending. The warning's existing
+close-on-deactivation behavior remains enabled.
 
 ## Current distribution
 
