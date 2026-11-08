@@ -83,14 +83,24 @@ enum SM6CostGate {
         for machine in fixtures.machines {
             guard !machine.cpuBrand.isEmpty, machine.cpuBrand.utf8.count <= 128,
                   !machine.osBuild.isEmpty, machine.osBuild.utf8.count <= 64,
-                  machine.samples.count == 5, machine.samples.allSatisfy({ $0 > 0 }),
-                  machine.discardedWarmup > 0, machine.samples.sorted()[2] == machine.acceptedMedian,
+                  // Legacy fixtures have five fresh-process samples. The lead's
+                  // 2026-11-08 ruling uses ten run medians (five unchanged-main
+                  // pairs); each run still discards one child and measures five.
+                  [5, 10].contains(machine.samples.count), machine.samples.allSatisfy({ $0 > 0 }),
+                  machine.discardedWarmup > 0, median(machine.samples) == machine.acceptedMedian,
                   machine.acceptedMedian <= (UInt64.max - 9) / 11,
                   keys.insert(machine.cpuBrand + "\n" + machine.osBuild).inserted else {
                 throw CLIError(description: "SM6 invalid/duplicate accepted fixture")
             }
         }
         return fixtures
+    }
+
+    private static func median(_ values: [UInt64]) -> UInt64 {
+        let sorted = values.sorted(), middle = sorted.count / 2
+        if sorted.count % 2 == 1 { return sorted[middle] }
+        let lower = sorted[middle - 1], upper = sorted[middle]
+        return lower + (upper - lower) / 2 + (upper - lower) % 2
     }
 
     private static func systemString(_ name: String) throws -> String {

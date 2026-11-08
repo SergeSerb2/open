@@ -181,7 +181,8 @@ public final class CommandBarController: NSObject {
         applyScopeTheme()
         engine.prewarm()
         let field = panel.input.field
-        let initial = request.mode == .editCurrentURL ? (request.currentTabURL?.absoluteString ?? "") : ""
+        let address = request.currentTabURL?.absoluteString == "open://welcome" ? "Welcome to Open" : request.currentTabURL?.absoluteString ?? ""
+        let initial = request.mode == .editCurrentURL ? address : ""
         completion.reset()
         field.stringValue = CommandBarFieldEditor.normalized(initial)
         panel.input.textDidChange()
@@ -469,7 +470,8 @@ public final class CommandBarController: NSObject {
         let typed = text
         if typed.isEmpty || scope != nil {
             input.leadingIcon = .symbol("magnifyingglass", plate: false)
-        } else if r?.mode == .editCurrentURL, let current = r?.currentTabURL, typed == current.absoluteString {
+        } else if r?.mode == .editCurrentURL, let current = r?.currentTabURL,
+                  typed == current.absoluteString || (current.absoluteString == "open://welcome" && typed == "Welcome to Open") {
             input.leadingIcon = .favicon(current, fallback: "globe") // Cmd+L shows the page favicon (F0048)
         } else if let top = suggestions.first {
             input.leadingIcon = rows.first.map(\.icon).map { icon in
