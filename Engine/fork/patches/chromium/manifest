@@ -54,3 +54,6 @@ paths: components/constrained_window/native_web_contents_modal_dialog_manager_vi
 
 # 0809-open-https-warning-after-commit.patch
 paths: chrome/browser/ssl/https_only_mode_tab_helper.cc, chrome/browser/ssl/https_only_mode_tab_helper.h
+
+# 0810-open-modal-unblock-during-tab-teardown.patch
+paths: chrome/browser/ui/tabs/tab_strip_model.cc
