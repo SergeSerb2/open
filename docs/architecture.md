@@ -87,7 +87,7 @@ Tactics: build the window and sidebar from the snapshot before the engine finish
 
 Launch time starts at the kernel process-start counter, before the first App constructor. `sidebarDrawn` requires a display callback whose timestamp is at or after the flushed window transaction. It does not mean that the window was merely ordered or that drawing was queued. CEF loads after this confirmed frame. First web paint and the first accepted key are separate milestones; a sidebar change must preserve both.
 
-`OPEN_SPEED_TRACE=1` enables fixed startup signposts and precise phase counters. It is off by default. Automation can separately capture loaded images at the confirmed sidebar frame with `OPEN_SPEED_IMAGES=1`. This image scan stays out of primary timing runs. Floor calibration uses a standalone AppKit window and a second variant with the same direct system links as Open. Both use the same kernel origin, LaunchServices path and frame rule.
+`OPEN_SPEED_TRACE=1` enables fixed startup signposts and precise phase counters. It is off by default. Automation can separately capture loaded images at the confirmed sidebar frame with `OPEN_SPEED_IMAGES=1`. This image scan stays out of primary timing runs. Floor calibration uses a standalone AppKit window and a second variant with the same direct system links as Open. Both use the same kernel origin, LaunchServices path and frame rule. In the macOS 27.2 control, both standalone floor apps load WebKit by the confirmed first frame. Image presence is informational; it does not establish a removable cost.
 
 ## Testing
 
