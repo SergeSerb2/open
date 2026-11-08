@@ -1114,7 +1114,8 @@ named):**
 
 | Measure | Budget | Basis | Gated at |
 |---|---|---|---|
-| One EasyList + EasyPrivacy engine, steady state, with the D-12 regex features | ≤ 40 MiB | 32 MiB measured standalone (F-35); the in-tree allocator and the regex lazy-DFA caches can add some (guess) | Step 4 (single context, `cefsimple`) |
+| One EasyList + EasyPrivacy engine, steady state, with the D-12 regex features | ≤ 57 MiB, text and DAT, median of 5 | Lead footprint ruling §13.5.1 item 4a (2026-11-07 20:40); record PA allocated breakdown | Step 4 (single context, `cefsimple`) |
+| After the full-corpus check plus one idle purge | ≤ 60 MiB, text and DAT, median of 5 | Same ruling 4a; one idle-triggered, rate-limited purge, no request-path purge or idle timer loop; G-2/G-4 unchanged | Step 4 (single context, `cefsimple`) |
 | Second Profile with the same lists | ≤ +2 MiB over the window below, and the second Profile's status shows `engine_shared=1` | Shared engine; only matcher state (exclusions, toggle) is per Profile. **Window (review r2 N-8):** create both request contexts first and take the baseline; the measure is the delta from the second context's `LoadFromDirectory` to its `engine_shared=1` status. The cost of creating a context itself is not in this budget | Step 8 (two request contexts need the app or the test host; `cefsimple` has one context, §13.1; review r1 finding 9) |
 | Text build transient | ≤ +100 MiB above steady state, back to steady state ≤ 5 s after the swap | 80 MiB measured | Step 9 |
 | All 5 generic + privacy lists enabled | Record only (no gate in v1) | R-7; decides whether any non-default list becomes a default | Step 9 |
@@ -3883,6 +3884,18 @@ budget and what must be tried first. They replace the matching rows of
    budget: **≤ 50 MiB**, stretch 40 MiB. If still above, the breakdown
    (vmmap tag 14, PartitionAlloc) goes to the lead.
 
+4a. **Footprint ruling (2026-11-07 20:40, lead):** accepted for v1 at
+≤ 57 MiB steady state (text and DAT, median of 5) and ≤ 60 MiB after the
+full-corpus check plus one idle purge; the 50 MiB budget is replaced; the
+remaining cost is the crate's own rule data and indexes (~37 MiB allocated),
+whose restructuring is post-v1.
+
+The purge is idle-triggered and rate-limited, on the matcher sequence;
+it never runs per request or on the request path. One idle period causes
+one purge, with no timer loop after it. Record the allocated breakdown,
+prove G-2/G-4 unchanged, and observe 60 seconds without activity to show
+zero extra purges after the first.
+
 ---
 
 ## 14. Risks and open questions
@@ -4555,17 +4568,17 @@ Parsed GURLs and factory initiators are reused. Ordinary requests avoid a
 ResourceRequest copy. Response pipes remain proxied through completion. The
 attempted post-response fusion violates Mojo's unwritten-endpoint rule
 (`mojo/public/c/system/message_pipe.h:330-338`) and aborted worker-script
-completion in the final CDP run. Its removal is prepared but awaits an
-engine rebuild after the lead clears Section 12 priority. Every network regex program compiles
-on the build runner before publication; no warm match grows its caches.
-The discard policy stays disabled because cleanup would discard programs
-and cause request-path recompiles. The adblock-only regex builder disables
-eager DFA and one-pass accelerators and caps its lazy DFA cache at 8 KiB.
-A preferred 64 KiB NFA ceiling retries the upstream 10 MiB limit on
-`CompiledTooBig`, rather than changing a valid rule's verdict. The real
-623,832-byte user-regex fixture blocks correctly through that fallback.
-The 1/2 KiB cache candidates missed the first-pass CPU limit; all candidates
-had identical verdicts. No regex API is changed to byte matching.
+completion in the earlier CDP run. Its removal is built in `5d4d15a5`;
+repaired N-case and page receipts are in progress. Every network regex
+program compiles on the build runner before publication; no warm match
+grows its caches. The discard policy stays disabled because cleanup would
+discard programs and cause request-path recompiles. Regex builders now use
+all upstream defaults: lazy cache, eager DFA, one-pass and NFA limit.
+The earlier bounded-builder candidate saved little memory and raised the
+warm CPU maximum from about 150–170 µs to about 500 µs. Its 64 KiB preferred
+program-limit fallback was verified, then removed with that candidate.
+The 623,832-byte user-regex fixture still matches with the default builder.
+No regex API is changed to byte matching.
 
 Only crate-generated ABP syntax uses ASCII separator/wildcard classes,
 including generated word/digit classes. User `/regex/` filters retain their
@@ -4690,7 +4703,7 @@ baseline. This confirms the worker regression; it does not validate the
 unbuilt repair. The closed-document probe also fails on the baseline and
 still needs a reliable stimulus. Receipt: `baseline-p3-control.log`.
 
-**Lead decision 20:16: prepared source, not built.** Restore plain
+**Lead decision 20:16: prepared source; built at 20:33.** Restore plain
 `Regex::new` / `RegexSet::new` with their upstream default NFA limit, lazy
 cache, eager DFA and one-pass settings. Keep compile-only warming, program
 retention, ASCII generated forms, DAT sharing, Chromium resolver and early
@@ -4708,7 +4721,59 @@ This is the API Chromium uses after backgrounding
 decommits empty slot spans and discards unused pages. New diagnostics print
 parse, serialize, deserialize, regex compile and reclaim durations, plus PA
 and physical footprint before/after the round trip and reclaim. These
-changes and the fusion repair await explicit engine clearance. Their
-predicted CPU/memory savings are not measurements. The decision record is
-`.re/s13/e1/GATES.md`; final identity, G-5 callback/GURL scopes, build-time
-delta, footprint and distribution remain pending. No budget has changed.
+changes and the fusion repair built in 59 s, with engine-status 8 PASS,
+0 FAIL, 0 WARN. The working results below replace their earlier estimates.
+The decision record is `.re/s13/e1/GATES.md`. Final low-load receipts,
+G-5 callback/GURL scopes, N-cases and distribution remain pending. The
+new footprint gate follows ruling4a; CPU budgets remain unchanged.
+
+
+**Default builder, text round trip and reclaim: working receipt (20:36).**
+Five headless runs per mode/cap, without quiet lock, at load1 14.47–20.71.
+All twenty 20,311-result dumps retain the baseline hashes. Every run adds
+zero request compiles. Both input paths now compile 1,000 programs after
+262 exact rule references are re-shared. Programs occupy 7,278,276 bytes
+(+27,144 bytes versus the bounded DAT engine); the 16 user-regex programs
+occupy 4,385,392 bytes. User regex semantics remain unchanged. All sixteen
+synthetic URL/separator/user-regex cases also retain their previous verdict
+hash for text/DAT and both caps.
+
+| Cap/input | CPU mean / p99 / warm max µs | First-pass CPU max µs | Wall warm max µs | Physical delta |
+|---|---:|---:|---:|---:|
+| 16 KiB text | 4.065 / 17.666 / 172.291 | 160.000 | 395.875 | 56.61 MiB |
+| 16 KiB DAT | 4.643 / 20.166 / 175.750 | 145.708 | 302.708 | 53.06 MiB |
+| 8 KiB text | 4.575 / 19.833 / 162.625 | 175.125 | 367.167 | 56.38 MiB |
+| 8 KiB DAT | 4.609 / 20.875 / 174.167 | 185.250 | 532.292 | 52.91 MiB |
+
+The current worst CPU URL is corpus line 366 (3,256 bytes), allowed; no
+winning filter exists. These working CPU rows pass the ruled 500 µs limit.
+They are not final load1 ≤12 acceptance or load1 ≤4 Step 9 wall receipts.
+The 50 MiB footprint budget still fails. The breakdown goes to the lead;
+no budget changes and no additional engine optimization is selected.
+
+| PA component, median 16 KiB, all roots | Text | DAT |
+|---|---:|---:|
+| Rule/index/build residual allocated delta | 37.15 MiB | 36.84 MiB |
+| Immutable regex programs (exact crate counter) | 6.94 MiB | 6.94 MiB |
+| Regex caches/metadata/rounding residual | 6.50 MiB | 6.58 MiB |
+| Other to settled (includes released thread caches) | −0.20 MiB | −0.21 MiB |
+| Settled allocated delta | 50.39 MiB | 50.14 MiB |
+| Settled resident delta | 53.73 MiB | 51.30 MiB |
+| Physical pages released by ReclaimAll | 12.30 MiB | 6.67 MiB |
+
+The text round trip itself frees median 1.85 MiB allocated and 3.91 MiB
+physical before serialized buffers leave scope. Live text allocation is
+now within 0.25 MiB of DAT. The remaining physical gap is allocator slack,
+not resident list/DAT bytes. PA phase deltas include browser allocations
+and rounding; the cache residual is not exact cache ownership. The full
+corpus later grows physical footprint by about 10 MiB with about 1.1 MiB
+live-allocation growth. No request-path purge was added.
+
+Median 16 KiB text load is 502 ms: parse 174.142 ms, serialize 85.037 ms,
+deserialize/replace/free 176.453 ms, compile 54.431 ms, reclaim 3.142 ms.
+The old lower-load text median was 331 ms; new load minus the new decode
+and reclaim phases is 322.405 ms. This supports decode plus purge as the
+added cost, with builder/load differences as limits on the comparison.
+Disk DAT load is 195 ms, including 138.420 ms deserialize, 49.008 ms compile
+and 1.512 ms reclaim. Raw receipts: `default-roundtrip-working-*` and
+`default-roundtrip-verdict-identity.json` in `.re/s13/e1/`.

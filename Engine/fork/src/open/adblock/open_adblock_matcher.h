@@ -17,6 +17,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "open/adblock/rust/src/lib.rs.h"
 
 class GURL;
@@ -43,6 +44,15 @@ scoped_refptr<base::SequencedTaskRunner> AdBlockCosmeticsTaskRunner();
 // verification, builds, DAT reads and writes, and engine destruction (§6.6).
 // One for all Profiles, so at most one build runs at a time.
 scoped_refptr<base::SequencedTaskRunner> AdBlockBuildTaskRunner();
+
+// Matcher-sequence activity only updates one timestamp while a delayed idle
+// task is pending. Reclaim runs as a separate task after 5s without activity,
+// at most once per minute, and never repeats without new engine activity.
+void NoteAdBlockEngineActivity(base::TimeTicks now);
+void NoteAdBlockProxyActivity(base::TimeTicks now);
+#if !defined(OFFICIAL_BUILD)
+uint64_t AdBlockIdleReclaimCount();
+#endif
 
 // The engine of one load; immutable once published. Made only through
 // MakeEngineHolder(), whose deleter frees it on the build runner wherever

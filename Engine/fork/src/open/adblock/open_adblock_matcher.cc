@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.h"
+#include "base/functional/bind.h"
 #if !defined(OFFICIAL_BUILD)
 #include "open/adblock/open_adblock_selftest.h"
 #endif
@@ -32,6 +34,73 @@ scoped_refptr<base::SequencedTaskRunner>& MatcherRunner() {
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   return *runner;
 }
+
+class IdleReclaimer;
+IdleReclaimer*& ActiveIdleReclaimer() {
+  static IdleReclaimer* reclaimer = nullptr;
+  return reclaimer;
+}
+
+// Process-wide because all Profiles share the matcher sequence and allocator.
+// This owns no Profile/engine reference. A pending task is skipped at shutdown.
+class IdleReclaimer {
+ public:
+  void Activity(base::TimeTicks now) {
+    DCHECK(MatcherRunner()->RunsTasksInCurrentSequence());
+    last_activity_ = now;
+    if (pending_) {
+      return;
+    }
+    pending_ = true;
+    Schedule(std::max(base::Seconds(5), next_allowed_ - now));
+  }
+
+  uint64_t count() const { return count_; }
+
+ private:
+  void Schedule(base::TimeDelta delay) {
+    MatcherRunner()->PostDelayedTask(
+        FROM_HERE, base::BindOnce(&IdleReclaimer::OnIdle,
+                                 base::Unretained(this)), delay);
+  }
+
+  void OnIdle() {
+    DCHECK(MatcherRunner()->RunsTasksInCurrentSequence());
+    const auto now = base::TimeTicks::Now();
+    const auto deadline = std::max(last_activity_ + base::Seconds(5),
+                                   next_allowed_);
+    if (now < deadline) {
+      // Only activity since scheduling can move this deadline. No periodic
+      // poll remains once idle: the first purge consumes the pending task.
+      Schedule(deadline - now);
+      return;
+    }
+    pending_ = false;
+    next_allowed_ = now + base::Minutes(1);
+#if !defined(OFFICIAL_BUILD)
+    RecordOpenAdBlockMemoryPhase("before-idle-reclaim");
+    const auto cpu_start = base::ThreadTicks::Now();
+#endif
+    base::ElapsedTimer timer;
+    partition_alloc::MemoryReclaimer::Instance()->ReclaimAll();
+    ++count_;
+    VLOG(1) << "OpenAdBlock: idle reclaim runs=" << count_
+            << " elapsed_us=" << timer.Elapsed().InMicroseconds()
+            << " idle_ms=" << (now - last_activity_).InMilliseconds()
+#if !defined(OFFICIAL_BUILD)
+            << " cpu_us=" << (base::ThreadTicks::Now() - cpu_start).InMicroseconds()
+#endif
+        ;
+#if !defined(OFFICIAL_BUILD)
+    RecordOpenAdBlockMemoryPhase("after-idle-reclaim");
+#endif
+  }
+
+  base::TimeTicks last_activity_;
+  base::TimeTicks next_allowed_;
+  bool pending_ = false;
+  uint64_t count_ = 0;
+};
 
 void RecordCheck(AdBlockMatcherCounters& counters,
                  base::TimeDelta elapsed,
@@ -73,6 +142,27 @@ scoped_refptr<base::SequencedTaskRunner> AdBlockBuildTaskRunner() {
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}));
   return *runner;
 }
+
+void NoteAdBlockEngineActivity(base::TimeTicks now) {
+  static base::NoDestructor<IdleReclaimer> reclaimer;
+  ActiveIdleReclaimer() = reclaimer.get();
+  reclaimer->Activity(now);
+}
+
+void NoteAdBlockProxyActivity(base::TimeTicks now) {
+  // Blocking-off/no-engine processes never arm an adblock idle purge.
+  if (auto* reclaimer = ActiveIdleReclaimer()) {
+    reclaimer->Activity(now);
+  }
+}
+
+#if !defined(OFFICIAL_BUILD)
+uint64_t AdBlockIdleReclaimCount() {
+  DCHECK(MatcherRunner()->RunsTasksInCurrentSequence());
+  auto* reclaimer = ActiveIdleReclaimer();
+  return reclaimer ? reclaimer->count() : 0;
+}
+#endif
 
 EngineHolder::EngineHolder(rust::Box<open_adblock::OpenAdblockEngine> engine)
     : engine(std::move(engine)),
@@ -219,6 +309,7 @@ open_adblock::OpenBlockerResult OpenAdBlockMatcher::Check(
   }
   const GURL& source = source_url.is_valid() ? source_url : url;
   const base::TimeTicks start = base::TimeTicks::Now();
+  NoteAdBlockEngineActivity(start);
   open_adblock::OpenBlockerResult result = open_adblock::open_adblock_check(
       *engine_->engine, url.spec(), source.spec(), type, max_input_bytes);
   RecordCheck(counters_, base::TimeTicks::Now() - start, url.spec().size(),
@@ -232,6 +323,7 @@ open_adblock::OpenCosmeticResources OpenAdBlockMatcher::Cosmetic(
   if (!engine_ || !document_url.is_valid()) {
     return {};
   }
+  NoteAdBlockEngineActivity(base::TimeTicks::Now());
   open_adblock::OpenCosmeticResources resources =
       open_adblock::open_adblock_cosmetic(*engine_->engine, document_url.spec());
   constexpr auto kRelaxed = std::memory_order_relaxed;
@@ -257,6 +349,7 @@ std::vector<std::string> OpenAdBlockMatcher::HiddenSelectors(
   if (!engine_) {
     return {};
   }
+  NoteAdBlockEngineActivity(base::TimeTicks::Now());
   // Tokens come from pages: invalid UTF-8 becomes U+FFFD.
   auto to_rust = [](const std::vector<std::string>& values) {
     rust::Vec<rust::String> out;

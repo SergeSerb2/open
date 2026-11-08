@@ -5,6 +5,7 @@
 #include "open/adblock/open_adblock_selftest.h"
 
 #include <mach/mach.h>
+#include <sys/resource.h>
 #include <time.h>
 
 #include <algorithm>
@@ -907,6 +908,79 @@ std::string RunBench(scoped_refptr<OpenAdBlockMatcher> matcher,
   return verdicts;
 }
 
+uint64_t ProcessCpuMicroseconds() {
+  rusage usage{};
+  if (getrusage(RUSAGE_SELF, &usage)) {
+    return 0;
+  }
+  return static_cast<uint64_t>(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) *
+             1000000 +
+         usage.ru_utime.tv_usec + usage.ru_stime.tv_usec;
+}
+
+void FinishIdleProof(base::OnceCallback<void(bool)> done,
+                     bool written,
+                     uint64_t first,
+                     uint64_t cpu,
+                     unsigned seconds,
+                     uint64_t last) {
+  Line("idle proof seconds=" + std::to_string(seconds) +
+       " first=" + std::to_string(first) + " last=" + std::to_string(last) +
+       " extra=" + std::to_string(last - first) + " process_cpu_us=" +
+       std::to_string(ProcessCpuMicroseconds() - cpu));
+  std::move(done).Run(written && first == 1 && last == first);
+}
+
+void ReadIdleProofEnd(base::OnceCallback<void(bool)> done,
+                      bool written,
+                      uint64_t first,
+                      uint64_t cpu,
+                      unsigned seconds) {
+  AdBlockMatcherTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&AdBlockIdleReclaimCount),
+      base::BindOnce(&FinishIdleProof, std::move(done), written, first, cpu,
+                     seconds));
+}
+
+void ObserveIdleProof(base::OnceCallback<void(bool)> done,
+                      bool written,
+                      unsigned seconds,
+                      uint64_t first) {
+  RecordOpenAdBlockMemoryPhase("post-idle");
+  Line("idle first_purges=" + std::to_string(first));
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ReadIdleProofEnd, std::move(done), written, first,
+                     ProcessCpuMicroseconds(), seconds),
+      base::Seconds(std::min(seconds, 120u)));
+}
+
+void ReadIdleProofStart(base::OnceCallback<void(bool)> done,
+                        bool written,
+                        unsigned seconds) {
+  AdBlockMatcherTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&AdBlockIdleReclaimCount),
+      base::BindOnce(&ObserveIdleProof, std::move(done), written, seconds));
+}
+
+void FinishBenchAfterWrite(base::OnceCallback<void(bool)> done, bool written) {
+  RecordOpenAdBlockMemoryPhase("post-checks");
+  const auto& command = *base::CommandLine::ForCurrentProcess();
+  if (!command.HasSwitch("open-adblock-idle-proof-seconds")) {
+    std::move(done).Run(written);
+    return;
+  }
+  unsigned seconds = 0;
+  base::StringToUint(command.GetSwitchValueASCII("open-adblock-idle-proof-seconds"),
+                    &seconds);
+  // post-checks is 2s after the corpus. Allow the real 5s idle task to fire;
+  // this observes production behavior and never invokes the purge directly.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ReadIdleProofStart, std::move(done), written, seconds),
+      base::Seconds(4));
+}
+
 // The matcher never does file IO. The final callback waits for the private
 // verdict file on the build runner before it ends the real binary run.
 void BenchAndWrite(scoped_refptr<OpenAdBlockMatcher> matcher,
@@ -934,11 +1008,9 @@ void BenchAndWrite(scoped_refptr<OpenAdBlockMatcher> matcher,
                 base::BindOnce(
                     [](base::OnceCallback<void(bool)> done, bool written) {
                       base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-                          FROM_HERE, base::BindOnce(
-                              [](base::OnceCallback<void(bool)> done, bool written) {
-                                RecordOpenAdBlockMemoryPhase("post-checks");
-                                std::move(done).Run(written);
-                              }, std::move(done), written), base::Seconds(2));
+                          FROM_HERE,
+                          base::BindOnce(&FinishBenchAfterWrite,
+                                         std::move(done), written), base::Seconds(2));
                     }, std::move(done)));
           },
           std::move(done)));

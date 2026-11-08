@@ -114,6 +114,7 @@ class BusyScope {
 #if !defined(OFFICIAL_BUILD)
     start_cpu_ = base::ThreadTicks::Now();
 #endif
+    NoteAdBlockProxyActivity(start_);
   }
   BusyScope(const BusyScope&) = delete;
   BusyScope& operator=(const BusyScope&) = delete;
