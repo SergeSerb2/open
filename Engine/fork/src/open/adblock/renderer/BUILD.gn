@@ -10,13 +10,17 @@ source_set("renderer") {
     "open_adblock_renderer_agent.h",
   ]
   deps = [
-    "//base",
     "//chrome/common",
-    "//content/public/renderer",
     "//gin",
+    "//third_party/blink/public:blink",
+  ]
+  # The agent's public header exposes these types. Keep GN include checking
+  # enabled, including when the CEF renderer client includes that header.
+  public_deps = [
+    "//base",
+    "//content/public/renderer",
     "//mojo/public/cpp/bindings",
     "//open/adblock/mojom",
-    "//third_party/blink/public:blink",
     "//url",
     "//v8",
   ]

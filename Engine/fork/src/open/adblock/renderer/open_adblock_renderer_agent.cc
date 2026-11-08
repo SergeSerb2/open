@@ -26,6 +26,7 @@
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "url/gurl.h"

@@ -4717,6 +4717,15 @@ defining header. The engine lock is released; rebuild waits behind E3.
 Step 5 remains **in progress**. No cefsimple or App acceptance has run;
 the lead's 14:08 screen hold blocks windowed checks until cleared.
 
+The follow-up source audit checked each new overlay header and source against
+the pinned Chromium definitions. Public GN dependencies now propagate the
+BinderRegistry and renderer-header types. Renderer DEPS rules allow the Mojo
+boundary and reject browser matcher/service and Rust headers; Mojo DEPS rules
+allow its wire types and URL imports. GN include checking stays enabled. The
+next build checks those include paths and compiles the cosmetic objects and
+small targets before the complete CEF targets. These are source changes;
+compile and runtime acceptance remain pending.
+
 - `mojom/open_adblock.mojom` carries the initial sorted hide selectors,
   generic exceptions and `generichide`. `OpenAdBlockCosmeticsHost` is a
   self-owned receiver bound with `BinderRegistry::AddInterface` on

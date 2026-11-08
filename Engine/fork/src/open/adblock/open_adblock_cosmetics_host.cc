@@ -5,6 +5,7 @@
 #include "open/adblock/open_adblock_cosmetics_host.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -13,6 +14,8 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "open/adblock/mojom/open_adblock.mojom.h"
