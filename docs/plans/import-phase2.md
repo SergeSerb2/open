@@ -961,7 +961,9 @@ runs exactly once on a later main-queue turn, including rejection and context
 closure; the import no longer creates a hidden page or matches delegate events.
 `EI_failure_reported_app` gates a missing fixture before the engine call.
 `EI_failure_reported_engine` gates the damaged-signature rejection, its rendered
-error text and result count, and installation of the next candidate.
+error text and result count, and installation of the next candidate. All 18 EI
+gates pass; mapping failed to skipped makes the engine and count gates fail.
+See the [C5 receipt](../engine-spike/s14-crx-completion.md).
 A production Web Store request for a well-formed nonexistent ID is an INFO
 receipt, bounded to two minutes by the harness. That bound never marks a row
 failed or advances the App queue. The merged multi-Profile mapping resolves
