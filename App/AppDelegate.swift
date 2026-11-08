@@ -407,10 +407,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
-    if let state = model.windows.first(where: { $0.id == id && $0.style == .standard }) {
-      // Memory only: the next ordinary save and the quit save persist it. A focus
-      // change alone must not rewrite browser.json (private-window flows leave the
-      // saved session untouched; e2e incognito no_snapshot_history_change).
+    let standard = model.windows.filter { $0.style == .standard }
+    let mostRecent = standard.max { ($0.lastFocusedAt ?? .distantPast) < ($1.lastFocusedAt ?? .distantPast) }
+    if let state = standard.first(where: { $0.id == id }), state !== mostRecent || state.lastFocusedAt == nil {
+      // Only a switch to another standard window changes recency. Refocusing the
+      // current one (for example after a private window) leaves the saved session
+      // untouched (e2e incognito no_snapshot_history_change). Memory only: the next
+      // ordinary save and the quit save persist it.
       state.lastFocusedAt = Date()
     }
     for (otherID, factory) in hostFactories where otherID != id {
