@@ -1159,3 +1159,90 @@ break-and-revert proofs, load averages and the pre-#153 A/B comparison. Keep
 Section 2's existing command-bar budgets unchanged.
 
 For the Section 8 milestone, the lead's final instruction defers full and targeted regression suites to one run on final main. This PR records the completed negative proofs and current-display before/after measurements; it does not claim a new full-suite PASS.
+
+## Quiet-machine budgets
+
+`tools/budgets.sh --out <receipt.json>` runs the existing performance
+measurements against an already-built Release App and release OpenKit CLIs.
+It prints one table: row, unchanged budget, measured value, samples, PASS/FAIL,
+and load1 at the start and end of the workload. JSON retains all launch samples,
+per-process idle CPU, process churn, cleanup and budget sources. Raw harness
+logs remain in `<receipt.json>.logs/`. Use a new output name for each run.
+
+Build before taking the quiet lock. Follow the current lead's engine and
+heavy-slot rules. On the M5:
+
+```sh
+export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main
+OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Release
+~/Library/Caches/OpenRE/scripts/heavy.sh swift build -c release --package-path Packages/OpenKit
+mkdir -p .re/e2e-tools
+xcrun swiftc -O -swift-version 6 -parse-as-library tools/e2e/activate-own-app.swift -o .re/e2e-tools/activate-own-app
+xcrun swiftc -O -swift-version 6 -parse-as-library tools/e2e/owned-window-count.swift -o .re/e2e-tools/owned-window-count
+xcrun clang -dynamiclib -fblocks -fobjc-arc -Wno-deprecated-declarations tools/verification/feature-idle-probe.m -framework AppKit -framework QuartzCore -framework CoreVideo -o .re/e2e-tools/budgets-idle-probe.dylib
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock tools/budgets.sh --out .re/budgets/m5.json
+```
+
+`--app <path>` defaults to `build/Release/Open.app`. The App needs automation.
+Missing CLIs or missing/stale automation helpers cause refusal with exact build
+commands. The runner never builds. It refuses hardened-runtime Apps and Apps
+mounted from images, per the Section 16 no-crash rule. Use the normal development
+App from `tools/build.sh`, not a release artifact.
+
+The caller owns the quiet lock. The runner takes only the on-screen lock, once
+per App/native-window workload. It checks `/tmp/open-onscreen-priority` before
+each hold. It never waits for low load. A loaded-machine failure stays FAIL,
+with its loads. Only a lead-arranged quiet M5 run establishes quiet-machine
+acceptance. Follow current screen holds; the command does not clear them.
+
+App workloads use disposable profiles and the existing LaunchServices/socket
+harness. The keys used by these flows are reset before launch and restored with
+their original plist types in `finally`. Each worker reaps owned processes
+before releasing its screen hold. It removes disposable profiles, home and
+temporary data. A launch, crash or cleanup error stops the run before more
+screen work. Tell the lead before any further launch.
+
+Budget inventory (the Python source cites each numeric limit):
+
+| Workload | Existing measurement and limits |
+|---|---|
+| Existing-profile launch | `engine_e2e.py` `warm_existing_profile`, extracted from S16 `run_launch.py`: seven launches; sidebar median ≤250 ms, first paint median ≤700 ms. Also main ≤50 ms and modelLoaded ≤120 ms intermediate marks from the app-shell plan. Kernel process birth and a confirmed sidebar frame are required. Process-cold, warm file caches. |
+| First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh Welcome roots, median first content ≤250 ms, selected imported-tab paint from `firstRunLandingStarted` ≤700 ms. Uses the existing synthetic import fixture with local deterministic saved pages. |
+| Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. The target is ≈0%, with no approved numeric tolerance. The runner uses zero as a conservative bound and labels it explicitly. |
+| Site Control | Full `sitecontrol-render check`: cold-open CPU p95 <8 ms; simple-editor CPU p95 <12 ms using the required full-check procedure; both instruction gates; idle <10 ms CPU/2 s; ten-page refresh <100 ms; pad CPU p95 <2 ms; off-main hue <15 ms; ≤61 previews/120 inputs; code highlight CPU p95 <2 ms. Unknown instruction baselines fail closed. |
+| SM6 and mini-player | `sidebar-render check`: one declared warm-up and five fresh processes, accepted instruction ceiling, first-layout wall median ≤120 ms, structural gates, MC8 paused idle CPU ≤0.5%. |
+| Command bar keystrokes | `commandbar-render check` (#132/#135/#136, now 150/151): CPU p95 <8 ms, completion added p95 ≤0.3 ms, ≤1 panel layout pass. Retains the full combined gate. |
+| Live tab switch | `split-app-speed.py` fixture and `split op=bench`: 40 samples each for root single→single and single→split, p95 ≤16 ms. Native layout/CA flush and every-pane first rAF combine by max. Physical presentation is unproved. The separate paired-main 25 ms allowance does not replace 16 ms. |
+| Sidebar | `sidebar-render bench --rows 1000`: scroll and model drag/move p95 ≤8.33 ms. Existing selection toggle p95 ≤1 ms; 50-row bulk move/archive/folder/Space p95 ≤16 ms; Expand All p95 ≤16 ms. |
+| Folder Peek | Existing 50-folder/1,000-row FP10: all three declared attempts, transition p95 ≤2 ms, the open median goal <1 ms, scroll p95 ≤8.33 ms and matched plain ×1.10 +0.05 ms. Standalone invocation uses the strict 2 ms limit without building a pinned parent or taking its exception. Raw native row-layout comparisons remain in the harness verdict. |
+| Suggestions | `openkit suggest-check`: #31 stream <600 ms with its existing up-to-three attempts, all retained; extension actions p95 <0.2 ms; first/inline snapshots CPU p95 <5 ms; completion check p95 ≤0.05 ms. |
+| Ad blocking | `openkit adblock perf`: 1,000 lookups p95 <1 ms and profile-open integrity scan p95 <10 ms, ten groups each. Combined time is informational. |
+| Cold command bar | Existing `app-actions` first-open key route and `openFirstResultsMs`: ≤50 ms, entry to first snapshot applied; excludes frame presentation. |
+| Find | `find_checks.py` F04 native-key timing: first and repeat open p95 ≤1000/120 ms, twenty fresh windows, lazy creation and visible pane proof. This uses the built-in presentation marks and does not build the separate idle observer. |
+| Theme editor | `space-editor-render check`: B1 two-window CPU p95 ≤4 ms/240 ticks; cold texture tile <500 ms and field composition <250 ms. |
+| Feature harnesses | `features-render check`: PiP idle CPU ≤0.5%; `favicon-check`: 1,000-row stored-icon scroll p95 ≤8.33 ms; S8 observer: zero owned resources/events in ten two-second toast/swipe windows across both motion modes. The observer is built before the run. |
+
+Each reused CLI has a harness-exit row. A functional failure or interrupted
+native suite stays visible when timing passes. Missing metrics fail. The runner
+does not retry workloads. Existing internal FP10 and suggest attempts remain;
+raw results are retained and each FP10 attempt is shown separately.
+
+Other values in the named docs are diagnostics or two-build comparisons:
+memory has no budget; ad-block combined time, sleep-pass CPU, engine startup
+marks and editor full-drag wall time have no separate limits. The S8 sidebar
+±10% comparison, MC9 media-versus-parent mean delta and paired-main regressions
+need a reference build and remain separate comparison procedures. First-run
+and imported-content timings use their own fixture, apart from the required
+existing-profile launch.
+
+To prove failure detection, copy the cold-command-open limit to 1 ms for one
+real run. Product thresholds and files do not change:
+
+```sh
+/usr/bin/lockf -k /tmp/open-m5-quiet.lock tools/budgets.sh --only command-open --fail-demo --out .re/budgets/fail-demo.json
+```
+
+The row is labelled `FAIL DEMO`. A budget failure exits 1; a complete all-PASS
+run exits 0. `--only <workload>` is for diagnosis and marks JSON `partial`.
+Default invocation runs the complete inventory once. No unit tests, desktop
+input, cache purge, threshold edits or engine-tree builds are involved.
