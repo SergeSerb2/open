@@ -4468,3 +4468,28 @@ then replace 0310 and apply 0311 from this branch's `patches/cef/`.
    starts with `bcjindcccaagfpapjjmafapmmgkkhgoa`). Open warns in
    Settings when native blocking is on and the Profile has an enabled
    extension from that set.
+
+### Section 13 engine bring-up (2026-11-07, work in progress)
+
+Branch `s13/step4-engine` starts at `6839eba9`. Its assigned root is
+`~/Developer/open-engine-s10`; no other engine root is used. The recorded
+starting state has 564 Chromium status lines, 39 CEF status lines, and
+23 applied patch records (main through #223).
+
+To insert Step 4 in series order, reverse main's 0505 and 0310, then run
+`engine-apply --all`. This applies Step 4's 0310, then 0311, then 0505.
+The shared files in 0311 and 0505 apply without a context refresh; 0701
+has separate manifest paths. Status is 8 PASS, 0 FAIL, 0 WARN: 24 patches,
+94 overlays, and 117/117 CEF patches. The dev `cefsimple cefclient` build
+passes in 112 s with 10 jobs and nice. Root apply and build run under
+`/tmp/open-engine-build.lock`, in detached sessions. This is build proof;
+break-and-revert, the four rulings, final N-cases, gates, OTR lifetime,
+App checks, and the new distribution remain pending.
+
+Raw receipts are in `.re/s13/e1/` in the project root. The corpus remains
+20,311 URLs with the committed SHA-256 `d758ee6639488dab875b54b729feead7251e482c3671b9f44bc990edf240d5b0`.
+The new measurements use the official immutable seed snapshot from
+`s13/app-a` commit `60deca0c` (EasyList SHA-256 `756ddc9a…`, EasyPrivacy
+`c1d09df3…`), checked before staging; these differ from the historical
+October measurements. The same staged bytes will be used before and
+after each optimization.
