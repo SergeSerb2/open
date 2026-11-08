@@ -173,8 +173,12 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         results['settings_peek_migration'] = {'ok': migrated == [False, False] and winning == [True, True],
             'legacyCopiedWhenMissing': migrated, 'canonicalWins': winning}
     finally:
-        if not app.closed:
-            app.call('settings-profile', cancel=True)
-            app.call('settings-icon', select='openDefault')
-        restore_defaults(app, saved)
-        app.quit()
+        try:
+            if not app.closed:
+                app.call('settings-profile', cancel=True)
+                app.call('settings-icon', select='openDefault')
+        finally:
+            try:
+                restore_defaults(app, saved)
+            finally:
+                app.quit()
