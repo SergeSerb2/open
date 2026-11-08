@@ -71,7 +71,7 @@ WebKit is informational. Sparkle adds WebKit to the entry image set, while the n
 
 These are measured opportunity bounds, not accepted fix gains:
 
-1. **Check the security scan on the first signed build:** the follow-up below identifies about 157 ms in `syspolicyd` `ChangetimeScan`. Establish its behavior on the actual notarized distribution before proposing a shipping change. Changing the harness request is not a product launch improvement.
+1. **Stop invalidating the security scan cache on every run:** the follow-ups below identify about 148–157 ms in `syspolicyd` `ChangetimeScan`, then identify Chromium's per-run code-sign clone hard link as the ctime writer. The feature can be disabled from the App, but its update-safety purpose must be preserved or proved unnecessary before shipping that choice. The first signed-build check remains required. Changing the harness request is not a product launch improvement.
 2. **Reduce the executable's real loader footprint only if worthwhile:** the measured pool is about 5.9 ms. Class/Swift metadata registration,48.8k fixups and touched code/signature pages remain combined. A module split or metadata reduction cannot claim the full 107 ms hypothesis from this evidence.
 3. **Embedded framework work is low priority:** roughly 1 ms in the Swift floor and 3 ms in the C graph control. Do not revive Sparkle/framework-delay candidates without a new measured gain.
 
@@ -194,18 +194,74 @@ That launch ran at load1 12.249→14.151. It is functional metadata evidence, no
 | Entry-only copy of Open's signature-information query |All three Security calls succeed; no ctime advance.|`SecCodeCopySelf`, `SecCodeCopyStaticCode` and `SecCodeCopySigningInformation` alone are insufficient. No identity or Keychain was accessed.|
 | Earlier opt-in metadata-call trace |No matching metadata setter caught in Open or its CEF helpers, while ctime still advances.|No writer identified. Missing calls, direct syscalls and external writers remain possible; this negative result does not prove an OS writer.|
 
-The auxiliary entry controls and traces are historical research evidence from before the new interposer ban. They supply no product change and will not be reused. The attempted broader trace failed its loader-only check before NSApplication/window creation: `Open-2026-11-08-022918.ips`, SIGABRT, `_tlv_bootstrap_error` from the research library's `wrap_mmap`. It is a research-instrument failure, excluded from the evidence above. All launch work stopped immediately. The lead was notified; no M5 on-screen work resumes without “M5 clear”. No further experiments run tonight. `DYLD_INSERT_LIBRARIES` and interposer experiments are now prohibited on every machine.
+The auxiliary entry controls and traces are historical research evidence from before the new interposer ban. They supply no product change and will not be reused. The attempted broader trace failed its loader-only check before NSApplication/window creation: `Open-2026-11-08-022918.ips`, SIGABRT, `_tlv_bootstrap_error` from the research library's `wrap_mmap`. It is a research-instrument failure, excluded from the evidence above. All launch work stopped immediately. The lead was notified, and research remained stopped overnight until the morning's explicit M5 clearance. `DYLD_INSERT_LIBRARIES` and interposer experiments remain prohibited on every machine.
 
-The established cause of the repeated delay is **security re-assessment, with executable ctime advancing during full runs**. The exact writer is unresolved. The unchanged bundle and before-engine control do not support bundle size or nested-code count alone as the reason for a ctime advance on every full launch. They do not exclude those factors from the scan's duration. Nearby `syspolicyd` bastion/XProtect messages have private target paths and do not prove that either service wrote Open's metadata. No product or harness writer has yet been demonstrated, so no fix is proposed.
+The overnight audit established **security re-assessment, with executable ctime advancing during full runs**. At that point the exact writer was unresolved. The unchanged bundle and before-engine control do not support bundle size or nested-code count alone as the reason for a ctime advance on every full launch. They do not exclude those factors from the scan's duration. Nearby `syspolicyd` bastion/XProtect messages have private target paths and do not prove that either service wrote Open's metadata. No product or harness writer has yet been demonstrated, so no fix is proposed.
 
-**Open question:** which writer in or after engine init advances the executable's ctime?
+**Open question at 02:32:** which writer in or after engine init advances the executable's ctime? The morning follow-up below resolves it.
 
-**Next step:** find the writer without interposers: compare ctime before and after runs that stop at successive engine milestones, using the App's existing launch marks. This is pending screen clearance and a later research session.
+**Next step recorded at 02:32:** find the writer without interposers: compare ctime before and after runs that stop at successive engine milestones, using the App's existing launch marks. Work resumed after the lead cleared the M5 screen in the morning.
 
 Evidence is retained in `.re/s16/launch-fixes/pre-main/launchservices/window-audit/`: `window.ndjson`, `index.py`, `primary-scans.json` (bundle/PID and exact log-line references for every cell), `scan-spans.json`, `audit-summary.json`, the before/live/after `.json`, `.stat` and `.xattr` snapshots, `functional.json`, `appkit-probe.json`, `early-quit.json`, `load-probe.json`, `spawn-probe.json`, `signature-probe.json`, and the two completed trace directories. No new timing set or product change was made.
 
-## Current-source validation block
+## Writer found: Chromium's code-sign clone hard link
 
-After merging main `caf42f74`, the real Release build of diagnostic source `0922a78c` ran through the S16 wrapper against `open-engine-s8-main`. It exited 65 in 7.3 seconds at load1 5.11→5.18. Unchanged main engine sources require absent `cef_open_world.h`, absent `cef_site_control.h`, and `CefOpenPageHandler.OnSecurityStateChanged`. The authorized view is stale. No other engine root was used or fetched.
+**The writer is Chromium's `CodeSignCloneManager`.** During engine initialization it APFS-clones the App, replaces the clone's main executable with a hard link to the running App's executable, and later removes that link through its cleanup helper. Creating and deleting a hard link changes the source inode's ctime and link count without changing its bytes, mtime or xattrs. This explains both changes observed overnight.
 
-Per the lead instruction, current-source build validation stops there. The pending media, firstrun, window, updater and full M5 verify-all checks remain blocked on the refreshed view. Earlier updater 21/21 and menu 107-route evidence belongs to the earlier pinned cohort. It is not current-head acceptance. PR #251 is not ready to merge.
+The call path in the authorized read-only Chromium source view is:
+
+| Source under `chromium/src/` | Evidence |
+|---|---|
+| `chrome/browser/chrome_browser_main_mac.mm:79` |`ChromeBrowserMainPartsMac` constructs `code_sign_clone_manager_` with the outer bundle and main executable name.|
+| `chrome/browser/mac/code_sign_clone_manager.mm:513` |`kMacAppCodeSignClone` is enabled by default. The constructor checks that feature at line 524, then posts `Clone` at lines 543–546.|
+| Same file, lines 623, 338 and 294 |`Clone` calls `CloneApp`, which calls `HardLinkMainExecutable`; its `link(source, destination)` creates the additional reference to the original executable.|
+| Same file, lines 550–559 and 734–765 |The destructor launches the cleanup helper. It waits for the parent to exit and removes the clone directory, including the hard link.|
+| `chrome/browser/mac/code_sign_clone_manager.h:18–49` |The stated purpose is to keep the original executable and its surrounding signed bundle reachable after a live App update. This is code-signature protection, not signing or changing the executable's contents.|
+
+No engine source was edited, and no git command ran in that source tree. `source-evidence.json` records the viewed files' SHA-256 values and line ranges; the retained excerpts identify the exact source used. The runtime evidence below independently proves that this path runs in Open.
+
+### Separate-process stat observation
+
+The observer requests a poll every 2 ms and records `st_ctime_ns` (the full `st_ctimespec` value), mtime, inode, device, link count, size and mode. It watches the executable, bundle root and immediate framework/helper entries. It runs in a separate process, without attachment, root, `fs_usage` or an interposer. It also records the matching clone path and inode while the hard link exists. Ordinary functional launches take only the screen lock. They are not timing or budget receipts.
+
+| Functional run | Executable metadata changes | Result |
+|---|---|---|
+| Frozen normal App |09:29:39.524486043: links 1→2; 09:29:41.012449262: 2→1|The live `Open.app.bundle/Contents/MacOS/Open` clone has the original's device and inode. Observed change-boundary poll gaps are 3.200/3.277 ms.|
+| Same executable with `--disable-features=MacAppCodeSignClone` |None through first paint and clean exit|Link count stays 1; ctime and executable SHA-256 stay fixed. The feature switch is passed through the existing process command line to CEF.|
+| Same executable, existing quit-before-engine path |None|`terminationSkippedEngine` confirms a clean exit before engine initialization.|
+| Current merged Debug, normal feature state |09:35:04.641391754: links 1→2; 09:35:05.624395400: 2→1|The live clone again has the original's device/inode. Change-boundary poll gaps are 2.676/2.618 ms. This build uses the refreshed main engine view.|
+
+All four runs keep their executable SHA-256 unchanged, exit cleanly and leave no owned process. No observed bundle-root/framework/helper metadata changes occur. Loads before→after are 10.40→11.01, 16.59→17.42, 33.46→33.46, and 17.27→15.84. The observer's requested interval is not a real-time scheduling guarantee: maximum gaps elsewhere are 35.0/45.8/23.5 ms in the normal, disabled and current Debug runs. Those gaps are retained; the two link transitions in each normal run are bracketed within 3.3 ms, and the inode itself supplies each exact ctime value.
+
+The existing Debug signposts place the first ctime change **inside `CefInitialize`**:
+
+| Event, 2026-11-08 GMT−07:00 | Timestamp | Evidence |
+|---|---|---|
+| `engineStart` |09:35:04.542080|`current-debug/unified.ndjson:1720`|
+| `cefInitializeBegin` |09:35:04.570891|Line 1730|
+| Executable hard link, links 1→2 |09:35:04.641391754|`current-debug/stat.ndjson`; matching clone device/inode|
+| `cefInitializeEnd` |09:35:04.683469|Line 1833|
+| `engineStarted` |09:35:04.683547|Line 1834|
+| `engineInitialized` |09:35:04.688707|Line 1866|
+| `firstLoadEnd` |09:35:04.899971|Line 2027|
+| `updaterCreated` |09:35:05.032134|Line 2146|
+
+The hard link already exists before `CefInitialize` returns and before the later navigation/updater marks. The existing before-engine stop, the same-inode clone and the feature-off full run isolate the writer directly. No new milestone executable or crash-prone probe was needed. `--enable-logging=stderr --v=1 --verbose` reaches Chromium; its ordinary logs are retained alongside the signposts.
+
+The prior launch's link creation/removal advances the executable ctime **after** that launch's pre-entry assessment. The next LaunchServices request therefore sees a changed executable and scans again. This sequence explains why unchanged in-place Open bundles scan repeatedly while the empty-entry controls stay warm. It is not evidence of a source-file write, an updater installation, or a bundle-size-only cache policy.
+
+### Fix options and remaining gate
+
+The existing App/engine configuration can append `--disable-features=MacAppCodeSignClone` before CEF starts. The functional control proves that this removes the ctime writer; it does not measure a shipping launch gain. No product default or switch was changed in this PR.
+
+For Debug/ad-hoc builds with no in-place updater, an App-side opt-out is the bounded option. For shipping builds, first prove the updater never replaces a bundle while its old process is alive, or preserve Chromium's protection. A protection-preserving engine option is to keep and reuse an executable/version-specific anchor across launches, with safe multi-instance/update cleanup, instead of creating and deleting a hard link every run. That needs an engine-owner design and authorized root; it is not implemented here. Simply delaying the clone until after paint would still invalidate the next launch's assessment.
+
+The 148–157 ms scan is the measured opportunity bound from earlier paired research. These functional runs do not establish its removal on the first notarized Developer ID distribution, and do not accept the sidebar/paint budgets. The signed-build check above remains required.
+
+Raw evidence is in `.re/s16/launch-fixes/pre-main/ctime-writer/`: `summary.json`, `source-evidence.json`, source excerpts, and `normal/`, `clone-disabled/`, `before-engine/`, `current-debug/` receipts and stat logs. `current-debug/phase-signposts.json` indexes the unified-log lines. Frozen batch artifacts and the engine source tree remain untouched.
+
+## Current-source validation
+
+The earlier Release build of diagnostic source `0922a78c`, after merging main `caf42f74`, exited 65 in 7.3 seconds at load1 5.11→5.18. Main required missing world/site-control headers and a security-state callback in the authorized engine view. Validation stopped at that external block; no other engine root was used or fetched.
+
+The lead refreshed `open-engine-s8-main` in the morning to main's engine SHA-256 `47af3007153a883fac2acd10e491451de0abcac030c4fbebb14f15f1052115d9`. Main `cdd147ca` merged cleanly in `fc007a04`. The Debug build through `s16-heavy.sh`, with that authorized root exported, passes in 87.8 seconds at load1 44.08→28.67. Media, firstrun, window, updater and full M5 verify-all validation are in progress. The real current-Debug functional launch and cleanup also pass. Earlier updater 21/21 and menu 107-route evidence still belongs to the earlier pinned cohort. It is not current-head acceptance. PR #251 is not ready to merge.
