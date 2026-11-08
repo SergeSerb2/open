@@ -6,6 +6,7 @@ build/
 DerivedData/
 docs/engine-spike/firstrun/
 docs/engine-spike/results-firstrun-*.json
+docs/engine-spike/results-onboarding-*.json
 *.xcodeproj/
 *.xcworkspace/
 xcuserdata/

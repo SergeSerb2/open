@@ -81,7 +81,10 @@ extension AutomationController {
       "urlField": factory.controller?.sidebar.displayedURLText ?? "",
       "layout": page.map { welcomeLayout($0) } as Any? ?? NSNull(),
       "cards": page?.cards.map { ["label": $0.accessibilityLabel() ?? "", "role": $0.accessibilityRole()?.rawValue ?? "",
-        "hovered": $0.isHovered, "trackingAreas": $0.trackingAreas.count,
+        "hovered": $0.isHovered,
+        // AppKit adds its own tooltip tracking area lazily; count only the card's own.
+        "trackingAreas": $0.trackingAreas.filter { [card = $0] area in area.owner === card }.count,
+        "allTrackingAreas": $0.trackingAreas.count,
         "actions": $0.accessibilityCustomActions()?.map(\.name) ?? []] as [String: Any] } ?? [],
       "engineInternalPages": OEEngine.shared.allWebContents.filter { $0.url.map(WelcomeTab.isInternal) == true }.count,
       "hosts": factory.welcomeHosts.map { id, host in ["tab": id.description, "visible": host.page.visible,
