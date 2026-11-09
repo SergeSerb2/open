@@ -67,21 +67,22 @@ extension AutomationController {
           if let on = args["history"] as? Bool { flow.includeHistory = on }
           if let on = args["secrets"] as? Bool { flow.includeSecrets = on }
         case "import":
-          guard flow.step == .welcome else { throw Failure(message: "not on Welcome") }; flow.showImport()
+          guard let steps = app.onboardingWindowController?.steps, steps.step == .name else { throw Failure(message: "not on Name") }
+          if flow.probe == nil { await flow.refreshProbe() }; steps.next()
         case "fresh":
-          guard [.welcome, .importChoices, .failed].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; flow.startFresh()
+          guard [.welcome, .importChoices, .failed, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() }
         case "back":
           guard [.importChoices, .failed].contains(flow.step) else { throw Failure(message: "Back is unavailable") }
-          flow.step = flow.step == .importChoices ? .welcome : .importChoices
+          if let steps = app.onboardingWindowController?.steps { steps.back() }
         case "notnow":
           guard [.importChoices, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Not Now is unavailable") }
-          if flow.step == .importChoices { flow.skipImport() } else { flow.finish() }
-        case "finish": guard flow.step == .defaultBrowser else { throw Failure(message: "not on default-browser step") }; flow.finish()
+          if let steps = app.onboardingWindowController?.steps { if steps.step == .importData { await steps.skipToDefault() } else { steps.finishFromDefault() } }
+        case "finish": guard flow.step == .defaultBrowser else { throw Failure(message: "not on default-browser step") }; app.onboardingWindowController?.steps?.finishFromDefault()
         case "continue", "retry":
           if flow.step == .report {
-            if flow.errorText == FirstRunViewModel.importedSaveError { app.finishFirstRun(imported: true) }
+            if flow.errorText == FirstRunViewModel.importedSaveError { if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() } }
             else if action == "retry", flow.errorText != nil, !flow.wizard.hasImportedData { flow.showImport() }
-            else { flow.enterDefaultBrowser() }
+            else if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault() }
           } else {
             guard firstRunActionTask == nil, [.importChoices, .failed].contains(flow.step) else { throw Failure(message: "import is not ready") }
             firstRunActionTask = Task { @MainActor [weak self] in
@@ -98,6 +99,7 @@ extension AutomationController {
     let current = app.firstRunWindowController?.model
     var state: [String: Any] = ["active": app.firstRunWindowController?.window?.isVisible == true,
       "step": current?.step.rawValue ?? app.lastFirstRunStep,
+      "screen": app.onboardingWindowController?.steps?.step.rawValue ?? "done",
       "importInProgress": app.importInProgress,
       "historyInProgress": app.importRunner.historyInProgress,
       "historyProcessed": app.importRunner.historyProcessed,

@@ -76,14 +76,19 @@ def run(factory, results, tmp, h):
         app.call('snapshot', path=str(path), window=inspection['window'])
         width, height, pixel = h.read_image(str(path), srgb=True)
         sy = height / inspection['frameSize'][1]
+        sx = width / inspection['frameSize'][0]
+        # The report is hosted in setup's 520-point left panel, with a
+        # 56-point content inset and 10-point row inset. Inspect its actual
+        # value column, rather than the illustration on the right.
+        value_right = (520 - 56 - 10) * sx
         # Only the value half of the Boosts row, excluding its label and other rows.
         red = sum(r > g + 40 and r > b + 20
                   for y in range(int((middle - 9) * sy), int((middle + 9) * sy))
-                  for x in range(int(width * .45), int(width * .95))
+                  for x in range(int(250 * sx), int(value_right))
                   for r, g, b in [pixel(x, y)])
         # Vision can omit an isolated digit. Check visible ink as well as
         # the outcome; the zero case also requires its enclosed ring.
-        left, right = int(width * .88), int(width * .95)
+        left, right = int(value_right - 40 * sx), int(value_right)
         top, bottom = int((middle - 9) * sy), int((middle + 9) * sy)
         area = {(x, y) for y in range(top, bottom) for x in range(left, right)}
         ink = {point for point in area if min(pixel(*point)) > 120}
