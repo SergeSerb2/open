@@ -11,7 +11,7 @@ public struct PasswordsImportCopy: Sendable {
     public init(canImport:Bool,savedItems:Int?) {self.canImport=canImport;self.savedItems=savedItems}
     public var title:String {canImport ? "Import passwords and cookies from Arc?":"Passwords and cookies can't be imported yet."}
     public var body:String {
-        if canImport {return "Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else."}
+        if canImport {return "Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else. " + ArcSecretsImportReport.passkeyMessage}
         if let savedItems {return "Open found \(ImportCountCopy.phrase(savedItems,singular:"saved item",plural:"saved items")) in Arc. Open didn't read or copy \(savedItems == 1 ? "it":"them")."}
         return "Open didn't read or copy passwords or cookies. You can continue without them."
     }
@@ -261,18 +261,21 @@ public struct FirstRunView:View {
         brand.padding(.bottom,16)
         Text(model.phaseText).font(.headline).padding(.bottom,12)
         Group {if let value=model.progress {ProgressView(value:value)} else {ProgressView().progressViewStyle(.linear)}}.frame(width:320).accessibilityValue(model.phaseText)
-        if model.browserHasLanded {Text("Your browser is ready. History is still importing in the background.").frame(width:SettingsTokens.firstRunSparseTextWidth).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.top,12)}
+        if model.browserHasLanded && model.phaseText == "Importing your history…" {Text("Your browser is ready. History is still importing in the background.").frame(width:SettingsTokens.firstRunSparseTextWidth).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.top,12)}
     }}}
     private var report:some View {VStack(alignment:.leading,spacing:10) {
         if !embeddedImport {Text("Import complete").font(.title2)}
         ScrollView {VStack(alignment:.leading,spacing:10) {
             Text(model.reportSummary).fixedSize(horizontal:false,vertical:true)
-            SettingsGroup {ForEach(Array(ImportWizardViewModel.reportCategories.enumerated()),id:\.element) {index,name in
-                SettingsRow(height:30,divider:index != ImportWizardViewModel.reportCategories.count-1) {HStack {
+            SettingsGroup {ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
+                SettingsRow(height:30,divider:index != model.wizard.displayedReportCategories.count-1) {HStack {
                     Text(ImportCountCopy.displayCategory(name));Spacer();
                     Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? secondary:Color.primary)
                 }}
             }}
+            ForEach(model.wizard.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
+            if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(secondary) }
+            if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).foregroundStyle(secondary) }
             if embeddedImport, model.outcome?.errorText != nil, !model.wizard.hasImportedData {Button("Try Again") {model.showImport()}}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}

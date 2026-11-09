@@ -45,7 +45,7 @@ An Arc user who switches to Open keeps their logins and can keep saving and fill
 6. "Manage Passwords" (command bar), the Passwords row, and the dropdown footer open `chrome://password-manager/passwords` for the right profile (P-13, P-14).
 7. Nothing crashes on any password, card, address, or passkey path in a hosted tab (P-15; §2 names one crash that exists today and one rule that prevents another).
 8. A persistent cookie and a session cookie survive quit and relaunch; `Cookies` stores them encrypted (C-1…C-3).
-9. Import of a synthetic two-profile Arc fixture writes each record to the mapped Open profile only; a second run adds 0 records; a forced stop after any step and a re-run end in the same state (I-1…I-8).
+9. Import of a synthetic two-profile Arc fixture writes each record to the mapped Open profile only; a second run adds 0 records; a forced stop after any step and a re-run end in the same state. Deleting a destination Profile cancels its import and keeps its folders absent after relaunch (I-1…I-9).
 10. No code path reads, creates, or writes "Chromium Safe Storage". Real secrets are never written under Chromium's mock key (K-1…K-3, P-22, I-8).
 11. No unit tests. Every check runs the real app (AGENTS.md rule 6).
 
@@ -646,7 +646,7 @@ Chromium's HTTP auth dialog is web-modal too. With H-7 the native modal path is 
    - `canEnablePasswordSaving` and `canEnableCreditCardsSaving` return NO.
    - `canImportPasswordsAndCookies` is false (§7.4); the wizard shows its "can't be imported yet" copy.
    - The e2e harness passes `--open-allow-mock-keychain-secrets`, which permits password/card prompts and their `canEnable*` switches. It never permits imported real secrets.
-   - Errata (lead decision, 2026-11-06): all four §5.3 import methods fail closed with `OEErrorMockKeychain = 8` unless the process has that switch AND every record passes a browser-process fixture check before any write. Both login `signon_realm` and `origin_url` hosts must be `example.com`, a subdomain of `example.com`, `localhost`, or `127.0.0.1`. Cookie domains, after removing a leading dot, must match that host allowlist. Card numbers must be one of the public test values `4111111111111111`, `5555555555554444`, or `378282246310005`. Addresses are allowed with the switch. One non-fixture record rejects the whole batch without writes. Real-key engines do not apply the fixture check. The real wizard still refuses on mock-key engines (§7.4), even with the switch; only synthetic imports use this exception.
+   - Errata (lead decision, 2026-11-06): all four §5.3 import methods fail closed with `OEErrorMockKeychain = 10` unless the process has that switch AND every record passes a browser-process fixture check before any write. Both login `signon_realm` and `origin_url` hosts must be `example.com`, a subdomain of `example.com`, `localhost`, or `127.0.0.1`. Cookie domains, after removing a leading dot, must match that host allowlist. Card numbers must be one of the public test values `4111111111111111`, `5555555555554444`, or `378282246310005`. Addresses are allowed with the switch. One non-fixture record rejects the whole batch without writes. Real-key engines do not apply the fixture check. The real wizard still refuses on mock-key engines (§7.4), even with the switch; only synthetic imports use this exception.
 5. Release builds: release.md §4.4 already treats repeated Keychain prompts as a defect. §9.5 adds the checks.
 
 ### 7.2 At rest
@@ -687,6 +687,10 @@ Profile folders are created with mode 0700 (`S_IRWXU` in `base::CreateDirectory`
 - `OESavePrompt.username` is never logged; the automation event log records `kind` and `displayHost` only, and only for fixture hosts.
 
 ## 8. Import write path
+
+**Section 15 App/fixture errata (2026-11-08):** Address and card fixture GUIDs must be valid UUID strings. Address street tokens use stored type 77 (`ADDRESS_HOME_STREET_ADDRESS`), not derived type 30 (`ADDRESS_HOME_LINE1`); name type 7 remains stored. A cookie partition key must use canonical schemeful-site serialization. The synthetic Secure cookie uses a canonical HTTPS localhost partition site. These fixture corrections are documented with source evidence in [the import fixture notes](../re/import-secrets-fixture.md).
+
+`AppImportRunner` registers once as a `ProfileDataOwner`. Retirement marks both the Profile ID and directory as retired, cancels and awaits a mapped import task, drains pending sink writes, and drops the sink context and reload callback before folder removal. A retired destination is refused before context lookup. Cancellation checks before ledger begin, step commit, and finish prevent late ledger writes. The runner does not remove Profile folders or change the ledger during retirement. The same tracked task owns real consented imports and synthetic imports. Ten runnable M5 synthetic acceptance rows passed, including both Profile deletion cases and both mock-key wizard switch modes; I-5/I-6 recovery probes remain M1-only. See the [count-only acceptance receipt](../engine-spike/imported-secrets-acceptance.md).
 
 ### 8.1 Shape and profile mapping
 
@@ -871,6 +875,16 @@ The fixture extends `SyntheticSecretsFixture`: two Arc profile directories (`Def
 | I-6 | Same with the kill during the cookie step | Same as I-5 |
 | I-7 | `/echo-cookies` in each profile after a relaunch | Each profile sends only its imported cookie names |
 | I-8 | Wizard on a mock-key build (with or without the e2e flag) | Passwords step shows "can't be imported yet"; no consent token is created (automation counts adapter calls) |
+| I-9-completed | Import into Work, reassign its Space to Default, delete Work through Settings, quit and relaunch | Work's App and engine folders (including the cache) stay absent, its context is gone, the ledger is unchanged, a request for the deleted destination is refused, and Default's counts stay unchanged; no crash |
+| I-9-in-progress | Hold Work's real fixture batch after its logins step with `pause:"after-logins", pauseProfile:"Profile 1"`; delete through the same Settings flow, quit and relaunch | The runner cancels and drains the batch, drops Work's sink, and passes the same folder, ledger and Default checks as I-9-completed; no crash |
+
+`AppImportRunner` registers once as a `ProfileDataOwner`. Retirement remembers
+both the Profile ID and directory for the rest of the process. It cancels and
+awaits the mapped secrets task, drains outstanding engine writes, and releases
+the sink and cookie reload callback. Only `ProfileTeardown` removes folders.
+Cancellation is checked before each ledger write, including the final write.
+I-5 and I-6 intentionally kill Open and run only on the M1. On the M5, set
+`OPEN_E2E_NO_CRASH_PROBES=1`; those rows report "M1-only by rule; not run".
 
 `openkit verify-secrets-fixture` (CLI) prints the same per-kind counts with a counting sink.
 
@@ -954,7 +968,7 @@ Agents may not launch Arc (AGENTS.md rule 4). Use a throwaway test account on a 
 - `docs/engine-patches.md`: add P9 "Passwords and autofill bridge" pointing here (Step 1).
 - `docs/engine-api.md`: new section from §5 (Step 2).
 - `docs/automation.md`: §9.1 commands (Step 4).
-- `docs/plans/first-run.md` §5.4 and S-3: remove "until the browser engine can store secrets, this step checks and counts only" once Step 5 lands.
+- `docs/plans/first-run.md` §5.4 and shared S-3/S-4 now describe consented writes through each mapped engine Profile and counts-only reports. Mock-key builds keep the real capability OFF; synthetic acceptance and the user-present real Keychain check are separate gates.
 - `docs/plans/release.md` §4: entitlement change after Q-3 and U-9.
 - `docs/status.md`: §1.15 "Write imported secrets", §1.17 "Password manager", §3.1 gaps 1–2, §5.4 decision → planned, citing this plan.
 - `docs/plans/settings-library.md` P-9: the row label is "Credit Cards" (IS §18; the code already says so); Arc's symbol for it is `creditcard.and.123` (PW-5).
