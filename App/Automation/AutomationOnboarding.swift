@@ -56,6 +56,15 @@ extension AutomationController {
     }
     var state = app.onboardingWindowController?.state ?? app.onboardingReceipt ?? ["active": false, "screen": "done", "phase": "inactive", "dim": ["exists": false, "alpha": 0]]
     state["moduleActive"] = app.onboardingActivated
+    state["launchTiming"] = LaunchTiming.shared.report
+    state["audioPreparationPending"] = app.preparedOnboardingSound != nil
+    var startup = app.onboardingStartup
+    if let firstFrame = state["firstFrameHostTime"] as? Double,
+       let launch = startup["launchHostTime"] as? Double {
+      startup["firstOnboardingFrameHostTime"] = firstFrame
+      startup["launchToFirstOnboardingFrameMS"] = (firstFrame-launch)*1000
+    }
+    state["startup"] = startup
     if app.frontWindowController != nil { state["welcome"] = try welcome(["action": "state"]) }
     return state
   }

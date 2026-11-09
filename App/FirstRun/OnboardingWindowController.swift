@@ -37,10 +37,6 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   var steps: OnboardingStepsController?
   private let dim: NSWindow
   private var started = false
-  private var engineSettled = false
-  private var startRequested = false
-  private var measureFrames = false
-  private var startObserver: CFRunLoopObserver?
   private let dimView = NSView()
   #if OPEN_AUTOMATION
   private var staticProof: [String: Any]?
@@ -55,18 +51,17 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   #if OPEN_AUTOMATION
   private var screenObserver: (any NSObjectProtocol)?
   #endif
+  var onFirstFrame: (@MainActor () -> Void)?
   var onHandoff: (@MainActor () -> Void)?
   var onRelease: (@MainActor ([String: Any], UInt64) -> Void)?
 
-  init(options: LaunchOptions, replay: Bool) {
+  init(options: LaunchOptions, replay: Bool, preparedSound: IntroSound) {
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("onboarding.window.create")
     defer { pacingRegion?.end() }
     #endif
     self.replay = replay
     residentBaseline = Self.residentBytes()
-    let preparedSound = IntroSound(mode: IntroSound.Mode(rawValue: options.introSound) ?? .normal)
-    preparedSound.prepare()
     let screen = NSScreen.main ?? NSScreen.screens.first
     var size = OnboardingTokens.windowSize
     if let frame = screen?.frame, frame.width <= size.width && frame.height <= size.height {
@@ -143,63 +138,52 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   }
   isolated deinit {
     lifecycle.forEach { $0.cancel() }
-    if let startObserver { CFRunLoopObserverInvalidate(startObserver) }
     #if OPEN_AUTOMATION
     if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
     #endif
   }
 
-  func showIntro(measureFrames: Bool, engineReady: Bool) {
-    #if OPEN_AUTOMATION
-    let region = IntroPacingTrace.begin("onboarding.window.show")
-    defer { region?.end() }
-    #endif
-    guard let window else { return }
-    dim.orderFront(nil); showWindow(nil); window.makeKeyAndOrderFront(nil); window.makeFirstResponder(intro)
-    guard !started else { return }; started = true
-    self.measureFrames = measureFrames
-    intro.onFirstPresentation = { [weak self] in self?.beginWhenReady() }
-    intro.observeRoomPresentation()
+  /// The engine is already ready and has returned from its first source burst.
+  /// Keep both windows unshown until the common audio/animation start.
+  func showIntro(measureFrames: Bool) {
+    guard let window, !started else { return }; started = true
+    window.contentView?.layoutSubtreeIfNeeded()
     window.displayIfNeeded()
-    if engineReady { engineDidBecomeReady() }
-  }
-
-  /// This observer runs only in the engine's native message loop, after its
-  /// first sources and before-waiting work return. The room stays static.
-  func engineDidBecomeReady() {
-    guard startObserver == nil, !engineSettled else { return }
-    let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { [weak self] _, _ in
-      MainActor.assumeIsolated {
-        guard let self else { return }
-        self.startObserver = nil; self.engineSettled = true; self.beginWhenReady()
-      }
+    func rasterize(_ layer: CALayer) {
+      layer.displayIfNeeded()
+      (layer.sublayers ?? []).forEach(rasterize)
+      if let mask = layer.mask { rasterize(mask) }
     }
-    startObserver = observer
-    if let observer { CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes) }
-  }
-
-  private func beginWhenReady() {
-    guard engineSettled, intro.firstFrameHostTime != nil, !startRequested, !closingForHandoff else { return }
-    startRequested = true
-    guard window?.isVisible == true else { return }
+    if let layer = intro.layer { rasterize(layer) }
+    CATransaction.flush()
     sound.scheduleStart { [weak self] hostTime in
         guard let self, !closingForHandoff else { return }
         #if OPEN_AUTOMATION
         staticProof = ["hostTime": CACurrentMediaTime(), "scene": intro.staticSceneState,
           "dim": IntroView.staticLayerState(dim.contentView?.superview?.layer ?? dimView.layer), "musicStarted": sound.musicHasStarted,
+          "windowVisible": window.isVisible, "dimVisible": dim.isVisible,
           "audioStartHostTime": sound.audioStartHostTime as Any? ?? NSNull(),
           "scheduledPlayhead": sound.scheduledPlayhead, "scheduledDeviceLeadMS": sound.scheduledDeviceLead*1000]
         #endif
         lifecycle.append(Task { [weak self] in
           try? await Task.sleep(for: .seconds(max(0, hostTime-CACurrentMediaTime())), tolerance: .zero)
           guard !Task.isCancelled, let self, !closingForHandoff else { return }
-          // No animation keys are installed before this transition. All visual
-          // tracks and the dim overlay share this t=0 with scheduled playback.
+          // No window or animation is visible before this transition. Submit
+          // the window, scene and dim fade together at scheduled playback.
           let start = CACurrentMediaTime()
           #if OPEN_AUTOMATION
           sound.animationWillStart(at: start)
           #endif
+          intro.onFirstPresentation = { [weak self] in self?.onFirstFrame?() }
           intro.start(at: start, measureFrames: measureFrames)
+          intro.observeRoomPresentation()
+          #if OPEN_AUTOMATION
+          let showRegion = IntroPacingTrace.begin("onboarding.window.show")
+          #endif
+          dim.orderFront(nil); showWindow(nil); window.makeKeyAndOrderFront(nil); window.makeFirstResponder(intro)
+          #if OPEN_AUTOMATION
+          showRegion?.end()
+          #endif
           #if OPEN_AUTOMATION
           let dimRegion = IntroPacingTrace.begin("onboarding.dim.animate")
           defer { dimRegion?.end() }
@@ -211,7 +195,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
           fade.duration = IntroTimeline.beat(intro.reduceMotion ? "reduceFade" : "dim").end
           fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
           dimView.layer?.add(fade, forKey: "intro-dim")
-          CATransaction.commit()
+          CATransaction.commit(); CATransaction.flush()
           lifecycle.append(Task { [weak self] in
             try? await Task.sleep(for: .seconds(IntroTimeline.beat("measureMemory").start))
             guard !Task.isCancelled, let self else { return }
@@ -298,7 +282,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
     return false
   }
-  func stop() { if let startObserver { CFRunLoopObserverInvalidate(startObserver); self.startObserver = nil }; lifecycle.forEach { $0.cancel() }; lifecycle.removeAll(); intro.stop(); sound.stop(); dim.close() }
+  func stop() { lifecycle.forEach { $0.cancel() }; lifecycle.removeAll(); intro.stop(); sound.stop(); dim.close() }
   var state: [String: Any] {
     var state = intro.state
     state["active"] = window?.isVisible == true

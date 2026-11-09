@@ -1,7 +1,22 @@
 import AppKit
+import QuartzCore
 import OpenOnboarding
 
 extension AppDelegate {
+  /// First-run only. No scene or window exists while engine.start blocks.
+  /// Returning launches never enter this preparation path.
+  private func prepareOnboardingSound() {
+    guard preparedOnboardingSound == nil else { return }
+    #if OPEN_AUTOMATION
+    if options.measureIntroFrames, IntroPacingTrace.current == nil { IntroPacingTrace.current = IntroPacingTrace() }
+    if onboardingStartup.isEmpty {
+      onboardingStartup["launchHostTime"] = CACurrentMediaTime()-LaunchTiming.shared.elapsedMilliseconds/1000
+    }
+    #endif
+    let sound = IntroSound(mode: IntroSound.Mode(rawValue: options.introSound) ?? .normal)
+    sound.prepare(); preparedOnboardingSound = sound
+  }
+
   /// This is the only production entrance into OpenOnboarding. Returning and
   /// skip-first-run launches do not initialize a scene, resource or player.
   func showOnboarding(replay: Bool) {
@@ -9,13 +24,37 @@ extension AppDelegate {
       controller.showWindow(nil); return
     }
     guard replay || !onboardingHandedOff else { return }
+    prepareOnboardingSound()
+    guard engineReady else { return }
+    if isFirstRun && !firstRunSaved && !onboardingEngineSettled {
+      guard onboardingStartObserver == nil else { return }
+      let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { [weak self] _, _ in
+        MainActor.assumeIsolated {
+          guard let self, !terminationRequested else { return }
+          onboardingStartObserver = nil; onboardingEngineSettled = true
+          #if OPEN_AUTOMATION
+          onboardingStartup["engineSettledHostTime"] = CACurrentMediaTime()
+          onboardingStartup["windowsBeforeEngineSettled"] = NSApp.windows.filter { $0.isVisible }.count
+          #endif
+          showOnboarding(replay: replay)
+        }
+      }
+      onboardingStartObserver = observer
+      if let observer { CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes) }
+      return
+    }
     onboardingWindowController?.stop()
     #if OPEN_AUTOMATION
-    IntroPacingTrace.current = options.measureIntroFrames ? IntroPacingTrace() : nil
     let pacingRegion = IntroPacingTrace.begin("onboarding.controller.create")
     defer { pacingRegion?.end() }
+    onboardingStartup["windowCreationHostTime"] = CACurrentMediaTime()
     #endif
-    let controller = OnboardingWindowController(options: options, replay: replay)
+    guard let sound = preparedOnboardingSound else { return }
+    preparedOnboardingSound = nil
+    let controller = OnboardingWindowController(options: options, replay: replay, preparedSound: sound)
+    #if OPEN_AUTOMATION
+    controller.onFirstFrame = { [weak self] in self?.startAutomationIfNeeded() }
+    #endif
     onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
     controller.onHandoff = { [weak self] in
       guard let self else { return }
@@ -35,7 +74,7 @@ extension AppDelegate {
         self?.onboardingReceipt = final
       }
     }
-    controller.showIntro(measureFrames: options.measureIntroFrames, engineReady: engineReady)
+    controller.showIntro(measureFrames: options.measureIntroFrames)
   }
   func showFirstRunSteps(replay: Bool = false) {
     guard let onboarding = onboardingWindowController, let window = onboarding.window else { return }

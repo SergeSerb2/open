@@ -56,6 +56,9 @@ app.setActivationPolicy(.regular)
 LaunchTiming.shared.phase("finishLaunchingBegin")
 app.finishLaunching()
 LaunchTiming.shared.phase("finishLaunchingEnd")
+// First run has no window until the engine and its first native loop burst
+// return. Returning launches keep this snapshot-before-engine path unchanged.
+if !appDelegate.isFirstRun {
 appDelegate.drawWindowsBeforeEngine()
 LaunchTiming.shared.phase("sidebarSubmitted")
 
@@ -99,6 +102,7 @@ if firstFrame.presented {
 }
 
 appDelegate.firstRunWindowController?.startProbeAfterDisplay()
+}
 
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.
@@ -144,6 +148,7 @@ engineConfigurationRegion?.end()
 OEEngine.shared.delegate = appDelegate
 LaunchTiming.shared.mark("engineStart")
 #if OPEN_AUTOMATION
+if appDelegate.isFirstRun { appDelegate.onboardingStartup["engineStartBeginHostTime"] = CACurrentMediaTime() }
 if let data = try? JSONSerialization.data(withJSONObject: LaunchTiming.shared.report, options: [.sortedKeys]) {
   FileHandle.standardError.write(Data("Open: pre-engine timing ".utf8) + data + Data("\n".utf8))
 }
@@ -172,6 +177,9 @@ do {
   exit(1)
 }
 LaunchTiming.shared.mark("engineStarted")
+#if OPEN_AUTOMATION
+if appDelegate.isFirstRun { appDelegate.onboardingStartup["engineStartEndHostTime"] = CACurrentMediaTime() }
+#endif
 
 #if OPEN_AUTOMATION
 IntroPacingTrace.current?.engineMessageLoopWillStart()

@@ -54,8 +54,7 @@ def run(factory, results, tmp, h):
             if stall['ms'] > 16:
                 print('intro stall %.6f..%.6f %.3f ms %s' %
                       (stall['start'], stall['end'], stall['ms'], ', '.join(stall['regions'])), flush=True)
-        print('intro startup engine.start=%.3f ms room-to-t0=%.3f ms' %
-              (measured.get('preparationMainThreadMS', {}).get('engine.start', 0), measured.get('animationDelayMS', 0)), flush=True)
+        print('intro startup '+json.dumps(measured.get('startup', {}), sort_keys=True), flush=True)
         measured['firstLaunchAfterBuild'] = app.first_launch_after_build
         print('intro audio timing '+json.dumps(measured.get('sound', {}).get('timing', {}), sort_keys=True), flush=True)
         stalls = measured.get('stalls')
@@ -84,7 +83,9 @@ def run(factory, results, tmp, h):
         results['frame_window_completed'] = dict(ok=measured['frameStats']['count'] >= 30
             and not measured['frameStats']['running'], load=os.getloadavg())
         static = measured.get('preAnimationStatic') or {}
-        static_pred = lambda s: bool(s.get('scene', {}).get('static')) and bool(s.get('dim', {}).get('static')) \
+        static_pred = lambda s: s.get('windowVisible') is False and s.get('dimVisible') is False \
+            and all(s.get(k, {}).get('layerCount', 0) > 0 and not s[k].get('animationKeys') \
+                    and s[k].get('presentationDifferences') == 0 for k in ('scene', 'dim')) \
             and s.get('musicStarted') is False and abs(s.get('scheduledPlayhead', 1)) <= .002 \
             and s.get('scheduledDeviceLeadMS', 0) > 0
         # The negative is the actual running scene, read after measurement.
@@ -101,16 +102,17 @@ def run(factory, results, tmp, h):
             and timing['prepareStart'] <= timing['workerReady'] <= timing['decision'] <= timing['t0']
             and timing['workerReady'] <= timing['startRequest']+.3
             and timing['t0'] == measured['animationStartHostTime'], timestamps=timing, load=os.getloadavg())
-        duration = measured.get('animationDelayMS')
-        startup = measured.get('preparationMainThreadMS', {}).get('engine.start')
-        if app.first_launch_after_build:
-            results['static_room_duration_cold'] = dict(status='INFO', ms=duration, engineStartMS=startup,
-                firstLaunchAfterBuild=True, load=os.getloadavg(),
-                reason="static room = cost of the engine's synchronous startup; the intro cannot animate while it runs")
-        else:
-            results['static_room_duration_repeat'] = dict(ok=isinstance(duration, (int, float))
-                and 0 <= duration <= 400, ms=duration, engineStartMS=startup,
-                firstLaunchAfterBuild=False, load=os.getloadavg())
+        startup = measured.get('startup', {})
+        order = [startup.get(k) for k in ('launchHostTime', 'engineStartBeginHostTime',
+            'engineStartEndHostTime', 'engineSettledHostTime', 'windowCreationHostTime', 'firstOnboardingFrameHostTime')]
+        results['engine_before_first_run_window'] = dict(ok=all(isinstance(t, (int, float)) for t in order)
+            and order == sorted(order) and startup.get('windowsBeforeEngineSettled') == 0,
+            timestamps=startup, load=os.getloadavg())
+        results['launch_to_first_onboarding_frame'] = dict(status='INFO', startup=startup,
+            firstLaunchAfterBuild=app.first_launch_after_build,
+            firstFrameAfterAnimationMS=(measured['firstFrameHostTime']-measured['animationStartHostTime'])*1000,
+            reason='first onboarding frame waits for synchronous engine.start and its first native message-loop burst',
+            load=os.getloadavg())
         if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
         # Run every existing functional predicate on a separate unmeasured
         # launch. Its early keys, phase polling and PNGs cannot perturb frames.
@@ -166,6 +168,12 @@ def run(factory, results, tmp, h):
         gate('first_launch_shows_intro', lambda s: s.get('active') and s.get('screen')=='intro' and s.get('moduleActive'), intro, returning)
         inactive = lambda s: not s.get('active') and not s.get('moduleActive') and s.get('phase')=='inactive'
         gate('returning_inactive', inactive, returning, intro)
+        def returning_order(s):
+            timing = s.get('launchTiming', {})
+            return inactive(s) and s.get('audioPreparationPending') is False \
+                and all(k in timing for k in ('sidebarDrawn', 'engineStart', 'engineStarted')) \
+                and timing['sidebarDrawn'] <= timing['engineStart'] <= timing['engineStarted']
+        gate('returning_window_before_engine', returning_order, returning, intro)
         dim_pred = lambda s: s.get('dim', {}).get('exists') and abs(s['dim']['alpha']-.85)<.001 and s['dim']['ignoresMouseEvents'] and s['dim']['child']
         gate('dim_overlay', dim_pred, dim, returning)
         launch('--skip-first-run')

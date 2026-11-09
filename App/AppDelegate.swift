@@ -1,6 +1,4 @@
-#if OPEN_AUTOMATION
 import OpenOnboarding
-#endif
 import AppKit
 import OpenEngine
 import OpenModel
@@ -23,6 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var firstRunWelcomeID: ItemID?
   var firstRunWindowController: FirstRunWindowController?
   var onboardingWindowController: OnboardingWindowController?
+  var preparedOnboardingSound: IntroSound?
+  var onboardingStartObserver: CFRunLoopObserver?
+  var onboardingEngineSettled = false
+  #if OPEN_AUTOMATION
+  var onboardingStartup: [String: Any] = [:]
+  #endif
   var onboardingActivated = false
   var onboardingHandedOff = false
   var onboardingReceipt: [String: Any]?
@@ -182,6 +186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     let icons = wasEngineReady && !windowControllers.isEmpty ? stores.sidebarFavicons : nil
     terminationRequested = true
+    preparedOnboardingSound?.stop(); preparedOnboardingSound = nil
+    if let onboardingStartObserver { CFRunLoopObserverInvalidate(onboardingStartObserver); self.onboardingStartObserver = nil }
     onboardingWindowController?.stop()
     for controller in windowControllers { controller.closeThemeEditor() }
     extensionPrompts.cancelAll()
@@ -669,21 +675,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if !isFirstRun || firstRunSaved { completeLinkRestoration() }
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
-    onboardingWindowController?.engineDidBecomeReady()
     #if OPEN_AUTOMATION
-      let socket =
-        options.automationSocket
-        ?? options.userDataDirectory.appendingPathComponent("automation.sock")
-      let server = AutomationServer(socketURL: socket, controller: AutomationController(app: self))
-      do {
-        try server.start()
-        automation = server
-        FileHandle.standardError.write(Data("Open: automation socket at \(socket.path)\n".utf8))
-      } catch {
-        FileHandle.standardError.write(Data("Open: automation socket failed: \(error)\n".utf8))
-      }
+    if !isFirstRun { startAutomationIfNeeded() }
     #endif
   }
+
+  #if OPEN_AUTOMATION
+  func startAutomationIfNeeded() {
+    guard automation == nil else { return }
+    let socket =
+      options.automationSocket
+      ?? options.userDataDirectory.appendingPathComponent("automation.sock")
+    let server = AutomationServer(socketURL: socket, controller: AutomationController(app: self))
+    do {
+      try server.start()
+      automation = server
+      FileHandle.standardError.write(Data("Open: automation socket at \(socket.path)\n".utf8))
+    } catch {
+      FileHandle.standardError.write(Data("Open: automation socket failed: \(error)\n".utf8))
+    }
+  }
+  #endif
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
     let owner = hostFactories.values.first { $0.isIncognito && $0.incognitoSession?.context === request.context }

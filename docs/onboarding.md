@@ -66,25 +66,29 @@ expired main-actor task from synchronous engine startup cannot discard a ready
 player. The receipt includes `prepareStart`, `workerReady`, `startRequest`,
 `decision` and actual animated `t0` host timestamps.
 
-The first room frame appears before engine startup and stays static while the
-engine starts and returns from its first native message-loop burst. Audio player
-creation, preparation and the first device start stay on an audio worker. After
-that burst, playback is scheduled with the common 80 ms lead. At t=0, the scene
-tracks and the dim layer fade are installed together. No animation keys are
-installed during the static room. A repeat launch of the same binary must keep
-the measured static duration at most 400 ms. The first launch after a build or
-install reports that duration and `engine.start` as INFO: the static room is the
-cost of synchronous engine startup, during which the main thread cannot animate.
-The observed cold engine startup was 2,249 ms and the static room was 2,424 ms;
-the same-binary repeat measured 110 ms and 288 ms. Dyld/signature checks are a
-hypothesis for the cold difference, not an attributed cause. Scheduled audio
-and animation starts must differ by at most 20 ms.
-Returning launches allocate none of this work.
+First run prepares audio off main while the engine starts, without creating an
+onboarding window or dim overlay. After `engine.start` and the first native
+message-loop burst return, it creates and rasterizes the scene while unshown.
+Playback uses the common 80 ms lead. At t=0 it submits the window, every scene
+track and the dim fade together; the first visible intro frame is animated.
+The pre-start guard checks that both windows are unshown, all scene/dim
+animation keys are empty, and music has not started. Missing presentation layers
+are reported as such while unshown, never replaced by model layers.
+
+Launch-to-first-onboarding-frame is INFO for cold and repeat launches. Engine
+startup varied from 110 ms to 2,421 ms on the same executable, so there is no
+visible static-room budget or cold-only exception. Dyld/signature checks are a
+hypothesis, not an attributed cause. Audio/animation starts stay within 20 ms.
+Returning launches keep the snapshot-backed browser's confirmed frame before
+engine startup and create no onboarding scene or audio worker.
 
 Automation measures display-link intervals over t=0–8 s from the first animated
-frame. `onboarding action=state` reports `animationDelayMS` from the first room
-frame, `preAnimationStatic` (real scene/dim animation keys, presentation/model
-comparison and pre-start audio playhead), and the common host-clock times.
+frame. `onboarding action=state` reports launch, engine start begin/end, native
+loop settled, window creation and first onboarding frame timestamps in `startup`.
+It also reports `preAnimationStatic` (real scene/dim animation keys, presentation
+availability, visibility and pre-start audio playhead), and the common host clock.
+The confirmed display timestamp can follow submission by one display refresh;
+the receipt reports that difference explicitly.
 The opt-in pacing trace records each interval above 1.5 times nominal as
 `stalls: [{start, end, ms, regions, regionOverlapMS}]`. Region totals are
 inclusive main-thread milliseconds; nested regions must not be added together.
