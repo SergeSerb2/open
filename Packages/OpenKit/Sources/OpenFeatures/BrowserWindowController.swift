@@ -245,7 +245,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Only the frame follows the Space; private content keeps its fixed dark appearance.
         root.appearance = incognitoTitle == nil ? NSApp.effectiveAppearance : NSAppearance(named: .darkAqua)
         context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
-        context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+        context.systemAppearance = context.isIncognito ? .dark : ContentAppearance(NSApp.effectiveAppearance)
         WindowSpeedTrace.mark("sidebarInitBegin")
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
         WindowSpeedTrace.mark("sidebarAndContainerCreated")
@@ -264,12 +264,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.onCloseRequest = { [weak self] in self?.onCloseRequested?() }
         if let state { window.setFrame(CGRect(x: state.frameX, y: state.frameY, width: dimensions.width, height: dimensions.height), display: false) }
         systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            // assumeIsolated requires every NSApp.appearance write to run on the main thread.
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let appearance = NSApp.effectiveAppearance
                 let content = self.window.flatMap { ($0 as? SpaceThemeWindow)?.contentAppearanceOverride } ?? appearance
                 if self.root.appearance?.name != content.name { self.root.appearance = content }
-                let system = ContentAppearance(appearance)
+                let system: ContentAppearance = self.context.isIncognito ? .dark : ContentAppearance(appearance)
                 if self.context.systemAppearance != system { self.context.systemAppearance = system }
                 self.refresh()
             }
@@ -1151,6 +1152,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
+        // Tear down this controller's appearance observation once at window close.
         systemAppearanceObservation = nil
         boostEditor?.close(returnFocus: false)
         pendingSpaceCreationOptions = nil

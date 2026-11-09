@@ -84,6 +84,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         root.appearance = NSApp.effectiveAppearance
         window.contentView = root; window.delegate = self; window.title = "Little Open"
         systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            // assumeIsolated requires every NSApp.appearance write to run on the main thread.
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let appearance = NSApp.effectiveAppearance
@@ -313,6 +314,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         return menu
     }
     func prepareToClose() {
+        // Tear down this controller's appearance observation once during close preparation.
         systemAppearanceObservation = nil
         closed = true; extensionsMenu?.cancelTrackingWithoutAnimation(); extensionsMenu = nil
         if let extensionObservation { extensionsUI?.removeObserver(extensionObservation) }; extensionObservation = nil

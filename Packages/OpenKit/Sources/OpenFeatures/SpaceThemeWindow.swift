@@ -1,8 +1,9 @@
 import AppKit
 import OpenDesign
 
-/// The Space controls only this window's frame. Attached surfaces retain their
-/// previous system appearance, unless they choose an explicit appearance.
+/// The Space controls only this window's frame. Sheets, including system alert
+/// and save/open panels, intentionally keep the system/private content appearance.
+/// Foreign child windows are excluded; explicit appearance choices are preserved.
 @MainActor
 class SpaceThemeWindow: NSWindow, WindowContentAppearanceHost {
     /// Private windows already kept their content and inherited sheets dark.
@@ -15,6 +16,7 @@ class SpaceThemeWindow: NSWindow, WindowContentAppearanceHost {
     }
     private var attachments: [ObjectIdentifier: Attachment] = [:]
     private var systemAppearanceObservation: NSKeyValueObservation?
+    // Add any new Open module that owns child panels to this allowlist.
     private static let contentWindowModules: Set<String> = [
         "Open", "OpenDesign", "OpenFeatures", "OpenSpaceEditor", "OpenSiteControl", "OpenExtensionsUI"
     ]
@@ -51,9 +53,11 @@ class SpaceThemeWindow: NSWindow, WindowContentAppearanceHost {
     }
 
     func contentAppearanceDidChange(for window: NSWindow, inheritsAppearance: Bool) {
-        // Our presenter calls this after choosing nil (inherit) or an explicit
-        // mode. Do not infer that choice by observing nullable native KVO.
-        attachments.removeValue(forKey: ObjectIdentifier(window))
+        // Relinquish our pin before a presenter installs an explicit choice.
+        // Do not infer that choice by observing nullable native KVO.
+        if let removed = attachments.removeValue(forKey: ObjectIdentifier(window)),
+           !inheritsAppearance, let pinned = removed.pinnedAppearance,
+           window.appearance === pinned { window.appearance = nil }
         if inheritsAppearance { trackAppearance(of: window) }
         if attachments.isEmpty { systemAppearanceObservation = nil }
     }
@@ -63,22 +67,28 @@ class SpaceThemeWindow: NSWindow, WindowContentAppearanceHost {
         trackAppearance(of: window)
     }
     private func trackAppearance(of window: NSWindow) {
+        attachments = attachments.filter { $0.value.window != nil }
         let id = ObjectIdentifier(window)
-        guard attachments[id] == nil else { return }
+        if let existing = attachments[id], existing.window === window { return }
         let attachment = Attachment(window)
         attachments[id] = attachment
+        guard attachments[id] === attachment else { return }
         pin(attachment)
+        guard attachments[id] === attachment else { return }
         if systemAppearanceObservation == nil {
             systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+                // assumeIsolated requires every NSApp.appearance write to run on the main thread.
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    for (id, attachment) in self.attachments {
+                    for (id, attachment) in Array(self.attachments) {
+                        guard self.attachments[id] === attachment else { continue }
                         guard let window = attachment.window,
                               let pinned = attachment.pinnedAppearance,
                               window.appearance === pinned else {
                             self.attachments.removeValue(forKey: id)
                             continue
                         }
+                        guard self.attachments[id] === attachment else { continue }
                         self.pin(attachment)
                     }
                     if self.attachments.isEmpty { self.systemAppearanceObservation = nil }

@@ -43,12 +43,16 @@ public final class ThemeEditorPanel: EditorPopoverPanel {
     }
     public func applyAppearance(_ mode: SpaceStyleAppearance) {
         guard appliedMode != mode else { return }; appliedMode = mode
+        let host = parent as? any WindowContentAppearanceHost
+        // Release the old pin before choosing an explicit mode, even if its
+        // NSAppearance object is identical to the system appearance.
+        host?.contentAppearanceDidChange(for: self, inheritsAppearance: false)
         switch mode {
         case .automatic: appearance = nil
         case .light: appearance = NSAppearance(named: .aqua)
         case .dark: appearance = NSAppearance(named: .darkAqua)
         }
-        (parent as? any WindowContentAppearanceHost)?.contentAppearanceDidChange(for: self, inheritsAppearance: mode == .automatic)
+        if mode == .automatic { host?.contentAppearanceDidChange(for: self, inheritsAppearance: true) }
     }
     public override var backingScaleFactor: CGFloat { renderScale ?? super.backingScaleFactor }
     public override var undoManager: UndoManager? {

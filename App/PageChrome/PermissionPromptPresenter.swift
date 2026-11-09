@@ -157,6 +157,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   func owns(_ window: NSWindow) -> Bool { isShown && presentedWindow === window }
   private func finish(_ decision: OEPermissionState?) {
     guard !finishing, let entry = current else { return }
+    let promptWindow = card == nil ? view.window : nil
     finishing = true; current = nil
     // Remove ownership before the engine callback, which may navigate/close.
     if decision == .allow { entry.request.grant() }
@@ -178,7 +179,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       self.card = nil
       card.dismiss(animated: decision != nil && !closed)
       if !closed, owner?.pageChrome.isVisible(entry.page) == true { entry.page.focusPage() }
-    } else { popover.close() }
+    } else {
+      popover.close()
+      if let promptWindow, let parent = promptWindow.parent { parent.removeChildWindow(promptWindow) }
+    }
     finishing = false; presentPending()
   }
   func cancel(page: OEWebContent) {
