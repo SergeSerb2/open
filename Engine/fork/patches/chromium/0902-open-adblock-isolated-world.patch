@@ -1,16 +1,19 @@
 diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_isolated_world_ids.h
 --- a/chrome/common/chrome_isolated_world_ids.h
 +++ b/chrome/common/chrome_isolated_world_ids.h
-@@ -23,8 +23,11 @@
-   // Isolated world ID for AppleScript.
-   ISOLATED_WORLD_ID_APPLESCRIPT,
- 
--  // One fixed world for Open runtimes; extensions allocate above this range.
-+  // Open page runtimes (Boosts and Zap) use this world.
-   ISOLATED_WORLD_ID_OPEN,
-+
-+  // Reserved for the private cosmetics world defined in the Open overlay.
-+  ISOLATED_WORLD_ID_OPEN_ADBLOCK_RESERVED,
- #endif  // BUILDFLAG(IS_MAC)
- 
+@@ -31,7 +31,15 @@
    // Numbers for isolated worlds for extensions are set in
+   // extensions/renderer/script_injection.cc, and are are greater than or equal
+   // to this number.
++#if BUILDFLAG(IS_MAC)
++  ISOLATED_WORLD_ID_EXTENSIONS = ISOLATED_WORLD_ID_OPEN + 2,
++
++  // Private cosmetics world, numerically below extensions. Define this
++  // after the extension boundary to keep patch 0601 independently checkable.
++  ISOLATED_WORLD_ID_OPEN_ADBLOCK_RESERVED = ISOLATED_WORLD_ID_OPEN + 1,
++#else
+   ISOLATED_WORLD_ID_EXTENSIONS
++#endif
+ };
+ // LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/common/ChromeIsolatedWorldIds.java)
+ #endif  // CHROME_COMMON_CHROME_ISOLATED_WORLD_IDS_H_
