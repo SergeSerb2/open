@@ -272,8 +272,10 @@ class Open:
         env.update(extra_env or {})
         self.world_audit_dir = env.get("OPEN_E2E_WORLD_AUDIT_DIR")
         if self.world_audit_dir:
-            extra_args = list(extra_args) + ["--verbose", "--v=0",
-                "--vmodule=isolated_world_manager=1,script_injection=1,open_adblock_renderer_agent=1"]
+            modules = [arg.split("=", 1)[1] for arg in extra_args if arg.startswith("--vmodule=")]
+            modules.append("isolated_world_manager=1,script_injection=1,open_adblock_renderer_agent=1")
+            extra_args = [arg for arg in extra_args if not arg.startswith("--vmodule=")]
+            extra_args += ["--verbose", "--v=0", "--vmodule=" + ",".join(modules)]
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
@@ -296,9 +298,10 @@ class Open:
         # The early-launcher-exit fixture must exercise open(1), not the App
         # child that stays alive until quit. Keep strict death checks for both.
         self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls and not launch_without_wait
+        self.launch_output = open(self.launch_log_path, "a") if self.direct_child and self.world_audit_dir else None
         self.proc = subprocess.Popen(args if self.direct_child else launch,
                                      env=env if self.direct_child else None,
-                                     stdout=self.log, stderr=subprocess.STDOUT)
+                                     stdout=self.launch_output or self.log, stderr=subprocess.STDOUT)
         if self.direct_child:
             self.pid = self.proc.pid
         _OWNED_APPS.append(self)
@@ -530,6 +533,8 @@ class Open:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
                 self.proc.wait()
+            if self.launch_output:
+                self.launch_output.close()
             if os.path.exists(self.launch_log_path):
                 self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
             self.log.close()
@@ -539,12 +544,17 @@ class Open:
                 audit = Path(self.world_audit_dir)
                 audit.mkdir(parents=True, exist_ok=True)
                 engine_log = Path(self.user_data) / "State" / "engine.log"
+                # Some real suites select --enable-logging=stderr. Preserve
+                # that launch's output rather than the shared aggregate log.
+                if not engine_log.is_file():
+                    engine_log = Path(self.launch_log_path)
                 if engine_log.is_file():
                     target = audit / ("engine-%s-%s.log" % (self.pid, time.time_ns()))
                     shutil.copyfile(engine_log, target)
                     self.quit_report["world_audit_log"] = str(target)
+                    self.quit_report["world_audit_source"] = str(engine_log)
                 else:
-                    self.quit_report.update(ok=False, world_audit_error="engine.log is missing")
+                    self.quit_report.update(ok=False, world_audit_error="engine and launch logs are missing")
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
