@@ -108,6 +108,7 @@ final class PageQuitCoordinator {
   private var remaining: [(EngineWebContentHostFactory, OEWebContent)] = []
   init(app: AppDelegate) { self.app = app }
   func shouldTerminate() -> Bool {
+    if app.quitWarning.withoutPrompts { return true }
     #if OPEN_AUTOMATION
     // A dead runner cannot answer a new beforeunload request. Normal quit
     // still runs the page preflight; owner shutdown closes hosts directly.
@@ -152,7 +153,10 @@ final class PageQuitCoordinator {
           } else { owner.controller?.container.closeHost(for: id) }
         }
         self.next()
-      } else { self.running = false; self.remaining.removeAll() }
+      } else {
+        self.running = false; self.remaining.removeAll()
+        self.app.quitWarning.resetApproval()
+      }
     }
     if !waits { next() }
   }

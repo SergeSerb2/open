@@ -1,8 +1,13 @@
 import Foundation
 import ImageIO
 import OpenModel
+import OpenAdBlock
 @_spi(FaviconDiagnostics) import OpenStore
 import UniformTypeIdentifiers
+
+private struct FaviconCLISites: FaviconSiteResolver {
+    func siteKey(for host: String) -> String? { try? AdBlockSites.shared.registrableDomain(host) }
+}
 
 private let faviconUsage = """
 usage: openkit favicons fetch --snapshot DIR --db PATH [--limit N]
@@ -72,7 +77,7 @@ private func faviconCommand(_ args: [String]) async throws {
         configuration.urlCache = nil
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
-        let fetcher = FaviconFetcher(store: store, session: session)
+        let fetcher = FaviconFetcher(store: store, session: session, siteResolver: FaviconCLISites())
         // Hidden development diagnostics. The public-host override only applies to
         // the page origin; cross-origin destinations retain the real address policy.
         if let host = options["--treat-as-public"] {

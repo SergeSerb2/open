@@ -456,10 +456,14 @@ def rows_from(receipt, fail_demo=False):
                 samples=1000, strict=strict, source=source, evidence=m[0] if m else 'metric missing')
     elif group == 'adblock':
         # AdBlockCLI.swift lead decision 2026-10-25, also check.py adblock_perf.
-        for label, pattern, limit in (('adblock 1000 lookups', r'lookups_1000 p95_ms=([\d.]+)', 1),
-                                      ('adblock profile integrity scan', r'profile_open_with_integrity_scan p95_ms=([\d.]+)', 10)):
-            numeric(label, limit, pattern, samples=10, strict=True,
-                    source='Packages/OpenKit/Sources/openkit/AdBlockCLI.swift; tools/verification/check.py adblock_perf')
+        source = 'Packages/OpenKit/Sources/openkit/AdBlockCLI.swift; tools/verification/check.py adblock_perf'
+        numeric('adblock 1000 lookups', 1, r'lookups_1000 p95_ms=([\d.]+)', samples=10, strict=True, source=source)
+        opened = match(r'profile_open_with_integrity_scan p95_ms=([\d.]+) budget_ms=10 samples=(\d+) max_ms=([\d.]+)')
+        add('adblock profile integrity scan', 10, float(opened[1]) if opened else None,
+            samples=int(opened[2]) if opened else None, strict=True, source=source,
+            evidence=opened[0] if opened else 'metric missing', ok=bool(opened and int(opened[2]) == 40))
+        if opened:
+            rows[-1]['measured']['max'] = float(opened[3])  # Informational; only p95 has a budget.
     elif group == 'command-open':
         # architecture.md; engine_e2e.py app_actions first_open_results_budget.
         add('command bar cold first results' + (' [FAIL DEMO]' if fail_demo else ''), 1 if fail_demo else 50,
