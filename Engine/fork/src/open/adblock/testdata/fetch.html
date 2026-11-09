@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>fetch</title></head>
+<body>
+<script src="/api/xhr-only.json"></script>
+<script src="/redirect?to=http://127.0.0.2/ads/redirect-target.js"></script>
+<script>
+  const outcome = p => p.then(() => 'ok', () => 'failed');
+  window.__xhrOnly = outcome(fetch('/api/xhr-only.json'));
+  window.__preflight = outcome(fetch('http://127.0.0.2/ads/banner.js',
+                                     {headers: {'X-Open-Test': '1'}}));
+  window.__socket = url => new Promise(resolve => {
+    const socket = new WebSocket(url);
+    socket.onopen = () => resolve('open');
+    socket.onerror = () => resolve('error');
+  });
+  window.__blockedSocket = window.__socket('ws://127.0.0.2/ws');
+  window.__allowedSocket = window.__socket('ws://127.0.0.1/ws');
+  // Just under url::kMaxURLChars (2 MiB): a longer URL never leaves the
+  // renderer, so no hook would see it.
+  window.__longFetch = outcome(fetch('/api/data.json?' + 'a'.repeat(2 * 1024 * 1024 - 64)));
+  window.__webTransport = () => {
+    try {
+      const transport = new WebTransport('https://127.0.0.2/wt-blocked');
+      return transport.ready.then(() => 'ready', () => 'rejected');
+    } catch (e) {
+      return Promise.resolve('threw');
+    }
+  };
+</script>
+</body></html>

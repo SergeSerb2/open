@@ -526,7 +526,55 @@ the PR. This transport adds no App UI.
 
 ## P8. Native ad-block engine
 
-Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a `URLLoaderThrottle`, cosmetic delivery over `cef.mojom`). Until it lands, `OEBrowserContext.requestFilter` is the stepping stone that plan names (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
+Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a URLLoaderFactory proxy, cosmetic delivery over Mojo). Step 4 is built on `s13/step4-engine`; its main `d26300e6` dev distribution and Debug App build pass. Merged N 32/32 and quiet G-4/G-5 pass; real App and final negative controls remain pending. Native blocking uses the production CEF/OpenEngine ad-block API. The existing `OEBrowserContext.requestFilter` remains a separate API (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
+
+### Step 4 implementation (2026-11-07)
+
+| Piece | As built | Verification |
+|---|---|---|
+| P-3, `cef/0311` | Open appends the outermost URLLoaderFactory before Chrome/WebRequest. Subresources, redirect hops, WebSocket and WebTransport checks run on the matcher sequence. Main documents pass through. | Removing P-3 produces 24 FAIL and 6 PASS control rows; restoring it builds. Post-S15 N-case rerun passes 32/32. |
+| Idle memory reclaim | One matcher-sequence task after 5 s without engine/proxy activity, at most once/minute; no task remains after the purge until new activity. No Profile/engine reference or request-path purge. | Built in `e12d3554`. The `4bfa64b8` same-binary control records physical delta at corpus +6 s: 65.19/62.48 MiB with purge off, 57.19/53.33 MiB with purge on (16 KiB text/DAT, median 5, working load1 9.23–22.73). All 80 initial/following-burst dumps match baseline. Text/DAT 60 s observations retain exactly one purge, zero extra runs. Post-S15 quiet G-4/G-5/G-6 page proof passes. |
+| Proxy cost | Reuse parsed GURLs and factory initiators; avoid the ordinary ResourceRequest copy. Retain the loader/client proxy through completion. The attempted response-pipe fusion was removed: Mojo permits fusion only before either endpoint is written, so a post-response fusion closes the completion path. | Full-corpus verdict dumps match before/after. N-9 exposed aborted worker-script loads in the fusion build; the removal is built in `5d4d15a5`. The repaired page receipt measures 8.576 ms busy CPU per 200 requests at working load1 40.60–42.34, including callbacks 2.525 ms and cached-source/GURL selection 0.027 ms. Ruling 2a accepts ≤9 ms; post-S15 quiet CPU 8.500 ms, on/off wall 64.900/113.200 ms and N 32/32 pass. |
+| Rust crate patches | Compile every network regex on the build runner before publication, with no warm match. Keep program-discard cleanup disabled because it would cause request-path compiles. The earlier candidate bounded caches/accelerators; the lead's 20:16 decision restored all upstream builder defaults in source, retaining program-byte counters. | Built candidate: zero added corpus compiles; smaller caches trade memory for CPU. Restored-default build has zero added compiles in all twenty corpus runs; warm CPU maximum medians 163–176 µs at load14.5–20.7. The preferred 64 KiB ceiling/fallback and cache override are removed. |
+| Generated ABP patterns | Use ASCII separator and wildcard classes only in crate-generated expressions. Complete user `/regex/` expressions keep their semantics. GURL specs are ASCII and percent-escaped (`url/gurl.h:25-26,109`). | Text program bytes 32,376,108 → 7,254,660. All 20,311 result rows match for text/DAT and both caps. The pinned lists contain 25 user regex lines, optimized into 16 programs (4,358,248 bytes; 13.46% of the old total). |
+| DAT sharing | Re-share immutable NetworkFilter objects only when all eleven fields match. Deserialization had duplicated Arc-backed objects and their regex programs. | 262 duplicate references restored; DAT programs 1,195 → 1,000, bytes 8,524,772 → 7,251,132. Full-result dumps remain identical. |
+| Text compaction and page reclaim | Lossless text builds serve a deserialized engine from the same DAT bytes already written, with resources reapplied. Lossy inputs keep their text engine because DAT v0 drops rule types. After temporary buffers and the replaced engine are freed, the build runner calls PA `MemoryReclaimer::ReclaimAll()`. | The original `5d4d15a5` receipt adds median 176.453 ms for text deserialize/free, total text load 502 ms; reclaim releases 12.30/6.67 MiB text/DAT. The later same-binary idle receipt records steady physical delta 55.34/51.45 MiB and corpus +6 s with purge 57.19/53.33 MiB (16 KiB, median 5). These meet lead ruling 4a on working numbers. Full corpus identity is unchanged; quiet acceptance remains pending. |
+| Domain resolver, 97-2 | CXX callback to Chromium `registry_controlled_domains`, including private registries. Drop `embedded-domain-resolver`, `addr`, `psl`, `psl-types`; regenerate vendor closure and GN. Shim version 4 invalidates old DAT receipts. | Owned-root build and engine-status 8/8 PASS. Four full-corpus dumps match the pre-resolver verdicts. |
+| OTR lifetime | 0310 exposes idempotent service shutdown. The existing native `ProfileContextClosed` overlay hook shuts it down before notifying the shell. No new upstream patch or overlap with 0701. | Real native parent/OTR: distinct services, identical engine holder, `engine_shared=1`, pending-load cancellation, retained-wrapper close, repeated shutdown, and ordered parent deletion: 14 PASS. |
+
+No list text, resources JSON or DAT input buffer remains in the engine holder.
+Inputs are released before regex compilation. The text path also checks the
+latest load id after serialization and before writing its DAT (100-7).
+Working same-binary idle measurements meet lead ruling 4a: 16 KiB text/DAT
+55.34/51.45 MiB steady and 57.19/53.33 MiB after the corpus plus one idle
+purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
+135.291/131.750 µs and zero added regex compiles. See
+`.re/s13/e1/idle-resume-proof.json` and `idle-resume-verdict-identity.json`.
+The later main `d26300e6` integration passes 20 native processes and 40 baseline-identical initial/resumed corpus dumps. Its 16 KiB text/DAT physical deltas are 55.157/52.110 MiB steady and 57.094/54.188 MiB after the corpus plus idle purge. G-2 CPU, G-6 and ruling 4a pass. Merged N 32/32, positive/allowed COUNT and quiet G-4/G-5/G-6 pass. Both COUNT negative controls pass; strict App acceptance passes 79/79, including 11 record-only rows. Regression/full-gate work remains pending. The dev distribution is recorded; the Debug App builds with matching normalized engine code. Only lead rulings 2a and 4a replace the original budgets.
+
+### Control API (Section 13, 2026-11-07)
+
+The `cef_open_adblock.h` overlay adds six free functions, with generated C
+API/wrappers and no request-context virtual methods. A libcef overlay in
+`open/adblock/open_adblock_api.cc` forwards control to the existing
+per-context service and reads the current-document tab helper. Same-path
+configuration is a no-op; empty unloads and cancels pending publication.
+Enable/exclusion changes reset factories in loaded storage partitions using
+Chromium's proxy-transition path. OTR settings are separate and its engine
+can be shared with its parent.
+
+The Step 7 revision treats verified zero-list generations, including a
+resources-only manifest, as successful no-engine loads. It verifies inputs,
+skips registry/DAT/build work, drops the matcher engine and reclaims its
+freed pages on the build runner. Native zero-file, resources-only and official pinned-input API flows each pass 26 checks. The strict App scope also passes the real all-lists-off request and one-list restore controls.
+
+`OEAdBlock.h` exposes main-thread categories on OEBrowserContext/OEWebContent.
+Pre-init values apply through a weak ready callback; closed contexts return
+defaults. The status snapshot has 11 scalar keys and fixed error summaries,
+with no paths or page URLs. The integrated real-CEF API and lifetime flows pass 21 and 14 rows.
+The complete series builds with 8 PASS/0 FAIL/0 WARN in built-artifact
+status. The dev distribution has SHA-256 `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`, based on main `d26300e6`. The Debug App builds and its normalized framework code matches. Merged N 32/32, production COUNT/allowed control and quiet G-4/G-5/G-6 pass. Quiet on/off wall medians are 64.900/113.200 ms, busyCPU 8.500 ms, at load1 8.13–9.07. Both COUNT negative controls pass. Strict real App acceptance in default Chrome hosting passes 79/79, including 11 whole-process record rows. AD3 passes the accepted attachment-only allocation predicate: PA median −46,144 bytes, non-PA malloc in-use zero, different-list control +25,129,024 bytes with sharing=false. Earlier whole-process FAIL receipts remain historical under the Step 8 erratum. All nine App launches clean up. Features has 27 PASS; default-Chrome Extensions UI has 71 PASS and one existing BLOCKED row. Settings preview passes 47 functional checks and native pane renders. Main e8d4acd4 is merged with no further Engine/fork changes; its Debug rebuild and full verification pass (25/25, no failures or skips).
+The new symbols are listed in `verification/expected-symbols.txt`.
 
 ### Security review (Step 1, 2026-10-26)
 

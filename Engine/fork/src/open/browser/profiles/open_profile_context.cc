@@ -242,6 +242,11 @@ class ProfileDeletion : public ProfileObserver {
 
 namespace open_engine {
 void ProfileContextClosed(Profile* profile) {
+  // Native Profiles can close while CEF wrappers are still retained (0701).
+  // End ad-block work before notifying the shell or tearing down the Profile.
+  if (auto* context = CefBrowserContext::FromBrowserContext(profile)) {
+    context->ShutdownOpenAdBlockService();
+  }
   if (profile->IsPrimaryOTRProfile())
     profile->SetUserData(kClosedProfileKey, std::make_unique<ClosedProfile>());
   auto found = Handlers().find(profile);

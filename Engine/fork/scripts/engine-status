@@ -160,10 +160,12 @@ def gn_args(path):
 
 
 def main():
-    parser = argparse.ArgumentParser(usage="engine-status [--json <path>] [--strict]",
+    parser = argparse.ArgumentParser(usage="engine-status [--json <path>] [--strict] [--built]",
                                      epilog="Engine/fork/scripts/engine-status")
     parser.add_argument("--json", type=Path, metavar="PATH")
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--built", action="store_true",
+                        help="check symbols in the dev build instead of the recorded distribution")
     parser.add_argument("--patch-plan", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--refresh-plan", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--cef-applied", action="store_true", help=argparse.SUPPRESS)
@@ -261,7 +263,9 @@ def main():
         if distpath.is_dir():
             candidates = sorted(distpath.rglob("Chromium Embedded Framework.framework/Chromium Embedded Framework"))
             if candidates:
-                found_distrib, binary = True, candidates[0]
+                found_distrib = True
+                if not args.built:
+                    binary = candidates[0]
     missing = []
     # On macOS the cefsimple target produces cefsimple.app.
     if not (out / "cefsimple.app/Contents/MacOS/cefsimple").is_file():

@@ -1115,8 +1115,11 @@ Executable. Read-only: it must never write to the Chromium tree. It may write
 only its own stdout/stderr and, with `--json <path>`, one JSON file in the
 repo working dir or `$STATE_DIR`.
 
-Usage: `engine-status [--json <path>] [--strict]`. Exit 0 = all checks pass.
+Usage: `engine-status [--json <path>] [--strict] [--built]`. Exit 0 = all checks pass.
 Exit 1 = at least one check failed. `--strict` also fails on warnings.
+`--built` checks expected symbols in the dev framework before a distribution
+is recorded. The default still checks the recorded distribution when present;
+a dev check does not qualify that distribution.
 
 Checks in order. Print one line per check: `PASS|FAIL|WARN  <name>  <detail>`.
 

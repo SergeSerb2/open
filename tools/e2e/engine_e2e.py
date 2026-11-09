@@ -720,8 +720,8 @@ def extension_checks(app, style, results):
                                   "darkreader": dr}
     results["content_scripts"]["screenshot"] = shot(app, "%s-content-script-darkreader.png" % style)
 
-    # declarativeNetRequest (uBlock Origin Lite). Control: a profile with no
-    # extensions must load the same URLs.
+    # declarativeNetRequest (uBlock Origin Lite). Control: the features run
+    # disables native blocking and loads the same URLs without extensions.
     probe = ('(async () => { const out = {}; for (const u of ["https://securepubads.g.doubleclick.net/tag/js/gpt.js",'
              ' "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]) { try { await fetch(u, {mode: "no-cors"});'
              ' out[u] = "loaded"; } catch (e) { out[u] = "blocked"; } } return out; })()')
@@ -1049,13 +1049,30 @@ def feature_checks(app, style, results, tmp):
                 "work_space": work_space}
 
     def adblock_control():
-        c = new_tab(app, "https://example.com/")
-        r = app.eval(c, '(async () => { const out = {}; for (const u of ["https://securepubads.g.doubleclick.net/tag/js/gpt.js",'
-                        ' "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]) { try { await fetch(u, {mode: "no-cors"});'
-                        ' out[u] = "loaded"; } catch (e) { out[u] = "blocked"; } } return out; })()')
-        app.call("close", tab=c)
-        app.call("select", tab=t)
-        return {"ok": all(v == "loaded" for v in r.values()), "without_extensions": r}
+        # This is the extension DNR control. Native blocking now defaults on,
+        # so explicitly turn it off through Settings for these same URLs.
+        native = app.call("settings-adblock-engine")["nativeSupported"]
+        previous = app.call("settings-adblock")["enabled"] if native else None
+        c = None
+        def native_disabled():
+            state = app.call("settings-adblock-engine")
+            contexts = [context for profile in state["profiles"] for context in profile["contexts"]]
+            return state["bindingInstalled"] and bool(contexts) and all(not context["adBlockEnabled"] for context in contexts)
+        try:
+            if native:
+                app.call("settings-adblock", enabled=False)
+                assert wait_until(native_disabled, timeout=10)
+            c = new_tab(app, "https://example.com/")
+            r = app.eval(c, '(async () => { const out = {}; for (const u of ["https://securepubads.g.doubleclick.net/tag/js/gpt.js",'
+                            ' "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]) { try { await fetch(u, {mode: "no-cors"});'
+                            ' out[u] = "loaded"; } catch (e) { out[u] = "blocked"; } } return out; })()')
+            native_off = not native or native_disabled()
+            return {"ok": native_off and all(v == "loaded" for v in r.values()), "without_extensions": r,
+                    "native_supported": native, "native_enabled_during_probe": not native_off}
+        finally:
+            if native: app.call("settings-adblock", enabled=previous)
+            if c is not None: app.call("close", tab=c)
+            app.call("select", tab=t)
 
     def codecs():
         return {"ok": True, "support": app.eval(t, '({h264: MediaSource.isTypeSupported(\'video/mp4; codecs="avc1.42E01E"\'),'
