@@ -281,12 +281,14 @@ binds the prepared values. Seed/verify and exclusion-file IO run in
 existing per-Profile opening task. Warm Profiles keep their after-paint opening.
 
 The store configure event explicitly reloads an already configured directory
-after seeding; setting the same path alone would not retry it. A missing pointer keeps the initial load in `awaiting_generation`
+after seeding; setting the same path alone would not retry it. A missing
+pointer keeps the initial load in `awaiting_generation`
 with a 1,500 ms deadline per eligible request and a process-wide 128-request
 limit. Bad manifests/SHA or other real load errors end that wait and fail open;
 a valid zero-list generation completes it. Main-frame navigation stays direct.
 Before the native wait was added, the App-only branch failed open before
-an engine was ready. The M5 App-only probe on 2026-11-09 blocked the first post-onboarding script and loaded
+an engine was ready. The M5 App-only probe on 2026-11-09 blocked the first
+post-onboarding script and loaded
 its allowed control while the after-paint adapter was still unstarted. The fresh
 generation was already published before onboarding finished. On warm relaunch,
 the first script loaded before the DAT engine arrived; saved-off and excluded
@@ -347,7 +349,7 @@ per-request cap and queue bound intentionally fail open if the first engine
 is unavailable in time; this is a startup wait, not a promise to block
 requests after a timeout or a real load error. Runtime receipts for the
 combined implementation are recorded separately from the earlier App-only
-checkpoint below.
+checkpoint above.
 
 ### Site Control Center and Settings UI
 
