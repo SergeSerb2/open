@@ -924,11 +924,11 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
             # bypasses all three for installer relaunch, including beforeunload;
             # there is no longer a user-cancel path for the former R2 retry row.
             with downloads.server() as base_url:
+                tab = app.call('tabs')[0]['id']
                 installing = True
                 pause_review_installer(app, before_installers, folder / 'Open.app')
                 if opts.force_failure:
                     raise AssertionError('forced failure with the prepared installer paused')
-                tab = app.call('tabs')[0]['id']
                 snapshot = json.loads(Path(app.call('save')).read_text())
                 destination = folder / 'retry-downloads'; destination.mkdir(exist_ok=True)
                 app.call('download-settings', profile=snapshot['profiles'][0]['id'], directory=str(destination), ask=False)
