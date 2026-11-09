@@ -19,6 +19,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   private var retryTermination: (() -> Void)?
   private var terminationRetryAvailable = false
   private var terminationWasCancelled = false
+  private(set) var installationRelaunchRequested = false
   private var acknowledgement: (() -> Void)?
   private var received: UInt64 = 0
   private var expected: UInt64 = 0
@@ -81,6 +82,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     presentAlert(alert, on: window) { [weak self] response in
       guard let self else { return }; self.alert = nil
       if response == .alertFirstButtonReturn {
+        self.installationRelaunchRequested = true
         self.terminationWasCancelled = false
         let reply = self.readyReply; self.readyReply = nil
         if let reply { reply(.install) } else { self.installOnQuit?() }
@@ -138,6 +140,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   func backgroundDownloading() { if !userInitiated { phase = "downloading" } }
   func backgroundPreparing() { if !userInitiated { phase = "extracting" } }
   func backgroundError(_ error: any Error) {
+    installationRelaunchRequested = false
     guard !userInitiated, !errorShown else { return }
     let error = error as NSError
     if error.domain == SUSparkleErrorDomain,
@@ -186,11 +189,13 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
   }
   private func statusAction() {
     if terminationRetryAvailable, let retryTermination {
+      installationRelaunchRequested = true
       terminationRetryAvailable = false
       terminationWasCancelled = false
       showStatus("Installing update... ", button: "Cancel", progress: nil, enabled: false, hidden: true)
       retryTermination()
     } else if phase == "ready" {
+      installationRelaunchRequested = true
       terminationWasCancelled = false
       let reply = readyReply; readyReply = nil; reply?(.install)
     }
@@ -264,6 +269,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     window.onPrimary = close; window.onClose = close; window.show()
   }
   func showUpdaterError(_ error: any Error, acknowledgement: @escaping () -> Void) {
+    installationRelaunchRequested = false
     closeStatus(); closeUpdateWindow(); cancel = nil
     if !userInitiated { backgroundError(error); acknowledgement(); return }
     errorShown = true
@@ -303,6 +309,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     else { closeStatus(); refreshBanners() }
   }
   func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {
+    installationRelaunchRequested = true
     phase = "installing"; cancel = nil; readyReply = nil
     retryTermination = applicationTerminated ? nil : retryTerminatingApplication
     terminationRetryAvailable = false
@@ -324,6 +331,7 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     available = false; dismissUpdateInstallation(); acknowledgement()
   }
   func dismissUpdateInstallation() {
+    installationRelaunchRequested = false
     closeStatus(); closeUpdateWindow(); cancel = nil; choice = nil; readyReply = nil; installOnQuit = nil
     retryTermination = nil; terminationRetryAvailable = false; terminationWasCancelled = false
     if let alert {

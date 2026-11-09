@@ -282,7 +282,8 @@ final class DownloadsCenter: DownloadsProvider {
   /// This runs before sleep capture or any page-beforeunload handling.
   /// The traced Arc path does not prove a Warn-before-quitting preference gate;
   /// keep this download-specific warning for both values (downloads-s11.md).
-  func shouldKeepBrowsing() -> Bool {
+  func shouldKeepBrowsing(withoutPrompts: Bool = false) -> Bool {
+    if withoutPrompts { approveQuit(); return false }
     #if OPEN_AUTOMATION
     if AutomationOwnerWatch.quittingWithoutPrompts {
       approveQuit()
