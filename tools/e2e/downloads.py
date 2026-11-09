@@ -22,8 +22,11 @@ def server():
         def log_message(self, *_): pass
         def do_GET(self):
             route = self.path.split('?', 1)[0]
-            if route == '/':
+            if route in ('/', '/arm'):
                 body = b'<!doctype html><title>Downloads fixture</title><body>Downloads fixture</body>'
+                if route == '/arm':
+                    body = (b'<!doctype html><title>Unload fixture</title><button id=arm '
+                            b'onclick="onbeforeunload=e=>{e.preventDefault();e.returnValue=1}">Arm</button>')
                 self.send_response(200); self.send_header('Connection', 'close'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body); return
             unknown = route == '/unknown'
             slow = route in ('/slow', '/unknown', '/finish')
@@ -301,6 +304,149 @@ def checks(factory, results, tmp, config, harness):
         app.quit()
         check('quit_empty', not empty['running'] and not empty['quitAlerts'] and no_alert_exit)
 
+    def generic_quit_flow():
+        nonlocal app, tab
+        key = 'open.general.warnBeforeQuitting'
+
+        def relaunch():
+            nonlocal app
+            app = factory(urls=(), fresh=True, extra_env=launch_env)
+            app.preferences_domain = domain
+            app.call('download-policy', quit='keep')
+
+        def request(button):
+            app.call('quit-warning', button=button, request=True)
+
+        def exited():
+            return wait(lambda: not app.process_path(app.pid), 15)
+
+        def generic_alerts():
+            return Path(app.launch_log_path).read_text(errors='replace').count('generic-quit-alert-presented')
+
+        def download_alerts():
+            return Path(app.launch_log_path).read_text(errors='replace').count('downloads-quit-alert-presented')
+
+        def stable_snapshot(value):
+            # Native modal focus can update usage timestamps without changing a tab/window.
+            if isinstance(value, dict):
+                return {k: stable_snapshot(v) for k, v in value.items() if k not in ('lastActiveAt', 'lastFocusedAt')}
+            if isinstance(value, list):
+                return [stable_snapshot(v) for v in value]
+            return value
+
+        def tab_ids(value):
+            if isinstance(value, dict):
+                own = {value['id']} if {'id', 'url', 'createdAt'} <= value.keys() else set()
+                return own.union(*(tab_ids(v) for v in value.values()))
+            if isinstance(value, list):
+                return set().union(*(tab_ids(v) for v in value))
+            return set()
+
+        # Real menu-command quit, native NSAlert buttons, two browser windows.
+        if app.closed:
+            relaunch()
+            tab = E.new_tab(app, base + '/')
+        app.call('defaults', key=key, value=True)
+        app.call('command', id='new-window')
+        windows_before = app.call('shell-windows')
+        snapshot_before = stable_snapshot(json.loads(Path(app.call('save')).read_text()))
+        before = generic_alerts()
+        request('cancel')
+        cancelled = wait(lambda: not app.process_path(app.pid) or E._try(lambda: app.call('quit-warning')))
+        if not app.process_path(app.pid):
+            app.quit()
+            check('generic_quit_cancel', False, reason='App exited instead of presenting a cancellable warning', quit=app.quit_report)
+            return
+        snapshot_after = stable_snapshot(json.loads(Path(app.call('save')).read_text()))
+        check('generic_quit_cancel', cancelled and generic_alerts() == before + 1
+              and app.call('shell-windows') == windows_before and snapshot_before == snapshot_after
+              and cancelled[-1]['windows'] == len(windows_before)
+              and cancelled[-1]['tabs'] == len(tab_ids(snapshot_before)) >= 1
+              and cancelled[-1]['title'] == 'Quit Open?' and cancelled[-1]['buttons'] == ['Quit', 'Cancel']
+              and cancelled[-1]['keys'] == ['\r', '\x1b'], alerts=cancelled,
+              windowsBefore=windows_before, windowsAfter=app.call('shell-windows'), snapshotIntact=snapshot_before == snapshot_after)
+
+        # Accepted approval survives async history/sleep/engine shutdown retries.
+        request('quit')
+        clean_exit = exited()
+        alerts = generic_alerts()
+        app.quit()
+        check('generic_quit_accept', clean_exit and alerts == before + 2 and not app.quit_report['forced'],
+              alerts=alerts - before, quit=app.quit_report)
+
+        relaunch()
+        app.call('defaults', key=key, value=False)
+        request('cancel')  # A broken always-on prompt would cancel this quit.
+        immediate = exited()
+        alerts = generic_alerts()
+        app.quit()
+        check('generic_quit_off', immediate and alerts == 0 and not app.quit_report['forced'], alerts=alerts, quit=app.quit_report)
+
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        tab = E.new_tab(app, base + '/')
+        profile_id = next(v['profile'] for v in app.call('spaces') if v['focused'])
+        app.call('download-settings', profile=profile_id, directory=str(first), ask=False)
+        running = start('/slow')
+        wait(lambda: item(running).get('received', 0) > 0)
+        app.call('download-policy', quit='keep')
+        request('cancel')
+        kept = wait(lambda: state()['quitAlerts'])
+        check('generic_quit_downloads_keep_one', kept and len(kept) == 1 and generic_alerts() == 0
+              and download_alerts() == 1 and item(running)['state'] == 'inProgress', alerts=kept, genericAlerts=generic_alerts())
+        app.call('download-policy', quit='close')
+        request('cancel')  # A stacked generic alert would keep the App alive.
+        download_exit = exited()
+        alerts = [download_alerts(), generic_alerts()]
+        app.quit()
+        check('generic_quit_downloads_close_one', download_exit and alerts == [2, 0] and not app.quit_report['forced'],
+              alerts=alerts, quit=app.quit_report)
+
+        # Review R1 finding 1: an approved attempt that a page's beforeunload "Stay" ends
+        # must not leave the next quit prompt-free. Close Open, Stay, new download, quit:
+        # the downloads alert must appear again.
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        tab = E.new_tab(app, base + '/')
+        profile_id = next(v['profile'] for v in app.call('spaces') if v['focused'])
+        app.call('download-settings', profile=profile_id, directory=str(first), ask=False)
+        armed = E.new_tab(app, base + '/arm')
+        app.call('wait', tab=armed)
+        try:
+            app.call('click', tab=armed, selector='#arm')  # beforeunload needs a user activation
+            running = start('/slow')
+            wait(lambda: item(running).get('received', 0) > 0)
+            app.call('download-policy', quit='close')
+            downloads_before = download_alerts()
+            request('quit')
+            def dialog_visible():
+                return bool((E._try(lambda: app.call('dialog-state')) or {}).get('visible'))
+            stay = wait(lambda: dialog_visible() or None, 10)
+            if stay: app.call('dialog-button', accept=False)
+            survived = wait(lambda: (not dialog_visible() and bool(app.process_path(app.pid))) or None, 5)
+            again = start('/slow')
+            wait(lambda: item(again).get('received', 0) > 0)
+            app.call('download-policy', quit='keep')
+            request('cancel')
+            asked_again = wait(lambda: download_alerts() >= downloads_before + 2 or None, 10)
+            check('generic_quit_stay_then_requit', bool(stay) and bool(survived) and bool(asked_again)
+                  and item(again).get('state') == 'inProgress' and app.process_path(app.pid),
+                  stay=bool(stay), survived=bool(survived), downloadAlerts=download_alerts() - downloads_before,
+                  again=item(again))
+        finally:
+            # Leave no page or quit prompt behind (review checklist §4).
+            E._try(lambda: app.call('dialog-button', accept=False) if (app.call('dialog-state') or {}).get('visible') else None)
+            E._try(lambda: app.eval(armed, 'onbeforeunload=null;true'))
+            E._try(lambda: app.call('download-policy', quit='close'))
+            app.quit()
+
+        # The harness must still exit with the setting on and no alert policy.
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        app.quit()
+        check('generic_quit_harness_bypass', not app.quit_report['forced'] and generic_alerts() == 0,
+              quit=app.quit_report, alerts=generic_alerts())
+
     def clear_flow():
         nonlocal tab
         original_space = next(s['id'] for s in app.call('spaces') if s['focused'])
@@ -374,7 +520,8 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow, "quit": quit_flow}
+                     "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
+                     "quit": quit_flow, "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
             selected = set(selection.split(',')) if selection else set(flows)
             flows['cancel-sheet'] = cancel_sheet_flow
