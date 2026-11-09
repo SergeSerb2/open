@@ -947,10 +947,13 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                 app.call('dialog-button', accept=False)
                 wait(lambda: app.call('dialog-state'), lambda s: not s.get('pending'), 'beforeunload stayed open')
                 app.call('defaults', key='open.general.warnBeforeQuitting', value=True)
+                # A download navigation on the armed page would itself ask
+                # beforeunload before the quit proof. Keep both real fixtures.
+                download_tab = harness.new_tab(app, base_url + '/')
 
                 def start_download():
-                    app.eval(tab, '(() => {let a=document.createElement("a");a.href=%s;a.id="review-download";a.textContent="download";document.body.append(a)})()' % json.dumps(base_url + '/slow'))
-                    app.call('click', tab=tab, selector='#review-download')
+                    app.eval(download_tab, '(() => {let a=document.createElement("a");a.href=%s;a.id="review-download";a.textContent="download";document.body.append(a)})()' % json.dumps(base_url + '/slow'))
+                    app.call('click', tab=download_tab, selector='#review-download')
                     return wait(lambda: app.call('downloads-state'),
                                 lambda s: s['running'] and any(i['received'] > 0 for i in s['items']), 'real download did not start')
                 start_download()
