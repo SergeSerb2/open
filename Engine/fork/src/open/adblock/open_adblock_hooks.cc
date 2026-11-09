@@ -185,8 +185,16 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
     const net::IsolationInfo& isolation_info,
     network::URLLoaderFactoryBuilder& factory_builder) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!service) {
+    return;
+  }
+  // Track documents even while disabled or on a zero-list generation. Those
+  // pages may populate MemoryCache before blocking is turned back on.
+  if (type == FactoryType::kDocumentSubResource) {
+    service->OnDocumentFactoryCreated();
+  }
   // §7.2 rule 1 and 2: a Profile with a service that blocks ads.
-  if (!service || !service->IsEnabled()) {
+  if (!service->IsEnabled()) {
     return;
   }
   // The tab's counts exist before its first stop, so a page with none (or

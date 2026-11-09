@@ -629,7 +629,11 @@ void OpenAdBlockService::SetEnabled(bool enabled) {
   if (shut_down_) {
     return;
   }
-  const bool turns_blocking_on = enabled && !enabled_;
+  const bool turns_blocking_on =
+      enabled && !enabled_ && may_have_unblocked_content_;
+  if (!enabled && (status_.engine_loaded || has_document_)) {
+    may_have_unblocked_content_ = true;
+  }
   enabled_ = enabled;
   status_.enabled = enabled;
   if (!enabled) {
@@ -651,13 +655,25 @@ void OpenAdBlockService::SetEnabled(bool enabled) {
     LoadFromDirectory(adblock_root_, /*prefer_dat=*/true);
   }
   if (turns_blocking_on) {
-    InvalidateRendererCaches("enabled");
+    InvalidateRendererCaches("enabled_after_unblocked_state");
+    may_have_unblocked_content_ = false;
   }
   NotifyStatus();
 }
 
 bool OpenAdBlockService::IsEnabled() const {
   return enabled_ && !shut_down_;
+}
+
+void OpenAdBlockService::OnDocumentFactoryCreated() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (shut_down_) {
+    return;
+  }
+  has_document_ = true;
+  if (!enabled_ || (!status_.engine_loaded && status_.generation > 0)) {
+    may_have_unblocked_content_ = true;
+  }
 }
 
 void OpenAdBlockService::SetExcludedDomains(
@@ -753,6 +769,7 @@ void OpenAdBlockService::SetListDirectory(base::FilePath adblock_root) {
   }
   adblock_root_.clear();
   initial_load_pending_ = false;
+  may_have_unblocked_content_ |= has_document_;
   latest_load_id_->fetch_add(1, std::memory_order_acq_rel);
   status_ = AdBlockStatus();
   status_.match_cap_bytes = kOpenAdBlockMatchCapBytes;
@@ -795,6 +812,9 @@ void OpenAdBlockService::OnBuilt(
   status_.last_build_ms = result.build_ms;
   status_.last_error = result.error;
   if (success) {
+    const bool replaces_engine = status_.engine_loaded;
+    const bool needs_cache_clear =
+        replaces_engine || may_have_unblocked_content_;
     status_.engine_loaded = !!result.engine;
     status_.engine_from_dat = result.from_dat;
     status_.engine_shared = result.shared;
@@ -820,8 +840,14 @@ void OpenAdBlockService::OnBuilt(
           }
         },
         result.empty_generation, std::move(result.engine)));
-    if (enabled_ && status_.engine_loaded) {
-      InvalidateRendererCaches("generation_installed");
+    if (enabled_ && status_.engine_loaded && needs_cache_clear) {
+      InvalidateRendererCaches(replaces_engine
+                                  ? "generation_replaced"
+                                  : "generation_after_unblocked_document");
+      may_have_unblocked_content_ = false;
+    } else if ((!enabled_ && status_.engine_loaded) ||
+               (result.empty_generation && has_document_)) {
+      may_have_unblocked_content_ = true;
     }
   } else {
     PostToMatcher(base::BindOnce(

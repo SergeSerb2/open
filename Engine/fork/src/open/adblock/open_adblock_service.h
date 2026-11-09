@@ -50,6 +50,11 @@ class OpenAdBlockService {
   // UI mirror of the switch (and not shut down).
   bool IsEnabled() const;
 
+  // Records a document's factory before the disabled-path early return.
+  // Initial enabled documents wait for their first engine, so they do not
+  // arm a clear. Disabled or verified zero-list documents can cache content.
+  void OnDocumentFactoryCreated();
+
   // Normalized and checked here; the callers' input is not trusted.
   void SetExcludedDomains(std::vector<std::string> registrable_domains);
   // UI mirror: is |host| (lowercase, no trailing dot) or a parent domain of
@@ -141,6 +146,8 @@ class OpenAdBlockService {
   bool enabled_ = false;
   bool initial_load_pending_ = false;
   bool shut_down_ = false;
+  bool has_document_ = false;
+  bool may_have_unblocked_content_ = false;
   base::flat_set<std::string> excluded_domains_;
 
   // The latest load id, shared with the build tasks so a stale build stops
