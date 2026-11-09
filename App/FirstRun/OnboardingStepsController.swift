@@ -148,6 +148,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   }
   private func render(direction: Int) {
     guard isViewLoaded else { return }
+    controls.allowsOverflow = step == .favorites
     host?.view.removeFromSuperview(); host = nil
     controls.subviews.forEach { $0.removeFromSuperview() }; footer.subviews.forEach { $0.removeFromSuperview() }
     cardButtons.forEach { $0.removeFromSuperview() }; cardButtons.removeAll()
@@ -453,7 +454,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   override func cancelOperation(_ sender: Any?) { onEscape?() }
 }
 @MainActor private final class OnboardingControls: OnboardingSurface {
-  override var wantsDefaultClipping: Bool { false }
+  var allowsOverflow = false
+  override var wantsDefaultClipping: Bool { !allowsOverflow }
 }
 @MainActor private final class OnboardingPanel: OnboardingSurface {
   override func draw(_ rect: NSRect) { (effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 30/255, alpha: 1):.white).setFill(); bounds.fill() }

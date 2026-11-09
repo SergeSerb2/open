@@ -12,8 +12,9 @@ import QuartzCore
   private var hovered = false
   var selected = false {
     didSet {
+      setAccessibilityValue(selected ? 1:0)
       guard selected != oldValue else { return }
-      setAccessibilityValue(selected ? 1:0); updateSurface(animated: true); updateBadge(animated: true); needsDisplay = true
+      updateSurface(animated: true); updateBadge(animated: true); needsDisplay = true
     }
   }
   override var interactionHoverScale: Double { 1 }
