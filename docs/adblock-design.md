@@ -286,11 +286,17 @@ native branch, a missing pointer keeps the initial load in `awaiting_generation`
 with a 1,500 ms deadline per eligible request and a process-wide 128-request
 limit. Bad manifests/SHA or other real load errors end that wait and fail open;
 a valid zero-list generation completes it. Main-frame navigation stays direct.
-This App-only branch still fails open before an engine is ready. Fresh
-post-onboarding first-request blocking with its logged hold time, saved-off/
-excluded behavior, and launch impact remain pending real-App proof. Fresh and
-warm first-paint comparisons each require at least five interleaved main/branch
-pairs after the lead releases the build and screen holds.
+This App-only branch still fails open before an engine is ready. The M5
+App-only probe on 2026-11-09 blocked the first post-onboarding script and loaded
+its allowed control while the after-paint adapter was still unstarted. The fresh
+generation was already published before onboarding finished. On warm relaunch,
+the first script loaded before the DAT engine arrived; saved-off and excluded
+controls also loaded. The main engine has no cold-hold counters, so the probe's
+browser resource durations are not native hold measurements. Receipts are in
+`.re/s13/i/resume-0952/probe-branch/`; the Chrome-style App ad-block suite passed
+81 rows. The companion native first-request/deadline proof remains pending.
+Fresh and warm first-paint comparisons each require at least five interleaved
+main/branch pairs and are recorded separately from these functional results.
 
 ### Site Control Center and Settings UI
 

@@ -4500,7 +4500,7 @@ distribution (stamp 5602914f…). Step 4 is not applied there. To put it
 back: copy `Engine/fork/src/open/adblock/` from this branch into the tree,
 then replace 0310 and apply 0311 from this branch's `patches/cef/`.
 
-### Cold-start App erratum (2026-11-09, code checkpoint)
+### Cold-start App erratum (2026-11-09, App-only verification)
 
 The adapter now posts exclusions, the deterministic Profile list directory,
 and enabled state when a context is created, including Default at engine
@@ -4518,9 +4518,15 @@ The companion native change keeps an unpublished pointer in
 `awaiting_generation` under the same 1,500 ms per-request / 128 process-wide
 limits. Real manifest/SHA/read errors end pending; an engine or valid zero-list
 generation completes the initial load. This App-only branch still fails open
-before an engine arrives. Fresh post-onboarding first-request blocking with
-logged hold time, five fresh and five warm first-paint pairs, and native
-boundary/negative proofs remain unverified.
+before an engine arrives. The M5 App-only probe blocked the first
+post-onboarding script with an allowed control while the after-paint adapter
+was still unstarted; its generation was already published before onboarding
+finished. Warm relaunch exposed the remaining first-engine gap. Saved-off and
+excluded controls loaded. The Chrome-style App ad-block suite passed 81 rows.
+Raw receipts are in `.re/s13/i/resume-0952/`. Main's engine exposes no cold-hold
+counters; browser resource durations do not prove native hold time. Fresh/warm
+first-paint pairs are a separate gate. Native deadline/boundary proofs still
+belong to the companion branch.
 
 ### Section 13 lead decisions (2026-11-07)
 
