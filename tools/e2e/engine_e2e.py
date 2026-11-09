@@ -257,7 +257,8 @@ class Open:
         self.launch_log_path = log_path + ".launch-%d.log" % time.time_ns()
         # The first-frame timeout fixture also uses open without -W. Its
         # successful early launcher exit must not be mistaken for app exit.
-        wait_args = [] if (extra_env or {}).get("OPEN_E2E_NO_LAUNCH_WAIT") == "1" else ["-W"]
+        launch_without_wait = (extra_env or {}).get("OPEN_E2E_NO_LAUNCH_WAIT") == "1"
+        wait_args = [] if launch_without_wait else ["-W"]
         launch = ["/usr/bin/open", "-n"] + wait_args + ["-a", self.bundle] + list(delivery_urls) + [
                   "--stdout", self.launch_log_path, "--stderr", self.launch_log_path]
         for key, value in env.items():
@@ -267,7 +268,9 @@ class Open:
         # Cold external-URL fixtures require LaunchServices to send the real
         # open-URL Apple event during startup. Keep their unique data root,
         # owner-exit watcher and verified-PID cleanup under strict supervision.
-        self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls
+        # The early-launcher-exit fixture must exercise open(1), not the App
+        # child that stays alive until quit. Keep strict death checks for both.
+        self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls and not launch_without_wait
         self.proc = subprocess.Popen(args if self.direct_child else launch,
                                      env=env if self.direct_child else None,
                                      stdout=self.log, stderr=subprocess.STDOUT)
