@@ -26,8 +26,20 @@ std::string_view AdBlockClassIdObserverScript() {
   let classOffset = 0;
   let idOffset = 0;
   let timer = 0;
+  let workTimer = 0;
   let tokenCharacters = 0;
   let collecting = true;
+  let head = null;
+  let tail = null;
+  // Retain the walker and the class/ID position when one task yields.
+  let active = null;
+  const stopCollecting = () => {
+    collecting = false;
+    observer.disconnect();
+    clearTimeout(workTimer);
+    workTimer = 0;
+    head = tail = active = null;
+  };
   const add = (token, seen, pending) => {
     if (!collecting) return;
     if (!token || token.length > 2048 || seen.has(token)) return;
@@ -35,42 +47,36 @@ std::string_view AdBlockClassIdObserverScript() {
     // no filter. These caps are separate from the 64 inserted-sheet limit.
     if (seenClasses.size + seenIds.size >= 65536 ||
         tokenCharacters + token.length > 4 * 1024 * 1024) {
-      collecting = false;
-      observer.disconnect();
+      stopCollecting();
       return;
     }
     seen.add(token);
     pending.push(token);
     tokenCharacters += token.length;
   };
-  // Bound each initial scan or mutation batch, including nodes with no
-  // tokens and repeated/invalid tokens that do not enter the lifetime sets.
+  // This is a task budget, not a document limit. Exhaustion only yields.
   const spend = budget => {
-    if (--budget.steps < 0) {
-      collecting = false;
-      observer.disconnect();
-      return false;
-    }
+    if (!budget.steps) return false;
+    --budget.steps;
     return true;
   };
-  const collectElement = (element, budget) => {
-    if (!collecting || !spend(budget)) return;
-    for (const token of element.classList) {
-      if (!spend(budget)) break;
-      add(token, seenClasses, classes);
-      if (!collecting) break;
+  const scan = (element, subtree, initial = false) => ({
+    element, classIndex: 0, phase: 0, initial,
+    walker: subtree ? document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT) : null
+  });
+  const collectElement = (state, budget) => {
+    if (!state.phase) {
+      if (!spend(budget)) return false;
+      state.phase = 1;
     }
-    if (collecting && spend(budget)) add(element.id, seenIds, ids);
-  };
-  const collect = (node, budget) => {
-    if (!collecting || node.nodeType !== Node.ELEMENT_NODE) return;
-    collectElement(node, budget);
-    // A TreeWalker avoids a second, unbounded array of matching DOM nodes.
-    const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
-    let element;
-    while (collecting && (element = walker.nextNode())) {
-      collectElement(element, budget);
+    while (state.classIndex < state.element.classList.length) {
+      if (!spend(budget)) return false;
+      add(state.element.classList[state.classIndex++], seenClasses, classes);
+      if (!collecting) return false;
     }
+    if (!spend(budget)) return false;
+    add(state.element.id, seenIds, ids);
+    return collecting;
   };
   const flush = () => {
     timer = 0;
@@ -87,7 +93,7 @@ std::string_view AdBlockClassIdObserverScript() {
       }
     }
     if (result < 0) {
-      observer.disconnect();
+      stopCollecting();
       classes.length = ids.length = 0;
       seenClasses.clear();
       seenIds.clear();
@@ -102,22 +108,63 @@ std::string_view AdBlockClassIdObserverScript() {
       trace(3, classes.length - classOffset + ids.length - idOffset);
     }
   };
-  const observer = new MutationObserver(records => {
+  const drain = () => {
+    workTimer = 0;
     const budget = {steps: 65536};
-    for (const record of records) {
-      if (!collecting || !spend(budget)) break;
-      if (record.type === 'attributes') collectElement(record.target, budget);
-      else for (const node of record.addedNodes) {
-        if (!collecting || !spend(budget)) break;
-        collect(node, budget);
+    while (collecting && budget.steps) {
+      if (active) {
+        if (!collectElement(active, budget)) break;
+        const element = active.walker && active.walker.nextNode();
+        if (element) {
+          active.element = element;
+          active.classIndex = active.phase = 0;
+        } else {
+          if (active.initial) trace(2, classes.length + ids.length);
+          active = null;
+        }
+        continue;
+      }
+      if (!head) break;
+      if (head.recordIndex === head.records.length) {
+        head = head.next;
+        if (!head) tail = null;
+        continue;
+      }
+      const record = head.records[head.recordIndex];
+      if (!spend(budget)) break;
+      if (record.type === 'attributes') {
+        ++head.recordIndex;
+        active = scan(record.target, false);
+      } else if (head.nodeIndex < record.addedNodes.length) {
+        const node = record.addedNodes[head.nodeIndex++];
+        if (node.nodeType === Node.ELEMENT_NODE) active = scan(node, true);
+      } else {
+        ++head.recordIndex;
+        head.nodeIndex = 0;
       }
     }
     schedule();
+    if (collecting && (active || head)) {
+      trace(6);
+      workTimer = setTimeout(drain, 0);
+    }
+  };
+  const observer = new MutationObserver(records => {
+    if (!collecting) return;
+    // Linked batches retain MutationRecord and addedNodes positions without
+    // copying an unbounded subtree into another array.
+    const batch = {records, recordIndex: 0, nodeIndex: 0, next: null};
+    if (tail) tail.next = batch;
+    else head = batch;
+    tail = batch;
+    if (!workTimer) workTimer = setTimeout(drain, 0);
   });
   // The native entry runs one task after document-element creation. Read
   // existing parser/inline-script elements once before watching mutations.
-  collect(root, {steps: 65536});
-  trace(2, classes.length + ids.length);
+  active = scan(root, true, true);
+  drain();
+  // Observe before the first yielded task: parser/SPA changes during the
+  // remaining initial scan must also be queued, even if the walker saw them.
   if (collecting) {
     observer.observe(root, {subtree: true, childList: true,
                             attributes: true, attributeFilter: ['class', 'id']});

@@ -17,13 +17,13 @@
 #include "base/no_destructor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
-#include "chrome/common/chrome_isolated_world_ids.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "gin/arguments.h"
 #include "gin/converter.h"
 #include "gin/function_template.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "open/adblock/renderer/open_adblock_isolated_world.h"
 #include "open/adblock/renderer/open_adblock_page_script.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -174,19 +174,19 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
   v8::HandleScope scope(isolate);
   const auto alive = weak_ptr_factory_.GetWeakPtr();
   auto context = frame->GetScriptContextFromWorldId(
-      isolate, ISOLATED_WORLD_ID_CHROME_INTERNAL);
+      isolate, kOpenAdBlockIsolatedWorldId);
   if (context.IsEmpty()) {
     // The Blink getter can return an empty context. Enter the normal world
     // creation path; our context callback installs the binding synchronously.
     frame->ExecuteScriptInIsolatedWorld(
-        ISOLATED_WORLD_ID_CHROME_INTERNAL,
+        kOpenAdBlockIsolatedWorldId,
         blink::WebScriptSource(blink::WebString::FromUtf8("void 0")),
         blink::BackForwardCacheAware::kAllow);
     if (!alive || document_epoch != document_epoch_) {
       return;
     }
     context = frame->GetScriptContextFromWorldId(
-        isolate, ISOLATED_WORLD_ID_CHROME_INTERNAL);
+        isolate, kOpenAdBlockIsolatedWorldId);
   }
   if (context.IsEmpty()) {
     return;
@@ -200,7 +200,7 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
           << " frame=" << frame->GetLocalFrameToken().ToString()
           << " world=" << frame->GetScriptContextWorldId(context);
   frame->ExecuteScriptInIsolatedWorld(
-      ISOLATED_WORLD_ID_CHROME_INTERNAL,
+      kOpenAdBlockIsolatedWorldId,
       blink::WebScriptSource(
           blink::WebString::FromUtf8(AdBlockClassIdObserverScript())),
       blink::BackForwardCacheAware::kAllow);
@@ -209,7 +209,7 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
 void OpenAdBlockRendererAgent::DidCreateScriptContext(
     v8::Local<v8::Context> context,
     int32_t world_id) {
-  if (world_id == ISOLATED_WORLD_ID_CHROME_INTERNAL) {
+  if (world_id == kOpenAdBlockIsolatedWorldId) {
     InstallBinding(context, "callback");
   }
 }
@@ -217,7 +217,7 @@ void OpenAdBlockRendererAgent::DidCreateScriptContext(
 void OpenAdBlockRendererAgent::WillReleaseScriptContext(
     v8::Local<v8::Context> context,
     int32_t world_id) {
-  if (world_id == ISOLATED_WORLD_ID_CHROME_INTERNAL && binding_installed_ &&
+  if (world_id == kOpenAdBlockIsolatedWorldId && binding_installed_ &&
       binding_context_.Get(v8::Isolate::GetCurrent()) == context) {
     binding_context_.Reset();
     binding_installed_ = false;

@@ -2179,9 +2179,13 @@ Start the isolated observer in the frame's next AgentGroupScheduler task,
 guarded by a WeakPtr and document epoch. Enter that scheduler's isolate,
 install the native binding, then execute the observer. Before observing
 mutations, scan the existing document once, including elements created by
-parser or top-of-body inline scripts. The scan and each mutation batch stop
-after 65,536 node/token inspection steps, in addition to the existing
-65,536 distinct-token and 4,194,304 UTF-16-unit lifetime caps. Queued generic
+parser or top-of-body inline scripts. **Review correction (19:08):** after
+65,536 node/token inspection steps, work yields with `setTimeout(0)` and
+resumes with a fresh budget. It retains the TreeWalker, element class/ID
+position, MutationRecord index and added-node index. Mutation observation
+starts before the first yielded task so changes during an unfinished initial
+scan are queued. Only the 65,536 distinct-token / 4,194,304 UTF-16-unit
+lifetime caps, or a negative native report result, disconnect. Queued generic
 reports still send at most 500 tokens per flush. The new C-4 inline variant
 requires hiding and initial-scan evidence in 10/10 navigations. The rebuilt
 `335e9f8d` binary passes both C-4 variants 10/10; the inline variant also
@@ -2345,8 +2349,16 @@ context to CEF's `OnContextCreated` (F-29), so OpenEngine's own context
 hook also runs in this world; it must ignore contexts it does not own
 (P7 follow-up).
 
-*Co-tenants of the shared world (review r1 finding 10; v1 keeps the ID by
-lead ruling).* An isolated world separates scripts from the **page**, not
+**Private cosmetics world (2026-11-08 19:08 review).** Chromium patch 0902
+reserves macOS world **7**, below `ISOLATED_WORLD_ID_EXTENSIONS` (now 8).
+The overlay's `renderer/open_adblock_isolated_world.h` defines and statically
+checks `kOpenAdBlockIsolatedWorldId`. Chrome internal world 4 and the existing
+Open/P7 world 6 have different V8 globals and cannot see this binding.
+The pinned enum had no free slot, so the patch explicitly reserves one;
+the extension allocator starts above it. Build/runtime rerun pending.
+
+*Historical co-tenants of the shared world (review r1 finding 10;
+superseded by the private-world correction above).* An isolated world separates scripts from the **page**, not
 from other browser code in the same world: code in one world shares one
 V8 global. In this tree the world also hosts the DOM Distiller observer
 (`chrome/renderer/chrome_content_renderer_client.cc:741-742`) and the
@@ -4793,11 +4805,11 @@ and final build pass. No failed build output was launched.
   `{display:none!important}` rule, inserted with `WebCssOrigin::kUser`
   and `BackForwardCacheAware::kAllow`. No style DOM node, CSS-valued
   script interpolation or main-world global is created.
-- The fixed class/ID observer runs in
-  `ISOLATED_WORLD_ID_CHROME_INTERNAL` only after native binding installation.
+- The fixed class/ID observer runs in private cosmetics world 7
+  (`kOpenAdBlockIsolatedWorldId`, Chromium 0902) after native binding installation.
   It starts in the frame's next task, after Blink's script prohibition
-  ends. A bounded scan of existing document tokens precedes mutation
-  observation, so parser and early inline-script nodes are included.
+  ends. It begins scanning existing tokens and starts mutation observation
+  before yielding, so parser and early inline-script nodes are included.
   An early context callback installs the binding idempotently; its
   `v8::Global<Context>` follows release. Weak callbacks read the current
   payload lazily. Generic replies carry a document epoch and old replies
@@ -4873,9 +4885,9 @@ the supplied origin, and return null (empty generic output) with a
  The renderer checks for an
 empty result from `GetScriptContextFromWorldId`; if needed it creates the
 world with fixed `void 0`, then installs before executing the observer,
-matching the existing P7 creation pattern. The legacy shared Chrome
-internal world is kept as specified; the separate Open world is not
-silently substituted. The observer token/character work limits and the
+matching the existing P7 creation pattern. The 19:08 review replaces the
+shared Chrome world with private cosmetics world 7, separate from P7 world 6.
+The observer task budget yields and resumes; its token/character lifetime limits and the
 64-slot reservation are explicit implementation bounds. The 500-selector
 reply cap is independent of the 500-token input cap.
 
@@ -4965,6 +4977,14 @@ attribution. E4 makes no product fix or budget change for this row.
 Both contended gates pass, so the priority lane and no-wait fallback
 are not required. Neither gate needs a quiet rerun or an S16 routing row.
 Runtime receipts and each milestone checkpoint belong in `.re/s13/e4/`.
+
+**19:08 review correction, validation pending.** The observer no longer
+disconnects at its per-task step budget. Two real CEF fixtures cover 30,000
+initial parser elements and one 30,000-node insertion, each with a final
+generic-rule element and repeated class tokens below the lifetime cap.
+The requested rerun is the 18 functional rows plus these two cases,
+binding-before-observer/world-7 checks, real-App cosmetic controls and one
+C-G1 run after rebuilding own targets then the full framework in s13b.
 
 
 ### Step 5 root and shared-sequence bounds (2026-11-08 14:00)

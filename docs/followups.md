@@ -402,9 +402,10 @@ live Open Default; named Profiles still match stable import IDs only.
   AD3 reproduces on Step 4 App, owned by F. Windowed checks use the shared
   screen lock after builds; timing calls also take the quiet lock.
 - Scriptlets, `:style()`, `:remove*()` and procedural filters remain
-  post-v1 by lead ruling 6. The shared Chrome internal isolated world is
-  kept for this milestone; coordinate a dedicated cosmetic world with P7
-  before a co-tenant enumerates that world's globals (plan §8.3).
+  post-v1 by lead ruling 6. The 19:08 review reserves private cosmetics
+  world 7 (Chromium 0902), separate from Chrome internal 4 and Open/P7 6.
+  It also makes the 65,536-step task budget yield and resume. Rebuild and
+  real CEF/App reruns, including two 30,000-element cases, are pending.
 - Generic collection stops at 65,536 distinct tokens or 4,194,304 UTF-16
   code units per document; native inputs also cap each token at 2,048
   UTF-8 bytes. A page beyond those limits can miss generic hiding. Review

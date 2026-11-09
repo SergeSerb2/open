@@ -4,6 +4,7 @@
 
 source_set("renderer") {
   sources = [
+    "open_adblock_isolated_world.h",
     "open_adblock_page_script.cc",
     "open_adblock_page_script.h",
     "open_adblock_renderer_agent.cc",
