@@ -840,3 +840,196 @@ cast. This is the lead's later attribution; the original STOP receipt remains
 unchanged. The M5 and M1 screen holds still stand. No App, probe, timing run
 or verifier was launched for this checkpoint. The interrupted full gate and
 other pending acceptance rows remain open; all checkpoint jobs finished.
+
+### M5 clearance at 08:31: new proof and a second STOP
+
+The lead cleared the M5 on 2026-11-09. The new receipts are in
+`postclear-0831-20261109/`; earlier receipts remain unchanged. The two normal
+Apps survived the overnight cleanup. Deep strict signature checks and the
+engine fingerprint preflight passed, so no App rebuild was needed.
+`artifacts.json` records their exact hashes and the original build receipt.
+The distribution remains
+`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`;
+normalized embedded code remains
+`983ddb7a61e82970c8315db8f980881bd2495fe996148436d016b17c5610a1ba`.
+Both contain #271 and 0106. Native ad blocking remains ON by default.
+
+The runtime proof head was `1a2f96e74c7a93ccec0908431462b7942b60a423`.
+Its App and engine source matches the recorded native head `046a0778`.
+After the STOP below, main `d624b952861730f169b788243a59964be6de2eff`
+(#275) was merged as `3717f4ef2222866625b5dd502a95b78fa658cb1d`.
+That merge changes only `sidebar-render/PreviewChecks.swift`; App and engine
+inputs are unchanged. The runtime rows below therefore retain their exact
+proof head. Full verification of the new merged head has not run.
+No engine source, patch, manifest or series changed in this update.
+
+The Chromium apply order remains:
+
+```text
+0301 0302 0303 0304 0305 0306 0401 0402 0403
+0501 0504 0506 0601
+0801 0802 0803 0804 0805 0806 0807 0808 0809 0810
+0106
+```
+
+The CEF and Rust orders remain those recorded in the #271 rebuild above.
+The required 0106-after-08xx numeric-order difference is WARN only.
+`engine-status-merged-result.json` records 7 PASS, 0 FAIL, 1 WARN after
+merging #275; exit zero, 8.41 seconds, load1 17.49→16.44. An earlier status
+invocation passed all seven checks but rejected the JSON output location.
+The retry used an allowed worktree path. Both invocations are retained.
+
+| Row | Morning rebuilt-engine result | Receipt or limit |
+|---|---|---|
+| a | PASS | Three full runs after priming retain identical executable stat, link count two, saved identity and clone bundle inode; `functional/receipt.json` |
+| b | 7/7 scan-free in this new cohort; historical FAIL retained | Seven LaunchServices relaunches have matching RunningBoard start records and zero ChangetimeScan pairs in the captured intervals. All stat samples stay at the primed value. Earlier first-after-gap scans remain unexplained; this set does not close that cause |
+| c | PASS | In-place `cp` retains device/inode `16777229/1159232070`, changes nanosecond mtime, and recreates the clone and saved identity |
+| d | PASS | Two install paths get distinct cache directories and executable inodes; returning to the first reuses only its own clone |
+| e | Requested ad-hoc path PASS in both directions; DLV PENDING M1 | Disposable Release→Debug and Debug→Release installs both prime and reuse a clone before the atomic directory swap. Both builds contain #271 + 0106. This is not a new main control. Fresh renderers and a silent audio utility pass; existing GPU retained. Earlier forced GPU/network restart FAIL remains separate |
+| f | PASS | Two normal runs with the owned cache directory at 0500 render and launch renderer/GPU/utility helpers. No persistent clone appears; link count goes 1→2→1, with ctime changes, proving the safe per-run fallback |
+| g | PENDING next quiet window | No rebuilt-engine timing was run. The completed frozen pre-#271 A/B above remains labelled pre-#271 |
+| h | PARTIAL | Shell 7 PASS; engine-status 7 PASS/0 FAIL/1 WARN. Features stopped before launch on the crash guard. Updater did not run. Earlier post-#271 Features 26 PASS and updater 103 PASS remain a separate cohort |
+
+The b poller requested 1 ms and observed a worst gap of 3.88 ms. Each of
+seven runs has one unchanged stat event, equal to the post-prime value.
+No pre-engine ctime recurrence appears in these runs. The original copy,
+signature verification and two priming receipts are retained. No launch-gain
+claim follows from this functional set. The prior b FAIL, the windowless
+ctime anomaly and the inconclusive assessment-cache guess remain above.
+
+The first b attempt exited before any App launch: an inner priority assertion
+saw another section's flag after the outer wrapper had queued. Its measurement
+folder was empty. `b-queue-abort.json` records that harness failure. The retry
+kept the priority wait in the outer wrapper and omitted the duplicate check
+inside the held screen lock. No priority flag was set or removed by this work.
+The seven completed samples are the only simple-relaunch samples in this cohort.
+
+`requested-adhoc-Release-swap/receipt.json` and
+`requested-adhoc-Debug-swap/receipt.json` record the live replacements. The
+existing owned-directory `renamex_np(..., RENAME_SWAP)` helper matches the
+Sparkle 2.10.1 operation described above. The old staging App is removed
+before new helpers launch. Each direction renders three new local test sites,
+creates fresh renderer and audio utility processes, and quits cleanly.
+`swap-log-review.json` finds no captured signing-failure candidate tied to the
+observed App/helper PIDs or clone paths. This log check covers only its recorded
+intervals. It does not claim that all system messages concern these Apps.
+The separate historical forced-service restart failure remains unchanged.
+
+Each row batch and suite took its own screen-lock invocation. These are
+functional checks: no quiet lock, load gate, timing comparison or priority
+flag. No owned build ran during an App launch.
+
+| Batch | Result | Seconds after screen acquisition | Load1 start→end |
+|---|---|---:|---|
+| a/c/d/f, nine full runs | PASS | 26.79 | 9.81→8.78 |
+| b, two primes and seven relaunches | 7/7 scan-free; metadata stable | 18.82 | 5.60→7.21 |
+| e, Release→Debug | PASS | 19.12 | 7.59→8.27 |
+| e, Debug→Release | PASS | 18.90 | 8.59→8.45 |
+| shell | 7 PASS | 21.01 | 7.39→6.78 |
+| features | STOP before launch; no feature assertion ran | — | 21.05 at STOP |
+| updater | NOT RUN after STOP | — | — |
+
+### Renderer crash STOP at 09:15 and remaining verification
+
+At 09:15:45 GMT−07, the guard found the new real report
+`Open Helper (Renderer)-2026-11-09-091543.ips` while acquiring the Features
+screen lock. Features had not started an App. The report's capture time is
+09:15:28.2698; its header time is 09:15:43. It records PID 33603, parent Open
+PID 32710, `EXC_CRASH / SIGABRT`, and `blink::DevToolsSession::IOSession::DispatchProtocolCommand`
+among the faulting frames. It is not marked simulated. The App path is redacted.
+The parent had exited when checked. Ownership and cause are unassigned.
+No relationship to 0106 is established by this report.
+
+The last owned shell App and helper PIDs had all exited by 09:13:22 and do
+not include either report PID. The completed morning rows predate the crash
+capture. The guard refused to start Features, its wrapper exited 1, and the
+serial runner stopped. That exit is a crash-guard refusal, not a Features
+assertion failure. Updater and full verification were not started. No retry,
+App launch, probe or on-screen check followed. The lead was notified.
+`crash-stop.json`, `suite-features.log` and the wrapper receipt retain the STOP.
+
+The full `s16-heavy.sh tools/verify-all.sh` on merged head `3717f4ef` remains
+PENDING renewed screen clearance. The table below is a NOT RUN inventory,
+not an execution result. Optional user-data import was not selected.
+`full-verify-not-started.json` records the reason. The prior full gate's
+15 PASS / INTERRUPTED and the older 24 PASS / 1 timing FAIL remain above.
+
+| Current merged-head check | Result | Seconds |
+|---|---|---:|
+| build | NOT RUN after STOP | — |
+| commands-demo | NOT RUN after STOP | — |
+| roundtrip | NOT RUN after STOP | — |
+| space-legacy | NOT RUN after STOP | — |
+| space-editor | NOT RUN after STOP | — |
+| space-pad-compare | NOT RUN after STOP | — |
+| suggest-check | NOT RUN after STOP | — |
+| commands-dump | NOT RUN after STOP | — |
+| route | NOT RUN after STOP | — |
+| favicons | NOT RUN after STOP | — |
+| media-demo | NOT RUN after STOP | — |
+| sleep-demo | NOT RUN after STOP | — |
+| adblock-perf | NOT RUN after STOP | — |
+| adblock-catalog | NOT RUN after STOP | — |
+| profiles | NOT RUN after STOP | — |
+| settings-preview | NOT RUN after STOP | — |
+| sidebar-render | NOT RUN after STOP | — |
+| sidebar-compare | NOT RUN after STOP | — |
+| commandbar-render | NOT RUN after STOP | — |
+| features-render | NOT RUN after STOP | — |
+| extensions-render | NOT RUN after STOP | — |
+| sitecontrol-render | NOT RUN after STOP | — |
+| onboarding-render | NOT RUN after STOP | — |
+| boosts | NOT RUN after STOP | — |
+| verify-secrets-fixture | NOT RUN after STOP | — |
+
+Remaining: Features, updater and full verification need renewed M5 clearance.
+Hardened DLV and intentional crash recovery still need M1 clearance. Timing
+g on the rebuilt engine needs the next quiet window. The historical b FAIL
+and its unexplained first-after-gap cause remain recorded despite this new
+7/7 scan-free set. The PR is not ready to merge.
+
+`final-audit.json` records no remaining owned PID and all audited test clone
+caches removed. The new b profile and install copy are removed; its raw logs
+and stat receipts remain. Completed harnesses record Open preference restoration
+and zero owned windows. All 11 audited frozen executable, framework, script and
+input hashes and recorded inodes match the pre-run audit. The known new renderer
+report is retained. No system setting changed, no prohibited experiment ran,
+and no priority flag or shared lock file was changed. All owned jobs finished.
+
+### Main advanced to #280 after the STOP
+
+The final main fetch also brought `701bcab0c97805030f62970717b046f4b67e271b`
+(PR #280, window-border). It was merged as
+`2f956a0f6c81f703fb5bdbec7f8df6ec35daecac`. This changes App code, so the
+morning runtime table above is strictly evidence for its recorded earlier
+App/source head. It is not runtime acceptance of the new #280 Apps.
+There are no engine-file changes in either new main merge. The distribution,
+code hash and series order remain unchanged; no new engine rebuild is needed.
+
+Both Apps were rebuilt, one at a time through S16-heavy with
+`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s16`, without a launch.
+
+| Windowless check on 2f956a0f | Result | Seconds | Load1 start→end |
+|---|---|---:|---|
+| Debug App build | PASS | 75.80 | 9.60→10.07 |
+| Release automation App build | PASS | 155.62 | 10.07→13.89 |
+| Both engine fingerprints | PASS | 5.49 | 10.89→12.82 |
+| engine-status | 7 PASS / 0 FAIL / 1 order WARN | 8.24 | 10.89→12.82 |
+
+Deep strict signature verification also passed for both Apps. New executable
+SHA-256 values are Debug
+`f645b2af08a9116990b9d6023eb4fb0fa1b0d0ea074709bb1a239606655a6fa4` and
+Release `c76ca0520fc47435fb26ef12c15b68e1dba22d9f2a954c0cfba84ae47661add7`.
+Both embedded signed frameworks retain SHA-256
+`63c7e9aef11ec54c31360530c397a16fd9c8f5aef27cea2a7a2b1cb6e2336f7d`.
+`post280-artifacts.json`, `build-merged-debug.json`, `build-merged-release.json`,
+`post280-static.json` and `engine-status-post280-result.json` record these
+windowless checks. Neither new App has been launched.
+
+`full-verify-post280-not-started.json` records the same 25 NOT RUN rows for
+the new merged source. The older pre-#280 inventory remains unchanged.
+The new Apps need runtime qualification after renewed M5 clearance, including
+completion of Features, updater and the full verifier. DLV still needs M1
+clearance; rebuilt-engine timing still needs the next quiet window. The morning
+clone/scan/swap results and all historical failures retain their exact heads.
+No performance or merge-readiness claim follows from build/static success.

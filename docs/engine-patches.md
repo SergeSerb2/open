@@ -29,8 +29,10 @@ The cache lease protects a running browser's clone during live replacement.
 Design, rejected-disable evidence and current verification status are in
 [the clone report](re/codesign-clone-reuse.md). Normal-App reuse, invalidation,
 separate installs, fallback and the requested ad-hoc live swap passed.
-The scan gate is FAIL against the 7/7 target: residual first-after-gap
-scans, cause open, despite stable executable metadata (functional set 6/7).
+The historical scan gate remains FAIL against the 7/7 target: residual
+first-after-gap scans, cause open, despite stable executable metadata
+(functional set 6/7). The rebuilt-engine morning set is separately 7/7
+scan-free with unchanged metadata. It does not explain the earlier scans.
 Hardened DLV remains pending M1 clearance. The pre-#271 quiet-window runner
 completed seven pairs, but both variants failed the cold/warm budgets.
 Timing on the rebuilt post-#271 engine remains pending the next quiet window.
@@ -47,7 +49,14 @@ results. No launch-gain claim follows from these functional rows.
 The post-#271 full gate was interrupted by the real-crash STOP rule after
 15 PASS; its active Settings check was cancelled and nine checks did not run.
 No full-gate PASS is claimed. The lead later attributed the crash to the
-S11/window-border build; the screen hold still blocks the full-gate rerun.
+S11/window-border build. After renewed M5 clearance, a/c/d/f, seven scan-free
+relaunches, both ad-hoc swap directions and the shell suite passed again.
+A new real renderer crash report stopped the queue before Features launched
+at 09:15 on 2026-11-09. Ownership is unassigned. Updater and the new full gate
+did not start. Main #275 and then `701bcab0` (#280, window-border) are now
+merged. Engine inputs are unchanged. The morning runtime rows retain their
+earlier App/source identity; the #280 Apps need fresh runtime verification.
+Further screen work awaits renewed clearance.
 
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
