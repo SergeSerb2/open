@@ -4514,14 +4514,16 @@ passed 14 rows on this build. The resources-only generation API flow
 passed 26 rows, including no-engine status, the same-context unload
 control and exactly one restored list at generation 3. The zero-file
 fixture and official pinned-list/resources flow also passed 26 rows each.
-Other runtime receipts below precede Section 15's merge until their
-merged-build reruns are recorded. The root's clone hold ended at 14:00;
-the M5 screen hold remains active. Headless corpus/footprint/G-2/G-6 passed.
+The root's clone hold ended at 14:00; M5 screen clearance arrived at
+16:30. Headless corpus/footprint/G-2/G-6 passed. The merged N run passes
+32/32, production COUNT and its allowed control pass, and quiet page
+G-4/G-5/G-6 pass. The wrong-document control and URL edges are still
+awaiting their merged-build receipts.
 The same-context explicit-unload control for zero-list memory passed
 offscreen. The dev distribution and Debug App build also passed offscreen;
 the App's normalized engine code matches the recorded framework. Its bundle
-contains the 47 pinned redirect resources. Browser N/COUNT, real App
-acceptance, suites and the full gate follow M5 screen clearance.
+contains the 47 pinned redirect resources. Real App acceptance, suites
+and the full gate remain in progress.
 Before distribution and again before the done report,
 fetch main and check `Engine/fork` changes since the last merged main.
 Any new engine change requires merge, rebuild and engine reproof first.
@@ -4667,8 +4669,8 @@ The initial pre-build baseline has a separate 3,211,576-byte physical
 delta and does not isolate engine retention. Endpoint load1 is
 22.07 -> 21.55. Evidence:
 `.re/s13/e3/s15-empty-resources-warm-control-evidence.json` and
-`s15-zero-list-official-r2.log`. App request proofs remain pending
-screen clearance; the distribution and Debug App build are ready.
+`s15-zero-list-official-r2.log`. App request proofs remain pending;
+the distribution and Debug App build are ready.
 Historical receipts: `.re/s13/e3/empty-generation-before.log`,
 `empty-generation-after.log` and `empty-corpus-identity.json`; Step 7
 reproduction: `empty-resources-before.log`.
@@ -4720,6 +4722,14 @@ all 32 rows (`integrated-N-r2.results.json`), including the native/server
 count predicate, limits, workers, sockets, extension ordering, DAT reload
 and in-flight close/driver-failure cleanup.
 
+The post-Section-15 rerun also passes 32/32 (`s15-N-r1.results.json`).
+The production-default focused COUNT rerun (`s15-count-positive-r2`)
+records blocked old id 2 at 5 -> 8, new id 4 at zero at commit, load
+and 4.013 s after the witness, with zero server GETs. Its allowed control
+completes exactly three GETs, keeps the old count at 5 and the new count
+at zero through the same late reading. Outgoing unload CDP events remain
+zero in both variants and are not part of the predicate.
+
 **Unicode/IDN page edges.** All 16 cases pass against both the saved
 pre-ASCII build and the integrated build (32 rows). CDP observes the
 actual canonical ASCII specs, and allow/block verdicts remain identical
@@ -4735,12 +4745,23 @@ blocking-on median 118.2 ms versus off 144.7 ms. G-5 busy CPU failed at
 Receipt: `.re/s13/e3/integrated-page-loaded-r1-page-scopes.json`. These
 loaded numbers do not establish the quiet gate or a cause for the miss.
 
-**Remaining delivery gates.** The no-engine generation revision,
-recorded distribution, real App acceptance (including bundled resources
-and DAT reapplication) and the full verify gate remain pending in E3.
-The lead's 2026-11-08 12:27 ruling requires one more quiet load1 <=12
-opportunity after the App build. If none occurs, retain both loaded CPU
-receipts (12.756 ms at load1 48–50 and 8.576 ms at 40–42) and route the
-quiet G-5 row to Section 16 under ruling 2a; it does not block this PR. N-18 currently proves hook reachability only: no HTTP/3
+The lead's 17:43 priority instruction enabled a post-Section-15 quiet
+run after the App build. It passes G-4, G-5 CPU/wall and G-6, with
+all sampled load1 values 8.13–9.07 (limit 12). Loads 2–5 have on-load
+wall times 58.9/61.4/68.4/70.7 ms, median **64.900 ms**; off median is
+113.200 ms. Median busy thread CPU is **8.500 ms**, within 9 ms.
+The production idle purge occurs before measured load 2. G-4 includes
+all five loads: 1,000 requests, p50 <=32 µs, p99 <=256 µs, max <=512 µs.
+G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
+262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
+The 64.900 ms value is Step 5's C-G2 input T for this engine.
+
+**Remaining delivery gates.** The merged wrong-document negative and
+URL edges, real App acceptance (including bundled resources and DAT
+reapplication), suites and the full verify gate remain pending in E3.
+The no-engine generation revision, distribution, Debug App build and
+quiet G-5 gate now pass. Retain the earlier loaded CPU receipts
+(12.756 ms at load1 48–50 and 8.576 ms at 40–42) as historical attempts.
+N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
