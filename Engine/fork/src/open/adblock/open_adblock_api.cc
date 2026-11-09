@@ -101,6 +101,7 @@ CefRefPtr<CefDictionaryValue> CefGetOpenAdBlockStatus(
   auto value = CefDictionaryValue::Create();
   value->SetBool("enabled", status.enabled);
   value->SetBool("engine_loaded", status.engine_loaded);
+  value->SetBool("awaiting_generation", status.awaiting_generation);
   value->SetBool("engine_from_dat", status.engine_from_dat);
   value->SetBool("engine_shared", status.engine_shared);
   value->SetString("dat_policy", status.dat_policy);

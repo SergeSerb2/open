@@ -264,7 +264,8 @@ Swift side (`OpenFeatures`): `AdBlockStore` holds the catalog, per-Profile enabl
 
 An enabled context with a nonempty list directory can hold eligible
 subresources and subframe navigations while its first engine load is in
-flight. Main-frame navigations are never held. The matcher sequence owns
+flight, including the time before `current.json` is first published.
+Main-frame navigations are never held. The matcher sequence owns
 the queue and one deadline timer; it does not block a thread. Each request's
 deadline is its entry time plus 1,500 ms. At the deadline it fails open, even
 if an engine becomes available before the continuation runs. Scheduling can
@@ -280,20 +281,27 @@ per request. `--v=1` logs each completed hold without a URL or site;
 diagnostics. A full queue or an already elapsed deadline logs a skipped hold.
 
 Disabling blocking, excluding the site, clearing the directory, shutting
-down the service, or completing a failed/empty first load releases eligible
-waiters. A missing `current.json` is a failed load, with no polling or
-indefinite hold; the configured directory remains available for the App's
-later explicit reload after seeding. A context that has already installed
-an engine never enters this queue again, including during a reload. Off,
+down the service, or completing a real load error/empty first load releases
+eligible waiters. A missing `current.json` leaves the service in
+`awaiting_generation`, with no polling; requests keep their individual
+1,500 ms deadlines. A malformed pointer, bad manifest/SHA, refused symlink,
+or other read error ends the pending state, fails open, and sets `last_error`.
+The App explicitly reloads after seeding. A context that has installed an
+engine or verified a zero-list generation never enters this queue again,
+including during a reload. Turning blocking off ends the pending state;
+turning it back on retries an unfinished initial load. Off,
 excluded, no-load-in-flight, and warm requests have zero intentional hold.
 
 This native branch is stacked on Step 5. The App's early context
-configuration and post-paint reload are a separate branch. A truly unseeded
-Profile can still issue requests after the missing-pointer load fails and
-before the App starts its post-paint reload: that interval is fail-open under
-the no-load-in-flight rule. Blocking from the first fresh-profile request,
-warm-relaunch zero holds, queue/deadline boundaries, and launch-time impact
-remain unverified until the lead releases the build and screen holds.
+configuration and fresh-Profile seeding are a separate branch. Fresh Profiles
+start `openProfile` at context creation, once a background stat finds no
+generation pointer. Seed IO runs in `ListRepository`; warm Profiles still
+open after paint. Together, early seeding and awaiting-generation holding
+close the earlier missing-pointer gap in source. Blocking from the first
+fresh post-onboarding request, with its logged hold time, is still pending
+real-runtime proof. Fresh and warm launch comparisons each require at least
+five interleaved main/branch pairs, plus the queue/deadline and negative
+proofs, after the lead releases the build and screen holds.
 
 ### Site Control Center and Settings UI
 

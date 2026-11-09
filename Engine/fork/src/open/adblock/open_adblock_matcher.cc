@@ -338,7 +338,7 @@ OpenAdBlockMatcher::~OpenAdBlockMatcher() = default;
 void OpenAdBlockMatcher::SetEngine(std::shared_ptr<const EngineHolder> engine) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   engine_ = std::move(engine);
-  has_loaded_engine_ |= !!engine_;
+  initial_load_completed_ |= !!engine_;
   ColdHolds().FinishReady(this);
 }
 
@@ -357,9 +357,10 @@ void OpenAdBlockMatcher::SetExclusions(
   ColdHolds().FinishReady(this);
 }
 
-void OpenAdBlockMatcher::SetFirstLoadPending(bool pending) {
+void OpenAdBlockMatcher::SetFirstLoadPending(bool pending, bool completed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   first_load_pending_ = pending;
+  initial_load_completed_ |= completed;
   if (!pending) {
     ColdHolds().FinishReady(this);
   }
@@ -367,7 +368,7 @@ void OpenAdBlockMatcher::SetFirstLoadPending(bool pending) {
 
 bool OpenAdBlockMatcher::NeedsFirstEngineHold(std::string_view top_host) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return enabled_ && !has_loaded_engine_ && !engine_ && first_load_pending_ &&
+  return enabled_ && !initial_load_completed_ && !engine_ && first_load_pending_ &&
          !HostIsExcluded(exclusions_, top_host);
 }
 

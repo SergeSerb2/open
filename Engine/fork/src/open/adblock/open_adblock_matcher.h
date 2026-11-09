@@ -114,9 +114,9 @@ class OpenAdBlockMatcher
   void SetEngine(std::shared_ptr<const EngineHolder> engine);
   void SetEnabled(bool enabled);
   void SetExclusions(base::flat_set<std::string> normalized_domains);
-  // True only between an actual nonempty-directory load's start and reply.
-  // This is separate from engine_ so an unsuccessful first load stops holding.
-  void SetFirstLoadPending(bool pending);
+  // Includes awaiting the first current.json publication. A real load error
+  // ends the wait; completed also closes the initial window for zero lists.
+  void SetFirstLoadPending(bool pending, bool completed = false);
 
   bool NeedsFirstEngineHold(std::string_view top_host) const;
   // Matcher sequence only. Call only for eligible subresources/subframes,
@@ -161,7 +161,7 @@ class OpenAdBlockMatcher
   std::shared_ptr<const EngineHolder> engine_;
   bool enabled_ = false;
   bool first_load_pending_ = false;
-  bool has_loaded_engine_ = false;
+  bool initial_load_completed_ = false;
   base::flat_set<std::string> exclusions_;
   mutable AdBlockMatcherCounters counters_;
 };

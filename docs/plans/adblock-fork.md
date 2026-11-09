@@ -2899,14 +2899,19 @@ Thread rules (violations are Step-blocking bugs):
    load is therefore async. **Cold-start erratum (lead brief, 2026-11-09):**
    main-frame navigations still pass through. Enabled, non-excluded
    subresources and subframe navigations wait only while the first usable
-   engine's load is in flight, at most 1,500 ms from each request's entry.
+   engine's load is in flight or awaiting its first `current.json`
+   publication, at most 1,500 ms from each request's entry.
    One process-wide matcher-sequence queue holds at most 128 requests,
    including sockets; the deadline and queue overflow fail open. Failed or
-   empty loads release waiters; no load in flight means no hold. A missing
-   pointer waits for the App's explicit post-seed reload without polling.
-   A context that has already loaded an engine never holds again. See
-   `docs/adblock-design.md` for the fresh-profile fail-open interval. First
-   paint, first-request blocking, and warm zero-hold proof remain pending.
+   empty loads release waiters; real manifest/SHA/read errors end the
+   pending state and set `last_error`. A missing pointer instead leaves
+   `awaiting_generation` set until the App's explicit post-seed reload,
+   without polling. A context that has loaded an engine or verified a
+   zero-list generation never holds again. The App starts fresh-Profile
+   seeding at context creation (background pointer stat and repository IO);
+   warm Profiles keep after-paint opening. First-request blocking with a
+   logged hold, five fresh and five warm first-paint pairs, and warm
+   zero-hold proof remain pending.
 2. Every other engine call (checks, cosmetic queries, generic selectors)
    runs **only** on the matcher sequence (D-12, gate G-1). Those calls
    never do file I/O and never call CEF client code. The bounded first-load

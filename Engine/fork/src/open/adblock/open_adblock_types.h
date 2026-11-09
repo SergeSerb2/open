@@ -26,6 +26,8 @@ enum class AdBlockLoadResult {
   kStale,
   // The service shut down, or was destroyed, before the result arrived.
   kCancelled,
+  // No pointer has been published yet. Initial requests remain bounded-held.
+  kAwaitingGeneration,
 };
 
 // A snapshot of one Profile's ad-block state for OpenEngine (the panel and
@@ -41,6 +43,7 @@ struct AdBlockStatus {
   bool enabled = false;
   // An engine (from the DAT or from text) is installed.
   bool engine_loaded = false;
+  bool awaiting_generation = false;
   // The last successful load used the generation's engine.dat.
   bool engine_from_dat = false;
   // The generation the current engine came from (0: none).
