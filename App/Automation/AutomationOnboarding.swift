@@ -1,4 +1,5 @@
 #if OPEN_AUTOMATION
+import OpenOnboarding
 import AppKit
 import ObjectiveC.runtime
 import OpenDesign
@@ -6,6 +7,8 @@ import OpenSettings
 
 extension AutomationController {
   func runOnboarding(_ args: [String: Any]) async throws -> [String: Any] {
+    let pacingRegion = IntroPacingTrace.begin("automation.onboarding")
+    defer { pacingRegion?.end() }
     let action = args["action"] as? String ?? "state"
     let allowed: [String: Set<String>] = ["state": [], "skip-intro": [], "get-started": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
     guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,
@@ -53,6 +56,15 @@ extension AutomationController {
     }
     var state = app.onboardingWindowController?.state ?? app.onboardingReceipt ?? ["active": false, "screen": "done", "phase": "inactive", "dim": ["exists": false, "alpha": 0]]
     state["moduleActive"] = app.onboardingActivated
+    state["launchTiming"] = LaunchTiming.shared.report
+    state["audioPreparationPending"] = app.preparedOnboardingSound != nil
+    var startup = app.onboardingStartup
+    if let firstFrame = state["firstFrameHostTime"] as? Double,
+       let launch = startup["launchHostTime"] as? Double {
+      startup["firstOnboardingFrameHostTime"] = firstFrame
+      startup["launchToFirstOnboardingFrameMS"] = (firstFrame-launch)*1000
+    }
+    state["startup"] = startup
     if app.frontWindowController != nil { state["welcome"] = try welcome(["action": "state"]) }
     return state
   }

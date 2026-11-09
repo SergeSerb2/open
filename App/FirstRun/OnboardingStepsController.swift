@@ -17,9 +17,11 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   struct Site {
     let name: String
     let host: String
+    var iconSourceURL: URL? = nil
     var url: URL { URL(string: "https://" + host + "/")! }
   }
-  static let sites = [Site(name: "Gmail", host: "mail.google.com"), Site(name: "Google Maps", host: "maps.google.com"), Site(name: "YouTube", host: "youtube.com"), Site(name: "Notion", host: "notion.com"), Site(name: "Slack", host: "slack.com"), Site(name: "Figma", host: "figma.com"), Site(name: "GitHub", host: "github.com"), Site(name: "Linear", host: "linear.app"), Site(name: "Spotify", host: "spotify.com"), Site(name: "WhatsApp", host: "web.whatsapp.com"), Site(name: "ChatGPT", host: "chatgpt.com"), Site(name: "Wikipedia", host: "wikipedia.org")]
+  // Gmail's own favicon on Google's static host; runtime download only.
+  static let sites = [Site(name: "Gmail", host: "mail.google.com", iconSourceURL: URL(string: "https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico")), Site(name: "Google Maps", host: "maps.google.com"), Site(name: "YouTube", host: "youtube.com"), Site(name: "Notion", host: "notion.com"), Site(name: "Slack", host: "slack.com"), Site(name: "Figma", host: "figma.com"), Site(name: "GitHub", host: "github.com"), Site(name: "Linear", host: "linear.app"), Site(name: "Spotify", host: "spotify.com"), Site(name: "WhatsApp", host: "web.whatsapp.com"), Site(name: "ChatGPT", host: "chatgpt.com"), Site(name: "Wikipedia", host: "wikipedia.org")]
   unowned let app: AppDelegate
   let firstRun: FirstRunViewModel
   let replay: Bool
@@ -417,6 +419,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       let tile = icons.tiles[index]
       let button = favoriteButtons.indices.contains(index) ? favoriteButtons[index] : nil
       return ["index": index, "name": site.name, "iconState": tile.state,
+        "iconSourceURL": (site.iconSourceURL?.absoluteString as Any?) ?? NSNull(),
         "renderedKind": tile.image == nil ? "monogram" : "icon", "sourceKind": (tile.info?.sourceKind?.rawValue as Any?) ?? NSNull(),
         "pixelSize": [tile.info?.width ?? 0, tile.info?.height ?? 0], "opaque": tile.info?.opaque ?? false,
         "iconStyle": tile.info.map { $0.opaque && min($0.width, $0.height) >= 64 ? "full-bleed":"plate" } ?? "monogram",

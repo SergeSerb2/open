@@ -59,6 +59,49 @@ hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
 0.08 s; sound preparation deadline 0.3 s; frame measurement 0–8 s;
 resident measurement 3 s; orb periods 18/22/26 s.
 
+The worker publishes prepared-player readiness under a lock before notifying the
+main actor. At the animation start gate, the main actor reads that state directly.
+If preparation is still pending, its 300 ms deadline starts at that gate. An
+expired main-actor task from synchronous engine startup cannot discard a ready
+player. The receipt includes `prepareStart`, `workerReady`, `startRequest`,
+`decision` and actual animated `t0` host timestamps.
+
+First run prepares audio off main while the engine starts, without creating an
+onboarding window or dim overlay. After `engine.start` and the first native
+message-loop burst return, it creates and rasterizes the scene while unshown.
+Playback uses the common 80 ms lead. At t=0 it submits the window, every scene
+track and the dim fade together; the first visible intro frame is animated.
+The pre-start guard checks that both windows are unshown, all scene/dim
+animation keys are empty, and music has not started. Missing presentation layers
+are reported as such while unshown, never replaced by model layers.
+
+Launch-to-first-onboarding-frame is INFO for cold and repeat launches. Engine
+startup varied from 110 ms to 2,421 ms on the same executable, so there is no
+visible static-room budget or cold-only exception. Dyld/signature checks are a
+hypothesis, not an attributed cause. Audio/animation starts stay within 20 ms.
+Returning launches keep the snapshot-backed browser's confirmed frame before
+engine startup and create no onboarding scene or audio worker.
+
+Automation measures display-link intervals over t=0–8 s from the first animated
+frame. `onboarding action=state` reports launch, engine start begin/end, native
+loop settled, window creation and first onboarding frame timestamps in `startup`.
+It also reports `preAnimationStatic` (real scene/dim animation keys, presentation
+availability, visibility and pre-start audio playhead), and the common host clock.
+The display-link confirmation timestamp can follow the common submission time;
+the receipt reports that difference explicitly. This confirms a main-thread
+display-link callback, not a render-server frame statistic.
+The opt-in pacing trace records each interval above 1.5 times nominal as
+`stalls: [{start, end, ms, regions, regionOverlapMS}]`. Region totals are
+inclusive main-thread milliseconds; nested regions must not be added together.
+`preparationMainThreadMS` retains work before animated t=0. Signposts and the
+bounded recorder are absent from normal Release builds.
+
+The onboarding suite measures a product-only launch without polling or PNG
+capture in the frame window. It then uses a separate launch for the original
+functional keys, phase checks and native snapshots. The diagnostic
+`OPEN_E2E_ONBOARDING_SNAPSHOT_CONTROL=1` adds a PNG to the frame window for
+attribution only. Pacing limits remain p95 ≤1.5 times nominal and drops ≤1%.
+
 Continue replaces the foreground inside the same 1280×800 onboarding window.
 The room, dim child and music keep their clocks through the setup steps below.
 The intro never writes a snapshot. A small screen (both width ≤1280 and height
@@ -120,9 +163,9 @@ Selected tiles use the existing primary button blue for tint, ring and the fille
 
 Automation `onboarding action=state` includes `favoriteTiles` with `iconState` (`monogram`, `loading`, `icon`, or `failed`), `renderedKind`, `sourceKind`, `pixelSize`, fixed frames and fade duration. Automation builds accept `--favicon-network=blocked` to fail only this prefetch before creating a session. `tools/e2e/onboarding_steps.py` verifies live downloads, blocked-network monograms, fixed geometry, Reduce Motion and the stored sidebar hand-off. Its window-only captures exclude the screen-sized dim child and include the actual window backing scale. Selected and focused close-ups and an interior pixel comparison guard against AppKit drawing a text focus band across the tile. Automation can opt into a private request/candidate trace with `OPEN_FAVICON_DIAGNOSTICS=1`; normal launches never produce it. The Notion suggestion uses its canonical `notion.com` host, so its page needs no redirect across registrable domains. Theme uses `OpenSpaceEditor`'s preset strip, color pad, state reducer and appearance bar. The selected style is applied to the focused Space at finish. Blocker uses the existing `AdBlockStore.setEnabled` global `nativeAdBlockEnabled` setting in `adblock-settings.json`, the same setting as Advanced.
 
-The icon gate runs twice with separate fresh first-launch roots. Before prefetch, each root must have no favicon records, no browser snapshot and no completed first run. Every tile must report a fetched icon, its source kind and its original dimensions within twelve seconds. In light and dark window captures, each icon's inner 24×24-point square is compared with that tile's real blocked-network monogram. Both mean CIEDE2000 ≥6 and at least 25% of samples with CIEDE2000 ≥8 are required. The blocked capture is also passed to the same detector and must fail for every tile. This distinguishes Gmail's fetched Google image from its colored `Gm` fallback. The miniature sidebar reserves two rows for its first eight selected icons; the counter and final hand-off retain every selection.
+The icon gate runs twice with separate fresh first-launch roots. Before prefetch, each root must have no favicon records, no browser snapshot and no completed first run. Every tile must report a fetched icon, its source kind and its original dimensions within twelve seconds. In light and dark window captures, each icon's inner 24×24-point square is compared with that tile's real blocked-network monogram. Both mean CIEDE2000 ≥6 and at least 25% of samples with CIEDE2000 ≥8 are required. The blocked capture is also passed to the same detector and must fail for every tile. This distinguishes Gmail's fetched image from its colored `Gm` fallback. Gmail must also report source kind `curated`, and its light/dark pixels on both fresh launches must differ from the generic Google G fetched by the same suite's forced-curated-failure run, using the same perceptual thresholds. The miniature sidebar reserves two rows for its first eight selected icons; the counter and final hand-off retain every selection.
 
-`OnboardingBrandMark` supplies the intro's trimmed rounded doorway and sun to the intro, Name preview and both marks on the card. The Theme preview keeps its traffic lights, URL bar, four tinted sidebar rows and three neutral page bars live with the selected Space style. The second Favorite suggestion is Google Maps (`https://maps.google.com/`): its public manifest declares distinct product artwork. Gmail's signed-out page declares no icon and uses Google's generic fallback. Once a visited page reports its own favicon, `EngineWebContentHost.confirmFaviconForDocument` sends it through `StoredFaviconCache.report`; the page-specific store record takes precedence over the prefetch's origin fallback. Live Favorites use the engine image, and unloaded Favorites use the refreshed store cache.
+`OnboardingBrandMark` supplies the intro's trimmed rounded doorway and sun to the intro, Name preview and both marks on the card. The Theme preview keeps its traffic lights, URL bar, four tinted sidebar rows and three neutral page bars live with the selected Space style. The second Favorite suggestion is Google Maps (`https://maps.google.com/`): its public manifest declares distinct product artwork. Gmail has the only non-nil curated `iconSourceURL`: `https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico`, Gmail's own icon on Google's static host. It is downloaded at runtime with the same byte, image, cookie, credential and redirect limits as discovered icons. A curated request has at most 1.5 seconds inside the existing six-second site budget; failure falls back to ordinary discovery. Automation-only `--favicon-curated=fail` changes that request to a missing path on the same host; the public signed-out page then declares no icon and supplies Google's generic fallback through the original chain. Once a visited page reports its own favicon, `EngineWebContentHost.confirmFaviconForDocument` sends it through `StoredFaviconCache.report`; the page-specific store record takes precedence over the prefetch's origin fallback. Live Favorites use the engine image, and unloaded Favorites use the refreshed store cache.
 
 The Ready card uses one original drawing routine for the screen and 1200 × 750 PNG output. Its gradient midpoint supplies the sRGB relative luminance. Above 0.55, the name uses black at 0.82 and the date uses black at 0.55; otherwise they use white and white at 0.72. The date is 17 points in the card's design coordinates. Save opens `NSSavePanel`; Shuffle cycles six deterministic patterns. The two 32-point circle buttons sit 12 points apart, centered 16 points below the card. Their white fill changes from 0.16 to 0.24 on hover, with white glyphs at 0.9. Confetti emits above the card once for 0.6 seconds, in a separate layer below the card and its text, then removes its layer. Reduce Motion uses cross-fades and no confetti.
 

@@ -58,6 +58,12 @@ actor ListRepository {
 
     private var storage: GenerationStorage { GenerationStorage(maximumBytes: max(64 * 1024 * 1024, policy.maximumListBytes), ephemeral: ephemeral, resources: resources) }
 
+    func excludedDomains(directory: URL) throws -> Set<String> {
+        try Task.checkCancellation()
+        let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
+        return try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
+    }
+
     /// Build the new layout beside its destination, then publish with one same-volume rename.
     /// Until publication succeeds the old folder is read-only, so a failed copy loses no data.
     func migrate(from old: URL, to directory: URL) throws {

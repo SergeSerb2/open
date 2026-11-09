@@ -3499,6 +3499,25 @@ capturing; P-1 regeneration is fork-infra §12 step 5.
 
 ## 12. OpenEngine and Swift API surface
 
+**API-DESIGN errata (Section 13 H, 2026-11-09):**
+The App adapter's OTR inheritance in API-DESIGN §3 and the Site Control contract
+in §5 also need session-only exclusions. `AdBlockStore.siteSnapshot(for:privateSession:)`
+and `setExcluded(_:excluded:profile:privateSession:)` take the parent Profile ID
+and the engine's existing `Private-N` context identifier. The effective set is
+parent saved exclusions ∪ session additions. Private removal cannot override a
+saved parent exclusion. The adapter registers the session when it configures
+the OTR and drops it when the last private window closes. Saved-parent changes
+recompute each open OTR's union; private events target only that OTR. No private
+choice is serialized. Profile close and retirement notify observers, including
+an immediate retirement notification before IO drains. Site Control remains
+Section 12's responsibility; its parent/session call-site handoff is in
+`.re/s13/h/S12-HANDOFF.md` in the project root. The lead assigned the joint
+visible-panel refresh and tile-tap proof to Section 12 after taking H's API
+changes. H's separate real-App lifecycle observer counts production didChange
+notifications and reads availability; its private-window request/disk proof
+uses the real page context and native engine. Those receipts do not prove the
+Site Control presenter or its actual tap path.
+
 CEF types never cross into Swift (architecture rule). OpenEngine is the
 only layer that includes CEF headers.
 
@@ -4653,6 +4672,37 @@ the same engine files as 65c6a780), the source state of the recorded
 distribution (stamp 5602914f…). Step 4 is not applied there. To put it
 back: copy `Engine/fork/src/open/adblock/` from this branch into the tree,
 then replace 0310 and apply 0311 from this branch's `patches/cef/`.
+
+### Cold-start App erratum (2026-11-09, App-only verification)
+
+The adapter now posts exclusions, the deterministic Profile list directory,
+and enabled state when a context is created, including Default at engine
+readiness. Context configuration does not need an IO-backed store. A separate
+read-only background task prefetches saved settings/exclusions; until it
+returns, the existing store's in-memory values win, otherwise defaults are
+on/no exclusions. **Lead fresh-profile ruling (2026-11-09 04:30):** one
+background `lstat` of `lists/current.json` identifies `ENOENT`. A live fresh
+context starts `openProfile` immediately after detection, without waiting for
+paint; existing generations retain after-paint opening. Store metadata/lease
+preparation and repository seed/verify/exclusion IO stay off the main thread.
+The first store configure explicitly reloads an already configured directory,
+because the early load may have failed before seeding created `current.json`.
+The companion native change keeps an unpublished pointer in
+`awaiting_generation` under the same 1,500 ms per-request / 128 process-wide
+limits. Real manifest/SHA/read errors end pending; an engine or valid zero-list
+generation completes the initial load. This App-only branch still fails open
+before an engine arrives. The M5 App-only probe blocked the first
+post-onboarding script with an allowed control while the after-paint adapter
+was still unstarted; its generation was already published before onboarding
+finished. Warm relaunch exposed the remaining first-engine gap. Saved-off and
+excluded controls loaded. The Chrome-style App ad-block suite passed 81 rows.
+Raw receipts are in `.re/s13/i/resume-0952/`. Main's engine exposes no cold-hold
+counters; browser resource durations do not prove native hold time. Five
+interleaved Release pairs for each of fresh/warm Profiles at load1 7.82–9.35
+showed no first-paint slowdown against main `1a37e49a`: fresh medians main
+797 ms / branch 719 ms, warm 755 / 655 ms; paired median differences were
+−92 / −100 ms. All samples, including the slow first fresh pair, were kept.
+Native deadline/boundary proofs still belong to the companion branch.
 
 ### Section 13 lead decisions (2026-11-07)
 
