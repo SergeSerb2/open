@@ -59,9 +59,16 @@ public final class SidebarView: NSView {
     private var modelUpdateDepth = 0
     private var pendingChanges: [TreeChange] = []
     private var pendingRename: ItemID?
+    public var updateBannerState: UpdateBannerState? { didSet { syncBanner() } }
+    public var onUpdateBannerAction: (() -> Void)?
+    public var onUpdateBannerDismiss: (() -> Void)?
+    public private(set) var updateBanner: UpdateBannerView?
+    private var activeBanner: NSView? { updateBanner ?? banner }
+    private func slotHeight(_ width: CGFloat) -> CGFloat { updateBanner?.height(for: width) ?? banner?.height(for: width) ?? 0 }
     private var banner: SidebarBannerView?
     private var bannerShown = false
     private var bannerGeneration = 0
+    private var retiringUpdateBanner: UpdateBannerView?
     private var preferencesObserver: NSObjectProtocol?
 
     public init(context: SidebarContext) {
@@ -166,7 +173,7 @@ public final class SidebarView: NSView {
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
         let mediaHeight = mediaControls.requiredHeight
-        let bannerHeight = bannerShown ? banner?.height(for: max(0, w - 2 * BannerMetrics.inset)) ?? 0 : 0
+        let bannerHeight = bannerShown ? slotHeight(max(0, w - 2 * BannerMetrics.inset)) : 0
         let listBottom = bottom - mediaHeight - (bannerShown ? bannerHeight + 2 * BannerMetrics.inset : 0)
         let oldPager = pager.frame, oldMedia = mediaControls.frame
         let mediaWidthChanged = oldMedia.width > 0 && oldMedia.width != w
@@ -200,8 +207,8 @@ public final class SidebarView: NSView {
             animateURLStatus(shown: statusShown, oldFavorites: oldFavorites, oldPager: oldPagerFrame)
         }
         bottomBar.frame = CGRect(x: 0, y: bottom, width: w, height: BottomBarMetrics.height)
-        if bannerShown, let banner {
-            let height = banner.height(for: max(0, w - 2 * BannerMetrics.inset))
+        if bannerShown, let banner = activeBanner {
+            let height = slotHeight(max(0, w - 2 * BannerMetrics.inset))
             banner.frame = CGRect(x: BannerMetrics.inset, y: bottom - mediaControls.requiredHeight - BannerMetrics.inset - height,
                                   width: max(0, w - 2 * BannerMetrics.inset), height: height)
 
@@ -768,16 +775,52 @@ extension SidebarView {
         let preferences = context.previewPreferences
         let eligible = preferences.object(forKey: "open.sidebar.autoArchiveBannerEligible") == nil || preferences.bool(forKey: "open.sidebar.autoArchiveBannerEligible")
         let interval = context.focusedSpace.flatMap { context.model.profile(id: $0.profileID) }?.settings.autoArchiveAfter
-        let wanted = context.autoArchiveBannerRequested && eligible && !preferences.bool(forKey: "open.sidebar.autoArchiveBannerDismissed") && interval != nil && interval != .never
-        guard wanted != bannerShown else { return }
+        let educationWanted = context.autoArchiveBannerRequested && eligible && !preferences.bool(forKey: "open.sidebar.autoArchiveBannerDismissed") && interval != nil && interval != .never
+        if let state = updateBannerState {
+            banner?.isHidden = true
+            if let updateBanner { updateBanner.state = state; needsLayout = true; return }
+            let view = UpdateBannerView(state: state, context: context)
+            view.onAction = { [weak self] in self?.onUpdateBannerAction?() }
+            view.onDismiss = { [weak self] in self?.onUpdateBannerDismiss?() }
+            updateBanner = view; addSubview(view)
+        } else if let updateBanner {
+            self.updateBanner = nil; retiringUpdateBanner?.removeFromSuperview()
+            updateBanner.onAction = nil; updateBanner.onDismiss = nil
+            retiringUpdateBanner = updateBanner
+            let layer = updateBanner.layer
+            let opacity = layer?.presentation()?.opacity ?? layer?.opacity ?? 1
+            let translation = layer?.presentation()?.value(forKeyPath: "transform.translation.y") ?? 0
+            layer?.removeAllAnimations()
+            if animatesSidebarChanges, let layer {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = opacity; fade.toValue = 0; fade.duration = Motion.bannerOut
+                let group = CAAnimationGroup(); group.animations = [fade]; group.duration = Motion.bannerOut
+                if !Motion.reducesMotion {
+                    let slide = CABasicAnimation(keyPath: "transform.translation.y")
+                    slide.fromValue = translation; slide.toValue = 12; slide.duration = Motion.bannerOut
+                    group.animations?.append(slide)
+                }
+                CATransaction.begin()
+                CATransaction.setCompletionBlock { [weak self, weak updateBanner] in MainActor.assumeIsolated {
+                    updateBanner?.removeFromSuperview()
+                    if self?.retiringUpdateBanner === updateBanner { self?.retiringUpdateBanner = nil }
+                } }
+                layer.opacity = 0; layer.add(group, forKey: "banner")
+                CATransaction.commit()
+            } else { updateBanner.removeFromSuperview(); retiringUpdateBanner = nil }
+            bannerShown = false
+            needsLayout = true
+        }
+        let wanted = updateBannerState != nil || educationWanted
+        guard wanted != bannerShown || (updateBanner != nil && updateBanner?.layer?.animation(forKey: "banner") == nil) else { return }
         bannerShown = wanted; bannerGeneration += 1
         let generation = bannerGeneration
-        if wanted, banner == nil {
+        if wanted, updateBanner == nil, banner == nil {
             let view = SidebarBannerView(context: context)
             view.onHeightChange = { [weak self] in self?.needsLayout = true }
             banner = view; addSubview(view)
         }
-        guard let banner else { return }
+        guard let banner = activeBanner else { return }
         banner.layer?.removeAllAnimations()
         if wanted {
             banner.isHidden = false
@@ -801,7 +844,7 @@ extension SidebarView {
         banner.layer?.add(group, forKey: "banner")
         CATransaction.commit()
     }
-    public var autoArchiveBanner: SidebarBannerView? { bannerShown ? banner : nil }
+    public var autoArchiveBanner: SidebarBannerView? { bannerShown && updateBannerState == nil ? banner : nil }
     public var bannerContentInset: CGFloat { 0 }
     public func refreshAutoArchiveBanner() { syncBanner() }
 }
