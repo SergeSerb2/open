@@ -686,6 +686,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     #endif
     LaunchTiming.shared.mark("engineInitialized")
     engineReady = true
+    adBlockEngineAdapter.engineDidInitialize()
     showWindowsIfNeeded()
     refreshScriptingEngine()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
