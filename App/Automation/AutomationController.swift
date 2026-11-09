@@ -684,6 +684,8 @@
         return try await runBoostCommand(cmd, a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
+      case "sad-tab-state", "sad-tab-action":
+        return try runSadTabCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)
         guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }

@@ -11,6 +11,7 @@ public final class PaneSlotView: NSView {
     public let tabID: ItemID
     public private(set) var paneChrome: PaneChromeView?
     public private(set) var placeholderView: PlaceholderContentView?
+    public private(set) var sadTabView: SadTabView?
     public private(set) var contentHostView: NSView?
     /// Open's history swipe indicator over this pane's page (page-platform §4.4.3), made on the
     /// first swipe.
@@ -30,7 +31,7 @@ public final class PaneSlotView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, toolbar: Bool = false, fullURL: Bool = false, focused: Bool, style: SpaceThemeStyle,
                    close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping (Bool) -> Void,
-                   toolbarMenu: (() -> NSMenu?)? = nil) {
+                   toolbarMenu: (() -> NSMenu?)? = nil, reload: @escaping () -> Void, closeSadTab: @escaping () -> Void) {
         isFocused = split && focused
         self.style = style; swipeIndicator?.style = style
         focusRing.strokeColor = style.accentColor(.light).cgColor
@@ -45,12 +46,27 @@ public final class PaneSlotView: NSView {
         } else { paneChrome?.removeFromSuperview(); paneChrome = nil }
         // A sleeping tab whose page was discarded in place keeps its page object: showing it
         // reloads its entry (memory-fork §5.5), and the phase turns live at that commit.
-        if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen || tab.live.sleepPhase == .sleeping {
+        let wasSad = sadTabView != nil
+        let hadPageFocus = (window?.firstResponder as? NSView).map { responder in
+            [contentHostView, sadTabView].compactMap { $0 }.contains { responder === $0 || responder.isDescendant(of: $0) }
+        } ?? false
+        if tab.live.isCrashed {
+            contentHostView?.isHidden = true; contentHostView?.removeFromSuperview()
+            contentHostView = nil; lastHostWindowRect = nil
+            placeholderView?.removeFromSuperview(); placeholderView = nil
+            let sad = sadTabView ?? SadTabView(style: style)
+            sadTabView = sad; sad.style = style; sad.onReload = reload; sad.onClose = closeSadTab
+            if sad.superview !== clip { clip.addSubview(sad, positioned: .below, relativeTo: paneChrome) }
+            if hadPageFocus && !wasSad { window?.makeFirstResponder(sad) }
+        } else if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen || tab.live.sleepPhase == .sleeping {
+            sadTabView?.removeFromSuperview(); sadTabView = nil
             if contentHostView !== host.view { contentHostView?.removeFromSuperview(); lastHostWindowRect = nil }
             placeholderView?.removeFromSuperview(); placeholderView = nil
             contentHostView = host.view; host.view.isHidden = false
             if host.view.superview !== clip { clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome) }
+            if hadPageFocus && wasSad { host.focus() }
         } else {
+            sadTabView?.removeFromSuperview(); sadTabView = nil
             contentHostView?.isHidden = true; contentHostView?.removeFromSuperview()
             placeholderView?.removeFromSuperview()
             contentHostView = nil; lastHostWindowRect = nil; let placeholder = PlaceholderContentView(tab: tab, style: style)
@@ -89,6 +105,7 @@ public final class PaneSlotView: NSView {
             contentHostView?.frame = page; lastHostWindowRect = hostWindowRect
         }
         if placeholderView?.frame != page { placeholderView?.frame = page }
+        if sadTabView?.frame != page { sadTabView?.frame = page }
         if swipeIndicator?.frame != page { swipeIndicator?.frame = page }
         if focusRing.frame != bounds {
             // The ring follows the slot's 0.22 s view motion. A reused layer must
@@ -152,6 +169,7 @@ public final class WebContentContainer: NSView {
     public var onPaneClicked: ((ItemID) -> Void)?
     public var onLinkClicked: ((ItemID, URL, NSEvent.ModifierFlags) -> Bool)?
     public var onPaneClose: ((ItemID) -> Void)?
+    public var onSadTabClose: ((ItemID) -> Void)?
     public var onPaneMenu: ((ItemID, NSView) -> Void)?
     public var onURLField: (() -> Void)?
     /// The window's toasts (the pane bar's Copy button says what it copied).
@@ -202,7 +220,7 @@ public final class WebContentContainer: NSView {
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
         hiddenLRU.removeAll { tabIDs.contains($0) }
         ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: old != ids)
-        if previousFocus != focusedTabID { cache[focusedTabID]?.focus() }
+        if previousFocus != focusedTabID { focusContent(focusedTabID) }
         let pending = tabIDs.filter { $0 != focusedTabID && cache[$0] == nil }
         if !pending.isEmpty {
             DispatchQueue.main.async { [weak self] in
@@ -268,7 +286,9 @@ public final class WebContentContainer: NSView {
         guard let live = tabProvider(id)?.live else { return }
         live.hasWebContent = true; live.isLoading = state.isLoading; live.progress = state.progress
         live.canGoBack = state.canGoBack; live.canGoForward = state.canGoForward
+        let crashChanged = live.isCrashed != state.isCrashed
         live.isAudible = state.isAudible; live.isCrashed = state.isCrashed
+        if crashChanged { updateSlots() }
     }
     private func metadataChanged(_ id: ItemID) {
         if let tab = tabProvider(id), let host = registeredHost(for: id) {
@@ -283,7 +303,9 @@ public final class WebContentContainer: NSView {
             slot.configure(tab: tab, host: cache[id], split: ids.count > 1, toolbar: showsToolbar, fullURL: showsFullURL, focused: focused == id, style: style,
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
-                           toolbarMenu: { [weak self] in self?.onToolbarMenu?() })
+                           toolbarMenu: { [weak self] in self?.onToolbarMenu?() },
+                           reload: { [weak self] in self?.cache[id]?.reload() },
+                           closeSadTab: { [weak self] in self?.onSadTabClose?(id) })
             slot.paneChrome?.extensionsUI = extensionsUI
         }
     }
@@ -352,7 +374,11 @@ public final class WebContentContainer: NSView {
         parkedSlots = parkedSlots.filter { recent.contains($0.key) }
     }
     public func focus(tabID: ItemID) {
-        guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); cache[tabID]?.focus(); metadataChanged(tabID)
+        guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); focusContent(tabID); metadataChanged(tabID)
+    }
+    private func focusContent(_ id: ItemID) {
+        if let sad = slots.first(where: { $0.tabID == id })?.sadTabView { window?.makeFirstResponder(sad) }
+        else { cache[id]?.focus() }
     }
     func observeClick(_ event: NSEvent) {
         guard event.window === window, !transitioning else { return }

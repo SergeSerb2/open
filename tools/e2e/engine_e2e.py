@@ -1153,6 +1153,8 @@ def feature_checks(app, style, results, tmp):
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
                      ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
+    runpy.run_path(os.path.join(ROOT, "tools/e2e/sad_tab.py"))["run"](
+        app, results, new_tab, wait_until, t)
     runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
         app, results, tmp, new_tab, wait_until)
 

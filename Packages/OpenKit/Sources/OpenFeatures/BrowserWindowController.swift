@@ -256,6 +256,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
         super.init(window: window); window.contentView = root; window.delegate = self
+        container.onSadTabClose = { [weak self] id in
+            guard let self else { return }
+            _ = self.sidebar(self.sidebar, didRequest: .close(nodeID: id))
+        }
         window.onLayoutPass = { [weak self] in self?.placeTrafficLights() }
         window.onCloseRequest = { [weak self] in self?.onCloseRequested?() }
         if let state { window.setFrame(CGRect(x: state.frameX, y: state.frameY, width: dimensions.width, height: dimensions.height), display: false) }
