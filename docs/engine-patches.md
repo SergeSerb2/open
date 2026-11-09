@@ -29,7 +29,8 @@ The cache lease protects a running browser's clone during live replacement.
 Design, rejected-disable evidence and current verification status are in
 [the clone report](re/codesign-clone-reuse.md). Normal-App reuse, invalidation,
 separate installs, fallback and the requested ad-hoc live swap passed.
-The functional scan gate is FAIL at 6/7 despite stable executable metadata.
+The scan gate is FAIL against the 7/7 target: residual first-after-gap
+scans, cause open, despite stable executable metadata (functional set 6/7).
 Hardened DLV and quiet-window timing remain pending. The full gate recorded
 24 PASS and 1 FAIL (`commandbar-render`, two timing rows at load1 29.1).
 Chromium `0106` follows main's `0801–0810`; the numeric-order WARN is expected.

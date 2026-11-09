@@ -102,8 +102,9 @@ DLV copies. The historical failed candidate below remains evidence, not a
 proposed release setting. See [the reuse report](../re/codesign-clone-reuse.md)
 for the design and verification status. Normal-App reuse, invalidation,
 separate installs, fallback and the requested ad-hoc live swap passed.
-The functional scan gate remains FAIL at 6/7 with unchanged executable
-metadata. Quiet-window timing is pending. The full gate recorded 24 PASS
+The scan gate remains FAIL against the 7/7 target: residual first-after-gap
+scans, cause open, with unchanged executable metadata (functional set 6/7).
+Quiet-window timing is pending. The full gate recorded 24 PASS
 and one `commandbar-render` FAIL on two timing rows at load1 29.1.
 The 16:31 lead ruling supersedes the earlier M5 exception: hardened-runtime
 DLV copies are crash-capable and may launch only on the M1 after `M1 clear`,

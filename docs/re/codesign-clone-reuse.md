@@ -140,7 +140,7 @@ no launch gain or live-update safety result.
 | Row | Required proof | Current state |
 |---|---|---|
 | a | Executable ctime and link count stay unchanged for three full runs after the first clone | PASS, normal App; `stability/receipt.json` |
-| b | Seven simple relaunches have no attributable ChangetimeScan | FAIL: renewed normal-App set has 6/7 windows without a scan; first has a 143 ms candidate despite unchanged executable metadata. No gain claim |
+| b | Seven simple relaunches have no attributable ChangetimeScan | FAIL against the 7/7 target; residual first-after-gap scans, cause open. Functional set: 6/7 scan-free, unchanged executable metadata in all seven. No gain claim |
 | c | An in-place executable copy keeps the inode but recreates the clone | PASS, normal App; `stability/receipt.json` |
 | d | Two install paths use distinct clones with no cross-reuse | PASS, normal App; `stability/receipt.json` |
 | e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Requested ad-hoc path PASS on main and reused-clone branch (fresh renderers/audio utility; GPU retained). Extra forced GPU/network restart control FAIL retained. DLV PENDING M1 clear |
@@ -534,5 +534,83 @@ and no new real Open crash report found by its read-only check since the
 full gate began. The frozen Apps and primed timing profiles remain for
 tonight's handoff. No quiet-window measurement or M1 launch has run.
 The scan failure, timing handoff, full-gate failure and pending M1 rows
-remain separate acceptance gaps. No PR or launch-gain claim is made at
-this checkpoint.
+remain separate acceptance gaps. At this full-gate checkpoint there was
+no PR or launch-gain claim.
+
+### Read-only check of launches between sets
+
+The lead's 18:35 ruling separates the engine contract from the remaining
+assessment question. Rows a, c, d and f, plus unchanged executable stat in
+all row-b runs, prove that reuse avoids per-run ctime/link writes. Row b
+remains **FAIL against the 7/7 target; residual first-after-gap scans, cause
+open**. Row g is still pending tonight. No launch gain is claimed.
+
+The cache-pressure hypothesis is that other Open bundles evict this install's
+syspolicyd assessment entry during each gap. This check used only saved
+launch receipts and a new read-only `log show`, with no App launch. The exact
+command and exit 0 are in `gap-attribution/collection.json`; the raw log is
+`gap-attribution/open-family.ndjson`. The interval is 2026-11-08
+17:13:00–17:41:10 local time. The predicate selects RunningBoard and Launch
+Services messages naming Open, plus process-start and path-resolution lines.
+
+`gap-attribution/analyze.py`, `starts.json` and `gap-counts.json` preserve
+the extraction and every counted event. A confirmed App start requires
+RunningBoard's successful `submitAndStart`, a matching activity's public
+`PreventLaunch` executable path, and its tracked App identity. Count each
+PID once. Anonymous capital-`Open` processes without a public bundle path
+are separate first-tracking observations. Lower-case `/usr/bin/open`
+launchers, repeated launch-request lines, and system XPC attachments are
+excluded. This is an App-start comparison, not a complete Chromium helper
+exec census. Launch Services messages did not supply additional public
+bundle paths in this query.
+
+Bundle aliases in the table:
+
+- M: `.re/s16/codesign-clone-reuse/measurements/main/Open.app`, the matched control.
+- D: `~/.t3/worktrees/open/t3-c5d84ead/build/Debug/Open.app`.
+- R: `~/.t3/worktrees/open/t3-fcc4acd6/build/Release/Open.app`.
+- S: `~/.t3/worktrees/open/t3-section-11-app-shell/build/Debug/Open.app`.
+- T: the disposable `Open-E2E-downloads-…/downloads-attempt-…/Open.app`.
+
+Each gap runs from the previous branch launch's recorded exit to the next
+branch request. Daytime 3 starts after the retained interrupted branch
+launch at 17:27:46.708, rather than after daytime 2. No interrupted launch
+is hidden. Times below are local; counts exclude the branch being measured.
+
+| Branch relaunch | Gap before request | Gap s | Scan ms | Confirmed starts by other bundle path | Path-unavailable Open observations |
+|---|---|---:|---:|---|---:|
+| Daytime 1 | 17:13:22.714–17:24:53.329 | 690.615 | 148.98 | 33: M ×1, D ×1, S ×31 | 26 |
+| Daytime 2 | 17:24:55.206–17:27:41.136 | 165.930 | 148.13 | 0 | 0 |
+| Daytime 3 | 17:27:46.708–17:33:22.501 | 335.793 | 144.50 | 9: M ×1, R ×2, S ×6 | 21 |
+| Daytime 4 | 17:33:24.130–17:33:24.309 | 0.179 | none | 0 | 0 |
+| Daytime 5 | 17:33:25.546–17:33:28.955 | 3.409 | none | 2: M ×2 | 0 |
+| Daytime 6 | 17:33:30.242–17:33:30.480 | 0.238 | none | 0 | 0 |
+| Daytime 7 | 17:33:31.713–17:33:35.173 | 3.460 | none | 2: M ×2 | 0 |
+| Functional 1 | 17:33:36.493–17:40:56.995 | 440.502 | 143.06 | 36: R ×31, S ×3, T ×2 | 15 |
+| Functional 2 | 17:40:58.569–17:40:58.653 | 0.084 | none | 0 | 0 |
+| Functional 3 | 17:40:59.671–17:40:59.757 | 0.086 | none | 0 | 0 |
+| Functional 4 | 17:41:00.765–17:41:00.851 | 0.086 | none | 0 | 0 |
+| Functional 5 | 17:41:01.861–17:41:01.944 | 0.083 | none | 0 | 0 |
+| Functional 6 | 17:41:02.972–17:41:03.059 | 0.087 | none | 0 | 0 |
+| Functional 7 | 17:41:04.024–17:41:04.112 | 0.088 | none | 0 | 0 |
+
+For example, raw lines 674/678/681 pair the S bundle path with a successful
+start and tracking record in the first gap. Lines 15149/15153/15156 do the
+same for the disposable downloads App before functional 1. Each event's
+source line numbers are also saved in `starts.json` and each gap's details.
+
+**Conclusion: cache eviction by other bundles remains a guess.** Three of
+the four scan-bearing gaps include 8–36 confirmed external App starts,
+excluding M. None of the ten scan-free gaps has an external bundle start.
+However, daytime 2 scanned after a 165.930 s gap with no observed other
+Open-family start at all. Other-bundle launches are therefore not a complete
+explanation in this log record. Daytime 5 and 7 also remain scan-free despite
+two matched-main starts each. The long gaps and other launch counts covary;
+this comparison does not isolate elapsed time from cache pressure. It exposes
+neither an eviction event nor the assessment cache's key or contents. A
+time-dependent assessment rule is another untested possibility. The scan
+target paths remain private, so the cause stays open.
+
+The lead approved opening the PR with these failures and pending rows
+explicit. It is not ready to merge. The approved quiet-window script remains
+unchanged and unrun; hardened DLV launches still wait for `M1 clear`.
