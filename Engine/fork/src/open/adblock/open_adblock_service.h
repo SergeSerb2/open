@@ -93,6 +93,8 @@ class OpenAdBlockService {
     ~BuildResult();
 
     std::shared_ptr<const EngineHolder> engine;
+    // current.json has not been published yet (not a corrupt generation).
+    bool awaiting_generation = false;
     // Verified generation with no enabled lists. Success without creating an
     // engine, loading resources, or entering the engine registry.
     bool empty_generation = false;
@@ -131,6 +133,7 @@ class OpenAdBlockService {
   const scoped_refptr<OpenAdBlockMatcher> matcher_;
   base::FilePath adblock_root_;
   bool enabled_ = false;
+  bool initial_load_pending_ = false;
   bool shut_down_ = false;
   base::flat_set<std::string> excluded_domains_;
 

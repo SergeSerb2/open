@@ -101,6 +101,7 @@ CefRefPtr<CefDictionaryValue> CefGetOpenAdBlockStatus(
   auto value = CefDictionaryValue::Create();
   value->SetBool("enabled", status.enabled);
   value->SetBool("engine_loaded", status.engine_loaded);
+  value->SetBool("awaiting_generation", status.awaiting_generation);
   value->SetBool("engine_from_dat", status.engine_from_dat);
   value->SetBool("engine_shared", status.engine_shared);
   value->SetString("dat_policy", status.dat_policy);
@@ -114,6 +115,8 @@ CefRefPtr<CefDictionaryValue> CefGetOpenAdBlockStatus(
   value->SetInt("excluded_count", status.excluded_domains.size());
   // Generation IDs are int64, beyond CefDictionaryValue's 32-bit integer.
   value->SetDouble("load_generation", status.generation);
+  value->SetDouble("cold_holds", status.cold_holds);
+  value->SetDouble("cold_hold_max_ms", status.cold_hold_max_ms);
   return value;
 }
 

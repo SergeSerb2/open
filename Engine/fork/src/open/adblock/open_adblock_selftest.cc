@@ -1876,6 +1876,7 @@ void RunOpenAdBlockSelftest(OpenAdBlockService* service,
 std::string AdBlockStatusText(const AdBlockStatus& status) {
   return "enabled=" + std::to_string(status.enabled) +
          " engine_loaded=" + std::to_string(status.engine_loaded) +
+         " awaiting_generation=" + std::to_string(status.awaiting_generation) +
          " engine_from_dat=" + std::to_string(status.engine_from_dat) +
          " engine_shared=" + std::to_string(status.engine_shared) +
          " generation=" + std::to_string(status.generation) +
@@ -1886,6 +1887,8 @@ std::string AdBlockStatusText(const AdBlockStatus& status) {
          " match_cap_bytes=" + std::to_string(status.match_cap_bytes) +
          " checks=" + std::to_string(status.checks) +
          " checks_truncated=" + std::to_string(status.checks_truncated) +
+         " cold_holds=" + std::to_string(status.cold_holds) +
+         " cold_hold_max_ms=" + std::to_string(status.cold_hold_max_ms) +
          " last_build_ms=" + std::to_string(status.last_build_ms) +
          " last_error=\"" + status.last_error + "\"" +
          " excluded=" + base::JoinString(status.excluded_domains, ",");
@@ -1902,7 +1905,8 @@ void LoadOpenAdBlockForSmoke(OpenAdBlockService* service,
               return;
             }
             static constexpr const char* kNames[] = {"loaded", "failed",
-                                                     "stale", "cancelled"};
+                                                     "stale", "cancelled",
+                                                     "awaiting_generation"};
             fprintf(stderr, "OpenAdBlockSmoke: load result=%s %s\n",
                     kNames[static_cast<int>(result)],
                     AdBlockStatusText(service->GetStatus()).c_str());
