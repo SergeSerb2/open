@@ -491,8 +491,9 @@ def run_favorite_icons(factory, results, tmp, h):
         scale = focus['backingScale']
         for appearance, shot in shots.items():
             path = evidence/('favorites-selected-focused-'+appearance+'.png')
-            h.subprocess.run(['sips', '-c', str(round((hgt+32)*scale)), str(round((w+32)*scale)), '--cropOffset',
-                str(round(shot['size'][1]-(y+hgt+16)*scale)), str(round((x-16)*scale)), shot['path'], '--out', str(path)],
+            padding = 24 # Include the outer focus ring, badge and their shadows.
+            h.subprocess.run(['sips', '-c', str(round((hgt+padding*2)*scale)), str(round((w+padding*2)*scale)), '--cropOffset',
+                str(round(shot['size'][1]-(y+hgt+padding)*scale)), str(round((x-padding)*scale)), shot['path'], '--out', str(path)],
                 check=True, capture_output=True)
         # Move focus through the native key path. The tile interior must not
         # change: the focus indicator belongs only around its outside edge.
