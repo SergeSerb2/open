@@ -1,5 +1,6 @@
-"""View menu site clears through the real App and two local HTTP origins."""
+"""View menu site clears through the real App and local HTTP origin boundaries."""
 from collections import Counter
+from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 
@@ -14,8 +15,9 @@ def run(factory, results, tmp, style, harness):
         def do_GET(self):
             host = self.headers.get('Host', '').split(':')[0]
             with mutex:
-                hits[(host, self.path)] += 1
-                count = hits[(host, self.path)]
+                key = (host, self.server.server_port, self.path)
+                hits[key] += 1
+                count = hits[key]
             cached = self.path == '/cached'
             if cached:
                 body = ('cache-' + str(count)).encode()
@@ -34,15 +36,12 @@ def run(factory, results, tmp, style, harness):
             try: self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError): pass
 
-    server = ThreadingHTTPServer(('127.0.0.1', 0), Page)
-    worker = threading.Thread(target=server.serve_forever, daemon=True)
-    worker.start()
+    resources = ExitStack()
     app = None
     saved = {}
     wait = harness.wait_until
     commands = ['clear-cache-and-refresh', 'clear-cookies-and-refresh']
-    origins = ['http://a.clear-a.test:%d' % server.server_port,
-               'http://b.clear-b.test:%d' % server.server_port]
+    origins, cache_keys = [], []
 
     def check(name, ok, **evidence):
         results[name + '_' + style] = dict(ok=bool(ok), **evidence)
@@ -61,12 +60,19 @@ def run(factory, results, tmp, style, harness):
     def cookies(tab):
         return app.eval(tab, "fetch('/cookies').then(r=>r.text())")
 
+    def cookie_values(tab):
+        return dict(value.split('=', 1) for value in cookies(tab).split('; ') if value)
+
     def cached(tab):
         return app.eval(tab, "fetch('/cached',{cache:'force-cache'}).then(r=>r.text())")
 
     def counts():
         with mutex:
-            return [hits[(host, '/cached')] for host in ['a.clear-a.test', 'b.clear-b.test']]
+            return [hits[(host, port, '/cached')] for host, port in cache_keys]
+
+    def document_hits():
+        with mutex:
+            return hits[(*cache_keys[0], '/start')]
 
     def seed(tab, domain, value):
         return app.eval(tab, "document.cookie='hostCookie=%s;path=/';"
@@ -94,6 +100,19 @@ def run(factory, results, tmp, style, harness):
         return found
 
     try:
+        servers = []
+        for _ in range(2):
+            server = resources.enter_context(ThreadingHTTPServer(('127.0.0.1', 0), Page))
+            worker = threading.Thread(target=server.serve_forever, daemon=True)
+            worker.start()
+            resources.callback(worker.join, timeout=5)
+            resources.callback(server.shutdown)
+            servers.append(server)
+        port, other_port = [server.server_port for server in servers]
+        origins = ['http://a.clear-a.test:%d' % port, 'http://b.clear-b.test:%d' % port,
+                   'http://sibling.clear-a.test:%d' % port, 'http://a.clear-a.test:%d' % other_port]
+        cache_keys = [('a.clear-a.test', port), ('b.clear-b.test', port),
+                      ('sibling.clear-a.test', port), ('a.clear-a.test', other_port)]
         app = factory(urls=(origins[0] + '/start',), fresh=True, load_extensions=False,
                       extra_args=['--host-resolver-rules=MAP *.test 127.0.0.1', '--no-proxy-server'])
         ta = app.call('tabs')[0]['id']
@@ -107,29 +126,74 @@ def run(factory, results, tmp, style, harness):
         app.call('suggest-remote', enabled=False)
         tb = open_page(origins[1] + '/start')
         seeded = [seed(ta, 'clear-a.test', 'A'), seed(tb, 'clear-b.test', 'B')]
-        # A sibling sees only the Domain cookie. This distinguishes it from a
-        # host cookie that the old clearBrowsingData(origin:) path could clear.
-        sibling = open_page(origins[0].replace('a.clear-a.test', 'sibling.clear-a.test') + '/start')
+        # Inherited Domain cookies clear, but host-only cookies of the sibling
+        # and parent must survive the clear of a.clear-a.test.
+        sibling = open_page(origins[2] + '/start')
         sibling_before = cookies(sibling)
+        app.eval(sibling, "document.cookie='siblingHost=kept;path=/';1")
+        parent_tab = open_page('http://clear-a.test:%d/start' % port)
+        app.eval(parent_tab, "document.cookie='parentHost=kept;path=/';1")
+        other_port_tab = open_page(origins[3] + '/start')
+        cache_tabs = [ta, tb, sibling, other_port_tab]
+        cookie_tabs = [ta, tb, sibling, parent_tab]
+        cookie_seed = [cookie_values(tab) for tab in cookie_tabs]
         check('K_seed_host_and_parent_domain', all('hostCookie=' in s and 'domainCookie=' in s for s in seeded)
-              and sibling_before == 'domainCookie=A', seeded=seeded, sibling=sibling_before)
-        first = [cached(ta), cached(tb)]
-        repeated = [cached(ta), cached(tb)]
+              and sibling_before == 'domainCookie=A'
+              and cookie_seed[2] == {'domainCookie': 'A', 'siblingHost': 'kept'}
+              and cookie_seed[3] == {'domainCookie': 'A', 'parentHost': 'kept'},
+              seeded=seeded, sibling=sibling_before, cookies=cookie_seed)
+        first = [cached(tab) for tab in cache_tabs]
+        repeated = [cached(tab) for tab in cache_tabs]
         before = counts()
         refreshed = clear(ta, commands[0])
-        after_cache = [cached(ta), cached(tb)]
+        after_cache = [cached(tab) for tab in cache_tabs]
         after = counts()
-        after_cookies = [cookies(ta), cookies(tb)]
-        check('K1_clear_cache_and_refresh', refreshed and first == repeated == ['cache-1', 'cache-1']
-              and before == [1, 1] and after == [2, 1] and after_cache == ['cache-2', 'cache-1']
-              and all('hostCookie=' in s and 'domainCookie=' in s for s in after_cookies),
-              reloaded=refreshed, serverBefore=before, serverAfter=after, cache=after_cache, cookies=after_cookies)
+        after_cookies = [cookie_values(tab) for tab in cookie_tabs]
+        check('K1_clear_cache_and_refresh', refreshed and first == repeated == ['cache-1'] * 4
+              and before == [1, 1, 1, 1] and after == [2, 1, 1, 1]
+              and after_cache == ['cache-2', 'cache-1', 'cache-1', 'cache-1'] and after_cookies == cookie_seed,
+              reloaded=refreshed, origins=origins, serverBefore=before, serverAfter=after,
+              cache=after_cache, cookies=after_cookies)
         refreshed = clear(ta, commands[1])
-        after_cookies = [cookies(ta), cookies(tb), cookies(sibling)]
-        check('K2_clear_cookies_and_refresh', refreshed and after_cookies[0] == after_cookies[2] == ''
-              and 'hostCookie=B' in after_cookies[1] and 'domainCookie=B' in after_cookies[1]
-              and [cached(ta), cached(tb)] == after_cache and counts() == after,
+        after_cookies = [cookie_values(tab) for tab in cookie_tabs]
+        check('K2_clear_cookies_and_refresh', refreshed and after_cookies[0] == {}
+              and after_cookies[1] == cookie_seed[1]
+              and all('domainCookie' not in values for values in after_cookies[2:])
+              and [cached(tab) for tab in cache_tabs] == after_cache and counts() == after,
               reloaded=refreshed, cookies=after_cookies, cacheCounts=counts())
+        check('K_cookie_sibling_host_only_survives', after_cookies[2] == {'siblingHost': 'kept'},
+              before=cookie_seed[2], after=after_cookies[2])
+        check('K_cookie_parent_host_only_survives', after_cookies[3] == {'parentHost': 'kept'},
+              before=cookie_seed[3], after=after_cookies[3])
+
+        # Hold only delivery of the real engine completion. Change the hash and
+        # invoke again while the first operation is still awaiting its refresh.
+        # The bounded automation barrier releases itself after ten seconds.
+        select(ta)
+        old_load = app.eval(ta, 'window.loadID')
+        old_requests = document_hits()
+        app.call('page-site-data-probe', action='hold', tab=ta)
+        try:
+            app.call('menu-perform', id=commands[1])
+            held = wait(lambda: (lambda s: s if s['waiting'] else None)(
+                app.call('page-site-data-probe')), timeout=5)
+            assert held, 'real clear did not reach its completion barrier'
+            app.call('menu-perform', id=commands[1])
+            duplicate = app.call('page-site-data-probe')
+            changed_url = app.eval(ta, "location.hash='during-site-clear';location.href")
+            assert wait(lambda: app.tab(ta).get('page', {}).get('url') == changed_url, timeout=5), 'hash URL not observed'
+        finally:
+            app.call('page-site-data-probe', action='release')
+        reloaded = wait(lambda: harness._try(lambda: (lambda value: value and value != old_load)(
+            app.eval(ta, 'window.loadID'))), timeout=10)
+        if reloaded:
+            app.call('wait', tab=ta)
+        finished = app.call('page-site-data-probe')
+        check('K_same_origin_hash_refresh', reloaded and document_hits() == old_requests + 1,
+              reloaded=bool(reloaded), changedURL=changed_url, requests=[old_requests, document_hits()])
+        check('K_inflight_clear_deduplicated', duplicate['starts'] == duplicate['completions'] == 1
+              and duplicate['waiting'] and finished['starts'] == finished['completions'] == finished['refreshes'] == 1
+              and document_hits() == old_requests + 1, held=held, duplicate=duplicate, finished=finished)
         select(ta)
         actions = bar_actions()
         check('K_site_commandbar_available', actions == [True, True], actions=actions)
@@ -175,14 +239,15 @@ def run(factory, results, tmp, style, harness):
                     refused.append('disabled menu item' in str(error))
             check('K_internal_commands_disabled_' + str(index), all(row and row['enabled'] is False for row in rows)
                   and all(refused), url=url, rows=rows, refused=refused)
-            if index == 0:
-                actions = bar_actions()
-                check('K_internal_commandbar_unavailable', actions == [False, False], actions=actions)
+            actions = bar_actions()
+            check('K_internal_commandbar_unavailable_' + str(index), actions == [False, False], url=url, actions=actions)
             app.call('close', tab=tab)
     finally:
-        if app:
-            harness._restore_defaults(app, saved)
-            app.quit()
-        server.shutdown()
-        server.server_close()
-        worker.join(timeout=5)
+        try:
+            if app:
+                try:
+                    harness._restore_defaults(app, saved)
+                finally:
+                    app.quit()
+        finally:
+            resources.close()

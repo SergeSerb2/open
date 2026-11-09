@@ -911,11 +911,19 @@ Section 8 decisions, where this section left a choice open:
 | Command | With Site Control E2 | Before E2 |
 |---|---|---|
 | `clear-cookies-and-refresh` | `clearSiteData(origin:kinds:[.cookies])` for the focused page's origin, then `reload()` | `clearBrowsingData(origin:)`, then `reload()` (shipped in Section 8: it clears the host cookies of the page's host only; `Domain=` cookies stay and the HTTP cache is untouched, OEBrowserContext.mm `DeleteCookies(url, "")`; the earlier note that it drops every site's cache was wrong) |
-| `clear-cache-and-refresh` | `clearSiteData(origin:kinds:[.cache])`, then `reloadIgnoringCache()` | disabled (enabled key `siteDataClearAvailable`), like the Site Control panel's Clear Cache |
+| `clear-cache-and-refresh` | `clearSiteData(origin:kinds:[.cache])`, then `reloadIgnoringCache()` | disabled, like the Site Control panel's Clear Cache |
 
-Scope follows Chromium's Clear-Site-Data rules for the origin's site
-(PG-9: per site; guess). No toast: the reload is the feedback (guess).
-Peek: the top Peek page.
+Cache scope is the exact origin (scheme, host and port). Cookies match the host
+and parent Domain cookies across schemes and ports. Parent Domain cookies are
+shared with siblings; sibling and parent host-only cookies stay. This relies on
+Chromium refusing public-suffix Domain cookies (see `OESiteControl.h`).
+The focused page's own context includes private windows and the top Peek page.
+Successful completion refreshes if the page is still live in the same origin;
+hash and pushState changes do not suppress it. Closed pages or changed origins
+do not refresh. A second clear for the same page while one runs does nothing.
+Success has no toast; failure shows "Site data could not be cleared." with no
+URL or engine error text. The task is not canceled on close; the closed/delegate
+and origin guards refuse a stale refresh after completion.
 
 ### 4.10 Developer menu
 
@@ -1334,8 +1342,9 @@ the enabled answer. `commands-dump` must still pass (it reads registry
 titles, not runtime titles).
 
 New `EnabledKey` values: `hasWebPage` (live http(s), file, or data page in
-the focused host), `siteDataClearAvailable` (E2 landed and the page is
-http(s)), `isTracing`, `notTracing`.
+the focused host), `isTracing`, `notTracing`. Both site-clear commands register
+`hasCurrentTab`; the factory's `isPageToolEnabled` adds the shared live HTTP(S) guard
+for menus, command-bar filtering and dispatch.
 
 | Command id | Handler | Enabled key | Menu state |
 |---|---|---|---|
@@ -1343,8 +1352,8 @@ http(s)), `isTracing`, `notTracing`.
 | `zoom-in`, `zoom-out`, `zoom-actual-size` | existing host calls + §4.3 toast | `hasCurrentTab` | — |
 | `capture-page`, `capture-full-page`, `capture-portrait` | `CaptureController` (§4.6) | `hasWebPage` | — |
 | `appearance-automatic`, `-light`, `-dark` | §4.8 | always | checkmark on the current value |
-| `clear-cache-and-refresh` | §4.9 | `siteDataClearAvailable` | — |
-| `clear-cookies-and-refresh` | §4.9 | `hasWebPage` | — |
+| `clear-cache-and-refresh` | §4.9 | `hasCurrentTab` + live HTTP(S) guard | — |
+| `clear-cookies-and-refresh` | §4.9 | `hasCurrentTab` + live HTTP(S) guard | — |
 | `javascript-console`, `inspect-elements`, `network-inspector` | §4.10.1 | `hasCurrentTab` | — |
 | `toggle-developer-mode` | §4.10.3 | always | title "Turn on/off Developer Mode for this site"; hidden without an http(s) or file page |
 | `allow-js-apple-events` | §4.10.2 | always | checkmark |
@@ -1497,8 +1506,10 @@ report `blocked: EP-n`, never pass):
 | X6 | Undo after translate → original text |
 | A1 | `command appearance-dark` → `scheme.html` `matchMedia` dark in Alloy and hosted tabs, no reload (`events` has no load) |
 | A2 | `appearance-automatic` + `app-appearance value=dark` then `value=light` → `scheme.html` follows each time |
-| K1 | Two fixture origins seed host/parent-domain cookies and HTTP cache → View ▸ Clear Cache and Refresh on A → A refetches, B stays cached, both cookie sets stay, page reloads |
-| K2 | View ▸ Clear Cookies and Refresh on A → A host and parent-domain cookies disappear (also on a sibling), B cookies and both caches stay, page reloads; private clears preserve the parent Profile; internal/file pages disable both commands and internal pages omit both command-bar actions |
+| K1 | A, unrelated B, A's sibling subdomain and A's host on a second port seed HTTP cache → View ▸ Clear Cache and Refresh on A → only A refetches; the other three stay cached; all cookie sets stay, page reloads |
+| K2 | View ▸ Clear Cookies and Refresh on A → A host and parent-domain cookies disappear; the shared Domain cookie also leaves sibling/parent, whose own host-only cookies stay; B cookies and all four caches stay, page reloads; private clears preserve the parent Profile |
+| K_same_origin_hash_refresh / K_inflight_clear_deduplicated | Automation-only bounded completion barrier holds the real clear before refresh → hash changes and a second menu invocation → one engine clear and one real document reload; no backend is substituted |
+| K_internal_commands_disabled / K_internal_commandbar_unavailable | Both menu actions disabled/refused and both command-bar entries absent on each of about:blank, file: and open://welcome |
 | D1 | `javascript-console` opens DevTools on the Console panel (DevTools page URL has `panel=console` or its first view is Console via `pages`) |
 | D2 | `network-inspector` → Network panel (EP-4b) |
 | D3 | `toggle-developer-mode` → `menu-state` title flips; URL field shows the full URL |

@@ -262,7 +262,6 @@ extension EngineWebContentHostFactory {
     case EnabledKey.webPage:
       // A live http(s), file, or data page in the focused host (page-platform §7.1).
       return ["http", "https", "file", "data"].contains(selectedContent?.url?.scheme?.lowercased() ?? "")
-    case EnabledKey.siteDataClearAvailable: return isPageToolEnabled("clear-cache-and-refresh") == true
     case EnabledKey.isTracing: return TroubleshootingActions.shared.isRecording
     case EnabledKey.notTracing: return !OEEngine.shared.isTracing
     default: return true
