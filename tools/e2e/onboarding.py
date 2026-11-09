@@ -33,6 +33,8 @@ def run(factory, results, tmp, h):
         nonlocal app
         if app and not app.closed: app.quit()
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(source), '--intro-sound=silent', *args])
+        # Main's quit confirmation must be answered when native Cmd+W quits setup.
+        app.call('quit-warning', button='quit')
         return app
 
     def state(): return app.call('onboarding', action='state')
