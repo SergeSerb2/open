@@ -1,5 +1,9 @@
 import AppKit
 import OpenEngine
+import os.signpost
+#if OPEN_AUTOMATION
+import MachO
+#endif
 
 /// Command-line options. Unknown `--switches` also reach Chromium, because
 /// CEF parses the process command line itself (for example
@@ -109,11 +113,65 @@ struct LaunchOptions {
 @MainActor
 final class LaunchTiming {
   static let shared = LaunchTiming()
+  /// Opt-in, fixed-count startup probes. No timers or idle logging.
+  let speedTraceEnabled = ProcessInfo.processInfo.environment["OPEN_SPEED_TRACE"] == "1"
+  private lazy var speedLog = OSLog(subsystem: "io.github.sergeserb2.open", category: "SpeedTrace")
   let processStartTicks: UInt64
   let hasKernelProcessStart: Bool
   private let millisecondsPerTick: Double
   private(set) var marks: [(String, UInt64)] = []
   private var firstFrameConfirmed: Bool?
+  #if OPEN_AUTOMATION
+  private var keyProbeTimestamp: TimeInterval?
+  private var entryImages: [String]?
+  private var sidebarImages: [String]?
+
+  func recordEntryImages() {
+    guard ProcessInfo.processInfo.environment["OPEN_SPEED_IMAGES"] == "1" else { return }
+    entryImages = loadedImages()
+  }
+
+  /// Diagnostic only: capture the image set after frame confirmation and
+  /// before engine startup. Keep this scan out of ordinary launch timings.
+  func recordSidebarImages() {
+    guard ProcessInfo.processInfo.environment["OPEN_SPEED_IMAGES"] == "1" else { return }
+    sidebarImages = loadedImages()
+  }
+
+  private func loadedImages() -> [String] {
+    (0..<_dyld_image_count()).compactMap { index in
+      _dyld_get_image_name(index).map { String(cString: $0) }
+    }
+  }
+
+  /// Queue an owned-window key dispatch at the confirmed frame. The native
+  /// run loop must service it, and OEApplication.sendEvent routes it normally.
+  func postKeyReadinessProbe(to window: NSWindow?) {
+    guard ProcessInfo.processInfo.environment["OPEN_SPEED_KEY_PROBE"] == "1", let window else { return }
+    let timestamp = ProcessInfo.processInfo.systemUptime
+    let number = window.windowNumber
+    keyProbeTimestamp = timestamp
+    mark("keyPosted")
+    // Dispatch after the native loop resumes from engine setup, through the
+    // same sendEvent path used by the App's key automation.
+    RunLoop.main.perform { [weak self] in
+      MainActor.assumeIsolated {
+        guard self != nil,
+          let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: timestamp, windowNumber: number, context: nil,
+            characters: "l", charactersIgnoringModifiers: "l", isARepeat: false, keyCode: 37)
+        else { return }
+        NSApp.sendEvent(event)
+      }
+    }
+  }
+
+  func recordKeyReadiness(_ event: NSEvent, handled: Bool) {
+    guard keyProbeTimestamp == event.timestamp else { return }
+    keyProbeTimestamp = nil
+    mark(handled ? "keyAccepted" : "keyRejected")
+  }
+  #endif
 
   private init() {
     var timebase = mach_timebase_info_data_t()
@@ -132,11 +190,24 @@ final class LaunchTiming {
 
   var elapsedMilliseconds: Double { Double(mach_continuous_time() - processStartTicks) * millisecondsPerTick }
   func mark(_ name: String) {
-    if !marks.contains(where: { $0.0 == name }) { marks.append((name, mach_continuous_time())) }
+    if !marks.contains(where: { $0.0 == name }) {
+      marks.append((name, mach_continuous_time()))
+      if speedTraceEnabled { os_signpost(.event, log: speedLog, name: "LaunchPhase", "%{public}@", name as NSString) }
+    }
   }
+  func phase(_ name: String) { if speedTraceEnabled { mark(name) } }
   func recordFirstFrame(confirmed: Bool) { firstFrameConfirmed = confirmed }
   var report: [String: Any] {
     var result: [String: Any] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded() as Any) })
+    #if OPEN_AUTOMATION
+    if let entryImages { result["entryImages"] = entryImages }
+    if let sidebarImages { result["sidebarImages"] = sidebarImages }
+    #endif
+    if speedTraceEnabled {
+      result["preciseMs"] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, Double($0.1 - processStartTicks) * millisecondsPerTick) })
+      result["processStartTicks"] = String(processStartTicks)
+      result["millisecondsPerTick"] = millisecondsPerTick
+    }
     if let firstFrameConfirmed { result["firstFrameConfirmed"] = firstFrameConfirmed }
     return result
   }

@@ -52,6 +52,59 @@ enum MainMenu {
     return menu
   }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
+  #if OPEN_AUTOMATION
+  static func shortcutSnapshot(_ menu: NSMenu?, includeUnkeyed: Bool = false) -> [[String: Any]] {
+    (menu?.items ?? []).flatMap { item -> [[String: Any]] in
+      if let submenu = item.submenu { return shortcutSnapshot(submenu, includeUnkeyed: includeUnkeyed) }
+      guard !item.isSeparatorItem, includeUnkeyed || !item.keyEquivalent.isEmpty else { return [] }
+      return [["id": item.identifier?.rawValue ?? "", "key": item.keyEquivalent,
+        "modifierMask": item.keyEquivalentModifierMask.rawValue,
+        "action": item.action.map(NSStringFromSelector) ?? "", "targetNil": item.target == nil,
+        "tag": item.tag, "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+    }
+  }
+  /// Resolve native events through the App's real router at the first frame.
+  /// This records routing only; it does not execute Quit, Print or other commands.
+  static func registryShortcutRoutes(_ app: AppDelegate) -> [[String: Any]] {
+    let carriers = shortcutSnapshot(NSApp.mainMenu)
+    let knownConflicts = ConflictChecker.check(overrides: app.keyBindings).filter(\.isKnownArcDuplicate)
+    return CommandRegistry.active.flatMap { command in
+      app.keyBindings.effectiveShortcuts(for: command).map { shortcut -> [String: Any] in
+        let context = RoutingContext(isAppActive: command.scope != .global,
+          isCommandBarOpen: command.scope == .commandBar,
+          isSidebarFocused: command.scope == .sidebarFocused)
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero,
+          modifierFlags: shortcut.keyEquivalentModifierMask,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: NSApp.keyWindow?.windowNumber ?? 0, context: nil,
+          characters: shortcut.keyEquivalent, charactersIgnoringModifiers: shortcut.keyEquivalent,
+          isARepeat: false, keyCode: UInt16(shortcut.carbonKeyCode ?? 0))
+        var routed = ""
+        if let event, case .browserCommand(let id)? = app.fallbackKeyboard.route(
+          event: event, context: context, overrides: app.keyBindings) { routed = id }
+        let hasCarrier = carriers.contains { item in
+          item["id"] as? String == command.id && item["key"] as? String == shortcut.keyEquivalent
+            && item["modifierMask"] as? UInt == shortcut.keyEquivalentModifierMask.rawValue
+        }
+        // The registry already records native duplicates such as Show Fonts /
+        // New Tab. Check that their physical key still reaches the same owner;
+        // AppKit can remove the losing native item's duplicate key equivalent.
+        let knownDuplicate = routed != command.id && knownConflicts.contains {
+          $0.shortcut == shortcut && Set($0.commandIDs).isSuperset(of: [command.id, routed])
+        }
+        let routedCarrier = carriers.contains { item in
+          item["id"] as? String == routed && item["key"] as? String == shortcut.keyEquivalent
+            && item["modifierMask"] as? UInt == shortcut.keyEquivalentModifierMask.rawValue
+        }
+        return ["id": command.id, "key": shortcut.keyEquivalent,
+          "modifierMask": shortcut.keyEquivalentModifierMask.rawValue, "scope": command.scope.rawValue,
+          "routedCommand": routed, "menuCarrier": hasCarrier, "knownDuplicate": knownDuplicate,
+          "routable": (routed == command.id && (command.menuPath == nil || hasCarrier))
+            || (knownDuplicate && routedCarrier)]
+      }
+    }
+  }
+  #endif
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     // Native intro responder/default button owns unmodified keys. Do not load

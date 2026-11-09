@@ -1,5 +1,24 @@
 # Follow-ups
 
+- Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
+  `onboarding` measures main-thread display-link intervals, not render-server
+  frames. The intro's animations run on the render server; the main thread is
+  busy with engine startup during the first seconds. One M5 run at load1 10.9
+  (240 Hz display): p50/p95 4.167 ms, max 144.9 ms, 22 of 1,848 intervals over
+  1.5 × nominal (1.2 %, row limit 1 %). Needs a render-side measurement
+  (Core Animation frame statistics without a debugger prompt) and quiet ×3
+  runs; consider starting the intro animations only after the engine's
+  synchronous startup work, if the render side also shows hitches.
+- Section 17 speed proof — the returning-launch comparison against a build
+  without Section 17 (three merges reverted) is pending: the plain
+  `git revert -m 1` of #260 conflicts with later commits. `window` measured
+  cold sidebar/first paint 436/725 ms and warm 452/701 ms at load1 ≈ 10–13,
+  above the known-main 400/700 limits; an interleaved control run decides
+  whether Section 17 adds anything (the returning path adds only nil checks).
+- Arc first-launch capture (Section 17) — the user-only screen recording in
+  `docs/status.md` §5.2 settles the open questions in
+  `docs/re/onboarding.md` §9 (intro button caption, clock alignment, music
+  stop/mute, setup reachability, browser reveal).
 - Section 15 non-fatal file-icon fault — one simulated `ExcUserFault` at 17:21:51 on 2026-11-08 matches the passing H3 features run, through `ISMutableIcns addCGImage:scale:error:`, `NSWorkspace setIcon:forFile:options:` and Chromium `shortcuts::SetIconForFile`. The App exited cleanly; TANDEM §8c classifies it as a fault, not a crash. Cause and regression attribution are unknown. H3 has no new real crash report. [Acceptance and regression receipt](engine-spike/passwords-acceptance.md#the-1402-crash-and-regression-proof).
 - Section 15 imported secrets — the App writer and explicit-consent adapter are implemented separately from save/fill. Mock-key builds keep `canImportPasswordsAndCookies == false`. Ten runnable M5 synthetic import rows passed. I-5/I-6 recovery probes remain M1-only and unrun while M1 is on HOLD. The user-present real Keychain import after U-1/U-2 remains open (see the hand check below).
 - Section 15 Arc captures **S-1…S-6** — use the user's combined capture session and a throwaway account. S-1: save/update password, card and address sheets (size, icon, colors, button order); S-2: fill dropdown; S-3: post-save feedback; S-4: generation offer; S-5: Passwords/Credit Cards pages and switch placement; S-6: the internal URL display. Native App acceptance does not prove Arc pixel parity. See [passwords/autofill §13](plans/passwords-autofill.md#13-screenshots-needed-from-the-user-arc-their-own-mac).
@@ -28,6 +47,8 @@
   — Section 14 C7, 2026-11-08
 
 Small items found during review and verification. Each line: area — issue — where found.
+
+- Launch (Section 16) — the 250 ms sidebar budget remains open. The 2026-11-08 M5 interleaved window measured floor141 ms, matched-system-links149 ms, main375 ms and branch377 ms, seven samples each, load1 6.3–8.2. Main/branch first paint was744/771 ms; native key acceptance489/490 ms in a separate set. None of the five candidates showed a measurable gain; menu deferral, optional framework delays, layout coalescing, dylib stripping and Sparkle delay-load were reverted. Keep only opt-in diagnostics. [Research](launch-diagnostics.md) found about 5.9 ms in the retained executable loader pool and about 148–157 ms in `syspolicyd` change-time scans. Chromium's `CodeSignCloneManager` creates/removes a hard link to Open's executable during each full run, advancing its ctime and invalidating the next launch's scan cache. [PR #266](https://github.com/SergeSerb2/open/pull/266) implements persistent clone reuse while retaining live-update protection. Its residual scan and timing acceptance remains open; #251 claims no gain. — 2026-11-08
 
 - Boost code mode (Step 7 package, [Code mode #203](https://github.com/SergeSerb2/open/pull/203)) — App Step 5 now implements `BoostEditorHost.loadedJS(boostID:tabID:)` from the installed document snapshot and calls `BoostEditorController.boundPageDidCommit(tabID:)` after real document commits. Real-page B5 checks live CSS, deferred JS, Refresh to Run and reload. Native code flows (including available CSS selector insertion and one-step undo) and bar comparison cover the package; real-App rest/hover snapshots await host integration. The JS notice uses the lead’s 2026-11-06 ruling recorded in plan §4.10. Package evidence and negative-proof logs are in the PR body. — Section 12 child C, 2026-11-06.
 
