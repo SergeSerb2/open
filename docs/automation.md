@@ -1582,3 +1582,18 @@ The `first-run` API remains the importer verification seam. Its compatibility ac
 Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.
 
 Shared-screen e2e callers can pass `--focus-attempts 1` to `tools/e2e/engine_e2e.py` to stop the suite after its first foreground interruption, preserving the interrupted receipt and running cleanup. The default remains three attempts; passwords probes always use one.
+
+Clean-link copy coverage: `OPEN_E2E_PAGE_COPY_ONLY=1 tools/e2e/engine_e2e.py --only page`
+runs the existing copy/quote/zoom group plus row, selection and folder copy (plain/Markdown),
+unchanged/mixed URLs, and row/page/toast native Share. `sidebar-share` also reports
+`payloadURLs` from the actual native picker service-query callback. Automation-only
+`pasteboard-preserve` / `pasteboard-restore` hold all clipboard formats inside the App;
+they return success flags without exposing saved clipboard contents.
+
+### Generic quit warning
+
+`quit` is harness cleanup and skips the generic warning. `quit-warning` returns
+the bounded generic-alert receipts; `{button:"cancel"|"quit", request:true}`
+queues the real `quit-open` command, observes its native modal window, and presses
+that alert's own NSButton. This does not send desktop input. The `downloads` suite
+includes `OPEN_DOWNLOADS_CASE=generic-quit` for this focused real-App flow.

@@ -638,9 +638,10 @@ def favicons(cli, seed):
 def adblock_perf(cli):
     text = run(cli, "adblock", "perf", "--dir", str(Path("data").resolve()))
     lookup = re.search(r"lookups_1000 p95_ms=([\d.]+) budget_ms=1 groups=10 lookups=10000 matches=5000", text)
-    opened = re.search(r"profile_open_with_integrity_scan p95_ms=([\d.]+) budget_ms=10", text)
+    opened = re.search(r"profile_open_with_integrity_scan p95_ms=([\d.]+) budget_ms=10 samples=40 max_ms=([\d.]+)", text)
     require(lookup and opened, "missing one of the two adblock performance metrics")
     require(float(lookup[1]) < 1 and float(opened[1]) < 10, "adblock performance budget exceeded")
+    require(float(opened[2]) >= float(opened[1]), "adblock open maximum must include the p95 sample")
 
 
 def adblock_catalog(cli, root):

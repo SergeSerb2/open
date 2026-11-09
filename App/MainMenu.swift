@@ -374,7 +374,7 @@ extension EngineWebContentHostFactory {
     case "zoom-in", "zoom-out", "zoom-actual-size": guard zoomPage(id) else { return false }
     case "print": selectedContent?.showPrintPanel()
     case "save-page-as": savePage()
-    case "share-page": if let url = selectedContent?.url { NSSharingServicePicker(items: [url]).show(relativeTo: controller?.container.bounds ?? .zero, of: controller!.container, preferredEdge: .maxY) }
+    case "share-page": return sharePage()
     // The Copy URL family and its toasts (page-platform §4.2, `App/Page/PageCommands.swift`).
     case "copy-url": guard copyURL() else { return false }
     case "copy-url-markdown": guard copyURLMarkdown() else { return false }

@@ -4453,19 +4453,27 @@ def page_commands_checks(factory, results, tmp):
     server, origin = page_fixture_server()
     app = factory(urls=(), fresh=True)
     shared_quotes = None
+    clipboard_saved = app.call("pasteboard-preserve")
     try:
+        assert clipboard_saved, "clipboard preservation failed"
         # Shared defaults domain: set the one key this suite reads, restore it in `finally`.
         shared_quotes = app.call("defaults", key="open.advanced.enableSharedQuotes")
         app.call("defaults", key="open.advanced.enableSharedQuotes", value=True)
         page_copy_rows(app, results, origin)
+        import clean_links
+        clean_links.checks(app, results, origin, sys.modules[__name__])
         page_quote_rows(app, results, origin)
         page_zoom_rows(app, results, origin)
     finally:
         try:
             app.call("defaults", key="open.advanced.enableSharedQuotes", value=shared_quotes)
         finally:
-            app.quit()
-            server.shutdown()
+            try:
+                if clipboard_saved:
+                    results["CL_clipboard_restored"] = {"ok": app.call("pasteboard-restore")}
+            finally:
+                app.quit()
+                server.shutdown()
 
 
 def sidebar_checks(factory, results, tmp):
@@ -7195,6 +7203,9 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
 
 def page_checks(factory, results, tmp, style="alloy"):
     """page-platform §8.3 `--only page`: one suite, one row group per feature."""
+    if os.environ.get("OPEN_E2E_PAGE_COPY_ONLY") == "1":
+        page_commands_checks(factory, results, tmp)
+        return
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)
