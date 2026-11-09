@@ -264,16 +264,28 @@ def run(factory, results, tmp, env):
                 return {'cancelInert': True, 'confirmedDeleteLive': True, 'empty': True, 'existingUndo': 'none'}
             row('BG3_delete_empty', delete)
             def focus():
-                browser(); app.call('menu-perform', id='boost-gallery'); number=state()['library']
-                app.call('key', key='w', modifiers=['cmd'], route='app', window=number)
-                assert not any(w['number'] == number and w['visible'] for w in app.call('windows'))
-                browser(); app.call('menu-perform', id='boost-gallery')
-                for key in ['t', 'l']:
-                    app.call('key', key=key, modifiers=['cmd'], route='app', window=state()['library'])
-                    assert wait(lambda: bar()['presented'], timeout=5), bar()
+                observations = {}
+                for layout in ['List', 'Gallery']:
+                    gallery(); ui('layout', name=layout); number=state()['library']
+                    # Cmd+L belongs to a browser window. Both existing List and
+                    # Gallery keep it inert in Library; do not invent a new policy.
+                    app.call('key', key='l', modifiers=['cmd'], route='app', window=number)
+                    assert not bar()['presented'] and ui()['key'], {'layout': layout, 'bar': bar()}
+                    app.call('key', key='t', modifiers=['cmd'], route='app', window=number)
+                    assert wait(lambda: bar()['presented'], timeout=5), {'layout': layout, 'key': 't', 'bar': bar()}
                     app.call('key', key='escape', route='app')
                     assert wait(lambda: not bar()['presented'], timeout=5)
-                return {'cmdW': True, 'cmdT': True, 'cmdL': True, 'escape': True, 'return': 'BG1_commandbar'}
+                    app.call('key', key='w', modifiers=['cmd'], route='app', window=number)
+                    assert not any(w['number'] == number and w['visible'] for w in app.call('windows'))
+                    observations[layout] = {'cmdL': 'inert', 'cmdT': 'command bar', 'escape': 'dismissed', 'cmdW': 'closed'}
+                assert observations['List'] == observations['Gallery']
+                browser(); app.call('select', tab=tab_a)
+                app.call('key', key='l', modifiers=['cmd'], route='app')
+                assert wait(lambda: bar()['presented'], timeout=5)
+                assert bar()['mode'] == 'editCurrentURL', bar()
+                app.call('key', key='escape', route='app')
+                assert wait(lambda: not bar()['presented'], timeout=5)
+                return {'libraryParity': observations, 'browserCmdL': True, 'return': 'BG1_commandbar'}
             row('BG_focus', focus)
         finally:
             try:
