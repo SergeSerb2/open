@@ -349,7 +349,22 @@ def real_engine(factory, results, wait):
     def status(profile, private=False):
         return next(c['adBlockStatus'] for c in profile_state(profile)['contexts'] if c['offTheRecord'] == private)
     def loaded(profile, private=False):
-        return wait(lambda: (lambda s: s if s['engine_loaded'] else None)(status(profile, private)), timeout=40)
+        missing_context = False
+        def ready():
+            nonlocal missing_context
+            # Context creation is asynchronous, including transient Profile
+            # pages. An absent context is not a loaded-engine verdict.
+            context = next((c for c in profile_state(profile)['contexts']
+                            if c['offTheRecord'] == private), None)
+            if context is None:
+                missing_context = True
+                return None
+            state = context['adBlockStatus']
+            return state if state['engine_loaded'] else None
+        value = wait(ready, timeout=40)
+        print('AD3_context_readiness ' + json.dumps(dict(profile=profile, private=private,
+            sawMissingContext=missing_context, loaded=bool(value), state=profile_state(profile))), flush=True)
+        return value
     def count(tab):
         page = app.call('tab-state', tab=tab)['page']['identifier']
         return next(p['blockedCount'] for profile in query()['profiles']
