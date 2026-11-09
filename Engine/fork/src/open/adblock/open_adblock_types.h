@@ -68,6 +68,8 @@ struct AdBlockStatus {
   uint32_t match_cap_bytes = 0;
   uint64_t checks = 0;
   uint64_t checks_truncated = 0;
+  uint64_t cold_holds = 0;
+  uint64_t cold_hold_max_ms = 0;
   // Cosmetic output v1 does not apply, summed over every cosmetic and
   // generic-selector query since the service started (adblock-fork §5.2,
   // lead ruling 6, review R3-4).

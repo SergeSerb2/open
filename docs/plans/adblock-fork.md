@@ -2896,18 +2896,22 @@ Thread rules (violations are Step-blocking bugs):
 1. The Rust engine is built, deserialized and serialized **only** on the
    build runner, and every engine is destroyed there (§6.6). The UI
    thread never parses a list and never waits on a build. Startup DAT
-   load is therefore async: early navigations before the first engine
-   arrives are **allowed** (no engine = allow). This is the correct
-   cold-start trade: blocking the first paint on a 47 ms deserialize
-   would break the 700 ms budget for a feature the user can toggle. The
-   §13 perf check measures how long the unprotected window lasts (expect
-   < 200 ms after Profile open for a lossless set; a lossy set builds
-   from text, so expect about 250 ms — guess from Step 3's 226 ms) and
-   the PR reports it.
+   load is therefore async. **Cold-start erratum (lead brief, 2026-11-09):**
+   main-frame navigations still pass through. Enabled, non-excluded
+   subresources and subframe navigations wait only while the first usable
+   engine's load is in flight, at most 1,500 ms from each request's entry.
+   One process-wide matcher-sequence queue holds at most 128 requests,
+   including sockets; the deadline and queue overflow fail open. Failed or
+   empty loads release waiters; no load in flight means no hold. A missing
+   pointer waits for the App's explicit post-seed reload without polling.
+   A context that has already loaded an engine never holds again. See
+   `docs/adblock-design.md` for the fresh-profile fail-open interval. First
+   paint, first-request blocking, and warm zero-hold proof remain pending.
 2. Every other engine call (checks, cosmetic queries, generic selectors)
    runs **only** on the matcher sequence (D-12, gate G-1). Those calls
-   never do file I/O, never post a task to wait for a result, and never
-   call CEF client code.
+   never do file I/O and never call CEF client code. The bounded first-load
+   queue suspends requests with continuations and one timer; it never waits
+   synchronously or blocks the matcher sequence.
 3. Counters are UI-thread only; the matcher sequence posts coalesced
    deltas (§7.5).
 4. The renderer reaches the browser for cosmetics only through
@@ -3916,7 +3920,7 @@ median reported. Machine: record `sysctl -n machdep.cpu.brand_string`.
 | Check | Method | Budget |
 |---|---|---|
 | DAT load (warm start) | second launch with `engine.dat` present; time from process start to `OpenAdBlockSmoke` first-load line, minus the same measure with ad blocking off | ≤ 250 ms added (F-15 says ~47 ms deserialize; the rest is harness noise — investigate above 250) |
-| Text build (cold) | delete `engine.dat`; same measure | ≤ 1500 ms added, and the first page still paints during it (§10 rule 1 — assert the page's `load` event fires before the status shows `engine_loaded` if the build is slow; if it does not, that is a finding, not a failure) |
+| Text build (cold) | delete `engine.dat`; same measure | ≤ 1500 ms intentional hold per eligible request while the first load is in flight (§10 rule 1, 2026-11-09 erratum); main-frame navigation passes through. Record paint and `load` relative to `engine_loaded`, deadline lateness, queue-bound overflow, and fail-open behavior |
 | Page overhead | Revised 2026-10-26: gate G-5 (§7.8) on `corpus.html?sample=0`, exactly 200 real corpus URLs (review r1 finding 4), replacing the short-path `many.html` | blocking on faster than off; busy thread CPU ≤ 9 ms per 200-request load, off the UI thread; quiet load1 ≤ 12 (§13.5.1 item 2a) |
 | Request checks | gates G-1…G-4, G-6, G-7 (§7.8) | as stated there |
 | Cosmetic query | time 100 cosmetic queries on the matcher sequence in the selftest on the real lists and print the mean; plus the renderer-side sync call (C-G1, C-G2) | ≤ 100 µs/page query (as built: 77–79 µs; hide selectors are always sorted in the shim, and that sort is inside the measured cost); C-G1/C-G2 as in §11 Step 5 |

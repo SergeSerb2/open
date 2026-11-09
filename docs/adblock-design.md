@@ -260,6 +260,41 @@ Swift side (`OpenFeatures`): `AdBlockStore` holds the catalog, per-Profile enabl
 - **Storage.** Under `~/Library/Application Support/Open/Profiles/<profile>/AdBlock/`: `catalog-state.json` (enabled IDs, ETags, last-check times, catalog version), `lists/<id>.txt` (last good text per list), `engine.dat` (serialized engine for fast startup), and `exclusions.json` (excluded domains per Profile). Load `engine.dat` at Profile open (about 47 ms for two lists). Fall back to text parse if the DAT version mismatches the crate version.
 - **Per-Profile isolation.** Engines, enabled sets, and exclusions are per Profile, as in Arc (`blockListsPerProfile`). Incognito Profiles get a memory-only engine cloned from the default lists with no disk writes.
 
+### Bounded first-load wait (Section 13, 2026-11-09)
+
+An enabled context with a nonempty list directory can hold eligible
+subresources and subframe navigations while its first engine load is in
+flight. Main-frame navigations are never held. The matcher sequence owns
+the queue and one deadline timer; it does not block a thread. Each request's
+deadline is its entry time plus 1,500 ms. At the deadline it fails open, even
+if an engine becomes available before the continuation runs. Scheduling can
+make the observed duration longer; the configured deadline never moves.
+
+The queue holds at most 128 requests across the whole browser process,
+including WebSocket and WebTransport checks. Excess requests fail open.
+Held request data is released on completion; a disconnected factory is kept
+alive only until its bounded continuations drain. The existing socket UI
+reply still checks that the requesting frame exists. Holding adds no UI work
+per request. `--v=1` logs each completed hold without a URL or site;
+`cold_holds` and `cold_hold_max_ms` are included in context status and smoke
+diagnostics. A full queue or an already elapsed deadline logs a skipped hold.
+
+Disabling blocking, excluding the site, clearing the directory, shutting
+down the service, or completing a failed/empty first load releases eligible
+waiters. A missing `current.json` is a failed load, with no polling or
+indefinite hold; the configured directory remains available for the App's
+later explicit reload after seeding. A context that has already installed
+an engine never enters this queue again, including during a reload. Off,
+excluded, no-load-in-flight, and warm requests have zero intentional hold.
+
+This native branch is stacked on Step 5. The App's early context
+configuration and post-paint reload are a separate branch. A truly unseeded
+Profile can still issue requests after the missing-pointer load fails and
+before the App starts its post-paint reload: that interval is fail-open under
+the no-load-in-flight rule. Blocking from the first fresh-profile request,
+warm-relaunch zero holds, queue/deadline boundaries, and launch-time impact
+remain unverified until the lead releases the build and screen holds.
+
 ### Site Control Center and Settings UI
 
 - The panel toggle shows three facts: the master state, whether this site is excluded, and the blocked count for the current page load (from `blockedResourceCount`). Toggling writes the exclusion for the registrable domain, updates the panel without closing it, and shows the reload affordance (`AdBlockReloadFollowUpAction` in Arc). The scope dialog offers “this site” (registrable domain, default) and “this page only” (exact URL, session-scoped). Do not offer “everywhere” in the per-site dialog; that is the master toggle in Settings.

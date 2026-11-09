@@ -5,6 +5,7 @@
 #include "open/adblock/open_adblock_matcher.h"
 
 #include <algorithm>
+#include <list>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -17,6 +18,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/timer/timer.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "partition_alloc/memory_reclaimer.h"
@@ -124,6 +126,98 @@ void RecordCheck(AdBlockMatcherCounters& counters,
 }
 
 }  // namespace
+
+// One queue and one deadline timer for the whole process, on the matcher
+// sequence. Pending callbacks retain their matcher, never the UI service.
+// Once a request leaves the queue, no delayed task retains its request data.
+class OpenAdBlockMatcher::ColdHoldQueue {
+ public:
+  void Add(scoped_refptr<OpenAdBlockMatcher> matcher,
+           std::string top_host,
+           base::TimeTicks start,
+           base::OnceCallback<void(bool)> resume) {
+    DCHECK(AdBlockMatcherTaskRunner()->RunsTasksInCurrentSequence());
+    const auto now = base::TimeTicks::Now();
+    if (pending_.size() >= kOpenAdBlockMaxColdHolds ||
+        now >= start + kOpenAdBlockColdHoldLimit) {
+      VLOG(1) << "OpenAdBlock: cold_hold_skipped="
+              << (pending_.size() >= kOpenAdBlockMaxColdHolds ? "queue_full"
+                                                            : "deadline");
+      std::move(resume).Run(true);
+      return;
+    }
+    matcher->counters_.cold_holds.fetch_add(1, std::memory_order_relaxed);
+    pending_.push_back({std::move(matcher), std::move(top_host), start,
+                        start + kOpenAdBlockColdHoldLimit, std::move(resume)});
+    VLOG(1) << "OpenAdBlock: cold_hold_queued pending=" << pending_.size()
+            << " limit=" << kOpenAdBlockMaxColdHolds;
+    ScheduleNext();
+  }
+
+  void FinishReady(OpenAdBlockMatcher* changed) {
+    DCHECK(AdBlockMatcherTaskRunner()->RunsTasksInCurrentSequence());
+    const auto now = base::TimeTicks::Now();
+    std::list<Pending> completed;
+    for (auto it = pending_.begin(); it != pending_.end();) {
+      auto current = it++;
+      if (now >= current->deadline ||
+          (changed && current->matcher.get() == changed &&
+           !changed->NeedsFirstEngineHold(current->top_host))) {
+        completed.splice(completed.end(), pending_, current);
+      }
+    }
+    // Erase and re-arm before callbacks: one can release a factory or cause
+    // another state update. No iterator into pending_ survives a callback.
+    ScheduleNext();
+    for (auto& request : completed) {
+      const auto released = base::TimeTicks::Now();
+      const auto elapsed = released - request.start;
+      const bool fail_open = released >= request.deadline;
+      auto& maximum = request.matcher->counters_.cold_hold_max_ms;
+      maximum.store(std::max(maximum.load(std::memory_order_relaxed),
+                             static_cast<uint64_t>(elapsed.InMilliseconds())),
+                    std::memory_order_relaxed);
+      VLOG(1) << "OpenAdBlock: cold_hold_ms=" << elapsed.InMillisecondsF()
+              << " deadline_ms=" << kOpenAdBlockColdHoldLimit.InMilliseconds()
+              << " deadline_expired=" << fail_open
+              << " engine_loaded=" << request.matcher->HasEngine();
+      std::move(request.resume).Run(fail_open);
+    }
+  }
+
+ private:
+  struct Pending {
+    scoped_refptr<OpenAdBlockMatcher> matcher;
+    std::string top_host;
+    base::TimeTicks start;
+    base::TimeTicks deadline;
+    base::OnceCallback<void(bool)> resume;
+  };
+
+  void ScheduleNext() {
+    timer_.Stop();
+    if (pending_.empty()) {
+      return;
+    }
+    const auto next = std::min_element(
+        pending_.begin(), pending_.end(),
+        [](const Pending& a, const Pending& b) { return a.deadline < b.deadline; });
+    timer_.Start(FROM_HERE,
+                 std::max(base::TimeDelta(),
+                          next->deadline - base::TimeTicks::Now()),
+                 base::BindOnce(&ColdHoldQueue::FinishReady,
+                                base::Unretained(this), nullptr));
+  }
+
+  std::list<Pending> pending_;
+  base::OneShotTimer timer_;
+};
+
+// static
+OpenAdBlockMatcher::ColdHoldQueue& OpenAdBlockMatcher::ColdHolds() {
+  static base::NoDestructor<ColdHoldQueue> queue;
+  return *queue;
+}
 
 scoped_refptr<base::SequencedTaskRunner> AdBlockMatcherTaskRunner() {
   return MatcherRunner();
@@ -244,17 +338,50 @@ OpenAdBlockMatcher::~OpenAdBlockMatcher() = default;
 void OpenAdBlockMatcher::SetEngine(std::shared_ptr<const EngineHolder> engine) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   engine_ = std::move(engine);
+  has_loaded_engine_ |= !!engine_;
+  ColdHolds().FinishReady(this);
 }
 
 void OpenAdBlockMatcher::SetEnabled(bool enabled) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   enabled_ = enabled;
+  if (!enabled) {
+    ColdHolds().FinishReady(this);
+  }
 }
 
 void OpenAdBlockMatcher::SetExclusions(
     base::flat_set<std::string> normalized_domains) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   exclusions_ = std::move(normalized_domains);
+  ColdHolds().FinishReady(this);
+}
+
+void OpenAdBlockMatcher::SetFirstLoadPending(bool pending) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  first_load_pending_ = pending;
+  if (!pending) {
+    ColdHolds().FinishReady(this);
+  }
+}
+
+bool OpenAdBlockMatcher::NeedsFirstEngineHold(std::string_view top_host) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return enabled_ && !has_loaded_engine_ && !engine_ && first_load_pending_ &&
+         !HostIsExcluded(exclusions_, top_host);
+}
+
+void OpenAdBlockMatcher::HoldForFirstEngine(
+    std::string top_host,
+    base::TimeTicks request_start,
+    base::OnceCallback<void(bool)> resume) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!NeedsFirstEngineHold(top_host)) {
+    std::move(resume).Run(false);
+    return;
+  }
+  ColdHolds().Add(base::WrapRefCounted(this), std::move(top_host), request_start,
+                   std::move(resume));
 }
 
 bool OpenAdBlockMatcher::IsActiveFor(std::string_view top_host) const {

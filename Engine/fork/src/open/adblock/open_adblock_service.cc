@@ -562,7 +562,9 @@ void OpenAdBlockService::Shutdown() {
   VLOG(1) << "OpenAdBlock: shutdown checks=" << counters.checks.load(kRelaxed)
           << " checks_truncated=" << counters.checks_truncated.load(kRelaxed)
           << " checks_over_1ms=" << counters.checks_over_1ms.load(kRelaxed)
-          << " max_check_us=" << counters.max_check_us.load(kRelaxed);
+          << " max_check_us=" << counters.max_check_us.load(kRelaxed)
+          << " cold_holds=" << counters.cold_holds.load(kRelaxed)
+          << " cold_hold_max_ms=" << counters.cold_hold_max_ms.load(kRelaxed);
   // The matcher answers "off" from now on; its engine reference drops on
   // the matcher sequence and the deleter frees the engine on the build
   // runner (§6.6). Never a free under a lock or on this thread.
@@ -575,6 +577,7 @@ void OpenAdBlockService::Shutdown() {
                                << matcher->RegexCompileCountsText();
 #endif
                        matcher->SetEnabled(false);
+                       matcher->SetFirstLoadPending(false);
                        matcher->SetEngine(nullptr);
                      },
                      matcher_));
@@ -657,6 +660,11 @@ void OpenAdBlockService::LoadFromDirectory(
   adblock_root_ = adblock_root;
   const uint64_t load_id =
       latest_load_id_->fetch_add(1, std::memory_order_acq_rel) + 1;
+  PostToMatcher(base::BindOnce(
+      [](bool pending, OpenAdBlockMatcher* matcher) {
+        matcher->SetFirstLoadPending(pending);
+      },
+      !adblock_root.empty()));
   AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&BuildOnBackground, std::move(adblock_root), prefer_dat,
@@ -700,6 +708,7 @@ void OpenAdBlockService::SetListDirectory(base::FilePath adblock_root) {
                                   excluded_domains_.end());
   PostToMatcher(base::BindOnce([](OpenAdBlockMatcher* matcher) {
     matcher->SetEngine(nullptr);
+    matcher->SetFirstLoadPending(false);
   }));
   NotifyStatus();
 }
@@ -743,6 +752,7 @@ void OpenAdBlockService::OnBuilt(
         [](bool empty_generation, std::shared_ptr<const EngineHolder> engine,
            OpenAdBlockMatcher* matcher) {
           matcher->SetEngine(std::move(engine));
+          matcher->SetFirstLoadPending(false);
           if (empty_generation) {
             // SetEngine releases its old holder on the build runner. Reclaim
             // after that queued destruction, so all-lists-off retains the
@@ -753,6 +763,12 @@ void OpenAdBlockService::OnBuilt(
           }
         },
         result.empty_generation, std::move(result.engine)));
+  } else {
+    // Missing current.json is a completed failed load. Keep its directory so
+    // the App can explicitly reload after post-paint bundled-list seeding.
+    PostToMatcher(base::BindOnce([](OpenAdBlockMatcher* matcher) {
+      matcher->SetFirstLoadPending(false);
+    }));
   }
   VLOG(1) << "OpenAdBlock: loaded " << result.list_count << " lists, "
           << (result.empty_generation ? "empty" : result.shared ? "shared" : result.from_dat ? "dat" : "text")
@@ -772,6 +788,8 @@ AdBlockStatus OpenAdBlockService::GetStatus() const {
   constexpr auto kRelaxed = std::memory_order_relaxed;
   status.checks = counters.checks.load(kRelaxed);
   status.checks_truncated = counters.checks_truncated.load(kRelaxed);
+  status.cold_holds = counters.cold_holds.load(kRelaxed);
+  status.cold_hold_max_ms = counters.cold_hold_max_ms.load(kRelaxed);
   status.cosmetic_dropped_procedural =
       counters.cosmetic_dropped_procedural.load(kRelaxed);
   status.cosmetic_dropped_unsafe = counters.cosmetic_dropped_unsafe.load(kRelaxed);

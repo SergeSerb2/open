@@ -114,6 +114,8 @@ CefRefPtr<CefDictionaryValue> CefGetOpenAdBlockStatus(
   value->SetInt("excluded_count", status.excluded_domains.size());
   // Generation IDs are int64, beyond CefDictionaryValue's 32-bit integer.
   value->SetDouble("load_generation", status.generation);
+  value->SetDouble("cold_holds", status.cold_holds);
+  value->SetDouble("cold_hold_max_ms", status.cold_hold_max_ms);
   return value;
 }
 

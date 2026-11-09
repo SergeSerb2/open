@@ -1886,6 +1886,8 @@ std::string AdBlockStatusText(const AdBlockStatus& status) {
          " match_cap_bytes=" + std::to_string(status.match_cap_bytes) +
          " checks=" + std::to_string(status.checks) +
          " checks_truncated=" + std::to_string(status.checks_truncated) +
+         " cold_holds=" + std::to_string(status.cold_holds) +
+         " cold_hold_max_ms=" + std::to_string(status.cold_hold_max_ms) +
          " last_build_ms=" + std::to_string(status.last_build_ms) +
          " last_error=\"" + status.last_error + "\"" +
          " excluded=" + base::JoinString(status.excluded_domains, ",");
