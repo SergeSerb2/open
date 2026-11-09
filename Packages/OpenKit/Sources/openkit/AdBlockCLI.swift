@@ -124,8 +124,8 @@ func runAdBlock(args: [String]) async throws {
         default: throw AdBlockError("unknown allowlist action")
         }
     case "perf":
-        // Real persisted model load + 10,000 lookups through the caller's immutable snapshot.
-        // Each measured group includes a fresh on-disk settings load; no seeded-list IO is timed.
+        // Forty real persisted opens; the first ten also exercise 10,000 snapshot lookups.
+        // Seeding is outside timing; every measured open repeats live-generation verification.
         try store.closeProfile(profile)
         // Use a persisted model in an isolated directory; never alter a user's allowlist or copy
         // their browsing data. Each timed group reopens it through the public store interface.
@@ -143,18 +143,19 @@ func runAdBlock(args: [String]) async throws {
             ["news.example.com", "notexample.com", "bücher.de", "example.org"][index % 4]
         }
         var times: [Double] = [], loads: [Double] = [], lookups: [Double] = [], matches = 0
-        for _ in 0..<10 {
+        for sample in 0..<40 {
             let start = DispatchTime.now().uptimeNanoseconds
             let loaded = try AdBlockStore(root: benchRoot)
             try await loaded.openProfile(profile, directory: ProfileDirectories(root: benchRoot).adBlockDirectory(dataDirectoryName: profile.description), scheduleUpdates: false)
             let snapshot = loaded.siteSnapshot(for: profile)
             let loadedAt = DispatchTime.now().uptimeNanoseconds
-            for host in hosts { if snapshot.isAllowlisted(normalizedHost: host) { matches += 1 } }
-            let end = DispatchTime.now().uptimeNanoseconds
-            let duration = Double(end - start) / 1_000_000
-            times.append(duration)
             loads.append(Double(loadedAt - start) / 1_000_000)
-            lookups.append(Double(end - loadedAt) / 1_000_000)
+            if sample < 10 {
+                for host in hosts { if snapshot.isAllowlisted(normalizedHost: host) { matches += 1 } }
+                let end = DispatchTime.now().uptimeNanoseconds
+                times.append(Double(end - start) / 1_000_000)
+                lookups.append(Double(end - loadedAt) / 1_000_000)
+            }
             try loaded.closeProfile(profile)
         }
         // Two budgets (lead decision 2026-10-25): per-lookup cost is what pages pay; profile open
@@ -166,9 +167,10 @@ func runAdBlock(args: [String]) async throws {
         }
         let lookupP95 = p95(lookups), loadP95 = p95(loads), totalP95 = p95(times)
         print(String(format: "lookups_1000 p95_ms=%.4f budget_ms=1 groups=10 lookups=10000 matches=%d", lookupP95, matches))
-        print(String(format: "profile_open_with_integrity_scan p95_ms=%.4f budget_ms=10", loadP95))
+        print(String(format: "profile_open_with_integrity_scan p95_ms=%.4f budget_ms=10 samples=%d max_ms=%.4f", loadP95, loads.count, loads.max() ?? 0))
         print(String(format: "combined p95_ms=%.4f (informational)", totalP95))
         print("groups_ms=\(times.map { String(format: "%.4f", $0) }.joined(separator: ","))")
+        print("profile_open_groups_ms=\(loads.map { String(format: "%.4f", $0) }.joined(separator: ","))")
         guard lookupP95 < 1, loadP95 < 10, matches == 5000 else { throw AdBlockError("performance budget or match check failed") }
     default: throw AdBlockError("unknown adblock action")
     }

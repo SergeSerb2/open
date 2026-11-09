@@ -20,6 +20,9 @@ def fixtures(root, tmp):
 
 
 def run(factory, results, tmp, root, wait):
+    if os.environ.get('OPEN_E2E_ADBLOCK_INTEGRITY_ONLY') == '1':
+        integrity(factory, results, root, wait)
+        return
     if os.environ.get('OPEN_E2E_ADBLOCK_REAL_ONLY') == '1':
         real_engine(factory, results, wait)
         return
@@ -27,6 +30,7 @@ def run(factory, results, tmp, root, wait):
     if os.environ.get('OPEN_E2E_ADBLOCK_BINDING_ONLY') == '1':
         return
     real_engine(factory, results, wait)
+    integrity(factory, results, root, wait)
     from engine_e2e import _restore_defaults
     app = factory(fresh=True)
     saved = {}
@@ -92,6 +96,141 @@ def run(factory, results, tmp, root, wait):
         finally:
             app.quit()
             _restore_defaults(app, saved)
+
+
+def integrity(factory, results, root, wait):
+    """Tamper the loaded App's real generation, then use the public Update Now call."""
+    import hashlib
+    import http.server
+    import threading
+    from engine_e2e import _restore_defaults
+
+    bodies = {name: (Path(root) / 'Vendor/adblock' / name).read_bytes()
+              for name in ('easylist.txt', 'easyprivacy.txt')}
+    requests = []
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            if self.path.endswith('.txt'):
+                body, mime = bodies[Path(self.path).name], 'text/plain'
+            elif self.path.startswith('/ad.js'):
+                body, mime = b'window.__adLoaded=true;', 'application/javascript'
+            elif self.path.startswith('/control.js'):
+                body, mime = b'window.__controlLoaded=true;', 'application/javascript'
+            else:
+                body = b'''<!doctype html><title>Open integrity recovery</title>
+<link rel="icon" href="data:,"><script>window.__done=0;</script>
+<script src="http://demand.supply/ad.js" onload="__done++" onerror="__done++"></script>
+<script src="/control.js" onload="__done++" onerror="__done++"></script>'''
+                mime = 'text/html'
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Content-Type', mime)
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            try: self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError): pass
+        def log_message(self, *_): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    args = ['--host-resolver-rules=MAP open-adblock.test 127.0.0.1:%d, MAP demand.supply 127.0.0.1:%d' %
+            (server.server_port, server.server_port), '--no-proxy-server']
+    keys = {'open.settings.lastPane': 'general',
+            'open.general.searchSuggestNoticeDismissed': True}
+    app, saved = None, {}
+    try:
+        for mode in ('fallback', 'reseed'):
+            app = factory(urls=('about:blank',), fresh=True, load_extensions=False, extra_args=args,
+                          extra_env={'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT':
+                                     'http://127.0.0.1:%d' % server.server_port})
+            for key, value in keys.items():
+                if key not in saved: saved[key] = app.call('defaults', key=key, persistent=True)
+                app.call('defaults', key=key, value=None)
+                app.call('defaults', key=key, value=value)
+            app.call('settings-pane', pane='advanced')
+            assert wait(lambda: app.call('settings-adblock')['ready'], timeout=40)
+            profile = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Default')
+            # Cancel the scheduler outside the flow through its existing real Store hook.
+            app.call('adblock-memory', action='pause-updates', profile=profile['id'])
+            def native_status():
+                return next((c['adBlockStatus'] for p in app.call('settings-adblock-engine')['profiles']
+                             if p['profile'] == profile['id'] for c in p['contexts']
+                             if c['adBlockStatus']['engine_loaded']), None)
+            before_native = wait(native_status, timeout=40)
+            assert before_native and before_native['list_count'] == 2, before_native
+            pid = app.pid
+            directory = Path(app.user_data) / 'Profiles' / profile['directory'] / 'AdBlock/lists'
+            if mode == 'fallback':
+                seed_update = app.call('settings-adblock', updateNow=True)
+                assert not seed_update['error'] and not seed_update['lastError'], seed_update
+            pointer = json.loads((directory / 'current.json').read_text())
+            # An unchanged seed update publishes a pointer without reloading the engine.
+            before_native = native_status()
+            assert before_native, 'native engine unavailable before tamper'
+            assert bool(pointer.get('previous')) == (mode == 'fallback'), pointer
+            generation = directory / 'generations' / str(pointer['live']['generation'])
+            target = generation / 'EasyList.txt'
+            original = target.read_bytes()
+            tampered = bytearray(original)
+            tampered[500] ^= 1
+            target.write_bytes(tampered)
+            update = app.call('settings-adblock', updateNow=True)
+            current = json.loads((directory / 'current.json').read_text())
+            live = directory / 'generations' / str(current['live']['generation'])
+            restored = (live / 'EasyList.txt').read_bytes()
+            quarantines = list((directory / 'quarantine').glob(str(pointer['live']['generation']) + '-*'))
+            native = wait(lambda: next((c['adBlockStatus'] for p in app.call('settings-adblock-engine')['profiles']
+                          if p['profile'] == profile['id'] for c in p['contexts']
+                          if c['adBlockStatus']['engine_loaded']
+                          and c['adBlockStatus']['load_generation'] == current['live']['generation']), None), timeout=40)
+            tab = app.call('open', url='about:blank')['id']
+            app.call('wait', tab=tab)
+            app.call('devtools', tab=tab, method='Network.enable')
+            app.call('events')
+            requests.clear()
+            app.call('navigate', tab=tab, url='http://open-adblock.test/recovered')
+            app.call('wait', tab=tab)
+            completed = wait(lambda: app.call('eval', tab=tab, js='window.__done===2'), timeout=20)
+            scripts = app.call('eval', tab=tab,
+                               js='({ad:window.__adLoaded===true,control:window.__controlLoaded===true})')
+            errors = [e['params'].get('errorText') for e in app.call('events')
+                      if e['type'] == 'devtools' and e['method'] == 'Network.loadingFailed']
+            blocked = (completed and scripts['control'] and not scripts['ad']
+                       and 'net::ERR_BLOCKED_BY_CLIENT' in errors
+                       and not any(p.startswith('/ad.js') for p in requests))
+            settings = app.call('settings-adblock')
+            repaired = any(r['id'] == 'EasyList' and r['repaired']
+                           and 'EasyList: size or SHA-256 mismatch' in r['integrityRecovery']
+                           and 'quarantined' in r['integrityRecovery']
+                           and ('fell back' if mode == 'fallback' else 'reseeded/refetched') in r['integrityRecovery']
+                           for r in update['updateResults'])
+            ok = (repaired and update['updateReloads'] == 1 and not update['error']
+                  and not update['lastError'] and restored == original and len(quarantines) == 1
+                  and (quarantines[0] / 'EasyList.txt').read_bytes() == tampered and bool(native)
+                  and native['load_generation'] > before_native['load_generation'] and native['list_count'] == 2
+                  and not native['last_error']
+                  and blocked and app.pid == pid and not settings['error'] and not settings['lastError']
+                  and 'last list update failed' not in str(settings['text']).lower())
+            name = 'AD4_update_now_tamper_' + mode
+            results[name] = dict(ok=ok, update=update, native=native, nativeBefore=before_native,
+                                 sameProcess=app.pid == pid, scripts=scripts, networkErrors=errors,
+                                 blockedAfterRecovery=bool(blocked), settings=settings,
+                                 quarantineCount=len(quarantines),
+                                 originalSHA256=hashlib.sha256(original).hexdigest(),
+                                 restoredSHA256=hashlib.sha256(restored).hexdigest())
+            print(name, 'PASS' if ok else 'FAIL', flush=True)
+            app.quit()
+            app = None
+    finally:
+        try:
+            if app:
+                for key, value in saved.items(): app.call('defaults', key=key, value=value)
+                app.quit()
+        finally:
+            _restore_defaults(app, saved)
+            server.shutdown()
+            server.server_close()
 
 
 def binding(factory, results, wait):
