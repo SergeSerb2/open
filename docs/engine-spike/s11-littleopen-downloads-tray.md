@@ -54,8 +54,10 @@ embedded code `983ddb7a61e82970c8315db8f980881bd2495fe996148436d016b17c5610a1ba`
 These are the new #266 engine, not the older distribution.
 
 Base: `origin/main` `7ae68e4a`, plus `origin/s11/downloads-history` through
-`4423de80` because #286 was not on main. Work is on
-`s11/littleopen-downloads-tray`; no PR or merge is requested.
+`4423de80` because #286 was not on main. Main then advanced to `a9adb6cf`
+(#287), which touches `AppDelegate.swift`. Merge `74ed0121` includes it before
+the final Debug build and tray acceptance. Work is on
+`s11/littleopen-downloads-tray`; delivery is a branch push only.
 
 The M1 is on hold. All on-screen receipts below are M5, under
 `/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock`, with
@@ -73,16 +75,44 @@ Run:
 
 ```sh
 OPEN_DOWNLOADS_CASE=littleopen OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS=1 \
-  tools/e2e/engine_e2e.py --only downloads --style chrome --stop-on-app-death
+  tools/e2e/engine_e2e.py --only downloads --style chrome \
+  --engine-sha256 346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd \
+  --stop-on-app-death --suite-timeout 300
 ```
 
 | Check | Result | Evidence |
 |---|---|---|
-| Debug build | PASS | `.re/littleopen-downloads/build-popover-focus.log` |
-| Tray real-App rows (M5) | 16 PASS, cleanup PASS | `.re/littleopen-downloads/positive-6.json`, `e2e-positive-6.log` |
-| Attribution break-and-revert (M5) | Expected attribution FAIL detected; source restored byte for byte; final rerun pending | `.re/littleopen-downloads/negative-attribution.json`, `e2e-negative-attribution.log`, `attribution-mutation.log` |
-| Touched render checks | Pending | |
-| Light/dark tray screenshots inspected (M5) | PASS, visual inspection only | `.re/littleopen-downloads/tray-light.png`, `tray-dark.png` |
+| Final merged Debug build (M5) | PASS | `.re/littleopen-downloads/build-merged-final.log` |
+| Final tray real-App rows (M5, source `74ed0121`) | 16/16 PASS, no interruptions; cleanup PASS with no forced kill and zero owned processes/windows left | `.re/littleopen-downloads/positive-final.json`, `e2e-positive-final.log` |
+| Attribution break-and-revert (M5) | Expected attribution FAIL detected; source restored byte for byte; final restored run PASS | `.re/littleopen-downloads/negative-attribution.json`, `e2e-negative-attribution.log`, `attribution-mutation.log`, `positive-final.json` |
+| Final touched render checks (M5) | PASS: build; Features 689 functional + 19 idle; Extensions 16 | `.re/littleopen-downloads/verify-final.log`, `verify-final/summary.txt` and per-check logs |
+| Library/Settings preview regression (M5, before #287 merge) | PASS: 47 checks and 240 renders | `.re/littleopen-downloads/verify-touched/settings-preview.log`, `verify-touched/summary.txt` |
+| Final light/dark tray screenshots inspected (M5) | PASS: filename, source, state and Open/Show in Finder controls are legible; visual inspection only | `.re/littleopen-downloads/tray-light.png`, `tray-dark.png` |
+
+Final row details are in `positive-final.json`; its matching log is
+`e2e-positive-final.log`, both under `.re/littleopen-downloads/`.
+The file-opener receipt proves 1,048,576 actual downloaded bytes with the expected
+SHA-256. The final run's `engine_fingerprint` row matches the required new vendor
+SHA above. Its `dlg-before` and `dlg-after` counts are both zero.
+
+| Real-App row (M5) | Result / proof |
+|---|---|
+| `little_tray_empty` | PASS: no button, items or tray before a download. |
+| `little_tray_attribution` | PASS: a real Little Open page transfer appears only in its source tray. |
+| `little_tray_progress` | PASS: visible row, host, received bytes and aggregate fraction between zero and one. |
+| `little_tray_accessibility` | PASS: Downloads, row and action AX labels. |
+| `little_tray_pause` | PASS: native Pause control; received bytes stay stable while paused. |
+| `little_tray_resume` | PASS: native Resume control; received bytes grow again. |
+| `little_tray_cancel` | PASS: native Cancel control; shared item and tray become Cancelled. |
+| `little_tray_two_windows` | PASS: two Little Open windows on one Profile have separate item IDs. |
+| `little_tray_main_excluded` | PASS: a main-window page transfer appears in neither tray. |
+| `little_tray_finish` | PASS: a transfer finishes and the visible row becomes Completed. |
+| `little_tray_retained` | PASS: completed and cancelled session items remain in the tray. |
+| `little_tray_open_file` | PASS: native Open control invokes the file-opener probe with the actual file and expected hash/size. |
+| `little_tray_reveal` | PASS: native Show in Finder control records the correct file through the existing automation policy. |
+| `little_tray_library_shared` | PASS: the real Library rows contain all four shared item IDs. |
+| `little_tray_escape` | PASS: Escape through `OEApplication.sendEvent` dismisses the tray and preserves the item. |
+| `little_tray_source_close` | PASS: closing the source window preserves the completed Library item and file. |
 
 ## Review checklist
 
@@ -91,7 +121,7 @@ OPEN_DOWNLOADS_CASE=littleopen OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS=1 \
 | Input/memory limits | Existing center bounds session entries to 1,000. No new parser, file schema, network buffer or unbounded source is added. |
 | Lifetimes/callbacks | Weak source controller; immutable session ID; popover close clears its delegate before close; coordinator cleanup removes session-owned trays. Real-App Escape and source-close rows pass. |
 | Real event paths | Real page input starts transfers; automation presses the title-bar and row NSButtons. The native popover root and the existing Little Open pre-key hook own Escape; real-App Escape passes. |
-| Checks prove the change | The deliberate early-source removal fails `little_tray_attribution`; final restored rerun pending. Screenshots are for human inspection, not a file-size claim of pixel parity. |
+| Checks prove the change | The deliberate early-source removal fails `little_tray_attribution`; the final restored run passes all 16 rows. Negative coverage is limited to attribution. Screenshots provide visual inspection only; Arc pixel parity remains unproved. |
 | Isolation/cleanup | Disposable data/cache roots and port. No defaults writes or system appearance changes. Failed attempts and the 16-row run leave zero owned processes/windows, with no forced kill (`cleanup-*.json`). |
 | UI/motion | Popovers do not animate. Progress changes only on engine callbacks, with disabled layer implicit actions. No rest animation. |
 | Docs | Followups, status, App-shell plan and Downloads guide link this receipt. Arc visual parity remains explicitly unproved. |
@@ -132,6 +162,7 @@ All attempts used the M5 and the new #266 engine. Dialog checks stayed at zero.
 | `positive-5.json` | 14 core rows PASS; actual Escape dispatch failed to dismiss the tray. Fixed by reusing `PageChromePopoverView`, focusing the root, and handling Escape through the existing Little Open pre-key route when AppKit keeps its parent key. |
 | `positive-6.json` | All 16 rows PASS, cleanup PASS, no forced kill. |
 | `negative-attribution.json` | Deliberate `webContent:nil` mutation reproduces the attribution FAIL. Cleanup PASS; no forced kill; dialog checks zero. |
+| `positive-final.json` | Final merged/restored source: all 16 rows PASS, engine fingerprint PASS, cleanup PASS, no interruptions or forced kill, dialog checks zero. Final light/dark screenshots inspected. |
 
 Attempt JSON, screen-run logs, build logs and cleanup reports are retained under
 `.re/littleopen-downloads/`. Screenshots are manual visual evidence, without a
