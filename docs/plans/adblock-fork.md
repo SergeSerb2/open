@@ -4591,7 +4591,8 @@ are measurements for optimization, not final gate acceptance.
 ### Step 4 as built (2026-11-08, integrated engine)
 
 Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
-Source now includes main `25b9c950`, including the final Section 15 App,
+Source now includes main `50028c98`, including the final Section 15 App
+and imported-secrets integration,
 the final App adapter `fcd1ef25`, and Step 7 resources. Engine inputs are
 unchanged since main `d26300e6` (Section 15's Chromium 0801–0810). Every main patch
 is retained. The engine applies Chromium's 08xx before the CEF series,

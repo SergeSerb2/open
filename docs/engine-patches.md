@@ -566,7 +566,7 @@ can be shared with its parent.
 The Step 7 revision treats verified zero-list generations, including a
 resources-only manifest, as successful no-engine loads. It verifies inputs,
 skips registry/DAT/build work, drops the matcher engine and reclaims its
-freed pages on the build runner. Native zero-file, resources-only and official pinned-input API flows each pass 26 checks; App request acceptance remains pending.
+freed pages on the build runner. Native zero-file, resources-only and official pinned-input API flows each pass 26 checks. The strict App scope also passes the real all-lists-off request and one-list restore controls.
 
 `OEAdBlock.h` exposes main-thread categories on OEBrowserContext/OEWebContent.
 Pre-init values apply through a weak ready callback; closed contexts return
