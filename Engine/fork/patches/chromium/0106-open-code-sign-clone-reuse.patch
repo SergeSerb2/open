@@ -1,0 +1,119 @@
+diff --git a/chrome/browser/mac/BUILD.gn b/chrome/browser/mac/BUILD.gn
+index 8bf5ab755a8003fa1419bed9b0a89e5512488ff5..7080b6dd22e10c093f0354a1243623de151918b7 100644
+--- a/chrome/browser/mac/BUILD.gn
++++ b/chrome/browser/mac/BUILD.gn
+@@ -86,6 +86,8 @@ source_set("impl") {
+     "key_window_notifier.cc",
+     "metrics.mm",
+     "nsprocessinfo_additions.mm",
++    "open_code_sign_clone.cc",
++    "open_code_sign_clone.h",
+     "relauncher.mm",
+   ]
+   deps = [
+@@ -101,6 +103,7 @@ source_set("impl") {
+     "//chrome/common:constants",
+     "//components/policy/core/common",
+     "//components/version_info",
++    "//crypto",
+   ]
+ }
+ 
+diff --git a/chrome/browser/mac/code_sign_clone_manager.h b/chrome/browser/mac/code_sign_clone_manager.h
+index 75a7052040a80582323b11fb9a9eab47f93d14ff..f735489f0adf4b210c9ada3b88311d094b32fe21 100644
+--- a/chrome/browser/mac/code_sign_clone_manager.h
++++ b/chrome/browser/mac/code_sign_clone_manager.h
+@@ -7,6 +7,7 @@
+ 
+ #include "base/feature_list.h"
+ #include "base/files/file_path.h"
++#include "base/files/scoped_file.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/timer/timer.h"
+ #include "content/public/common/main_function_params.h"
+@@ -71,7 +72,12 @@ BASE_DECLARE_FEATURE(kMacAppCodeSignCloneRenameAsBundle);
+ // approaches would be more broadly applicable (on HFS+ for example). This is
+ // not a major concern given how ubiquitous APFS on macOS has become.
+ //
+-// Each instance of Chrome will create a new temporary clone of itself at
++// Open first attempts a persistent, per-install clone in the user data
++// directory. A matching executable identity and a retained shared lease allow
++// reuse without another link/unlink (which would change the source ctime).
++// Failed cache checks or recreation use the original per-run path below.
++//
++// Each instance of Chrome using the per-run fallback creates a temporary clone at
+ // startup even if one already exists. In this way each instance of Chrome
+ // maintains a reference to its specific in-use files, keeping them accessible
+ // on the filesystem until exit. Once the last instance of Chrome that maintains
+@@ -121,12 +127,17 @@ class CodeSignCloneManager {
+   void Clone(const base::FilePath& src_path,
+              const base::FilePath& main_executable_name,
+              CloneCallback callback);
++  void CloneReady(const base::FilePath& clone_app_path,
++                  const base::FilePath& main_executable_name,
++                  base::TimeTicks start_time,
++                  CloneCallback callback);
+   void StartCloneExistsTimer(const base::FilePath& clone_app_path,
+                              const base::FilePath& main_executable_name);
+   void StopCloneExistsTimer();
+   void CloneExistsTimerFire(const base::FilePath& clone_app_path,
+                             const base::FilePath& main_executable_name);
+ 
++  base::ScopedFD persistent_clone_lease_;
+   std::string unique_temp_dir_suffix_;
+   base::RepeatingTimer clone_exists_timer_;
+   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+diff --git a/chrome/browser/mac/code_sign_clone_manager.mm b/chrome/browser/mac/code_sign_clone_manager.mm
+index 97abe9476b394e8b4f70aa0e2157ac0e12df5350..cc6e8a3af352199c78a19988ae701252493a0e3b 100644
+--- a/chrome/browser/mac/code_sign_clone_manager.mm
++++ b/chrome/browser/mac/code_sign_clone_manager.mm
+@@ -43,6 +43,7 @@
+ #include "base/task/thread_pool.h"
+ #include "base/time/time.h"
+ #include "build/branding_buildflags.h"
++#include "chrome/browser/mac/open_code_sign_clone.h"
+ #include "chrome/common/chrome_constants.h"
+ #include "chrome/common/chrome_switches.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -563,6 +564,14 @@ void RecordCloneExists(MacCloneExists exists) {
+                                  const base::FilePath& main_executable_name,
+                                  CloneCallback callback) {
+   base::TimeTicks start_time = base::TimeTicks::Now();
++  if (auto persistent =
++          GetOpenCodeSignClone(src_path, main_executable_name, CloneApp)) {
++    persistent_clone_lease_ = std::move(persistent->lease);
++    CloneReady(persistent->bundle, main_executable_name, start_time,
++               std::move(callback));
++    return;
++  }
++  VLOG(1) << "Open code-sign clone cache unavailable; using per-run clone";
+ 
+   // Intentionally avoiding `base::ScopedTempDir()`. The temp dir is
+   // expected to exist beyond the lifetime of this process. The temp dir
+@@ -626,15 +635,23 @@ void RecordCloneExists(MacCloneExists exists) {
+     return;
+   }
+ 
+-  base::TimeDelta delta = base::TimeTicks::Now() - start_time;
+-  base::UmaHistogramTimes("Mac.AppCodeSignCloneCreationTime", delta);
+-
+   // Let `~CodeSignCloneManager` know it needs to clean up. `Clone` is run from
+   // a posted task which is guaranteed to finish once it has started. It will
+   // block shutdown until complete. `ThreadPoolInstance::Shutdown` is run before
+   // `~CodeSignCloneManager`. `Clone` and ` ~CodeSignCloneManager` will never
+   // overlap, it is safe to set `needs_cleanup_` from this task.
+   needs_cleanup_ = true;
++  CloneReady(clone_app_path, main_executable_name, start_time,
++             std::move(callback));
++}
++
++void CodeSignCloneManager::CloneReady(
++    const base::FilePath& clone_app_path,
++    const base::FilePath& main_executable_name,
++    base::TimeTicks start_time,
++    CloneCallback callback) {
++  base::UmaHistogramTimes("Mac.AppCodeSignCloneCreationTime",
++                          base::TimeTicks::Now() - start_time);
+ 
+   // Record a baseline metric.
+   RecordCloneExists(MacCloneExists::kExists);
