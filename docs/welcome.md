@@ -131,5 +131,8 @@ throughout its animation and always has white text. A 5.2:1 model target leaves
 room for the tiny label's antialiased glyph cores to meet 4.5:1 in captures.
 `Home` keeps its original visible ink when it meets its 5.2:1 model minimum;
 otherwise the same correction includes both sidebar tints and the underlying
-heading row, with a 0.2 margin. Both illustration labels remain mandatory pixel assertions in
-every matrix row. Footer links are mandatory there as well.
+heading row, with a 0.2 margin. Both illustration labels remain mandatory pixel
+assertions in every matrix row. Footer links are mandatory there as well.
+
+See [the eight-case contrast evidence](welcome-contrast.md) for the captured
+ratios, the original-color failure control, and two representative App images.
