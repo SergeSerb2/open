@@ -33,6 +33,10 @@ def run(factory, results, tmp, h):
         nonlocal app
         if app and not app.closed: app.quit()
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(source), '--intro-sound=silent', *args])
+        # Answer main's native quit confirmation for this suite's setup close.
+        # Keep the product-only frame launch free of automation calls.
+        if '--measure-intro-frames' not in args:
+            app.call('quit-warning', button='quit')
         return app
 
     def state(): return app.call('onboarding', action='state')
