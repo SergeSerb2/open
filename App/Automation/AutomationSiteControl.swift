@@ -50,6 +50,39 @@ extension AutomationController {
     guard let owner = factory.controller, let scc = owner.siteControl else { throw Failure(message: "no site") }
     switch args["action"] as? String ?? "state" {
     case "state": break
+    case "permission-index":
+      guard let tab = owner.splitController.focusedTab,
+            let context = factory.hosts[tab.id]?.content.context else { throw Failure(message: "no site context") }
+      let store = SitePermissionStore.forContext(context)
+      await store.persistenceTask?.value
+      return ["ready": store.indexReady]
+    case "adblock-state":
+      guard let context = scc.view.panel.snapshot?.context else { throw Failure(message: "no site snapshot") }
+      let store = app.stores.existingAdBlock
+      return ["bindingInstalled": store?.onEngineEvent != nil,
+        "profileOpen": store?.isProfileOpen(context.profileID) ?? false,
+        "enabled": store?.isEnabled ?? false,
+        "shouldBlock": (try? store?.siteSnapshot(for: context.profileID).shouldBlock(host: context.url.host() ?? "")) == true]
+    case "capture-content-blocking":
+      guard scc.isPresented, let snapshot = scc.view.panel.snapshot,
+            let tile = snapshot.tiles.first(where: { $0.kind == .contentBlocking }), tile.state != .unavailable else {
+        throw Failure(message: "no available ad-block tile")
+      }
+      factory.siteControlSource.capturedContentBlockingTile = (tile, snapshot.context.tabID)
+    case "set-adblock-excluded":
+      guard scc.isPresented, let context = scc.view.panel.snapshot?.context,
+            context.isWebsite, !context.isIncognito, let host = context.url.host(),
+            let excluded = args["excluded"] as? Bool,
+            let store = app.stores.existingAdBlock, store.onEngineEvent != nil,
+            store.isEnabled, store.isProfileOpen(context.profileID) else { throw Failure(message: "no available ad-block store") }
+      try store.setExcluded(host, excluded: excluded, profile: context.profileID)
+    case "toggle-captured-content-blocking":
+      guard scc.isPresented, let captured = factory.siteControlSource.capturedContentBlockingTile,
+            scc.tabID == captured.tabID else { throw Failure(message: "no captured tile for this panel") }
+      factory.siteControlSource.capturedContentBlockingTile = nil
+      // Deliver the retained value through the real panel callback. Settings
+      // can change the store between drawing a tile and receiving its action.
+      scc.view.panel.onToggle?(captured.tile)
     case "open":
       guard let tab = owner.splitController.focusedTab,
             factory.siteControlSource.snapshot(for: tab.id) != nil,

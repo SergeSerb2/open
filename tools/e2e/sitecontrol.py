@@ -3,6 +3,7 @@
 The fixture and its server belong to this invocation. No desktop input.
 """
 from pathlib import Path
+import hashlib
 import json
 import os
 import statistics
@@ -32,6 +33,10 @@ def run(factory, results, tmp, env, functional_only=False):
             return app.call('site-controls', action='open', via=via)
         def row(s, identifier): return next((r for r in s['rows'] if r['id'] == identifier), {})
         def control(s, identifier): return next((r for r in s['controls'] if r['id'] == identifier), {})
+        def permission_index():
+            return {str(p.relative_to(app.user_data)): dict(mtimeNS=p.stat().st_mtime_ns,
+                    sha256=hashlib.sha256(p.read_bytes()).hexdigest(), origins=json.loads(p.read_text()))
+                    for p in Path(app.user_data).rglob('OpenPermissionOrigins.json')}
         def record(key, ok, **detail):
             results[key] = dict(ok=bool(ok), load=load(), **detail)
             print(key, 'PASS' if ok else 'FAIL', flush=True)
@@ -56,7 +61,18 @@ def run(factory, results, tmp, env, functional_only=False):
             app.call('navigate', tab=tab, url=origin+'/ads.html'); app.call('wait', tab=tab)
             adblock_open_before = Path(app.user_data, '.adblock-lock').exists()
             before = state()
+            permission_before = permission_index()
             s = opened()
+            permission_ready = app.call('site-controls', action='permission-index')['ready']
+            permission_after = permission_index()
+            record('S1_permission_read_only', permission_ready and permission_before == permission_after
+                   and all(origin not in p['origins'] for p in permission_before.values()),
+                   before=permission_before, after=permission_after, origin=origin,
+                   negative='old panel reads remember this never-decided origin and write the index')
+            s = state()
+            adblock = app.call('site-controls', action='adblock-state')
+            adblock_available = adblock['bindingInstalled'] and adblock['profileOpen'] and adblock['enabled']
+            expected_adblock = ('on' if adblock['shouldBlock'] else 'off') if adblock_available else 'unavailable'
             startup = app.call('startup')
             # Command services legitimately open Settings after first paint.
             # Capture the owner at the existing pre-engine startup checkpoint,
@@ -73,9 +89,10 @@ def run(factory, results, tmp, env, functional_only=False):
             record('S1_open', not before['presented'] and s['presented'] and {r['id'] for r in actions} == expected
                    and s['extensionsVisible'] and any(i['id'] == 'extension.add' and i['visible'] for i in s['extensionItems'])
                    and row(s,'row.contentBlocking').get('title') == 'Block Ads & Trackers'
-                   and row(s,'row.contentBlocking').get('state') == 'unavailable'
+                   and row(s,'row.contentBlocking').get('state') == expected_adblock
                    and s['security'].get('title') == 'Connection: Insecure' and geometry,
-                   state=s, negative=before)
+                   state=s, negative=before, adBlockStore=adblock, expectedAdBlockState=expected_adblock,
+                   oldUnavailableAssertionRejected=row(s,'row.contentBlocking').get('state') != 'unavailable')
             app.call('snapshot', path=str(private/'S1-open.png'))
             toggled_closed=app.call('site-controls', action='open')
             reopened=app.call('site-controls', action='open')
@@ -87,11 +104,11 @@ def run(factory, results, tmp, env, functional_only=False):
             option_closed=not state()['presented']
             app.call('mouse',action='click',**point)
             record('S1_option_click',option_closed and state()['presented'],negativeOptionIgnored=option_closed)
-            # Main's App ad-block adapter has not opened this profile. Never
-            # count the unavailable row or a synthetic filter as a passing S2.
+            # An unopened/disabled adapter remains a supported unavailable
+            # case. Only the real available store can qualify S2.
             if row(s,'row.contentBlocking').get('state') == 'unavailable':
-                # Lead ruling: the missing Section 13 adapter is an interim
-                # unavailable state. Opening Settings must not change it.
+                # Settings may open the Profile. Its current real store,
+                # rather than the prior drawn state, decides availability.
                 settings_file=Path(app.user_data,'adblock-settings.json')
                 settings_before=settings_file.read_bytes() if settings_file.exists() else None
                 browser=app.call('window-state')['id']
@@ -102,13 +119,18 @@ def run(factory, results, tmp, env, functional_only=False):
                 app.call('menu-perform',id='close-window')
                 app.call('window-focus',id=browser,activate=True)
                 unavailable=opened()
+                after_settings=app.call('site-controls',action='adblock-state')
+                now_available=after_settings['bindingInstalled'] and after_settings['profileOpen'] and after_settings['enabled']
+                expected_after=('on' if after_settings['shouldBlock'] else 'off') if now_available else 'unavailable'
                 settings_after=settings_file.read_bytes() if settings_file.exists() else None
                 record('S1_unavailable_settings',settings['settings']>0 and settings['pane']=='advanced'
-                       and row(unavailable,'row.contentBlocking').get('state')=='unavailable'
+                       and row(unavailable,'row.contentBlocking').get('state')==expected_after
                        and action_calls=={'toggle':0,'openAdBlockSettings':1}
                        and settings_before==settings_after,settings=settings,unchanged=settings_before==settings_after,
-                       sourceActionCalls=action_calls,
-                       negative='opening the store in Settings does not make the missing engine adapter available')
+                       sourceActionCalls=action_calls,adBlockStore=after_settings,
+                       negative='the unavailable tile must open Settings without toggling or changing persisted settings')
+                s=unavailable
+            if row(s,'row.contentBlocking').get('state') == 'unavailable':
                 blocked('S2_adblock', 'section 13 ad-block adapter', row=row(unavailable,'row.contentBlocking'))
             else:
                 off = app.call('site-controls', action='tap', id='row.contentBlocking')
@@ -123,6 +145,30 @@ def run(factory, results, tmp, env, functional_only=False):
                 record('S2_adblock', row(off,'row.contentBlocking').get('subtitle') == 'Off' and off['reloadVisible'] and persisted
                        and row(on,'row.contentBlocking').get('subtitle') == 'On' and allowed is True and denied is False,
                        off=off,on=on,allowed=allowed,blocked=denied)
+                # Keep the exact drawn tile, change the real owner through
+                # automation, then deliver the retained value via onToggle.
+                # The old tile.state decision fails in both directions.
+                stale_proofs = []
+                for initial_excluded in (False, True):
+                    opened()
+                    app.call('site-controls', action='set-adblock-excluded', excluded=initial_excluded)
+                    captured_state = 'off' if initial_excluded else 'on'
+                    captured = wait(lambda: (lambda x: x if row(x,'row.contentBlocking').get('state') == captured_state else None)(state()), timeout=5)
+                    app.call('site-controls', action='capture-content-blocking')
+                    app.call('site-controls', action='set-adblock-excluded', excluded=not initial_excluded)
+                    changed_state = 'on' if initial_excluded else 'off'
+                    changed = wait(lambda: (lambda x: x if row(x,'row.contentBlocking').get('state') == changed_state else None)(state()), timeout=5)
+                    app.call('site-controls', action='toggle-captured-content-blocking')
+                    restored = wait(lambda: (lambda x: x if row(x,'row.contentBlocking').get('state') == captured_state else None)(state()), timeout=5)
+                    actual = app.call('site-controls', action='adblock-state')
+                    stale_proofs.append(dict(captured=captured, changed=changed, restored=restored,
+                        store=actual, initialExcluded=initial_excluded,
+                        ok=bool(captured and changed and restored and restored['reloadVisible'])
+                           and actual['shouldBlock'] is (not initial_excluded)))
+                record('S2_stale_tile', all(p['ok'] for p in stale_proofs), directions=stale_proofs,
+                       negative='using tile.state leaves the changed exclusion in place instead of toggling current state')
+                # Leave the shared fixture blocking, as before these proofs.
+                opened(); app.call('site-controls', action='tap', id='row.contentBlocking')
             standard = state()
             standard_picker = standard['mode'] == 'extensionPicker' and standard['focusedControl'] == 'extension.add'
             close(); app.call('key', key='e', modifiers=['cmd'], route='app')
@@ -157,6 +203,21 @@ def run(factory, results, tmp, env, functional_only=False):
             value = app.call('permission', origin=origin, kind=1)
             record('S3_permission', not row(absent,'row.permission.camera') and bool(allowed) and row(toggled,'row.permission.camera').get('subtitle') == 'Blocked' and value == 2 and toggled['reloadVisible'], allowed=allowed,blocked=toggled,negative=absent)
             app.call('permission', origin=origin, kind=1, state=0)
+            app.call('site-controls', action='permission-index')
+            close()
+            undecided_origin = origin.replace('127.0.0.1','localhost')
+            undecided = new_tab(app, undecided_origin+'/boost.html')
+            indexed_before = permission_index()
+            read_only = opened()
+            indexed_ready = app.call('site-controls', action='permission-index')['ready']
+            indexed_after = permission_index()
+            record('S3_permission_index_unchanged', indexed_ready and read_only['presented']
+                   and bool(indexed_before) and indexed_before == indexed_after
+                   and any(origin in p['origins'] for p in indexed_before.values())
+                   and all(undecided_origin not in p['origins'] for p in indexed_before.values()),
+                   before=indexed_before, after=indexed_after, origin=undecided_origin,
+                   negative='old state() adds the never-decided origin and changes file content and mtime')
+            close(); app.call('key',key='w',modifiers=['cmd'],route='app'); app.call('select',tab=tab)
             # Create and persist through the real editor, then exercise the
             # SCC's visible controls against the sole AppBoosts owner.
             def editor(action='state', **args): return app.call('boost-editor', action=action, **args)
@@ -277,6 +338,7 @@ def run(factory, results, tmp, env, functional_only=False):
                 private_tab=app.call('open',url=origin+'/boost.html')['id']
                 app.call('wait',tab=private_tab)
                 private_state=opened()
+                manage_boosts=next((i for i in private_state['items'] if i['title']=='Manage Boosts…'), {})
                 private_context=app.call('incognito-state',private=True)
                 boost_controls=[c for c in private_state['controls'] if c['id'].startswith('boost.')]
                 boost_commands=('new-boost','edit-boost','new-legacy-boost','view-boosts')
@@ -299,13 +361,14 @@ def run(factory, results, tmp, env, functional_only=False):
                     and private_state['isIncognito'] is True and not normal_context['isIncognito']
                     and not private_state['canCreateBoost'] and not control(private_state,'action.newBoost')['enabled']
                     and not any(c['enabled'] for c in boost_controls)
+                    and manage_boosts.get('enabled') is False
                     and private_state['urlButtonState'] not in ('boosted','openBoosted')
                     and len(menu_rows)==len(boost_commands) and all(not r['enabled'] for r in menu_rows.values())
                     and all(refused_commands.values()) and private_menu_refused
                     and private_customize_refused and private_editor_refused
                     and app.eval(private_tab,'getComputedStyle(document.body).outlineStyle')=='none'
                     and refused(action='tap',id='action.newBoost'),
-                    state=private_state,privateContext=private_context,
+                    state=private_state,privateContext=private_context,manageBoostsMenu=manage_boosts,
                     boostMenus=menu_rows,refusedCommands=refused_commands,negativeDisabledMenu=private_menu_refused,
                     negativeNormalContext=normal_context['isIncognito'],negativeDisabledTap=True,
                     customizeRefused=private_customize_refused,editorRefused=private_editor_refused)

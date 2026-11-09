@@ -297,7 +297,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
             if snapshot.capabilities.contains(.clearCache) { item("Clear Cache", "clearCache") }
             item("Clear Cookies", "clearCookies")
         }
-        separator(); item("Manage Boosts…","view-boosts")
+        separator(); item("Manage Boosts…","view-boosts",enabled: !snapshot.context.isIncognito)
         item("New Boost…","newBoost",enabled: snapshot.canCreateBoost)
         separator(); item("Manage Extensions…", "manage-extensions"); item("Add Extension…", "add-extension")
         if snapshot.context.isWebsite { separator(); item("All Site Settings…", "siteSettings") }

@@ -39,6 +39,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   private(set) var changeDeliveryCount = 0
   private(set) var toggleCallCount = 0
   private(set) var openAdBlockSettingsCallCount = 0
+  var capturedContentBlockingTile: (tile: SiteSettingTile, tabID: ItemID)?
   #endif
   private var adBlockStore: AdBlockStore? { factory?.app.stores.existingAdBlock }
   init(factory: EngineWebContentHostFactory) {
@@ -134,7 +135,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       if let engineContext = factory.hosts[tabID]?.content.context {
         let permissions = SitePermissionStore.forContext(engineContext)
         for row in Self.permissionRows {
-          let state = permissions.state(origin: url, kind: row.engine)
+          let state = permissions.currentState(origin: url, kind: row.engine)
           guard state != .ask else { continue }
           tiles.append(SiteSettingTile(id: "permission.\(row.id)", kind: .permission(row.permission), title: row.title,
             subtitle: state == .allow ? "Allowed" : "Blocked", state: state == .allow ? .on : .off, symbol: row.symbol))
@@ -162,7 +163,10 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     case .contentBlocking:
       guard let store = adBlockStore, store.onEngineEvent != nil, store.isEnabled, store.isProfileOpen(snapshot.context.profileID),
             let host = snapshot.context.url.host() else { openAdBlockSettings(tabID: tabID); return }
-      do { try store.setExcluded(host, excluded: tile.state == .on, profile: snapshot.context.profileID) }
+      do {
+        let currentlyBlocking = try store.siteSnapshot(for: snapshot.context.profileID).shouldBlock(host: host)
+        try store.setExcluded(host, excluded: currentlyBlocking, profile: snapshot.context.profileID)
+      }
       catch { factory.controller?.toasts.show(.init(title: "Ad blocking settings could not be saved.")) }
     case .permission(let permission):
       guard let row = Self.permissionRows.first(where: { $0.permission == permission }),

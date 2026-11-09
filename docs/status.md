@@ -372,9 +372,16 @@ paired startup groups and the full high gate remain pending on this engine.
 Earlier `619324d3` receipts are history and do not qualify the new head.
 `no_snapshot_history_change` must PASS when incognito resumes (#261).
 
+PR #276 round-1 code edits re-read current ad-block state on toggle, make
+panel permission reads leave the origin index unchanged (including initial
+load), disable private Manage Boosts, and compare S1 with the real store.
+The new S2 stale-tile, permission file content/mtime and S10 menu proofs and
+their negatives are prepared, **NOT RUN**. The earlier builds and runtime
+receipts above apply to source `64e62f34`, not these review edits. Both M5
+screen clearance and disk-hold release are required before new builds or
+runtime checks. F2/F4-rest/F6/F7/F8 are recorded in `docs/followups.md`.
 The native ad-block tile showed On in the compiled-negative App; full S2
-is not yet measured. The existing S1 unavailable-state assertion is unchanged
-pending the lead's review of the fresh results. S11/S12 remain **FAIL, known:
+is not yet measured. S11/S12 remain **FAIL, known:
 material and element colors, follow-up S12-V (lead 22:20)**, not parity.
 E1–E3 remain deferred under lead 22:38. Gap item 1(c) is PARTIAL: host-cookie
 Clear Cookies uses the legacy bridge, and Clear Cache is absent/refused.

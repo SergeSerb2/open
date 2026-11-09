@@ -42,11 +42,17 @@ final class SitePermissionStore {
       let saved = await index.read()
       guard let self else { return }
       self.origins = Set(self.origins.union(saved).sorted().prefix(SitePermissionOriginIndex.limit)); self.indexReady = true
-      await index.write(self.origins)
+      // A read-only panel may be the first caller. Only persist decisions
+      // remembered while the index was loading, not the unchanged saved set.
+      if self.origins != saved { await index.write(self.origins) }
     }
   }
   func state(origin: URL, kind: OEPermissionKind) -> OEPermissionState {
     remember(origin)
+    return currentState(origin: origin, kind: kind)
+  }
+  /// Reads the engine without adding an origin to the on-disk decision index.
+  func currentState(origin: URL, kind: OEPermissionKind) -> OEPermissionState {
     return Self.canPersist(kind) ? context?.permissionState(for: kind, origin: origin) ?? .ask : .ask
   }
   func set(origin: URL, kind: OEPermissionKind, state: OEPermissionState, requestSystemAuthorization: Bool = true) {

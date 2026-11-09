@@ -1498,10 +1498,25 @@ Advanced Settings cleanup/defaults canary completed before 02:35.
 **Gate incomplete (screen hold 02:35):** the later main loader is void;
 main features, all eleven App suites, saved-Boost/private S4/S10 positives
 and negatives, S2, X13, paired startup and the full high gate remain pending.
-No on-screen work resumes before the lead's explicit M5 clear. The earlier
-engine6193 results below are history only. The real tile showed On in the
-compiled-negative App; S1's old unavailable assertion stays unchanged until
-the lead reviews the fresh suite result. S2 must report its real #271 result.
+No new build or runtime check resumes before both the lead's explicit M5
+clear and disk-hold release. The earlier engine6193 results below are history
+only. The real tile showed On in the compiled-negative App; round-1 F9 now
+authorizes S1 to compare with the real store's available/unavailable state.
+F3 re-reads current blocking state on toggle; `S2_stale_tile` retains a tile,
+changes the real exclusion through automation and delivers the retained
+callback in both directions. F5 adds read-only permission lookup and avoids
+rewriting the unchanged index on load; `S1_permission_read_only` and
+`S3_permission_index_unchanged` compare file content/hash and mtime before
+and after opening on a never-decided origin (absent and populated index).
+F4 disables Manage Boosts in private menus, asserted in `S10_incognito`.
+All round-1 proof and negative runs are **NOT RUN** under items25–26; the
+source64e62f34 builds/receipts do not qualify the review edits. After both
+holds end, restore each old behavior separately, show its new row FAIL,
+restore exact source and rebuild before the positive rows and final gate.
+F1 is by design under D-10 and §Incognito: parent-Profile Boost metadata is
+read-only in private windows, with no Boost application or writes.
+F2/F4-rest/F6/F7/F8 are deferred in `docs/followups.md`.
+S2 must report its real #271 result.
 Gap item 1(c) is PARTIAL: host-cookie Clear Cookies uses the legacy bridge;
 Clear Cache is absent/refused. S12-G owns both … menu clearSiteData bindings
 after A and G merge. E1–E3 remain deferred in A.
