@@ -72,6 +72,10 @@ class FocusInterruption(RuntimeError):
         self.evidence = evidence
 
 
+class AppDied(RuntimeError):
+    fatal_app_death = True
+
+
 class SuiteAppDied(BaseException):
     """Bypass per-row Exception handlers: a dead App must end the suite."""
     fatal_app_death = True
@@ -150,13 +154,29 @@ def check_suite_app_death(app=None):
 
 class FocusTracker:
     """Native input and every timed polling/capture interval keep separate trace bounds."""
-    def __init__(self, capture_frontmost_command=False):
+    def __init__(self, capture_frontmost_command=False, stop_on_app_death=False):
         self.apps = []
         self.checkpoints = {}
         self.timing_checkpoints = {}
         self.observation_checkpoints = {}
         self.capture_frontmost_command = capture_frontmost_command
         self.frontmost_processes = {}
+        self.crashes_before = _open_crash_reports()
+        self.fatal_app_death = False
+        self.stop_on_app_death = stop_on_app_death
+
+    def check_alive(self):
+        if not self.stop_on_app_death:
+            return
+        # Intentional quit/SIGKILL recovery closes the owned instance before
+        # recording a row or launching its replacement.
+        crashed = bool(_open_crash_reports() - self.crashes_before)
+        dead = any(app.pid and not app.closed and
+                   app.process_path(app.pid) != os.path.realpath(app.executable)
+                   for app in self.apps)
+        if crashed or dead:
+            self.fatal_app_death = True
+            raise AppDied('App death or new crash report; stopped before the next flow')
 
     def loss(self):
         interruptions = []
@@ -203,6 +223,7 @@ class CheckedResults(dict):
         if isinstance(value, dict) and ("ok" in value or "status" in value):
             value.setdefault("load", os.getloadavg())
         if isinstance(value, dict) and "ok" in value:
+            self.tracker.check_alive()
             interruptions = self.tracker.loss()
             if interruptions:
                 # Retain even a successful assertion as INTERRUPTED. It cannot
@@ -12200,7 +12221,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
                     help='features: prove ignored save offers with main App code and no password delegate')
@@ -12255,8 +12276,8 @@ def main():
         ap.error("--only is required unless --engine-fingerprint-only is set")
     if opts.functional_only and opts.only not in ("sitecontrol", "extensions-ui", "split"):
         ap.error("--functional-only applies to sitecontrol, extensions-ui or split")
-    if opts.only in ('passwords-probe', 'passwords') and opts.style != 'chrome':
-        ap.error('passwords suites require --style chrome')
+    if opts.only in ('passwords-probe', 'passwords', 'secrets-import') and opts.style != 'chrome':
+        ap.error('passwords suites and secrets-import require --style chrome')
     if opts.passwords_rows is not None:
         allowed = {'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
                    'PW-HF4-window-close', 'PW-HF5-navigate', 'PW-HF6-space', 'PW-HF7-quit'}
@@ -12284,6 +12305,8 @@ def main():
     root_kind = "sidebarc" if opts.only == "sidebar-completion" else opts.only
     if opts.only == 'passwords-probe':
         root_kind = 'pwprobe'  # Leave room for automation.sock in macOS sun_path.
+    if opts.only == 'secrets-import':
+        root_kind = 'secrets'
     run_name = "Open-E2E-%s-%s-%d-%s" % (root_kind, opts.style, os.getpid(), os.urandom(4).hex())
     sweep_stale_runs()
     user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
@@ -12361,10 +12384,11 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
-    tracker = FocusTracker()
+    tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
     _ACTIVE_FOCUS_TRACKER = tracker
 
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
+        tracker.check_alive()
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
@@ -12475,6 +12499,10 @@ def main():
                 row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None,
                 result_name=probe_result_name,
                 engine_distribution_sha256=results['engine']['distributionSHA256'])
+        elif opts.only == "secrets-import":
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/secrets_import.py'))['run'](
+                factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "onboarding":
             results["onboarding"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
@@ -12654,7 +12682,8 @@ def main():
     focus_attempts = (1 if opts.stop_on_app_death or opts.only == 'passwords-probe'
                       else min(opts.focus_attempts, 2 if opts.only == 'passwords' else 3))
     for attempt in range(1, focus_attempts + 1):
-        tracker = FocusTracker(capture_frontmost_command=opts.only == 'split')
+        tracker = FocusTracker(capture_frontmost_command=opts.only == 'split',
+                               stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
@@ -12671,13 +12700,19 @@ def main():
                 # Deterministic chrome captures; restore the user's value in finally.
                 _restore_defaults(None, {'open.sidebar.hideHintShown': True})
             execute()
+            tracker.check_alive()
         except FocusInterruption as error:
-            interruption = {"reason": str(error), "focus": error.evidence}
+            try:
+                tracker.check_alive()
+            except AppDied as death:
+                dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(death)})
+            else:
+                interruption = {"reason": str(error), "focus": error.evidence}
         except (Exception, SuiteAppDied, SuiteStopped) as error:
             if opts.stop_on_app_death:
                 signal.setitimer(signal.ITIMER_REAL, 0)
             try:
-                loss = [] if getattr(error, 'fatal_app_death', False) else tracker.loss()
+                loss = [] if getattr(error, 'fatal_app_death', False) or tracker.fatal_app_death else tracker.loss()
             except Exception:
                 loss = []  # A crashed owned app cannot answer a focus query.
             if loss:
@@ -12716,14 +12751,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata"):
+    for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata", "secrets-import"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata")
+    failures = [k for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata", "secrets-import")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
