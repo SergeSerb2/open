@@ -1549,3 +1549,11 @@ unchanged/mixed URLs, and row/page/toast native Share. `sidebar-share` also repo
 `payloadURLs` from the actual native picker service-query callback. Automation-only
 `pasteboard-preserve` / `pasteboard-restore` hold all clipboard formats inside the App;
 they return success flags without exposing saved clipboard contents.
+
+### Generic quit warning
+
+`quit` is harness cleanup and skips the generic warning. `quit-warning` returns
+the bounded generic-alert receipts; `{button:"cancel"|"quit", request:true}`
+queues the real `quit-open` command, observes its native modal window, and presses
+that alert's own NSButton. This does not send desktop input. The `downloads` suite
+includes `OPEN_DOWNLOADS_CASE=generic-quit` for this focused real-App flow.

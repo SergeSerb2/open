@@ -356,8 +356,19 @@
         app.saveState()
         return app.snapshotStore.fileURL.path
       case "quit":
+        app.quitWarning.harnessQuit = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
         return true
+      case "quit-warning":
+        if let button = a["button"] as? String {
+          guard ["quit", "cancel"].contains(button) else { throw Failure(message: "expected quit or cancel") }
+          app.quitWarning.buttonForAutomation = button
+        }
+        if a["request"] as? Bool == true {
+          app.quitWarning.harnessQuit = false
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.app.performCommand("quit-open") }
+        }
+        return app.quitWarning.alerts
       case "library-open":
         let section: LibrarySection?
         if let value = a["section"] {
