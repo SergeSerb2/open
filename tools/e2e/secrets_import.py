@@ -358,21 +358,27 @@ def _run(factory, results, tmp, h):
             }
             for allow in (False, True):
                 launch(fresh=True, allow=allow)
-                chosen = app.call('first-run', action='settings-import', directory=str(source))
+                # One fixed bound includes choose() itself and every state
+                # request; the receipt measures start-of-choose through idle.
+                ready_started = time.monotonic()
+                ready_deadline = ready_started + 10
+                chosen = app.call('first-run', action='settings-import', directory=str(source), timeout=10)
+                choose_returned = time.monotonic()
                 # Presenting the sheet also starts its SwiftUI count task.
                 # It can supersede choose()'s request, so that await can return
                 # while the newer count is still active. Follow the real Next
                 # button's readable/idle gate before entering the copy reference.
-                ready_started = time.monotonic()
-                ready_deadline = ready_started + 10
                 def wizard_ready():
                     remaining = ready_deadline - time.monotonic()
                     if remaining <= 0:
                         return None
                     state = app.call('first-run', action='settings-inspect', timeout=remaining)
                     return state if state['settingsReadable'] and not state['settingsBusy'] else None
-                ready = h.wait_until(wizard_ready, timeout=10, step=.05)
-                ready_elapsed = time.monotonic() - ready_started
+                remaining = ready_deadline - time.monotonic()
+                assert remaining > 0, 'fixture import wizard not ready'
+                ready = h.wait_until(wizard_ready, timeout=remaining, step=.05)
+                idle_observed = time.monotonic()
+                ready_elapsed = idle_observed - ready_started
                 assert ready and ready_elapsed <= 10, 'fixture import wizard not ready'
                 assert ready['settingsCounts'] == wizard_counts, 'fixture import wizard counts differ'
                 # Prove a user can continue once counting settles, through the
@@ -384,7 +390,9 @@ def _run(factory, results, tmp, h):
                 row('I-8-readiness-' + ('allow-switch' if allow else 'no-switch'),
                     ready['settingsCanContinue'] and advanced,
                     busyAfterChoose=chosen['settingsBusy'], readableAfterChoose=chosen['settingsReadable'],
-                    busyClearedWithinSeconds=10, observedWaitSeconds=round(ready_elapsed, 3),
+                    readinessUpperBoundSeconds=10, chooseToIdleSeconds=round(ready_elapsed, 3),
+                    chooseCallSeconds=round(choose_returned - ready_started, 3),
+                    waitAfterChooseSeconds=round(idle_observed - choose_returned, 3),
                     counts=ready['settingsCounts'], nextThroughAppKey=True)
                 app.call('first-run', action='settings-passwords')
                 app.call('first-run', action='settings-inspect')
