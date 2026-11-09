@@ -447,9 +447,16 @@ def checks(factory, results, tmp, config, harness):
         dismiss_library(); app.call('space', space=home_space)
         profile_row = next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile2)
         profile_dir = Path(app.user_data) / 'Profiles' / profile_row['directory']
-        app.call('profiles-shell', action='show', profile=profile2)
+        # Settings shows a Profile by name; its SwiftUI controls install a moment later.
+        app.call('profiles-shell', action='show', profile=profile_row['name'])
         try:
-            app.call('profiles-shell', action='press', label='Delete Profile')
+            def press_delete():
+                try:
+                    app.call('profiles-shell', action='press', label='Delete Profile'); return True
+                except RuntimeError:
+                    return None
+            if not wait(press_delete, 5):
+                raise RuntimeError('Delete Profile control did not appear')
             wait(lambda: app.call('profiles-shell')['sheet'] > 0)
             app.call('profiles-shell', action='type-delete', text='History Second')
             app.call('profiles-shell', action='press', label='Delete')
