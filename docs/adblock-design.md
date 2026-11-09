@@ -349,7 +349,25 @@ per-request cap and queue bound intentionally fail open if the first engine
 is unavailable in time; this is a startup wait, not a promise to block
 requests after a timeout or a real load error. Runtime receipts for the
 combined implementation are recorded separately from the earlier App-only
-checkpoint above.
+checkpoint above. On M5, the combined fresh post-onboarding probe blocked the
+first ad script, loaded its allowed control, and recorded zero holds: seeding
+had completed during onboarding. A separate first-navigation probe reached
+the missing-pointer state and held its first two scripts for 263.945 and
+264.007 ms, then blocked the ad script. Its warm DAT relaunch held the first
+two scripts for 116.566 and 116.594 ms and blocked the ad script. Already-loaded,
+saved-off and excluded controls had no holds. The same first-navigation
+assertion failed on main `3b45f509` with Step 5's accepted engine: the server
+received the ad script. A Release repeat also blocked the first ad script,
+with 67.964–68.017 ms holds; that warm relaunch needed zero holds.
+
+Real `cefsimple` requests against an unpublished generation reached 128 held
+requests; request 129 passed through immediately. All 128 used the configured
+1,500 ms deadline and failed open when it expired (observed scheduling lateness
+0.06–4.06 ms). Requests started one second apart kept separate deadlines
+(3.61–4.43 ms late). Main-frame navigation, off, excluded, valid zero-list,
+bad-SHA and symlink-pointer controls passed without holds, and cancellation
+closed all seven browsers cleanly. Raw App/server/native logs, source and
+engine hashes, and boundary receipts are in `.re/s13/i/native-1418/`.
 
 ### Site Control Center and Settings UI
 

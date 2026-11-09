@@ -882,7 +882,8 @@ def real_engine(factory, results, wait):
         debug_keys = sorted(status(other['id']))
         expected_keys = sorted(['enabled', 'engine_loaded', 'engine_from_dat', 'engine_shared',
                                'dat_policy', 'list_count', 'resources_loaded', 'last_build_ms',
-                               'last_error', 'excluded_count', 'load_generation'])
+                               'last_error', 'excluded_count', 'load_generation',
+                               'awaiting_generation', 'cold_holds', 'cold_hold_max_ms'])
         row('debug_copy_privacy', bool(copied) and '/' not in copied and '://' not in copied
             and 'open-adblock.test' not in copied and app.user_data not in copied
             and debug_keys == expected_keys, keys=debug_keys)

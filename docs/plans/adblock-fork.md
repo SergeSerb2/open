@@ -2918,9 +2918,14 @@ Thread rules (violations are Step-blocking bugs):
    without polling. A context that has loaded an engine or verified a
    zero-list generation never holds again. The App starts fresh-Profile
    seeding at context creation (background pointer stat and repository IO);
-   warm Profiles keep after-paint opening. First-request blocking with a
-   logged hold, five fresh and five warm first-paint pairs, and warm
-   zero-hold proof remain pending.
+   warm Profiles keep after-paint opening. A warm Profile in a new process
+   can hold while its first DAT engine loads; already-installed engines
+   never hold. Combined M5 probes blocked the first fresh and warm scripts
+   with logged holds; off/excluded controls recorded zero holds. The real
+   128/129 queue, fixed 1,500 ms deadlines, error/zero-list/cancellation
+   controls, and E3's 32 N/regression rows passed. Receipts are in
+   `.re/s13/i/native-1418/`; fresh/warm launch pairs and final gates are
+   recorded there separately.
 2. Every other engine call (checks, cosmetic queries, generic selectors)
    runs **only** on the matcher sequence (D-12, gate G-1). Those calls
    never do file I/O and never call CEF client code. The bounded first-load
@@ -4699,8 +4704,8 @@ because the early load may have failed before seeding created `current.json`.
 The companion native change keeps an unpublished pointer in
 `awaiting_generation` under the same 1,500 ms per-request / 128 process-wide
 limits. Real manifest/SHA/read errors end pending; an engine or valid zero-list
-generation completes the initial load. This App-only branch still fails open
-before an engine arrives. The M5 App-only probe blocked the first
+generation completes the initial load. At this App-only checkpoint, requests
+still failed open before an engine arrived. The M5 App-only probe blocked the first
 post-onboarding script with an allowed control while the after-paint adapter
 was still unstarted; its generation was already published before onboarding
 finished. Warm relaunch exposed the remaining first-engine gap. Saved-off and
@@ -4711,7 +4716,8 @@ interleaved Release pairs for each of fresh/warm Profiles at load1 7.82–9.35
 showed no first-paint slowdown against main `1a37e49a`: fresh medians main
 797 ms / branch 719 ms, warm 755 / 655 ms; paired median differences were
 −92 / −100 ms. All samples, including the slow first fresh pair, were kept.
-Native deadline/boundary proofs still belong to the companion branch.
+The combined native deadline/boundary proof is recorded in §10 rule 1 and
+`docs/adblock-design.md`; these App-only timing receipts remain historical.
 
 ### Section 13 lead decisions (2026-11-07)
 
