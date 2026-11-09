@@ -31,11 +31,15 @@ class SpaceThemeWindow: NSWindow {
             handler?(response)
         }
     }
-    override func addChildWindow(_ childWin: NSWindow, ordered place: NSWindow.OrderingMode) {
+    override func addChildWindow(_ childWin: NSWindow?, ordered place: NSWindow.OrderingMode) {
+        // Safari AutoFill can send nil while clearing its remote child window,
+        // despite AppKit's nonnull annotation. Keep that native no-op safe.
+        guard let childWin else { return }
         preserveAppearance(of: childWin)
         super.addChildWindow(childWin, ordered: place)
     }
-    override func removeChildWindow(_ childWin: NSWindow) {
+    override func removeChildWindow(_ childWin: NSWindow?) {
+        guard let childWin else { return }
         super.removeChildWindow(childWin)
         releaseAppearance(of: childWin)
     }
