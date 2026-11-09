@@ -58,110 +58,135 @@ outside the command bar's text, drawing and keystroke code, but the lead's requi
 
 ## Targeted validation, 2026-11-09
 
-PR #279 remains a draft. M5 screen/disk holds ended under LEAD-UPDATE item 29.
-No new main merge or final full gate is allowed until the lead sends “your
-turn”, after #276, #278 and #277 merge. The last merged main is `3fb0645c`.
-Main's engine is SHA-256
-`8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
-No engine files changed.
+PR #279 remains a draft. Under LEAD-UPDATE items 29–31, no main merge or final
+full gate runs until the lead sends “your turn”, after #276, #278 and #277 merge.
+The last merged main is `3fb0645c`; App build head is `61ace5ec`.
+Final flow head is `c9e50b6dcc0069483e9fce7018e2c762e51d1386`; only Python fixture setup changed after the App builds.
 
-Every build uses outer `/usr/bin/lockf -k /tmp/s12-build.lock`, then
-`/Users/serge/.t3/projects/open/.re/handoff/sections/s12/s12-heavy.sh high`,
-with `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`. Debug and Release
-run in sequence. Only this checkout's superseded build outputs are removed,
-after logs are saved. App suites use the screen lock, one suite per invocation,
-and wait outside every lock while the shared priority flag exists. Native
-Settings and Site Control checks use the repository's screen worker without
-a second nested screen lock.
+Earlier targeted functional proofs and all eight deliberate source regressions
+used engine `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
+They stand under item 31: #266 changes no App, OpenKit or web-content code.
+Restored Debug, Release and the final Gallery run use the updated main engine
+view, SHA-256 `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+No engine file changed in this PR. The final gate must merge main `7ae68e4a`
+or later, rebuild on that engine, audit keys, and update fingerprint gates.
+Any paired startup/launch comparison must use the same engine on both sides.
+No live BG gate hard-codes the old fingerprint.
+
+Builds ran sequentially under outer `/tmp/s12-build.lock`, then the shared
+`s12-heavy.sh high` wrapper, with
+`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`. Only this checkout's
+superseded build outputs were removed after saving logs. Each App suite takes
+one screen-lock invocation and waits outside all locks for the priority flag.
+Native Settings and Site Control checks use the repository screen worker.
+No unit tests, computer use, Arc launch, new worktree or engine-root edits.
 
 Receipts, source diffs, logs and synthetic captures are retained in
 `.re/s12-bg/resume-20261109-0830/` in the project root. Elapsed receipts include
-lock queue time; loads are 1/5/15-minute averages. The earlier limited verifier
-on product code `749da3a0` passed 5/5 selected rows: build, commands-demo
-(326/326), suggest-check (56/56), commands-dump (0/0/0; same 11 allowed-missing),
-and commandbar-render (151/151). That was not a full gate.
+lock queue time; loads below are 1/5/15-minute averages.
 
-| Check | Current result | Evidence / load |
+| Check | Result | Evidence / load |
 |---|---|---|
-| Debug | PASS through native code `f5279ddb`; final restored build pending | 102.643 s; 25.52/17.04/13.17 → 13.73/15.77/13.13 |
-| Release | PASS at `8fb592da`; rebuild after Edit fix pending | 150.421 s; 9.95/10.11/8.52 → 7.50/9.07/8.35 |
+| Restored Debug | PASS at `61ace5ec`, engine 34619927 | 90.947 s; 9.26/9.96/12.31 → 11.94/11.19/12.59 |
+| Restored Release | PASS at `61ace5ec`, engine 34619927 | 236.585 s; 11.94/11.19/12.59 → 12.19/12.05/12.63 |
 | Shared keys | PASS | 20 settings-state literal keys, no duplicates; one full enabled-key literal in OpenModel |
-| commandbar-render strict | PASS 151/151 | CPU p95 5.04 ms; added completion 0.133 ms; load 4.2/6.4/7.3. No quiet or paired rerun required under §4c/§4d. |
+| Gallery | PASS 14/14, engine 34619927 | 15.96/13.16/12.89 → 22.38/16.07/14.04; zero focus interruptions; cleanup PASS |
+| Deliberate source regressions | CONFIRMED 8/8, engine 8e8a461c | Each raw FAIL at the intended assertion, cleanup PASS; restored source then passes the complete Gallery run |
+| commandbar-render strict | PASS 151/151 | CPU p95 5.04 ms; added completion p95 0.133 ms; load 4.2/6.4/7.3. No quiet/paired rerun required under §4c/§4d. |
 | boosts browser harness | PASS 6/6 | 3.97/6.62/7.45 → 4.05/6.59/7.44 |
-| settings-preview | PASS 47/47, 240 PNGs, dump-keys | Populated/empty Boosts at 1x/2x; expected Previews controls; stored Profile search-engine receipt; removed delay default absent |
-| sitecontrol-render | PASS 1551/1551; 2 diagnostic INFO | Native windows/menus included. Code keystroke CPU p95 1.380 ms at 8.42/9.28/10.32; cold-open/editor timing diagnostics retained in raw log. |
-| boosteditor | PASS 27/27 | Current Debug App; all owned cleanup passed; no focus interruptions |
-| incognito | 29 PASS, later suite error in Alloy | chrome.developerPrivate unavailable at extension-management step; no-snapshot-change passed; Chrome-style run pending |
-| commandbar + live Settings | PASS 77/77 | Existing commandbar suite invokes settings_live.run; owned cleanup passed |
-| Full verify-all | NOT RUN | Lead's merge-order gate; wait for “your turn” |
+| settings-preview | PASS 47/47, 240 PNGs, dump-keys | Populated/empty Boosts 1x/2x; Previews controls, stored Profile receipt and removed delay default absent |
+| sitecontrol-render | PASS 1551/1551; 2 diagnostic INFO | Code keystroke CPU p95 1.380 ms at 8.42/9.28/10.32. Cold-open diagnostic 8.817 ms vs 8 ms at load1 11.55 retained; instruction/functional gates pass. |
+| boosteditor | PASS 27/27 | Run end 11.25/9.48/9.20; cleanup PASS, no focus interruption |
+| commandbar + live Settings | PASS 77/77, including 16 settings_ rows | Run end 13.28/10.20/9.47; cleanup PASS |
+| incognito, Chrome style | PASS 31; native 2x capture DEFERRED on 1x display | Suite load 23.72/13.74/10.79; cleanup PASS, no focus interruption |
+| Full verify-all | NOT RUN | Lead's explicit merge-order hold |
+
+The earlier limited verifier at product code `749da3a0` passed 5/5 selected rows:
+build, commands-demo (326/326), suggest-check (56/56), commands-dump (0/0/0;
+same 11 allowed-missing), and commandbar-render (151/151). It was not a full gate.
+Final builds have no errors and no warning in the new Gallery files. Existing
+engine nullability/incomplete-implementation and package/shared-automation
+warnings remain; source-warning audits and full build logs are retained.
 
 ## Real-App proof
 
 `tools/e2e/engine_e2e.py --only boost-gallery --config Debug
---stop-on-app-death` drives Open's native File menu, real hosted Library controls,
-editor controls, Settings, and pages. Keys use `route='app'` through
-`OEApplication.sendEvent`. `AutomationBoostGallery.swift` only exposes bounded
-UI traversal and actions; it constructs no Boost records and invokes no Library
-action in place of a control. The queued Profile proof retains a rendered
-control, changes the Profile binding and presses that control in the same turn.
+--engine-sha256 346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd
+--stop-on-app-death` drives native menus, real hosted Library/Settings controls,
+editor controls and pages. Keys use `route='app'` through
+`OEApplication.sendEvent`. The bounded `AutomationBoostGallery.swift` traversal
+constructs no Boost records and invokes no Library action in place of a control.
+The queued Profile proof retains a rendered control, changes the picker binding
+and presses the same control in one turn.
 
 Two synthetic HTTPS hosts use an ephemeral loopback TLS server, resolver mapping
 and run-specific certificate pin. No system trust setting changes. Boosts are
-created through the real editor. Per-run data/cache/Profile roots and TLS ports
-are unique. Shared App defaults are saved, reset, and restored in nested finally
-cleanup, including strict early aborts.
+created through the real editor. Each run has unique data/cache/Profile roots
+and a TLS port. Shared App defaults are saved, reset and restored in nested
+finally cleanup, including strict early aborts.
 
-| Row | Proof | Current result |
+| Row | Proof | Result |
 |---|---|---|
-| BG1 menu / command bar | Existing Library window reused; real grid/card AX controls; command-bar Return dispatch | PASS |
-| BG2 cards / live toggle | Two names/sites; search and empty second Profile; off/on changes only the matching live page | PASS; native Zoom resize capture pending |
-| BG3 Edit | Stored Boost and Profile open in editor against the real HTTPS fixture | PASS, ordinary and queued |
-| BG3 Delete / empty | Escape Cancel is inert; confirmed deletion removes card and live effect; empty state and List control remain | PASS; Boost-specific Library Undo does not exist |
-| F1 key Library | Library picker B stays on B when Gallery runs with Library key | PASS; old-reset negative pending |
-| F1 browser/editor caller | Visible non-key Library B changes to caller A; closed Library from B selects B | PASS; old-visible-branch negatives pending |
-| F2 layout | Sidebar round trip, in-window List/Gallery, plain Library preserves Profile/layout and History; View Boosts selects List | PASS; old-default/reset negative pending |
-| F4 captured Profile | Queued real Toggle/Edit target their rendered Profile A after picker moves to B | PASS; old live-binding negatives pending |
-| F6 preference | Real Settings off refuses menu/bar and removes live effect; Library Turn On restores effect; editor agrees | PASS |
-| Private browser | Menu disabled; dispatch refused; command-bar action absent | PASS |
-| Focus | Both List/Gallery: Cmd+W closes, Cmd+T opens bar, Escape dismisses, Cmd+L inert. Browser Cmd+L opens location editor; BG1 proves Return. | PASS at `a9aadeae` |
-| Cleanup | Owned App processes/windows removed after completed runs | PASS, including forced early failure with the real Delete sheet open |
+| BG1 menu / command bar | One Library window reused; grid/card controls; real command-bar Return | PASS |
+| BG2 cards / live toggle | Two names/sites; search and empty Profile; off/on affects only the matching page | PASS, including native Window ▸ Zoom resize and restore |
+| BG3 Edit | Stored Boost and Profile open against the real HTTPS fixture | PASS, ordinary and queued |
+| BG3 Delete / empty | Escape Cancel inert; confirmed deletion removes card and live effect; empty List control remains | PASS; Library has no Boost-specific Undo |
+| F1 key Library | Picker B stays B when Gallery runs with Library key | PASS; old reset fails |
+| F1 browser/editor caller | Visible non-key Library B changes to caller A; closed Library from B selects B | PASS; old visible-preservation branch fails for browser and editor |
+| F2 layout | Sidebar round trip, List/Gallery, plain Library preserves Profile/layout/History; View Boosts selects List | PASS; old default/reset fails |
+| F4 captured Profile | Retained Toggle/Edit controls act on rendered A after picker moves to B | PASS; both old live callbacks fail |
+| F6 preference | Settings off refuses menu/bar and removes live effect; Turn On restores; editor agrees | PASS |
+| Private browser | Menu disabled, dispatch refused, command-bar action absent | PASS |
+| Focus | Both layouts: Cmd+L inert, Cmd+T opens bar, Escape dismisses, Cmd+W closes; browser Cmd+L and BG1 Return | PASS |
+| Cleanup | All completed App runs remove owned processes/windows | PASS, including forced early failure with Delete sheet open |
 
-The initial focus assertion wrongly expected Cmd+L in Library to open a browser
-bar. The diagnostic identified L. Source tracing and the real List/Gallery
-parity row confirm the existing inert Library path; no product key policy
-changed. The raw initial FAIL is retained. Thirteen Gallery rows passed at
-`f5279ddb`, and the corrected focus row passed at `a9aadeae`.
+Native rest, hover and resized captures were inspected for the two cards and
+layout controls. This local-only surface has no claimed Arc Gallery pixel
+baseline. Settings populated/empty renders also cover 1x/2x. Native incognito
+2x capture remains a display follow-up; no M1 screen run was attempted.
 
-Ordinary and queued Edit initially failed because the engine commit arrived
-before `host.content.url`. The bounded diagnostic recorded `canEdit=false` at
-commit. `f5279ddb` fixes this by passing the committed URL through existing
-eligibility/presentation. Pre-fix FAILs and post-fix PASSes are retained.
+## Deliberate regressions
 
-## Deliberate regressions still to run
+Each temporary mutation was built in this checkout and tested through the same
+App flow. Every row below produced a raw FAIL and passed owned cleanup. All
+mutations were restored; no mutant is committed. `negative-summary.json` keeps
+each failure's exact load and engine fingerprint.
 
-Each temporary mutation is built in this checkout, tested through the same real
-App flow, recorded as raw FAIL, and restored. No mutant is committed.
-
-| Mutation | Rows that must fail | State |
+| Mutation | Rows that fail | Result |
 |---|---|---|
-| Restore Gallery refusal in factory and App gates | BG1_menu, BG1_commandbar | PENDING |
-| Restore key-Library Profile reset | F1_key_library | PENDING |
-| Restore implicit/default list reset | F2_layout | PENDING |
-| Restore live Profile reads in callbacks | F4_toggle_profile, F4_edit_profile | PENDING |
-| Restore visible-on-Boosts preservation | F1_browser_profile, F1_editor_profile | PENDING |
-| Force failure with actual Delete sheet open | BG3_delete_empty fails at the forced assertion; owned cleanup passes with zero windows/processes left | CONFIRMED |
+| Restore Gallery refusal in factory and App gates | BG1_menu, BG1_commandbar | CONFIRMED 2/2 |
+| Restore key-Library Profile reset | F1_key_library | CONFIRMED |
+| Restore implicit/default list reset | F2_layout | CONFIRMED |
+| Restore live Profile callback reads | F4_toggle_profile, F4_edit_profile | CONFIRMED 2/2 |
+| Restore visible-on-Boosts preservation | F1_browser_profile, F1_editor_profile | CONFIRMED 2/2 |
+| Force failure with actual Delete sheet open | BG3_delete_empty | Intended assertion fails; cleanup PASS, zero owned windows/processes |
 
-After restoration: rebuild Debug and Release, audit shared keys, run the final
-Gallery positive (including native Window ▸ Zoom resize), preserve rest/hover/
-resized captures, and update these results. The final main merge, rebuild and
-full verify-all wait for the lead's “your turn”. No baseline, comparator,
-threshold or allowlist changes are permitted.
+Ordinary and queued Edit first failed because the engine commit arrived before
+`host.content.url`. The bounded diagnostic recorded `canEdit=false` at commit.
+`f5279ddb` fixes this by passing the committed URL through existing eligibility
+and presentation. Pre-fix FAILs and post-fix PASSes are retained.
 
-F3 app-level regular-Profile parity remains accepted by the lead. F5's shared
-factory first-run/engine-ready policy remains a follow-up in `docs/followups.md`.
-The lead approved F1/F2/F4/F6 source at `749da3a0`; the later automation and shared
-Library Edit fix still need lead review.
+The first combined final run passed 13 rows including resize, then the focus
+helper incorrectly required a non-empty grid after Delete removed both cards.
+The helper now requires the actual layout control for that focus setup; other
+card/grid assertions are unchanged. The raw failure and cleanup PASS remain.
+The corrected complete suite passes all 14 rows.
 
-The online/shared Gallery remains out of scope. Arc Gallery's shared-browsing
-role remains a guess in the feature-gap audit; this page specifies only Open's
-local behavior and makes no new reverse-engineering claim.
+The initial focus check wrongly expected Library Cmd+L to open a browser bar.
+Source tracing and real List/Gallery parity prove the existing inert path;
+browser Cmd+L still works. No product key policy changed. The first incognito
+run used Alloy: 29 rows passed, then extension management lacked
+`chrome.developerPrivate`. The documented Chrome-style run passed 31. Its worker
+survived the system cancel; the parent exit code was lost, so the completed
+native result, cleanup and exited worker were recorded without a duplicate.
+The first menu negative was recovered the same way. Raw initial errors and
+observation receipts remain available.
+
+F3's app-level regular-Profile parity is accepted. F5's shared factory readiness
+policy remains in `docs/followups.md`. The lead approved F1/F2/F4/F6 source at
+`749da3a0`; later automation and the shared Library Edit fix still need lead
+review. The final main merge, rebuild and full verify-all wait for “your turn”.
+
+Sharing, online browsing/install and preview generation remain out of scope.
+Arc Gallery's shared-browsing role remains a guess in the feature-gap audit;
+this page makes no new reverse-engineering claim.

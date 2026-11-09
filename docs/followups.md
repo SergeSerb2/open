@@ -363,9 +363,11 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 - Code mode is integrated from #203, including live CSS and document-bound JS
   reload state. The local Gallery shares the Library's Boost owner and actions;
   BG1–BG3, Profile/layout and private/global-off flows pass in the real App on
-  2026-11-09; targeted Settings and Site Control render checks pass. Deliberate
-  source regressions, remaining App suites, the final Release rebuild and the
-  full merge-order gate remain pending. See
+  2026-11-09; targeted Settings and Site Control render checks pass. Eight
+  deliberate source regressions are confirmed; Boost editor, command bar,
+  Settings and Chrome-style incognito suites pass. Restored Debug/Release and
+  the complete Gallery run pass on engine 34619927. Native incognito 2x capture,
+  the final merge-order gate and lead review remain pending. See
   [Gallery acceptance](boost-gallery.md).
   P7 still blocks selector picking.
 - Library command readiness (BG review F5, Section 12 lead, 2026-11-09):

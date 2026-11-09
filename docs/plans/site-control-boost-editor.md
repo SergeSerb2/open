@@ -1226,8 +1226,10 @@ The Boosts List/Gallery control changes layout in the Library itself.
 `view-library` changes neither Profile nor presentation. With no browser window
 key, Gallery is an app-level regular-Profile Library command, matching View
 Boosts (F3, lead ruling). Factory-level Library readiness is a shared follow-up
-([F5](../followups.md#section-12-boost-app-runtime-limits)). Targeted real-App Gallery flows now pass; deliberate
-regressions and the final merge-order gate are tracked in
+([F5](../followups.md#section-12-boost-app-runtime-limits)). Targeted real-App
+Gallery flows and eight deliberate source regressions pass.
+Restored Debug/Release and the complete Gallery run pass on engine 34619927;
+the final main merge, full gate and lead review remain pending, tracked in
 [Gallery acceptance](../boost-gallery.md).
 
 ---
