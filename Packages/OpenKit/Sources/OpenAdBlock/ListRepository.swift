@@ -25,7 +25,9 @@ public struct AdBlockProfileState: Codable, Sendable, Equatable {
 public struct AdBlockUpdateResult: Sendable {
     public let id: String
     public let changed: Bool
-    public let repaired: Bool
+    public internal(set) var repaired: Bool
+    /// Local verification failure and warm-open recovery, retained after a successful update.
+    public internal(set) var integrityRecovery: String? = nil
     public let bytes: Int
     public let downloadedBytes: Int
     public let sha256: String
@@ -39,6 +41,7 @@ public struct AdBlockUpdateResult: Sendable {
 
 /// Owns list IO off the main actor. The store serializes operations for each Profile.
 actor ListRepository {
+    private struct IntegrityFailure: Error {}
     let policy: AdBlockDownloadPolicy
     let downloader: ListDownloader
     let pins: [String: AdBlockBundledPin]
@@ -229,9 +232,11 @@ actor ListRepository {
         return staging
     }
 
-    private func stageCurrent(directory: URL, staging: URL, catalog: AdBlockCatalog) throws -> GenerationReference {
+    private func stageCurrent(directory: URL, staging: URL, catalog: AdBlockCatalog, recoverIntegrity: Bool = false) throws -> GenerationReference {
         guard let reference = try storage.current(in: directory)?.live else { throw AdBlockError("no current generation") }
-        let manifest = try storage.verify(reference, directory: directory, catalog: catalog)
+        let manifest: GenerationManifest
+        do { manifest = try storage.verify(reference, directory: directory, catalog: catalog) }
+        catch { if recoverIntegrity { throw IntegrityFailure() }; throw error }
         for file in manifest.files {
             try Task.checkCancellation()
             try FileManager.default.copyItem(at: storage.path(reference, in: directory).appendingPathComponent(file.file),
@@ -261,23 +266,32 @@ actor ListRepository {
     }
 
     /// Every successful update publishes a complete generation, including all-304 checks.
-    /// Reload remains unnecessary when the input hashes did not change.
+    /// Recovery requires one reload even when the recovered input hashes did not change.
     func updateBatch(catalog: AdBlockCatalog, directory: URL, state: AdBlockProfileState)
-        async throws -> (AdBlockProfileState, [AdBlockUpdateResult]) {
+        async throws -> (AdBlockProfileState, [AdBlockUpdateResult], Bool) {
         let staging = try makeStaging(directory)
         defer { try? FileManager.default.removeItem(at: staging) }
-        let previous = try stageCurrent(directory: directory, staging: staging, catalog: catalog)
         var next = state, results: [AdBlockUpdateResult] = []
-        for id in state.enabledBlockLists {
+        let previous: GenerationReference
+        var recovery: String?
+        do { previous = try stageCurrent(directory: directory, staging: staging, catalog: catalog, recoverIntegrity: true) }
+        catch is IntegrityFailure {
+            try Task.checkCancellation()
+            next = try await open(directory: directory, catalog: catalog)
+            recovery = next.lastError
+            previous = try stageCurrent(directory: directory, staging: staging, catalog: catalog)
+        }
+        for id in next.enabledBlockLists {
             let list = try catalog.list(id)
-            let (receipt, result) = try await update(list, directory: staging, previous: state.lists[id])
+            var (receipt, result) = try await update(list, directory: staging, previous: next.lists[id])
+            if let recovery { result.repaired = true; result.integrityRecovery = recovery }
             next.lists[id] = receipt; results.append(result)
         }
         try Task.checkCancellation()
         next.lastError = nil
         try publishCaches(staging: staging, directory: directory, state: next)
         _ = try storage.publish(state: next, inputs: staging.appendingPathComponent("lists"), directory: directory, previous: previous)
-        return (next, results)
+        return (next, results, recovery != nil)
     }
 
     /// Reset is one generation transaction, so a failed default download keeps all old choices.

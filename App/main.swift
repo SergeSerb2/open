@@ -66,6 +66,7 @@ if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_EARLY_LITTLE_OPEN"] == "
   appDelegate.openBlankLittleOpen(timestamp: ProcessInfo.processInfo.systemUptime)
 }
 if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_QUIT_BEFORE_ENGINE"] == "1" {
+  appDelegate.quitWarning.harnessQuit = true
   RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
 }
 if let input = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_EARLY_NAVIGATION"] {
