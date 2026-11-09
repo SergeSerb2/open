@@ -5104,82 +5104,105 @@ endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 
 
-### Step 5 as built (2026-11-09, morning screen hold)
+### Step 5 as built (2026-11-09, page-load timing blocked)
 
-**Merged PR candidate: `s13/step5-pr` (PR: pending lead creation).** E5
-merged the complete cosmetics and parser-corpus stack (`cf16a133`) with
-main `518471aa` in `ac15c11a`, then overlapping main `195ab60d` in
-`44b90ccc` before building. Release-script-only main `3fb0645c` is merged
-in `183f4ec6`; it changes no App or engine source. Main's strict AD3
-attachment-allocation gate and record-only whole-process pairs remain.
-No budget, baseline, assertion or allowlist is widened.
+**Readiness BLOCKED:** the six quiet App pairs fail the required no-slower condition: 38.15 ms cosmetics vs 35.65 ms at exact main 518 (+7.01%); native busy CPU 6,855 vs 6,709 µs (+2.18%). Load1 8.14–9.56. No rerun or waiver.
 
-The merged s13b build passes owned objects/targets, scoped GN/checkdeps,
-the full CEF framework and strict built status **8 PASS / 0 FAIL / 0 WARN**.
-The headless real caller passes official-list load and empty-root refusal
-(2/2). CEF passes all 20 executable rows, including both 30,000-element
-cases at 10/10 hides and yields, and all 45 observers install the binding
-before execution in world 7. Distribution and App Debug build pass;
-Vendor and embedded normalized engine code share SHA-256
-`f44ac4b9dc3cffae21eefd5d02a618c51dc6b676d73c830179012abe7a21eb17`.
-These runtime receipts bind to built source `44b90ccc`.
+Final fetch: origin/main7ae68e4a merged engine PR#266 (persistent signed clone,0106). Per the lead engine-ordering exception, merge/rebuild and affected validation are required before PR readiness. This blocked checkpoint retains the measured4313f7d8 source; it does not claim acceptance against the new engine.
 
-The first merged App adblock run passes all 84 behavior rows, including
-strict AD3, resources/Profile/lifetime and the explicit cosmetic controls:
-`AD3_cosmetic_enabled_hides`, `AD3_cosmetic_excluded_visible`,
+**Merged candidate: `s13/step5-pr` (PR: pending lead creation).** E5
+combines the cosmetics/parser-corpus stack `cf16a133` with main through
+`316902de`, merged in `4313f7d8`. The 26/26 full gate and affected
+adblock 86 retain 3190491e provenance under TANDEM 5a; the earlier seven
+App suites retain c57370d8. Late main adds quit warnings, with only shared-doc
+overlap and no E5 harness/engine change. App Debug/fingerprint reran, and
+the twelve page-pair launches check the new quit bypass/cleanup.
+Engine source built at `44b90ccc`
+remains byte-identical. The deleted App was rebuilt from the retained
+s13b distribution, then rebuilt after the latest App overlap merge.
+Strict AD3 attachment-allocation and record-only whole-process pairs
+remain. No assertion, baseline, budget or allowlist changed.
+
+The assigned s13b engine passes owned objects/targets, scoped GN/checkdeps,
+full CEF and strict status 8 PASS / 0 FAIL / 0 WARN. Pinned apply/reverse passes
+39 patches/67 files with byte-identical restoration. Headless caller
+load/empty-root passes 2/2. CEF passes 20/20 executable rows (C-9 reserved),
+including both 30,000-element fixtures 10/10 hides and yields, and 45/45
+binding-before-observer executions in world 7. Distribution/App Debug
+and normalized engine fingerprint pass. Vendor and embedded code SHA is
+`f44ac4b9dc3cffae21eefd5d02a618c51dc6b676d73c830179012abe7a21eb17`;
+the retained distribution matches 57acfaee’s engine.
+
+Complete affected App adblock rerun on 3190491e passes 86 rows, including
+strict AD3, integrity/resources/Profile/lifetime and all five cosmetic
+controls: `AD3_cosmetic_enabled_hides`, `AD3_cosmetic_excluded_visible`,
 `AD3_cosmetic_global_off_visible`, `AD3_cosmetic_global_on_hides_again`
-and `AD3_cosmetic_gates_reject_inverse_controls`. The suite remains
-**FAIL (audit collector)**, with only 5/9 launch logs saved; all owned
-processes/windows were removed. Collector fixes through `3a7539b1` retain
-per-launch stderr, prefer the selected log destination and preserve live
-allocation-counter reads. Their runtime rerun is **PENDING (morning)**.
+and `AD3_cosmetic_gates_reject_inverse_controls`. Displays are
+none/block/block/none, with no page globals or page style elements.
+The other seven complete suites retain c57370d8 provenance under TANDEM 5a:
+extensions 12, actions 26, extensions-p3 19, extensions-e2 26,
+full extensions-ui 71, features 27 and page 85 PASS. Existing picker/Page
+BLOCKED and smart-zoom DEFERRED rows remain explicit. Cleanup and framework
+identity pass throughout.
 
-Patch 0902 adds non-official verbose numeric traces at extension world
-allocation and the actual `ScriptInjection::InjectJs` execution request.
-The renderer agent records context creation. These traces log world,
-execution kind, frame token and source count, with no page URL, script text
-or extension identifier. `OPEN_E2E_WORLD_AUDIT_DIR` enables these scopes
-and retains each launch's engine file or unique stderr stream. The real
-`extensions` flow checks Dark Reader injection in a local page and iframe,
-native cosmetic hiding in both, and reciprocal absence of the ad-block
-binding and extension API. Numeric proof remains **PENDING (morning)**:
-no extension allocation/injection may use private world 7; isolated and
-user-script worlds must be at least 8; main-world injection must use 0;
-all ad-block observers must use 7. Every owned launch needs a retained log.
+Numeric proof: 352 App behavior PASS, 29/29 launch logs, 91 extension allocations/331 injections/46 observers 7; extension worlds 8–11 and main injection 0, no extension allocation/injection 7.
+Patch 0902 traces actual allocation/injection requests without URLs,
+script text or extension identifiers; the renderer traces every context.
+Each owned App launch has a saved engine file or unique stderr stream.
+Two source-proven Blink inspector contexts are reported separately.
+The reciprocal page/iframe probe first records enabled=true,
+engine_loaded=true, load_generation=1 for the actual page Profile.
+Both frames then show Dark Reader and native hiding, exactly one private
+binding context, no ad-block binding in extension/main contexts and no
+extension API in private contexts. The same new flow fails as expected on
+exact main 518, then cleans up 0 owned windows/processes. This readiness
+barrier does not fix the known fresh-Profile cold-start window (child I).
 
-Full gate attempt 1 stopped after 15 PASS to release a heavy slot during
-priority starvation. Attempt 2 also passed 15 checks, then Settings preview
-failed `sidebar-defaults` with Foundation mktemp errno 28 (disk full).
-The stopped `sidebar-render` trap row is INTERRUPTED. Neither attempt is
-a full-gate PASS. Raw results and the remaining rows are in
-`.re/s13/e5/PR-BODY.md`; no post-02:35 screen result counts as acceptance.
+Final full M5 `tools/verify-all.sh --with-arc-data`: 26 PASS / 0 raw FAIL / 0 INTERRUPTED / 0 SKIP,
+including the requested settings-preview row. Every row and any raw timing
+qualification are in `.re/s13/e5/PR-BODY.md`. The two night gates remain
+partial: one stopped for priority starvation, the next hit Settings ENOSPC.
+No result during the 02:35–08:30 screen hold counts as acceptance. The
+initial collector 5/9-log failure and the numeric-loopback fixture failure
+remain preserved beside successful complete reruns. Full UI's raw private
+audit failure remains beside its source-proven inspector reclassification
+and saved-log PASS; no extension predicate was relaxed.
 
-The lead's 02:42/02:45 rule 8b hold stops all M5 and M1 screen work until
-the user clears the crash dialog in the morning. No E5 job remains;
-heavy slot a is released. **PENDING (morning)**: complete App adblock
-rerun, `extensions`, `actions`, `extensions-p3`, `extensions-e2`, full
-`extensions-ui`, `features`, `page`, Settings preview/full gate, numeric
-world separation and C-G1/C-G2 once each. Extension coverage includes real
-Chrome Web Store installs, local signed-CRX install/refusal and actual
-page/iframe content scripts. The lead creates the PR after acceptance;
-this pending branch misses the 06:15 DMG.
+Contended timing: accepted inherited C-G1 p50 133 µs/p99 824 µs at e8c8e355 (load1 22.57–24.73), C-G2 p50 84 µs at 18fcabc2 (load1 8.49–13.31, T = 64.9 ms, 239,510 bench checks), C-G3 353 µs (load1 13.98); reruns waived by lead 10:55 after timed-path diff review.
+Lead 10:55 retains these accepted receipts and skips E5 C-G1/C-G2 reruns.
+The engine diff from e8c8e355 adds non-official VLOG tracing, a Rust result
+field consumed only by self-test, self-test/parser-corpus and API-proof
+code, and the 0902 patch refactor with the same world IDs 7/8. It changes
+no timed-path behavior. C-G1's product binary is 5074218a, recorded by
+the documentation head e8c8e355; C-G2's binary is 335e9f8d, recorded by
+18fcabc2. First-process calls are separate; 100 documents were measured
+per gate. All original samples/loads and raw absolute_load_valid=false
+remain; accepted PASS at load does not claim a quiet absolute result.
+The queue-only E5 controllers consumed no timing attempts.
 
-Six interleaved real-App page-load pairs are prepared, not run: this
-network-plus-cosmetics build versus exact main `518471aa` network-only App.
-Both Apps are built and fingerprinted. The adapted E3 harness uses equal
-pinned seeds/fixture/cache policy and requires equal nonzero blocked
-counts. It reports median on-load wall and native matcher/proxy busy-thread
-CPU per load, not whole-App CPU. Quiet lock stays outside the other locks;
-load1 <=12 is the target. Loaded results retain their loads and cannot
-claim quiet acceptance. No page performance result exists yet.
+Page comparison: six interleaved App pairs: cosmetics 38.150 ms / 6855 µs busy CPU, exact main 518 network-only 35.650 ms / 6709 µs; load1 8.14–9.56, raw FAIL.
+The control App vanished before attempt1 could launch; that pre-launch
+identity failure produced no page sample. Exact518 was rebuilt/fingerprinted
+with the same executable hash, then both Apps were copied outside build
+folders with executable/framework/seed identity and strict signature PASS.
+Fresh-label attempt2 supplies all samples; no started timing run was retried.
+Both Apps use the same pinned seeds, 200-image fixture and cache policy,
+with equal nonzero blocked counts; only the candidate hides the cosmetic
+control. One warm-up and one measured load per App, alternating pair order.
+CPU is native matcher/proxy busy-thread CPU, excluding renderer and whole
+App CPU. Newer main shell changes are an attribution limit against exact518;
+the comparison does not isolate an engine-only cause. Prebuilt pairs take quiet→screen with no heavy slot (lead 11:31); every load and cleanup is recorded.
 
-The parser self-test and Rust shim are byte-identical to `cf16a133`, so
-its accepted full-size parser-corpus receipts remain applicable to that
-source. E5 changes no parser policy, corpus size, license or dependency.
-Exact commands, seconds, loads, identities and pending rows are in
-`.re/s13/e5/PR-BODY.md` and `CHECKPOINT.md`. The E4 receipts below are
-historical and retain their stated source/binary and acceptance limits.
+Self-test and Rust shim are byte-identical to accepted cf16a133, so the
+full-size parser corpus need not repeat. Scriptlets/procedural actions,
+parser accounting/deadline follow-ups and Step 8 cross-Profile contention
+remain separate. The inherited worst-payload +56.22 MiB process delta is
+record-only, not a measured worst single allocation. Exact commands,
+seconds, loads, identities, known limits and the review table are in
+`.re/s13/e5/PR-BODY.md`, `APP-VALIDATION.md` and `CHECKPOINT.md`.
+The lead creates/reviews the PR. Step 5 missed the 06:15 DMG as directed.
 
+#### Earlier E4 evidence (before merged acceptance)
 
 Branch `s13/step5-cosmetics` started at Step 4 `dc7b985a` and merged
 Step 4 `f06011e7` before its first build. The lead assigned
@@ -5191,7 +5214,7 @@ Strict built status is 8 PASS, 0 FAIL, 0 WARN. The final binary loads the
 two official lists in a real headless service check and rejects an empty
 root with the expected diagnostic error (2/2 PASS; command 5.53 s, load
 12.70/19.68/21.64 to 12.57/19.53/21.57).
-Step 5 remains **in progress**. The real CEF functional suite passes
+At that checkpoint, Step 5 remained **in progress**. The real CEF functional suite passes
 18 executable rows in 86.94 s (load 10.40/12.98/17.41 to 8.91/11.55/16.39).
 Late generic elements hide 10/10; top-of-body inline-script elements hide
 10/10 and appear in the initial scan 10/10. C-9 remains reserved.
