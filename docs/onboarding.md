@@ -59,6 +59,13 @@ hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
 0.08 s; sound preparation deadline 0.3 s; frame measurement 0–8 s;
 resident measurement 3 s; orb periods 18/22/26 s.
 
+The worker publishes prepared-player readiness under a lock before notifying the
+main actor. At the animation start gate, the main actor reads that state directly.
+If preparation is still pending, its 300 ms deadline starts at that gate. An
+expired main-actor task from synchronous engine startup cannot discard a ready
+player. The receipt includes `prepareStart`, `workerReady`, `startRequest`,
+`decision` and actual animated `t0` host timestamps.
+
 The first room frame appears before engine startup and stays static while the
 engine starts and returns from its first native message-loop burst. Audio player
 creation, preparation and the first device start stay on an audio worker. After

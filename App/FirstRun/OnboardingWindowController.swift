@@ -66,7 +66,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     self.replay = replay
     residentBaseline = Self.residentBytes()
     let preparedSound = IntroSound(mode: IntroSound.Mode(rawValue: options.introSound) ?? .normal)
-    preparedSound.prepare {}
+    preparedSound.prepare()
     let screen = NSScreen.main ?? NSScreen.screens.first
     var size = OnboardingTokens.windowSize
     if let frame = screen?.frame, frame.width <= size.width && frame.height <= size.height {
@@ -181,9 +181,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   private func beginWhenReady() {
     guard engineSettled, intro.firstFrameHostTime != nil, !startRequested, !closingForHandoff else { return }
     startRequested = true
-    sound.prepare { [weak self] in
-      guard let self, !closingForHandoff, window?.isVisible == true else { return }
-      sound.scheduleStart { [weak self] hostTime in
+    guard window?.isVisible == true else { return }
+    sound.scheduleStart { [weak self] hostTime in
         guard let self, !closingForHandoff else { return }
         #if OPEN_AUTOMATION
         staticProof = ["hostTime": CACurrentMediaTime(), "scene": intro.staticSceneState,
@@ -197,7 +196,14 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
           // No animation keys are installed before this transition. All visual
           // tracks and the dim overlay share this t=0 with scheduled playback.
           let start = CACurrentMediaTime()
+          #if OPEN_AUTOMATION
+          sound.animationWillStart(at: start)
+          #endif
           intro.start(at: start, measureFrames: measureFrames)
+          #if OPEN_AUTOMATION
+          let dimRegion = IntroPacingTrace.begin("onboarding.dim.animate")
+          defer { dimRegion?.end() }
+          #endif
           CATransaction.begin(); CATransaction.setDisableActions(true)
           dimView.layer?.opacity = 0.85
           let fade = CABasicAnimation(keyPath: "opacity")
@@ -212,7 +218,6 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             residentAtThree = Int64(Self.residentBytes())-Int64(residentBaseline)
           })
         })
-      }
     }
   }
   func handoff() {

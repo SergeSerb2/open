@@ -56,6 +56,7 @@ def run(factory, results, tmp, h):
                       (stall['start'], stall['end'], stall['ms'], ', '.join(stall['regions'])), flush=True)
         print('intro startup engine.start=%.3f ms room-to-t0=%.3f ms' %
               (measured.get('preparationMainThreadMS', {}).get('engine.start', 0), measured.get('animationDelayMS', 0)), flush=True)
+        print('intro audio timing '+json.dumps(measured.get('sound', {}).get('timing', {}), sort_keys=True), flush=True)
         stalls = measured.get('stalls')
         (evidence/'intro-frames.json').write_text(json.dumps(measured, indent=2))
         results['stall_trace'] = dict(ok=isinstance(stalls, list) and len(stalls)==stats['drops']
@@ -95,6 +96,12 @@ def run(factory, results, tmp, h):
         sync = abs(sound.get('audioStartHostTime', 0)-measured['animationStartHostTime'])*1000
         results['animated_start_audio_sync'] = dict(ok=sound.get('decision')=='played' and sync <= 20,
             ms=sync, load=os.getloadavg())
+        timing = sound.get('timing', {})
+        clocks = [timing.get(k) for k in ('prepareStart', 'workerReady', 'startRequest', 'decision', 't0')]
+        results['audio_readiness_clock'] = dict(ok=all(isinstance(t, (int, float)) for t in clocks)
+            and timing['prepareStart'] <= timing['workerReady'] <= timing['decision'] <= timing['t0']
+            and timing['workerReady'] <= timing['startRequest']+.3
+            and timing['t0'] == measured['animationStartHostTime'], timestamps=timing, load=os.getloadavg())
         if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
         # Run every existing functional predicate on a separate unmeasured
         # launch. Its early keys, phase polling and PNGs cannot perturb frames.
