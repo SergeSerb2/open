@@ -48,8 +48,11 @@ and at least 32 pt below it. Shorter viewports retain native scrolling.
 
 Illustrations use the content background with 4% white contrast in dark appearance
 and 6% black in light. Mock sidebars use the Space's theme tint at 55% opacity;
-plain rows use white at 14% or black at 10%. Active elements use `#3D6BFF` at 90%
-with white text. Other mock text uses white or black at 75%. The only mock labels
+plain rows use white at 14% or black at 10%. Active elements use opaque Open blue,
+starting from `#3D6BFF` and reducing only OKLab lightness to meet 4.5:1 against
+white with a 0.2 margin. They share that blue in both appearances. The `+ New Tab`
+pill and its white label stay opaque throughout the animation. Other
+mock text uses white or black at 75%. The only mock labels
 are `+ New Tab` and the second Space name, `Home`.
 
 The Debug/automation socket command `welcome` returns `visible`, `activeCard`
@@ -90,3 +93,30 @@ cache roots, a local file page, and owned-process cleanup. It saves, resets,
 and restores `open.settings.lastPane`, `open.library.lastSection`, and
 `open.import.lastArcDir` in a `finally` path. The common runner preserves its
 startup preference keys. It changes no Welcome preference keys.
+
+Welcome text uses each actual, opaque content surface. Theme foreground tokens
+are seeds, not guaranteed content text colors. `WelcomeTextColors` composites
+alpha in sRGB, computes WCAG relative luminance with the sRGB transfer function,
+and keeps a seed that passes. A failing seed changes only OKLab lightness toward
+black or white, with a 0.2 contrast margin where the surface allows it. Header
+text is measured on the page background; card text is measured on the card fill.
+Secondary text meets 4.5:1 and primary text has stronger contrast. The small card
+titles also use 4.5:1, above the requested 3:1 heading minimum. Colors update on
+theme, app/view appearance, and key-state changes. Cached inputs prevent layout
+or animation frames from repeating the color math. Welcome adds no inactive tint.
+
+The `W36_contrast_*` rows cover light/dark Space themes × Light/Dark app appearance
+× active/inactive windows. The existing `appearance` command overrides only
+`NSApp.appearance`; the user's macOS setting stays unchanged. An owned second
+Open process establishes the inactive case without touching a user's app. Each
+row requires the expected theme, appearance, app activation, and native key state,
+plus a real window-server capture. The capture's ICC profile is converted to sRGB
+before sampling. Each label's modal background is its surface; the median of 12
+strongest glyph-core pixels is its ink. The gate checks both headers, all four
+card titles and bodies, and the illustration labels. Its three summary ratios
+are the lowest header, title, and body ratios, not a selected best card. Glyph
+sample coordinates and RGB values are retained in `.re/welcome-contrast/` with
+all eight PNGs. Run just this matrix with
+`OPEN_E2E_WELCOME_CONTRAST_ONLY=1 tools/e2e/engine_e2e.py --only welcome` under the
+same screen lock and priority rules. The temporary old-palette build patch and
+negative receipt also stay in `.re/`; no mutation switch ships in the App.

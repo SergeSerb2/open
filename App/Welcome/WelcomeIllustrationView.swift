@@ -25,6 +25,12 @@ final class WelcomeIllustrationView: NSView {
   var animationCount: Int { tracks.reduce(0) { $0 + ($1.layer.animationKeys()?.count ?? 0) } }
   #if OPEN_AUTOMATION
   var drawnLabels: [String] { textLayers.compactMap { $0.0.string as? String } }
+  var drawnLabelFrames: [(String, CGRect)] {
+    textLayers.compactMap { text, _ in
+      guard let label = text.string as? String else { return nil }
+      return (label, text.convert(text.bounds, to: layer))
+    }
+  }
   var paintColors: [String: NSColor] {
     var result: [String: NSColor] = [:]
     for (layer, paint) in fills where result[paint.rawValue] == nil {
@@ -105,7 +111,7 @@ final class WelcomeIllustrationView: NSView {
         let t = 0.30 + Double(i) * 0.025
         opacity(glyph, [0, 0, 1, 1], [0, t, t + 0.01, 1])
       }
-      opacity(row, [0.35, 1, 1, 0.35, 0.35], [0, 0.12, 0.22, 0.30, 1])
+      // This is an active pill. Its white instruction stays opaque throughout.
       position(command, [CGPoint(x: 140, y: 125), CGPoint(x: 140, y: 125), command.position, command.position], [0, 0.18, 0.28, 1])
       opacity(command, [0, 0, 1, 1, 0, 0], [0, 0.18, 0.26, 0.66, 0.75, 1])
       opacity(page, [0, 0, 1, 1], [0, 0.65, 0.80, 1])
@@ -145,7 +151,7 @@ final class WelcomeIllustrationView: NSView {
     appliedDark = dark; appliedBackground = background; appliedTint = sidebarTint
     let contrast: NSColor = dark ? .white : .black
     let surface = WelcomeColors.surface(background, dark: dark)
-    let blue = NSColor(srgbRed: 61.0 / 255, green: 107.0 / 255, blue: 1, alpha: 0.9)
+    let blue = WelcomeTextColors.illustrationBlue
     let row = contrast.withAlphaComponent(dark ? 0.14 : 0.10)
     let otherTint = sidebarTint.blended(withFraction: 0.35, of: blue) ?? sidebarTint
     CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -162,7 +168,9 @@ final class WelcomeIllustrationView: NSView {
       }
       item.backgroundColor = color.cgColor
     }
-    for (text, white) in textLayers { text.foregroundColor = (white ? NSColor.white : contrast.withAlphaComponent(0.75)).cgColor }
+    for (text, active) in textLayers {
+      text.foregroundColor = (active ? NSColor.white : contrast.withAlphaComponent(0.75)).cgColor
+    }
     for panel in panels { panel.borderWidth = 1; panel.borderColor = row.cgColor }
     CATransaction.commit()
   }
