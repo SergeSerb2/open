@@ -2,6 +2,9 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
+#if OPEN_AUTOMATION
+import OpenOnboarding
+#endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
@@ -99,6 +102,9 @@ appDelegate.firstRunWindowController?.startProbeAfterDisplay()
 
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.
+#if OPEN_AUTOMATION
+let engineConfigurationRegion = IntroPacingTrace.begin("engine.configuration")
+#endif
 let configuration = OEEngineConfiguration()
 // root_cache_path = <root>/Engine. The default profile's engine data is
 // Engine/Default (CEF's fixed name for the global context); other profiles
@@ -132,6 +138,9 @@ if AutomationNotificationSetup.suppressesSystemSetup {
 }
 #endif
 
+#if OPEN_AUTOMATION
+engineConfigurationRegion?.end()
+#endif
 OEEngine.shared.delegate = appDelegate
 LaunchTiming.shared.mark("engineStart")
 #if OPEN_AUTOMATION
@@ -140,6 +149,10 @@ if let data = try? JSONSerialization.data(withJSONObject: LaunchTiming.shared.re
 }
 #endif
 do {
+  #if OPEN_AUTOMATION
+  let pacingRegion = IntroPacingTrace.begin("engine.start")
+  defer { pacingRegion?.end() }
+  #endif
   try OEEngine.shared.start(configuration: configuration)
 } catch {
   FileHandle.standardError.write(Data("Open: engine failed to start: \(error)\n".utf8))
@@ -160,6 +173,9 @@ do {
 }
 LaunchTiming.shared.mark("engineStarted")
 
+#if OPEN_AUTOMATION
+IntroPacingTrace.current?.engineMessageLoopWillStart()
+#endif
 OEEngine.shared.runMessageLoop()
 appDelegate.saveState()
 appDelegate.prepareForEngineShutdown()
@@ -171,6 +187,10 @@ exit(0)
 /// The running app's code signature.
 enum CodeSignature {
   static var hasTeamIdentifier: Bool {
+    #if OPEN_AUTOMATION
+    let region = IntroPacingTrace.begin("engine.signatureCheck")
+    defer { region?.end() }
+    #endif
     var code: SecCode?
     guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return false }
     var staticCode: SecStaticCode?
@@ -214,6 +234,9 @@ final class FirstWindowFrameObserver: NSObject {
   }
   @objc private func frame(_ link: CADisplayLink) {
     guard link.timestamp >= submittedAt else { return }
+    #if OPEN_AUTOMATION
+    (view as? IntroView)?.recordFirstPresentation(at: link.timestamp)
+    #endif
     LaunchTiming.shared.phase("frameCallback")
     presented = true; CFRunLoopStop(CFRunLoopGetMain())
   }

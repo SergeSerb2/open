@@ -3,9 +3,26 @@ import QuartzCore
 import Metal
 import OpenDesign
 
+#if DEBUG || OPEN_AUTOMATION
+/// CATextLayer draws synchronously by default. Keep that default and measure
+/// its first rasterization separately from constructing the attributed text.
+private final class IntroMeasuredTextLayer: CATextLayer {
+    override func display() {
+        guard Thread.isMainThread else { super.display(); return }
+        let region = MainActor.assumeIsolated { IntroPacingTrace.begin("intro.text.display") }
+        defer { MainActor.assumeIsolated { region?.end() } }
+        super.display()
+    }
+}
+#endif
+
 @MainActor
 private final class IntroButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("intro.button.draw")
+        defer { pacingRegion?.end() }
+        #endif
         NSColor.white.withAlphaComponent(isHighlighted ? 0.85 : 1).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 22, yRadius: 22).fill()
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: IntroColors.blue]
@@ -100,6 +117,9 @@ public final class IntroView: NSView {
     private var tasks: [Task<Void, Never>] = []
     private var measureLink: CADisplayLink?
     private var previousFrame: Double?
+    private var measurementSubmittedHostTime = 0.0
+    public private(set) var firstFrameHostTime: Double?
+    private var measurementDeadline: Task<Void, Never>?
     private var intervals: [Double] = []
     private var nominalInterval = 1.0/60
     private var renderTime: Double?
@@ -125,19 +145,27 @@ public final class IntroView: NSView {
         layoutScene()
     }
     required init?(coder: NSCoder) { return nil }
-    isolated deinit { measureLink?.invalidate(); tasks.forEach { $0.cancel() } }
+    isolated deinit { measureLink?.invalidate(); measurementDeadline?.cancel(); tasks.forEach { $0.cancel() } }
 
     public override func layout() { super.layout(); layoutScene() }
     private func layoutScene() {
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("intro.layout")
+        defer { pacingRegion?.end() }
+        #endif
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let scale = min(bounds.width/1280, bounds.height/800)
         scene.position = CGPoint(x: bounds.midX, y: bounds.midY)
         scene.setAffineTransform(.init(scaleX: scale, y: scale))
         button.frame = NSRect(x: bounds.midX-100*scale, y: bounds.midY+(567-400)*scale, width: 200*scale, height: 44*scale)
-        CATransaction.commit()
+        commitIntroTransaction()
     }
 
     private func makeScene(scale: CGFloat, increaseContrast: Bool) {
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("intro.layers.create")
+        defer { pacingRegion?.end() }
+        #endif
         let full = CGRect(origin: .zero, size: OnboardingTokens.windowSize)
         room.frame = full
         room.colors = [IntroColors.color(0x1A3FD0).cgColor, IntroColors.room.cgColor]
@@ -164,7 +192,14 @@ public final class IntroView: NSView {
         add(spill, "transform.scale", [0.2, 3.5], "spill")
         add(spill, "opacity", [0, 0.45, 0.28], "spill", fractions: [0, 0.65, 1])
         let grain = CAReplicatorLayer(); grain.frame = full
-        if let image = Grain.tile(noiseFactor: 0.6, scale: scale) {
+        #if DEBUG || OPEN_AUTOMATION
+        let grainRegion = IntroPacingTrace.begin("intro.grain.generate")
+        #endif
+        let grainImage = Grain.tile(noiseFactor: 0.6, scale: scale)
+        #if DEBUG || OPEN_AUTOMATION
+        grainRegion?.end()
+        #endif
+        if let image = grainImage {
             let rows = CAReplicatorLayer(); rows.frame = full
             rows.instanceCount = Int(ceil(full.height/Grain.tilePoints)); rows.instanceTransform = CATransform3DMakeTranslation(0, Grain.tilePoints, 0)
             let tile = CALayer(); tile.frame = .init(x: 0, y: 0, width: Grain.tilePoints, height: Grain.tilePoints)
@@ -220,7 +255,16 @@ public final class IntroView: NSView {
         return layer
     }
     private func text(_ title: String, size: CGFloat, weight: NSFont.Weight, frame: CGRect, scale: CGFloat, alpha: CGFloat) -> CATextLayer {
-        let layer = CATextLayer(); layer.frame = frame; layer.contentsScale = scale; layer.alignmentMode = .center
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("intro.text.fontAndLayer")
+        defer { pacingRegion?.end() }
+        #endif
+        #if DEBUG || OPEN_AUTOMATION
+        let layer = IntroMeasuredTextLayer()
+        #else
+        let layer = CATextLayer()
+        #endif
+        layer.frame = frame; layer.contentsScale = scale; layer.alignmentMode = .center
         layer.string = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: NSColor.white.withAlphaComponent(alpha)])
         return layer
     }
@@ -229,6 +273,10 @@ public final class IntroView: NSView {
     }
 
     public func start(at hostTime: Double, measureFrames: Bool) {
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("intro.timeline.install")
+        defer { pacingRegion?.end() }
+        #endif
         guard animationStartHostTime == 0 else { return }
         animationStartHostTime = hostTime
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -271,16 +319,41 @@ public final class IntroView: NSView {
             button.layer?.add(spring, forKey: "button-spring")
         }
         button.isEnabled = false
-        CATransaction.commit()
+        commitIntroTransaction()
         if skipped { skip() }
         schedule(at: reduceMotion ? buttonBeat.end : buttonBeat.start) { [weak self] in self?.enableButton() }
         schedule(at: IntroTimeline.beat("idlePause").start) { [weak self] in self?.pauseAmbient() }
-        if measureFrames {
-            nominalInterval = 1/Double(max(1, window?.screen?.maximumFramesPerSecond ?? 60))
-            let link = displayLink(target: self, selector: #selector(recordFrame(_:)))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: Float(1/nominalInterval), maximum: Float(1/nominalInterval), preferred: Float(1/nominalInterval))
-            measureLink = link; link.add(to: .main, forMode: .common)
-            schedule(at: IntroTimeline.beat("measureFrames").end) { [weak self] in self?.measureLink?.invalidate(); self?.measureLink = nil }
+        // The controller arms measurement before ordering the window. Keep
+        // this fallback for callers that start an already-presented view.
+        if measureFrames, measureLink == nil, firstFrameHostTime == nil { measureFramesFromFirstPresentation() }
+    }
+
+    public func measureFramesFromFirstPresentation() {
+        guard measureLink == nil, firstFrameHostTime == nil else { return }
+        measurementSubmittedHostTime = CACurrentMediaTime()
+        nominalInterval = 1/Double(max(1, window?.screen?.maximumFramesPerSecond ?? 60))
+        let link = displayLink(target: self, selector: #selector(recordFrame(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: Float(1/nominalInterval), maximum: Float(1/nominalInterval), preferred: Float(1/nominalInterval))
+        measureLink = link; link.add(to: .main, forMode: .common)
+    }
+
+    /// Also called by the launch's first-window observer before engine.start.
+    /// Measurement always includes startup after the first room frame, even
+    /// when the animated timeline and music have not started yet.
+    public func recordFirstPresentation(at hostTime: Double) {
+        guard measureLink != nil, firstFrameHostTime == nil, hostTime >= measurementSubmittedHostTime else { return }
+        firstFrameHostTime = hostTime; previousFrame = hostTime
+        #if DEBUG || OPEN_AUTOMATION
+        IntroPacingTrace.current?.start(at: hostTime)
+        #endif
+        measurementDeadline = Task { [weak self] in
+            let end = hostTime+IntroTimeline.beat("measureFrames").end
+            try? await Task.sleep(for: .seconds(max(0, end-CACurrentMediaTime())), tolerance: .zero)
+            guard !Task.isCancelled, let self else { return }
+            measureLink?.invalidate(); measureLink = nil
+            #if DEBUG || OPEN_AUTOMATION
+            IntroPacingTrace.current?.finish()
+            #endif
         }
     }
     private func schedule(at time: Double, action: @escaping @MainActor () -> Void) {
@@ -302,7 +375,7 @@ public final class IntroView: NSView {
         for track in tracks { track.layer.removeAllAnimations() }
         composition.removeAllAnimations(); ambient.removeAllAnimations(); spillGroup.removeAllAnimations(); room.removeAllAnimations(); button.layer?.removeAllAnimations()
         apply(at: IntroTimeline.beat("button").end); button.alphaValue = 1
-        CATransaction.commit(); enableButton()
+        commitIntroTransaction(); enableButton()
     }
     @objc public func getStarted() {
         guard ready, !handingOff else { return }
@@ -333,23 +406,36 @@ public final class IntroView: NSView {
     }
     public func stop() {
         tasks.forEach { $0.cancel() }; tasks.removeAll(); measureLink?.invalidate(); measureLink = nil
+        measurementDeadline?.cancel(); measurementDeadline = nil
+        #if DEBUG || OPEN_AUTOMATION
+        IntroPacingTrace.current?.finish()
+        #endif
         pauseAmbient()
     }
     private func pauseAmbient() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for orb in orbs { let t = orb.convertTime(CACurrentMediaTime(), from: nil); orb.speed = 0; orb.timeOffset = t }
-        CATransaction.commit(); ambientPaused = true
+        commitIntroTransaction(); ambientPaused = true
     }
     @objc private func recordFrame(_ link: CADisplayLink) {
-        guard link.timestamp >= animationStartHostTime else { return }
-        if let previousFrame, intervals.count < 4096 { intervals.append(link.timestamp-previousFrame) }
+        recordFirstPresentation(at: link.timestamp)
+        guard let firstFrameHostTime, link.timestamp > (previousFrame ?? firstFrameHostTime),
+              link.timestamp <= firstFrameHostTime+IntroTimeline.beat("measureFrames").end else { return }
+        if let previousFrame, intervals.count < 4096 {
+            intervals.append(link.timestamp-previousFrame)
+            #if DEBUG || OPEN_AUTOMATION
+            IntroPacingTrace.current?.recordInterval(start: previousFrame, end: link.timestamp,
+                nominal: nominalInterval, callback: CACurrentMediaTime())
+            #endif
+        }
         previousFrame = link.timestamp
     }
     public var frameStats: [String: Any] {
         let ordered = intervals.sorted()
         func percentile(_ p: Double) -> Double { ordered.isEmpty ? 0 : ordered[min(ordered.count-1, Int(Double(ordered.count-1)*p))]*1000 }
         return ["count": ordered.count, "p50MS": percentile(0.5), "p95MS": percentile(0.95), "maxMS": percentile(1),
-                "drops": intervals.filter { $0 > nominalInterval*1.5 }.count, "nominalMS": nominalInterval*1000, "running": measureLink != nil]
+                "drops": intervals.filter { $0 > nominalInterval*1.5 }.count, "nominalMS": nominalInterval*1000, "running": measureLink != nil,
+                "startHostTime": firstFrameHostTime as Any? ?? NSNull(), "duration": IntroTimeline.beat("measureFrames").end]
     }
     public var state: [String: Any] {
         func keys(_ root: CALayer) -> [String] {
@@ -362,13 +448,20 @@ public final class IntroView: NSView {
         let animationKeys = layer.map(keys) ?? []
         let door = tracks.first { $0.key == "strokeEnd" && $0.layer.name == "door" }!.layer
         let sun = tracks.first { $0.beat == "sun" }!.layer
-        return ["phase": skipped ? "sellCompleted" : IntroTimeline.phase(at: elapsed, reduceMotion: reduceMotion), "elapsed": elapsed,
-                "animationStartHostTime": animationStartHostTime, "reduceMotion": reduceMotion, "skipped": skipped,
+        var result: [String: Any] = ["phase": skipped ? "sellCompleted" : IntroTimeline.phase(at: elapsed, reduceMotion: reduceMotion), "elapsed": elapsed,
+                "animationStartHostTime": animationStartHostTime,
+                "firstFrameHostTime": firstFrameHostTime as Any? ?? NSNull(),
+                "animationDelayMS": firstFrameHostTime.map { max(0, animationStartHostTime-$0)*1000 } as Any? ?? NSNull(),
+                "reduceMotion": reduceMotion, "skipped": skipped,
                 "ready": ready, "buttonEnabled": button.isEnabled, "buttonDefault": button.keyEquivalent == "\r",
                 "buttonLabel": button.accessibilityLabel() ?? "", "ambientPaused": ambientPaused,
                 "animations": animationKeys, "blendFilters": blendFilters(scene), "frameStats": frameStats,
                 "doorStrokeEnd": (door.presentation() ?? door).value(forKeyPath: "strokeEnd") ?? 0,
                 "sunY": (sun.presentation() ?? sun).position.y]
+        #if DEBUG || OPEN_AUTOMATION
+        if let trace = IntroPacingTrace.current { result.merge(trace.state) { _, new in new } }
+        #endif
+        return result
     }
 
     /// CLI only: sample the very same CA tracks into their model values. A
@@ -383,7 +476,7 @@ public final class IntroView: NSView {
             let b = IntroTimeline.beat("button")
             button.alphaValue = CGFloat(min(1, max(0, (time-b.start)/(b.end-b.start))))
         }
-        CATransaction.commit()
+        commitIntroTransaction()
         layoutSubtreeIfNeeded(); displayIfNeeded(); button.displayIfNeeded(); layer?.displayIfNeeded()
         let width = Int(bounds.width*scale), height = Int(bounds.height*scale)
         guard let space = CGColorSpace(name: CGColorSpace.displayP3),
@@ -405,11 +498,11 @@ public final class IntroView: NSView {
         canvas.addSublayer(scene)
         scene.position = CGPoint(x: CGFloat(width)/2, y: CGFloat(height)/2)
         scene.setAffineTransform(oldTransform.scaledBy(x: scale, y: scale))
-        CATransaction.commit()
+        commitIntroTransaction()
         defer {
             CATransaction.begin(); CATransaction.setDisableActions(true)
             layer?.insertSublayer(scene, at: 0); scene.position = oldPosition; scene.setAffineTransform(oldTransform)
-            CATransaction.commit()
+            commitIntroTransaction()
         }
         let renderer = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace: space, kCARendererMetalCommandQueue: queue])
         renderer.layer = canvas; renderer.bounds = pixelBounds
@@ -450,6 +543,13 @@ public final class IntroView: NSView {
         let bitmap = NSBitmapImageRep(cgImage: image)
         guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
         try png.write(to: url)
+    }
+    @inline(__always) private func commitIntroTransaction() {
+        #if DEBUG || OPEN_AUTOMATION
+        let region = IntroPacingTrace.begin("intro.CATransaction.commit")
+        defer { region?.end() }
+        #endif
+        CATransaction.commit()
     }
     private func apply(at time: Double) {
         for track in tracks { track.layer.setValue(track.value(at: reduceMotion ? IntroTimeline.beat("button").end : time), forKeyPath: track.key) }

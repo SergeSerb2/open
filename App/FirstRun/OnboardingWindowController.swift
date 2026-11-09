@@ -44,10 +44,17 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   private let residentBaseline: UInt64
   private var residentAtThree: Int64?
   private var residentAfterHandoff: Int64?
+  #if OPEN_AUTOMATION
+  private var screenObserver: (any NSObjectProtocol)?
+  #endif
   var onHandoff: (@MainActor () -> Void)?
   var onRelease: (@MainActor ([String: Any], UInt64) -> Void)?
 
   init(options: LaunchOptions, replay: Bool) {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("onboarding.window.create")
+    defer { pacingRegion?.end() }
+    #endif
     self.replay = replay
     residentBaseline = Self.residentBytes()
     let preparedSound = IntroSound(mode: IntroSound.Mode(rawValue: options.introSound) ?? .normal)
@@ -75,6 +82,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     window.contentView = intro
     window.setFrame(NSRect(origin: window.frame.origin, size: size), display: false)
     sound = preparedSound
+    #if OPEN_AUTOMATION
+    let dimRegion = IntroPacingTrace.begin("onboarding.dim.create")
+    #endif
     dim = OnboardingDimWindow(contentRect: screen?.frame ?? NSRect(origin: .zero, size: size),
       styleMask: [.borderless], backing: .buffered, defer: false)
     dim.backgroundColor = .black; dim.alphaValue = intro.reduceMotion ? 0.85 : 0
@@ -84,19 +94,57 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     super.init(window: window)
     window.delegate = self; window.center()
     window.addChildWindow(dim, ordered: .below)
+    #if OPEN_AUTOMATION
+    dimRegion?.end()
+    screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+      object: nil, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated {
+          let region = IntroPacingTrace.begin("screen.reconfiguration.notification")
+          defer { region?.end() }
+          self?.updateDimFrame()
+        }
+      }
+    #endif
     intro.onGetStarted = { [weak self] in self?.handoff() }
   }
   required init?(coder: NSCoder) { return nil }
 
   func windowDidMove(_ notification: Notification) { updateDimFrame() }
-  func windowDidChangeScreen(_ notification: Notification) { updateDimFrame() }
+  func windowDidChangeScreen(_ notification: Notification) {
+    #if OPEN_AUTOMATION
+    let region = IntroPacingTrace.begin("onboarding.window.screenChanged")
+    defer { region?.end() }
+    #endif
+    updateDimFrame()
+  }
+  #if OPEN_AUTOMATION
+  func windowDidChangeBackingProperties(_ notification: Notification) {
+    let region = IntroPacingTrace.begin("onboarding.window.backingChanged")
+    defer { region?.end() }
+    updateDimFrame()
+  }
+  #endif
   private func updateDimFrame() {
+    #if OPEN_AUTOMATION
+    let region = IntroPacingTrace.begin("onboarding.dim.updateFrame")
+    defer { region?.end() }
+    #endif
     if let screen = window?.screen { dim.setFrame(screen.frame, display: false) }
   }
-  isolated deinit { lifecycle.forEach { $0.cancel() } }
+  isolated deinit {
+    lifecycle.forEach { $0.cancel() }
+    #if OPEN_AUTOMATION
+    if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+    #endif
+  }
 
   func showIntro(measureFrames: Bool) {
+    #if OPEN_AUTOMATION
+    let region = IntroPacingTrace.begin("onboarding.window.show")
+    defer { region?.end() }
+    #endif
     guard let window else { return }
+    if measureFrames { intro.measureFramesFromFirstPresentation() }
     dim.orderFront(nil); showWindow(nil); window.makeKeyAndOrderFront(nil); window.makeFirstResponder(intro)
     guard !started else { return }; started = true
     window.displayIfNeeded()
@@ -105,6 +153,10 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
       let start = CACurrentMediaTime()+IntroTimeline.beat("syncLead").end
       sound.start(animationHostTime: start)
       intro.start(at: start, measureFrames: measureFrames)
+      #if OPEN_AUTOMATION
+      let dimRegion = IntroPacingTrace.begin("onboarding.dim.animate")
+      defer { dimRegion?.end() }
+      #endif
       if !intro.reduceMotion {
         NSAnimationContext.runAnimationGroup { context in
           context.duration = IntroTimeline.beat("dim").end

@@ -1,3 +1,6 @@
+#if OPEN_AUTOMATION
+import OpenOnboarding
+#endif
 import Foundation
 import OpenAdBlock
 import OpenEngine
@@ -33,6 +36,10 @@ final class AdBlockEngineAdapter {
   /// Compose with the sleep policy, which owns onProfileCreated. The task runs
   /// after BrowserModel inserts the Profile, including Undo and import swaps.
   func installProfilePolicy() {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("adblock.installProfilePolicy")
+    defer { pacingRegion?.end() }
+    #endif
     let previous = app.model.onProfileCreated
     app.model.onProfileCreated = { [weak self] profile in
       previous?(profile)
@@ -42,6 +49,10 @@ final class AdBlockEngineAdapter {
   }
 
   func startAfterPaint() {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("adblock.startAfterPaint")
+    defer { pacingRegion?.end() }
+    #endif
     guard !started, !app.shutdownPrepared else { return }
     started = true
     _ = app.stores.adBlock // Binds events before any Profile opens.
@@ -70,6 +81,10 @@ final class AdBlockEngineAdapter {
   }
 
   func contextCreated(_ context: OEBrowserContext, profileID: ProfileID) {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("adblock.contextCreated")
+    defer { pacingRegion?.end() }
+    #endif
     if context.originalContext != nil { otrContexts.add(context) }
     guard let profile = app.model.profile(id: profileID) else { return }
     openAfterPaint(profile)
@@ -85,6 +100,10 @@ final class AdBlockEngineAdapter {
   }
 
   private func configure(_ context: OEBrowserContext, directory: URL, enabled: Bool, excluded: [String]) {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("adblock.configure")
+    defer { pacingRegion?.end() }
+    #endif
     context.adBlockExcludedDomains = excluded
     context.adBlockListDirectory = directory
     context.isAdBlockEnabled = enabled

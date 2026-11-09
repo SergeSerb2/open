@@ -1,3 +1,6 @@
+#if OPEN_AUTOMATION
+import OpenOnboarding
+#endif
 import AppKit
 import OpenEngine
 import OpenFeatures
@@ -191,6 +194,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var pendingDialogs: [OEJavaScriptDialog] { pageChrome.dialogs.pendingDialogs }
 
   init(app: AppDelegate, state: BrowserWindowState, model: BrowserModel? = nil, incognitoSession: IncognitoSession? = nil) {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("factory.create")
+    defer { pacingRegion?.end() }
+    #endif
     self.app = app; windowState = state; self.model = model ?? app.model
     self.incognitoSession = incognitoSession
     super.init()
@@ -339,6 +346,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
   }
   func engineDidBecomeReady() {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("factory.engineDidBecomeReady")
+    defer { pacingRegion?.end() }
+    #endif
     for (id, url) in queuedNavigations { model.tab(id: id)?.url = url }
     queuedNavigations.removeAll()
     showSelection(focus: false)
@@ -448,6 +459,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Explicit action path for a page, private session, or ordered deletion.
   /// Read-only inspection must use context(for:create: false) instead.
   static func createRegularContext(profileID: ProfileID, directory: String, app: AppDelegate) -> OEBrowserContext? {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("profile.context.create")
+    defer { pacingRegion?.end() }
+    #endif
     guard app.engineReady else { return nil }
     let context: OEBrowserContext?
     if profileID == app.model.defaultProfile?.id {

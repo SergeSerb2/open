@@ -1,4 +1,5 @@
 #if OPEN_AUTOMATION
+import OpenOnboarding
 import AppKit
 import ObjectiveC.runtime
 import OpenDesign
@@ -6,6 +7,8 @@ import OpenSettings
 
 extension AutomationController {
   func runOnboarding(_ args: [String: Any]) async throws -> [String: Any] {
+    let pacingRegion = IntroPacingTrace.begin("automation.onboarding")
+    defer { pacingRegion?.end() }
     let action = args["action"] as? String ?? "state"
     let allowed: [String: Set<String>] = ["state": [], "skip-intro": [], "get-started": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
     guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,

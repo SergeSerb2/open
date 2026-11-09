@@ -46,9 +46,43 @@ def run(factory, results, tmp, h):
         negatives[name] = dict(ok=rejected, expected='FAIL', observed=broken)
         results[name+'_negative'] = dict(ok=rejected, expected='FAIL', load=os.getloadavg())
 
+    def frames(measured):
+        stats = measured['frameStats']; load = os.getloadavg()
+        print('intro frames p50=%.3f p95=%.3f max=%.3f drops=%d count=%d load1=%.2f nominal=%.3f' %
+              (stats['p50MS'], stats['p95MS'], stats['maxMS'], stats['drops'], stats['count'], load[0], stats['nominalMS']), flush=True)
+        for stall in measured.get('stalls', []):
+            if stall['ms'] > 16:
+                print('intro stall %.6f..%.6f %.3f ms %s' %
+                      (stall['start'], stall['end'], stall['ms'], ', '.join(stall['regions'])), flush=True)
+        stalls = measured.get('stalls')
+        (evidence/'intro-frames.json').write_text(json.dumps(measured, indent=2))
+        results['stall_trace'] = dict(ok=isinstance(stalls, list) and len(stalls)==stats['drops']
+            and all(s['end'] > s['start'] and s['ms'] > 1.5*stats['nominalMS'] and s['regions'] for s in stalls)
+            and not measured.get('traceOverflow', True), state=measured, load=load)
+        if 'Apple M5' in h.subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True) and load[0] <= 12 and stats['nominalMS'] <= 8.34:
+            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), timing=True, stats=stats, load=load)
+        else:
+            results['strict_120hz'] = dict(status='INFO', reason='requires M5 120 Hz and load1 <= 12', stats=stats, load=load)
+
     try:
         h._restore_defaults(None, {key: None for key in keys})
         launch('--measure-intro-frames')
+        if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1':
+            # The App measures from the first presented room frame. Leave
+            # the main thread alone: no screenshots, keys or state polling in
+            # the eight-second window. This is the same strict pacing gate.
+            deadline = time.monotonic()+8.5
+            if os.environ.get('OPEN_E2E_ONBOARDING_SNAPSHOT_CONTROL') == '1':
+                # A/B control: identical product launch and idle frame window,
+                # with exactly the original suite's mid-intro PNG capture.
+                time.sleep(1.7)
+                app.call('snapshot', path=str(evidence/'intro-native-control.png'))
+            time.sleep(max(0, deadline-time.monotonic()))
+            measured = state()
+            frames(measured)
+            results['frame_window_completed'] = dict(ok=measured['frameStats']['count'] >= 30
+                and not measured['frameStats']['running'], load=os.getloadavg())
+            return
         before = state()
         intro = elapsed(.3)
         # Native Return/Space reach OEApplication, and cannot advance early.
@@ -78,13 +112,7 @@ def run(factory, results, tmp, h):
         measured = phase2
         # At 3 s, task_info must report an actual resident delta.
         gate('resident_3_seconds', lambda s: isinstance(s.get('residentDelta3Seconds'), int), phase1, intro)
-        stats = measured['frameStats']; load = os.getloadavg()
-        print('intro frames p50=%.3f p95=%.3f max=%.3f drops=%d count=%d load1=%.2f nominal=%.3f' %
-              (stats['p50MS'], stats['p95MS'], stats['maxMS'], stats['drops'], stats['count'], load[0], stats['nominalMS']), flush=True)
-        if 'Apple M5' in h.subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True) and load[0] <= 12 and stats['nominalMS'] <= 8.34:
-            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), timing=True, stats=stats, load=load)
-        else:
-            results['strict_120hz'] = dict(status='INFO', reason='requires M5 120 Hz and load1 <= 12', stats=stats, load=load)
+        frames(measured)
         paused = elapsed(23.7)
         gate('idle_pauses', lambda s: s.get('ambientPaused') is True, paused, phase1)
         app.call('onboarding', action='get-started')

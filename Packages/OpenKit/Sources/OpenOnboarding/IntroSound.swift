@@ -2,6 +2,9 @@ import AppKit
 import AVFoundation
 import CoreAudio
 import QuartzCore
+#if DEBUG || OPEN_AUTOMATION
+import os.signpost
+#endif
 
 /// AVAudioPlayer ownership transfers once from the preparation worker to main.
 private final class PreparedIntroPlayer: @unchecked Sendable {
@@ -46,6 +49,10 @@ public final class IntroSound {
 
     /// Completes once, within 300 ms. Late preparation is discarded and released.
     public func prepare(_ completion: @escaping @MainActor () -> Void) {
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("sound.prepare.main")
+        defer { pacingRegion?.end() }
+        #endif
         if resolved { completion(); return }
         onPrepared = completion
         guard preparation == nil else { return }
@@ -60,7 +67,23 @@ public final class IntroSound {
         let silent = mode == .silent
         let prepareDeadline = CACurrentMediaTime()+IntroTimeline.beat("soundDeadline").end
         let worker = Task.detached(priority: .userInitiated) { () -> PreparedIntroPlayer? in
-                guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+                let prepared: AVAudioPlayer?
+                do {
+                    #if DEBUG || OPEN_AUTOMATION
+                    let log = OSLog(subsystem: "io.github.sergeserb2.open", category: "IntroPacing")
+                    let id = OSSignpostID(log: log)
+                    os_signpost(.begin, log: log, name: "IntroAudioPlayerInit", signpostID: id)
+                    defer { os_signpost(.end, log: log, name: "IntroAudioPlayerInit", signpostID: id) }
+                    #endif
+                    prepared = try? AVAudioPlayer(contentsOf: url)
+                }
+                guard let player = prepared else { return nil }
+                #if DEBUG || OPEN_AUTOMATION
+                let log = OSLog(subsystem: "io.github.sergeserb2.open", category: "IntroPacing")
+                let prepareID = OSSignpostID(log: log)
+                os_signpost(.begin, log: log, name: "IntroAudioPrepare", signpostID: prepareID)
+                defer { os_signpost(.end, log: log, name: "IntroAudioPrepare", signpostID: prepareID) }
+                #endif
                 // Set before prepare/play, so no automated run can emit a sample.
                 player.volume = silent ? 0 : 0.5
                 guard player.prepareToPlay() else { return nil }
@@ -88,6 +111,10 @@ public final class IntroSound {
     /// deviceCurrentTime and CA time are sampled together; both schedules share
     /// one lead. The receipt records their actual host-clock conversion.
     public func start(animationHostTime: Double) {
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("sound.start.main")
+        defer { pacingRegion?.end() }
+        #endif
         guard let player else { return }
         let host = CACurrentMediaTime(), device = player.deviceCurrentTime
         let deviceStart = device + max(0, animationHostTime - host)

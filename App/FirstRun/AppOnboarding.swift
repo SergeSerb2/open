@@ -1,4 +1,5 @@
 import AppKit
+import OpenOnboarding
 
 extension AppDelegate {
   /// This is the only production entrance into OpenOnboarding. Returning and
@@ -9,6 +10,11 @@ extension AppDelegate {
     }
     guard replay || !onboardingHandedOff else { return }
     onboardingWindowController?.stop()
+    #if OPEN_AUTOMATION
+    IntroPacingTrace.current = options.measureIntroFrames ? IntroPacingTrace() : nil
+    let pacingRegion = IntroPacingTrace.begin("onboarding.controller.create")
+    defer { pacingRegion?.end() }
+    #endif
     let controller = OnboardingWindowController(options: options, replay: replay)
     onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
     controller.onHandoff = { [weak self] in
