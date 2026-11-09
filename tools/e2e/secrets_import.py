@@ -63,7 +63,13 @@ def run(factory, results, tmp, h):
             'Change Profile warning missing', 'Profile reassignment did not finish',
             'Profile deletion sheet missing',
         }
+        safe_runtime_errors = {
+            'first-run: Passwords copy reference requires capability OFF': 'wizard copy reference not ready',
+            'first-run: wizard is busy': 'wizard still busy',
+        }
         detail = ': ' + str(error) if isinstance(error, AssertionError) and str(error) in safe_assertions else ''
+        if isinstance(error, RuntimeError) and str(error) in safe_runtime_errors:
+            detail = ': ' + safe_runtime_errors[str(error)]
         raise RuntimeError('synthetic secrets suite stopped: ' + type(error).__name__ + detail) from None
 
 

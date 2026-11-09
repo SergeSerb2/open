@@ -4670,8 +4670,10 @@ def startup_failure_checks(factory, results, tmp):
             and timing["engineStart"] >= timing["firstFrameWaitTimedOut"] and "engineStarted" in timing
             and unconfirmed.eval(tab["id"], "document.title") == "Unconfirmed frame",
             "timing": timing, "hosts": unconfirmed.call("host-counts")}
-        results["launch_waiter_early_exit"] = {"ok": unconfirmed.launch_waiter_ended_before_automation
+        results["launch_waiter_early_exit"] = {"ok": not unconfirmed.direct_child
+            and unconfirmed.launch_waiter_ended_before_automation
             and unconfirmed.proc.poll() == 0 and check_page(unconfirmed, tab["id"], "Unconfirmed frame"),
+            "directAppChild": unconfirmed.direct_child,
             "launcherExit": unconfirmed.proc.returncode,
             "waiterEndedBeforeAutomation": unconfirmed.launch_waiter_ended_before_automation,
             "actualAppPID": unconfirmed.pid}
