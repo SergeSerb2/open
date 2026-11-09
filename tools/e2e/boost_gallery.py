@@ -89,6 +89,7 @@ def run(factory, results, tmp, env):
     def font(tab):
         return app.eval(tab, "getComputedStyle(document.querySelector('h1')).fontFamily")
     def profile(name):
+        (Path(tmp) / 'gallery-before-profile.json').write_text(json.dumps(ui(), indent=2))
         ui('profile', name=name)
         assert wait(lambda: state()['boostsProfile'] == (profile_a if name == name_a else profile_b), timeout=5)
     def enabled():
@@ -155,7 +156,12 @@ def run(factory, results, tmp, env):
                 gallery(); profile(name_b); browser(); app.call('menu-perform', id='boost-gallery')
                 assert state()['boostsProfile'] == profile_a, state()
                 assert 'boosts.' + first + '.card' in ids()
-                return {'visibleLibraryBOverriddenByBrowserA': True}
+                app.call('library-close'); browser(); app.call('space', space=space_b)
+                app.call('menu-perform', id='boost-gallery')
+                assert state()['boostsProfile'] == profile_b, state()
+                assert not any(id.endswith('.card') for id in ids())
+                browser()
+                return {'visibleLibraryBOverriddenByBrowserA': True, 'closedLibraryFromB': True}
             row('F1_browser_profile', f1_browser)
             def f1_editor():
                 gallery(); profile(name_b); browser(); app.call('select', tab=tab_a)
@@ -191,6 +197,8 @@ def run(factory, results, tmp, env):
                 profile(name_a); assert all('boosts.' + id + '.card' in ids() for id in [first, second])
                 app.call('snapshot', window=state()['library'], path=str(Path(tmp) / 'gallery-rest.png'))
                 env['shot'](app, 'boost-gallery-rest.png', window=state()['library'])
+                app.call('mouse', action='hover', window=state()['library'], x=300, y=150)
+                env['shot'](app, 'boost-gallery-hover.png', window=state()['library'])
                 return {'liveToggleOffOn': True, 'otherSiteUnchanged': True, 'searchAndProfiles': True}
             row('BG2_cards_toggle', bg2)
             def f4_toggle():
