@@ -15,6 +15,10 @@ extension AutomationController {
     guard let owner = settings ? app.settingsPresenter.settingsPresenter.window : app.settingsPresenter.libraryPresenter?.window,
       owner.isVisible else { throw Failure(message: "requested window is not visible") }
     if action != "state" { try await activateForInput(owner) }
+    // SwiftUI lazily materializes its AX tree for enhanced clients. Use the
+    // same in-process opt-in as the existing Profile automation checks.
+    let enhanced = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+    if NSApp.responds(to: enhanced) { NSApp.perform(enhanced, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
 
     func string(_ object: NSObject, _ name: String) -> String {
       let selector = NSSelectorFromString(name)
