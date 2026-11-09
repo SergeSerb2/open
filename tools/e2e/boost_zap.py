@@ -25,8 +25,12 @@ class PickerFlow:
 
     def enter(self, select=False):
         control = "editor.code.pick" if select else "editor.tool.zap"
-        assert self.wait_until(lambda: any(c["id"] == control and c["enabled"]
-                                          for c in self.state()["controls"]), timeout=10, step=.02), "picker control did not enable"
+        enabled = self.wait_until(lambda: any(c["id"] == control and c["enabled"]
+                                             for c in self.state()["controls"]), timeout=10, step=.02)
+        if not enabled:
+            state = self.state()
+            raise AssertionError("picker control did not enable: " + json.dumps({
+                k: state.get(k) for k in ("open", "active", "mode", "colorsReady", "zapAvailable", "controls")}))
         self.tap(control)
         assert self.wait_until(self.active, timeout=5, step=.02), "picker did not enter"
 
