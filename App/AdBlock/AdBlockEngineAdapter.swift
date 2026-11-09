@@ -84,8 +84,8 @@ final class AdBlockEngineAdapter {
 
   /// Also configure Default when launch has no selected page yet. No context is created here.
   func engineDidInitialize() {
-    guard let profile = app.model.defaultProfile, let context = OEEngine.shared.defaultContext else { return }
-    contextCreated(context, profileID: profile.id)
+    guard let profile = app.model.defaultProfile else { return }
+    contextCreated(OEEngine.shared.defaultContext, profileID: profile.id)
   }
 
   func startAfterPaint() {
