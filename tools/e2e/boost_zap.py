@@ -255,6 +255,8 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
             def unavailable():
                 app.call("navigate", tab=tab, url="about:blank");app.call("wait", tab=tab)
                 assert app.call("boost-editor", action="zap-available", tab=tab) is False
+                # Keep a caller window while querying the now-closed bound tab.
+                env["new_tab"](app, origin+"/zap.html")
                 app.call("close", tab=tab)
                 assert app.call("boost-editor", action="zap-available", tab=tab) is False
                 return {"internal":False,"closed":False}
