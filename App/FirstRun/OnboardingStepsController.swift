@@ -48,7 +48,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private let panel = OnboardingPanel()
   private let titleLabel = NSTextField(wrappingLabelWithString: "")
   private let descriptionLabel = NSTextField(wrappingLabelWithString: "")
-  private let controls = OnboardingSurface()
+  private let controls = OnboardingControls()
   private let footer = OnboardingSurface()
   let preview = OnboardingPreview()
   private var host: NSHostingController<FirstRunView>?
@@ -57,6 +57,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var backButton: OnboardingButton?
   private var nameField: NSTextField?
   private var favoriteButtons: [OnboardingFavoriteButton] = []
+  private var favoriteCounter: NSTextField?
   private var blockerSwitch: NSSwitch?
   private var cardButtons: [OnboardingButton] = []
   private var presetStrip: PresetStripView?
@@ -103,7 +104,9 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     let titleHeight = titleLabel.cell?.cellSize(forBounds: titleLabel.frame).height ?? 40
     titleLabel.frame.size.height = min(112, titleHeight)
     descriptionLabel.frame = NSRect(x: 56, y: titleLabel.frame.maxY+12, width: width-112, height: 66)
-    controls.frame = NSRect(x: 56, y: descriptionLabel.frame.maxY+32, width: width-112, height: max(40, view.bounds.height-descriptionLabel.frame.maxY-32-112))
+    let controlsY = step == .favorites ? descriptionLabel.frame.minY + min(descriptionLabel.frame.height,
+      descriptionLabel.cell?.cellSize(forBounds: descriptionLabel.frame).height ?? 36) + 36 : descriptionLabel.frame.maxY+32
+    controls.frame = NSRect(x: 56, y: controlsY, width: width-112, height: max(40, view.bounds.height-controlsY-112))
     footer.frame = NSRect(x: 56, y: view.bounds.height-88, width: width-112, height: 40)
     backButton?.frame = NSRect(x: 0, y: 4, width: 32, height: 32)
     skipButton?.frame = NSRect(x: step == .name ? 0:44, y: 0, width: 130, height: 40)
@@ -149,7 +152,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     controls.subviews.forEach { $0.removeFromSuperview() }; footer.subviews.forEach { $0.removeFromSuperview() }
     cardButtons.forEach { $0.removeFromSuperview() }; cardButtons.removeAll()
     if step != .ready { confetti?.removeFromSuperlayer(); confetti = nil }
-    nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; favoriteButtons = []; blockerSwitch = nil
+    nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; favoriteButtons = []; favoriteCounter = nil; blockerSwitch = nil
     titleLabel.stringValue = stepTitle; descriptionLabel.stringValue = detail
     if step == .importData {
       let host = NSHostingController(rootView: FirstRunView(model: firstRun, startsProbe: false, embeddedImport: true))
@@ -165,10 +168,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       for (index, site) in Self.sites.enumerated() {
         let tile = OnboardingFavoriteButton(site.name, primary: false, reduceMotion: reduceMotion) { [weak self] in self?.toggleFavorite(index) }
         tile.setAccessibilityRole(.checkBox)
+        tile.iconView.arrivalDelay = min(0.18, Double(index)*0.018)
         tile.applyIcon(icons.tiles[index], animated: false); tile.selected = selectedFavorites.contains(index)
-        tile.frame = NSRect(x: (index%4)*100, y: (index/4)*88, width: 88, height: 76)
+        tile.frame = NSRect(x: (index%4)*100, y: (index/4)*96, width: 88, height: 84)
         controls.addSubview(tile); favoriteButtons.append(tile)
       }
+      let counter = NSTextField(labelWithString: "")
+      counter.font = .systemFont(ofSize: 12, weight: .medium); counter.textColor = .secondaryLabelColor
+      counter.frame = NSRect(x: 0, y: 292, width: 388, height: 18); controls.addSubview(counter); favoriteCounter = counter
     }
     if step == .theme {
       let strip = PresetStripView(frame: NSRect(x: 0, y: 0, width: 360, height: 32))
@@ -334,7 +341,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     guard Self.sites.indices.contains(index) else { return }
     if !selectedFavorites.insert(index).inserted { selectedFavorites.remove(index) }
     if favoriteButtons.indices.contains(index) { favoriteButtons[index].selected = selectedFavorites.contains(index) }
-    updatePreview(); if !reduceMotion { let spring = CASpringAnimation(keyPath: "transform.scale"); spring.fromValue = 0.96; spring.toValue = 1; spring.mass = 1; spring.stiffness = pow(2 * .pi / 0.3, 2); spring.damping = 2*0.7*sqrt(spring.stiffness); spring.duration = spring.settlingDuration; preview.layer?.add(spring, forKey: "favorites") }
+    updatePreview()
   }
   func setBlocker(_ on: Bool) { blocker = on; blockerSwitch?.state = on ? .on:.off; updatePreview() }
   @objc private func blockerChanged(_ sender: NSSwitch) { setBlocker(sender.state == .on) }
@@ -378,7 +385,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       Task { @MainActor [weak self] in guard let self, observationGeneration == generation else { return }; if step == .importData { render(direction: 0) } else if step == .ready || step == .defaultBrowser { statusLabel?.stringValue = step == .ready ? firstRun.errorText ?? "":defaultOutcome }; updatePreview(); observeImport() }
     }
   }
-  private func updatePreview() { preview.update(step: step.rawValue, name: name, favorites: selectedFavorites.sorted().map { (Self.sites[$0].name, icons.tiles[$0]) }, count: firstRun.outcome?.importedCount("Imported tabs") ?? firstRun.probe?.sidebarItems ?? 0, report: firstRun.step == .report, blocker: blocker, card: card, reduceMotion: reduceMotion) }
+  private func updatePreview() {
+    let countText = selectedFavorites.isEmpty ? "None selected" : "\(selectedFavorites.count) selected"
+    if favoriteCounter?.stringValue != countText {
+      favoriteCounter?.stringValue = countText
+      if let favoriteCounter { NSAccessibility.post(element: favoriteCounter, notification: .valueChanged) }
+    }
+    preview.update(step: step.rawValue, name: name, favorites: selectedFavorites.sorted().map { (Self.sites[$0].name, icons.tiles[$0]) }, count: firstRun.outcome?.importedCount("Imported tabs") ?? firstRun.probe?.sidebarItems ?? 0, report: firstRun.step == .report, blocker: blocker, card: card, reduceMotion: reduceMotion)
+  }
   private func celebrate() {
     confettiPlayed = true
     let emitter = CAEmitterLayer(); emitter.emitterShape = .line
@@ -411,7 +425,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
         "iconWindowFrame": button.map { b in
           let r = b.iconView.convert(b.iconView.bounds, to: nil)
           return [r.minX, r.minY, r.width, r.height]
-        } ?? [], "iconFrame": [28, 8, 32, 32], "fadeDuration": button?.iconView.fadeDuration ?? 0]
+        } ?? [], "iconFrame": [28, 12, 32, 32], "fadeDuration": button?.iconView.fadeDuration ?? 0,
+        "style": button?.styleState ?? [:], "arrivalDelay": button?.iconView.arrivalDelay ?? 0]
     }
   }
   private var cardState: [String: Any] {
@@ -423,7 +438,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
           "frame": [button.frame.minX, button.frame.minY, button.frame.width, button.frame.height]]
       }]
   }
-  var state: [String: Any] { ["screen": step.rawValue, "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
+  var state: [String: Any] { ["screen": step.rawValue, "favoritePreview": preview.favoriteState, "favoriteCountLabel": favoriteCounter?.stringValue ?? "", "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
     var result: [[String: String]] = []
     if root is NSButton || root is NSSwitch || (root as? NSTextField)?.isEditable == true || root is ThemeEditorButton || root is PresetSwatchView || root is OpenSpaceEditor.ColorPadView { result.append(["role": root.accessibilityRole()?.rawValue ?? "", "label": root.accessibilityLabel() ?? (root as? NSButton)?.title ?? ""]) }
@@ -436,6 +451,9 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   override var isFlipped: Bool { true }
   override var acceptsFirstResponder: Bool { true }
   override func cancelOperation(_ sender: Any?) { onEscape?() }
+}
+@MainActor private final class OnboardingControls: OnboardingSurface {
+  override var wantsDefaultClipping: Bool { false }
 }
 @MainActor private final class OnboardingPanel: OnboardingSurface {
   override func draw(_ rect: NSRect) { (effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 30/255, alpha: 1):.white).setFill(); bounds.fill() }
@@ -456,12 +474,17 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
 }
 
 @MainActor class OnboardingButton: NSButton {
+  static var primaryBlue: NSColor { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1) }
   let prominent: Bool
   let reduceMotion: Bool
   var usesLightInk = false
   var circular = false
   private let press: @MainActor () -> Void
   private var hovered = false
+  var interactionHoverScale: Double { 1.02 }
+  var interactionPressedScale: Double { 0.98 }
+  var interactionDuration: Double? { nil }
+  func interactionHoverChanged(_ hovered: Bool) {}
   private var circularGlyph: NSImage?
   init(_ title: String, primary: Bool, reduceMotion: Bool, action: @escaping @MainActor () -> Void) {
     prominent = primary; self.reduceMotion = reduceMotion; press = action
@@ -484,13 +507,23 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   @objc private func invoke() { guard isEnabled else { return }; press() }
   override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; invoke(); return true }
   override func updateTrackingAreas() { super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea); addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)) }
-  override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true; animateScale(1.02) }
-  override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true; animateScale(1) }
-  override func mouseDown(with event: NSEvent) { animateScale(0.98); super.mouseDown(with: event); animateScale(hovered ? 1.02:1) }
-  private func animateScale(_ value: Double) { guard !reduceMotion, isEnabled else { return }; let spring = CASpringAnimation(keyPath: "transform.scale"); spring.fromValue = layer?.presentation()?.value(forKeyPath: "transform.scale") ?? 1; spring.toValue = value; spring.mass = 1; spring.stiffness = pow(2 * .pi / 0.3, 2); spring.damping = 2*0.45*sqrt(spring.stiffness); spring.duration = spring.settlingDuration; spring.fillMode = .forwards; spring.isRemovedOnCompletion = false; layer?.add(spring, forKey: "button-scale") }
+  override func mouseEntered(with event: NSEvent) { hovered = true; interactionHoverChanged(true); needsDisplay = true; animateScale(interactionHoverScale) }
+  override func mouseExited(with event: NSEvent) { hovered = false; interactionHoverChanged(false); needsDisplay = true; animateScale(1) }
+  override func mouseDown(with event: NSEvent) { animateScale(interactionPressedScale); super.mouseDown(with: event); animateScale(hovered ? interactionHoverScale:1) }
+  private func animateScale(_ value: Double) {
+    guard !reduceMotion, isEnabled else { return }
+    if let interactionDuration {
+      let animation = CABasicAnimation(keyPath: "transform.scale")
+      animation.fromValue = layer?.presentation()?.value(forKeyPath: "transform.scale") ?? 1; animation.toValue = value
+      animation.duration = interactionDuration; animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+      animation.fillMode = .forwards; animation.isRemovedOnCompletion = false; layer?.add(animation, forKey: "button-scale")
+    } else {
+      let spring = CASpringAnimation(keyPath: "transform.scale"); spring.fromValue = layer?.presentation()?.value(forKeyPath: "transform.scale") ?? 1; spring.toValue = value; spring.mass = 1; spring.stiffness = pow(2 * .pi / 0.3, 2); spring.damping = 2*0.45*sqrt(spring.stiffness); spring.duration = spring.settlingDuration; spring.fillMode = .forwards; spring.isRemovedOnCompletion = false; layer?.add(spring, forKey: "button-scale")
+    }
+  }
   override func draw(_ dirtyRect: NSRect) {
     if circular { NSColor.white.withAlphaComponent(hovered ? 0.24:0.16).setFill(); NSBezierPath(ovalIn: bounds).fill() }
-    if prominent { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: isEnabled ? 1:0.4).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 20, yRadius: 20).fill() }
+    if prominent { Self.primaryBlue.withAlphaComponent(isEnabled ? 1:0.4).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 20, yRadius: 20).fill() }
     if title == "Back" { NSColor.quaternaryLabelColor.withAlphaComponent(0.12).setFill(); NSBezierPath(ovalIn: bounds).fill() }
     if imagePosition == .imageOnly, let image {
       let tinted: NSImage
@@ -507,34 +540,5 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     }
     else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: prominent ? NSColor.white : NSColor.secondaryLabelColor, .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
     if window?.firstResponder === self { NSColor.keyboardFocusIndicatorColor.setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 18, yRadius: 18); path.lineWidth = 2; path.stroke() }
-  }
-}
-@MainActor private final class OnboardingFavoriteButton: OnboardingButton {
-  var selected = false { didSet { setAccessibilityValue(selected ? 1:0); needsDisplay = true } }
-  let iconView = OnboardingSiteIconView(frame: NSRect(x: 28, y: 8, width: 32, height: 32))
-  override init(_ title: String, primary: Bool, reduceMotion: Bool, action: @escaping @MainActor () -> Void) {
-    super.init(title, primary: primary, reduceMotion: reduceMotion, action: action)
-    // NSButtonCell's automatic text focus mask crosses the middle of this
-    // custom tile. Draw focus around the tile instead.
-    focusRingType = .none; addSubview(iconView)
-  }
-  required init?(coder: NSCoder) { nil }
-  override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); needsDisplay = true; return accepted }
-  override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); needsDisplay = true; return accepted }
-  func applyIcon(_ tile: OnboardingFavicons.Tile, animated: Bool) {
-    iconView.apply(name: title, tile: tile, animated: animated, reduceMotion: reduceMotion)
-  }
-  override func layout() { super.layout(); iconView.frame = NSRect(x: bounds.midX-16, y: 8, width: 32, height: 32) }
-  override func draw(_ dirtyRect: NSRect) {
-    NSColor.quaternaryLabelColor.withAlphaComponent(0.08).setFill(); let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 10, yRadius: 10); outline.fill()
-    if selected { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1).setStroke(); outline.lineWidth = 2; outline.stroke() }
-    if window?.firstResponder === self {
-      NSColor.keyboardFocusIndicatorColor.setStroke()
-      let focus = NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 4), xRadius: 7, yRadius: 7)
-      focus.lineWidth = 1.5; focus.stroke()
-    }
-    let style = NSMutableParagraphStyle(); style.alignment = .center; style.lineBreakMode = .byWordWrapping
-    (title as NSString).draw(in: NSRect(x: 2, y: 44, width: bounds.width-4, height: 30), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.labelColor, .paragraphStyle: style])
-    if selected { ("✓" as NSString).draw(at: NSPoint(x: bounds.width-19, y: 3), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .bold), .foregroundColor: NSColor.systemBlue]) }
   }
 }

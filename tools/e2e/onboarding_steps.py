@@ -449,7 +449,8 @@ def run_favorite_icons(factory, results, tmp, h):
     def stable(before, after):
         lhs, rhs = before.get('favoriteTiles',[]), after.get('favoriteTiles',[])
         return len(lhs)==len(rhs)==12 and all(a['frame']==b['frame'] and a['iconWindowFrame']==b['iconWindowFrame']
-            and a['iconFrame']==b['iconFrame']==[28,8,32,32] for a,b in zip(lhs,rhs))
+            and a['iconFrame']==b['iconFrame']==[28,12,32,32]
+            and a['frame'][2:]==b['frame'][2:]==[88,84] for a,b in zip(lhs,rhs))
     def row(name, ok, **data):
         results['favorite_icons_'+name] = dict(ok=bool(ok), load=os.getloadavg(), **data)
     try:
@@ -472,12 +473,26 @@ def run_favorite_icons(factory, results, tmp, h):
             for t in network['favoriteTiles'] if t['iconState']=='icon'), state=network)
         focus = state()
         row('selected_focused', focus['favoriteTiles'][0]['focused'] and 0 in focus['favorites'], state=focus)
+        preview = focus['favoritePreview']
+        empty_preview = initial['favoritePreview']
+        preview_shape = lambda p: p['size']==[200,440] and p['radius']==16 and p['headerHeight']==28 \
+            and p['columns']==4 and p['tileSize']==[40,40] and p['gap']==8 and p['ghostRows']==3
+        row('preview', preview_shape(preview) and preview['selectedCount']==2 and preview['emptySlots']==0
+            and all(item['frame'][2:]==[40,40] for item in preview['items']), state=preview)
+        row('preview_empty', preview_shape(empty_preview) and empty_preview['emptySlots']==8 and empty_preview['selectedCount']==0,
+            state=empty_preview)
+        row('preview_empty_negative', not (preview['emptySlots']==8 and preview['selectedCount']==0), expected='FAIL')
+        row('tile_style', all(t['style']['tileSize']==[88,84] and t['style']['radius']==14
+            and t['style']['focusOutset']==3 and t['style']['focusWidth']==3 and t['style']['focusRadius']==19
+            and t['style']['badgeDiameter']==18 and t['style']['badgeOffset']==4
+            and t['style']['pressedScale']==.97 and t['style']['hoverDuration']==.12 for t in focus['favoriteTiles']), state=focus)
+        row('selection_counter', initial['favoriteCountLabel']=='None selected' and focus['favoriteCountLabel']=='2 selected')
         x,y,w,hgt = focus['favoriteTiles'][0]['windowFrame']
         scale = focus['backingScale']
         for appearance, shot in shots.items():
             path = evidence/('favorites-selected-focused-'+appearance+'.png')
-            h.subprocess.run(['sips', '-c', str(round(hgt*scale)), str(round(w*scale)), '--cropOffset',
-                str(round(shot['size'][1]-(y+hgt)*scale)), str(round(x*scale)), shot['path'], '--out', str(path)],
+            h.subprocess.run(['sips', '-c', str(round((hgt+32)*scale)), str(round((w+32)*scale)), '--cropOffset',
+                str(round(shot['size'][1]-(y+hgt+16)*scale)), str(round((x-16)*scale)), shot['path'], '--out', str(path)],
                 check=True, capture_output=True)
         # Move focus through the native key path. The tile interior must not
         # change: the focus indicator belongs only around its outside edge.
@@ -495,6 +510,25 @@ def run_favorite_icons(factory, results, tmp, h):
             # more; retain the measured maximum instead of exact byte identity.
             delta = max(max(abs(aa-bb) for aa,bb in zip(a(px,py),b(px,py))) for px,py in points)
             focus_deltas.append(delta); focus_checks.append(delta<=1)
+        outside_deltas = []
+        badge_pixels = []
+        absent_badge_pixels = []
+        for appearance in shots:
+            _,height,a = h.read_image(shots[appearance]['path'],srgb=True)
+            _,_,b = h.read_image(unfocused[appearance]['path'],srgb=True)
+            px,py = round((x-4.5)*scale),round(height-(y+hgt/2)*scale)
+            outside_deltas.append(max(abs(aa-bb) for aa,bb in zip(a(px,py),b(px,py))))
+            def blue_badge(tile):
+                bx,by,bw,bh = tile['windowFrame']
+                points = [a(round((bx+bw+4+dx)*scale),round(height-(by+bh+4+dy)*scale))
+                    for dx in range(-7,8) for dy in range(-7,8) if dx*dx+dy*dy<=49]
+                return sum(p[2]>p[0]+40 and p[2]>p[1]+20 for p in points)
+            badge_pixels.append(blue_badge(focus['favoriteTiles'][0]))
+            absent_badge_pixels.append(blue_badge(focus['favoriteTiles'][1]))
+        row('focus_outside', all(delta>=15 for delta in outside_deltas), observed=outside_deltas)
+        row('focus_outside_negative', not all(delta<=1 for delta in outside_deltas), expected='FAIL')
+        row('selection_badge', all(count>=60 for count in badge_pixels), observed=badge_pixels)
+        row('selection_badge_negative', not all(count>=60 for count in absent_badge_pixels), expected='FAIL', observed=absent_badge_pixels)
         row('focus_border', all(focus_checks) and not state()['favoriteTiles'][0]['focused'],
             observed=focus_deltas, maximumChannelDifference=1)
         _,height,light = h.read_image(shots['light']['path'],srgb=True)
@@ -511,7 +545,8 @@ def run_favorite_icons(factory, results, tmp, h):
         row('prefetch_bounds', fetch['introElapsedWhenStarted']>=3.3 and fetch['siteTimeoutSeconds']==6
             and fetch['overallTimeoutSeconds']==12 and fetch['concurrency']==6, observed=fetch)
         fade = [t['fadeDuration'] for t in network['favoriteTiles'] if t['iconState']=='icon']
-        row('fade', bool(fade) and all(v in (0,.25) for v in fade) and .25 in fade, observed=fade)
+        row('fade', bool(fade) and all(v in (0,.2) for v in fade) and .2 in fade
+            and all(abs(t['arrivalDelay']-min(.18,t['index']*.018))<1e-9 for t in network['favoriteTiles']), observed=fade)
         database = Path(app.user_data)/'State/favicons.sqlite3'
         with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
             before_store = list(db.execute('SELECT origin,png64,fetched_at FROM favicons WHERE status=0 ORDER BY origin'))
@@ -557,7 +592,7 @@ def run_favorite_icons(factory, results, tmp, h):
         receipts['blocked'] = dict(initial=blocked_initial, final=blocked, captures=blocked_shots)
         row('blocked', monograms(blocked) and blocked['faviconFetch']['requests']==0
             and all(p['spread']>25 for shot in blocked_shots.values() for p in shot['pixels']), state=blocked, captures=blocked_shots)
-        row('monogram_contrast', all(t['monogramContrast']>=3 for t in blocked['favoriteTiles']),
+        row('monogram_contrast', all(t['monogramContrast']>=4.5 for t in blocked['favoriteTiles']),
             observed=[dict(name=t['name'],color=t['monogramColor'],contrast=t['monogramContrast']) for t in blocked['favoriteTiles']])
         row('network_negative', not quality(blocked), expected='FAIL', state=blocked)
         row('blocked_negative', not monograms(network), expected='FAIL', state=network)
@@ -568,7 +603,8 @@ def run_favorite_icons(factory, results, tmp, h):
         reduced = state()
         reduced_icons = [t for t in reduced['favoriteTiles'] if t['iconState']=='icon']
         row('reduce_motion', bool(reduced_icons) and all(t['fadeDuration']==0 for t in reduced_icons)
-            and stable(reduced_initial,reduced), state=reduced)
+            and stable(reduced_initial,reduced) and all(not t['style']['badgeScales'] for t in reduced['favoriteTiles'])
+            and not reduced['favoritePreview']['arrivalScales'], state=reduced)
         row('reduce_motion_negative', not all(t['fadeDuration']==0 for t in network['favoriteTiles'] if t['iconState']=='icon'), expected='FAIL')
         receipts['reduced'] = reduced
     finally:
