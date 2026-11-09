@@ -479,6 +479,15 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 
 Site Control review proofs also use `site-controls action=permission-index` to await the current Profile's pending permission-index task (no permission read/decision is made). `action=adblock-state` reads the existing store's binding, Profile availability, enabled flag and `shouldBlock` for the panel host without creating a store. For the stale-callback proof only, `capture-content-blocking` retains one available tile and its tab, `set-adblock-excluded excluded=<bool>` changes the real store for the normal panel's host, and `toggle-captured-content-blocking` consumes that tile through the real panel `onToggle` callback after checking its tab. These commands exist only in the automation build; they do not change the shipping interaction path.
 
+S2 uses the shipped EasyList rule `||demand.supply^$script`. The suite checks the
+list's pinned hash and maps `demand.supply` to its local fixture server, with
+proxies disabled. The ad request never goes to that public host. It records
+initial blocking after the native lists load, then keeps the existing Off /
+reload / allowed and On / reload / blocked assertions. The old same-origin
+`/ad.js` URL matched no shipped rule and failed on branch and unchanged main;
+the S12 lead ruled it a fixture defect at 12:40 on 2026-11-09. Restoring that URL
+is the negative control; no S2 assertion or threshold is relaxed.
+
 The `sitecontrol` suite attaches an INFO-only R-7 `backgroundResponse` diagnostic
 to S11. It samples (300,140) and (260,250) under the open panel with the engine
 page white, then black, and reports both sRGB values and ΔE00. A change below 3

@@ -17,7 +17,9 @@ def fixture_server(tmp):
 window.boostAtFirstScript={filter:getComputedStyle(document.documentElement).filter,style:!!document.getElementById('open-boosts-style'),js:window.boostRestoredFirstDocument??null};
 window.scriptUpdateAtFirstScript={version:window.boostScriptUpdateVersion??null,runs:window.boostScriptUpdateRuns??0};
 </script><title>Restored Boost fixture</title></head><body><h1>Restored Boost</h1></body></html>""", encoding="utf-8")
-    (folder / "ads.html").write_text("""<!doctype html><title>Site fixture</title><h1>Site controls</h1><div id="promo-banner">Promo</div><script>document.cookie='f=1';window.clicks=0;document.addEventListener('click',()=>window.clicks++)</script><script src="/ad.js"></script>""", encoding="utf-8")
+    # EasyList's shipped ||demand.supply^$script rule blocks this request.
+    # The Site Control caller maps that host to this server before launch.
+    (folder / "ads.html").write_text("""<!doctype html><title>Site fixture</title><h1>Site controls</h1><div id="promo-banner">Promo</div><script>document.cookie='f=1';window.clicks=0;document.addEventListener('click',()=>window.clicks++)</script><script src="http://demand.supply/ad.js"></script>""", encoding="utf-8")
     (folder / "ad.js").write_text("window.fixtureAdLoaded=true", encoding="utf-8")
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *a, **kw):

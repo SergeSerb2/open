@@ -22,7 +22,18 @@ def run(factory, results, tmp, env, functional_only=False):
             '<!doctype html><style>body{margin:0;background:white}.card{height:70px;background:linear-gradient(90deg,#fff,#def);border-bottom:1px solid #aaa}</style>'
             + ''.join('<div class="card">%d</div>' % i for i in range(2000)),
             encoding='utf-8')
-        app = factory(urls=('about:blank',))
+        # Use the real bundled filter, as settings_adblock.real_engine does.
+        # This host resolves only to our ephemeral fixture, never the network.
+        repo = Path(env['ROOT'])
+        rule = '||demand.supply^$script'
+        pin = next(line.split()[2] for line in
+                   (repo/'Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt').read_text().splitlines()
+                   if line.startswith('easylist.txt '))
+        easylist = (repo/'Vendor/adblock/easylist.txt').read_bytes()
+        assert hashlib.sha256(easylist).hexdigest() == pin and rule in easylist.decode().splitlines()
+        app = factory(urls=('about:blank',), extra_args=[
+            '--host-resolver-rules=MAP demand.supply 127.0.0.1:'+origin.rsplit(':',1)[1],
+            '--no-proxy-server'])
         saved = {}
         private = Path(env['ROOT']) / '.re/handoff/sections/s12/A-sitecontrol'
         private.mkdir(parents=True, exist_ok=True)
@@ -133,6 +144,22 @@ def run(factory, results, tmp, env, functional_only=False):
             if row(s,'row.contentBlocking').get('state') == 'unavailable':
                 blocked('S2_adblock', 'section 13 ad-block adapter', row=row(unavailable,'row.contentBlocking'))
             else:
+                def native_adblock():
+                    page = app.call('tab-state', tab=tab)['page']['identifier']
+                    return next((context for profile in app.call('settings-adblock-engine')['profiles']
+                                 for context in profile['contexts']
+                                 if any(p['identifier'] == page for p in context['pages'])), {})
+                ready = wait(lambda: native_adblock().get('adBlockStatus',{}).get('engine_loaded'), timeout=40)
+                app.call('navigate', tab=tab, url=origin+'/ads.html'); app.call('wait', tab=tab)
+                initial_on = opened()
+                initial_native = native_adblock()
+                initial_loaded = app.eval(tab,'window.fixtureAdLoaded === true')
+                record('S2_initial_on', ready and row(initial_on,'row.contentBlocking').get('state') == 'on'
+                       and initial_loaded is False
+                       and any(p['blockedCount'] > 0 for p in initial_native.get('pages',[])
+                               if p['identifier'] == app.call('tab-state',tab=tab)['page']['identifier']),
+                       scriptLoaded=initial_loaded, native=initial_native, list='easylist.txt', rule=rule,
+                       listSHA256=pin, locallyResolved=True)
                 off = app.call('site-controls', action='tap', id='row.contentBlocking')
                 files = list(Path(app.user_data).glob('Profiles/*/adblock/exclusions.json'))
                 persisted = any('127.0.0.1' in json.loads(p.read_text()) for p in files)
