@@ -18,6 +18,70 @@ For this plan:
 
 ## Summary
 
+### Persistent code-sign clone (Section 16, 2026-11-08)
+
+`chromium/0106-open-code-sign-clone-reuse.patch` wires the overlay
+`chrome/browser/mac/open_code_sign_clone.{h,cc}` into the existing clone
+manager. The feature remains enabled. A per-install private cache validates
+the executable's device, inode, size and nanosecond mtime, plus its hard link,
+before reuse. Failed checks retain Chromium's original per-run behavior.
+The cache lease protects a running browser's clone during live replacement.
+Design, rejected-disable evidence and current verification status are in
+[the clone report](re/codesign-clone-reuse.md). Normal-App reuse, invalidation,
+separate installs, fallback and the requested ad-hoc live swap passed.
+The historical scan gate remains FAIL against the 7/7 target: residual
+first-after-gap scans, cause open, despite stable executable metadata
+(functional set 6/7). The rebuilt-engine morning set is separately 7/7
+scan-free with unchanged metadata. It does not explain the earlier scans.
+Hardened DLV now passes the three requested M1 update directions. The
+pre-#271 quiet-window runner completed seven pairs, but both variants failed
+the cold/warm budgets.
+Timing on the rebuilt post-#271 engine remains pending the next quiet window.
+The earlier full gate recorded 24 PASS and 1 FAIL (`commandbar-render`, two
+timing rows at load1 29.1); the report keeps that historical failure.
+Chromium `0106` follows main's `0801–0810`; the numeric-order WARN is expected.
+
+After merging #271 and main `3fb0645c`, the S16 rebuild/distribution and both
+normal App builds passed. Distribution SHA-256 is
+`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+Engine-status is 7 PASS, 0 FAIL, 1 order WARN. Normal-App rows a/c/d/f pass
+again on this engine. See the report's post-#271 cohort for suite and full-gate
+results. No launch-gain claim follows from these functional rows.
+The earlier post-#271 gate stopped after 15 PASS when a real crash appeared;
+the lead later attributed it to S11/window-border. The later 09:15 renderer
+STOP was Section 13's intentional passing popup-renderer crash control, per
+the lead's attribution. Both original STOP receipts remain in the report.
+
+After main #280 and #281 were merged as `8cac5c6f`, both Apps were rebuilt.
+Current normal-App a/c/d/f pass; b is separately 7/7 scan-free with unchanged
+metadata. The historical b FAIL and its first-after-gap cause remain open.
+Both ad-hoc swap directions pass. Shell passes 7 rows, Features 27 (including
+non-fatal chrome://kill recovery), updater 103, and engine-status remains
+7 PASS / 0 FAIL / 1 order WARN. The current full gate is **24 PASS / 1 FAIL**:
+command-bar timing row 151 is +0.309 ms against +0.300 ms at load1 8.7.
+Two isolated attempts remain FAIL; the second exceeded the quiet load gate.
+They are not combined into PASS. The exact table, loads and limits are in
+the report. No code in the command-bar CLI path changed.
+
+The M1 DLV matrix now passes both **+0106 → +0106** Release↔Debug directions
+and the first-update **main(#271) → +0106** direction. Each of the three
+inputs passed one initial plain launch. The main control was App-only built
+from merge-base main `bc5678d1` against s8-main's recorded #271 distribution;
+no engine build ran. DLV signing and launches ran only on M1, with separate
+screen-lock calls, clear before/after dialog checks and no new crash report.
+Receipts are on M5 and the owned M1 worktree is removed. The M5 branch,
+Vendor engine and exact +0106 App were restored after the control build.
+The final merge of main `28001634` is `8afd3cc1`. It adds no engine
+input. Both normal Apps rebuilt and engine-status remains 7 PASS / 0 FAIL /
+1 order WARN. Shell passes 7 rows. Updater emits 97 PASS rows, then stops
+in the cancelled-termination retry case: known #283, with later rows incomplete.
+All cleanup and before/after dialog checks pass. The lead's 11:18 GO accepts
+the retained 24/1 full gate and +0.309 ms command-bar timing FAIL under TANDEM
+4l; #266 changes no OpenKit code relative to merged main. The PR is ready
+under that ruling. First-after-gap scans (3/7 daytime, 1/7 functional) stay
+OPEN. Row g remains pending the next quiet window, with no launch-gain claim.
+No engine rebuild or refresh ran; the lead owns the merge and engine refresh.
+
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
 The E11 window hook is `chromium/0306-open-extension-windows-tabs.patch`.
@@ -853,7 +917,7 @@ Overlay (no patch): `cef/include/cef_navigation_history.h` (`CefNavigationHistor
 
 Section 8 decisions (differences from memory-fork §3/§5, with the reason):
 
-- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102, 0103 and 0106 stay unused. The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
+- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files at that milestone.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102 and 0103 stay unused. Section 16 later assigned 0106 to code-sign clone reuse (see the summary above). The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
 - **Freeze state lives in a `WebContentsUserData`** (`PageLifecycleState`, overlay) instead of a `page_frozen_` member on `CefBrowserHostBase` (D-4's reason holds: content has no getter). It clears when the page becomes visible or its primary page changes, so "show unfreezes" needs no hunk in the `WasHidden` paths.
 - **Visibility uses `UpdateWebContentsVisibility`, not `WasShown()`/`WasHidden()`** (P1 finding: a direct `WasShown()` leaves "first set visible" unset and WebContents then ignores the view's later HIDDEN).
 - **Restore checks for an unused controller, not `GetEntryCount() == 0`.** A fresh `NavigationController` always holds the initial NavigationEntry, so the plan's check would refuse every restore. Capture also returns null for a controller with only the initial entry. A restore into a page that is already visible (an Alloy view in a shown window) calls `LoadIfNecessary()`; otherwise the entry loads when the page is shown (`SetActive(true)`).
