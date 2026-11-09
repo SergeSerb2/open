@@ -16,3 +16,4 @@
 0701-open-profile-lifecycle.patch  # Profiles: primary OTR lifetime and safe initialized-context lookup (07xx APIs live in the overlay)
 # 0704: local CRX completion is overlay-only (03xx extensions area, S10 number).
 # No upstream hook or patch entry: cef_extension_manager.h and open_extension_manager.mm.
+0901-open-adblock-renderer-agent.patch  # Ad-block Step 5 P-4: attach the per-frame cosmetic agent; Mojo/user sheets/observer live in overlay

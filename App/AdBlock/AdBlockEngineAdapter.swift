@@ -151,6 +151,12 @@ final class AdBlockEngineAdapter {
     openAfterPaint(profile)
   }
 
+  func contextClosed(_ context: OEBrowserContext) {
+    guard context.originalContext != nil else { return }
+    otrContexts.remove(context)
+    store?.closePrivateSession(context.identifier)
+  }
+
   private func configureBeforeRequests(_ context: OEBrowserContext, profileID: ProfileID) {
     guard isSupported, store?.isRetired(profileID) != true,
       let profile = app.model.profile(id: profileID) else { return }
@@ -163,7 +169,7 @@ final class AdBlockEngineAdapter {
     else { excluded = startup?.excludedDomains ?? [] }
     let directory = (try? store?.listDirectory(for: profileID))
       ?? app.directories.adBlockListsDirectory(dataDirectoryName: profile.dataDirectoryName)
-    configure(context, directory: directory, enabled: enabled, excluded: excluded)
+    configure(context, profile: profileID, directory: directory, enabled: enabled, excluded: excluded)
   }
 
   func contexts(for profile: ProfileID) -> [OEBrowserContext] {
@@ -173,12 +179,27 @@ final class AdBlockEngineAdapter {
     }
   }
 
-  private func configure(_ context: OEBrowserContext, directory: URL, enabled: Bool, excluded: [String]) {
+  private func configure(_ context: OEBrowserContext, profile: ProfileID, directory: URL, enabled: Bool, excluded: [String]) {
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("adblock.configure")
     defer { pacingRegion?.end() }
     #endif
-    context.adBlockExcludedDomains = excluded
+    var effective = excluded
+    // Before the store opens, keep #287's read-only startup configuration.
+    // Register a private session only after its parent's configuration exists.
+    if let store, store.isProfileOpen(profile) {
+      let session = context.originalContext == nil ? nil : context.identifier
+      if let session {
+        do { try store.openPrivateSession(session, profile: profile) }
+        catch {
+          context.isAdBlockEnabled = false
+          context.adBlockListDirectory = nil
+          return
+        }
+      }
+      effective = store.excludedDomains(for: profile, privateSession: session)
+    }
+    context.adBlockExcludedDomains = effective
     context.adBlockListDirectory = directory
     context.isAdBlockEnabled = enabled
   }
@@ -191,17 +212,24 @@ final class AdBlockEngineAdapter {
       directories[profile] = model.dataDirectoryName
       for context in contexts(for: profile) {
         let alreadySet = context.adBlockListDirectory == directory
-        configure(context, directory: directory, enabled: enabled, excluded: excluded)
+        configure(context, profile: profile, directory: directory, enabled: enabled, excluded: excluded)
         // Early loading may have found no current.json. Setting the same path
         // is a native no-op, so explicitly retry after the store has seeded it.
         if alreadySet { context.reloadAdBlockLists() }
       }
     case let .enabled(enabled):
-      for profile in app.model.profiles where store?.isRetired(profile.id) == false {
+      for profile in app.model.profiles where store?.isProfileOpen(profile.id) == true {
         for context in contexts(for: profile.id) { context.isAdBlockEnabled = enabled }
       }
-    case let .exclusions(profile, domains):
-      for context in contexts(for: profile) { context.adBlockExcludedDomains = domains }
+    case let .exclusions(profile, _):
+      for context in contexts(for: profile) {
+        context.adBlockExcludedDomains = store?.excludedDomains(for: profile,
+          privateSession: context.originalContext == nil ? nil : context.identifier) ?? []
+      }
+    case let .privateExclusions(profile, session, domains):
+      for context in contexts(for: profile) where context.originalContext != nil && context.identifier == session {
+        context.adBlockExcludedDomains = domains
+      }
     case let .reload(profile, _):
       for context in contexts(for: profile) { context.reloadAdBlockLists() }
     case let .closed(profile):

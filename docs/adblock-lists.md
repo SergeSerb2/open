@@ -258,7 +258,32 @@ Cache the immutable site snapshot for navigation. The fast
 `isAllowlisted(normalizedHost:)` expects that shared canonical form and does no
 file IO or PSL traversal. `isAllowlisted(host:)` normalizes caller input.
 
-`incognito: true` requires bundled defaults, uses a fresh temporary root, does
+The App's private windows use their parent Profile's global switch, lists, and
+saved site exclusions. A private site's additional exclusion is kept only in
+memory, keyed by the engine's private context identifier. All windows sharing
+that context share the choice. The effective exclusions are the union of the
+parent's saved choices and the private session's choices. Parent changes update
+open private contexts. Removing a private choice cannot remove an inherited
+saved choice. Closing the last private window drops the session set; a new
+session starts with only the parent's saved choices. The private mutation path
+does not write settings, exclusions, or list generations to disk.
+
+`siteSnapshot(for:privateSession:)` and
+`setExcluded(_:excluded:profile:privateSession:)` take the **parent** Profile ID
+and the OTR `OEBrowserContext.identifier`. Omit `privateSession` for regular
+windows. The App adapter registers and closes sessions with the store. Unknown,
+closed, or mismatched session IDs cannot mutate saved Profile settings. Session
+IDs are bounded to 128 UTF-8 bytes, with at most 128 registered contexts and
+4096 additional sites per context. Host validation and PSL normalization are
+the same as for saved exclusions.
+
+`AdBlockStore.didChange` reports open, close, retirement, global enable,
+saved/private exclusion changes, private-session close, and adapter binding
+changes. Retirement reports unavailable before waiting for in-flight IO.
+Closing a Profile also prevents a later global toggle from re-enabling its
+closed engine configuration.
+
+The standalone CLI's separate `incognito: true` mode requires bundled defaults, uses a fresh temporary root, does
 not read the supplied persistent root, and keeps settings in memory. Only the
 engine's temporary list/cache files and lease use that root. Close removes the
 Profile directory; session end removes the temporary root. No persistent JSON

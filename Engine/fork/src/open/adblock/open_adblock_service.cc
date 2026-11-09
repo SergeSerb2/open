@@ -570,6 +570,7 @@ void OpenAdBlockService::Shutdown() {
       FROM_HERE, base::BindOnce(
                      [](scoped_refptr<OpenAdBlockMatcher> matcher) {
 #if !defined(OFFICIAL_BUILD)
+                       PrintOpenAdBlockBenchLoadCount();
                        VLOG(1) << "OpenAdBlock: "
                                << matcher->RegexCompileCountsText();
 #endif
