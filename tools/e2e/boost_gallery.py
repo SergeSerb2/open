@@ -80,10 +80,11 @@ def run(factory, results, tmp, env):
     def browser():
         app.call('window-focus', id=normal, activate=True)
         app.call('space', space=space_a)
-    def gallery():
+    def gallery(expect_cards=True):
         browser(); app.call('menu-perform', id='boost-gallery')
         assert wait(lambda: state()['boostsPresentation'] == 'gallery', timeout=5)
-        assert wait(lambda: 'boosts.gallery' in ids(), timeout=5), ui()
+        surface = 'boosts.gallery' if expect_cards else 'boosts.layout'
+        assert wait(lambda: surface in ids(), timeout=5), ui()
     def ids():
         return {c['id'] for c in ui()['controls'] if c['id']}
     def font(tab):
@@ -276,7 +277,9 @@ def run(factory, results, tmp, env):
             def focus():
                 observations = {}
                 for layout in ['List', 'Gallery']:
-                    gallery(); ui('layout', name=layout); number=state()['library']
+                    # Delete may have emptied this Profile earlier in the full
+                    # suite. Focus belongs to the section in either state.
+                    gallery(expect_cards=False); ui('layout', name=layout); number=state()['library']
                     # Cmd+L belongs to a browser window. Both existing List and
                     # Gallery keep it inert in Library; do not invent a new policy.
                     app.call('key', key='l', modifiers=['cmd'], route='app', window=number)
