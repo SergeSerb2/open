@@ -21,6 +21,12 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
     def exists(tab):
         return any(t["id"] == tab for t in app.call("tabs"))
 
+    def page(handle):
+        # Peek owns engine content without a sidebar tab UUID.
+        if isinstance(handle, int):
+            return next((p for p in app.call("pages") if p["identifier"] == handle), {})
+        return app.page(handle)
+
     def state(tab=None, peek=False):
         return app.call("sad-tab-state", **({"peek": True} if peek else {"tab": tab}))
 
@@ -39,9 +45,11 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
             return
         split = app.call("split", op="state")
         if split["id"] and any(p["id"] == tab for p in split["panes"]):
-            app.call("select", tab=tab)
-            app.call("command", id="close-split-pane")
-            return
+            # Selecting a child UUID selects it outside its split. Separate via
+            # the enabled split menu, then close the requested fixture tab.
+            # Cleanup must also work when the pane-focus behavior under test fails.
+            app.call("split", op="menu", item="Separate All Tabs")
+            assert wait_until(lambda: not app.call("split", op="state")["id"], timeout=5, step=.05), "split cleanup did not separate panes"
         if app.tab(tab)["section"] in ("pinned", "favorites"):
             space = next(s["id"] for s in app.call("spaces") if s["focused"])
             app.call("sidebar-drop", nodes=[tab], parent={"kind": "today", "id": space}, index=0)
@@ -75,13 +83,22 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
     def peek(source, url="https://example.org/"):
         app.call("peek-open", tab=source, url=url)
         try:
-            content = app.call("peek-state")["stack"][-1]["content"]
+            def ready_content():
+                value = app.call("peek-state")
+                return value["stack"][-1]["content"] if value["shown"] and value["stack"] else 0
+            # The Peek entry precedes asynchronous engine content creation (ID 0).
+            content = wait_until(ready_content, timeout=5, step=.05)
+            assert content and content > 0, "Peek content did not become ready"
             app.call("wait", tab=content)
             yield content
         finally:
             if app.call("peek-state")["stack"]:
                 app.call("peek-close")
                 assert wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=.05)
+
+    def pane_key(tab):
+        panes = app.call("split", op="state")["panes"]
+        return str(next(i + 1 for i, pane in enumerate(panes) if pane["id"] == tab))
 
     def healthy_absent():
         with tab() as c:
@@ -95,6 +112,12 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
 
     def healthy_split():
         with split_pair() as (c, pane):
+            # Prove the same setup and pane-key mapping without terminating a renderer.
+            for target in (c, pane, c):
+                app.call("focus", tab=app.call("split", op="state")["focused"])
+                key(pane_key(target), ("ctrl", "shift"))
+                assert wait_until(lambda: app.call("split", op="state")["focused"] == target,
+                                  timeout=3, step=.05), "healthy pane shortcut did not focus its target"
             return {"ok": not shown(c) and not shown(pane)
                     and app.eval(c, "document.title") == "Example Domain"
                     and app.eval(pane, "document.title") == "Example Domain"}
@@ -102,7 +125,7 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
     def healthy_peek():
         with tab() as c, peek(c) as content:
             return {"ok": not shown(peek=True) and app.eval(content, "document.title") == "Example Domain"
-                    and not app.tab(c)["crashed"]}
+                    and page(content).get("crash") == 0 and not app.tab(c)["crashed"]}
 
     healthy_rows = (("sad_tab_healthy_absent", healthy_absent), ("sad_tab_healthy_split", healthy_split),
                     ("sad_tab_healthy_peek", healthy_peek))
@@ -117,15 +140,15 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
     def kill(c, peek=False, visible=True):
         # SIGTERM only. The caller must have machine and screen clearance.
         app.call("navigate", tab=c, url="chrome://kill")
-        assert wait_until(lambda: app.page(c).get("crash") == 2, timeout=5, step=.05), "kill state 2 missing"
+        assert wait_until(lambda: page(c).get("crash") == 2, timeout=5, step=.05), "kill state 2 missing"
         if visible:
             assert wait_until(lambda: shown(None if peek else c, peek), timeout=5, step=.05), "Sad Tab did not appear"
 
     def recovered(c, url, peek=False):
-        assert wait_until(lambda: app.page(c).get("crash") == 0 and not shown(None if peek else c, peek),
+        assert wait_until(lambda: page(c).get("crash") == 0 and not shown(None if peek else c, peek),
                           timeout=20, step=.05), "Sad Tab did not recover"
         app.call("wait", tab=c, timeout=20)
-        assert app.page(c)["url"] == url, "recovery changed the URL"
+        assert page(c)["url"] == url, "recovery changed the URL"
         assert app.eval(c, "document.title") == "Example Domain", "recovery did not restore the page"
 
     def appears():
@@ -191,7 +214,7 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
 
     def peek_reload_close():
         with tab() as c, peek(c) as content:
-            url = app.page(content)["url"]
+            url = page(content)["url"]
             kill(content, peek=True)
             app.call("sad-tab-action", peek=True, action="reload")
             recovered(content, url, peek=True)
@@ -246,7 +269,7 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
         with tab() as c:
             kill(c)
             with peek(c) as content:
-                url = app.page(content)["url"]
+                url = page(content)["url"]
                 # A healthy Peek must also shield the underlying default button.
                 key("return")
                 assert app.eval(content, "document.title") == "Example Domain"
@@ -260,16 +283,17 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
     def split_focus():
         with split_pair() as (c, pane):
             kill(c)
-            app.call("select", tab=c)
             focus_sad(c)
-            key("2", ("ctrl", "shift"))
+            key(pane_key(c), ("ctrl", "shift"))
+            assert wait_until(lambda: app.call("split", op="state")["focused"] == c, timeout=3, step=.05)
+            key(pane_key(pane), ("ctrl", "shift"))
             assert wait_until(lambda: app.call("split", op="state")["focused"] == pane, timeout=3, step=.05)
-            key("1", ("ctrl", "shift"))
+            key(pane_key(c), ("ctrl", "shift"))
             assert wait_until(lambda: state(c).get("focused"), timeout=3, step=.05)
             with peek(c) as content:
                 kill(content, peek=True)
                 focus_sad(peek=True)
-                key("2", ("ctrl", "shift"))
+                key(pane_key(pane), ("ctrl", "shift"))
                 return {"ok": bool(wait_until(lambda: app.call("split", op="state")["focused"] == pane,
                                              timeout=3, step=.05))}
 
