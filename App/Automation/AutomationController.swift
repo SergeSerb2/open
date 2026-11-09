@@ -35,6 +35,10 @@
     private var updaterModalObserver: (any NSObjectProtocol)?
     private var updaterModalEvents: [[String: Any]] = []
     var firstRunActionTask: Task<Void, Never>?
+    var secretsFixtureTask: Task<Void, Never>?
+    var secretsFixtureReport: [String: Any] = [:]
+    var secretsFixtureStage = "idle"
+    var secretsFixtureError = ""
     var importExtensionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
     var savePromptEvents: [[String: Any]] = []
@@ -197,6 +201,8 @@
         savePromptEvents.removeAll { number == nil || $0["window"] as? Int == number }
         return (owner?.drainEvents() ?? []) + completions
       case "credentials": return try await credentialCounts(a)
+      case "import-secrets-fixture": return try await importSecretsFixture(a)
+      case "import-secrets-state": return secretsImportState()
       case "credentials-prefs": return try credentialPreferences(a)
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }

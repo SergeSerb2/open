@@ -117,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
     LaunchTiming.shared.phase("settingsRegistered")
+    _ = importRunner.unfinishedSecretsImportAtLaunch
     NSApp.mainMenu = MainMenu.build()
     LaunchTiming.shared.phase("mainMenuBuilt")
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })

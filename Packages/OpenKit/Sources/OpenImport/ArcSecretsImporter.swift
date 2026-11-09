@@ -14,9 +14,14 @@ public enum SyntheticSecretsScenario: Sendable { case standard, batchBoundary, f
     func importAddresses(_ batch: borrowing [ImportedAddressRecord]) async throws -> SecretsWriteResult
     func importCards(_ batch: borrowing [ImportedCardRecord]) async throws -> SecretsWriteResult
     func importCookies(_ batch: borrowing [ImportedCookieRecord]) async throws -> SecretsWriteResult
+    /// Called once after the Profile's complete cookie step is durable.
+    func didFinishCookies() async
 }
 
-public extension SecretsImportSink { var openProfileID: UUID? { nil } }
+public extension SecretsImportSink {
+    var openProfileID: UUID? { nil }
+    func didFinishCookies() async {}
+}
 
 public struct SecretsWriteResult: Codable, Equatable, Sendable {
     public var added: Int
@@ -122,6 +127,7 @@ public struct ArcSecretsImportReport: Sendable {
         let mapped = directories.filter { sinks[$0] != nil }
         var ids: [String: UUID] = [:]
         for name in mapped { ids[name] = sinks[name]?.openProfileID }
+        try Task.checkCancellation()
         try ledger.begin(profiles: mapped, openProfiles: ids)
         for name in directories {
             try Task.checkCancellation()
@@ -139,6 +145,7 @@ public struct ArcSecretsImportReport: Sendable {
                 continue
             }
             for step in SecretsImportStep.allCases {
+                try Task.checkCancellation()
                 // The scope drops the private file copy before opening the next file.
                 if let reader = try ArcSecretsBatchReader(profileDirectory: directory, file: step.file, key: key, access: access) {
                     switch step {
@@ -177,11 +184,14 @@ public struct ArcSecretsImportReport: Sendable {
                         counts.cookies.skippedExpired += reader.report.cookiesExpired
                     }
                 }
+                try Task.checkCancellation()
                 try ledger.complete(step, profile: name, counts: counts)
+                if step == .cookies { await sink.didFinishCookies() }
                 report.profiles[name] = counts
                 if step == stopAfter { report.wasInterrupted = true; return report }
             }
         }
+        try Task.checkCancellation()
         try ledger.finish()
         return report
     }
