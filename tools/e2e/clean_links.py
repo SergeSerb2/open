@@ -86,6 +86,8 @@ def checks(app, results, origin, h):
             app.call('library-close')
             app.call('window-reopen')
         app.call('sidebar-drop', nodes=ids, parent=dict(kind='today', id=space), index=0)
+        app.call('select', tab=ids[1])
+        app.call('wait', tab=ids[1])
         app.call('eval', tab=ids[1], js="document.title = 'Clean Split Tracker'")
         h.wait_until(lambda: app.tab(ids[1])['title'] == 'Clean Split Tracker', timeout=5)
         app.call('select', tab=ids[0])
