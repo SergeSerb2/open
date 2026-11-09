@@ -329,7 +329,7 @@ public final class IntroView: NSView {
 
     }
 
-    /// The room is presented before Chromium starts. It has no animations.
+    /// Confirm the first display refresh after the animated window is submitted.
     public func observeRoomPresentation() {
         guard firstFrameHostTime == nil, roomLink == nil else { return }
         roomSubmittedHostTime = CACurrentMediaTime()

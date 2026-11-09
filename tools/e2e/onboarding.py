@@ -248,6 +248,8 @@ def run(factory, results, tmp, h):
         snapshot = Path(app.user_data)/'State/browser.json'
         prior = snapshot.read_bytes()
         app.call('onboarding', action='replay-intro')
+        # Replay prepares audio before showing its first animated frame too.
+        assert until(lambda: state().get('active')), state()
         replay = state()
         gate('replay_over_browser', lambda s: s.get('active') and s.get('replay'), replay, returning)
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
@@ -268,6 +270,7 @@ def run(factory, results, tmp, h):
         denied = h.subprocess.run([app.executable, '--replay-onboarding', '--intro-sound=off'], capture_output=True, text=True, timeout=15)
         denied_state = dict(exit=denied.returncode, refused='requires --user-data-dir' in denied.stderr)
         app.call('onboarding', action='replay-intro')
+        assert until(lambda: state().get('active')), state()
         interrupted_intro = state()
         gate('quit_during_animation_fixture', lambda s: s.get('active') and s.get('dim', {}).get('exists'), interrupted_intro, returning)
         before_quit = app.call('windows')
