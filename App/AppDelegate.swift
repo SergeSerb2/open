@@ -116,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
+    _ = importRunner.unfinishedSecretsImportAtLaunch
     NSApp.mainMenu = MainMenu.build()
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     NSApp.setActivationPolicy(.regular)
@@ -141,6 +142,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private lazy var pageQuit = PageQuitCoordinator(app: self)
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    // Sparkle may retry after a user cancels or the quit preflight defers.
+    defer { if !terminationRequested { updater?.userDriver.applicationTerminationCancelled() } }
     if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
@@ -350,6 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
     factory.attach(controller)
     windowControllers.append(controller)
+    updater?.userDriver.attach(controller)
     if session == nil { media.attach(factory); tabSleep.attach(factory) }
     activeWindowID = state.id
     MainMenu.targetWindowCommands(factory)
@@ -846,7 +850,7 @@ extension AppDelegate: CommandDispatcher {
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     guard allowsFirstRunCommand(id) else { return false }
     if id == "settings", settingsShortcutCaptured { return false }
-    if id == "check-for-updates" { return updater?.canCheckForUpdates ?? true }
+    if id == "check-for-updates" { return true }
     if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift

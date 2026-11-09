@@ -88,6 +88,9 @@ final class SyntheticSecretsFixture {
             // A named system note is not the user's visible note.
             logins += "INSERT INTO password_notes VALUES(1, 'system', X'763131');"
             try createDatabase("Login Data", profile: profile, sql: logins)
+            // Chromium CookiePartitionKey::FromStorage uses strict schemeful-site
+            // serialization. localhost is a distinct registrable fixture site;
+            // its partition must not match the example.com top-level request.
             var cookies = """
                 CREATE TABLE meta(key PRIMARY KEY, value); INSERT INTO meta VALUES('version', 24);
                 CREATE TABLE cookies(host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, has_expires,
@@ -97,9 +100,12 @@ final class SyntheticSecretsFixture {
             for row in 1...5 {
                 let blob = "X'" + (try encryptFixture(SHA256Fixture("login.example.com") + Array("fixture-cookie".utf8), key: key)).map { String(format: "%02x", $0) }.joined() + "'"
                 let expiry = row == 2 ? 0 : row == 5 ? time : future
-                cookies += "INSERT INTO cookies VALUES('login.example.com', 'fixture-\(index)-\(row)', '', \(blob), '/', \(expiry), 1, \(row == 3 ? 1 : 0), \(row == 2 ? 0 : 1), \(time), \(time), \(time), 1, 2, 2, 443, '\(row == 4 ? "https://other.example.com" : "")', \(row == 4 ? 1 : 0));"
+                cookies += "INSERT INTO cookies VALUES('login.example.com', 'fixture-\(index)-\(row)', '', \(blob), '/', \(expiry), 1, \(row == 3 ? 1 : 0), \(row == 2 ? 0 : 1), \(time), \(time), \(time), 1, 2, 2, 443, '\(row == 4 ? "https://localhost" : "")', \(row == 4 ? 1 : 0));"
             }
             try createDatabase("Cookies", profile: profile, sql: cookies)
+            // Chromium address_autofill_table.cc writes kDatabaseStoredTypes:
+            // NAME_FULL (7) and ADDRESS_HOME_STREET_ADDRESS (77) are stored.
+            // ADDRESS_HOME_LINE1 (30) is derived (autofill_profile.h).
             let web = """
                 CREATE TABLE addresses(guid, use_count, use_date, date_modified, language_code, record_type);
                 CREATE TABLE address_type_tokens(guid, type, value, verification_status);
@@ -107,7 +113,7 @@ final class SyntheticSecretsFixture {
                 CREATE TABLE keywords(id); CREATE TABLE autofill(date_created, date_last_used);
                 INSERT INTO addresses VALUES('00000000-0000-4000-8000-a0000000000\(index)', 3, \(now), \(now), 'en', 0);
                 INSERT INTO address_type_tokens VALUES('00000000-0000-4000-8000-a0000000000\(index)', 7, 'Fixture Person', 3);
-                INSERT INTO address_type_tokens VALUES('00000000-0000-4000-8000-a0000000000\(index)', 30, '1 Example Street', 4);
+                INSERT INTO address_type_tokens VALUES('00000000-0000-4000-8000-a0000000000\(index)', 77, '1 Example Street', 4);
                 INSERT INTO credit_cards VALUES('00000000-0000-4000-8000-c0000000000\(index)', 'Fixture Person', 12, 2030, \(try encrypted("4111 1111 1111 1111")), 'Fixture card', 4, \(now));
                 """
             try createDatabase("Web Data", profile: profile, sql: web)

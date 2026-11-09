@@ -1,7 +1,26 @@
 # Follow-ups
 
+- Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
+  `onboarding` measures main-thread display-link intervals, not render-server
+  frames. The intro's animations run on the render server; the main thread is
+  busy with engine startup during the first seconds. One M5 run at load1 10.9
+  (240 Hz display): p50/p95 4.167 ms, max 144.9 ms, 22 of 1,848 intervals over
+  1.5 × nominal (1.2 %, row limit 1 %). Needs a render-side measurement
+  (Core Animation frame statistics without a debugger prompt) and quiet ×3
+  runs; consider starting the intro animations only after the engine's
+  synchronous startup work, if the render side also shows hitches.
+- Section 17 speed proof — the returning-launch comparison against a build
+  without Section 17 (three merges reverted) is pending: the plain
+  `git revert -m 1` of #260 conflicts with later commits. `window` measured
+  cold sidebar/first paint 436/725 ms and warm 452/701 ms at load1 ≈ 10–13,
+  above the known-main 400/700 limits; an interleaved control run decides
+  whether Section 17 adds anything (the returning path adds only nil checks).
+- Arc first-launch capture (Section 17) — the user-only screen recording in
+  `docs/status.md` §5.2 settles the open questions in
+  `docs/re/onboarding.md` §9 (intro button caption, clock alignment, music
+  stop/mute, setup reachability, browser reveal).
 - Section 15 non-fatal file-icon fault — one simulated `ExcUserFault` at 17:21:51 on 2026-11-08 matches the passing H3 features run, through `ISMutableIcns addCGImage:scale:error:`, `NSWorkspace setIcon:forFile:options:` and Chromium `shortcuts::SetIconForFile`. The App exited cleanly; TANDEM §8c classifies it as a fault, not a crash. Cause and regression attribution are unknown. H3 has no new real crash report. [Acceptance and regression receipt](engine-spike/passwords-acceptance.md#the-1402-crash-and-regression-proof).
-- Section 15 imported secrets — complete the engine/App writer and consent flow separately. `canImportPasswordsAndCookies` remains false; save/fill fixture acceptance does not prove real-secret import.
+- Section 15 imported secrets — the App writer and explicit-consent adapter are implemented separately from save/fill. Mock-key builds keep `canImportPasswordsAndCookies == false`. Ten runnable M5 synthetic import rows passed. I-5/I-6 recovery probes remain M1-only and unrun while M1 is on HOLD. The user-present real Keychain import after U-1/U-2 remains open (see the hand check below).
 - Section 15 Arc captures **S-1…S-6** — use the user's combined capture session and a throwaway account. S-1: save/update password, card and address sheets (size, icon, colors, button order); S-2: fill dropdown; S-3: post-save feedback; S-4: generation offer; S-5: Passwords/Credit Cards pages and switch placement; S-6: the internal URL display. Native App acceptance does not prove Arc pixel parity. See [passwords/autofill §13](plans/passwords-autofill.md#13-screenshots-needed-from-the-user-arc-their-own-mac).
 - Section 15 HTTP authentication — replace the hosted Chromium dialog with an Arc-style Open sheet after capture evidence (PW-11). Current WebAuthn/HTTPS-First modal-host checks do not establish HTTP-auth fill/save acceptance.
 - Section 15 **PW-KC1** — user hand check of a real Keychain failure and the "password wasn't saved" toast. No synthetic failure hook or agent access to the real Keychain. Save/fill fixture acceptance uses the mock Keychain only.
@@ -282,8 +301,16 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Reference captures and system grants.** [Page-chrome §7](re/page-chrome.md#7-captures-that-would-settle-the-remaining-questions) still needs user-operated Arc captures. Permission width/edge and Downloads ring geometry/recent interval remain guesses. Combined camera/microphone and real macOS authorization/delivery remain BLOCKED under the no-credential-prompt rule; notifications/MIDI fixtures do not prove them (#180). Owner: user captures / lead, with the owning engine sections for system grants.
 
 
-- First run / Section 7: passwords and cookies remain capability OFF until the
-  engine supplies its secret writer. F10 uses the disabled selection and the
+- Section 15 user hand check — after U-1/U-2, use the signed build with the user
+  present to import the user's real Arc secrets through the App's explicit
+  consent step. Check the real Keychain approval/denial paths, per-Profile
+  storage, repeat-import counts, and the report without recording secret values.
+  Synthetic fixture acceptance does not close this gate. Agents must not run
+  this import, read the real Keychain, or decrypt real Arc secrets.
+
+- First run / Section 7: passwords and cookies remain capability OFF on
+  mock-key builds, including builds with the synthetic-fixture allow switch.
+  F10 uses the disabled selection and the
   shared skip action's code path, with no real Keychain request. A missing
   alternate-icon cache requires reselection; launch never renders replacement
   SwiftUI artwork. The first-run Release 250 ms budget and imported-tab 700 ms

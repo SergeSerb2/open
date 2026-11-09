@@ -34,11 +34,13 @@ public struct ImportOutcome: Sendable {
     public var counts: [String: Int]
     public var errorText: String?
     public var failures: [String: String]
+    public var secretsReportLines: [String]
     public var extensions: [ImportExtensionCandidate]
     public var extensionProfileCount: Int
-    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], extensions: [ImportExtensionCandidate] = [], extensionProfileCount: Int = 0) {
+    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:], extensions: [ImportExtensionCandidate] = [], extensionProfileCount: Int = 0, secretsReportLines: [String] = []) {
         self.counts = counts; self.errorText = errorText; self.failures = failures
         self.extensions = extensions; self.extensionProfileCount = extensionProfileCount
+        self.secretsReportLines = secretsReportLines
     }
 }
 
@@ -46,7 +48,7 @@ public struct ImportOutcome: Sendable {
 /// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
 public enum ImportOutcomeKeys {
     public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
-    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Boosts","Passwords and cookies"]
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Boosts","Passwords and cookies","Passwords","Cookies","Addresses","Cards"]
 }
 public extension ImportOutcome {
     func importedCount(_ category:String)->Int {
@@ -58,11 +60,13 @@ public extension ImportOutcome {
 
 @MainActor public protocol ImportActions: AnyObject {
     var canImportPasswordsAndCookies: Bool { get }
+    var hasUnfinishedSecretsImport: Bool { get }
     func runImport(plan: ImportPlan) async -> ImportOutcome
     func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult
 }
 public extension ImportActions {
     var canImportPasswordsAndCookies: Bool { false }
+    var hasUnfinishedSecretsImport: Bool { false }
     func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult { .failed("Extension installation is unavailable.") }
 }
 

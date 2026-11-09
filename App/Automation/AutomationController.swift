@@ -12,6 +12,7 @@
   import OpenExtensionsUI
   import OpenSpaceEditor
   import Synchronization
+  import MachO
 
   /// Executes automation commands (docs/automation.md) on the main actor.
   /// Every command answers `{"id":…, "ok":true, "result":…}` or
@@ -31,7 +32,13 @@
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
+    private var updaterModalObserver: (any NSObjectProtocol)?
+    private var updaterModalEvents: [[String: Any]] = []
     var firstRunActionTask: Task<Void, Never>?
+    var secretsFixtureTask: Task<Void, Never>?
+    var secretsFixtureReport: [String: Any] = [:]
+    var secretsFixtureStage = "idle"
+    var secretsFixtureError = ""
     var importExtensionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
     var savePromptEvents: [[String: Any]] = []
@@ -102,6 +109,79 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "updater-view-tree":
+        var seen: Set<ObjectIdentifier> = []
+        var webViews: [String] = []
+        let webClasses = ["WKWebView", "WebView"].compactMap(NSClassFromString)
+        func visit(_ view: NSView) {
+          guard seen.insert(ObjectIdentifier(view)).inserted else { return }
+          if webClasses.contains(where: { view.isKind(of: $0) }) { webViews.append(NSStringFromClass(type(of: view))) }
+          for child in view.subviews { visit(child) }
+        }
+        for window in NSApp.windows { if let content = window.contentView { visit(content.superview ?? content) } }
+        let notes = app.updater?.userDriver.updateWindow?.notes?.text
+        let banners = app.windowControllers.compactMap { controller -> [String: Any]? in
+          guard let banner = controller.sidebar.updateBanner else { return nil }
+          return ["title": banner.titleLabel.stringValue, "subtitle": banner.subtitleLabel.stringValue,
+            "frame": rect(banner.frame), "titleFrame": rect(banner.titleLabel.frame),
+            "subtitleFrame": rect(banner.subtitleLabel.frame),
+            "subtitleColor": colorComponents(banner.subtitleLabel.textColor)]
+        }
+        return ["webViewCount": webViews.count, "webViewClasses": webViews,
+          "viewCount": seen.count, "notesViewClass": notes.map { NSStringFromClass(type(of: $0)) } ?? "",
+          "notesIsTextView": notes is NSTextView, "bannerStyles": banners]
+      case "updater-banner-width":
+        guard let width = a["width"] as? Double, (164...400).contains(width), let controller = app.frontWindowController else { throw Failure(message: "expected banner width 164...400") }
+        controller.model.setSidebarWidth(windowID: controller.windowID, width: width)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        return width
+      case "updater-menu":
+        guard let (menu, index) = findMenuItem("check-for-updates", in: NSApp.mainMenu), let item = menu.item(at: index) else { throw Failure(message: "missing update menu item") }
+        let enabled = menuEnabled(item)
+        return ["title": item.title, "enabled": enabled, "badgeCount": item.badge?.itemCount ?? 0,
+          "canCheck": app.updater?.canCheckForUpdates ?? true]
+      case "updater-act": return app.updater?.userDriver.performAutomationAction(a["action"] as? String ?? "") ?? false
+      case "updater-modal-alert":
+        let action = a["action"] as? String ?? "state"
+        if action == "state" { return updaterModalEvents }
+        if let observer = updaterModalObserver { NotificationCenter.default.removeObserver(observer) }
+        updaterModalObserver = nil
+        if action == "disarm" { return true }
+        guard action == "arm", let button = a["button"] as? Int, (0...1).contains(button) else {
+          throw Failure(message: "expected arm with button 0 or 1, state, or disarm")
+        }
+        updaterModalEvents.removeAll()
+        updaterModalObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
+          object: nil, queue: .main) { [weak self] notification in
+          guard let presented = notification.object as? NSWindow else { return }
+          MainActor.assumeIsolated {
+            guard let self, let alert = self.app.updater?.userDriver.alert,
+              presented === alert.window else { return }
+            // CEF may hold main-queue tasks inside a native modal loop. Observe
+            // the real alert and press its button from that loop, as Downloads does.
+            RunLoop.main.perform(inModes: [.modalPanel]) { [weak self, weak alert] in
+              MainActor.assumeIsolated {
+                guard let self, let alert, alert.buttons.indices.contains(button), self.updaterModalEvents.isEmpty else { return }
+                var row = self.describe(alert.window)
+                row["text"] = self.windowText(alert.window)
+                row["informativeText"] = alert.informativeText
+                row["buttons"] = alert.buttons.map { ["title": $0.title, "enabled": $0.isEnabled] }
+                row["appModal"] = NSApp.modalWindow === alert.window
+                row["active"] = NSApp.isActive
+                row["browserWindows"] = self.app.windowControllers.count
+                row["updaterBeforeAnswer"] = self.app.updater?.automationState
+                row["pressedButton"] = button
+                self.updaterModalEvents.append(row)
+                if let observer = self.updaterModalObserver { NotificationCenter.default.removeObserver(observer) }
+                self.updaterModalObserver = nil
+                alert.buttons[button].performClick(nil)
+              }
+            }
+          }
+        }
+        return true
+      case "updater-background-check": app.updater?.checkInBackgroundForAutomation(); return true
+      case "updater-images": return (0..<_dyld_image_count()).compactMap { _dyld_get_image_name($0).map { String(cString: $0) } }
       case "child-dialog-button": return try await childDialogButton(a)
       case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
@@ -121,6 +201,8 @@
         savePromptEvents.removeAll { number == nil || $0["window"] as? Int == number }
         return (owner?.drainEvents() ?? []) + completions
       case "credentials": return try await credentialCounts(a)
+      case "import-secrets-fixture": return try await importSecretsFixture(a)
+      case "import-secrets-state": return secretsImportState()
       case "credentials-prefs": return try credentialPreferences(a)
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
@@ -1631,6 +1713,7 @@
     func windowText(_ window: NSWindow) -> [String] {
       var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
       func walk(_ object: NSObject, depth: Int) {
+        if window.title.hasPrefix("Open Update"), let view = object as? NSView, view.isHiddenOrHasHiddenAncestor { return }
         guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
         for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue"] {
           let selector = NSSelectorFromString(name)
@@ -1757,7 +1840,7 @@
         let enabled = menuEnabled(item)
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
           "modifierMask": item.keyEquivalentModifierMask.rawValue,
-          "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+          "badgeCount": item.badge?.itemCount ?? 0, "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
     func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
@@ -2388,6 +2471,7 @@
     }
     isolated deinit {
       if let managerUndoObserver { NotificationCenter.default.removeObserver(managerUndoObserver) }
+      if let updaterModalObserver { NotificationCenter.default.removeObserver(updaterModalObserver) }
     }
 
     private func timing(_ w: EngineWebContentHostFactory) async -> [String: Any] {
