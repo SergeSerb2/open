@@ -1,5 +1,6 @@
 # Open patches for Chromium. One patch per line: <file>.patch  # rationale
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
+0106-open-code-sign-clone-reuse.patch  # S16: reuse the signed hard-link clone without advancing executable ctime on warm launches
 0301-open-headless-browser-window.patch  # P1: Browser features without a BrowserView (hidden tab-strip Browsers)
 0302-open-hidden-browser-ui.patch  # P1: Chrome UI code that assumes "no BrowserView => unit test" accepts hidden tab-strip Browsers
 0303-open-hosted-tab-lifecycle.patch  # P1: hosted tabs are never discarded by Chrome's lifecycle unit; tab API guards moved to 0306

@@ -26,6 +26,8 @@ struct LaunchOptions {
   var chromeToolbar = false
   /// Test/support overrides. Normal launches detect first run from the snapshot.
   var skipFirstRun = false
+  var faviconNetworkBlocked = false
+  var faviconCuratedFailure = false
   var introSound = "normal"
   var reduceMotion = false
   var measureIntroFrames = false
@@ -66,6 +68,14 @@ struct LaunchOptions {
         if ["off", "silent"].contains(v) { introSound = v }
         #if OPEN_AUTOMATION
         if v == "fail-device" { introSound = v }
+        #endif
+      } else if value("favicon-network") == "blocked" {
+        #if OPEN_AUTOMATION
+        faviconNetworkBlocked = true
+        #endif
+      } else if value("favicon-curated") == "fail" {
+        #if OPEN_AUTOMATION
+        faviconCuratedFailure = true
         #endif
       } else if arg == "--reduce-motion" {
         #if OPEN_AUTOMATION

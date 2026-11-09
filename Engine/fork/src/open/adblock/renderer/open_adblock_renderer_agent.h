@@ -6,10 +6,13 @@
 #define OPEN_ADBLOCK_RENDERER_OPEN_ADBLOCK_RENDERER_AGENT_H_
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "base/timer/elapsed_timer.h"
+#include "base/time/time.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "open/adblock/mojom/open_adblock.mojom.h"
 #include "url/origin.h"
@@ -30,6 +33,7 @@ class OpenAdBlockRendererAgent final : public content::RenderFrameObserver {
 
   void DidCreateNewDocument() override;
   void DidCreateDocumentElement() override;
+  void DidDispatchDOMContentLoadedEvent() override;
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int32_t world_id) override;
   void WillReleaseScriptContext(v8::Local<v8::Context> context,
@@ -37,7 +41,8 @@ class OpenAdBlockRendererAgent final : public content::RenderFrameObserver {
   void OnDestruct() override;
 
  private:
-  void StartObserver(uint64_t document_epoch);
+  void QueueObserverAfterDOMContentLoaded();
+  void StartObserver(uint64_t document_epoch, base::TimeTicks deadline);
   void InstallBinding(v8::Local<v8::Context> context, const char* reason);
   void Exceptions(gin::Arguments* args);
   void Report(gin::Arguments* args);
@@ -52,11 +57,15 @@ class OpenAdBlockRendererAgent final : public content::RenderFrameObserver {
   uint32_t generic_sheets_ = 0;
   uint32_t generic_pending_ = 0;
   bool document_queried_ = false;
+  bool dom_content_loaded_ = false;
+  bool observer_pending_ = false;
   bool observer_started_ = false;
   bool binding_installed_ = false;
   bool generic_limit_logged_ = false;
 #if !defined(OFFICIAL_BUILD)
   uint64_t footprint_before_insert_ = 0;
+  std::optional<base::ElapsedTimer> initial_scan_wall_;
+  std::optional<base::ElapsedThreadTimer> initial_scan_cpu_;
 #endif
   v8::Global<v8::Context> binding_context_;
   // Survives new documents if Blink retains the context. Callbacks always

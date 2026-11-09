@@ -73,6 +73,8 @@ extension AutomationController {
       "animationCount": all.reduce(0) { $0 + $1.cards.reduce(0) { $0 + $1.illustration.animationCount } },
       "hostCount": all.count, "engineContentCreationCount": factory.contentCreationCount,
       "windowState": ["id": factory.windowState.id.description,
+        "appActive": NSApp.isActive, "appAppearance": NSApp.effectiveAppearance.name.rawValue,
+        "appearance": page?.effectiveAppearance.name.rawValue ?? "",
         "visible": factory.window?.isVisible == true, "miniaturized": factory.window?.isMiniaturized == true,
         "key": factory.window?.isKeyWindow == true, "main": factory.window?.isMainWindow == true,
         "occlusionState": factory.window?.occlusionState.rawValue ?? 0,
@@ -100,6 +102,19 @@ extension AutomationController {
       guard let rgb = color.usingColorSpace(.sRGB) else { return [] }
       return [Double(rgb.redComponent), Double(rgb.greenComponent), Double(rgb.blueComponent), Double(rgb.alphaComponent)]
     }
+    // Window PNGs have a top-left origin. Resolve the actual native label
+    // bounds here so the pixel gate samples glyphs, not guessed coordinates.
+    func inWindow(_ view: NSView) -> [Double] {
+      inWindow(view.bounds, of: view)
+    }
+    func inWindow(_ bounds: NSRect, of view: NSView) -> [Double] {
+      let frame = view.convert(bounds, to: nil)
+      return rect(NSRect(x: frame.minX, y: (page.window?.frame.height ?? 0) - frame.maxY,
+        width: frame.width, height: frame.height))
+    }
+    func text(_ label: NSTextField) -> [String: Any] {
+      ["frame": inWindow(label), "color": label.textColor.map(components) ?? []]
+    }
     let cards: [[String: Any]] = page.cards.map { card in
       let copy = NSAttributedString(string: card.detail.stringValue,
         attributes: [.font: card.detail.font ?? NSFont.systemFont(ofSize: 14)])
@@ -108,7 +123,13 @@ extension AutomationController {
       return ["frame": rect(card.frame), "illustration": rect(card.illustration.frame),
         "detail": rect(card.detail.frame), "requiredTextHeight": Double(ceil(required.height)),
         "title": rect(card.heading.frame), "requiredTitleWidth": Double(ceil(card.heading.attributedStringValue.size().width)),
+        "textPixels": ["title": text(card.heading), "body": text(card.detail)],
+        "surface": card.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) }.map(components) ?? [],
+        "windowFrame": inWindow(card),
         "labels": card.illustration.drawnLabels, "paints": card.illustration.paintColors.mapValues(components),
+        "labelPixels": card.illustration.drawnLabelFrames.map { label, frame in
+          ["label": label, "frame": inWindow(frame, of: card.illustration)] as [String: Any]
+        },
         "scale": card.illustration.sceneScale]
     }
     return ["viewport": [Double(page.contentSize.width), Double(page.contentSize.height)],
@@ -116,7 +137,11 @@ extension AutomationController {
       "headerTop": Double(page.heading.frame.minY), "headerBottom": Double(page.subheading.frame.maxY),
       "gridTop": Double(page.cards[0].frame.minY), "columnWidth": Double(page.cards[0].bounds.width * 2 + 20),
       "footer": rect(page.footerFrame), "footerGap": Double(page.footerFrame.minY - (page.cards.map { $0.frame.maxY }.max() ?? 0)),
-      "background": components(page.backgroundColor), "cards": cards]
+      "background": components(page.backgroundColor),
+      "linkPixels": page.footerLinks.map { button in
+        ["label": button.title, "frame": inWindow(button.cell?.titleRect(forBounds: button.bounds) ?? button.bounds, of: button)] as [String: Any]
+      },
+      "textPixels": ["heading": text(page.heading), "subheading": text(page.subheading)], "cards": cards]
   }
 }
 #endif

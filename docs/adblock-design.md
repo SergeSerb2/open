@@ -260,6 +260,50 @@ Swift side (`OpenFeatures`): `AdBlockStore` holds the catalog, per-Profile enabl
 - **Storage.** Under `~/Library/Application Support/Open/Profiles/<profile>/AdBlock/`: `catalog-state.json` (enabled IDs, ETags, last-check times, catalog version), `lists/<id>.txt` (last good text per list), `engine.dat` (serialized engine for fast startup), and `exclusions.json` (excluded domains per Profile). Load `engine.dat` at Profile open (about 47 ms for two lists). Fall back to text parse if the DAT version mismatches the crate version.
 - **Per-Profile isolation.** Engines, enabled sets, and exclusions are per Profile, as in Arc (`blockListsPerProfile`). Incognito Profiles get a memory-only engine cloned from the default lists with no disk writes.
 
+### Cold-start configuration (Section 13, 2026-11-09)
+
+The App configures Default at engine readiness and every regular or private
+context at creation, before handing it to a page. It sets exclusions, the
+deterministic `Profiles/<dataDirectoryName>/AdBlock/lists` path, and the master
+switch through OpenEngine. A read-only task prefetches saved settings and
+exclusions off the main thread during model installation. Until that task
+returns, configuration uses the existing store's in-memory values where
+available, otherwise the product default (on, no exclusions). The App does not
+wait for this task or perform settings IO on the main thread before paint.
+
+The startup task also performs one `lstat` of `lists/current.json` per Profile;
+only `ENOENT` identifies a fresh Profile. There is no main-thread stat. For a
+fresh Profile with a live context, `AdBlockStore.openProfile` starts from context
+creation, or as soon as that background result returns. Store metadata, settings,
+and lease preparation run on a worker; main-actor installation only assigns and
+binds the prepared values. Seed/verify and exclusion-file IO run in
+`ListRepository`. Concurrent fresh contexts share store preparation and the
+existing per-Profile opening task. Warm Profiles keep their after-paint opening.
+
+The store configure event explicitly reloads an already configured directory
+after seeding; setting the same path alone would not retry it. A missing pointer keeps the initial load in `awaiting_generation`
+with a 1,500 ms deadline per eligible request and a process-wide 128-request
+limit. Bad manifests/SHA or other real load errors end that wait and fail open;
+a valid zero-list generation completes it. Main-frame navigation stays direct.
+Before the native wait was added, the App-only branch failed open before
+an engine was ready. The M5 App-only probe on 2026-11-09 blocked the first post-onboarding script and loaded
+its allowed control while the after-paint adapter was still unstarted. The fresh
+generation was already published before onboarding finished. On warm relaunch,
+the first script loaded before the DAT engine arrived; saved-off and excluded
+controls also loaded. The main engine has no cold-hold counters, so the probe's
+browser resource durations are not native hold measurements. Receipts are in
+`.re/s13/i/resume-0952/probe-branch/`; the Chrome-style App ad-block suite passed
+81 rows. These are historical App-only results; the combined native first-request
+proof is recorded with the native change.
+Five interleaved Release pairs per mode used the same recorded main engine,
+with the quiet lock outside the screen lock and load1 7.82–9.35. Fresh first
+paint medians were main 797 ms / App branch 719 ms (paired median difference
+−92 ms); warm medians were 755 / 655 ms (−100 ms). All 20 launches had a
+confirmed first frame, active App, and clean process/window teardown. The
+first fresh pair's 4,792 / 4,465 ms samples remain in the result; no outlier
+was removed. These compare startup with main `1a37e49a`; they do not establish
+the absolute launch budget. Raw pairs and binary hashes are beside the probe.
+
 ### Bounded first-load wait (Section 13, 2026-11-09)
 
 An enabled context with a nonempty list directory can hold eligible
@@ -290,18 +334,20 @@ The App explicitly reloads after seeding. A context that has installed an
 engine or verified a zero-list generation never enters this queue again,
 including during a reload. Turning blocking off ends the pending state;
 turning it back on retries an unfinished initial load. Off,
-excluded, no-load-in-flight, and warm requests have zero intentional hold.
+excluded and already-loaded requests have zero intentional hold. A warm
+Profile relaunched in a new process can hold its first eligible request
+while its DAT engine loads; once installed, requests and later reloads
+use the normal path without a cold hold.
 
-This native branch is stacked on Step 5. The App's early context
-configuration and fresh-Profile seeding are a separate branch. Fresh Profiles
-start `openProfile` at context creation, once a background stat finds no
-generation pointer. Seed IO runs in `ListRepository`; warm Profiles still
-open after paint. Together, early seeding and awaiting-generation holding
-close the earlier missing-pointer gap in source. Blocking from the first
-fresh post-onboarding request, with its logged hold time, is still pending
-real-runtime proof. Fresh and warm launch comparisons each require at least
-five interleaved main/branch pairs, plus the queue/deadline and negative
-proofs, after the lead releases the build and screen holds.
+The merged App configures contexts before page use and starts seeding a
+fresh Profile at context creation after a background stat. Warm Profiles
+open their store after paint. Early configuration, fresh seeding and the
+awaiting-generation state cover the initial missing-pointer window. The
+per-request cap and queue bound intentionally fail open if the first engine
+is unavailable in time; this is a startup wait, not a promise to block
+requests after a timeout or a real load error. Runtime receipts for the
+combined implementation are recorded separately from the earlier App-only
+checkpoint below.
 
 ### Site Control Center and Settings UI
 

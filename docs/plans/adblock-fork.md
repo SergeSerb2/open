@@ -2174,9 +2174,17 @@ before that callback (`core/loader/frame_loader.cc:1856`), and
 `V8ScriptRunner` refuses script execution in that scope
 (`bindings/core/v8/v8_script_runner.cc:529`). The first real CEF run therefore
 hid domain-specific elements but sent no generic reports (C-4: 0/10).
-Start the isolated observer in the frame's next AgentGroupScheduler task,
-guarded by a WeakPtr and document epoch. Enter that scheduler's isolate,
-install the native binding, then execute the observer. Before observing
+**2026-11-09 timing correction:** keep the hostname-specific sheet at
+`DidCreateDocumentElement`, but start generic filtering after
+`DOMContentLoaded`. Pinned `FrameLoader::FinishedParsing` also wraps its
+DCL callback in `ScriptForbiddenScope` (`frame_loader.cc:479`), so that
+callback queues `WebLocalFrame::PostIdleTask`, the first main-thread idle
+task after the event. If the document query follows DCL, it queues the same
+idle path. A pending flag, WeakPtr and document epoch prevent duplicate or
+stale startup. Enter the frame scheduler's isolate, create or reuse world 7,
+install the native binding, then execute the observer. A context callback
+only logs creation; it does not install a binding before generic startup.
+Blink may itself recreate a previously used world during navigation. Before observing
 mutations, scan the existing document once, including elements created by
 parser or top-of-body inline scripts. **Review correction (19:08):** after
 65,536 node/token inspection steps, work yields with `setTimeout(0)` and
@@ -2186,7 +2194,8 @@ starts before the first yielded task so changes during an unfinished initial
 scan are queued. Only the 65,536 distinct-token / 4,194,304 UTF-16-unit
 lifetime caps, or a negative native report result, disconnect. Queued generic
 reports still send at most 500 tokens per flush. The new C-4 inline variant
-requires hiding and initial-scan evidence in 10/10 navigations. The rebuilt
+requires eventual hiding after DCL/idle startup and initial-scan evidence in
+10/10 navigations; generic rules do not promise document-start hiding. The rebuilt
 pre-review `335e9f8d` binary passes both C-4 variants 10/10; the inline variant also
 records its generic class in the initial scan 10/10. The real CEF suite
 passes all 18 executable rows, including binding-before-observer ordering
@@ -3499,6 +3508,25 @@ capturing; P-1 regeneration is fork-infra §12 step 5.
 
 ## 12. OpenEngine and Swift API surface
 
+**API-DESIGN errata (Section 13 H, 2026-11-09):**
+The App adapter's OTR inheritance in API-DESIGN §3 and the Site Control contract
+in §5 also need session-only exclusions. `AdBlockStore.siteSnapshot(for:privateSession:)`
+and `setExcluded(_:excluded:profile:privateSession:)` take the parent Profile ID
+and the engine's existing `Private-N` context identifier. The effective set is
+parent saved exclusions ∪ session additions. Private removal cannot override a
+saved parent exclusion. The adapter registers the session when it configures
+the OTR and drops it when the last private window closes. Saved-parent changes
+recompute each open OTR's union; private events target only that OTR. No private
+choice is serialized. Profile close and retirement notify observers, including
+an immediate retirement notification before IO drains. Site Control remains
+Section 12's responsibility; its parent/session call-site handoff is in
+`.re/s13/h/S12-HANDOFF.md` in the project root. The lead assigned the joint
+visible-panel refresh and tile-tap proof to Section 12 after taking H's API
+changes. H's separate real-App lifecycle observer counts production didChange
+notifications and reads availability; its private-window request/disk proof
+uses the real page context and native engine. Those receipts do not prove the
+Site Control presenter or its actual tap path.
+
 CEF types never cross into Swift (architecture rule). OpenEngine is the
 only layer that includes CEF headers.
 
@@ -4654,6 +4682,37 @@ distribution (stamp 5602914f…). Step 4 is not applied there. To put it
 back: copy `Engine/fork/src/open/adblock/` from this branch into the tree,
 then replace 0310 and apply 0311 from this branch's `patches/cef/`.
 
+### Cold-start App erratum (2026-11-09, App-only verification)
+
+The adapter now posts exclusions, the deterministic Profile list directory,
+and enabled state when a context is created, including Default at engine
+readiness. Context configuration does not need an IO-backed store. A separate
+read-only background task prefetches saved settings/exclusions; until it
+returns, the existing store's in-memory values win, otherwise defaults are
+on/no exclusions. **Lead fresh-profile ruling (2026-11-09 04:30):** one
+background `lstat` of `lists/current.json` identifies `ENOENT`. A live fresh
+context starts `openProfile` immediately after detection, without waiting for
+paint; existing generations retain after-paint opening. Store metadata/lease
+preparation and repository seed/verify/exclusion IO stay off the main thread.
+The first store configure explicitly reloads an already configured directory,
+because the early load may have failed before seeding created `current.json`.
+The companion native change keeps an unpublished pointer in
+`awaiting_generation` under the same 1,500 ms per-request / 128 process-wide
+limits. Real manifest/SHA/read errors end pending; an engine or valid zero-list
+generation completes the initial load. This App-only branch still fails open
+before an engine arrives. The M5 App-only probe blocked the first
+post-onboarding script with an allowed control while the after-paint adapter
+was still unstarted; its generation was already published before onboarding
+finished. Warm relaunch exposed the remaining first-engine gap. Saved-off and
+excluded controls loaded. The Chrome-style App ad-block suite passed 81 rows.
+Raw receipts are in `.re/s13/i/resume-0952/`. Main's engine exposes no cold-hold
+counters; browser resource durations do not prove native hold time. Five
+interleaved Release pairs for each of fresh/warm Profiles at load1 7.82–9.35
+showed no first-paint slowdown against main `1a37e49a`: fresh medians main
+797 ms / branch 719 ms, warm 755 / 655 ms; paired median differences were
+−92 / −100 ms. All samples, including the slow first fresh pair, were kept.
+Native deadline/boundary proofs still belong to the companion branch.
+
 ### Section 13 lead decisions (2026-11-07)
 
 1. **Order.** Step 4 (with the §13.5.1 rulings) first. Then the control
@@ -5113,82 +5172,95 @@ endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 
 
-### Step 5 as built (2026-11-09, morning screen hold)
+### Step 5 as built (2026-11-09, generic observer after DCL)
 
-**Merged PR candidate: `s13/step5-pr` (PR: pending lead creation).** E5
-merged the complete cosmetics and parser-corpus stack (`cf16a133`) with
-main `518471aa` in `ac15c11a`, then overlapping main `195ab60d` in
-`44b90ccc` before building. Release-script-only main `3fb0645c` is merged
-in `183f4ec6`; it changes no App or engine source. Main's strict AD3
-attachment-allocation gate and record-only whole-process pairs remain.
-No budget, baseline, assertion or allowlist is widened.
+**Merged candidate: `s13/step5-pr` (PR pending lead creation); ready for lead PR creation and review.**
+Product source `4ce7facb234cb96d0abdbf9fd730478ddf511198` includes main
+engine PR #266 (0106), merged through `cbe13bfa`. Independent patch 0106
+was moved first in numeric Chromium series order; patch contents and the
+strict checker were unchanged. The initial strict 7/0/1 warning stopped
+packaging and remains in the receipts. The rebuilt s13b engine passes
+owned objects/targets, scoped GN/checkdeps, full CEF and strict 8/0/0.
+Fresh distribution, App Debug and normalized fingerprint pass. Code SHA:
+`5f65f8e8495fa03508987d929971cb073f779d84927b8e4f3444c16c2a15be5b`.
+Later commits update evidence only. No unit tests or desktop input.
 
-The merged s13b build passes owned objects/targets, scoped GN/checkdeps,
-the full CEF framework and strict built status **8 PASS / 0 FAIL / 0 WARN**.
-The headless real caller passes official-list load and empty-root refusal
-(2/2). CEF passes all 20 executable rows, including both 30,000-element
-cases at 10/10 hides and yields, and all 45 observers install the binding
-before execution in world 7. Distribution and App Debug build pass;
-Vendor and embedded normalized engine code share SHA-256
-`f44ac4b9dc3cffae21eefd5d02a618c51dc6b676d73c830179012abe7a21eb17`.
-These runtime receipts bind to built source `44b90ccc`.
+**Attribution and timing change.** The first six quiet pairs were a real
+regression: paired median +1.45 ms, 5/6 slower; condition medians 38.15 vs
+35.65 ms. One real-App attribution run measured renderer CPU: sync query
+46 µs, initial CSS 217 µs, binding 9 µs, observer execution 487 µs including
+initial scan 253 µs, and generic CSS 32 µs. Cold warmup world creation
+including binding took 637 µs CPU; measured existing-world lookup took
+3 µs and does not measure Blink's eager recreation. Nested times must not
+be added twice. Exact wall/CPU pairs and the frame filter are in
+`.re/s13/e5/RENDERER-ATTRIBUTION.md`.
 
-The first merged App adblock run passes all 84 behavior rows, including
-strict AD3, resources/Profile/lifetime and the explicit cosmetic controls:
+The hostname-specific user sheet stays at document start. Generic world
+lookup/creation, binding installation, initial class/ID scan and
+MutationObserver start on the first main-thread idle task after DCL.
+Blink forbids scripts in document-element and DCL callbacks, so DCL queues
+`WebLocalFrame::PostIdleTask`. A pending flag, WeakPtr and document epoch
+reject duplicate/stale work. Context callbacks do not install the binding
+early; Blink can still recreate a previously used world itself. The 30k
+yield/resume path, 65,536-step budget, lifetime caps, 64-sheet cap and
+private world 7 remain. §8.2 and C-4 require eventual generic hiding,
+including inline-created nodes, rather than generic document-start hiding.
+
+**Fresh acceptance.** Headless load/empty root 2/2; CEF 20/20 executable
+rows (C-9 reserved), both 30k fixtures hide/yield 10/10, C-4 inline hidden
+and initially scanned 10/10, binding-before-execution 45/45 in world 7.
+Fresh adblock: 86 PASS, 11/11 launch logs and 13 world-7 observers. Fresh extensions: 12 PASS, 1/1 launch log, 27 allocations, 106 injections and 6 world-7 observers. Extension allocations/isolated injections use worlds 8–11, main injections use 0; no extension allocation/injection uses 7. Page/iframe reciprocal separation passes after enabled=true, engine_loaded=true and load_generation=1. All five App cosmetic controls pass:
 `AD3_cosmetic_enabled_hides`, `AD3_cosmetic_excluded_visible`,
-`AD3_cosmetic_global_off_visible`, `AD3_cosmetic_global_on_hides_again`
-and `AD3_cosmetic_gates_reject_inverse_controls`. The suite remains
-**FAIL (audit collector)**, with only 5/9 launch logs saved; all owned
-processes/windows were removed. Collector fixes through `3a7539b1` retain
-per-launch stderr, prefer the selected log destination and preserve live
-allocation-counter reads. Their runtime rerun is **PENDING (morning)**.
+`AD3_cosmetic_global_off_visible`, `AD3_cosmetic_global_on_hides_again`,
+`AD3_cosmetic_gates_reject_inverse_controls`. Native requests/resources,
+strict AD3, Profile/privacy and lifetime rows pass; no page-visible Open
+global or author stylesheet appears. Adblock attempt 1 was interrupted by
+T3 Pretty foreground loss, cleaned up, and is retained beside complete
+attempt 2. No product failure was retried.
 
-Patch 0902 adds non-official verbose numeric traces at extension world
-allocation and the actual `ScriptInjection::InjectJs` execution request.
-The renderer agent records context creation. These traces log world,
-execution kind, frame token and source count, with no page URL, script text
-or extension identifier. `OPEN_E2E_WORLD_AUDIT_DIR` enables these scopes
-and retains each launch's engine file or unique stderr stream. The real
-`extensions` flow checks Dark Reader injection in a local page and iframe,
-native cosmetic hiding in both, and reciprocal absence of the ad-block
-binding and extension API. Numeric proof remains **PENDING (morning)**:
-no extension allocation/injection may use private world 7; isolated and
-user-script worlds must be at least 8; main-world injection must use 0;
-all ad-block observers must use 7. Every owned launch needs a retained log.
+New C-G1 once: p50 106.5 µs / p99 233.0 µs, 100 measured documents; raw budget PASS, load1 11.19–14.42, absolute_load_valid=False. First-process calls remain separate. C-G2/C-G3 retain the explicit lead waiver: C-G2 84/714 µs at
+18fcabc2 (product 335e9f8d), T 64.9 ms, 239,510 injected checks, load1
+8.49–13.31; C-G3 353 µs, load1 13.98. The off query and initial insertion
+paths are unchanged except non-official opt-in timers. The old
+133/824 µs C-G1 remains historical; the observer change required the new
+once-only run above. Original raw loaded qualifications remain explicit.
 
-Full gate attempt 1 stopped after 15 PASS to release a heavy slot during
-priority starvation. Attempt 2 also passed 15 checks, then Settings preview
-failed `sidebar-defaults` with Foundation mktemp errno 28 (disk full).
-The stopped `sidebar-render` trap row is INTERRUPTED. Neither attempt is
-a full-gate PASS. Raw results and the remaining rows are in
-`.re/s13/e5/PR-BODY.md`; no post-02:35 screen result counts as acceptance.
+Eight alternating App pairs: cosmetics 39.300 ms / 6761.0 µs native busy CPU; exact main 518 network-only 39.900 ms / 7498.5 µs. Median paired wall delta -2.050 ms / -4.478%; PASS under the lead's ≤ +0.5 ms OR ≤ +1.5% rule. Load1 5.92–7.31; absolute_load_valid=True, status=PASS. Each condition uses the same pinned 200-image fixture, seeds
+and cache policy; all measured loads have 200 terminals and 143 native
+blocks. Each App records readiness, one warmup then one measured load.
+Navigation wall ends at load; generic hiding is checked afterward. CPU is
+native matcher/proxy thread CPU, excluding renderer and whole-App CPU.
+Prebuilt pairs take quiet → screen, no heavy slot; no trimming or retry.
+Source/shell differences from exact 518 remain an attribution limit.
 
-The lead's 02:42/02:45 rule 8b hold stops all M5 and M1 screen work until
-the user clears the crash dialog in the morning. No E5 job remains;
-heavy slot a is released. **PENDING (morning)**: complete App adblock
-rerun, `extensions`, `actions`, `extensions-p3`, `extensions-e2`, full
-`extensions-ui`, `features`, `page`, Settings preview/full gate, numeric
-world separation and C-G1/C-G2 once each. Extension coverage includes real
-Chrome Web Store installs, local signed-CRX install/refusal and actual
-page/iframe content scripts. The lead creates the PR after acceptance;
-this pending branch misses the 06:15 DMG.
+**Full M5 gate:** 26 PASS / 0 FAIL / 0 INTERRUPTED / 0 SKIP, `tools/verify-all.sh --with-arc-data`, heavy a,
+no quiet lock. The full summary and exact commands/seconds/loads are in
+`.re/s13/e5/PR-BODY.md`. Earlier full gate 26/26 at `3190491e` and the
+complete Section 6 set retain their source provenance: actions 26,
+extensions-p3 19, extensions-e2 26, full extensions-ui 71, features 27,
+page 85 PASS (other seven suites `c57370d8`). Known picker/Page BLOCKED
+and smart-zoom DEFERRED rows remain. Earlier 352 behavior PASS and
+29/29 logs (91 allocations/331 injections/46 observers) are separate,
+not pooled as new-head results. Exact 518 world-negative and forced
+failure cleanup proofs remain accepted. Night gate/ENOSPC, collector,
+loopback fixture and inspector-classification failures remain preserved.
 
-Six interleaved real-App page-load pairs are prepared, not run: this
-network-plus-cosmetics build versus exact main `518471aa` network-only App.
-Both Apps are built and fingerprinted. The adapted E3 harness uses equal
-pinned seeds/fixture/cache policy and requires equal nonzero blocked
-counts. It reports median on-load wall and native matcher/proxy busy-thread
-CPU per load, not whole-App CPU. Quiet lock stays outside the other locks;
-load1 <=12 is the target. Loaded results retain their loads and cannot
-claim quiet acceptance. No page performance result exists yet.
+Self-test and Rust sources remain byte-identical to accepted `cf16a133`:
+150,000 list builds, 100,000 URL parses, 30,000 DAT and 30,000 resources
+inputs need no repeat. Earlier isolated apply/reverse proof is 39 patches /
+67 files; the new strict applied state is 41 patches / 140 overlays, not
+claimed as a fresh isolated fixture run. Scriptlets/procedural/style/remove
+actions, Step 8 cross-Profile contention, parser deadlines/accounting and
+allocator attribution remain separate. The +56.22 MiB worst-payload process
+delta is record-only, not a measured worst single allocation. Child I's
+fresh-Profile startup fix is separate from this measured build.
 
-The parser self-test and Rust shim are byte-identical to `cf16a133`, so
-its accepted full-size parser-corpus receipts remain applicable to that
-source. E5 changes no parser policy, corpus size, license or dependency.
-Exact commands, seconds, loads, identities and pending rows are in
-`.re/s13/e5/PR-BODY.md` and `CHECKPOINT.md`. The E4 receipts below are
-historical and retain their stated source/binary and acceptance limits.
+The vanished control App's cause remains UNPROVEN after own-script/call
+audit; exact 518 was rebuilt and verified. Private copied Apps preserve
+executable/framework/seed identity and strict deep codesign checks. No
+06:15 DMG claim. The lead owns PR creation and independent review.
 
+#### Earlier E4 evidence (before merged acceptance)
 
 Branch `s13/step5-cosmetics` started at Step 4 `dc7b985a` and merged
 Step 4 `f06011e7` before its first build. The lead assigned
@@ -5200,7 +5272,7 @@ Strict built status is 8 PASS, 0 FAIL, 0 WARN. The final binary loads the
 two official lists in a real headless service check and rejects an empty
 root with the expected diagnostic error (2/2 PASS; command 5.53 s, load
 12.70/19.68/21.64 to 12.57/19.53/21.57).
-Step 5 remains **in progress**. The real CEF functional suite passes
+At that checkpoint, Step 5 remained **in progress**. The real CEF functional suite passes
 18 executable rows in 86.94 s (load 10.40/12.98/17.41 to 8.91/11.55/16.39).
 Late generic elements hide 10/10; top-of-body inline-script elements hide
 10/10 and appear in the initial scan 10/10. C-9 remains reserved.
@@ -5255,10 +5327,11 @@ and final build pass. No failed build output was launched.
   script interpolation or main-world global is created.
 - The fixed class/ID observer runs in private cosmetics world 7
   (`kOpenAdBlockIsolatedWorldId`, Chromium 0902) after native binding installation.
-  It starts in the frame's next task, after Blink's script prohibition
-  ends. It begins scanning existing tokens and starts mutation observation
+  It starts on the first main-thread idle task after DOMContentLoaded.
+  The hostname-specific sheet stays at document start; generic rules may
+  hide later. It scans existing tokens and starts mutation observation
   before yielding, so parser and early inline-script nodes are included.
-  An early context callback installs the binding idempotently; its
+  Binding installation happens at idle startup, not the context callback; its
   `v8::Global<Context>` follows release. Weak callbacks read the current
   payload lazily. Generic replies carry a document epoch and old replies
   are discarded. `generichide` prevents the observer and all reports.

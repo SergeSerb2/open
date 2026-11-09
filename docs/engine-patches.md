@@ -18,6 +18,70 @@ For this plan:
 
 ## Summary
 
+### Persistent code-sign clone (Section 16, 2026-11-08)
+
+`chromium/0106-open-code-sign-clone-reuse.patch` wires the overlay
+`chrome/browser/mac/open_code_sign_clone.{h,cc}` into the existing clone
+manager. The feature remains enabled. A per-install private cache validates
+the executable's device, inode, size and nanosecond mtime, plus its hard link,
+before reuse. Failed checks retain Chromium's original per-run behavior.
+The cache lease protects a running browser's clone during live replacement.
+Design, rejected-disable evidence and current verification status are in
+[the clone report](re/codesign-clone-reuse.md). Normal-App reuse, invalidation,
+separate installs, fallback and the requested ad-hoc live swap passed.
+The historical scan gate remains FAIL against the 7/7 target: residual
+first-after-gap scans, cause open, despite stable executable metadata
+(functional set 6/7). The rebuilt-engine morning set is separately 7/7
+scan-free with unchanged metadata. It does not explain the earlier scans.
+Hardened DLV now passes the three requested M1 update directions. The
+pre-#271 quiet-window runner completed seven pairs, but both variants failed
+the cold/warm budgets.
+Timing on the rebuilt post-#271 engine remains pending the next quiet window.
+The earlier full gate recorded 24 PASS and 1 FAIL (`commandbar-render`, two
+timing rows at load1 29.1); the report keeps that historical failure.
+Chromium `0106` follows main's `0801–0810`; the numeric-order WARN is expected.
+
+After merging #271 and main `3fb0645c`, the S16 rebuild/distribution and both
+normal App builds passed. Distribution SHA-256 is
+`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+Engine-status is 7 PASS, 0 FAIL, 1 order WARN. Normal-App rows a/c/d/f pass
+again on this engine. See the report's post-#271 cohort for suite and full-gate
+results. No launch-gain claim follows from these functional rows.
+The earlier post-#271 gate stopped after 15 PASS when a real crash appeared;
+the lead later attributed it to S11/window-border. The later 09:15 renderer
+STOP was Section 13's intentional passing popup-renderer crash control, per
+the lead's attribution. Both original STOP receipts remain in the report.
+
+After main #280 and #281 were merged as `8cac5c6f`, both Apps were rebuilt.
+Current normal-App a/c/d/f pass; b is separately 7/7 scan-free with unchanged
+metadata. The historical b FAIL and its first-after-gap cause remain open.
+Both ad-hoc swap directions pass. Shell passes 7 rows, Features 27 (including
+non-fatal chrome://kill recovery), updater 103, and engine-status remains
+7 PASS / 0 FAIL / 1 order WARN. The current full gate is **24 PASS / 1 FAIL**:
+command-bar timing row 151 is +0.309 ms against +0.300 ms at load1 8.7.
+Two isolated attempts remain FAIL; the second exceeded the quiet load gate.
+They are not combined into PASS. The exact table, loads and limits are in
+the report. No code in the command-bar CLI path changed.
+
+The M1 DLV matrix now passes both **+0106 → +0106** Release↔Debug directions
+and the first-update **main(#271) → +0106** direction. Each of the three
+inputs passed one initial plain launch. The main control was App-only built
+from merge-base main `bc5678d1` against s8-main's recorded #271 distribution;
+no engine build ran. DLV signing and launches ran only on M1, with separate
+screen-lock calls, clear before/after dialog checks and no new crash report.
+Receipts are on M5 and the owned M1 worktree is removed. The M5 branch,
+Vendor engine and exact +0106 App were restored after the control build.
+The final merge of main `28001634` is `8afd3cc1`. It adds no engine
+input. Both normal Apps rebuilt and engine-status remains 7 PASS / 0 FAIL /
+1 order WARN. Shell passes 7 rows. Updater emits 97 PASS rows, then stops
+in the cancelled-termination retry case: known #283, with later rows incomplete.
+All cleanup and before/after dialog checks pass. The lead's 11:18 GO accepts
+the retained 24/1 full gate and +0.309 ms command-bar timing FAIL under TANDEM
+4l; #266 changes no OpenKit code relative to merged main. The PR is ready
+under that ruling. First-after-gap scans (3/7 daytime, 1/7 functional) stay
+OPEN. Row g remains pending the next quiet window, with no launch-gain claim.
+No engine rebuild or refresh ran; the lead owns the merge and engine refresh.
+
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
 The E11 window hook is `chromium/0306-open-extension-windows-tabs.patch`.
@@ -552,23 +616,30 @@ purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
 `.re/s13/e1/idle-resume-proof.json` and `idle-resume-verdict-identity.json`.
 The later main `d26300e6` integration passes 20 native processes and 40 baseline-identical initial/resumed corpus dumps. Its 16 KiB text/DAT physical deltas are 55.157/52.110 MiB steady and 57.094/54.188 MiB after the corpus plus idle purge. G-2 CPU, G-6 and ruling 4a pass. Merged N 32/32, positive/allowed COUNT and quiet G-4/G-5/G-6 pass. Both COUNT negative controls pass; strict App acceptance passes 79/79, including 11 record-only rows. Regression/full-gate work remains pending. The dev distribution is recorded; the Debug App builds with matching normalized engine code. Only lead rulings 2a and 4a replace the original budgets.
 
-### Step 5 implementation checkpoint (2026-11-09, morning screen hold)
+### Step 5 implementation checkpoint (2026-11-09, generic observer after DCL)
 
-| Piece | Source change | Verification |
-|---|---|---|
-| `chromium/0902-open-adblock-isolated-world.patch` | Reserve macOS world 7 for the overlay's private cosmetics binding; Open/P7 remains 6, Chrome internal remains 4, extensions begin at 8. The observer retains its walker/token/record positions and yields at the per-task step budget. Non-official verbose traces record numeric extension-world allocation and every script injection target; no URL or script text is logged. | E5 merged build at `44b90ccc`: full framework/scoped checks/strict 8/0/0 PASS; CEF 20/20, both 30k cases 10/10 and ordering 45/45 PASS. Full-series apply/reverse passes 39 patches / 67 files. App numeric world separation PENDING (morning screen hold). Earlier E4 review at 5074218a: own targets/full framework/scoped includes/strict 8/0/0; CEF 20/20, both 30k cases 10/10 with yields; world-7 ordering 45/45. App cosmetic 14/14; C-G1 p50 133 µs/p99 824 µs at load1 22.57–24.73. |
-| P-3, `cef/0311` registry hook | Register the per-Profile matcher on `AdBlockCosmeticsTaskRunner()`. No request returns to UI. Network/socket hunks retained. | E5 merged s13b full CEF/strict built 8/0/0 PASS at `44b90ccc`; headless service load/empty-root 2/2 PASS. |
-| P-4, `cef/0901-open-adblock-renderer-agent.patch` | Include and attach one per-frame cosmetic agent. Mojo host, isolated observer and user-origin sheets live in overlay; generated Mojo files stay out of patches. The observer starts after Blink's script prohibition, scans existing tokens once, then observes mutations. | E5 CEF 20/20 and install-before-execute 45/45 PASS at `44b90ccc`; distribution/App Debug/fingerprint PASS. App cosmetic controls and strict AD3 behavior pass in the 84-row first run, but missing launch logs leave the suite unaccepted. Collector rerun, complete App/full gate and C-G1/C-G2 PENDING (morning). Earlier E4 gate/Page/timing/payload receipts remain historical in the plan. |
-| Parser corpus switches (`cef/0310`, overlay self-test) | `--open-adblock-fuzz-full` runs the full parser corpus without a watchdog; `--open-adblock-fuzz-data-only` skips earlier kinds and runs 30,000 DAT plus 30,000 resources inputs. Official builds exclude these paths. | Accepted source `5c31fc1b`: 30,000 per kind PASS; earlier 150,000 list / 100,000 URL run PASS. Sources unchanged in E5 merge. See plan full-size parser-corpus receipt. |
-| Non-official harness | Existing off switch plus paced `--open-adblock-bench-load` / `--open-adblock-bench-load-rate` and receiver-drop switch. Renderer verbose logs include timing, counts and in-process footprint. | E5 off/excluded/drop negatives PASS; C-G1/C-G2 reruns PENDING (morning). Earlier E4: quit-load 5/5 PASS. C-G1 p50 123 µs/p99 505 µs, load1 10.71–14.03; C-G2 p50 84 µs, load1 8.49–13.31, T=64.9 ms, R=9,244.9923/s, 239,510 checks. C-G3 353 µs for 431 selectors, load1 13.98. Worst record +56.22 MiB/264.297 ms across 67 recalculations, load1 14.47–14.53. |
+Product `4ce7facb`, main engine PR #266 merged; ready for lead PR creation and review.
+Hostname-specific CSS stays at document start. Generic world creation,
+binding, scan and observation queue one genuine idle task after DCL;
+C-4 requires eventual hiding. The 30k yield/resume, 64-sheet cap and
+world-7 separation remain. One real-App renderer attribution is recorded
+in `.re/s13/e5/RENDERER-ATTRIBUTION.md` and the plan §8.2 erratum.
 
-The unchanged sanitizer's exact quote, escape, delimiter, procedural and
-256 KiB rules are quoted in the plan's "Step 5 as built" security callout
-(98-2). It returns selector vectors, and the renderer constructs only the
-fixed `display:none!important` declaration. No scriptlets, style/remove
-or procedural action executes. Generic requests carry the top origin to
-re-check the global toggle and site exclusions for every batch. See the
-plan's errata and acceptance table, including the separate App AD3 owner.
+| Piece | Behavior and verification |
+|---|---|
+| `chromium/0902` | Private world 7; extensions start at 8. Fresh adblock: 86 PASS, 11/11 launch logs and 13 world-7 observers. Fresh extensions: 12 PASS, 1/1 launch log, 27 allocations, 106 injections and 6 world-7 observers. Extension allocations/isolated injections use worlds 8–11, main injections use 0; no extension allocation/injection uses 7. Page/iframe reciprocal separation passes after enabled=true, engine_loaded=true and load_generation=1. |
+| `cef/0311` registry and `cef/0901` P-4 | Matcher work stays off UI. Fresh owned/full/scoped/strict 8/0/0, headless 2/2, CEF 20/20, both 30k hide/yield 10/10, binding-before-execution 45/45, distribution/App/fingerprint PASS. Adblock 86 includes all five cosmetic controls; extensions 12 includes real CWS and reciprocal page/iframe proof. |
+| Non-official timing | New C-G1 once: p50 106.5 µs / p99 233.0 µs, 100 measured documents; raw budget PASS, load1 11.19–14.42, absolute_load_valid=False. First-process calls remain separate. Inherited C-G2 84/714 µs, T 64.9 ms, 239,510 checks, load1 8.49–13.31; C-G3 353 µs, load1 13.98. Original six quiet pairs FAIL (+1.45 ms paired median) remain recorded. Eight alternating App pairs: cosmetics 39.300 ms / 6761.0 µs native busy CPU; exact main 518 network-only 39.900 ms / 7498.5 µs. Median paired wall delta -2.050 ms / -4.478%; PASS under the lead's ≤ +0.5 ms OR ≤ +1.5% rule. Load1 5.92–7.31; absolute_load_valid=True, status=PASS. |
+| Parser-corpus modes (`cef/0310`, self-test) | Unchanged accepted source: 150,000 list / 100,000 URL / 30,000 DAT / 30,000 resources inputs PASS. Full and data-only modes are non-official; no corpus repeat after unchanged source. |
+| Full M5 gate | 26 PASS / 0 FAIL / 0 INTERRUPTED / 0 SKIP; complete summary, commands, seconds, loads and source-qualified earlier Section 6/features/page set in `.re/s13/e5/PR-BODY.md`. |
+
+The sanitizer's quote/escape/delimiter and 256 KiB rules remain unchanged.
+Only fixed `display:none!important` rules execute; no scriptlets or
+procedural/style/remove actions. Generic batches carry top origin to
+re-check enabled/exclusion state. Earlier isolated 39-patch/67-file
+apply/reverse proof remains historical; current strict state is 41 patches /
+140 overlays. No new single-allocation claim or fresh-Profile startup fix.
+The lead opens and reviews the PR; all earlier raw failures are retained.
 
 ### Control API (Section 13, 2026-11-07)
 
@@ -848,7 +919,7 @@ Overlay (no patch): `cef/include/cef_navigation_history.h` (`CefNavigationHistor
 
 Section 8 decisions (differences from memory-fork §3/§5, with the reason):
 
-- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102, 0103 and 0106 stay unused. The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
+- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files at that milestone.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102 and 0103 stay unused. Section 16 later assigned 0106 to code-sign clone reuse (see the summary above). The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
 - **Freeze state lives in a `WebContentsUserData`** (`PageLifecycleState`, overlay) instead of a `page_frozen_` member on `CefBrowserHostBase` (D-4's reason holds: content has no getter). It clears when the page becomes visible or its primary page changes, so "show unfreezes" needs no hunk in the `WasHidden` paths.
 - **Visibility uses `UpdateWebContentsVisibility`, not `WasShown()`/`WasHidden()`** (P1 finding: a direct `WasShown()` leaves "first set visible" unset and WebContents then ignores the view's later HIDDEN).
 - **Restore checks for an unused controller, not `GetEntryCount() == 0`.** A fresh `NavigationController` always holds the initial NavigationEntry, so the plan's check would refuse every restore. Capture also returns null for a controller with only the initial entry. A restore into a page that is already visible (an Alloy view in a shown window) calls `LoadIfNecessary()`; otherwise the entry loads when the page is shown (`SetActive(true)`).

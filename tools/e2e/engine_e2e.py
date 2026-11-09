@@ -246,6 +246,19 @@ class Open:
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
+        # Screen launches are serialized. Keep a private receipt of the real
+        # executable identity so first-after-build/install costs stay visible
+        # without treating them as same-binary repeat-launch budgets.
+        binary_stat = os.stat(app)
+        binary_identity = [os.path.realpath(app), binary_stat.st_dev, binary_stat.st_ino,
+                           binary_stat.st_mtime_ns, binary_stat.st_size]
+        receipt_key = hashlib.sha256(os.path.realpath(app).encode()).hexdigest()
+        launch_receipt = Path(ROOT) / '.re/e2e-tools' / ('last-launched-binary-' + receipt_key + '.json')
+        try:
+            previous_binary = json.loads(launch_receipt.read_text())
+        except (OSError, ValueError):
+            previous_binary = None
+        self.first_launch_after_build = previous_binary != binary_identity
         activator_source = os.path.join(ROOT, "tools", "e2e", "activate-own-app.swift")
         self.activator = os.path.join(ROOT, ".re", "e2e-tools", "activate-own-app")
         if not os.path.exists(self.activator) or os.path.getmtime(self.activator) < os.path.getmtime(activator_source):
@@ -308,6 +321,8 @@ class Open:
         self.proc = subprocess.Popen(args if self.direct_child else launch,
                                      env=env if self.direct_child else None,
                                      stdout=self.launch_output or self.log, stderr=subprocess.STDOUT)
+        launch_receipt.parent.mkdir(parents=True, exist_ok=True)
+        launch_receipt.write_text(json.dumps(binary_identity))
         if self.direct_child:
             self.pid = self.proc.pid
         _OWNED_APPS.append(self)
@@ -4481,19 +4496,27 @@ def page_commands_checks(factory, results, tmp):
     server, origin = page_fixture_server()
     app = factory(urls=(), fresh=True)
     shared_quotes = None
+    clipboard_saved = app.call("pasteboard-preserve")
     try:
+        assert clipboard_saved, "clipboard preservation failed"
         # Shared defaults domain: set the one key this suite reads, restore it in `finally`.
         shared_quotes = app.call("defaults", key="open.advanced.enableSharedQuotes")
         app.call("defaults", key="open.advanced.enableSharedQuotes", value=True)
         page_copy_rows(app, results, origin)
+        import clean_links
+        clean_links.checks(app, results, origin, sys.modules[__name__])
         page_quote_rows(app, results, origin)
         page_zoom_rows(app, results, origin)
     finally:
         try:
             app.call("defaults", key="open.advanced.enableSharedQuotes", value=shared_quotes)
         finally:
-            app.quit()
-            server.shutdown()
+            try:
+                if clipboard_saved:
+                    results["CL_clipboard_restored"] = {"ok": app.call("pasteboard-restore")}
+            finally:
+                app.quit()
+                server.shutdown()
 
 
 def sidebar_checks(factory, results, tmp):
@@ -7223,6 +7246,9 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
 
 def page_checks(factory, results, tmp, style="alloy"):
     """page-platform §8.3 `--only page`: one suite, one row group per feature."""
+    if os.environ.get("OPEN_E2E_PAGE_COPY_ONLY") == "1":
+        page_commands_checks(factory, results, tmp)
+        return
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)

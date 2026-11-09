@@ -33,6 +33,7 @@ std::string_view AdBlockClassIdObserverScript() {
   let tail = null;
   // Retain the walker and the class/ID position when one task yields.
   let active = null;
+  let scanningInitial = true;
   const stopCollecting = () => {
     collecting = false;
     observer.disconnect();
@@ -110,6 +111,8 @@ std::string_view AdBlockClassIdObserverScript() {
   };
   const drain = () => {
     workTimer = 0;
+    const measureInitial = scanningInitial && typeof binding.trace === 'function';
+    if (measureInitial) trace(7);
     const budget = {steps: 65536};
     while (collecting && budget.steps) {
       if (active) {
@@ -119,7 +122,10 @@ std::string_view AdBlockClassIdObserverScript() {
           active.element = element;
           active.classIndex = active.phase = 0;
         } else {
-          if (active.initial) trace(2, classes.length + ids.length);
+          if (active.initial) {
+            scanningInitial = false;
+            trace(2, classes.length + ids.length);
+          }
           active = null;
         }
         continue;
@@ -148,6 +154,7 @@ std::string_view AdBlockClassIdObserverScript() {
       trace(6);
       workTimer = setTimeout(drain, 0);
     }
+    if (measureInitial) trace(8, scanningInitial ? 0 : 1);
   };
   const observer = new MutationObserver(records => {
     if (!collecting) return;
@@ -159,7 +166,7 @@ std::string_view AdBlockClassIdObserverScript() {
     tail = batch;
     if (!workTimer) workTimer = setTimeout(drain, 0);
   });
-  // The native entry runs one task after document-element creation. Read
+  // Native startup runs on the first idle task after DOMContentLoaded. Read
   // existing parser/inline-script elements once before watching mutations.
   active = scan(root, true, true);
   drain();

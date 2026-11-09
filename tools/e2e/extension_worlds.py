@@ -10,9 +10,24 @@ def run(app, results, wait, new_tab, static_server, darkreader):
     server = None
     try:
         app.call('settings-adblock', enabled=True)
-        assert wait(lambda: any(c['adBlockStatus']['engine_loaded']
-            for p in app.call('settings-adblock-engine')['profiles']
-            for c in p['contexts']), timeout=40), 'native lists did not load'
+        tab = new_tab(app, 'about:blank')
+        page_id = app.call('tab-state', tab=tab)['page']['identifier']
+        def native_ready():
+            for profile in app.call('settings-adblock-engine')['profiles']:
+                for context in profile['contexts']:
+                    if not any(page['identifier'] == page_id for page in context['pages']):
+                        continue
+                    status = context['adBlockStatus']
+                    receipt = dict(enabled=context['adBlockEnabled'],
+                        engine_loaded=status['engine_loaded'],
+                        load_generation=status['load_generation'],
+                        profile=profile['profile'], offTheRecord=context['offTheRecord'])
+                    receipt['ok'] = (receipt['enabled'] and receipt['engine_loaded']
+                                     and receipt['load_generation'] >= 1)
+                    results['content_script_adblock_precondition'] = receipt
+                    return receipt if receipt['ok'] else None
+            return None
+        assert wait(native_ready, timeout=40), 'probe Profile native lists did not load'
         with tempfile.TemporaryDirectory(prefix='open-extension-worlds-') as folder:
             fixture = Path(folder)
             common = ('<!doctype html><title>Open world separation</title>'
@@ -20,7 +35,12 @@ def run(app, results, wait, new_tab, static_server, darkreader):
             (fixture / 'index.html').write_text(common + '<iframe src="/frame.html"></iframe>')
             (fixture / 'frame.html').write_text(common)
             server, origin = static_server(folder)
-            tab = new_tab(app, origin + '/index.html')
+            # Pinned EasyList explicitly exempts numeric loopback and bare
+            # localhost from generic hiding. A localhost subdomain resolves
+            # locally in Chromium and exercises the real generic-hide path.
+            probe_origin = origin.replace('127.0.0.1', 'open-worlds.localhost')
+            app.call('navigate', tab=tab, url=probe_origin + '/index.html')
+            app.call('wait', tab=tab, timeout=30)
             frames = app.call('devtools', tab=tab, method='Page.getFrameTree')['frameTree']
             frame_ids = {frames['frame']['id']} | {
                 child['frame']['id'] for child in frames.get('childFrames', [])}
@@ -61,7 +81,10 @@ def run(app, results, wait, new_tab, static_server, darkreader):
                                for r in rows) and any(r['frame'] == frame and r['default']
                                and r['mode'] == 'dynamic' and r['hidden']
                                for r in rows) for frame in frame_ids)
-            assert wait(ready, timeout=15), 'page and iframe injection did not become ready'
+            is_ready = bool(wait(ready, timeout=15))
+            results['content_script_world_probe'] = dict(ok=is_ready,
+                origin=probe_origin, frames=sorted(frame_ids), contexts=rows)
+            assert is_ready, 'page and iframe injection did not become ready'
             results['content_scripts_page_and_iframe'] = {
                 'ok': len(frame_ids) == 2 and all(
                     any(r['frame'] == frame and r['extension'] == darkreader for r in rows)
