@@ -15,7 +15,16 @@ private struct GlobalSettings: Codable {
     var nativeAdBlockEnabled = true
 }
 
-private final class DirectoryLease {
+/// Read-only launch values. Reading these does not open a Profile, seed lists,
+/// acquire its directory lease, or start an update schedule.
+public struct AdBlockStartupConfiguration: Sendable {
+    public let isEnabled: Bool
+    public let excludedDomains: [String]
+}
+
+// Immutable descriptor ownership can transfer from preparation IO to the main
+// actor; no operation mutates it and flock remains held until deinit.
+fileprivate final class DirectoryLease: @unchecked Sendable {
     let descriptor: Int32
     init(root: URL) throws {
         if !FileManager.default.fileExists(atPath: root.path) {
@@ -32,6 +41,15 @@ private final class DirectoryLease {
     deinit { Darwin.close(descriptor) }
 }
 
+/// Prepared off the main actor; installing this value performs no file IO.
+public struct AdBlockStorePreparation: Sendable {
+    fileprivate let root: URL
+    fileprivate let catalog: AdBlockCatalog
+    fileprivate let repository: ListRepository
+    fileprivate let lease: DirectoryLease
+    fileprivate let isEnabled: Bool
+}
+
 private final class TemporaryRoot {
     let url: URL
     init() throws {
@@ -42,10 +60,40 @@ private final class TemporaryRoot {
 }
 
 /// Main-actor configuration store for a browser session. Files and downloads are handled by an IO
-/// actor. Call openProfile before creating its engine context, then bind onEngineEvent to OpenEngine.
+/// actor. Bind onEngineEvent before openProfile. The App can configure a context's
+/// deterministic list path before openProfile; it must reload once seeding finishes.
 /// Mutations throw so the UI cannot claim a change that failed to persist.
 @MainActor
 public final class AdBlockStore {
+    /// One background lstat per Profile at launch/context preparation. Only
+    /// ENOENT means fresh; inaccessible or malformed existing pointers are warm
+    /// here and are diagnosed by the normal generation verifier.
+    public nonisolated static func hasNoGeneration(directory: URL) -> Bool {
+        var info = stat()
+        return lstat(directory.appendingPathComponent("lists/current.json").path, &info) != 0 && errno == ENOENT
+    }
+
+    /// Fresh-context setup must not move catalog/settings/lease IO before paint
+    /// on the main actor. The repository's later seed IO stays on its own actor.
+    public nonisolated static func prepare(root: URL, bundledDefaultsDirectory: URL?) throws -> AdBlockStorePreparation {
+        let lease = try DirectoryLease(root: root)
+        let catalog = try AdBlockCatalog.load()
+        let repository = try ListRepository(policy: .init(), proxy: nil, bundle: bundledDefaultsDirectory, ephemeral: false)
+        let enabled = try readJSON(GlobalSettings.self, at: root.appendingPathComponent("adblock-settings.json"),
+                                   fallback: GlobalSettings()).nativeAdBlockEnabled
+        _ = AdBlockSites.shared
+        return AdBlockStorePreparation(root: root, catalog: catalog, repository: repository, lease: lease, isEnabled: enabled)
+    }
+
+    /// Call on an IO task, never the main actor. The normal store remains lazy.
+    public nonisolated static func startupConfiguration(root: URL, directory: URL) throws -> AdBlockStartupConfiguration {
+        let enabled = try readJSON(GlobalSettings.self, at: root.appendingPathComponent("adblock-settings.json"),
+                                   fallback: GlobalSettings()).nativeAdBlockEnabled
+        let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
+        let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
+        return AdBlockStartupConfiguration(isEnabled: enabled, excludedDomains: normalized.sorted())
+    }
+
     public let root: URL
     public let catalog: AdBlockCatalog
     public var onScheduledUpdate: (@MainActor (_ outcome: String, _ nextDelay: TimeInterval) -> Void)?
@@ -65,6 +113,15 @@ public final class AdBlockStore {
     private let temporaryRoot: TemporaryRoot?
 
     deinit { for task in schedules.values { task.cancel() } }
+
+    public init(preparation: AdBlockStorePreparation) {
+        self.root = preparation.root
+        self.catalog = preparation.catalog
+        self.repository = preparation.repository
+        self.lease = preparation.lease
+        self.isEnabled = preparation.isEnabled
+        self.temporaryRoot = nil
+    }
 
     /// root is the Open application-data directory, NOT a list directory. Incognito substitutes a
     /// unique temporary root, never reads persisted settings, and removes it at close/session end.
@@ -120,8 +177,8 @@ public final class AdBlockStore {
             let state = try await self.repository.open(directory: lists, catalog: self.catalog)
             try self.checkActive(profile)
             // Preserve the legacy AdBlock/exclusions.json read, including an exclusions-only Profile.
-            let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
-            let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
+            let normalized = try await self.repository.excludedDomains(directory: directory)
+            try self.checkActive(profile)
             self.directories[profile] = directory
             self.states[profile] = state; self.exclusions[profile] = normalized
             self.onEngineEvent?(.configure(profile: profile, listDirectory: lists,
