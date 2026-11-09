@@ -4347,7 +4347,8 @@ The caller verifies their recorded SHA-256 pins. Each seed read is capped at
 8 MiB. This mode creates no window and has no watchdog or caller time limit.
 The ordinary 10 s self-test and 300 s bench watchdogs stay in place.
 
-The seed is `0x9e3779b97f4a7c15`. The real shim receives 150,000 mutated list
+The initial mixed run used seed `0x9e3779b97f4a7c15`. The real shim received
+150,000 mutated list
 lines through `FilterSet::add_filter_list`, 100,000 mutated corpus URLs
 through `Check`, 3,000 mutations of a real DAT made from the pinned EasyList
 and EasyPrivacy, and 3,000 mutations of the pinned resources JSON through
@@ -4371,7 +4372,7 @@ Chromium's startup fence can delay a windowless run by about 180 s before
 its startup failsafe permits that task; parser duration excludes this wait.
 There is no App change or App distribution build for this mode.
 
-The single full-size run passed on the M5 at 20:21:59 local, 2026-11-08,
+The initial mixed run passed on the M5 at 20:21:59 local, 2026-11-08,
 built source `e749dc21`, root `open-engine-s13b`. No crash, abort or panic
 occurred. All owned processes ended and heavy lock a was released.
 
@@ -4413,8 +4414,28 @@ one pinned-list build and 30,000 resources builds.
 Data-only starts its RNG at the printed seed `0x9e3779b97f4a7c15`.
 It does not advance the RNG through skipped list/URL mutations. Active
 input retention, count meanings, no-watchdog behavior and low priority
-stay the same. The full-size data-only run is pending; no PASS is claimed
-for its 30,000-input rows yet. The initial 3,000-input receipts stay intact.
+stay the same. The single data-only run passed on 2026-11-08, built source
+`5c31fc1b`, with no crash, panic or abort. No earlier list/URL or CSS
+phases were repeated. The initial 3,000-input receipts stay intact.
+
+| Kind | Accepted | Rejected | Total | Load1 at count |
+|---|---:|---:|---:|---:|
+| Real-DAT mutations | 3,221 | 26,779 | 30,000 | 6.12 |
+| Mutated resources JSON | 8,251 | 21,749 | 30,000 | 9.65 |
+
+The real DAT was 7,020,990 bytes. Parser work took 1616.194 s; process
+wall time was 1799.914 s, including the startup fence. Load1
+ranged 6.04–19.42. Peak browser-process `phys_footprint` was
+199,985,096 bytes (190.72 MiB); final footprint was
+126,044,056 bytes (120.20 MiB). All 30,001 shim builds
+were timed; the slowest was `real-list-build`, index
+0, at 291.443 ms. This measures cost and does not enforce a deadline.
+
+Exact argv, seed, loads, input and binary hashes, counts, cleanup and build
+phases are in `.re/s13/e4/FUZZ.md` and `fuzz-data-full-1*.json`. The build
+passed own objects/targets, checkdeps, scoped GN includes, the full CEF
+framework and strict engine status (8 PASS / 0 FAIL / 0 WARN). All owned
+processes ended before the M5 quiet window.
 
 ### Step 4 status (2026-10-26, checkpoint; no PR yet)
 
