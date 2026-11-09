@@ -1,7 +1,8 @@
 diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_isolated_world_ids.h
+index caf1206..41cd2eb 100644
 --- a/chrome/common/chrome_isolated_world_ids.h
 +++ b/chrome/common/chrome_isolated_world_ids.h
-@@ -31,7 +31,15 @@
+@@ -30,7 +30,15 @@ enum ChromeIsolatedWorldIDs {
    // Numbers for isolated worlds for extensions are set in
    // extensions/renderer/script_injection.cc, and are are greater than or equal
    // to this number.
@@ -18,6 +19,7 @@ diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_is
  // LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/common/ChromeIsolatedWorldIds.java)
  #endif  // CHROME_COMMON_CHROME_ISOLATED_WORLD_IDS_H_
 diff --git a/extensions/renderer/isolated_world_manager.cc b/extensions/renderer/isolated_world_manager.cc
+index 824fbee..d2ec236 100644
 --- a/extensions/renderer/isolated_world_manager.cc
 +++ b/extensions/renderer/isolated_world_manager.cc
 @@ -9,6 +9,7 @@
@@ -28,7 +30,7 @@ diff --git a/extensions/renderer/isolated_world_manager.cc b/extensions/renderer
  #include "base/no_destructor.h"
  #include "extensions/common/mojom/execution_world.mojom.h"
  #include "extensions/renderer/extensions_renderer_client.h"
-@@ -160,6 +161,11 @@
+@@ -160,6 +161,11 @@ int IsolatedWorldManager::GetOrCreateIsolatedWorldForHost(
      world_info->name = injection_host.name();
      world_info->world_id = world_id;
      world_info->blink_world_id = blink_world_id;
@@ -41,6 +43,7 @@ diff --git a/extensions/renderer/isolated_world_manager.cc b/extensions/renderer
 
    // Initialize CSP and messaging for the new world. First, check if we have a
 diff --git a/extensions/renderer/script_injection.cc b/extensions/renderer/script_injection.cc
+index 4c032be..b56d14d 100644
 --- a/extensions/renderer/script_injection.cc
 +++ b/extensions/renderer/script_injection.cc
 @@ -12,6 +12,7 @@
@@ -51,7 +54,7 @@ diff --git a/extensions/renderer/script_injection.cc b/extensions/renderer/scrip
  #include "base/memory/raw_ptr.h"
  #include "base/metrics/histogram_macros.h"
  #include "base/time/time.h"
-@@ -360,6 +361,15 @@
+@@ -360,6 +361,15 @@ void ScriptInjection::InjectJs(std::set<std::string>* executing_scripts,
                        ChromeTrackEvent::kChromeExtensionScriptInjection,
                        ScriptInjectionForTracing(execution_world, world_id));
 
