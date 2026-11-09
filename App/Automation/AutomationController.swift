@@ -342,6 +342,8 @@
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
+      case "pasteboard-preserve": return AutomationPasteboard.preserve()
+      case "pasteboard-restore": return AutomationPasteboard.restore()
       case "pasteboard":
         // `text`: replace the contents first (checks that must see a fresh copy).
         if let text = a["text"] as? String { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
@@ -358,8 +360,19 @@
         app.saveState()
         return app.snapshotStore.fileURL.path
       case "quit":
+        app.quitWarning.harnessQuit = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
         return true
+      case "quit-warning":
+        if let button = a["button"] as? String {
+          guard ["quit", "cancel"].contains(button) else { throw Failure(message: "expected quit or cancel") }
+          app.quitWarning.buttonForAutomation = button
+        }
+        if a["request"] as? Bool == true {
+          app.quitWarning.harnessQuit = false
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.app.performCommand("quit-open") }
+        }
+        return app.quitWarning.alerts
       case "library-open":
         let section: LibrarySection?
         if let value = a["section"] {
@@ -1145,6 +1158,9 @@
         return ["id": w.windowState.id.description, "number": win.windowNumber,
           "appActive": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "isKeyWindow": win.isKeyWindow, "visible": win.isVisible,
+          "windowAppearance": win.effectiveAppearance.name.rawValue,
+          "contentAppearance": root.effectiveAppearance.name.rawValue,
+          "systemAppearance": controller.context.systemAppearance.rawValue,
           "keySameObject": NSApp.keyWindow === win, "onActiveSpace": win.isOnActiveSpace,
           "canBecomeKey": win.canBecomeKey, "windowClass": String(reflecting: type(of: win)),
           "attachedSheet": win.attachedSheet?.windowNumber ?? 0,
@@ -1246,7 +1262,11 @@
           // Native sheet lifecycle, with no tracking loop or external input.
           let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
           sheet.isReleasedWhenClosed = false
-          win.beginSheet(sheet, completionHandler: { _ in })
+          if let name = a["appearance"] as? String, ["light", "dark"].contains(name) {
+            sheet.appearance = NSAppearance(named: name == "dark" ? .darkAqua : .aqua)
+          }
+          if a["critical"] as? Bool == true { win.beginCriticalSheet(sheet, completionHandler: { _ in }) }
+          else { win.beginSheet(sheet, completionHandler: { _ in }) }
         case "end-sheet":
           if let sheet = win.attachedSheet { win.endSheet(sheet); sheet.orderOut(nil) }
         default: throw Failure(message: "expected key, sheet, or end-sheet")
@@ -1711,6 +1731,10 @@
     private func describe(_ w: NSWindow) -> [String: Any] {
       [
         "number": w.windowNumber, "title": w.title, "class": String(describing: type(of: w)),
+        "appearance": w.effectiveAppearance.name.rawValue,
+        "explicitAppearance": w.appearance?.name.rawValue ?? "",
+        "contentAppearance": w.contentView?.effectiveAppearance.name.rawValue ?? "",
+        "viewAppearances": chromeViewAppearances(in: w.contentView),
         "visible": w.isVisible, "key": w.isKeyWindow, "main": w.isMainWindow,
         "alpha": w.alphaValue, "frame": NSStringFromRect(w.frame),
         "parent": w.parent?.windowNumber ?? 0, "level": w.level.rawValue,

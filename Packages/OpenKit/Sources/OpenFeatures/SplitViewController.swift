@@ -119,8 +119,13 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
                 if let focused { self.select(focused) }; self.refresh(); self.onChange?()
             })
             menu.addItem(FeatureMenuItem("Close This Pane") { [weak self] in self?.performCommand("close-split-pane") })
-            menu.addItem(FeatureMenuItem("Copy Link") {
-                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(split.panes.map { $0.url.absoluteString }.joined(separator: "\n"), forType: .string)
+            menu.addItem(FeatureMenuItem("Copy Link") { [weak self] in
+                let links = split.panes.map { URLCleaner.clean($0.url) }
+                NSPasteboard.general.clearContents()
+                if NSPasteboard.general.setString(links.map { $0.url.absoluteString }.joined(separator: "\n"), forType: .string),
+                   links.contains(where: { !$0.removed.isEmpty }) {
+                    self?.container.toasts?.show(ToastContent(title: URLCleaner.cleanedTitle(count: links.count)))
+                }
             })
         }
         return menu

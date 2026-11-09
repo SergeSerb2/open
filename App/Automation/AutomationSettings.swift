@@ -53,6 +53,21 @@ extension AutomationController {
   func settingsAdBlock(_ args: [String: Any]) async throws -> [String: Any] {
     let adapter = app.settingsPresenter
     guard let model = adapter.settings.adBlock else { throw Failure(message: "ad blocking unavailable") }
+    var updateReloads: Int?
+    if args["updateNow"] as? Bool == true {
+      // Observe the real Store event while forwarding it to the native adapter.
+      let previous = model.store.onEngineEvent
+      var reloads = 0
+      model.store.onEngineEvent = { event in
+        if case .reload = event { reloads += 1 }
+        previous?(event)
+      }
+      defer { model.store.onEngineEvent = previous }
+      do { try await model.store.updateListsNow(profile: model.profileID); model.errorText = "" }
+      catch { model.errorText = "The last list update failed." }
+      model.revision &+= 1
+      updateReloads = reloads
+    }
     if let enabled = args["enabled"] as? Bool { model.setEnabled(enabled) }
     if let list = args["list"] as? String {
       guard model.lists.contains(where: { $0.id == list }),
@@ -89,6 +104,12 @@ extension AutomationController {
     if NSApp.responds(to: write) { NSApp.perform(write, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
     return ["enabled": model.enabled, "hasOtherBlocker": model.hasOtherBlocker,
       "ready": model.isReady, "error": model.errorText,
+      "lastError": model.store.lastError(for: model.profileID) ?? "",
+      "updateReloads": updateReloads ?? -1,
+      "updateResults": (model.store.lastUpdateResults[model.profileID] ?? []).map {
+        ["id": $0.id, "changed": $0.changed, "repaired": $0.repaired, "sha256": $0.sha256,
+         "integrityRecovery": $0.integrityRecovery ?? ""] as [String: Any]
+      },
       "copiedDebugInfo": copiedDebug ?? "",
       "lists": model.lists.map { ["id": $0.id, "enabled": model.enabledIDs.contains($0.id)] as [String: Any] },
       "listStatus": model.lists.filter(\.bundled).map { model.listStatus($0) },

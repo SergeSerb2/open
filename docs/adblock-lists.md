@@ -109,7 +109,9 @@ Enable, disable, and successful updates (including all-304) publish a new,
 complete generation. All files, the manifest, and their directories are fsynced;
 state is persisted **before** the temporary `current.json` is fsynced and renamed.
 The parent is then fsynced. Cleanup retains the live and previous generations.
-A failed batch leaves the live pointer unchanged. A crash before the rename
+A failed download batch leaves its verified live pointer unchanged. Integrity
+recovery can first replace a rejected pointer with a verified fallback or seed.
+A crash before the rename
 leaves the old complete generation usable; the next open reconciles persisted
 state from its manifest and removes unreferenced generations.
 
@@ -119,6 +121,28 @@ valid, the store reseeds pinned defaults or refetches defaults. `lastError` repo
 the integrity failure and recovery. Legacy enabled settings and exclusions can
 migrate from `AdBlock/`; its list files are never trusted as engine inputs.
 The engine must repeat verification at load to cover changes after Swift opens.
+
+Update Now also verifies the live generation before staging. If that verification
+fails, it calls the same warm-open recovery function, then continues the update
+in the same call. Recovery quarantines rejected bytes and verifies the previous
+generation, or reseeds pinned defaults when none is usable. Publication keeps
+generation numbers above quarantined generations. Successful update results
+retain the integrity failure and recovery in `integrityRecovery`, set `repaired`,
+clear `lastError`, and emit exactly one reload even when list hashes are unchanged.
+An intact all-304 batch still emits no reload.
+
+**Real-App proof — 2026-11-09:** `settings_adblock.py` AD4 flips byte 500
+in the loaded live EasyList, then calls Update Now through the App's real
+Store. Both verified-fallback and no-previous reseed cases passed without
+relaunch. Each retained the SHA-256 failure/recovery result, preserved damaged
+bytes in one quarantine, restored the good SHA, and emitted one reload even
+though the resulting list hashes were unchanged. Native `load_generation`
+advanced from 1 to 3 with `list_count=2` and no native error. A real script
+request to the pinned EasyList's known-blocked test host failed with
+`net::ERR_BLOCKED_BY_CLIENT`; the allowed control loaded and the server never
+received the blocked request. Settings showed no update error. Both App
+processes and their windows closed cleanly. The old-recovery binary failed
+the same fallback flow with zero quarantines/reloads and a Settings SHA error.
 
 ## Pins, downloads, and offline use
 
@@ -284,7 +308,7 @@ of this real CLI. No mocked transport or injected list response was used.
 | Catalog | `$CLI adblock catalog` | 46; categories 3/2/5/35/1; EasyList + EasyPrivacy default on |
 | Download | `$CLI adblock update --dir "$ROOT"` | Both real 200; sizes/hashes/ETags below; one reload event |
 | Conditional GET | Repeat update | Both 304; zero downloaded body bytes; zero reloads |
-| Profile tamper | Flip byte 500 in `lists/EasyList.txt`, then update | Failed local integrity; unconditional 200; original good SHA restored; one reload |
+| Profile tamper | Flip byte 500 in the live generation’s `EasyList.txt`, then Update Now without relaunch | Reuse warm-open quarantine + verified fallback/reseed; continue update; retain integrity failure in update results; one reload; no Settings error |
 | Bundle tamper | Flip byte 500 in staged `easylist.txt`; open with `--bundled-dir`; then `adblock bundle --dir <stage>` | Pin mismatch rejected the seed; repair fetched official bytes and restored the fixed pin |
 | Unreachable network | `adblock update --dir "$ROOT" --proxy http://127.0.0.1:9 --timeout 2` | Exit 1; `EasyList: network error (310); attempts=3`; 3.34 s; both old list hashes unchanged; error persisted |
 | Size cap | `adblock update --dir "$ROOT" --max-bytes 100` | Exit 1; source size limit; one attempt; both old list hashes unchanged |
@@ -407,3 +431,29 @@ The single "load + 1,000 lookups < 1 ms" gate mixed two different costs once war
 |---|---|---|
 | 1,000 allowlist lookups (what page loads pay) | p95 < 1 ms | 0.444 ms |
 | Profile open incl. SHA-256 scan of the live generation (once per profile, off the main thread) | p95 < 10 ms | 6.555 ms |
+
+**Lead decision — 2026-11-09:** profile-open timing now takes **40 samples**
+and reports both nearest-rank p95 (sorted sample 38 of 40) and max. The
+**10 ms p95 limit is unchanged**. With the former ten samples, nearest-rank
+p95 was the maximum; one slow sample therefore made a maximum-time gate
+out of the intended percentile. All 40 samples construct a fresh Store,
+open the same persisted Profile, and verify every live-generation file's
+size and SHA-256. A private root is seeded once before timing; no sample
+skips verification or trusts a persisted verified flag. The ten groups of
+1,000 lookups and their 5,000-match requirement stay unchanged. `check.py`
+requires the 40-sample receipt; `budgets.py` records p95 with `samples=40`
+and retains max as information, without a separate maximum budget.
+
+Three quiet Release runs of `tools/budgets.sh --only adblock` on 2026-11-09
+passed both unchanged limits. Each used 40 opens and ten lookup groups
+(5,000 matches in 10,000 lookups), under the quiet lock with load1 below 12:
+
+| Run | Profile-open p95 | Profile-open max (info) | 1,000-lookups p95 | Load1 start → end |
+|---|---|---|---|---|
+| 1 | 3.0811 ms | 20.8206 ms | 0.1360 ms | 9.37 → 9.34 |
+| 2 | 2.6520 ms | 2.7639 ms | 0.1517 ms | 9.34 → 9.34 |
+| 3 | 2.5167 ms | 2.9143 ms | 0.3190 ms | 9.34 → 9.72 |
+
+Run 1 retains its slow sample in max and in the full sample list; no sample
+is discarded before computing p95. Verification and timed boundaries are
+unchanged. The correction changes the sample count, not the 10 ms limit.

@@ -144,12 +144,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   private lazy var pageQuit = PageQuitCoordinator(app: self)
+  lazy var quitWarning = QuitWarningCoordinator()
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    // A Dock or AppleScript quit can re-enter from inside a quit alert's modal loop. One
+    // alert at a time; the open alert decides this attempt.
+    if quitWarning.presenting || downloadsCenter.presentingQuitAlert { return .terminateCancel }
     // Sparkle may retry after a user cancels or the quit preflight defers.
-    defer { if !terminationRequested { updater?.userDriver.applicationTerminationCancelled() } }
+    defer {
+      if !terminationRequested {
+        updater?.userDriver.applicationTerminationCancelled()
+        // An install quit that ended without a self-retry must not make a later normal quit
+        // prompt-free. Sparkle's retry button requests the relaunch again.
+        if !quitWarning.retryPending { updater?.userDriver.clearInstallationRelaunchRequest() }
+      }
+    }
     if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
-    if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
+    if quitWarning.beginAttempt(relaunch: updater?.userDriver.installationRelaunchRequested == true) {
+      // The downloads approval belongs to one attempt, like the generic one.
+      downloadsCenter.resetQuitApproval()
+    }
+    let downloadsWarned = downloadsCenter.hasRunning
+    if downloadsCenter.shouldKeepBrowsing(withoutPrompts: quitWarning.withoutPrompts) {
+      quitWarning.resetApproval(); return .terminateCancel
+    }
+    if quitWarning.shouldKeepBrowsing(app: self, downloadsWarned: downloadsWarned) { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
     if !shutdownPrepared, importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true) {
       historyQuitTask = Task { @MainActor in
@@ -158,9 +177,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
         NSApp.terminate(nil)
       }
+      quitWarning.markRetryPending()
       return .terminateCancel
     }
-    if engineReady, !shutdownPrepared, !pageQuit.shouldTerminate() { return .terminateCancel }
+    if engineReady, !shutdownPrepared, !pageQuit.shouldTerminate() {
+      // Page replies retry the quit when every page allows it; a "Stay" resets the attempt.
+      quitWarning.markRetryPending()
+      return .terminateCancel
+    }
     if !sleepQuitCaptured, engineReady, !shutdownPrepared, tabSleep.controller != nil {
       // OEApplication has no terminateLater: capture sleep history first (bounded at 3 s),
       // then ask again. The snapshot save and engine shutdown follow below.
@@ -170,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         self.sleepQuitCaptured = true; self.sleepQuitTask = nil
         NSApp.terminate(nil)
       }
+      quitWarning.markRetryPending()
       return .terminateCancel
     }
     let wasEngineReady = engineReady
@@ -626,6 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func engineDidInitialize() {
     LaunchTiming.shared.mark("engineInitialized")
     engineReady = true
+    adBlockEngineAdapter.engineDidInitialize()
     showWindowsIfNeeded()
     refreshScriptingEngine()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
