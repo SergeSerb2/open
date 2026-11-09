@@ -15,7 +15,7 @@ final class FeatureRootView: NSView {
 }
 
 @MainActor
-private final class LittleOpenNativeWindow: NSWindow {
+private final class LittleOpenNativeWindow: SpaceThemeWindow {
     var redirectPageFocus: ((NSResponder?) -> NSResponder?)?
     var onLayoutPass: (() -> Void)?
     var onCloseRequest: (() -> Void)?
@@ -65,6 +65,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private var closed = false
     private var opening = true
     private var placingTrafficLights = false
+    private var systemAppearanceObservation: NSKeyValueObservation?
     public var currentURL: URL? { container.host(for: session.tab.id)?.currentURL }
     public var showsIntro: Bool { !banner.isHidden }
 
@@ -80,7 +81,16 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true; window.animationBehavior = .none
         super.init(window: window)
+        root.appearance = NSApp.effectiveAppearance
         window.contentView = root; window.delegate = self; window.title = "Little Open"
+        systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let appearance = NSApp.effectiveAppearance
+                if self.root.appearance?.name != appearance.name { self.root.appearance = appearance }
+                self.updateChrome()
+            }
+        }
         // Alloy can finish creating its renderer after the embedded field was
         // focused. Keep that late native focus request behind the open bar.
         window.redirectPageFocus = { [weak self] responder in
@@ -202,6 +212,10 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     private func updateChrome() {
         guard let model = coordinator?.model else { return }
         let space = model.mostRecentlyFocusedSpace(profileID: session.profileID)
+        let system = ContentAppearance(NSApp.effectiveAppearance)
+        let appearance = space.map { SpaceThemeStyle(theme: $0.theme, system: system).resolvedAppearance(system: system) } ?? system
+        let name: NSAppearance.Name = appearance == .dark ? .darkAqua : .aqua
+        if window?.appearance?.name != name { window?.appearance = appearance.nsAppearance }
         titleBar.update(url: currentURL ?? session.tab.url, profile: model.profile(id: session.profileID),
                         showsProfile: model.profiles.count >= 2, spaceTitle: space.map { model.displayTitle(for: $0) })
     }
@@ -299,6 +313,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         return menu
     }
     func prepareToClose() {
+        systemAppearanceObservation = nil
         closed = true; extensionsMenu?.cancelTrackingWithoutAnimation(); extensionsMenu = nil
         if let extensionObservation { extensionsUI?.removeObserver(extensionObservation) }; extensionObservation = nil
         commandBar.dismiss(reason: .programmatic); spacePopover?.close(); spacePicker = nil
