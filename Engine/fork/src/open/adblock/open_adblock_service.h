@@ -83,6 +83,11 @@ class OpenAdBlockService {
   void SetStatusCallback(
       base::RepeatingCallback<void(const AdBlockStatus&)> callback);
 
+  // The CEF owner installs a weak context-scoped callback at creation,
+  // before configuring this service. It arms renderer MemoryCache clearing at next navigation;
+  // the renderer coalesces repeated requests until that navigation.
+  void SetRendererCacheInvalidator(base::RepeatingCallback<int()> callback);
+
   base::WeakPtr<OpenAdBlockService> GetWeakPtr();
 
   // The result of one background load.
@@ -128,6 +133,7 @@ class OpenAdBlockService {
                BuildResult result);
   void PostToMatcher(base::OnceCallback<void(OpenAdBlockMatcher*)> update);
   void NotifyStatus();
+  void InvalidateRendererCaches(const char* reason);
 
   const base::FilePath profile_dir_;
   const scoped_refptr<OpenAdBlockMatcher> matcher_;
@@ -143,6 +149,7 @@ class OpenAdBlockService {
 
   AdBlockStatus status_;
   base::RepeatingCallback<void(const AdBlockStatus&)> status_callback_;
+  base::RepeatingCallback<int()> renderer_cache_invalidator_;
 
   base::WeakPtrFactory<OpenAdBlockService> weak_ptr_factory_{this};
 };

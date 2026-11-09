@@ -26,6 +26,7 @@
 #include "base/task/thread_pool.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
+#include "content/public/browser/browser_thread.h"
 #include "crypto/hash.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "partition_alloc/memory_reclaimer.h"
@@ -628,6 +629,7 @@ void OpenAdBlockService::SetEnabled(bool enabled) {
   if (shut_down_) {
     return;
   }
+  const bool turns_blocking_on = enabled && !enabled_;
   enabled_ = enabled;
   status_.enabled = enabled;
   if (!enabled) {
@@ -647,6 +649,9 @@ void OpenAdBlockService::SetEnabled(bool enabled) {
   if (enabled && !initial_load_pending_ && !status_.engine_loaded &&
       status_.generation == 0 && !adblock_root_.empty()) {
     LoadFromDirectory(adblock_root_, /*prefer_dat=*/true);
+  }
+  if (turns_blocking_on) {
+    InvalidateRendererCaches("enabled");
   }
   NotifyStatus();
 }
@@ -668,7 +673,12 @@ void OpenAdBlockService::SetExcludedDomains(
       LOG(WARNING) << "OpenAdBlock: skipped an invalid excluded domain";
     }
   }
-  excluded_domains_ = base::flat_set<std::string>(std::move(domains));
+  base::flat_set<std::string> next_domains(std::move(domains));
+  const bool turns_blocking_on = enabled_ && std::ranges::any_of(
+      excluded_domains_, [&next_domains](const std::string& domain) {
+        return !HostIsExcluded(next_domains, domain);
+      });
+  excluded_domains_ = std::move(next_domains);
   status_.excluded_domains.assign(excluded_domains_.begin(),
                                   excluded_domains_.end());
   PostToMatcher(base::BindOnce(
@@ -676,6 +686,9 @@ void OpenAdBlockService::SetExcludedDomains(
         matcher->SetExclusions(std::move(domains));
       },
       excluded_domains_));
+  if (turns_blocking_on) {
+    InvalidateRendererCaches("exclusion_removed");
+  }
   NotifyStatus();
 }
 
@@ -807,6 +820,9 @@ void OpenAdBlockService::OnBuilt(
           }
         },
         result.empty_generation, std::move(result.engine)));
+    if (enabled_ && status_.engine_loaded) {
+      InvalidateRendererCaches("generation_installed");
+    }
   } else {
     PostToMatcher(base::BindOnce(
         [](bool pending, OpenAdBlockMatcher* matcher) {
@@ -849,6 +865,24 @@ AdBlockStatus OpenAdBlockService::GetStatus() const {
   status.cosmetic_dropped_over_cap =
       counters.cosmetic_dropped_over_cap.load(kRelaxed);
   return status;
+}
+
+void OpenAdBlockService::SetRendererCacheInvalidator(
+    base::RepeatingCallback<int()> callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!shut_down_ && !renderer_cache_invalidator_) {
+    renderer_cache_invalidator_ = std::move(callback);
+  }
+}
+
+void OpenAdBlockService::InvalidateRendererCaches(const char* reason) {
+  if (!renderer_cache_invalidator_) {
+    return;
+  }
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  const int requested = renderer_cache_invalidator_.Run();
+  VLOG(1) << "OpenAdBlock: renderer memory-cache next-navigation reason="
+          << reason << " requested_processes=" << requested;
 }
 
 void OpenAdBlockService::SetStatusCallback(
