@@ -24,7 +24,7 @@ class PickerFlow:
         return self.evaluate("window.__openZap?.isActive() === true")
 
     def enter(self, select=False):
-        control = "editor.code.pick" if select else "zap"
+        control = "editor.code.pick" if select else "editor.tool.zap"
         assert self.wait_until(lambda: any(c["id"] == control and c["enabled"]
                                           for c in self.state()["controls"]), timeout=10, step=.02), "picker control did not enable"
         self.tap(control)
