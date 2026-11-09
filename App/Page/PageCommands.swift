@@ -43,10 +43,8 @@ extension EngineWebContentHostFactory {
     let (clean, removed) = URLCleaner.clean(url)
     let raw = (selectedContent?.title).flatMap { $0.isEmpty ? nil : $0 } ?? selectedTab?.displayTitle ?? ""
     let title = raw.isEmpty ? (clean.host() ?? clean.absoluteString) : raw
-    let escaped = title.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "[", with: "\\[")
-      .replacingOccurrences(of: "]", with: "\\]")
     let board = NSPasteboard.general
-    board.clearContents(); board.setString("[\(escaped)](\(clean.absoluteString))", forType: .string)
+    board.clearContents(); board.setString(URLCleaner.markdownLink(title: title, url: clean), forType: .string)
     showCopyToast(clean, removed: removed, offerQuote: false)
     return true
   }

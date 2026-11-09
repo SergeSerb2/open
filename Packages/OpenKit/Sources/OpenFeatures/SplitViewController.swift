@@ -124,7 +124,7 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
                 NSPasteboard.general.clearContents()
                 if NSPasteboard.general.setString(links.map { $0.url.absoluteString }.joined(separator: "\n"), forType: .string),
                    links.contains(where: { !$0.removed.isEmpty }) {
-                    self?.container.toasts?.show(ToastContent(title: links.count == 1 ? URLCleaner.cleanedTitle : URLCleaner.cleanedLinksTitle))
+                    self?.container.toasts?.show(ToastContent(title: URLCleaner.cleanedTitle(count: links.count)))
                 }
             })
         }

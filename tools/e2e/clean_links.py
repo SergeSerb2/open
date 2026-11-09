@@ -82,6 +82,11 @@ def checks(app, results, origin, h):
             app.call('space-manager-menu', space=space, node=ids[1], item='Copy Link')
             record('manager_without_browser', app.call('shell-windows') == []
                    and app.call('pasteboard') == clean[1], actual=app.call('pasteboard'))
+            # Folder Copy All Links has the same no-browser fallback (review R1 finding 1).
+            app.call('pasteboard', text='manager-copy-sentinel')
+            app.call('space-manager-menu', space=space, node=folder, item='Copy All Links')
+            record('manager_folder_without_browser', app.call('shell-windows') == []
+                   and app.call('pasteboard') == '\n'.join(clean), actual=app.call('pasteboard'))
         finally:
             app.call('library-close')
             app.call('window-reopen')
