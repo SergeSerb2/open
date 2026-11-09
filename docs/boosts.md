@@ -164,7 +164,7 @@ The PR records redacted real-App counts, timings and load averages. The e2e
 runner writes local receipts under `docs/engine-spike/`; do not commit their
 process identifiers or temporary paths.
 Run `python3 tools/e2e/engine_e2e.py --style chrome --only boosteditor` under the
-on-screen lock. B4 reports BLOCKED. B5 checks live CSS, deferred JS and Refresh to Run against
+on-screen lock. B4 exercises Zap and live reveal. B5 checks live CSS, deferred JS and Refresh to Run against
 the bound document, including a second edit and same-document navigation.
 
 ## Verification (2026-10-25, America/Vancouver)
