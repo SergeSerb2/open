@@ -618,7 +618,7 @@ The later main `d26300e6` integration passes 20 native processes and 40 baseline
 
 ### Step 5 implementation checkpoint (2026-11-09, generic observer after DCL)
 
-Product `4ce7facb`, main engine PR #266 merged; targeted acceptance complete; final full gate pending.
+Product `4ce7facb`, main engine PR #266 merged; ready for lead PR creation and review.
 Hostname-specific CSS stays at document start. Generic world creation,
 binding, scan and observation queue one genuine idle task after DCL;
 C-4 requires eventual hiding. The 30k yield/resume, 64-sheet cap and
@@ -629,9 +629,9 @@ in `.re/s13/e5/RENDERER-ATTRIBUTION.md` and the plan §8.2 erratum.
 |---|---|
 | `chromium/0902` | Private world 7; extensions start at 8. Fresh adblock: 86 PASS, 11/11 launch logs and 13 world-7 observers. Fresh extensions: 12 PASS, 1/1 launch log, 27 allocations, 106 injections and 6 world-7 observers. Extension allocations/isolated injections use worlds 8–11, main injections use 0; no extension allocation/injection uses 7. Page/iframe reciprocal separation passes after enabled=true, engine_loaded=true and load_generation=1. |
 | `cef/0311` registry and `cef/0901` P-4 | Matcher work stays off UI. Fresh owned/full/scoped/strict 8/0/0, headless 2/2, CEF 20/20, both 30k hide/yield 10/10, binding-before-execution 45/45, distribution/App/fingerprint PASS. Adblock 86 includes all five cosmetic controls; extensions 12 includes real CWS and reciprocal page/iframe proof. |
-| Non-official timing | New C-G1 once: p50 106.5 µs / p99 233.0 µs, 100 measured documents; raw budget PASS, load1 11.19–14.42, absolute_load_valid=False. First-process calls remain separate. Inherited C-G2 84/714 µs, T 64.9 ms, 239,510 checks, load1 8.49–13.31; C-G3 353 µs, load1 13.98. Original six quiet pairs FAIL (+1.45 ms paired median) remain recorded. Eight alternating App pairs: cosmetics 39.300 ms / 6761 µs native busy CPU; exact main 518 network-only 39.900 ms / 7498 µs. Median paired wall delta -2.050 ms / -4.478%; PASS under the lead's ≤ +0.5 ms OR ≤ +1.5% rule. Load1 5.92–7.31; absolute_load_valid=True, status=PASS. |
+| Non-official timing | New C-G1 once: p50 106.5 µs / p99 233.0 µs, 100 measured documents; raw budget PASS, load1 11.19–14.42, absolute_load_valid=False. First-process calls remain separate. Inherited C-G2 84/714 µs, T 64.9 ms, 239,510 checks, load1 8.49–13.31; C-G3 353 µs, load1 13.98. Original six quiet pairs FAIL (+1.45 ms paired median) remain recorded. Eight alternating App pairs: cosmetics 39.300 ms / 6761.0 µs native busy CPU; exact main 518 network-only 39.900 ms / 7498.5 µs. Median paired wall delta -2.050 ms / -4.478%; PASS under the lead's ≤ +0.5 ms OR ≤ +1.5% rule. Load1 5.92–7.31; absolute_load_valid=True, status=PASS. |
 | Parser-corpus modes (`cef/0310`, self-test) | Unchanged accepted source: 150,000 list / 100,000 URL / 30,000 DAT / 30,000 resources inputs PASS. Full and data-only modes are non-official; no corpus repeat after unchanged source. |
-| Full M5 gate | PENDING on the new head; complete summary, commands, seconds, loads and source-qualified earlier Section 6/features/page set in `.re/s13/e5/PR-BODY.md`. |
+| Full M5 gate | 26 PASS / 0 FAIL / 0 INTERRUPTED / 0 SKIP; complete summary, commands, seconds, loads and source-qualified earlier Section 6/features/page set in `.re/s13/e5/PR-BODY.md`. |
 
 The sanitizer's quote/escape/delimiter and 256 KiB rules remain unchanged.
 Only fixed `display:none!important` rules execute; no scriptlets or

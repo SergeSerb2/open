@@ -5115,7 +5115,7 @@ network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 
 ### Step 5 as built (2026-11-09, generic observer after DCL)
 
-**Merged candidate: `s13/step5-pr` (PR pending lead creation); targeted acceptance complete; final full gate pending.**
+**Merged candidate: `s13/step5-pr` (PR pending lead creation); ready for lead PR creation and review.**
 Product source `4ce7facb234cb96d0abdbf9fd730478ddf511198` includes main
 engine PR #266 (0106), merged through `cbe13bfa`. Independent patch 0106
 was moved first in numeric Chromium series order; patch contents and the
@@ -5174,7 +5174,7 @@ native matcher/proxy thread CPU, excluding renderer and whole-App CPU.
 Prebuilt pairs take quiet → screen, no heavy slot; no trimming or retry.
 Source/shell differences from exact 518 remain an attribution limit.
 
-**Full M5 gate:** PENDING on the new head, `tools/verify-all.sh --with-arc-data`, heavy a,
+**Full M5 gate:** 26 PASS / 0 FAIL / 0 INTERRUPTED / 0 SKIP, `tools/verify-all.sh --with-arc-data`, heavy a,
 no quiet lock. The full summary and exact commands/seconds/loads are in
 `.re/s13/e5/PR-BODY.md`. Earlier full gate 26/26 at `3190491e` and the
 complete Section 6 set retain their source provenance: actions 26,
