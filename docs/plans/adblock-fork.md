@@ -4400,6 +4400,22 @@ full CEF framework and strict engine status (8 PASS / 0 FAIL / 0 WARN).
 Per-rule parse counts, R2-8's build-generated feature receipt and parse
 time-limit enforcement remain open.
 
+#### DAT/resources full-size follow-up (2026-11-08)
+
+The initial mixed run above used the 3,000-input cut size for DAT and
+resources. The full size is 30,000 inputs per kind. Both modes now use
+that full size. Add `--open-adblock-fuzz-data-only` to the existing full
+self-test command to skip mutated list lines, URLs, the four-byte DAT and
+CSS controls. The real pinned two-list build and valid-DAT control still
+run to supply and check the DAT seed. This mode makes 30,001 shim builds:
+one pinned-list build and 30,000 resources builds.
+
+Data-only starts its RNG at the printed seed `0x9e3779b97f4a7c15`.
+It does not advance the RNG through skipped list/URL mutations. Active
+input retention, count meanings, no-watchdog behavior and low priority
+stay the same. The full-size data-only run is pending; no PASS is claimed
+for its 30,000-input rows yet. The initial 3,000-input receipts stay intact.
+
 ### Step 4 status (2026-10-26, checkpoint; no PR yet)
 
 Paused at the user's order (22:25): no new PRs. Branch `m6/adblock-step4`
