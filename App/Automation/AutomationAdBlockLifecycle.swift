@@ -12,8 +12,9 @@ private final class AdBlockLifecycleObservation {
 
   init(store: AdBlockStore, profile: ProfileID) {
     token = NotificationCenter.default.addObserver(forName: Notification.Name("OpenAdBlockStoreDidChange"), object: nil, queue: .main) { [weak self, weak store] note in
+      let changedStore = note.object as? AdBlockStore
       MainActor.assumeIsolated {
-        guard let self, let store, note.object as? AdBlockStore === store else { return }
+        guard let self, let store, changedStore === store else { return }
         if self.notifications.count < 16 {
           self.notifications.append(["open": store.isProfileOpen(profile),
             "snapshotEnabled": store.siteSnapshot(for: profile).isEnabled])
