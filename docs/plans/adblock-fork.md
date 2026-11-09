@@ -4784,6 +4784,16 @@ pending in E3. The lead assigns the AD3 two-Profile footprint row to
 child F (`s13/ad3-footprint`): E4 measured 11.11 MiB net on this App
 with `engine_shared=true`, against the unchanged 2 MiB limit. E3 will
 retain its own measured row as FAIL, owned by F, and continue other flows.
+E3's first completed measurement is also FAIL: 6,373,376 bytes
+(6.078 MiB) net, with `engine_shared=true`, at endpoint load
+48.29/121.46/100.42 (`s15-adblock-real-r6-results.json`). The preceding
+21 native App rows pass, including independent Profile exclusions/lists
+and all-lists-off requests. Cleanup passes. The strict harness stopped
+at AD3; later rows were not run in that attempt. A private continuation
+retains this exact failed row and its unchanged threshold, while preserving
+the normal App-death, focus and watchdog checks for the remaining flows.
+The optional Section 12 App tile adapter is absent from this main, so
+its tile acceptance is N/A; E3 does not create a second tile.
 The no-engine generation revision, distribution, Debug App build and
 quiet G-5 gate now pass. Retain the earlier loaded CPU receipts
 (12.756 ms at load1 48–50 and 8.576 ms at 40–42) as historical attempts.
