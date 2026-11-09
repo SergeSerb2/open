@@ -525,8 +525,11 @@ def real_engine(factory, results, wait):
 
         app.call('profiles-shell', action='create', name='Engine Independent')
         other = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Engine Independent')
-        app.call('profiles-shell', profile=other['id'], action='open-url', url='about:blank')
-        other_tab = next(t['id'] for t in app.call('tabs') if t['profile'] == other['id'])
+        # A Profile without a Space opens a Little Open page, which is not
+        # part of the main window's tabs. Bind this tab fixture to a Space.
+        app.call('space-create', title='Engine Independent', profile=other['name'])
+        other_tab = app.call('open', url='about:blank')['id']
+        assert app.call('tab-state', tab=other_tab)['profile'] == other['id']
         assert loaded(other['id'])
         assert wait(lambda: status(other['id'])['load_generation'] > 1, timeout=40)
         shared = status(other['id'])
