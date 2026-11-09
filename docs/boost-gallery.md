@@ -48,12 +48,51 @@ The existing command registry and action title are unchanged. The change is
 outside the command bar's text, drawing and keystroke code, but the lead's required TANDEM
 §4c/§4d timing qualification still applies.
 
-## Acceptance after the holds
+## Build and off-screen validation, 2026-11-09
 
-All runtime rows below are **NOT RUN**. Section 12 lead update items 25 and 26
-hold the screens and disk. No build, verification runner, App launch or capture
-was used for this change during the hold. Source review and `git diff --check`
-do not prove runtime acceptance.
+Fetched and merged `origin/main` at `3fb0645c`; Git reported already up to date.
+The code head is `749da3a0`. The recorded main engine framework was verified as
+SHA-256 `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
+Debug and Release used `s12-heavy.sh low` with
+`OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main` in this existing checkout.
+Elapsed times include wrapper queue time. Loads are 1/5/15-minute averages.
+
+| Check | Result | Evidence / load start → end |
+|---|---|---|
+| App Debug | PASS, 479.4 s | `BUILD SUCCEEDED`; 8.36/9.04/7.25 → 8.55/10.23/8.65 |
+| Shared keys, after Debug | PASS | 20 distinct literal keys in the `settings-state` response, no duplicates; each new key once. One full Boosts-enabled preference literal, in `BoostPreferences`. |
+| App Release | PASS, 93.0 s | `BUILD SUCCEEDED`; 7.42/9.89/8.56 → 10.83/10.29/8.84 |
+| Targeted verifier: release CLI build | PASS, 86 s | Zero warnings/errors; all package products, including settings and Site Control harnesses, compiled |
+| `commands-demo` | PASS, 3 s | 326/326 checks; URL cleaning 30/30; archive migration and six folder-peek import variants passed |
+| `suggest-check` | PASS, 22 s | 56/56; first-snapshot benchmark load 7.6/9.4/8.6; completion benchmark load 7.6/9.3/8.6 |
+| `commands-dump` | PASS, 0 s | Missing/extra/different 0/0/0; 11 allowed-missing entries; no unexpected default/override conflicts |
+| `commandbar-render` | PASS, 33 s | 151/151; CPU p95 2.92 ms < 8 ms; completion added p95 0.093 ms ≤ 0.3 ms; load 5.1/8.5/8.4 |
+
+The targeted command was `tools/verify-all.sh --only
+commands-demo,suggest-check,commands-dump,commandbar-render`, under the same
+Section 12 wrapper and engine environment. All five selected rows passed in
+145.5 s total, at load 9.95/10.12/8.80 → 5.13/8.45/8.35. The first command-bar
+run passed every strict row; no timing rerun or paired qualification was needed.
+These CLI checks do not exercise the App's new Gallery dispatch or hosted UI.
+
+The native App builds are not warning-free: Debug has 69 primary source warning
+lines (41 unique), Release 43 (22 unique). Source comparison found none on lines
+changed by this branch. Both builds have zero error lines. Raw logs, load
+receipts and diagnostic summaries are retained in `.re/s12-bg/gate-20261109/`
+and `build/xcodebuild-{Debug,Release}.log`.
+
+`settings-preview` and `sitecontrol-render` remain NOT RUN. Their verifier rows
+call `tools/verification/check.py onscreen-suite`; settings previews require the
+screen lock, and Site Control opens native EditorHarness windows/menus. They
+cannot run under item 25. No full verifier or e2e suite ran in this phase.
+
+## Acceptance after the screen hold
+
+All real-App rows below are **NOT RUN**. Section 12 lead update item 27 lifted
+the disk hold for builds and off-screen checks in existing checkouts. Item 25's
+screen hold remains in force from 02:35 on 2026-11-09. No Open launch, e2e suite
+or real-window capture is allowed until the lead sends "M5 clear". Build and
+off-screen results do not prove Gallery runtime acceptance.
 
 | Row | Real-App check on the M5 | State |
 |---|---|---|
@@ -81,15 +120,18 @@ Read the real hosted UI and page state as well as the presentation flag. For BG3
 planning, the existing Library Edit action opens the stored host/path as HTTPS;
 it does not retain a development fixture's HTTP port.
 
-After explicit release of both holds, follow the current Section 12 rules:
-build Debug and Release against main's recorded engine through `s12-heavy.sh`,
-audit shared literal keys, run BG acceptance and `boosteditor`, `incognito` and
-settings suites, then the full `tools/verify-all.sh` on the final head. Required
-regressions include `sitecontrol-render`, `boosts`, `settings-preview` and
-`commandbar-render`. Every App/harness launch needs the M5 screen lock, one
-suite per invocation. Use the quiet lock only for timing receipts and record
-loads for strict and any required paired runs. Do not regenerate baselines or
-relax thresholds. Keep the raw misses separate from lead qualifications.
+After "M5 clear", Section 16's DMG launch goes first; the S12 merge order is
+#276, #278, #277, then Gallery. Follow the current Section 12 rules: run BG
+acceptance and `boosteditor`, `incognito` and settings suites, then the full
+`tools/verify-all.sh` on the final head. Required regressions include
+`sitecontrol-render`, `boosts`, `settings-preview` and `commandbar-render`.
+Merge overlapping main changes under rule 5a, rebuild Debug and Release against
+main's recorded engine through `s12-heavy.sh`, and audit shared literal keys
+before any App launch. Every App launch and screen-based harness needs the M5
+screen lock, one suite per invocation. Use the quiet lock only for timing
+receipts and record loads for strict and any required paired runs. Do not
+regenerate baselines or relax thresholds. Keep raw misses separate from lead
+qualifications.
 
 The online/shared Gallery remains out of scope. Arc Gallery's shared-browsing
 role remains a guess in the feature-gap audit; this page specifies only Open's
