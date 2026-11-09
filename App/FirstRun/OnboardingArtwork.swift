@@ -71,6 +71,7 @@ import ImageIO
 @MainActor final class OnboardingPreview: NSView {
   private var step = "name", name = ""
   private var favorites: [String] = []
+  private var favoriteIcons: [String: OnboardingSiteIconView] = [:]
   private var count = 0, report = false, blocker = true, reduced = false
   private var scene = CALayer()
   private let theme = ThemeBackgroundView()
@@ -96,10 +97,23 @@ import ImageIO
     theme.frame = CGRect(x: bounds.midX-210, y: bounds.midY-140, width: 420, height: 280)
     readyCard.frame = cardRect
     if step == "defaultBrowser" { layoutLink() }
+    let rect = CGRect(x: bounds.midX-170, y: bounds.midY-230, width: 340, height: 460)
+    for (index, name) in favorites.enumerated() {
+      favoriteIcons[name]?.frame = CGRect(x: rect.minX+54+CGFloat(index%3)*100, y: rect.maxY-68-CGFloat(index/3)*56, width: 32, height: 32)
+    }
   }
-  func update(step: String, name: String, favorites: [String], count: Int, report: Bool, blocker: Bool, card: OpenCardDrawing, reduceMotion: Bool) {
+  func update(step: String, name: String, favorites: [(String, OnboardingFavicons.Tile)], count: Int, report: Bool, blocker: Bool, card: OpenCardDrawing, reduceMotion: Bool) {
     let changed = self.step != step
-    self.step = step; self.name = name; self.favorites = favorites; self.count = min(8, max(0, count)); self.report = report; self.blocker = blocker; reduced = reduceMotion
+    self.step = step; self.name = name; self.favorites = favorites.map { $0.0 }; self.count = min(8, max(0, count)); self.report = report; self.blocker = blocker; reduced = reduceMotion
+    for icon in favoriteIcons.values { icon.isHidden = true }
+    if step == "favorites" {
+      for (name, tile) in favorites {
+        let icon = favoriteIcons[name] ?? OnboardingSiteIconView(frame: .zero)
+        if icon.superview == nil { addSubview(icon); favoriteIcons[name] = icon }
+        icon.isHidden = false; icon.apply(name: name, tile: tile, animated: !changed, reduceMotion: reduceMotion)
+      }
+    }
+    needsLayout = true
     theme.isHidden = step != "theme"
     readyCard.isHidden = step != "ready"; readyCard.card = card
     if step == "theme" {
@@ -153,7 +167,7 @@ import ImageIO
       let rect = CGRect(x: center.x-170, y: center.y-230, width: 340, height: 460)
       NSColor.white.withAlphaComponent(0.12).setFill(); NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
       if step == "favorites" {
-        for (index, value) in favorites.enumerated() { let r = CGRect(x: rect.minX+25+CGFloat(index%3)*100, y: rect.maxY-72-CGFloat(index/3)*56, width: 90, height: 40); NSColor.white.withAlphaComponent(0.12).setFill(); NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8).fill(); text(String(value.prefix(1)), in: r.insetBy(dx: 2, dy: 8), size: 19) }
+        for (index, _) in favorites.enumerated() { let r = CGRect(x: rect.minX+25+CGFloat(index%3)*100, y: rect.maxY-72-CGFloat(index/3)*56, width: 90, height: 40); NSColor.white.withAlphaComponent(0.12).setFill(); NSBezierPath(roundedRect: r, xRadius: 8, yRadius: 8).fill() }
       } else { for index in 0..<count { NSColor.white.withAlphaComponent(0.18).setFill(); NSBezierPath(roundedRect: CGRect(x: rect.minX+24, y: rect.maxY-60-CGFloat(index)*44, width: 292, height: 28), xRadius: 7, yRadius: 7).fill() }; if report { text("✓", in: CGRect(x: center.x-30, y: rect.minY+16, width: 60, height: 48), size: 38) } }
     case "theme": break // Real ThemeBackgroundView draws the chosen Space style.
     case "blocker":

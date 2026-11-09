@@ -18,7 +18,15 @@ public struct FaviconFetchResult: Sendable {
     public let index: Int
     public let status: Status
     public let durationMs: Double
+    public let elapsedMs: Double
     public let alreadyCached: Bool
+    public let imageInfo: FaviconImageInfo?
+}
+
+/// The caller supplies its existing PSL implementation. OpenStore has no PSL
+/// resource or dependency of its own; nil means the host has no accepted site.
+public protocol FaviconSiteResolver: Sendable {
+    func siteKey(for host: String) -> String?
 }
 
 /// Fetches directly from a page and its declared icon locations. No favicon service.
@@ -27,21 +35,44 @@ public actor FaviconFetcher {
     private let session: URLSession
     private let maxConcurrent: Int
     private let timeout: TimeInterval
+    private let originTimeout: TimeInterval
+    private let minimumDimension: Int
+    private let fallbackMinimumDimension: Int?
+    private var diagnostic: (@Sendable (String, String, String) -> Void)?
+    private let siteResolver: (any FaviconSiteResolver)?
     private var inFlight: [String: Task<OriginResult, Never>] = [:]
     private var diagnosticPublicHost: String?
 
     private struct OriginResult: Sendable {
         let status: FaviconFetchResult.Status
         var alreadyCached = false
+        var imageInfo: FaviconImageInfo?
         // Internal diagnostic only. Never attach destinations to reports or logs.
         var reason: FaviconDownloadError?
     }
 
-    public init(store: FaviconStore, session: URLSession = .shared, maxConcurrent: Int = 6, timeout: TimeInterval = 5) {
+    /// A site-key resolver can restrict each resource's redirects to its registrable
+    /// site (including private PSL registries). Without one, redirects stay on the
+    /// exact host. Declared CDN URLs remain explicit.
+    public init(store: FaviconStore, session: URLSession? = nil, maxConcurrent: Int = 6, timeout: TimeInterval = 5,
+                originTimeout: TimeInterval = 8, minimumDimension: Int = 1, fallbackMinimumDimension: Int? = nil,
+                siteResolver: (any FaviconSiteResolver)? = nil) {
         self.store = store
-        self.session = session
-        self.maxConcurrent = max(1, maxConcurrent)
-        self.timeout = timeout.isFinite && timeout > 0 ? min(5, timeout) : 5
+        if let session { self.session = session } else {
+            let config = URLSessionConfiguration.ephemeral
+            config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.urlCache = nil
+            self.session = URLSession(configuration: config)
+        }
+        self.maxConcurrent = min(6, max(1, maxConcurrent))
+        self.timeout = timeout.isFinite && timeout > 0 ? min(6, timeout) : 5
+        self.originTimeout = originTimeout.isFinite && originTimeout > 0 ? min(8, originTimeout) : 8
+        self.minimumDimension = min(1024, max(1, minimumDimension))
+        self.fallbackMinimumDimension = fallbackMinimumDimension.map { min(min(1024, max(1, minimumDimension)), max(1, $0)) }
+        self.siteResolver = siteResolver
+    }
+
+    @_spi(FaviconDiagnostics) public func setDiagnosticHandler(_ handler: @escaping @Sendable (String, String, String) -> Void) {
+        diagnostic = handler
     }
 
     /// CLI fixture hook only. Not part of the application API or normal CLI help.
@@ -55,8 +86,10 @@ public actor FaviconFetcher {
         diagnosticPublicHost = FaviconDestinationPolicy.normalizedHost(host)
     }
 
-    public nonisolated func prefetch(_ pageURLs: [URL]) async -> FetchReport {
+    public nonisolated func prefetch(_ pageURLs: [URL], overallTimeout: TimeInterval? = nil,
+        onResult: (@Sendable (FaviconFetchResult) async -> Void)? = nil) async -> FetchReport {
         let start = ContinuousClock.now
+        let deadline = overallTimeout.flatMap { $0.isFinite && $0 > 0 ? start.advanced(by: .seconds($0)) : nil }
         var seen = Set<String>(), pages: [URL] = []
         for page in pageURLs {
             guard let origin = FaviconOrigin.key(page), seen.insert(origin).inserted else { continue }
@@ -69,16 +102,17 @@ public actor FaviconFetcher {
                 let index = next + 1, page = pages[next]
                 next += 1
                 group.addTask {
-                    let start = ContinuousClock.now
-                    let result = await self.fetchShared(page)
+                    let siteStart = ContinuousClock.now
+                    let result = await self.fetchShared(page, deadline: deadline)
                     return FaviconFetchResult(index: index, status: result.status,
-                                              durationMs: result.alreadyCached ? 0 : Self.milliseconds(since: start),
-                                              alreadyCached: result.alreadyCached)
+                                              durationMs: result.alreadyCached ? 0 : Self.milliseconds(since: siteStart),
+                                              elapsedMs: Self.milliseconds(since: start), alreadyCached: result.alreadyCached, imageInfo: result.imageInfo)
                 }
             }
             for _ in 0..<min(maxConcurrent, pages.count) { submit() }
             while let result = await group.next() {
                 results.append(result)
+                await onResult?(result)
                 if next < pages.count { submit() }
             }
         }
@@ -95,23 +129,26 @@ public actor FaviconFetcher {
         await fetchShared(pageURL).status == .ok
     }
 
-    private func fetchShared(_ pageURL: URL) async -> OriginResult {
+    private func fetchShared(_ pageURL: URL, deadline: ContinuousClock.Instant? = nil) async -> OriginResult {
         guard let origin = FaviconOrigin.key(pageURL) else { return OriginResult(status: .failed) }
         if let existing = inFlight[origin] { return await existing.value }
         // Register before the first suspension, including the cache lookup. A shared task
         // survives cancellation of one waiter so it can still serve the other callers.
-        let task = Task { await fetchIfNeeded(pageURL, origin: origin) }
+        let task = Task { await fetchIfNeeded(pageURL, origin: origin, outerDeadline: deadline) }
         inFlight[origin] = task
         let result = await task.value
         inFlight[origin] = nil
         return result
     }
 
-    private func fetchIfNeeded(_ pageURL: URL, origin: String) async -> OriginResult {
+    private func fetchIfNeeded(_ pageURL: URL, origin: String, outerDeadline: ContinuousClock.Instant?) async -> OriginResult {
         if let stored = await store.cachedStatus(for: pageURL) {
-            return OriginResult(status: Self.status(stored), alreadyCached: true)
+            let icon = await store.icon(for: pageURL)
+            if stored != 0 || (icon?.info.map { min($0.width, $0.height) >= (fallbackMinimumDimension ?? minimumDimension) } ?? (minimumDimension == 1)) {
+                return OriginResult(status: Self.status(stored), alreadyCached: true, imageInfo: icon?.info)
+            }
         }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(8))
+        let deadline = min(outerDeadline ?? ContinuousClock.now.advanced(by: .seconds(originTimeout)), ContinuousClock.now.advanced(by: .seconds(originTimeout)))
         do {
             let policy = try await FaviconDestinationPolicy(pageURL: pageURL, origin: origin,
                                                            diagnosticPublicHost: diagnosticPublicHost, deadline: deadline)
@@ -129,11 +166,19 @@ public actor FaviconFetcher {
     private func fetchOrigin(_ pageURL: URL, origin: String, policy: FaviconDestinationPolicy,
                              deadline: ContinuousClock.Instant) async -> OriginResult {
         guard let fallback = URL(string: origin + "/favicon.ico") else { return OriginResult(status: .failed) }
-        var candidates: [URL] = [], hadError = false
+        var candidates: [FaviconCandidate] = [], hadError = false
+        var finalFallback = fallback
         do {
             let page = try await download(pageURL, limit: 256 * 1024, html: true, policy: policy, deadline: deadline)
             if (200..<300).contains(page.status) {
-                candidates = FaviconHeadScanner.candidates(in: page.data, baseURL: page.url, charset: page.charset)
+                let links = FaviconHeadScanner.candidates(in: page.data, baseURL: page.url, charset: page.charset)
+                diagnostic?(origin, page.url.absoluteString, "discovered:\(links.count):head-bytes=\(page.data.count)")
+                var manifests = 0
+                candidates = links.filter { candidate in
+                    guard candidate.manifestDocument else { return true }
+                    manifests += 1; return manifests <= 2
+                }
+                if let finalOrigin = FaviconOrigin.key(page.url), let url = URL(string: finalOrigin + "/favicon.ico") { finalFallback = url }
             } else if page.status != 404 && page.status != 410 { hadError = true }
         } catch FaviconDownloadError.blockedPrivate {
             return await failure(pageURL, reason: .blockedPrivate)
@@ -141,20 +186,42 @@ public actor FaviconFetcher {
             if Task.isCancelled { return OriginResult(status: .failed) }
             hadError = true
         }
-        // Rank/deduplicate first, then reserve the last of 16 total attempts for fallback.
-        candidates = Array(candidates.filter { $0 != fallback }.prefix(15)) + [fallback]
-        for candidate in candidates {
+        candidates.sort { $0.rank < $1.rank }
+        var seen = Set<URL>()
+        candidates = Array(candidates.filter { $0.url != fallback && $0.url != finalFallback && seen.insert($0.url).inserted }.prefix(14))
+        candidates.append(FaviconCandidate(url: finalFallback, kind: .favicon))
+        if finalFallback != fallback { candidates.append(FaviconCandidate(url: fallback, kind: .favicon)) }
+        var attempts = 0, attempted = Set<URL>()
+        var smallFallback: (Data, URL?, FaviconSourceKind, Int)?
+        while !candidates.isEmpty && attempts < 16 {
+            let candidate = candidates.removeFirst()
+            guard attempted.insert(candidate.url).inserted else { continue }; attempts += 1
             if Task.isCancelled { return OriginResult(status: .failed) }
-            if ContinuousClock.now >= deadline { return await failure(pageURL, reason: .timedOut) }
+            if ContinuousClock.now >= deadline { hadError = true; break }
             do {
+                if candidate.manifestDocument {
+                    // Discover manifests only after apple-touch candidates. A slow
+                    // manifest cannot spend the whole site's budget before links.
+                    let response = try await download(candidate.url, limit: 64 * 1024, html: false, policy: policy,
+                        deadline: min(deadline, ContinuousClock.now.advanced(by: .seconds(1.5))))
+                    if (200..<300).contains(response.status) {
+                        let icons = FaviconCandidate.manifest(response.data, baseURL: response.url).filter { !attempted.contains($0.url) }
+                        let iconURLs = Set(icons.map(\.url))
+                        candidates.removeAll { iconURLs.contains($0.url) }
+                        let fallbacks = candidates.filter { $0.kind == .favicon }
+                        let declared = (candidates.filter { $0.kind != .favicon } + icons).sorted { $0.rank < $1.rank }
+                        candidates = Array(declared.prefix(max(0, 16-attempts-fallbacks.count))) + fallbacks
+                    }
+                    continue
+                }
                 let data: Data
                 let iconURL: URL?
-                if candidate.scheme?.lowercased() == "data" {
-                    guard let inline = Self.inlinePNG(candidate) else { continue }
+                if candidate.url.scheme?.lowercased() == "data" {
+                    guard let inline = Self.inlinePNG(candidate.url) else { continue }
                     data = inline
                     iconURL = nil
                 } else {
-                    let icon = try await download(candidate, limit: 512 * 1024, html: false, policy: policy, deadline: deadline)
+                    let icon = try await download(candidate.url, limit: 512 * 1024, html: false, policy: policy, deadline: deadline)
                     guard (200..<300).contains(icon.status) else {
                         if icon.status != 404 && icon.status != 410 { hadError = true }
                         continue
@@ -162,11 +229,21 @@ public actor FaviconFetcher {
                     data = icon.data
                     iconURL = icon.url
                 }
-                if ContinuousClock.now >= deadline { return await failure(pageURL, reason: .timedOut) }
+                if ContinuousClock.now >= deadline { hadError = true; break }
                 do {
-                    try await store.ingest(imageData: data, iconURL: iconURL, for: pageURL, pageSpecific: false)
-                    return OriginResult(status: .ok)
+                    let minimum = candidate.kind == .appleTouch ? max(120, minimumDimension) : minimumDimension
+                    let info = try await store.ingest(imageData: data, iconURL: iconURL, for: pageURL, pageSpecific: false,
+                        minimumDimension: minimum, sourceKind: candidate.kind)
+                    diagnostic?(origin, candidate.url.absoluteString, "accepted:\(candidate.kind.rawValue):\(info.width)x\(info.height)")
+                    return OriginResult(status: .ok, imageInfo: info)
                 } catch FaviconStoreError.invalidImage {
+                    diagnostic?(origin, candidate.url.absoluteString, "rejected:image-or-size:minimum=\(minimumDimension):bytes=\(data.count)")
+                    if let fallbackMinimumDimension,
+                       let info = try? await store.inspect(imageData: data, minimumDimension: fallbackMinimumDimension),
+                       min(info.width, info.height) > (smallFallback?.3 ?? 0) {
+                        smallFallback = (data, iconURL, candidate.kind, min(info.width, info.height))
+                        diagnostic?(origin, candidate.url.absoluteString, "deferred:small:\(info.width)x\(info.height):after-larger-candidates")
+                    }
                     continue
                 } catch {
                     hadError = true
@@ -181,6 +258,12 @@ public actor FaviconFetcher {
             }
         }
         if Task.isCancelled { return OriginResult(status: .failed) }
+        if let (data, url, kind, _) = smallFallback, let fallbackMinimumDimension,
+           let info = try? await store.ingest(imageData: data, iconURL: url, for: pageURL, pageSpecific: false,
+               minimumDimension: fallbackMinimumDimension, sourceKind: kind) {
+            diagnostic?(origin, url?.absoluteString ?? "inline", "accepted:small-fallback:\(info.width)x\(info.height)")
+            return OriginResult(status: .ok, imageInfo: info)
+        }
         if hadError { await store.markError(for: pageURL) } else { await store.markMissing(for: pageURL) }
         let status = await store.cachedStatus(for: pageURL)
         return OriginResult(status: status.map(Self.status) ?? .failed)
@@ -188,6 +271,7 @@ public actor FaviconFetcher {
 
     private func download(_ url: URL, limit: Int, html: Bool, policy: FaviconDestinationPolicy,
                           deadline: ContinuousClock.Instant) async throws -> FaviconDownload {
+        guard url.absoluteString.utf8.count <= 8192, url.user == nil, url.password == nil else { throw FaviconDownloadError.invalidResponse }
         let requestDeadline = min(deadline, ContinuousClock.now.advanced(by: .seconds(timeout)))
         try await policy.check(url, deadline: requestDeadline)
         let remaining = FaviconDestinationPolicy.remaining(requestDeadline)
@@ -195,10 +279,11 @@ public actor FaviconFetcher {
         let requestTimeout = min(timeout, remaining)
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: requestTimeout)
         request.httpShouldHandleCookies = false
-        request.setValue(html ? "text/html" : "image/*", forHTTPHeaderField: "Accept")
+        request.setValue(html ? "text/html" : "image/*, application/manifest+json, application/json;q=0.9", forHTTPHeaderField: "Accept")
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
         let requestToSend = request
-        let redirectGuard = FaviconRedirectGuard(policy: policy, deadline: requestDeadline, timeout: requestTimeout)
+        diagnostic?(policy.pageOrigin, url.absoluteString, "request")
+        let redirectGuard = FaviconRedirectGuard(policy: policy, deadline: requestDeadline, timeout: requestTimeout, resourceURL: url, siteResolver: siteResolver, diagnostic: diagnostic)
         do {
             return try await withThrowingTaskGroup(of: FaviconDownload.self) { group in
                 group.addTask {
@@ -207,6 +292,7 @@ public actor FaviconFetcher {
                     if let error = redirectGuard.failure { throw error }
                     guard let response = response as? HTTPURLResponse, let finalURL = response.url,
                           FaviconOrigin.key(finalURL) != nil else { throw FaviconDownloadError.invalidResponse }
+                    await self.trace(origin: policy.pageOrigin, url: finalURL, event: "http:\(response.statusCode)")
                     guard (200..<300).contains(response.statusCode) else {
                         return FaviconDownload(data: Data(), url: finalURL, status: response.statusCode, charset: response.textEncodingName)
                     }
@@ -232,9 +318,12 @@ public actor FaviconFetcher {
                 return result
             }
         } catch {
+            diagnostic?(policy.pageOrigin, url.absoluteString, "rejected:download:\(redirectGuard.failure ?? error)")
             throw redirectGuard.failure ?? error
         }
     }
+
+    private func trace(origin: String, url: URL, event: String) { diagnostic?(origin, url.absoluteString, event) }
 
     fileprivate static func inlinePNG(_ url: URL) -> Data? {
         let text = url.absoluteString
@@ -340,7 +429,7 @@ private struct FaviconDestinationPolicy: Sendable {
                 }
                 lookup.finish(found ? .success(false) : .failure(FaviconDownloadError.invalidResponse))
             }
-            // A slow resolver must not extend the origin's eight-second budget. Late
+            // A slow resolver must not extend the origin's configured budget. Late
             // getaddrinfo completion is discarded; no connection starts after expiry.
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + max(0, remaining(deadline))) {
                 lookup.finish(.failure(FaviconDownloadError.timedOut))
@@ -370,29 +459,89 @@ private final class FaviconRedirectGuard: NSObject, URLSessionTaskDelegate, @unc
     private let policy: FaviconDestinationPolicy
     private let deadline: ContinuousClock.Instant
     private let timeout: TimeInterval
+    private let resourceURL: URL
+    private let siteResolver: (any FaviconSiteResolver)?
+    private let diagnostic: (@Sendable (String, String, String) -> Void)?
     private let lock = NSLock()
     private var storedFailure: (any Error)?
     var failure: (any Error)? { lock.withLock { storedFailure } }
 
-    init(policy: FaviconDestinationPolicy, deadline: ContinuousClock.Instant, timeout: TimeInterval) {
+    init(policy: FaviconDestinationPolicy, deadline: ContinuousClock.Instant, timeout: TimeInterval,
+         resourceURL: URL, siteResolver: (any FaviconSiteResolver)?, diagnostic: (@Sendable (String, String, String) -> Void)?) {
         self.policy = policy; self.deadline = deadline; self.timeout = timeout
+        self.resourceURL = resourceURL; self.siteResolver = siteResolver
+        self.diagnostic = diagnostic
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
+            completionHandler(.performDefaultHandling, nil)
+        } else { completionHandler(.cancelAuthenticationChallenge, nil) }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest) async -> URLRequest? {
         do {
-            guard let url = request.url else { throw FaviconDownloadError.invalidResponse }
+            guard let url = request.url, url.absoluteString.utf8.count <= 8192,
+                  url.user == nil, url.password == nil else { throw FaviconDownloadError.invalidResponse }
+            if let siteResolver {
+                guard let original = resourceURL.host.flatMap({ siteResolver.siteKey(for: $0) }),
+                      let next = url.host.flatMap({ siteResolver.siteKey(for: $0) }), original == next else { throw FaviconDownloadError.invalidResponse }
+            } else {
+                guard resourceURL.host == url.host else { throw FaviconDownloadError.invalidResponse }
+            }
+            guard resourceURL.scheme != "https" || url.scheme == "https" else { throw FaviconDownloadError.invalidResponse }
             try await policy.check(url, deadline: deadline)
             let remaining = FaviconDestinationPolicy.remaining(deadline)
             guard remaining > 0 else { throw FaviconDownloadError.timedOut }
             var request = request
             request.timeoutInterval = min(timeout, remaining)
             request.httpShouldHandleCookies = false
+            request.setValue(nil, forHTTPHeaderField: "Authorization")
+            request.setValue(nil, forHTTPHeaderField: "Cookie")
+            diagnostic?(policy.pageOrigin, url.absoluteString, "redirect:\(response.statusCode):from=\(response.url?.absoluteString ?? "")")
             return request
         } catch {
+            diagnostic?(policy.pageOrigin, request.url?.absoluteString ?? "", "redirect-refused:\(response.statusCode):\(error)")
             lock.withLock { storedFailure = error }
             task.cancel()
             return nil
+        }
+    }
+}
+
+private struct FaviconCandidate {
+    let url: URL
+    let kind: FaviconSourceKind
+    var size: Int? = nil
+    var manifestDocument = false
+    var rank: (Int, Int) {
+        let category: Int = switch kind {
+        case .appleTouch: size.map { $0 >= 120 ? 0 : 3 } ?? 0
+        case .manifest: 1
+        case .link: 2
+        case .favicon: 4
+        }
+        return (category, manifestDocument ? Int.min : -(size ?? 0))
+    }
+    static func size(_ sizes: String, maximum: Int) -> Int? {
+        sizes.lowercased().split(whereSeparator: { $0.isWhitespace }).compactMap { token -> Int? in
+            let sides = token.split(separator: "x")
+            guard sides.count == 2, let w = Int(sides[0]), let h = Int(sides[1]), min(w,h) > 0, max(w,h) <= maximum else { return nil }
+            return min(w,h)
+        }.max()
+    }
+    static func manifest(_ data: Data, baseURL: URL) -> [Self] {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let icons = object["icons"] as? [[String: Any]], icons.count <= 64 else { return [] }
+        return icons.compactMap { icon in
+            guard let src = icon["src"] as? String, src.utf8.count <= 8192,
+                  let url = URL(string: src, relativeTo: baseURL)?.absoluteURL, FaviconOrigin.key(url) != nil,
+                  let size = size(icon["sizes"] as? String ?? "", maximum: 512) else { return nil }
+            let purpose = (icon["purpose"] as? String ?? "any").split(separator: " ")
+            guard purpose.contains("any") || purpose.contains("maskable") else { return nil }
+            return Self(url: url, kind: .manifest, size: size)
         }
     }
 }
@@ -403,47 +552,27 @@ private struct FaviconHeadScanner {
     private var encoding: String.Encoding?
     private var cursor = 0
 
-    private struct Candidate {
-        let url: URL
-        let size: Int?
-        let apple: Bool
-        let order: Int
-    }
-
-    static func candidates(in data: Data, baseURL: URL, charset: String?) -> [URL] {
+    static func candidates(in data: Data, baseURL: URL, charset: String?) -> [FaviconCandidate] {
         let encoding = charset.flatMap(stringEncoding) ?? metaEncoding(in: data)
         var scanner = FaviconHeadScanner(bytes: Array(data), encoding: encoding)
-        var found: [Candidate] = []
+        var found: [FaviconCandidate] = []
         while let tag = scanner.nextTag() {
             if tag.name == "body" || tag.name == "/head" { break }
             if ["script", "style", "title", "textarea"].contains(tag.name) { scanner.skipRawText(tag.name); continue }
             guard tag.name == "link", let rel = tag.attributes["rel"], let href = tag.attributes["href"] else { continue }
             let tokens = Set(rel.lowercased().split(whereSeparator: { $0.isWhitespace }).map(String.init))
             let apple = tokens.contains("apple-touch-icon") || tokens.contains("apple-touch-icon-precomposed")
-            guard !tokens.contains("mask-icon"), apple || tokens.contains("icon"),
+            let manifest = tokens.contains("manifest")
+            guard !tokens.contains("mask-icon"), apple || manifest || tokens.contains("icon"),
                   let url = URL(string: asciiURL(entities(href).trimmingCharacters(in: .whitespacesAndNewlines)), relativeTo: baseURL)?.absoluteURL else { continue }
             if url.scheme?.lowercased() == "data" {
-                guard FaviconFetcher.inlinePNG(url) != nil else { continue }
+                guard !manifest, FaviconFetcher.inlinePNG(url) != nil else { continue }
             } else if FaviconOrigin.key(url) == nil { continue }
-            let sizes = (tag.attributes["sizes"] ?? "").lowercased().split(whereSeparator: { $0.isWhitespace }).compactMap { token -> Int? in
-                let sides = token.split(separator: "x")
-                guard sides.count == 2, let width = Int(sides[0]), let height = Int(sides[1]), min(width, height) >= 64 else { return nil }
-                return max(width, height)
-            }
-            found.append(Candidate(url: url, size: sizes.min(), apple: apple, order: found.count))
+            let size = FaviconCandidate.size(tag.attributes["sizes"] ?? "", maximum: 1024)
+            found.append(FaviconCandidate(url: url, kind: apple ? .appleTouch : manifest ? .manifest : .link, size: size, manifestDocument: manifest))
+            if found.count == 64 { break }
         }
-        found.sort {
-            let lhs = ($0.size == nil ? ($0.apple ? 1 : 2) : 0, $0.size ?? 0, $0.order)
-            let rhs = ($1.size == nil ? ($1.apple ? 1 : 2) : 0, $1.size ?? 0, $1.order)
-            return lhs < rhs
-        }
-        var seen = Set<URL>()
-        var result: [URL] = []
-        for candidate in found where seen.insert(candidate.url).inserted {
-            result.append(candidate.url)
-            if result.count == 16 { break }
-        }
-        return result
+        return found
     }
 
     private mutating func nextTag() -> (name: String, attributes: [String: String])? {

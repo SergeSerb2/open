@@ -11,6 +11,9 @@ import uuid
 
 
 def run(factory, results, tmp, h):
+    if os.environ.get('OPEN_E2E_ONBOARDING_ICONS_ONLY') == '1':
+        return run_favorite_icons(factory, results, tmp, h)
+    run_favorite_icons(factory, results, tmp, h)
     source = Path(tmp)/'setup-arc-synthetic'
     shutil.rmtree(source, ignore_errors=True)
     ids = runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
@@ -375,4 +378,171 @@ def run(factory, results, tmp, h):
         if app and not app.closed: app.quit()
         if external_server:
             external_server.shutdown(); external_server.server_close()
+        h._restore_defaults(None, saved)
+
+
+def run_favorite_icons(factory, results, tmp, h):
+    """Live direct-site downloads -> onboarding -> persisted sidebar Favorites.
+
+    Both network states use the real App and window. No icon bytes are bundled
+    or supplied by the harness. Capture only the App's owned window.
+    """
+    import sqlite3
+    evidence = Path(os.environ.get('OPEN_E2E_C7_EVIDENCE', str(Path(h.ROOT)/'.re/handoff/sections/s17/c7')))
+    evidence.mkdir(parents=True, exist_ok=True)
+    source = Path(tmp)/'favorite-icons-no-arc'; source.mkdir(exist_ok=True)
+    keys = ('open.firstRun.completed', 'open.onboarding.name', 'open.import.lastArcDir',
+            'open.onboarding.introSoundEnabled')
+    exported = h.subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
+    saved = {key: domain.get(key) for key in keys}
+    app = None
+    receipts = {}
+    def state(): return app.call('onboarding', action='state')
+    def until(predicate, timeout=20):
+        assert h.wait_until(predicate, timeout=timeout, step=.025), state()
+    def action(verb, **args): return app.call('onboarding', action=verb, **args)
+    def launch(blocked=False, reduced=False):
+        nonlocal app
+        if app and not app.closed: app.quit()
+        h._restore_defaults(None, {key: None for key in keys})
+        flags = ['--arc-dir='+str(source), '--intro-sound=off']
+        if blocked: flags.append('--favicon-network=blocked')
+        if reduced: flags.append('--reduce-motion')
+        app = factory(urls=(), fresh=True, extra_args=flags, extra_env={'OPEN_FAVICON_DIAGNOSTICS':'1'})
+        action('skip-intro'); action('get-started')
+        until(lambda: state()['screen']=='name')
+        name = state()
+        action('skip'); until(lambda: state()['screen']=='favorites')
+        return name, state()
+    def capture(label):
+        captures = {}
+        for appearance in ('light', 'dark'):
+            action('set-appearance', appearance=appearance)
+            time.sleep(.3)
+            s = state(); path = evidence/('favorites-'+label+'-'+appearance+'.png')
+            # Window ID belongs to this owned App. -x suppresses capture sound.
+            captured = h.subprocess.run(['/usr/sbin/screencapture', '-x', '-o', '-a', '-l', str(s['window']), str(path)], capture_output=True)
+            assert captured.returncode == 0, captured.stderr.decode(errors='replace')
+            width, height, pixel = h.read_image(str(path), srgb=True)
+            scale = s['backingScale']; frames = s['frameSize']
+            assert [width,height] == [round(frames[0]*scale), round(frames[1]*scale)], (width,height,frames,scale)
+            tiles = []
+            for tile in s['favoriteTiles']:
+                x,y,w,hgt = tile['iconWindowFrame']
+                # Window coordinates are bottom-up; PNG rows are top-down.
+                points = [pixel(round((x+dx)*scale), round(height-(y+dy)*scale))
+                    for dx in range(4,29,3) for dy in range(4,29,3)]
+                spread = max(max(p[c] for p in points)-min(p[c] for p in points) for c in range(3))
+                tiles.append(dict(index=tile['index'], spread=spread))
+            captures[appearance] = dict(path=str(path), size=[width,height], scale=scale, pixels=tiles)
+        return captures
+    def quality(s):
+        tiles = s.get('favoriteTiles',[])
+        icons = [t for t in tiles if t.get('iconState')=='icon']
+        return len(tiles)==12 and len(icons)>=10 and all(min(t['pixelSize'])>=32
+            and t['elapsedMS']<=12000 and t['sourceKind'] in ('apple-touch','manifest','link','favicon.ico') for t in icons) \
+            and all(t['renderedKind']=='monogram' for t in tiles if t['iconState']!='icon')
+    def monograms(s):
+        tiles = s.get('favoriteTiles',[])
+        return len(tiles)==12 and all(t.get('renderedKind')=='monogram' for t in tiles) and not s.get('error')
+    def stable(before, after):
+        lhs, rhs = before.get('favoriteTiles',[]), after.get('favoriteTiles',[])
+        return len(lhs)==len(rhs)==12 and all(a['frame']==b['frame'] and a['iconWindowFrame']==b['iconWindowFrame']
+            and a['iconFrame']==b['iconFrame']==[28,8,32,32] for a,b in zip(lhs,rhs))
+    def row(name, ok, **data):
+        results['favorite_icons_'+name] = dict(ok=bool(ok), load=os.getloadavg(), **data)
+    try:
+        name, initial = launch()
+        # Capture the actual initial fallback before the delayed intro prefetch.
+        until(lambda: state().get('faviconFetch',{}).get('finished'), timeout=17)
+        network = state()
+        receipts['network'] = dict(initial=initial, final=network)
+        (evidence/'network-state.json').write_text(json.dumps(network, indent=2))
+        action('toggle-favorite', index=0); action('toggle-favorite', index=6)
+        shots = capture('network')
+        trace = Path(app.user_data)/'favicon-trace.jsonl'
+        if trace.is_file(): shutil.copyfile(trace, evidence/'network-trace.jsonl')
+        receipts['network'] = dict(initial=initial, final=network, captures=shots)
+        (evidence/'icons-first-screenshots.json').write_text(json.dumps(receipts, indent=2))
+        print('C7_FIRST_SCREENSHOTS '+json.dumps(shots), flush=True)
+        row('network', quality(network), state=network,
+            missing=[t['name'] for t in network['favoriteTiles'] if t['iconState']!='icon'])
+        row('minimum_source', all(min(t['pixelSize'])>=32 and (min(t['pixelSize'])>=64 or t['iconStyle']=='plate')
+            for t in network['favoriteTiles'] if t['iconState']=='icon'), state=network)
+        focus = state()
+        row('selected_focused', focus['favoriteTiles'][0]['focused'] and 0 in focus['favorites'], state=focus)
+        x,y,w,hgt = focus['favoriteTiles'][0]['windowFrame']
+        scale = focus['backingScale']
+        for appearance, shot in shots.items():
+            path = evidence/('favorites-selected-focused-'+appearance+'.png')
+            h.subprocess.run(['sips', '-c', str(round(hgt*scale)), str(round(w*scale)), '--cropOffset',
+                str(round(shot['size'][1]-(y+hgt)*scale)), str(round(x*scale)), shot['path'], '--out', str(path)],
+                check=True, capture_output=True)
+        # Move focus through the native key path. The tile interior must not
+        # change: the focus indicator belongs only around its outside edge.
+        app.call('key', key='tab')
+        unfocused = capture('network-unfocused')
+        focus_checks = []
+        for appearance in shots:
+            _,height,a = h.read_image(shots[appearance]['path'],srgb=True)
+            _,_,b = h.read_image(unfocused[appearance]['path'],srgb=True)
+            points = [(round((x+dx)*scale),round(height-(y+dy)*scale))
+                for dx in range(10,int(w)-10) for dy in range(10,int(hgt)-10)]
+            focus_checks.append(all(a(px,py)==b(px,py) for px,py in points))
+        row('focus_border', all(focus_checks) and not state()['favoriteTiles'][0]['focused'], observed=focus_checks)
+        handoff_selection = {t['index'] for t in network['favoriteTiles'] if t['iconState']=='icon'}
+        handoff_selection = set(sorted(handoff_selection)[:2])
+        assert len(handoff_selection)==2, network
+        for index in sorted(set(state()['favorites']) ^ handoff_selection): action('toggle-favorite', index=index)
+        row('fixed_frames', stable(initial,network), initial=initial, final=network)
+        row('fixed_frames_negative', not stable(name,network), expected='FAIL')
+        fetch = network['faviconFetch']
+        row('prefetch_bounds', fetch['introElapsedWhenStarted']>=3.3 and fetch['siteTimeoutSeconds']==6
+            and fetch['overallTimeoutSeconds']==12 and fetch['concurrency']==6, observed=fetch)
+        fade = [t['fadeDuration'] for t in network['favoriteTiles'] if t['iconState']=='icon']
+        row('fade', bool(fade) and all(v in (0,.25) for v in fade) and .25 in fade, observed=fade)
+        database = Path(app.user_data)/'State/favicons.sqlite3'
+        with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
+            before_store = list(db.execute('SELECT origin,png64,fetched_at FROM favicons WHERE status=0 ORDER BY origin'))
+        while state()['screen']!='ready':
+            s=state()['screen']
+            if s=='defaultBrowser': action('choose-default', yes=False); action('next')
+            else: action('next')
+        action('get-started'); until(lambda: not state()['active'] and not state()['dim']['exists'])
+        def sidebar(): return [t for t in app.call('tabs') if t['section']=='favorites']
+        until(lambda: len(sidebar())==2 and all(t['rowFaviconSource']=='stored' and t['rowFaviconHash'] for t in sidebar()))
+        sidebar_tiles = sidebar()
+        with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
+            after_store = list(db.execute('SELECT origin,png64,fetched_at FROM favicons WHERE status=0 ORDER BY origin'))
+        row('sidebar_store_handoff', before_store==after_store and all(not t['hasWebContent'] and not t['loaded']
+            and t['rowFaviconSource']=='stored' for t in sidebar_tiles), favorites=sidebar_tiles)
+        receipts['sidebar'] = sidebar_tiles
+        _, blocked_initial = launch(blocked=True)
+        until(lambda: state()['faviconFetch']['finished'])
+        blocked = state(); action('toggle-favorite',index=0); action('toggle-favorite',index=6)
+        blocked_shots = capture('blocked')
+        receipts['blocked'] = dict(initial=blocked_initial, final=blocked, captures=blocked_shots)
+        row('blocked', monograms(blocked) and blocked['faviconFetch']['requests']==0
+            and all(p['spread']>25 for shot in blocked_shots.values() for p in shot['pixels']), state=blocked, captures=blocked_shots)
+        row('monogram_contrast', all(t['monogramContrast']>=3 for t in blocked['favoriteTiles']),
+            observed=[dict(name=t['name'],color=t['monogramColor'],contrast=t['monogramContrast']) for t in blocked['favoriteTiles']])
+        row('network_negative', not quality(blocked), expected='FAIL', state=blocked)
+        row('blocked_negative', not monograms(network), expected='FAIL', state=network)
+        row('blocked_fixed_frames', stable(blocked_initial,blocked), initial=blocked_initial, final=blocked)
+        # Same window and real downloaded images with Reduce Motion: no fade.
+        _, reduced_initial = launch(reduced=True)
+        until(lambda: state()['faviconFetch']['finished'], timeout=17)
+        reduced = state()
+        reduced_icons = [t for t in reduced['favoriteTiles'] if t['iconState']=='icon']
+        row('reduce_motion', bool(reduced_icons) and all(t['fadeDuration']==0 for t in reduced_icons)
+            and stable(reduced_initial,reduced), state=reduced)
+        row('reduce_motion_negative', not all(t['fadeDuration']==0 for t in network['favoriteTiles'] if t['iconState']=='icon'), expected='FAIL')
+        receipts['reduced'] = reduced
+    finally:
+        if app:
+            trace = Path(app.user_data)/'favicon-trace.jsonl'
+            if trace.is_file(): shutil.copyfile(trace, evidence/'last-network-trace.jsonl')
+        (evidence/'icon-receipts.json').write_text(json.dumps(receipts, indent=2))
+        if app and not app.closed: app.quit()
         h._restore_defaults(None, saved)

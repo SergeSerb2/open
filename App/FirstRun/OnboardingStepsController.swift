@@ -4,6 +4,7 @@ import Observation
 import QuartzCore
 import ImageIO
 import UniformTypeIdentifiers
+import OpenStore
 import OpenModel
 import OpenSettings
 import OpenDesign
@@ -18,7 +19,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     let host: String
     var url: URL { URL(string: "https://" + host + "/")! }
   }
-  static let sites = [Site(name: "Gmail", host: "mail.google.com"), Site(name: "Google Calendar", host: "calendar.google.com"), Site(name: "YouTube", host: "youtube.com"), Site(name: "Notion", host: "notion.so"), Site(name: "Slack", host: "slack.com"), Site(name: "Figma", host: "figma.com"), Site(name: "GitHub", host: "github.com"), Site(name: "Linear", host: "linear.app"), Site(name: "Spotify", host: "spotify.com"), Site(name: "WhatsApp", host: "web.whatsapp.com"), Site(name: "ChatGPT", host: "chatgpt.com"), Site(name: "Wikipedia", host: "wikipedia.org")]
+  static let sites = [Site(name: "Gmail", host: "mail.google.com"), Site(name: "Google Calendar", host: "calendar.google.com"), Site(name: "YouTube", host: "youtube.com"), Site(name: "Notion", host: "notion.com"), Site(name: "Slack", host: "slack.com"), Site(name: "Figma", host: "figma.com"), Site(name: "GitHub", host: "github.com"), Site(name: "Linear", host: "linear.app"), Site(name: "Spotify", host: "spotify.com"), Site(name: "WhatsApp", host: "web.whatsapp.com"), Site(name: "ChatGPT", host: "chatgpt.com"), Site(name: "Wikipedia", host: "wikipedia.org")]
   unowned let app: AppDelegate
   let firstRun: FirstRunViewModel
   let replay: Bool
@@ -39,8 +40,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var entered: [Step] = []
   private var tasks: [Task<Void, Never>] = []
   private var addedFavorites = Set<Int>()
-  private var iconTasks: [Task<Void, Never>] = []
-  private var siteImages: [Int: NSImage] = [:]
+  let icons: OnboardingFavicons
   private var themeState = ThemeEditorState()
   private var themeBaseline: SpaceTheme = .init()
   private var themeChanged = false
@@ -66,13 +66,21 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private(set) var savePanel: NSSavePanel?
   private let started = Date()
   var focusedSpace: Space? { app.frontWindowController?.context.focusedSpace ?? app.model.windows.first.flatMap { app.model.space(id: $0.focusedSpaceID) } ?? app.model.spaces.first }
-  init(app: AppDelegate, firstRun: FirstRunViewModel, replay: Bool, reduceMotion: Bool) {
+  init(app: AppDelegate, firstRun: FirstRunViewModel, replay: Bool, reduceMotion: Bool, icons: OnboardingFavicons) {
+    self.icons = icons
     self.app = app; self.firstRun = firstRun; self.replay = replay; self.reduceMotion = reduceMotion
     super.init(nibName: nil, bundle: nil)
     resetTheme()
+    icons.onChange = { [weak self] index in
+      guard let self, step == .favorites else { return }
+      if favoriteButtons.indices.contains(index) {
+        favoriteButtons[index].applyIcon(self.icons.tiles[index], animated: true)
+      }
+      updatePreview()
+    }
   }
   required init?(coder: NSCoder) { nil }
-  isolated deinit { tasks.forEach { $0.cancel() }; iconTasks.forEach { $0.cancel() } }
+  isolated deinit { tasks.forEach { $0.cancel() } }
   override func loadView() {
     let root = OnboardingSurface()
     for surface in [root, panel, controls, footer] { surface.onEscape = { [weak self] in self?.back() } }
@@ -157,11 +165,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       for (index, site) in Self.sites.enumerated() {
         let tile = OnboardingFavoriteButton(site.name, primary: false, reduceMotion: reduceMotion) { [weak self] in self?.toggleFavorite(index) }
         tile.setAccessibilityRole(.checkBox)
-        tile.siteImage = siteImages[index]; tile.selected = selectedFavorites.contains(index)
+        tile.applyIcon(icons.tiles[index], animated: false); tile.selected = selectedFavorites.contains(index)
         tile.frame = NSRect(x: (index%4)*100, y: (index/4)*88, width: 88, height: 76)
         controls.addSubview(tile); favoriteButtons.append(tile)
       }
-      fetchIcons()
     }
     if step == .theme {
       let strip = PresetStripView(frame: NSRect(x: 0, y: 0, width: 360, height: 32))
@@ -371,7 +378,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       Task { @MainActor [weak self] in guard let self, observationGeneration == generation else { return }; if step == .importData { render(direction: 0) } else if step == .ready || step == .defaultBrowser { statusLabel?.stringValue = step == .ready ? firstRun.errorText ?? "":defaultOutcome }; updatePreview(); observeImport() }
     }
   }
-  private func updatePreview() { preview.update(step: step.rawValue, name: name, favorites: selectedFavorites.sorted().map { Self.sites[$0].name }, count: firstRun.outcome?.importedCount("Imported tabs") ?? firstRun.probe?.sidebarItems ?? 0, report: firstRun.step == .report, blocker: blocker, card: card, reduceMotion: reduceMotion) }
+  private func updatePreview() { preview.update(step: step.rawValue, name: name, favorites: selectedFavorites.sorted().map { (Self.sites[$0].name, icons.tiles[$0]) }, count: firstRun.outcome?.importedCount("Imported tabs") ?? firstRun.probe?.sidebarItems ?? 0, report: firstRun.step == .report, blocker: blocker, card: card, reduceMotion: reduceMotion) }
   private func celebrate() {
     confettiPlayed = true
     let emitter = CAEmitterLayer(); emitter.emitterShape = .line
@@ -390,25 +397,21 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       emitter?.removeFromSuperlayer(); self?.confetti = nil
     })
   }
-  private func fetchIcons() {
-    guard iconTasks.isEmpty else { return }
-    for (index, site) in Self.sites.enumerated() {
-      iconTasks.append(Task { [weak self] in
-        // Direct site request only. Ephemeral sessions neither send nor store cookies.
-        let config = URLSessionConfiguration.ephemeral; config.timeoutIntervalForRequest = 2; config.timeoutIntervalForResource = 2; config.httpCookieStorage = nil
-        let session = URLSession(configuration: config, delegate: OnboardingIconRedirect(), delegateQueue: nil); defer { session.invalidateAndCancel() }
-        var request = URLRequest(url: site.url.appendingPathComponent("favicon.ico")); request.timeoutInterval = 2
-        guard let (bytes, response) = try? await session.bytes(for: request), !Task.isCancelled,
-          let response = response as? HTTPURLResponse, response.statusCode == 200,
-          response.url?.host == site.url.host, response.expectedContentLength <= 256*1024 else { return }
-        // Bound bytes before decoding. At most 256 KiB per site and a 64 px thumbnail.
-        var data = Data()
-        do { for try await byte in bytes { guard !Task.isCancelled, data.count < 256*1024 else { return }; data.append(byte) } } catch { return }
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-          let small = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 64] as CFDictionary), let self else { return }
-        let icon = NSImage(cgImage: small, size: NSSize(width: 32, height: 32)); siteImages[index] = icon
-        if favoriteButtons.indices.contains(index) { favoriteButtons[index].siteImage = icon }
-      })
+  private var favoriteIconState: [[String: Any]] {
+    Self.sites.enumerated().map { index, site in
+      let tile = icons.tiles[index]
+      let button = favoriteButtons.indices.contains(index) ? favoriteButtons[index] : nil
+      return ["index": index, "name": site.name, "iconState": tile.state,
+        "renderedKind": tile.image == nil ? "monogram" : "icon", "sourceKind": (tile.info?.sourceKind?.rawValue as Any?) ?? NSNull(),
+        "pixelSize": [tile.info?.width ?? 0, tile.info?.height ?? 0], "opaque": tile.info?.opaque ?? false,
+        "iconStyle": tile.info.map { $0.opaque && min($0.width, $0.height) >= 64 ? "full-bleed":"plate" } ?? "monogram",
+        "windowFrame": button.map { b in let r = b.convert(b.bounds, to: nil); return [r.minX, r.minY, r.width, r.height] } ?? [],
+        "monogramColor": button?.iconView.monogramColor ?? 0, "monogramContrast": button?.iconView.monogramContrast ?? 0,
+        "storeHit": tile.storeHit, "durationMS": tile.durationMS, "elapsedMS": tile.elapsedMS, "focused": button.map { $0.window?.firstResponder === $0 } ?? false, "frame": button.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
+        "iconWindowFrame": button.map { b in
+          let r = b.iconView.convert(b.iconView.bounds, to: nil)
+          return [r.minX, r.minY, r.width, r.height]
+        } ?? [], "iconFrame": [28, 8, 32, 32], "fadeDuration": button?.iconView.fadeDuration ?? 0]
     }
   }
   private var cardState: [String: Any] {
@@ -420,7 +423,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
           "frame": [button.frame.minX, button.frame.minY, button.frame.width, button.frame.height]]
       }]
   }
-  var state: [String: Any] { ["screen": step.rawValue, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
+  var state: [String: Any] { ["screen": step.rawValue, "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
     var result: [[String: String]] = []
     if root is NSButton || root is NSSwitch || (root as? NSTextField)?.isEditable == true || root is ThemeEditorButton || root is PresetSwatchView || root is OpenSpaceEditor.ColorPadView { result.append(["role": root.accessibilityRole()?.rawValue ?? "", "label": root.accessibilityLabel() ?? (root as? NSButton)?.title ?? ""]) }
@@ -508,21 +511,30 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
 }
 @MainActor private final class OnboardingFavoriteButton: OnboardingButton {
   var selected = false { didSet { setAccessibilityValue(selected ? 1:0); needsDisplay = true } }
-  var siteImage: NSImage? { didSet { needsDisplay = true } }
+  let iconView = OnboardingSiteIconView(frame: NSRect(x: 28, y: 8, width: 32, height: 32))
+  override init(_ title: String, primary: Bool, reduceMotion: Bool, action: @escaping @MainActor () -> Void) {
+    super.init(title, primary: primary, reduceMotion: reduceMotion, action: action)
+    // NSButtonCell's automatic text focus mask crosses the middle of this
+    // custom tile. Draw focus around the tile instead.
+    focusRingType = .none; addSubview(iconView)
+  }
+  required init?(coder: NSCoder) { nil }
+  override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); needsDisplay = true; return accepted }
+  override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); needsDisplay = true; return accepted }
+  func applyIcon(_ tile: OnboardingFavicons.Tile, animated: Bool) {
+    iconView.apply(name: title, tile: tile, animated: animated, reduceMotion: reduceMotion)
+  }
+  override func layout() { super.layout(); iconView.frame = NSRect(x: bounds.midX-16, y: 8, width: 32, height: 32) }
   override func draw(_ dirtyRect: NSRect) {
     NSColor.quaternaryLabelColor.withAlphaComponent(0.08).setFill(); let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 10, yRadius: 10); outline.fill()
     if selected { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1).setStroke(); outline.lineWidth = 2; outline.stroke() }
-    let icon = NSRect(x: bounds.midX-16, y: 8, width: 32, height: 32)
-    if let siteImage { siteImage.draw(in: icon) } else { NSColor.quaternaryLabelColor.setFill(); NSBezierPath(roundedRect: icon, xRadius: 7, yRadius: 7).fill(); (String(title.prefix(1)) as NSString).draw(at: NSPoint(x: icon.minX+9, y: icon.minY+6), withAttributes: [.font: NSFont.systemFont(ofSize: 19, weight: .semibold), .foregroundColor: NSColor.labelColor]) }
+    if window?.firstResponder === self {
+      NSColor.keyboardFocusIndicatorColor.setStroke()
+      let focus = NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 4), xRadius: 7, yRadius: 7)
+      focus.lineWidth = 1.5; focus.stroke()
+    }
     let style = NSMutableParagraphStyle(); style.alignment = .center; style.lineBreakMode = .byWordWrapping
     (title as NSString).draw(in: NSRect(x: 2, y: 44, width: bounds.width-4, height: 30), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.labelColor, .paragraphStyle: style])
     if selected { ("✓" as NSString).draw(at: NSPoint(x: bounds.width-19, y: 3), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .bold), .foregroundColor: NSColor.systemBlue]) }
-  }
-}
-
-private final class OnboardingIconRedirect: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-  func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                  newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-    completionHandler(nil)
   }
 }

@@ -179,7 +179,7 @@ enum ReviewFlows {
             let icon = Synthetic.icon("", color: 0x49A85A)
             let png = NSBitmapImageRep(data: icon.tiffRepresentation!)!.representation(using: .png, properties: [:])!
             let first = URL(string: "https://icons.example/a")!, second = URL(string: "https://icons.example/b")!
-            try blockingThrowing { try await store.ingest(imageData: png, iconURL: nil, for: first, pageSpecific: false) }
+            _ = try blockingThrowing { try await store.ingest(imageData: png, iconURL: nil, for: first, pageSpecific: false) }
             let s = fresh()
             s.controller.favicons = source
             s.controller.presentPreview(.init(input: .init(placeholder: "Search or Enter URL…", leadingIcon: .favicon(first, fallback: "globe")), rows: [
@@ -202,7 +202,7 @@ enum ReviewFlows {
             // An actor round trip followed by the main loop drains that lookup before eviction.
             _ = blocking { await store.count() }
             RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-            try blockingThrowing { try await store.ingest(imageData: png, iconURL: nil, for: miss, pageSpecific: false) }
+            _ = try blockingThrowing { try await store.ingest(imageData: png, iconURL: nil, for: miss, pageSpecific: false) }
             var premature = false
             let cachedMiss = cache.favicon(for: miss) { _ in premature = true }
             let b = URL(string: "https://missing-b.example/")!, c = URL(string: "https://missing-c.example/")!
