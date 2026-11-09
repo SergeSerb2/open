@@ -1,5 +1,6 @@
 import AppKit
 import OpenEngine
+import OpenDesign
 
 @MainActor
 final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
@@ -124,6 +125,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     popover.contentViewController?.view = view
     popover.show(relativeTo: anchor.rect, of: anchor.view, preferredEdge: anchor.edge)
     if let promptWindow = view.window {
+      // This NSPopover is ours; its native window class alone cannot prove
+      // ownership to the browser's child-window appearance policy.
+      (anchor.view.window as? any WindowContentAppearanceHost)?.contentAppearanceDidChange(for: promptWindow, inheritsAppearance: popover.appearance == nil)
       if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
       promptWindow.makeKeyAndOrderFront(nil)
       promptWindow.makeFirstResponder(view)

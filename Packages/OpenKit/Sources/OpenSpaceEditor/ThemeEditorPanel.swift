@@ -48,6 +48,7 @@ public final class ThemeEditorPanel: EditorPopoverPanel {
         case .light: appearance = NSAppearance(named: .aqua)
         case .dark: appearance = NSAppearance(named: .darkAqua)
         }
+        (parent as? any WindowContentAppearanceHost)?.contentAppearanceDidChange(for: self, inheritsAppearance: mode == .automatic)
     }
     public override var backingScaleFactor: CGFloat { renderScale ?? super.backingScaleFactor }
     public override var undoManager: UndoManager? {
