@@ -168,8 +168,13 @@ final class WelcomeIllustrationView: NSView {
       }
       item.backgroundColor = color.cgColor
     }
+    let sidebarSurface = WelcomeTextColors.opaque(sidebarTint.withAlphaComponent(0.55), over: surface)
+    let homeSurface = WelcomeTextColors.opaque(otherTint.withAlphaComponent(0.55), over: sidebarSurface)
     for (text, active) in textLayers {
-      text.foregroundColor = (active ? NSColor.white : contrast.withAlphaComponent(0.75)).cgColor
+      // At this tiny rasterized size, leave room for core pixels that are not
+      // fully covered. Passing Home seeds keep their original visible color.
+      text.foregroundColor = (active ? NSColor.white : WelcomeTextColors.text(
+        contrast.withAlphaComponent(0.75), on: homeSurface, minimum: 5.2)).cgColor
     }
     for panel in panels { panel.borderWidth = 1; panel.borderColor = row.cgColor }
     CATransaction.commit()

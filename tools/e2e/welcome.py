@@ -495,17 +495,28 @@ def design_gates(state, appearance):
     def near(actual, expected, tolerance=.005):
         return len(actual) == len(expected) and all(abs(a - b) <= tolerance for a, b in zip(actual, expected))
 
+    def composite(foreground, background):
+        return [c * foreground[3] + b * (1 - foreground[3])
+                for c, b in zip(foreground[:3], background[:3])] + [1]
+
+    def luminance(color):
+        linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in color[:3]]
+        return sum(c * weight for c, weight in zip(linear, (.2126, .7152, .0722)))
+
     color_ok = len(cards) == 4
     for card in cards:
         paint = card['paints']
         color_ok = color_ok and near(paint.get('surface', []), surface) \
             and near(paint.get('row', []), [ink, ink, ink, .14 if dark else .10]) \
-            and near(paint.get('active', []), [.224773, .401154, .980292, 1]) \
+            and near(paint.get('active', []), [.201293, .370453, .947755, 1]) \
             and abs(paint.get('sidebar', [0, 0, 0, 0])[3] - .55) <= .005
         if 'otherSidebar' in paint:
             color_ok = color_ok and abs(paint['otherSidebar'][3] - .55) <= .005
         if 'text' in paint:
-            color_ok = color_ok and near(paint['text'], [ink, ink, ink, .75])
+            home_surface = composite(paint['otherSidebar'], composite(paint['sidebar'], surface))
+            text_luma, surface_luma = luminance(paint['text']), luminance(home_surface)
+            home_ratio = (max(text_luma, surface_luma) + .05) / (min(text_luma, surface_luma) + .05)
+            color_ok = color_ok and abs(paint['text'][3] - 1) <= .005 and home_ratio >= 5.19
         if 'activeText' in paint:
             color_ok = color_ok and near(paint['activeText'], [1, 1, 1, 1])
     return {

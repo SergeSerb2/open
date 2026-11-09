@@ -6,8 +6,9 @@ import OpenDesign
 enum WelcomeTextColors {
   /// One opaque active blue for every illustration. Keep white instructional
   /// text at AA by changing only the Open-blue seed's OKLab lightness.
+  /// Tiny antialiased labels need a 5.2:1 model target to clear 4.5:1 in pixels.
   @MainActor static let illustrationBlue = readable(
-    RGB(r: 61.0 / 255, g: 107.0 / 255, b: 1), on: RGB(r: 1, g: 1, b: 1), minimum: 4.5).color
+    RGB(r: 61.0 / 255, g: 107.0 / 255, b: 1), on: RGB(r: 1, g: 1, b: 1), minimum: 5.0).color
 
   struct Pair {
     let primary: NSColor
@@ -29,9 +30,9 @@ enum WelcomeTextColors {
     composite(color, over: composite(surface, over: RGB(r: 1, g: 1, b: 1))).color
   }
 
-  static func text(_ seed: NSColor, on surface: NSColor) -> NSColor {
+  static func text(_ seed: NSColor, on surface: NSColor, minimum: Double = 4.5) -> NSColor {
     let base = composite(surface, over: RGB(r: 1, g: 1, b: 1))
-    return readable(composite(seed, over: base), on: base, minimum: 4.5).color
+    return readable(composite(seed, over: base), on: base, minimum: minimum).color
   }
 
   static func pair(primary: NSColor, secondary: NSColor, surface: NSColor) -> Pair {

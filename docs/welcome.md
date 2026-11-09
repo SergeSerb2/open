@@ -124,3 +124,12 @@ negative receipt also stay in `.re/`; no mutation switch ships in the App.
 Footer links keep their system link-color seed and use the same lightness-only
 correction against the page surface. They also have 4.5:1 pixel assertions, so a
 Dark app appearance cannot leave bright, low-contrast link text on a light Space.
+
+The illustrations share one opaque active blue, derived from Open blue
+`#3D6BFF` by changing only OKLab lightness. The `+ New Tab` pill stays opaque
+throughout its animation and always has white text. A 5.2:1 model target leaves
+room for the tiny label's antialiased glyph cores to meet 4.5:1 in captures.
+`Home` keeps its original visible ink when it meets its 5.2:1 model minimum;
+otherwise the same correction uses the actual two-layer sidebar surface, with
+a 0.2 margin. Both illustration labels remain mandatory pixel assertions in
+every matrix row. Footer links are mandatory there as well.
