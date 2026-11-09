@@ -314,7 +314,7 @@ public final class AdBlockStore {
         }
     }
 
-    /// One reload after a changed batch. No reload for 304. A failed batch retains all old lists.
+    /// One reload after a changed or recovered batch. No reload for an intact all-304 batch.
     public func updateListsNow(profile: ProfileID) async throws {
         try checkActive(profile)
         guard let state = states[profile] else { throw AdBlockError("profile is not open") }
@@ -325,10 +325,10 @@ public final class AdBlockStore {
                    let delay = Double(raw), delay.isFinite, delay > 0, delay <= 60 {
                     try await Task.sleep(for: .seconds(delay))
                 }
-                let (next, results) = try await self.repository.updateBatch(catalog: self.catalog, directory: directory, state: state)
+                let (next, results, recovered) = try await self.repository.updateBatch(catalog: self.catalog, directory: directory, state: state)
                 try self.checkActive(profile)
                 self.states[profile] = next; self.lastUpdateResults[profile] = results
-                if results.contains(where: \.changed) {
+                if recovered || results.contains(where: \.changed) {
                     self.onEngineEvent?(.reload(profile: profile, listDirectory: directory))
                 }
             } catch { try await self.recordFailure(error, state: state, profile: profile, directory: directory) }
