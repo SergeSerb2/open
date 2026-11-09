@@ -3310,7 +3310,9 @@ App and its production API:
 - [x] Debug copy has the 11-key native schema and no path, page URL or site.
 - [x] Real opposite request states reject the corresponding new gates;
       Cancel deletion retains the native context and folder.
-- [ ] Forced failure with a delete sheet open proves finally cleanup.
+- [x] Forced failure with a delete sheet open proves finally cleanup:
+      `s15-adblock-delete-cleanup-r1`, exact expected failure, zero
+      owned processes/windows after finally.
 - [ ] Existing page/features/extensions-ui/settings-preview scopes and the
       full verification gate pass on this integrated engine.
 
@@ -3319,6 +3321,34 @@ Control tile: .on when enabled/not excluded, .off when excluded and
 .unavailable when globally off or the binding/Profile is unavailable.
 The conditional tile proof runs only once its App source is on main;
 E3 must not create a second tile.
+
+**As built, real App (2026-11-08).** `s15-adblock-r5` records 61 PASS
+and one FAIL, AD3 footprint owned by F. All nine direct App launches quit
+cleanly, with no foreground interruption or surviving process/window.
+The run uses main `40c2ab94` and the recorded `8e8a461c…` distribution.
+Its wrapper takes 146.963 s, at endpoint loads 20.40/94.13/91.93 ->
+16.06/63.92/79.97. The raw harness exits 1; continuation of the exact
+owned AD3 row does not convert it to PASS.
+
+| Real App acceptance | Result and witness |
+|---|---|
+| Enable, exclude, re-include, global off/on | PASS: native counts, CDP blocked-by-client errors, script completion and server request log agree; same-document next requests also change without navigation. |
+| Profile independence and sharing | PASS: independent exclusions/lists, shared holder for identical inputs; a different-list control creates a separate engine and exceeds 2 MiB. |
+| AD3 incremental footprint | **FAIL, owned by F:** 5.734 MiB net, `engine_shared=true`, against 2 MiB, at load 18.54/71.19/83.19. |
+| OTR | PASS: shared parent engine; later parent exclusions and re-inclusion change real requests. |
+| Settings list generation | PASS: native generations 1 -> 3 -> 4 and opposite allowed/blocked requests. An unchanged scheduled download publishes disk generation 2 while correctly retaining native generation 1. |
+| Resources and verified DAT | PASS: 47 pinned resources, real text stub, verified DAT relaunch and reapplied stub. |
+| Zero lists and one-list restore | PASS: generation 4 has count 0, no engine/resources/error and allowed requests; generation 5 has exactly one list and resumes blocking/stubs. |
+| Delete during load | PASS: native engine loaded, real held HTTP request, Cancel control retains folder/context; deletion retires them and folder stays absent after relaunch. |
+| Debug copy | PASS: exact 11-key schema, no path, URL or site name. |
+| Warning and adapter scopes | PASS: AD1 11 rows and AD2 9 rows, with no native support override. |
+| Forced delete-sheet cleanup | PASS: expected failure in the specific real sheet, then zero owned processes/windows. |
+| Section 12 App tile | N/A: its App adapter is absent from this main. |
+
+The forced-sheet control takes 1,377.209 s including its screen queue,
+at endpoint loads 16.06/63.92/79.97 -> 6.00/10.09/26.08.
+Its raw expected failure and the separate AD3 failure are retained.
+Page/features/extensions-ui/settings-preview and the full gate follow.
 
 Later Step 5/9 acceptance remains open: two renderer processes with
 independent cosmetic selectors/exclusions, and cross-Profile C-G2 wait
