@@ -1410,6 +1410,23 @@ separate from a loaded functional run. The runner resets/restores the onboarding
 name and sound preference along with its existing App defaults. It never writes
 an Apple defaults domain.
 
+Functional receipt (2026-11-09, M5, automation App at main `518471aa`, runner
+`b1b21881`): `tools/budgets.sh --only first-run --app build/Release/Open.app
+--max-seconds 600 --out /tmp/s16-fr-20261109.json`. No quiet lock or load guard.
+All five fresh profiles reached Intro, Name/Welcome, the imported local page and
+final native Welcome. Every Intro reported sound reason `silent`. All five App
+cleanups passed with zero remaining windows/processes; defaults and private roots
+were restored/removed. This proves the flow, not quiet timing acceptance.
+
+| Row | Budget | Median | p95 | Samples | Result | Load1 start → end |
+|---|---|---|---|---|---|---|
+| First content | ≤250 ms | 486 ms | 3119 ms | 5 | FAIL | 5.50 → 6.11 |
+| Imported paint | ≤700 ms | 194 ms | 232 ms | 5 | PASS | 5.50 → 6.11 |
+
+First-content samples: 3119, 432, 486, 568, 412 ms. Imported-paint samples:
+232, 194, 204, 177, 160 ms. Keep the first-content miss; the thresholds and
+process-start clock are unchanged.
+
 | Workload | Existing measurement and limits |
 |---|---|
 | Existing-profile launch | `engine_e2e.py` `warm_existing_profile`, extracted from S16 `run_launch.py`: seven launches; sidebar median ≤250 ms, first paint median ≤700 ms. Also main ≤50 ms and modelLoaded ≤120 ms intermediate marks from the app-shell plan. Kernel process birth and a confirmed sidebar frame are required. Process-cold, warm file caches. |
