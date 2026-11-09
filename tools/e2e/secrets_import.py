@@ -66,6 +66,7 @@ def run(factory, results, tmp, h):
             'fixture import wizard not ready',
             'fixture import wizard counts differ',
             'fixture import wizard Next did not advance',
+            'fixture import wizard sheet missing',
         }
         safe_runtime_errors = {
             'first-run: Passwords copy reference requires capability OFF': 'wizard copy reference not ready',
@@ -383,7 +384,13 @@ def _run(factory, results, tmp, h):
                 assert ready['settingsCounts'] == wizard_counts, 'fixture import wizard counts differ'
                 # Prove a user can continue once counting settles, through the
                 # real App key path and SwiftUI's default Next button.
-                app.call('key', key='return', route='app')
+                # sendKey defaults to the browser window. Identify the actual
+                # Import sheet after its SwiftUI layout before sending Return.
+                sheets = app.call('windows', accessibility=True)
+                sheet = next((w for w in sheets if w.get('visible') and w.get('sheet')
+                              and 'Import from Arc' in w.get('text', [])), None)
+                assert sheet, 'fixture import wizard sheet missing'
+                app.call('key', key='return', route='app', window=sheet['number'])
                 advanced = bool(h.wait_until(lambda: app.call('first-run', action='settings-inspect')['settingsStep'] == 'Review',
                                             timeout=5, step=.05))
                 assert advanced, 'fixture import wizard Next did not advance'
