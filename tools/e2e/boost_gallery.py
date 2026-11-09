@@ -46,8 +46,14 @@ def run(factory, results, tmp, env):
     saved = {}
     keys = {'open.advanced.enableBoosts': True, 'open.boosts.hasDismissedInterstitial': True,
             'open.boosts.hasDismissedJSNotice': True, 'open.general.searchSuggestNoticeDismissed': True,
-            'open.library.lastSection': 'spaces'}
+            'open.library.lastSection': 'spaces', 'open.settings.lastPane': None}
     selected = set(filter(None, os.environ.get('OPEN_BG_ONLY', '').split(',')))
+    known = {'BG1_menu', 'BG1_commandbar', 'F1_key_library', 'F1_browser_profile',
+             'F1_editor_profile', 'F2_layout', 'BG2_cards_toggle', 'F4_toggle_profile',
+             'F4_edit_profile', 'BG3_edit', 'F6_settings_preference', 'BG_private',
+             'BG3_delete_empty', 'BG_focus'}
+    if selected - known:
+        raise ValueError('unknown Gallery rows: ' + ', '.join(sorted(selected - known)))
     def row(name, fn):
         if selected and name not in selected:
             return
@@ -262,10 +268,16 @@ def run(factory, results, tmp, env):
                 return {'cmdW': True, 'cmdT': True, 'cmdL': True, 'escape': True, 'return': 'BG1_commandbar'}
             row('BG_focus', focus)
         finally:
-            if app:
-                try:
+            try:
+                if app and not app.closed:
                     app.call('alert', window='library', button='Cancel', timeout=3)
-                except RuntimeError:
-                    pass
-                env['_restore_defaults'](app, saved)
-                app.quit()
+            except RuntimeError:
+                pass
+            finally:
+                try:
+                    # Stop querying a failed/dead App while unwinding. Restore
+                    # the same shared domain even when strict checks abort.
+                    env['_restore_defaults'](None, saved)
+                finally:
+                    if app:
+                        app.quit()
