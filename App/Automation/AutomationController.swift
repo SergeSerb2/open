@@ -1618,7 +1618,8 @@
     private func describe(_ w: NSWindow) -> [String: Any] {
       [
         "number": w.windowNumber, "title": w.title, "class": String(describing: type(of: w)),
-        "visible": w.isVisible, "key": w.isKeyWindow, "frame": NSStringFromRect(w.frame),
+        "visible": w.isVisible, "key": w.isKeyWindow, "main": w.isMainWindow,
+        "alpha": w.alphaValue, "frame": NSStringFromRect(w.frame),
         "parent": w.parent?.windowNumber ?? 0, "level": w.level.rawValue,
         "sheet": w.isSheet, "attachedSheet": w.attachedSheet?.windowNumber ?? 0,
         "firstResponder": w.firstResponder.map { String(describing: type(of: $0)) } ?? "",

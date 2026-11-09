@@ -1381,4 +1381,19 @@ a suggestion with real App Down/Return keys. The caller compares field values
 in the page and reports only equality, never the values.
 PR #264 repairs the HTTPS-First host and teardown failures with 0806/0809/0810. The old crashing distributions are never replayed. `--engine-sha256 HASH` checks the Vendor framework and embedded engine code before launch. Export `OPEN_E2E_NO_CRASH_PROBES=1` on M5; C-2 and feature crash recovery remain M1-only by rule. The loopback card fixture uses per-run TLS/SPKI, never a system trust change. PW-REAUTH-default/request verify mandatory reauthentication stays on for users; only the disposable fill row disables and restores it. Selected probe runs keep separate receipts so historical crash evidence survives.
 
+### Setup steps (`onboarding`)
+
+`onboarding action=state` includes `screen` (`intro`, `name`, `import`, `favorites`, `theme`, `blocker`, `defaultBrowser`, `ready`, `handoff`, `done`), the name, Favorite indexes, theme, blocker, default choice/outcome, card pattern, Reduce Motion, confetti, native control labels and dim state. Invalid stages and unknown arguments fail.
+
+The `card` object reports its relative luminance, text-color choice and converted frame, plus the native circle-button frames and labels. `confettiBehindCard` and `confettiLifetime` record the emitter's actual layer order and cell lifetime when created. The setup suite checks saved yellow/blue card text pixels through the real Save panel and uses the opposite-color export as each negative proof. It removes any older export before saving. Reduce Motion captures use separate names, so they do not replace the ordinary Ready light/dark pair.
+
+In automation builds, `--reduce-motion` and `OPEN_E2E_REDUCE_MOTION=1` apply to the intro, setup and Welcome page. The onboarding suite follows `--reduce-motion` through all three surfaces and checks that Welcome has no animation or pending playlist completion. Normal builds use the system preference.
+
+Actions: `next`, `back`, `skip`, `set-name name=…` (at most 40 characters), `toggle-favorite index=0…11`, `set-theme preset=…`, `set-blocker on=true|false`, `choose-default yes=true|false`, `shuffle-card`, and `get-started` on Ready. Intro actions remain `skip-intro`, `get-started` (Continue), and `replay-intro`.
+
+With an automation socket, default-browser requests use `OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed` (default `declined`) and never open the system prompt. `OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS` delays that stub's completion by at most 5000 ms, so the suite can prove that setup waits for a result before its 1.2-second outcome display.
+
+Automation-only screenshot/export hooks: `set-appearance appearance=light|dark` changes only the onboarding window; `save-card` opens its real save panel, `card-cancel` cancels it, and `card-save path=/absolute/file.png` supplies the native panel service response to the production completion. No desktop input is used. Tests use temporary roots, synthetic `--arc-dir`, and `--intro-sound=silent|off`.
+
+The `first-run` API remains the importer verification seam. Its compatibility actions walk setup's real navigation; the `screen` field names the new screen while `step` names Section 7's import state. No legacy first-run window is shown.
 Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.
