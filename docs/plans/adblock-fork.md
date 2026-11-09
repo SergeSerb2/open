@@ -3449,6 +3449,22 @@ capturing; P-1 regeneration is fork-infra §12 step 5.
 
 ## 12. OpenEngine and Swift API surface
 
+**API-DESIGN errata (Section 13 H, 2026-11-09; runtime proof pending):**
+The App adapter's OTR inheritance in API-DESIGN §3 and the Site Control contract
+in §5 also need session-only exclusions. `AdBlockStore.siteSnapshot(for:privateSession:)`
+and `setExcluded(_:excluded:profile:privateSession:)` take the parent Profile ID
+and the engine's existing `Private-N` context identifier. The effective set is
+parent saved exclusions ∪ session additions. Private removal cannot override a
+saved parent exclusion. The adapter registers the session when it configures
+the OTR and drops it when the last private window closes. Saved-parent changes
+recompute each open OTR's union; private events target only that OTR. No private
+choice is serialized. Profile close and retirement notify observers, including
+an immediate retirement notification before IO drains. Site Control remains
+Section 12's responsibility; its parent/session call-site handoff is in
+`.re/s13/h/S12-HANDOFF.md` in the project root. H's source checkpoint has no
+build, App run, negative-control receipt, or merge-readiness claim while the
+06:30 / M5-clear hold applies.
+
 CEF types never cross into Swift (architecture rule). OpenEngine is the
 only layer that includes CEF headers.
 
