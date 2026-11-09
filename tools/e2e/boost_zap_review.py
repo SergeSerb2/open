@@ -15,6 +15,7 @@ from sitecontrol_fixtures import fixture_server
 def run(factory, results, tmp, env):
     wait = env["wait_until"]
     app = None
+    tab = flow = None
     saved = {}
     with fixture_server(tmp) as origin:
         selectors = ["#s12-long-" + str(i) + "-" + "a" * (4085 - len(str(i))) for i in range(24)]
@@ -100,7 +101,8 @@ def run(factory, results, tmp, env):
                 app.call("open-world-messages", tab=tab, clear=True)
                 flow.enter()
                 entries = wait(complete_counts, timeout=10, step=.02)
-                assert entries and len(entries) == len(selectors)
+                assert flow.state()["zap"] and flow.active(), "counts transport failure ended the picker"
+                assert entries and len(entries) == len(selectors), "missing complete counts while the native and page picker stayed active"
                 assert {e["selector"] for e in entries} == set(selectors)
                 assert all(e["matchCount"] == 2 and e["label"] == "L" * 1024 for e in entries)
                 replies = flow.messages("zap:list-result")
@@ -130,7 +132,7 @@ def run(factory, results, tmp, env):
                     seed(zaps)
                     state = flow.state()
                     control = next(c for c in state["controls"] if c["id"] == "editor.tool.zap")
-                    assert not state["zapAvailable"] and not control["enabled"]
+                    assert not state["zapAvailable"] and not control["enabled"], "over-cap %s left Zap available or enabled" % name
                     assert control["tooltip"] == "Zap isn't available yet."
                     refused = False
                     try:
@@ -151,7 +153,7 @@ def run(factory, results, tmp, env):
                 moved = PickerFlow(app, destination, wait)
                 # Check before selection: a tab-switch exit must not mask a
                 # missing rebind exit hook.
-                assert wait(lambda: moved.stopped() and not flow.state().get("zap", False), timeout=5, step=.02)
+                assert wait(lambda: moved.stopped() and not flow.state().get("zap", False), timeout=5, step=.02), "host adoption left the picker or observer active before selection"
                 assert app.page(destination)["identifier"] == identity
                 app.call("select", tab=destination); app.call("wait", tab=destination)
                 page_click(moved)
@@ -183,8 +185,8 @@ def run(factory, results, tmp, env):
                 other = app.call("open", url=url, background=True)["id"]
                 flow.enter(); assert flow.state()["zap"] and flow.active()
                 app.call("select", tab=other); app.call("wait", tab=other)
-                assert wait(lambda: flow.stopped() and not flow.state().get("zap", False), timeout=5, step=.02)
-                assert flow.evaluate("window.__openZap.isObserving()") is False
+                assert wait(lambda: flow.stopped() and not flow.state().get("zap", False), timeout=5, step=.02), "tab switch left the hidden picker or observer active"
+                assert flow.evaluate("window.__openZap.isObserving()") is False, "tab switch left the hidden observer active"
                 app.call("select", tab=tab); app.call("wait", tab=tab)
                 assert flow.stopped() and not flow.state().get("zap", False)
                 page_click(flow)

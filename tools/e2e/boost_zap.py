@@ -251,13 +251,15 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 bad = [dict(base, sessionNonce="invented-nonce"), dict(base, selector="x"*4097),
                        dict(base, label="x"*1025), dict(base, matches=True), dict(base, matches=-1),
                        dict(base, extra=True)]
-                for payload in bad:
-                    assert flow.post("zap:committed", payload)["pickerAccepted"] is False
+                for index, payload in enumerate(bad, 1):
+                    assert flow.post("zap:committed", payload)["pickerAccepted"] is False, (
+                        "malformed commit case %d was accepted after its native handler receipt" % index)
                     assert app.call("boosts", action="get", boost=boost_id) == before
                 # A no-op store removal is insufficient evidence of rejection.
                 # The handler receipt distinguishes refusal from accepted no-op.
                 unknown = dict(capability, selector="#not-stored", via="undo")
-                assert flow.post("zap:removed", unknown)["pickerAccepted"] is False
+                assert flow.post("zap:removed", unknown)["pickerAccepted"] is False, (
+                    "unknown-selector removal was accepted after its native handler receipt")
                 assert app.call("boosts", action="get", boost=boost_id) == before
                 # Native transport and coordinator accept the exact selector and
                 # label limits, then the real reveal control removes that entry.

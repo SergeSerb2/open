@@ -389,27 +389,28 @@ picker handler returns. Z7 clears old receipts, waits for the exact posted
 payload's receipt, then reads the store. A page-world `window.postMessage` is not
 claimed as native validation evidence; Z1 checks that world has no native bridge.
 
-These round-1 rows and their negative builds have **not run** during the screen
-and disk holds. After both holds end, use the existing screen-locked
+Run these round-1 rows and their negative builds only when builds and screen
+work are permitted. Use the existing screen-locked
 `tools/e2e/engine_e2e.py --style chrome --only boosteditor` caller. Set
 `OPEN_E2E_BOOST_ZAP_ONLY=1` for Z1–Z8, or
 `OPEN_E2E_BOOST_ZAP_REVIEW_ONLY=1` for Z9–Z13; unset both for the full editor.
 Every row retains its normal real-App cleanup. No unit test or mocked host is
 substituted. Record the final head, counts, cleanup and load for each run.
 
-| Finding | Proof row and real-flow control | Break-and-restore negative still to run |
+| Finding | Proof row and real-flow control | Required break-and-restore negative |
 |---|---|---|
 | F1 | Z9: 24 stored 4,096-byte selectors with 1,024-byte labels; two DOM matches each; request and reply exceed one 64 KiB message; all chips/counts arrive and Zap stays active. Picker is inactive before entry and after Done. | First disable native request splitting: require Z9 to fail at missing complete counts. Separately collapse page replies into one oversized message: require Z9 to fail. Restore both before positive runs. Neither failure may close the native session. |
 | F8 | Z10: 1,024 stored entries enter successfully; 1,025 entries, a 4,097-byte selector and a 1,025-byte label each disable Zap, expose the existing unavailable tooltip, and refuse a tap without arming the page. Z9 covers the exact selector/label boundaries. | Remove only the stored-cap check from `isAvailable`, keeping entry guards: Z10 must fail on the enabled dead button. Restore the guard. |
-| F2 | Z11: enter, adopt through the real container/factory boundary, verify the same content has no active picker or observer **before selecting** the new tab, then verify a page click. | Omit the `rebind` old-ID exit call: Z11 must fail before selection. Restore it. |
+| F2 | Z11: enter, adopt through the real container/factory boundary, verify the same content has no active picker or observer **before selecting** the new tab, then verify a page click. | Omit the `rebind` old-ID exit call and the container's post-adoption placeholder refresh. That refresh recreates the selected source page; its loading event would independently exit the old-ID picker and mask the missing rebind hook. Z11 must fail before selection. Restore both paths. |
 | F3 | Z12: enter, hide only the engine page (no shell selection change), discard through the production sleep adapter; native flag clears before wake, then the woken page has no picker and accepts a click. | Omit the sleep adapter exit call: Z12 must fail on the pre-wake flag. Restore it. |
 | F5 | Z13: enter, switch tabs, check the hidden page's picker and MutationObserver are stopped, return and click normally. Active-before-switch is the negative control. | Suppress selection teardown in the App callbacks and the existing editor-close-on-selection fallback for this negative build: Z13 must fail on the hidden picker/observer. Restore all paths. |
-| F4 | Z3 now arms Zap before cross-site departure and asserts native `zap == false` as well as page inactivity after Back. Existing loading/commit teardown remains; change it only if the real row fails. | Temporarily suppress native navigation teardown and ignore the page exit event: Z3 must fail its native-flag assertion. Restore both. |
+| F4 | Z3 arms Zap before cross-site departure and asserts native `zap == false` as well as page inactivity after Back. Existing loading/commit teardown remains. | Temporarily suppress native navigation teardown and ignore the page exit event. End the initial Z1/Z2 picker before the first reload, so the negative reaches the strengthened after-Back assertion. Z3 must fail there with a stale native Zap flag. Restore every source edit. |
 | F7 | Z7 waits for an unknown-selector removal receipt with `pickerAccepted == false`; stored-selector removal on the same bridge is accepted. Store reads follow native handling. | Remove only `selectors.contains(selector)` from the `zapRemoved` validator: the unknown-removal receipt must become accepted and Z7 must fail. Restore it. |
 | F9 | Z7 awaits each malformed/nonce/expired message receipt before asserting rejection and an unchanged store. A valid exact-boundary commit on the same path is accepted. | Allow an unknown field in the commit validator: Z7 must fail **after** receiving the native handler receipt. Restore the field allowlist. |
 | F10 | Editor B4 verifies native flag off, page picker and observer off, and one ordinary page click after toggle-off. Its earlier commit/reveal is the positive control. | Omit the page exit evaluation while retaining native `.exited`: B4 must fail on page teardown or the swallowed click. Restore it. |
 
-Negative source edits are temporary and apply only after the holds end. Never
+Negative source edits are temporary and apply only when builds and screen work
+are permitted. Never
 commit or push a negative build. Keep each failed receipt, restore the final
 source, rebuild, then record its passing row. Product edits require a fresh full
 gate on the final head. F6's quote-aware selector hardening is recorded in
