@@ -616,28 +616,30 @@ purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
 `.re/s13/e1/idle-resume-proof.json` and `idle-resume-verdict-identity.json`.
 The later main `d26300e6` integration passes 20 native processes and 40 baseline-identical initial/resumed corpus dumps. Its 16 KiB text/DAT physical deltas are 55.157/52.110 MiB steady and 57.094/54.188 MiB after the corpus plus idle purge. G-2 CPU, G-6 and ruling 4a pass. Merged N 32/32, positive/allowed COUNT and quiet G-4/G-5/G-6 pass. Both COUNT negative controls pass; strict App acceptance passes 79/79, including 11 record-only rows. Regression/full-gate work remains pending. The dev distribution is recorded; the Debug App builds with matching normalized engine code. Only lead rulings 2a and 4a replace the original budgets.
 
-### Step 5 implementation checkpoint (2026-11-09, page-load timing blocked)
+### Step 5 implementation checkpoint (2026-11-09, generic observer after DCL)
 
-The six quiet App pairs fail the required no-slower condition: 38.15 ms with
-cosmetics versus 35.65 ms on exact main 518 (+7.01%). Native busy CPU is
-6,855 versus 6,709 µs (+2.18%), at load1 8.14–9.56. Readiness is blocked.
-No runtime retry or waiver is claimed.
+Product `4ce7facb`, main engine PR #266 merged; targeted acceptance complete; final full gate pending.
+Hostname-specific CSS stays at document start. Generic world creation,
+binding, scan and observation queue one genuine idle task after DCL;
+C-4 requires eventual hiding. The 30k yield/resume, 64-sheet cap and
+world-7 separation remain. One real-App renderer attribution is recorded
+in `.re/s13/e5/RENDERER-ATTRIBUTION.md` and the plan §8.2 erratum.
 
-| Piece | Source change | Verification |
-|---|---|---|
-| `chromium/0902-open-adblock-isolated-world.patch` | Reserve macOS world 7 for the overlay's private cosmetics binding; Open/P7 remains 6, Chrome internal remains 4, extensions begin at 8. The observer retains its walker/token/record positions and yields at the per-task step budget. Non-official verbose traces record numeric extension-world allocation and every script injection target; no URL or script text is logged. | E5 merged build at `44b90ccc`: full framework/scoped checks/strict 8/0/0 PASS; CEF 20/20, both 30k cases 10/10 and ordering 45/45 PASS. Full-series apply/reverse passes 39 patches / 67 files. App numeric separation PASS: 352 App behavior PASS, 29/29 launch logs, 91 extension allocations/331 injections/46 observers 7; extension worlds 8–11 and main injection 0, no extension allocation/injection 7; reciprocal page/iframe proof and exact518 negative PASS. Earlier E4 review at 5074218a: own targets/full framework/scoped includes/strict 8/0/0; CEF 20/20, both 30k cases 10/10 with yields; world-7 ordering 45/45. App cosmetic 14/14; C-G1 p50 133 µs/p99 824 µs at load1 22.57–24.73. |
-| P-3, `cef/0311` registry hook | Register the per-Profile matcher on `AdBlockCosmeticsTaskRunner()`. No request returns to UI. Network/socket hunks retained. | E5 merged s13b full CEF/strict built 8/0/0 PASS at `44b90ccc`; headless service load/empty-root 2/2 PASS. |
-| P-4, `cef/0901-open-adblock-renderer-agent.patch` | Include and attach one per-frame cosmetic agent. Mojo host, isolated observer and user-origin sheets live in overlay; generated Mojo files stay out of patches. The observer starts after Blink's script prohibition, scans existing tokens once, then observes mutations. | E5 CEF 20/20 and install-before-execute 45/45 PASS at `44b90ccc`; distribution/App Debug/fingerprint PASS. Merged adblock 86 PASS, all five cosmetic controls, full extension/features/page set and full M5 gate 26 PASS / 0 raw FAIL / 0 INTERRUPTED / 0 SKIP. accepted inherited C-G1 p50 133 µs/p99 824 µs at e8c8e355 (load1 22.57–24.73), C-G2 p50 84 µs at 18fcabc2 (load1 8.49–13.31, T = 64.9 ms, 239,510 bench checks), C-G3 353 µs (load1 13.98); reruns waived by lead 10:55 after timed-path diff review. Initial collector failure retained beside complete successful reruns. Earlier E4 gate/Page/timing/payload receipts remain historical in the plan. |
-| Parser corpus switches (`cef/0310`, overlay self-test) | `--open-adblock-fuzz-full` runs the full parser corpus without a watchdog; `--open-adblock-fuzz-data-only` skips earlier kinds and runs 30,000 DAT plus 30,000 resources inputs. Official builds exclude these paths. | Accepted source `5c31fc1b`: 30,000 per kind PASS; earlier 150,000 list / 100,000 URL run PASS. Sources unchanged in E5 merge. See plan full-size parser-corpus receipt. |
-| Non-official harness | Existing off switch plus paced `--open-adblock-bench-load` / `--open-adblock-bench-load-rate` and receiver-drop switch. Renderer verbose logs include timing, counts and in-process footprint. | E5 off/excluded/drop negatives PASS; accepted inherited C-G1 p50 133 µs/p99 824 µs at e8c8e355 (load1 22.57–24.73), C-G2 p50 84 µs at 18fcabc2 (load1 8.49–13.31, T = 64.9 ms, 239,510 bench checks), C-G3 353 µs (load1 13.98); reruns waived by lead 10:55 after timed-path diff review. Earlier E4: quit-load 5/5 PASS. C-G1 p50 123 µs/p99 505 µs, load1 10.71–14.03; C-G2 p50 84 µs, load1 8.49–13.31, T=64.9 ms, R=9,244.9923/s, 239,510 checks. C-G3 353 µs for 431 selectors, load1 13.98. Worst record +56.22 MiB/264.297 ms across 67 recalculations, load1 14.47–14.53. |
+| Piece | Behavior and verification |
+|---|---|
+| `chromium/0902` | Private world 7; extensions start at 8. Fresh adblock: 86 PASS, 11/11 launch logs and 13 world-7 observers. Fresh extensions: 12 PASS, 1/1 launch log, 27 allocations, 106 injections and 6 world-7 observers. Extension allocations/isolated injections use worlds 8–11, main injections use 0; no extension allocation/injection uses 7. Page/iframe reciprocal separation passes after enabled=true, engine_loaded=true and load_generation=1. |
+| `cef/0311` registry and `cef/0901` P-4 | Matcher work stays off UI. Fresh owned/full/scoped/strict 8/0/0, headless 2/2, CEF 20/20, both 30k hide/yield 10/10, binding-before-execution 45/45, distribution/App/fingerprint PASS. Adblock 86 includes all five cosmetic controls; extensions 12 includes real CWS and reciprocal page/iframe proof. |
+| Non-official timing | New C-G1 once: p50 106.5 µs / p99 233.0 µs, 100 measured documents; raw budget PASS, load1 11.19–14.42, absolute_load_valid=False. First-process calls remain separate. Inherited C-G2 84/714 µs, T 64.9 ms, 239,510 checks, load1 8.49–13.31; C-G3 353 µs, load1 13.98. Original six quiet pairs FAIL (+1.45 ms paired median) remain recorded. Eight alternating App pairs: cosmetics 39.300 ms / 6761 µs native busy CPU; exact main 518 network-only 39.900 ms / 7498 µs. Median paired wall delta -2.050 ms / -4.478%; PASS under the lead's ≤ +0.5 ms OR ≤ +1.5% rule. Load1 5.92–7.31; absolute_load_valid=True, status=PASS. |
+| Parser-corpus modes (`cef/0310`, self-test) | Unchanged accepted source: 150,000 list / 100,000 URL / 30,000 DAT / 30,000 resources inputs PASS. Full and data-only modes are non-official; no corpus repeat after unchanged source. |
+| Full M5 gate | PENDING on the new head; complete summary, commands, seconds, loads and source-qualified earlier Section 6/features/page set in `.re/s13/e5/PR-BODY.md`. |
 
-The unchanged sanitizer's exact quote, escape, delimiter, procedural and
-256 KiB rules are quoted in the plan's "Step 5 as built" security callout
-(98-2). It returns selector vectors, and the renderer constructs only the
-fixed `display:none!important` declaration. No scriptlets, style/remove
-or procedural action executes. Generic requests carry the top origin to
-re-check the global toggle and site exclusions for every batch. See the
-plan's errata and acceptance table, including the separate App AD3 owner.
+The sanitizer's quote/escape/delimiter and 256 KiB rules remain unchanged.
+Only fixed `display:none!important` rules execute; no scriptlets or
+procedural/style/remove actions. Generic batches carry top origin to
+re-check enabled/exclusion state. Earlier isolated 39-patch/67-file
+apply/reverse proof remains historical; current strict state is 41 patches /
+140 overlays. No new single-allocation claim or fresh-Profile startup fix.
+The lead opens and reviews the PR; all earlier raw failures are retained.
 
 ### Control API (Section 13, 2026-11-07)
 

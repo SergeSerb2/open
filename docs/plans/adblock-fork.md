@@ -5113,103 +5113,93 @@ endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 
 
-### Step 5 as built (2026-11-09, page-load timing blocked)
+### Step 5 as built (2026-11-09, generic observer after DCL)
 
-**Readiness BLOCKED:** the six quiet App pairs fail the required no-slower condition: 38.15 ms cosmetics vs 35.65 ms at exact main 518 (+7.01%); native busy CPU 6,855 vs 6,709 µs (+2.18%). Load1 8.14–9.56. No rerun or waiver.
+**Merged candidate: `s13/step5-pr` (PR pending lead creation); targeted acceptance complete; final full gate pending.**
+Product source `4ce7facb234cb96d0abdbf9fd730478ddf511198` includes main
+engine PR #266 (0106), merged through `cbe13bfa`. Independent patch 0106
+was moved first in numeric Chromium series order; patch contents and the
+strict checker were unchanged. The initial strict 7/0/1 warning stopped
+packaging and remains in the receipts. The rebuilt s13b engine passes
+owned objects/targets, scoped GN/checkdeps, full CEF and strict 8/0/0.
+Fresh distribution, App Debug and normalized fingerprint pass. Code SHA:
+`5f65f8e8495fa03508987d929971cb073f779d84927b8e4f3444c16c2a15be5b`.
+Later commits update evidence only. No unit tests or desktop input.
 
-Final fetch: origin/main7ae68e4a merged engine PR#266 (persistent signed clone,0106). Per the lead engine-ordering exception, merge/rebuild and affected validation are required before PR readiness. This blocked checkpoint retains the measured4313f7d8 source; it does not claim acceptance against the new engine.
+**Attribution and timing change.** The first six quiet pairs were a real
+regression: paired median +1.45 ms, 5/6 slower; condition medians 38.15 vs
+35.65 ms. One real-App attribution run measured renderer CPU: sync query
+46 µs, initial CSS 217 µs, binding 9 µs, observer execution 487 µs including
+initial scan 253 µs, and generic CSS 32 µs. Cold warmup world creation
+including binding took 637 µs CPU; measured existing-world lookup took
+3 µs and does not measure Blink's eager recreation. Nested times must not
+be added twice. Exact wall/CPU pairs and the frame filter are in
+`.re/s13/e5/RENDERER-ATTRIBUTION.md`.
 
-**Merged candidate: `s13/step5-pr` (PR: pending lead creation).** E5
-combines the cosmetics/parser-corpus stack `cf16a133` with main through
-`316902de`, merged in `4313f7d8`. The 26/26 full gate and affected
-adblock 86 retain 3190491e provenance under TANDEM 5a; the earlier seven
-App suites retain c57370d8. Late main adds quit warnings, with only shared-doc
-overlap and no E5 harness/engine change. App Debug/fingerprint reran, and
-the twelve page-pair launches check the new quit bypass/cleanup.
-Engine source built at `44b90ccc`
-remains byte-identical. The deleted App was rebuilt from the retained
-s13b distribution, then rebuilt after the latest App overlap merge.
-Strict AD3 attachment-allocation and record-only whole-process pairs
-remain. No assertion, baseline, budget or allowlist changed.
+The hostname-specific user sheet stays at document start. Generic world
+lookup/creation, binding installation, initial class/ID scan and
+MutationObserver start on the first main-thread idle task after DCL.
+Blink forbids scripts in document-element and DCL callbacks, so DCL queues
+`WebLocalFrame::PostIdleTask`. A pending flag, WeakPtr and document epoch
+reject duplicate/stale work. Context callbacks do not install the binding
+early; Blink can still recreate a previously used world itself. The 30k
+yield/resume path, 65,536-step budget, lifetime caps, 64-sheet cap and
+private world 7 remain. §8.2 and C-4 require eventual generic hiding,
+including inline-created nodes, rather than generic document-start hiding.
 
-The assigned s13b engine passes owned objects/targets, scoped GN/checkdeps,
-full CEF and strict status 8 PASS / 0 FAIL / 0 WARN. Pinned apply/reverse passes
-39 patches/67 files with byte-identical restoration. Headless caller
-load/empty-root passes 2/2. CEF passes 20/20 executable rows (C-9 reserved),
-including both 30,000-element fixtures 10/10 hides and yields, and 45/45
-binding-before-observer executions in world 7. Distribution/App Debug
-and normalized engine fingerprint pass. Vendor and embedded code SHA is
-`f44ac4b9dc3cffae21eefd5d02a618c51dc6b676d73c830179012abe7a21eb17`;
-the retained distribution matches 57acfaee’s engine.
+**Fresh acceptance.** Headless load/empty root 2/2; CEF 20/20 executable
+rows (C-9 reserved), both 30k fixtures hide/yield 10/10, C-4 inline hidden
+and initially scanned 10/10, binding-before-execution 45/45 in world 7.
+Fresh adblock: 86 PASS, 11/11 launch logs and 13 world-7 observers. Fresh extensions: 12 PASS, 1/1 launch log, 27 allocations, 106 injections and 6 world-7 observers. Extension allocations/isolated injections use worlds 8–11, main injections use 0; no extension allocation/injection uses 7. Page/iframe reciprocal separation passes after enabled=true, engine_loaded=true and load_generation=1. All five App cosmetic controls pass:
+`AD3_cosmetic_enabled_hides`, `AD3_cosmetic_excluded_visible`,
+`AD3_cosmetic_global_off_visible`, `AD3_cosmetic_global_on_hides_again`,
+`AD3_cosmetic_gates_reject_inverse_controls`. Native requests/resources,
+strict AD3, Profile/privacy and lifetime rows pass; no page-visible Open
+global or author stylesheet appears. Adblock attempt 1 was interrupted by
+T3 Pretty foreground loss, cleaned up, and is retained beside complete
+attempt 2. No product failure was retried.
 
-Complete affected App adblock rerun on 3190491e passes 86 rows, including
-strict AD3, integrity/resources/Profile/lifetime and all five cosmetic
-controls: `AD3_cosmetic_enabled_hides`, `AD3_cosmetic_excluded_visible`,
-`AD3_cosmetic_global_off_visible`, `AD3_cosmetic_global_on_hides_again`
-and `AD3_cosmetic_gates_reject_inverse_controls`. Displays are
-none/block/block/none, with no page globals or page style elements.
-The other seven complete suites retain c57370d8 provenance under TANDEM 5a:
-extensions 12, actions 26, extensions-p3 19, extensions-e2 26,
-full extensions-ui 71, features 27 and page 85 PASS. Existing picker/Page
-BLOCKED and smart-zoom DEFERRED rows remain explicit. Cleanup and framework
-identity pass throughout.
+New C-G1 once: p50 106.5 µs / p99 233.0 µs, 100 measured documents; raw budget PASS, load1 11.19–14.42, absolute_load_valid=False. First-process calls remain separate. C-G2/C-G3 retain the explicit lead waiver: C-G2 84/714 µs at
+18fcabc2 (product 335e9f8d), T 64.9 ms, 239,510 injected checks, load1
+8.49–13.31; C-G3 353 µs, load1 13.98. The off query and initial insertion
+paths are unchanged except non-official opt-in timers. The old
+133/824 µs C-G1 remains historical; the observer change required the new
+once-only run above. Original raw loaded qualifications remain explicit.
 
-Numeric proof: 352 App behavior PASS, 29/29 launch logs, 91 extension allocations/331 injections/46 observers 7; extension worlds 8–11 and main injection 0, no extension allocation/injection 7.
-Patch 0902 traces actual allocation/injection requests without URLs,
-script text or extension identifiers; the renderer traces every context.
-Each owned App launch has a saved engine file or unique stderr stream.
-Two source-proven Blink inspector contexts are reported separately.
-The reciprocal page/iframe probe first records enabled=true,
-engine_loaded=true, load_generation=1 for the actual page Profile.
-Both frames then show Dark Reader and native hiding, exactly one private
-binding context, no ad-block binding in extension/main contexts and no
-extension API in private contexts. The same new flow fails as expected on
-exact main 518, then cleans up 0 owned windows/processes. This readiness
-barrier does not fix the known fresh-Profile cold-start window (child I).
+Eight alternating App pairs: cosmetics 39.300 ms / 6761.0 µs native busy CPU; exact main 518 network-only 39.900 ms / 7498.5 µs. Median paired wall delta -2.050 ms / -4.478%; PASS under the lead's ≤ +0.5 ms OR ≤ +1.5% rule. Load1 5.92–7.31; absolute_load_valid=True, status=PASS. Each condition uses the same pinned 200-image fixture, seeds
+and cache policy; all measured loads have 200 terminals and 143 native
+blocks. Each App records readiness, one warmup then one measured load.
+Navigation wall ends at load; generic hiding is checked afterward. CPU is
+native matcher/proxy thread CPU, excluding renderer and whole-App CPU.
+Prebuilt pairs take quiet → screen, no heavy slot; no trimming or retry.
+Source/shell differences from exact 518 remain an attribution limit.
 
-Final full M5 `tools/verify-all.sh --with-arc-data`: 26 PASS / 0 raw FAIL / 0 INTERRUPTED / 0 SKIP,
-including the requested settings-preview row. Every row and any raw timing
-qualification are in `.re/s13/e5/PR-BODY.md`. The two night gates remain
-partial: one stopped for priority starvation, the next hit Settings ENOSPC.
-No result during the 02:35–08:30 screen hold counts as acceptance. The
-initial collector 5/9-log failure and the numeric-loopback fixture failure
-remain preserved beside successful complete reruns. Full UI's raw private
-audit failure remains beside its source-proven inspector reclassification
-and saved-log PASS; no extension predicate was relaxed.
+**Full M5 gate:** PENDING on the new head, `tools/verify-all.sh --with-arc-data`, heavy a,
+no quiet lock. The full summary and exact commands/seconds/loads are in
+`.re/s13/e5/PR-BODY.md`. Earlier full gate 26/26 at `3190491e` and the
+complete Section 6 set retain their source provenance: actions 26,
+extensions-p3 19, extensions-e2 26, full extensions-ui 71, features 27,
+page 85 PASS (other seven suites `c57370d8`). Known picker/Page BLOCKED
+and smart-zoom DEFERRED rows remain. Earlier 352 behavior PASS and
+29/29 logs (91 allocations/331 injections/46 observers) are separate,
+not pooled as new-head results. Exact 518 world-negative and forced
+failure cleanup proofs remain accepted. Night gate/ENOSPC, collector,
+loopback fixture and inspector-classification failures remain preserved.
 
-Contended timing: accepted inherited C-G1 p50 133 µs/p99 824 µs at e8c8e355 (load1 22.57–24.73), C-G2 p50 84 µs at 18fcabc2 (load1 8.49–13.31, T = 64.9 ms, 239,510 bench checks), C-G3 353 µs (load1 13.98); reruns waived by lead 10:55 after timed-path diff review.
-Lead 10:55 retains these accepted receipts and skips E5 C-G1/C-G2 reruns.
-The engine diff from e8c8e355 adds non-official VLOG tracing, a Rust result
-field consumed only by self-test, self-test/parser-corpus and API-proof
-code, and the 0902 patch refactor with the same world IDs 7/8. It changes
-no timed-path behavior. C-G1's product binary is 5074218a, recorded by
-the documentation head e8c8e355; C-G2's binary is 335e9f8d, recorded by
-18fcabc2. First-process calls are separate; 100 documents were measured
-per gate. All original samples/loads and raw absolute_load_valid=false
-remain; accepted PASS at load does not claim a quiet absolute result.
-The queue-only E5 controllers consumed no timing attempts.
+Self-test and Rust sources remain byte-identical to accepted `cf16a133`:
+150,000 list builds, 100,000 URL parses, 30,000 DAT and 30,000 resources
+inputs need no repeat. Earlier isolated apply/reverse proof is 39 patches /
+67 files; the new strict applied state is 41 patches / 140 overlays, not
+claimed as a fresh isolated fixture run. Scriptlets/procedural/style/remove
+actions, Step 8 cross-Profile contention, parser deadlines/accounting and
+allocator attribution remain separate. The +56.22 MiB worst-payload process
+delta is record-only, not a measured worst single allocation. Child I's
+fresh-Profile startup fix is separate from this measured build.
 
-Page comparison: six interleaved App pairs: cosmetics 38.150 ms / 6855 µs busy CPU, exact main 518 network-only 35.650 ms / 6709 µs; load1 8.14–9.56, raw FAIL.
-The control App vanished before attempt1 could launch; that pre-launch
-identity failure produced no page sample. Exact518 was rebuilt/fingerprinted
-with the same executable hash, then both Apps were copied outside build
-folders with executable/framework/seed identity and strict signature PASS.
-Fresh-label attempt2 supplies all samples; no started timing run was retried.
-Both Apps use the same pinned seeds, 200-image fixture and cache policy,
-with equal nonzero blocked counts; only the candidate hides the cosmetic
-control. One warm-up and one measured load per App, alternating pair order.
-CPU is native matcher/proxy busy-thread CPU, excluding renderer and whole
-App CPU. Newer main shell changes are an attribution limit against exact518;
-the comparison does not isolate an engine-only cause. Prebuilt pairs take quiet→screen with no heavy slot (lead 11:31); every load and cleanup is recorded.
-
-Self-test and Rust shim are byte-identical to accepted cf16a133, so the
-full-size parser corpus need not repeat. Scriptlets/procedural actions,
-parser accounting/deadline follow-ups and Step 8 cross-Profile contention
-remain separate. The inherited worst-payload +56.22 MiB process delta is
-record-only, not a measured worst single allocation. Exact commands,
-seconds, loads, identities, known limits and the review table are in
-`.re/s13/e5/PR-BODY.md`, `APP-VALIDATION.md` and `CHECKPOINT.md`.
-The lead creates/reviews the PR. Step 5 missed the 06:15 DMG as directed.
+The vanished control App's cause remains UNPROVEN after own-script/call
+audit; exact 518 was rebuilt and verified. Private copied Apps preserve
+executable/framework/seed identity and strict deep codesign checks. No
+06:15 DMG claim. The lead owns PR creation and independent review.
 
 #### Earlier E4 evidence (before merged acceptance)
 
