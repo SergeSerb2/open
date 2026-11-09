@@ -365,6 +365,13 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   build, BG1–BG3, private/global-off negatives and regression checks are pending
   the Section 12 screen/disk holds. See [Gallery acceptance](boost-gallery.md).
   P7 still blocks selector picking.
+- Library command readiness (BG review F5, Section 12 lead, 2026-11-09):
+  factory-level `view-library`, `view-boosts` and `boost-gallery` routes do not
+  share the AppDelegate's first-run gate or the editor commands' `engineReady`
+  check. The Gallery fix keeps existing Library parity. Follow up on a shared
+  first-run/engine-ready policy for these routes, with real-App first-window
+  and onboarding checks after the holds. Do not treat this as a new Gallery
+  acceptance PASS or enable Boost services during menu validation.
 - Private windows refuse Boosts. The App skips registration, script installation and live plans for OTR contexts; editor commands and Customize Page refuse. The same-parent Profile row and deliberate script-leak negative proof cover this boundary.
 - Profile deletion retires the registered Boost owner before folder removal. The store discards dirty state, cancels and drains writes, and stays closed for the process lifetime. B27 covers Settings delete → debounce → quit → relaunch with a deliberate disabled-retirement negative proof.
 

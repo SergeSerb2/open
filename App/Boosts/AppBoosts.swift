@@ -47,7 +47,7 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     defer { LaunchTiming.shared.mark("boostOwnerInitEnd") }
     #endif
     self.app = app
-    boostsGloballyEnabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
+    boostsGloballyEnabled = UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true
     app.profileTeardown.register(self)
     defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.preferencesChanged() }
@@ -123,7 +123,7 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     adapter.updateScripts(profile: profile)
   }
   private func preferencesChanged() {
-    let enabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
+    let enabled = UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true
     guard enabled != boostsGloballyEnabled else { return }
     boostsGloballyEnabled = enabled; revision &+= 1
     adapter.globalSwitchChanged()

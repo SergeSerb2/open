@@ -209,7 +209,7 @@ extension EngineWebContentHostFactory {
       return selectedTab.map { app.stores.boosts.canEdit(tabID: $0.id) } ?? false
     }
     if id == "boost-gallery" {
-      return !isIncognito && (UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true)
+      return !isIncognito && (UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true)
     }
     if id == "peek-email" { return controller != nil && peekEmailTab != nil }
     // Post-v1: Join Meeting needs calendar live data (lead decision S2 on live-data sources).
@@ -303,7 +303,9 @@ extension EngineWebContentHostFactory {
     }
     switch id {
     case "boost-gallery":
-      app.settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .gallery)
+      app.settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .gallery, boostsProfileID: focusedProfile?.id)
+    case "view-boosts":
+      app.settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .list, boostsProfileID: focusedProfile?.id)
     case "new-boost", "new-legacy-boost":
       guard let tab = selectedTab else { return false }; app.stores.boosts.openEditor(boostID: nil, tabID: tab.id, mode: id == "new-legacy-boost" ? .code(.css) : .simple)
     case "edit-boost":

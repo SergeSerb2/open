@@ -1214,14 +1214,19 @@ the render harness passes fakes).
 | Extension picker key binding (extensions-UI plan, Q11) | `siteControl.present(anchor: §3.6.1 rule, tabID: focused tab, mode: .extensionPicker)` |
 | `.customizePage(tabID:)` | `edit-boost` for that tab |
 | `new-boost`, `edit-boost`, `new-legacy-boost` | §4.1 |
-| `view-boosts` | Library window, section `boosts` |
-| `boost-gallery` | Same Library window, section `boosts`, gallery presentation; current Profile |
+| `view-boosts` | Library window, section `boosts`, explicit list presentation |
+| `boost-gallery` | Same Library window, section `boosts`, gallery presentation; preserve the Library picker if key or already visible on Boosts, otherwise use the invoking Profile |
 | Tab selection change, Space switch, window resign main | Close the panel; close the editor if its bound tab is no longer shown |
 | Panel open/close; matcher result for the selected tab | Set the URL field's `siteControlState` (§3.10): `rest`, `open`, `boosted`, or `openBoosted` (enum declared in OpenSidebar next to `URLFieldView`, because OpenSidebar must not import OpenSiteControl) |
 
 `isCommandEnabled` returns false for the Boost commands in incognito windows.
 Editor commands also refuse non-http(s) pages. The local Gallery needs no page,
 but refuses the global Boosts-off state.
+The Boosts List/Gallery control changes layout in the Library itself.
+`view-library` changes neither Profile nor presentation. With no browser window
+key, Gallery is an app-level regular-Profile Library command, matching View
+Boosts (F3, lead ruling). Factory-level Library readiness is a shared follow-up
+([F5](../followups.md#section-12-boost-app-runtime-limits)).
 
 ---
 

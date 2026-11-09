@@ -22,16 +22,25 @@ public struct BoostItemSnapshot: Identifiable, Sendable {
 /// Value snapshots keep OpenSettings independent of OpenBoosts and OpenEngine.
 public struct BoostsSection: View {
     @Bindable var model: LibraryViewModel
-    @AppStorage("open.advanced.enableBoosts") private var globallyEnabled = true
+    @AppStorage(BoostPreferences.globallyEnabledKey) private var globallyEnabled = true
     @State private var rename: (item: BoostItemSnapshot, profileID: ProfileID)?
     @State private var renameText = ""
     @State private var deleting: (item: BoostItemSnapshot, profileID: ProfileID)?
     public init(model: LibraryViewModel) {
         self.model = model
-        _globallyEnabled = AppStorage(wrappedValue: true, "open.advanced.enableBoosts", store: model.defaults)
+        _globallyEnabled = AppStorage(wrappedValue: true, BoostPreferences.globallyEnabledKey, store: model.defaults)
     }
     public var body: some View {
         VStack(spacing: 12) {
+            HStack {
+                Spacer()
+                Picker("Boosts layout", selection: $model.boostsPresentation) {
+                    Text("List").tag(BoostsPresentation.list)
+                    Text("Gallery").tag(BoostsPresentation.gallery)
+                }.labelsHidden().pickerStyle(.segmented).controlSize(.small).fixedSize()
+                    .font(Font(SettingsTokens.label.font))
+                    .accessibilityIdentifier("boosts.layout")
+            }
             if !globallyEnabled {
                 HStack {
                     Text("Boosts are off. Turn them on in Settings.").font(.system(size: 13)).foregroundStyle(.secondary)
@@ -45,7 +54,7 @@ public struct BoostsSection: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 18)], spacing: 22) {
                         ForEach(model.boostItems) { item in
-                            BoostGalleryCard(item: item, enabled: enabled(item), edit: { edit(item) }, delete: { requestDelete(item) })
+                            BoostGalleryCard(item: item, enabled: enabled(item), edit: edit(item), delete: { requestDelete(item) })
                                 .contextMenu { actions(item) }
                         }
                     }
@@ -81,12 +90,18 @@ public struct BoostsSection: View {
         .onChange(of: model.historyProfileID) { _, _ in rename = nil; deleting = nil }
     }
     private func enabled(_ item: BoostItemSnapshot) -> Binding<Bool> {
-        Binding(get: { item.isEnabled }, set: { model.actions.setBoostEnabled(id: item.id, enabled: $0, profileID: model.historyProfileID) })
+        let profileID = model.historyProfileID
+        let actions = model.actions
+        return Binding(get: { item.isEnabled }, set: { actions.setBoostEnabled(id: item.id, enabled: $0, profileID: profileID) })
     }
-    private func edit(_ item: BoostItemSnapshot) { model.actions.editBoost(id: item.id, profileID: model.historyProfileID) }
+    private func edit(_ item: BoostItemSnapshot) -> () -> Void {
+        let profileID = model.historyProfileID
+        let actions = model.actions
+        return { actions.editBoost(id: item.id, profileID: profileID) }
+    }
     private func requestDelete(_ item: BoostItemSnapshot) { deleting = (item, model.historyProfileID) }
     @ViewBuilder private func actions(_ item: BoostItemSnapshot) -> some View {
-        Button("Edit…") { edit(item) }
+        Button("Edit…", action: edit(item))
         Button("Rename…") { renameText = item.name; rename = (item, model.historyProfileID) }
         Button("Delete…", role: .destructive) { requestDelete(item) }
     }
