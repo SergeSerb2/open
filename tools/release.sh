@@ -525,6 +525,11 @@ acknowledgements() {
     if ! engine_available; then mode_skip "$(reason 02-engine)"; return; fi
     local args=()
     [[ $DRY == 1 ]] || args+=(--require-cef-credits)
+    # The App ships uBO redirect resources with their GPL-3.0 source (#262).
+    # Stage the same hash-verified source the App embeds as AdBlock/Source.
+    "$ROOT/tools/fetch-adblock-lists.sh"
+    [[ -d "$ROOT/Vendor/adblock/ubo-source" ]] || die 'Vendor/adblock/ubo-source missing after fetch-adblock-lists.sh'
+    args+=(--ubo-source "$ROOT/Vendor/adblock/ubo-source")
     python3 tools/generate-acknowledgements.py "$STAGE/credits/Credits.rtf" --text-output "$REL/Acknowledgements.txt" --marketing-version "$VERSION" --build-number "$BUILD" --engine-stamp "$ENGINE_STAMP" ${args[@]+"${args[@]}"}
     cp Vendor/cef/CREDITS.html "$REL/CREDITS.html"
     output "$STAGE/credits/Credits.rtf" "$REL/Acknowledgements.txt" "$REL/CREDITS.html"
