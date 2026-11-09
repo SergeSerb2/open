@@ -3223,8 +3223,8 @@ Acceptance:
   exclusions, same-path no-op, generation reload, failed load, unload during
   a pending load, OTR settings isolation/sharing and closed-context refusal.
 - [x] Real App request/control integration after the recorded distribution:
-  §12.1 and Step 8. The separate AD3 incremental-footprint row fails and
-  is owned by F; regression/full-gate acceptance remains below.
+  §12.1 and Step 8. F's accepted allocation capture replaces the historical
+  whole-process AD3 predicate; merged rerun/full-gate acceptance remains below.
 
 Step 4, Step 6 and Step 8 ship as one engine milestone under the lead's
 integration gate. Smoke switches remain non-official only.
@@ -3342,7 +3342,7 @@ Control tile: .on when enabled/not excluded, .off when excluded and
 The conditional tile proof runs only once its App source is on main;
 E3 must not create a second tile.
 
-**As built, real App (2026-11-08).** `s15-adblock-r5` records 61 PASS
+**Historical whole-process predicate, real App (2026-11-08).** `s15-adblock-r5` records 61 PASS
 and one FAIL, AD3 footprint owned by F. All nine direct App launches quit
 cleanly, with no foreground interruption or surviving process/window.
 The run uses main `40c2ab94` and the recorded `8e8a461c…` distribution.
@@ -3372,6 +3372,18 @@ Page passes 81 rows with no FAIL or foreground interruption. Five known
 BLOCKED rows, the hosted-tab activation SKIP and the user smart-zoom
 DEFERRED row remain explicit. Features, extensions-ui, settings-preview
 and the full gate follow on the later merged App build.
+
+**AD3 accepted capture, 20:53 lead ruling.** F's `d5e44abe` records 79/79
+PASS on its full adblock scope, including 11 record-only whole-process
+rows. Attachment-only PA allocated median is −26,464 bytes; non-PA malloc
+in-use delta is zero. The different-list control allocates 25,461,840 bytes
+with `engine_shared=false`. E3 merges that harness and the list-change
+wait fix in `11dd8b60`, keeping its live-page and disk-publication waits.
+The Debug rebuild passes in 50.600 s, including 20 s in the heavy queue,
+at endpoint loads 12.19/11.36/11.12 -> 12.57/11.61/11.22.
+No native engine or production adapter change is needed. E3's next full
+adblock scope uses the strict harness without its historical AD3 bypass.
+The earlier failed receipts keep their original predicate and result.
 
 Later Step 5/9 acceptance remains open: two renderer processes with
 independent cosmetic selectors/exclusions, and cross-Profile C-G2 wait
