@@ -553,8 +553,10 @@ def real_engine(factory, results, wait):
         time.sleep(6)
         memory_after = [browser_footprint() for _ in range(5)]
         delta = statistics.median(memory_after) - statistics.median(memory_before)
-        row('shared_engine_footprint', status(other['id'])['engine_shared'] and delta <= 2 * 1024 * 1024,
-            before=memory_before, after=memory_after, deltaBytes=delta, load=os.getloadavg())
+        sharing_status = status(other['id'])
+        row('shared_engine_footprint', sharing_status['engine_shared'] and delta <= 2 * 1024 * 1024,
+            before=memory_before, after=memory_after, deltaBytes=delta,
+            engineShared=sharing_status['engine_shared'], load=os.getloadavg())
         app.call('ext-shortcuts', action='close')
         app.call('select', tab=other_tab)
         app.call('menu-perform', id='new-incognito-window')
