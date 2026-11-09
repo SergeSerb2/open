@@ -1,9 +1,92 @@
-"""Section 15 M-* rows: synthetic metadata through the real App save sheet.
+"""Section 15 real-sheet, management, engine and cookie acceptance.
 
-No passwords, cards, addresses, Keychain access, or engine save callbacks. P-*
-rows will exercise the engine when its bridge is available.
+Field values stay in fixture documents or temporary comparisons. Reports contain
+booleans, counts, fixture hosts and public UI text only.
 """
 import os
+import json
+import signal
+import sqlite3
+import time
+from pathlib import Path
+
+def autofill_child_windows(app):
+    """Window metadata only; no accessibility or field values."""
+    return [w for w in app.call('windows') if w.get('visible') and w.get('parent', 0) and not w.get('sheet')]
+
+
+def show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5):
+    """Find Chromium's listbox in this page's native parent, including reuse."""
+    app.call('focus', tab=tab)
+    parent = app.call('native-focus-state')['keyWindow']
+    app.call('click', tab=tab, selector=selector)
+
+    def specific_popup():
+        return [w for w in app.call('windows', accessibilityRoles=True)
+                if w.get('visible') and w.get('parent') == parent and not w.get('sheet')
+                and w.get('class') == 'NativeWidgetMacNSWindow' and 'AXList' in w.get('roles', [])]
+
+    windows = wait_until(specific_popup, timeout=timeout, step=.05)
+    if windows:
+        # Chromium rejects acceptance until 500 ms after its first paint
+        # (AutofillSuggestionController::kIgnoreEarlyClicksOnSuggestionsDuration).
+        # Preserve that security guard and wait before sending user gestures.
+        time.sleep(.65)
+        windows = specific_popup()
+    return windows
+
+
+def fill_from_dropdown(app, tab, wait_until, selector='#username', down=1):
+    """Choose a native suggestion through real App keys. Caller checks equality."""
+    assert show_autofill_dropdown(app, tab, wait_until, selector), 'autofill dropdown did not appear after a field click'
+    for _ in range(down):
+        app.call('key', key='down', route='app')
+    # Selection can change row bounds. Preserve Chromium's visibility/idle
+    # acceptance barrier after the selected row has had a display turn.
+    time.sleep(.65)
+    app.call('key', key='return', route='app')
+    return True
+
+
+class PasswordAppDied(RuntimeError):
+    fatal_app_death = True
+
+
+class PasswordGuard:
+    """Check every row, including inherited M/MP rows, before publishing it."""
+    def __init__(self, factory, results, harness):
+        self.factory, self.results, self.h = factory, results, harness
+        self.baseline = harness['_open_crash_reports']()
+        self.app = None
+
+    def launch(self, *args, **kwargs):
+        self.check()
+        self.app = self.factory(*args, **kwargs)
+        return self.app
+
+    def check(self):
+        crashes = self.h['_open_crash_reports']() - self.baseline
+        if crashes:
+            raise PasswordAppDied('new Open crash report; stopped before the next flow')
+        if self.app and not self.app.closed:
+            try:
+                os.kill(self.app.pid, 0)
+                assert self.app.call('ping', timeout=3)['pid'] == self.app.pid
+            except Exception as error:
+                raise PasswordAppDied('Open stopped answering; suite stopped at first App death') from error
+
+    def __setitem__(self, name, result):
+        try:
+            self.check()
+        except PasswordAppDied:
+            self.results[name] = {'ok': False, 'reason': 'App death or new crash report', 'load': os.getloadavg()}
+            raise
+        self.results[name] = dict(result, newCrashReports=0, load=os.getloadavg())
+        print(name, result.get('status', 'PASS' if result.get('ok') else 'FAIL'), flush=True)
+
+
+class PasswordBlocked(RuntimeError):
+    pass
 
 
 def run_save_prompts(factory, results, tmp, harness):
@@ -31,11 +114,12 @@ def run_save_prompts(factory, results, tmp, harness):
         assert gone(), 'save sheet did not close after answer'
 
     def row(name, fn):
+        harness['begin_row'](name)
         try:
             detail = fn() or {}
             results[name] = {'ok': True, **detail}
         finally:
-            app.call('save-prompt', withdraw=True)
+            app.call('save-prompt', withdraw=True, timeout=3)
             assert gone(), 'case cleanup left a save sheet open'
 
     try:
@@ -69,6 +153,7 @@ def run_save_prompts(factory, results, tmp, harness):
         for choice in ['save', 'never', 'dismiss']:
             def check_answer(choice=choice):
                 events(); show(); answer(choice)
+                assert not app.call('events', window=-1), 'unknown window drained another window events'
                 ev = events()
                 assert len(ev) == 1 and ev[0]['answer'] == choice and ev[0]['kind'] == 'password' and ev[0]['displayHost'] == 'login.example.com', ev
                 try:
@@ -245,6 +330,7 @@ def run_manage_pages(factory, results, tmp, harness):
         return tab
 
     def row(name, fn):
+        harness['begin_row'](name)
         try:
             results[name] = {'ok': True, **(fn() or {})}
         except Exception:
@@ -350,6 +436,877 @@ def run_manage_pages(factory, results, tmp, harness):
         app.quit()
 
 
-def run(factory, results, tmp, harness):
-    run_save_prompts(factory, results, tmp, harness)
-    run_manage_pages(factory, results, tmp, harness)
+def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_ids=None):
+    wait = h['wait_until']
+    app = None
+    passed = set()
+    fixture_root = Path(h['ROOT']) / 'tools/e2e/fixtures/passwords'
+
+    def row(name, flow, requires=()):
+        if row_ids is not None and name not in row_ids:
+            return
+        h['begin_row'](name)
+        guard.check()
+        if any(r not in passed for r in requires):
+            results[name] = {'status': 'BLOCKED', 'reason': 'requires passing ' + ', '.join(requires)}
+            return
+        try:
+            detail = flow() or {}
+            guard.check()
+            results[name] = {'ok': True, **detail}
+            passed.add(name)
+        except PasswordAppDied:
+            raise
+        except h['FocusInterruption']:
+            raise
+        except PasswordBlocked as error:
+            results[name] = {'status': 'BLOCKED', 'reason': str(error)}
+        except Exception as error:
+            guard.check()
+            # No arbitrary exception payloads (a browser error can echo input).
+            reason = str(error) if isinstance(error, AssertionError) and error.args else 'flow assertion failed: ' + flow.__name__
+            results[name] = {'ok': False, 'reason': reason, 'errorType': type(error).__name__}
+        finally:
+            if app and not app.closed:
+                try:
+                    app.call('save-prompt', withdraw=True, timeout=3)
+                    app.call('key', key='escape', route='app', timeout=3)
+                except Exception:
+                    guard.check()
+
+    def key(value, **kwargs):
+        return app.call('key', key=value, route='app', **kwargs)
+
+    def dev(tab, method, **params):
+        return app.call('devtools', tab=tab, method=method, params=params)
+
+    def sheet():
+        return app.call('save-prompt', state=True)
+
+    def events():
+        return app.call('events')
+
+    def load(url):
+        from urllib.parse import urlsplit, urlunsplit
+        tab = h['new_tab'](app, url)
+        parts = urlsplit(url)
+        expected = urlunsplit(parts._replace(path=parts.path or '/'))
+        ready = 'location.href === %s && document.readyState === "complete"' % json.dumps(expected)
+        assert wait(lambda: app.eval(tab, ready), timeout=15, step=.1), 'fixture document did not finish navigation'
+        return tab
+
+    def fill(tab):
+        app.call('focus', tab=tab)
+        fields = app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).map(e => e.id)')
+        assert fields, 'fixture form has no inputs'
+        for field in fields:
+            app.call('click', tab=tab, selector='#' + field)
+            text = app.eval(tab, 'document.getElementById(%s).dataset.fixture' % json.dumps(field))
+            app.call('key', text=text, route='app')
+            del text
+        assert app.eval(tab, 'Array.from(document.querySelectorAll("input[data-fixture]")).every(e => e.value === e.dataset.fixture)')
+
+    def submit(tab):
+        app.call('click', tab=tab, selector='#submit')
+        assert wait(lambda: app.eval(tab, 'location.pathname === "/welcome"'), timeout=10, step=.1)
+
+    def prompt(kind, url, answer=None):
+        events()
+        tab = load(url); fill(tab); submit(tab)
+        value = wait(lambda: (s if (s := sheet()).get('visible') else None), timeout=5, step=.05)
+        assert value and value['kind'] == kind
+        assert any(e.get('type') == 'savePrompt' and e.get('kind') == kind and e.get('answer') == 'pending' for e in events())
+        if answer:
+            app.call('save-prompt', answer=answer)
+            assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05)
+            assert any(e.get('type') == 'savePrompt' and e.get('answer') == answer for e in events())
+        return tab, value
+
+    def counts(**expected):
+        def matching():
+            current = app.call('credentials')
+            return current if all(current.get(k) == v for k, v in expected.items()) else None
+        value = wait(matching, timeout=10, step=.1)
+        assert value
+        return {k: value[k] for k in expected}
+
+    def children():
+        return autofill_child_windows(app)
+
+    def popup(tab, selector='#username'):
+        return show_autofill_dropdown(app, tab, wait, selector)
+
+    def choose():
+        key('down'); time.sleep(.65); key('return')
+
+    def empty(tab):
+        return app.eval(tab, '(() => {const fields=Array.from(document.querySelectorAll("input[data-fixture]"));return fields.length > 0 && fields.every(e => e.value === "");})()')
+
+    def fields_match(tab, ids, changed=False):
+        script = '''(() => {const ids=%s; return ids.every(id => {
+          const e=document.getElementById(id); let expected=e.dataset.fixture;
+          if (%s && id==='password') expected=%s;
+          if (id==='expiry') {const a=e.value.replace(/\\D/g,''),b=expected.replace(/\\D/g,'');return a===b||a===b.slice(0,2)+b.slice(-2);}
+          if (id==='username'||id==='password') return e.value===expected;
+          return e.value.replace(/\\s/g,'')===expected.replace(/\\s/g,''); });})()'''
+        # The updated fixture value is read from our source, never printed.
+        import re
+        updated = re.search(r'id="password"[^>]*data-fixture="([^"]+)"', (fixture_root / 'change.html').read_text()).group(1)
+        return app.eval(tab, script % (json.dumps(ids), 'true' if changed else 'false', json.dumps(updated)))
+
+    def no_prompt(url, tab=None):
+        app.call('policy', savePrompt='hold'); events()
+        tab = load(url) if tab is None else tab
+        fill(tab); submit(tab)
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline:
+            assert not sheet().get('visible')
+            assert not any(e.get('type') == 'savePrompt' for e in events())
+            time.sleep(.1)
+        return {'sheetVisible': False}
+
+    with h['passwords_fixture_server']() as urls:
+        switches = urls['engine_switches'] + ['--use-mock-keychain', '--open-allow-mock-keychain-secrets']
+
+        def launch(fresh=False, allow=True):
+            nonlocal app
+            app = factory(urls=('about:blank',), fresh=fresh, extra_args=switches if allow else [s for s in switches if s != '--open-allow-mock-keychain-secrets'])
+            assert wait(lambda: app.call('tabs'), timeout=15, step=.1)
+            app.call('policy', savePrompt='hold')
+            return app
+
+        def relaunch(allow=True):
+            app.quit(); launch(allow=allow)
+
+        launch(fresh=True)
+        identity = {}
+        try:
+            def preference_inputs():
+                initial = app.call('credentials-prefs')
+                for invalid in [dict(profile='missing'), dict(passwordSaving=1), dict(cardsSaving='true'),
+                                dict(addressesSaving=None), dict(cardReauthentication=1), dict(unknown=True), dict(profile='x'*4097)]:
+                    try:
+                        app.call('credentials-prefs', **invalid)
+                        raise AssertionError('invalid credentials-prefs input was accepted')
+                    except RuntimeError:
+                        pass
+                    assert app.call('credentials-prefs') == initial, 'rejected preference input changed preferences'
+                for invalid in ['unknown', 1, None]:
+                    try:
+                        app.call('policy', savePrompt=invalid)
+                        raise AssertionError('invalid savePrompt policy was accepted')
+                    except RuntimeError:
+                        pass
+                return {'invalidInputsRejected': 10, 'preferencesUnchanged': True}
+            row('PW-PREFS-input', preference_inputs)
+
+            def reauthentication_default():
+                prefs = app.call('credentials-prefs')
+                assert prefs['canEnableCardsSaving'] and prefs['cardReauthentication'] is True
+                return {'freshProfile': True, 'cardReauthentication': True}
+            row('PW-REAUTH-default', reauthentication_default)
+
+            def first():
+                tab, value = prompt('password', urls['login'])
+                assert value['title'] == 'Save password for login.example.com?'
+                assert value['buttons'] == ['Never on this site', 'No', 'Save']
+                app.call('snapshot', window=value['window'], path=os.path.join(tmp, 'P-1-save-sheet.png'))
+                identity['login'] = tab
+                # P-2 owns the button press. Hold across this one row boundary.
+                identity['held'] = value
+                return {'kind': 'password', 'displayHost': 'login.example.com', 'sheetVisible': True}
+            # Do not use row's per-flow withdrawal between P-1 and P-2.
+            def first_and_save():
+                detail = first()
+                results['P-1'] = {'ok': True, **detail}; passed.add('P-1')
+                app.call('save-prompt', answer='save')
+                assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05)
+                return counts(logins=1)
+            row('P-2', first_and_save)
+            if 'P-1' not in passed and row_ids is None:
+                results['P-1'] = {'ok': False, 'reason': 'real password prompt did not appear'}
+
+            def redirect_prompt():
+                before = app.call('credentials')['logins']
+                events()
+                tab = load(urls['login'].replace('login.example.com', 'redirect.example.com'))
+                try:
+                    fill(tab)
+                    app.call('click', tab=tab, selector='#submit')
+                    assert wait(lambda: app.eval(tab, 'location.pathname === "/dashboard" && document.readyState === "complete" && !!document.querySelector("#dashboard")'), timeout=10, step=.1), 'post-login redirect did not reach the dashboard'
+                    value = wait(lambda: (s if (s := sheet()).get('visible') else None), timeout=5, step=.05)
+                    assert value and value['kind'] == 'password', 'save sheet was withdrawn during post-login navigation'
+                    assert value['title'] == 'Save password for redirect.example.com?'
+                    # Keep the sheet unanswered across another real engine turn.
+                    app.call('ping')
+                    assert sheet().get('visible'), 'save sheet closed before an answer'
+                    assert any(e.get('type') == 'savePrompt' and e.get('answer') == 'pending' for e in events())
+                    app.call('save-prompt', answer='save')
+                    assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05), 'save sheet did not close after its answer'
+                    return dict(counts(logins=before + 1), dashboardLoaded=True, heldUntilAnswered=True)
+                finally:
+                    guard.check()
+                    app.call('close', tab=tab)
+            def dropdown():
+                tab = load(urls['login']); identity['refill'] = tab
+                assert empty(tab), 'login fields were filled before a dropdown choice'
+                windows = popup(tab)
+                assert windows, 'specific autofill dropdown did not appear after clicking the username field'
+                # Role-only evidence avoids capturing credential labels.
+                return {'childWindowVisible': True}
+            row('P-3', dropdown, ['P-2'])
+
+            def refill():
+                tab = identity['refill']; assert popup(tab)
+                choose(); assert wait(lambda: fields_match(tab, ['username', 'password']), timeout=5, step=.05)
+                return {'bothFieldsMatch': True, 'inputRoute': 'app'}
+            row('P-4', refill, ['P-3'])
+
+            def refill_mouse():
+                tab = load(urls['login'])
+                assert empty(tab), 'login fields were filled before a dropdown choice'
+                windows = popup(tab)
+                assert windows, 'password dropdown did not appear for mouse selection'
+                window = windows[0]
+                width = h['frame'](window['frame'])[2]
+                # The first credential row is below the popup's 8 pt shadow.
+                # Events stay inside this verified Open child window.
+                point = dict(window=window['number'], x=width / 2, y=28)
+                # Deliver the native exit/enter tracking path before clicking.
+                # Chromium rejects a click on an item that appeared under a
+                # stationary pointer (PopupRowView::OnMouseReleased).
+                app.call('mouse', action='hover', window=window['number'], x=width / 2, y=2)
+                app.call('mouse', action='hover', **point)
+                # Entry can paint a new row; allow Chromium's next-idle
+                # acceptance barrier to pass after that display turn.
+                time.sleep(.65)
+                app.call('mouse', action='click', queued=True, **point)
+                assert wait(lambda: fields_match(tab, ['username', 'password']), timeout=5, step=.05), 'mouse selection did not fill both fixture fields'
+                return {'bothFieldsMatch': True, 'inputRoute': 'native-popup-mouse'}
+            row('P-4-mouse', refill_mouse, ['P-4'])
+
+            def update():
+                _, value = prompt('passwordUpdate', urls['change'], 'save')
+                assert value['buttons'] == ['No', 'Save']
+                tab = load(urls['login']); assert popup(tab); choose()
+                assert wait(lambda: fields_match(tab, ['username', 'password'], changed=True), timeout=5, step=.05)
+                return {'updatedValueMatches': True, 'offersNever': False}
+            row('P-5', update, ['P-4'])
+
+            def never():
+                other = urls['login'].replace('login.example.com', 'never.example.com')
+                prompt('password', other, 'never'); counts(blockedSites=1)
+                return no_prompt(other)
+            row('P-6', never)
+            def no_automatic_fill():
+                assert empty(load(urls['login'])), 'fields filled before a dropdown choice'
+                return {'emptyOnLoad': True}
+            row('P-7', no_automatic_fill, ['P-2'])
+
+            def iframe():
+                tab = load(urls['iframe'])
+                # DevTools can focus a frame's DOM while AppKit still owns
+                # the first responder. Establish real page focus first.
+                app.call('focus', tab=tab)
+                frame = dev(tab, 'Page.getFrameTree')['frameTree']['childFrames'][0]['frame']['id']
+                context = dev(tab, 'Page.createIsolatedWorld', frameId=frame, worldName='OpenPasswordFixture')['executionContextId']
+                result = dev(tab, 'Runtime.evaluate', contextId=context, expression='Array.from(document.querySelectorAll("input")).every(e=>!e.value)', returnByValue=True)
+                assert result['result']['value'] is True, 'iframe fields filled before a user choice'
+                geometry = dev(tab, 'Runtime.evaluate', contextId=context, expression='(()=>{let r=document.querySelector("#username").getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()', returnByValue=True)['result']['value']
+                offset = app.eval(tab, '(()=>{const r=document.querySelector("iframe").getBoundingClientRect();return [r.x+2,r.y+2]})()')
+                for event in ['mousePressed', 'mouseReleased']:
+                    dev(tab, 'Input.dispatchMouseEvent', type=event, x=geometry[0]+offset[0], y=geometry[1]+offset[1], button='left', clickCount=1)
+                assert wait(children, timeout=5, step=.05), 'cross-origin frame click did not show a credential dropdown'
+                return {'emptyOnLoad': True, 'dropdownAfterClick': True, 'nativePageFocus': True}
+            row('P-8', iframe, ['P-2'])
+
+            row('P-9', lambda: (prompt('address', urls['address'], 'save'), counts(addresses=1))[1])
+            def address_fill():
+                tab = load(urls['address']); assert popup(tab, '#name'); choose()
+                assert wait(lambda: fields_match(tab, ['name', 'street', 'city', 'postal']), timeout=5, step=.05)
+                return {'addressFieldsMatch': True}
+            row('P-10', address_fill, ['P-9'])
+            def http_card_guard():
+                prefs = app.call('credentials-prefs')
+                assert prefs['cardsSaving'] and prefs['canEnableCardsSaving']
+                assert app.call('credentials')['cards'] == 0
+                no_prompt(urls['http_card'])
+                counts(cards=0)
+                return {'scheme': 'http', 'cardSaveOffer': False, 'cardsUnchanged': True}
+            row('PW-CARD-HTTP', http_card_guard)
+
+            def secure_card_context():
+                tab = load(urls['card'])
+                assert app.eval(tab, 'location.protocol === "https:" && window.isSecureContext')
+                secure_type = dev(tab, 'Page.getFrameTree')['frameTree']['frame']['secureContextType']
+                assert secure_type in ['Secure', 'SecureLocalhost']
+                app.call('close', tab=tab)
+                return {'scheme': 'https', 'secureContext': True, 'secureContextType': secure_type}
+            row('PW-CARD-HTTPS', secure_card_context)
+            row('P-11', lambda: (prompt('card', urls['card'], 'save'), counts(cards=1))[1])
+            def card_fill():
+                # Only this synthetic profile opts out for unattended fill.
+                # New user profiles retain Chromium's mandatory device auth.
+                previous = app.call('credentials-prefs')['cardReauthentication']
+                try:
+                    app.call('credentials-prefs', cardReauthentication=False)
+                    assert wait(lambda: app.call('credentials-prefs')['cardReauthentication'] is False, timeout=3, step=.05)
+                    tab = load(urls['card']); assert popup(tab, '#number'); choose()
+                    assert wait(lambda: fields_match(tab, ['name', 'number', 'expiry']), timeout=5, step=.05)
+                    return {'cardFieldsMatch': True, 'syntheticProfileOptOut': True}
+                finally:
+                    app.call('credentials-prefs', cardReauthentication=previous)
+                    assert wait(lambda: app.call('credentials-prefs')['cardReauthentication'] is previous, timeout=3, step=.05)
+            row('P-12', card_fill, ['P-11'])
+
+            def card_reauthentication():
+                # The previous row restored this pref in memory. A graceful
+                # checkpoint commits it before a system-auth modal can require
+                # forced cleanup of an unresponsive automation socket.
+                relaunch()
+                assert app.call('credentials-prefs')['cardReauthentication'] is True
+                tab = load(urls['card']); assert popup(tab, '#number')
+                authenticating = app
+                tracker = app.focus_tracker
+                import re, socket, subprocess, threading
+                # Authorization Services can block the App's main thread inside
+                # Return. Observe only frontmost PID/bundle metadata through
+                # LaunchServices while that socket cannot reply. Never send
+                # input to SecurityAgent or change the authentication policy.
+                native = app.call('native-focus-state')
+                offset = native['uptime'] - time.monotonic()
+                observations, observation_errors = [], []
+                finished = threading.Event()
+                def observe_frontmost():
+                    while not finished.is_set():
+                        try:
+                            asn = subprocess.check_output(['/usr/bin/lsappinfo', 'front'], text=True, timeout=1).strip()
+                            if not re.fullmatch(r'ASN:0x[0-9a-fA-F]+-0x[0-9a-fA-F]+:?', asn):
+                                raise ValueError('invalid LaunchServices application identifier')
+                            info = subprocess.check_output(['/usr/bin/lsappinfo', 'info', '-only', 'bundleID', '-only', 'pid', asn], text=True, timeout=1)
+                            bundle = re.search(r'\bbundleID="([^"\n]*)"', info)
+                            pid = re.search(r'\bpid\s*=\s*(\d+)', info)
+                            if not bundle or not pid: raise ValueError('no frontmost identity')
+                            event = {'event': 'frontmostChanged', 'frontmostBundleID': bundle[1],
+                                     'frontmostPID': int(pid[1]), 'openPID': authenticating.pid,
+                                     'uptime': time.monotonic() + offset}
+                            if not observations or any(event[k] != observations[-1][k] for k in ['frontmostBundleID', 'frontmostPID']):
+                                observations.append(event)
+                        except Exception:
+                            observation_errors.append('frontmost identity unavailable')
+                        finished.wait(.2)
+                observer = threading.Thread(target=observe_frontmost, daemon=True)
+                observer.start()
+                blocked, hist = False, []
+                try:
+                    key('down'); time.sleep(.65)
+                    try:
+                        key('return', timeout=3)
+                        hist = app.call('devtools', tab=tab, method='Browser.getHistograms',
+                                        params={'query': 'Autofill.PaymentMethods.CheckoutFlow.ReauthUsage', 'delta': False},
+                                        timeout=3)['histograms']
+                    except socket.timeout:
+                        blocked = True
+                    time.sleep(1)
+                finally:
+                    finished.set(); observer.join(timeout=3)
+                os.kill(app.pid, 0)
+                assert not h['_open_crash_reports']() - guard.baseline, 'card selection created a crash report'
+                # Verified-PID cleanup cancels this owned request before any
+                # later row. It does not send input to the system dialog.
+                relaunch()
+                assert app.call('credentials-prefs')['cardReauthentication'] is True, 'restored card reauth preference did not survive auth cleanup'
+                losses = tracker.loss() if tracker else []
+                losses += [e for e in observations if e['frontmostPID'] != authenticating.pid]
+                auth_changes = [e for e in losses if e.get('event') == 'frontmostChanged'
+                                and e.get('frontmostBundleID') == 'com.apple.SecurityAgent'
+                                and e.get('openPID') == authenticating.pid]
+                def expected_auth_loss(event):
+                    if event in auth_changes: return True
+                    return (event.get('event') == 'NSApplicationDidResignActiveNotification'
+                            and event.get('openPID') == authenticating.pid
+                            and any(abs(event['uptime'] - change['uptime']) < 2
+                                    and event.get('frontmostPID') in [authenticating.pid, change['frontmostPID']]
+                                    for change in auth_changes))
+                if any(not expected_auth_loss(event) for event in losses):
+                    raise h['FocusInterruption']('unrelated foreground loss during device authentication', losses)
+                # Only this row requests the verified system-auth transition.
+                # All unrelated focus loss still invalidates native input.
+                if tracker: tracker.checkpoint()
+                started_metric = any(any(b['low'] == 1 and b['count'] for b in item['buckets']) for item in hist)
+                if blocked and not auth_changes:
+                    raise PasswordBlocked('Card selection left the App alive with no crash, but the native authentication loop blocked both metrics and the bundle-identified handoff trace')
+                assert started_metric or auth_changes, 'device authentication did not start for the saved card'
+                return {'deviceAuthenticationStarted': True, 'appAlive': True, 'histograms': hist,
+                        'verifiedSecurityAgentHandoff': bool(auth_changes),
+                        'modalAutomationBlocked': blocked, 'focusObservationErrors': len(observation_errors),
+                        'restoredPreferenceSurvivedRelaunch': True,
+                        'authenticationCompletionRequired': False}
+            row('PW-REAUTH-request', card_reauthentication, ['P-12'])
+
+            def manage():
+                key('t', modifiers=['command']); app.call('key', text='Manage Passwords', route='app')
+                state = wait(lambda: (s if (s := app.call('commandbar-state')).get('final') else None), timeout=10, step=.1)
+                index = next(i for i, r in enumerate(state['rows']) if r.get('action') == 'manage-passwords')
+                for _ in range(abs(index-state['selected'])): key('down' if index > state['selected'] else 'up')
+                key('return')
+                tab = wait(lambda: next((t for t in app.call('tabs') if t.get('selected') and t['url'].startswith('chrome://password-manager/passwords')), None), timeout=10, step=.1)
+                assert tab; identity['manage'] = tab['id']
+                # Traverse open shadow roots and report a row COUNT only.
+                script = '''(()=>{let n=0;const walk=r=>{for(const e of r.querySelectorAll('*')){if(e.localName==='password-list-item')n++;if(e.shadowRoot)walk(e.shadowRoot)}};walk(document);return n})()'''
+                assert wait(lambda: app.eval(tab['id'], script) == 1, timeout=10, step=.1)
+                return {'passwordRows': 1, 'entry': 'commandbar-native-return'}
+            row('P-13', manage, ['P-2'])
+
+            def footer():
+                tab = load(urls['login']); assert popup(tab); events()
+                # Password dropdown has one fixture entry followed by its footer.
+                key('down'); key('down'); time.sleep(.65); key('return')
+                assert not app.call('events', window=-1), 'unknown window drained the Manage event'
+                assert wait(lambda: any(e.get('type') == 'autofillPage' and e.get('page') == 'passwords' for e in events()), timeout=5, step=.1)
+                selected = next(t for t in app.call('tabs') if t.get('selected'))
+                assert selected['id'] == identity['manage']
+                return {'autofillPage': 'passwords', 'sameTab': True}
+            row('P-14', footer, ['P-13'])
+
+            def popup_dismissal():
+                tab = load(urls['login']); assert popup(tab)
+                key('t', modifiers=['command'])
+                assert wait(lambda: not children(), timeout=5, step=.05); key('escape')
+                assert popup(tab); default = next(s for s in app.call('spaces') if s['focused'])
+                work = app.call('space-create', title='Work', profile='Work'); identity['default'] = default['id']; identity['work'] = work
+                assert wait(lambda: not children(), timeout=5, step=.05)
+                app.call('space', space=default['id']); app.call('select', tab=tab); assert popup(tab)
+                key('s', modifiers=['command'])
+                assert wait(lambda: not children(), timeout=5, step=.05)
+                key('s', modifiers=['command'])
+                return {'commandbar': True, 'SpaceChange': True, 'sidebarHide': True}
+            row('P-16', popup_dismissal, ['P-2'])
+
+            def profile_isolation():
+                work = identity.get('work') or app.call('space-create', title='Work', profile='Work')
+                identity['work'] = work; app.call('space', space=work)
+                assert app.call('credentials', profile='Work')['logins'] == 0
+                tab = load(urls['login']); assert empty(tab)
+                app.call('click', tab=tab, selector='#username')
+                time.sleep(.5); assert not children()
+                return {'logins': 0, 'dropdownVisible': False}
+            row('P-17', profile_isolation, ['P-2'])
+
+            def at_rest():
+                # Chromium holds exclusive live database locks. Inspect a
+                # gracefully closed store, then restore the running fixture.
+                app.quit()
+                try:
+                    # Read copies of this suite's synthetic data only.
+                    paths = list((Path(app.user_data)/'Engine').rglob('Login Data'))
+                    assert paths
+                    import re
+                    fixture_bytes = [re.search(r'id="password"[^>]*data-fixture="([^"]+)"', (fixture_root/name).read_text()).group(1).encode()
+                                     for name in ['login.html', 'change.html']]
+                    checked = 0
+                    for index, path in enumerate(paths):
+                        assert path.parent.stat().st_mode & 0o777 == 0o700
+                        copy = Path(tmp)/('login-data-%d.sqlite' % index)
+                        source = sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True)
+                        with sqlite3.connect(copy) as database:
+                            source.backup(database)
+                            blobs = database.execute('select password_value from logins where blacklisted_by_user=0').fetchall()
+                            assert all(bytes(b[0]).startswith(b'v10') for b in blobs)
+                            checked += len(blobs)
+                        source.close(); assert all(value not in copy.read_bytes() for value in fixture_bytes)
+                    assert checked >= 1
+                    return {'encryptedLogins': checked, 'profileMode': '0700', 'fixtureBytesAbsent': True}
+                finally:
+                    launch()
+            row('P-18', at_rest, ['P-2'])
+
+            def private():
+                parent = next(s for s in app.call('spaces') if s['focused'])['profile']
+                before = app.call('credentials', profile=parent)
+                selected = next(t for t in app.call('tabs') if t.get('selected'))
+                parent_context = app.page(selected['id'])['context']
+                app.call('menu-perform', id='new-incognito-window')
+                assert wait(lambda: app.call('incognito-state', private=True).get('private'), timeout=10, step=.1)
+                try:
+                    state = app.call('incognito-state', private=True)
+                    assert state['parent'] == parent, 'private parent differs from the focused Space Profile'
+                    # A non-default parent's OTR context is created asynchronously.
+                    # The empty private window can be visible before its store is ready.
+                    def private_store_ready():
+                        try:
+                            return app.call('credentials')
+                        except RuntimeError as error:
+                            if str(error) == 'credentials: no profile context':
+                                return None
+                            raise
+                    private_before = wait(private_store_ready, timeout=10, step=.1)
+                    assert private_before, 'private Profile context did not become ready'
+                    assert private_before['logins'] == 0
+                    # Incognito enables HTTPS-First for public HTTP origins.
+                    # Use the real loopback HTTP form here; the dedicated
+                    # HTTPS-First rows exercise that warning and its decisions.
+                    no_prompt(urls['local_login'])
+                    # A new private window opens the command bar with no page.
+                    # Check the context on the page that submitted the form.
+                    state = app.call('incognito-state', private=True)
+                    assert state['ephemeral'], 'submitted private page context is not off the record'
+                    assert state['originalContext'] == parent_context, 'submitted private page has the wrong parent context'
+                    private_after = app.call('credentials')
+                    assert private_after == private_before
+                finally:
+                    app.call('window-close')
+                assert app.call('credentials', profile=parent) == before
+                return {'sheetVisible': False, 'privateLogins': 0, 'privateStoreUnchanged': True,
+                        'parentProfileMatchesFocusedSpace': True, 'parentStoreUnchanged': True}
+            row('P-19', private)
+
+            def virtual_authenticator():
+                tab = load(urls['webauthn'])
+                dev(tab, 'WebAuthn.enable')
+                auth = dev(tab, 'WebAuthn.addVirtualAuthenticator', options={'protocol': 'ctap2', 'transport': 'usb', 'hasResidentKey': True, 'hasUserVerification': True, 'isUserVerified': True})['authenticatorId']
+                try:
+                    for operation in ['create', 'get']:
+                        app.call('click', tab=tab, selector='#'+operation)
+                        script = 'document.querySelector("#result").dataset.operation === %s && document.querySelector("#result").textContent === "resolved"' % json.dumps(operation)
+                        assert wait(lambda: app.eval(tab, script), timeout=5, step=.05)
+                finally:
+                    dev(tab, 'WebAuthn.removeVirtualAuthenticator', authenticatorId=auth)
+                    dev(tab, 'WebAuthn.disable')
+                return {'create': 'resolved', 'get': 'resolved'}
+            row('P-20', virtual_authenticator)
+
+            def native_webauthn():
+                tab = load(urls['webauthn']); before = {w['number'] for w in children()}
+                app.call('click', tab=tab, selector='#create')
+                child = wait(lambda: next((w for w in children() if w['number'] not in before), None), timeout=3, step=.05)
+                if not child:
+                    raise AssertionError('H-7 WebAuthn native dialog did not appear')
+                try:
+                    labels = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == child['number'])
+                    import re
+                    assert any(re.search(r'passkey|security key|another device', text, re.I) for text in labels), 'new child was not a WebAuthn dialog'
+                    app.call('snapshot', window=child['number'], path=os.path.join(tmp, 'P-21-webauthn.png'))
+                    key('escape', window=child['number'])
+                    assert wait(lambda: app.eval(tab, 'document.querySelector("#result").textContent') == 'NotAllowedError', timeout=5, step=.05)
+                    assert wait(lambda: any(w['number'] == child['parent'] and w.get('visible')
+                                            for w in app.call('windows')), timeout=5, step=.05), 'WebAuthn cancellation closed its parent'
+                finally:
+                    # The rejected request has closed its own native dialog.
+                    # Dispose only this row's page, rather than closing every
+                    # visible Chromium window through broad dialog cleanup.
+                    app.call('close', tab=tab)
+                return {'childWindowVisible': True, 'rejection': 'NotAllowedError', 'parentWindowStillVisible': True}
+            row('P-21', native_webauthn)
+
+            def credential_manager():
+                app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
+                # Credential Management requires a secure context. Localhost
+                # is the fixture's secure origin; save through its real form.
+                prompt('password', urls['local_login'], 'save')
+                tab = load(urls['local_login']); before = len(children())
+                value = app.eval(tab, '''Promise.race([navigator.credentials.get({password:true}).then(x=>x===null?'null':'unexpected'),new Promise(r=>setTimeout(()=>r('timeout'),2000))])''')
+                assert value == 'null' and len(children()) == before
+                return {'result': 'null', 'dialogVisible': False}
+            row('P-23', credential_manager, ['P-2'])
+
+            def switches_off():
+                app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
+                prefs = app.call('credentials-prefs', passwordSaving=False)
+                assert prefs['passwordSaving'] is False
+                return no_prompt(urls['login'].replace('login.example.com', 'saving-off.example.com'))
+            row('PW-SW1', switches_off)
+            def persists():
+                relaunch()
+                assert app.call('credentials-prefs', profile='Default')['passwordSaving'] is False
+                return no_prompt(urls['login'].replace('login.example.com', 'saving-persist.example.com'))
+            row('PW-SW2', persists, ['PW-SW1'])
+            def switch_profiles():
+                app.call('credentials-prefs', profile='Default', passwordSaving=True)
+                if not identity.get('work'): identity['work'] = app.call('space-create', title='Work', profile='Work')
+                app.call('credentials-prefs', profile='Work', passwordSaving=False)
+                assert app.call('credentials-prefs', profile='Default')['passwordSaving'] is True
+                app.call('space', space=identity['work'])
+                no_prompt(urls['login'].replace('login.example.com', 'work-saving-off.example.com'))
+                app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
+                prompt('password', urls['login'].replace('login.example.com', 'default-saving-on.example.com'), 'dismiss')
+                return {'Work': False, 'Default': True, 'enginePromptsFollowPrefs': True}
+            row('PW-SW3', switch_profiles, ['PW-SW1'])
+
+            def auto_policy(policy):
+                home = next(s['id'] for s in app.call('spaces') if s['focused'])
+                parent = app.call('credentials')
+                parent_counts = {k: parent[k] for k in ('logins', 'blockedSites')}
+                # Sibling example.com hosts can match an existing credential
+                # through Chromium's PSL rules and save without a prompt.
+                # This row needs a new credential, so isolate its real store.
+                space = app.call('space-create', title='Policy '+policy, profile='Policy '+policy)
+                tab = None
+                try:
+                    app.call('space', space=space)
+                    url = urls['login'].replace('login.example.com', 'policy-'+policy+'.example.com')
+                    tab = load(url)  # Wait for the new Profile's real context.
+                    counts(logins=0, blockedSites=0)
+                    app.call('credentials-prefs', passwordSaving=True)
+                    events()
+                    app.call('policy', savePrompt=policy)
+                    fill(tab); submit(tab)
+                    expected = 'dismiss' if policy == 'record' else policy
+                    seen = []
+                    def answered():
+                        seen.extend(e for e in events() if e.get('type') == 'savePrompt')
+                        return any(e.get('answer') == expected for e in seen)
+                    assert wait(answered, timeout=5, step=.05), 'automatic real-sheet answer was not recorded'
+                    assert any(e.get('kind') == 'password' and e.get('answer') == 'pending' for e in seen), 'new real engine save prompt was not recorded'
+                    assert wait(lambda: not sheet().get('visible'), timeout=5, step=.05)
+                    stored = counts(logins=int(policy == 'save'), blockedSites=int(policy == 'never'))
+                    detail = {'policy': policy, 'answer': expected, 'realSheetButton': True,
+                              'emptyProfile': True, **stored}
+                finally:
+                    app.call('policy', savePrompt='hold')
+                    if tab is not None:
+                        app.call('close', tab=tab)
+                    app.call('space', space=home)
+                current = app.call('credentials')
+                assert all(current[k] == v for k, v in parent_counts.items()), 'policy fixture changed the parent Profile store'
+                return dict(detail, parentStoreUnchanged=True)
+            for policy in ['record', 'save', 'never', 'dismiss']:
+                row('PW-POLICY-'+policy, lambda policy=policy: auto_policy(policy))
+
+            row('P-24-post-login-redirect', redirect_prompt)
+
+            def mock_guard():
+                before = app.call('credentials', profile='Default')['logins']
+                relaunch(allow=False)
+                assert app.call('credentials-prefs', profile='Default')['canEnablePasswordSaving'] is False
+                home = next(s['id'] for s in app.call('spaces') if s['focused'])
+                # A sibling-host match copies an already saved credential
+                # without offering UI. Test a genuinely new credential here,
+                # without changing Chromium's persisted preferences.
+                space = app.call('space-create', title='Mock password guard', profile='Mock password guard')
+                tab = None
+                try:
+                    app.call('space', space=space)
+                    url = urls['login'].replace('login.example.com', 'mock-blocked.example.com')
+                    tab = load(url)
+                    initial = app.call('credentials')
+                    assert initial['usesMockKeychain'] and not initial['canEnablePasswordSaving']
+                    assert initial['logins'] == 0 and initial['blockedSites'] == 0
+                    no_prompt(url, tab=tab)
+                    counts(logins=0, blockedSites=0)
+                finally:
+                    if tab is not None:
+                        app.call('close', tab=tab)
+                    app.call('space', space=home)
+                assert app.call('credentials', profile='Default')['logins'] == before
+                return {'canEnablePasswordSaving': False, 'loginsUnchanged': True,
+                        'freshProfile': True, 'parentStoreUnchanged': True}
+            row('P-22', mock_guard)
+
+            def mock_offer_guards():
+                # P-22 relaunched without the synthetic-secret opt-in. Use an
+                # empty Profile so duplicate suppression cannot explain a
+                # missing card offer, then prove addresses still save there.
+                home = next(s for s in app.call('spaces') if s['focused'])['id']
+                space = app.call('space-create', title='Mock guard', profile='Mock guard')
+                try:
+                    app.call('space', space=space)
+                    initial = app.call('credentials')
+                    assert initial['usesMockKeychain'] and not initial['canEnableCreditCardsSaving']
+                    assert initial['cards'] == 0 and initial['addresses'] == 0
+                    assert initial['addressesSavingEnabled']
+                    no_prompt(urls['card'])
+                    counts(cards=0)
+                    prompt('address', urls['address'], 'save')
+                    counts(addresses=1)
+                    return {'mockOptInAbsent': True, 'cardSaveOffer': False, 'cards': 0,
+                            'addressSaveOffer': True, 'addresses': 1, 'freshProfile': True}
+                finally:
+                    app.call('space', space=home)
+            row('PW-MOCK-offers', mock_offer_guards, ['P-22'])
+
+            def cookie_names():
+                tab = load(urls['echo_cookies'])
+                names = app.eval(tab, 'JSON.parse(document.body.innerText)')
+                assert set(['oe_persist', 'oe_session', 'oe_lax']).issubset(names)
+                return {'cookieNamesPresent': 3}
+            def cookies_graceful():
+                load(urls['set_cookies']); relaunch(allow=False)
+                return cookie_names()
+            row('C-1', cookies_graceful)
+            def cookies_killed():
+                if os.environ.get('OPEN_E2E_NO_CRASH_PROBES') == '1':
+                    raise PasswordBlocked('M1-only by rule; not run')
+                load(urls['set_cookies'])
+                deadline = time.monotonic()+35
+                while time.monotonic() < deadline:
+                    guard.check(); time.sleep(.5)
+                app.discover_owned_processes(); os.kill(app.pid, signal.SIGKILL)
+                app.quit(); launch(allow=False)
+                return cookie_names()
+            row('C-2', cookies_killed)
+            def encrypted_cookies():
+                # Chromium holds exclusive live database locks. Inspect a
+                # gracefully closed store, then restore the running fixture.
+                app.quit()
+                try:
+                    paths = list((Path(app.user_data)/'Engine').rglob('Cookies')); assert paths
+                    checked = 0
+                    for index, path in enumerate(paths):
+                        source = sqlite3.connect('file:'+str(path)+'?mode=ro', uri=True)
+                        with sqlite3.connect(Path(tmp)/('cookies-%d.sqlite' % index)) as database:
+                            source.backup(database)
+                            records = database.execute("select value,encrypted_value from cookies where name in ('oe_persist','oe_session','oe_lax')").fetchall()
+                            assert all(value == '' and bytes(blob).startswith(b'v10') for value, blob in records)
+                            checked += len(records)
+                        source.close()
+                    assert checked >= 3
+                    return {'encryptedCookies': checked, 'plaintextValuesEmpty': True}
+                finally:
+                    launch()
+            row('C-3', encrypted_cookies, ['C-1'])
+            results['PW-KC1'] = {'status': 'BLOCKED', 'reason': 'Lead decision: user hand check; no synthetic Keychain-error hook and no real Keychain access in this suite'}
+            def https_first_warning(action):
+                # Each decision gets a new origin and a restarted engine. A
+                # previous Continue decision must not bypass the next warning.
+                relaunch(allow=False)
+                if not app.call('credentials')['supportsSecretsImport']:
+                    raise PasswordBlocked('running engine has no 08xx capability (supportsSecretsImport is false)')
+                app.call('space', space=identity.get('default') or app.call('spaces')[0]['id'])
+                settings = load('chrome://settings/security')
+                enabled = app.eval(settings, '''new Promise(resolve => chrome.settingsPrivate.setPref('https_only_mode_enabled', true, '', success => resolve(success === true)))''')
+                assert enabled, 'could not enable HTTPS-First in the disposable profile'
+                baseline = urls['local_login']
+                tab = load(baseline)
+                try:
+                    before = {w['number'] for w in children()}
+                    host = 'https-first.example.com' if action == 'continue' else 'https-first-%s.example.com' % action
+                    url = urls['login'].replace('login.example.com', host)
+                    app.call('navigate', tab=tab, url=url)
+                    shown = wait(lambda: next((w for w in children() if w['number'] not in before), None), timeout=20, step=.1)
+                    assert shown, 'HTTPS-First did not show a native warning'
+                    window = shown['number']
+                    import re
+                    texts = next(w.get('text', []) for w in app.call('windows', accessibility=True) if w['number'] == window)
+                    assert any(re.search(r'HTTPS|secure connection', text, re.I) for text in texts), 'new child was not the HTTPS warning'
+                    if action in ('close', 'window-close', 'navigate', 'space', 'quit'):
+                        parent = shown['parent']
+                        # Closing a tab with a live warning destroys its modal
+                        # controller inside DestroyTabFeatures(). This is the
+                        # real path that crashed the earlier PW-HF1 cleanup.
+                        if action == 'quit':
+                            # Send quit while the warning is live. Open.quit()
+                            # normally dismisses surfaces first, which would
+                            # miss this application teardown path.
+                            app.quitting = True
+                            app.call('quit', timeout=3)
+                            assert app.proc.wait(timeout=10) == 0, 'Open did not quit normally with its warning open'
+                            app.quit()
+                            assert app.quit_report['ok'] and not app.quit_report['forced']
+                            tab = None
+                        elif action == 'window-close':
+                            app.call('window-close')
+                            assert wait(lambda: not any(w['number'] == parent and w.get('visible') for w in app.call('windows')), timeout=5, step=.05)
+                            tab = None
+                        elif action == 'navigate':
+                            app.call('navigate', tab=tab, url=baseline)
+                            assert wait(lambda: app.eval(tab, 'location.href === %s && document.readyState === "complete"' % json.dumps(baseline)), timeout=15, step=.1)
+                        elif action == 'space':
+                            other = app.call('space-create', title='Warning lifetime', profile='Default')
+                            app.call('space', space=other)
+                            assert next(s['id'] for s in app.call('spaces') if s['focused']) == other
+                        else:
+                            app.call('close', tab=tab)
+                            assert wait(lambda: all(t['id'] != tab for t in app.call('tabs')), timeout=5, step=.05)
+                            tab = None
+                        if action != 'quit':
+                            assert app.call('ping')['pid'] == app.pid
+                            assert wait(lambda: not any(w['number'] == window and w.get('visible') for w in app.call('windows')), timeout=5, step=.05), 'warning remained visible after lifetime action'
+                            if action != 'window-close':
+                                assert any(w['number'] == parent and w.get('visible') for w in app.call('windows'))
+                        guard.check()
+                        return {'warning': 'dialog', 'action': action, 'appAlive': action != 'quit',
+                                'normalQuit': action == 'quit', 'warningClosed': True,
+                                'parentWindowStillVisible': action not in ('window-close', 'quit'),
+                                'distributionSHA256': engine_distribution_sha256}
+                    # A native widget can become visible before its AX button
+                    # tree is ready. Require both specific actions before input.
+                    def ready_buttons():
+                        labels = app.call('child-dialog-button', window=window)['buttons']
+                        return labels if (any(re.fullmatch(r'go back', label, re.I) for label in labels)
+                                          and any(re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I) for label in labels)) else None
+                    buttons = wait(ready_buttons, timeout=5, step=.05)
+                    assert buttons, 'HTTPS warning actions did not become ready'
+                    # Views maps AXPress to mouse events. Its default input
+                    # protection rejects those during the first 500 ms after
+                    # show/movement (metrics_mac.cc, DefaultInputProtectionPolicy).
+                    # Preserve that guard; send the real action after cooldown.
+                    time.sleep(.65)
+                    assert ready_buttons(), 'HTTPS warning disappeared before input'
+                    continue_label = next(label for label in buttons if re.fullmatch(r'continue(?: to (?:the )?site)?', label, re.I))
+                    app.call('snapshot', window=window, path=os.path.join(tmp, 'PW-HF-%s-warning.png' % action))
+                    if action == 'continue':
+                        pressed = app.call('child-dialog-button', window=window, label=continue_label)
+                        assert pressed['pressed'], 'Continue button did not accept its real press action'
+                    else:
+                        key(action, window=window)
+                        if action == 'return':
+                            # Chromium explicitly uses no default button here
+                            # (AskBeforeHttpDialogController::CreateDialogModel).
+                            # On macOS, Return does not click the focused button
+                            # (PlatformStyle::kReturnClicksFocusedControl=false).
+                            # Prove no security decision, then dismiss via Escape.
+                            deadline = time.monotonic()+.5
+                            while time.monotonic() < deadline:
+                                assert any(w['number'] == window and w.get('visible') for w in children()), 'Return unexpectedly closed the warning'
+                                counts = app.call('devtools', tab=tab, method='Browser.getHistograms', params={'query': 'interstitial.https_first_mode.decision', 'delta': False})
+                                metric = next(v for v in counts['histograms'] if v['name'] == 'interstitial.https_first_mode.decision')
+                                assert not any(v['low'] in (1, 2) and v['count'] for v in metric['buckets']), 'Return unexpectedly made a security decision'
+                                time.sleep(.05)
+                            key('escape', window=window)
+                    assert wait(lambda: all(w['number'] != window for w in children()), timeout=5, step=.05), 'HTTPS warning stayed open'
+                    expected = url if action == 'continue' else baseline
+                    def settled():
+                        return (not app.tab(tab)['loading'] and
+                                app.eval(tab, 'location.href === %s && document.readyState === "complete" && !!document.querySelector("#username")' % json.dumps(expected)))
+                    assert wait(settled, timeout=15, step=.1), 'HTTPS warning decision did not load the expected page'
+                    histograms = app.call('devtools', tab=tab, method='Browser.getHistograms',
+                                          params={'query': 'interstitial.https_first_mode.decision', 'delta': False})
+                    histogram = next(v for v in histograms['histograms'] if v['name'] == 'interstitial.https_first_mode.decision')
+                    decisions = {v['low']: v['count'] for v in histogram['buckets']}
+                    assert decisions.get(1 if action == 'continue' else 2, 0) >= 1, 'HTTPS decision metric was not recorded'
+                    if action != 'continue':
+                        assert decisions.get(1, 0) == 0, 'Go back unexpectedly proceeded'
+                    guard.check()
+                    return {'warning': 'dialog', 'action': action, 'continuedToFixture': action == 'continue',
+                            'returnedToPreviousPage': action != 'continue',
+                            'returnMadeNoDecision': action == 'return', 'escapeCleanup': action == 'return',
+                            'proceedDecisions': decisions.get(1, 0), 'dontProceedDecisions': decisions.get(2, 0),
+                            'distributionSHA256': engine_distribution_sha256}
+                finally:
+                    # Closing this row's own tab also disposes its native modal
+                    # if an assertion fails before the dialog gets an answer.
+                    guard.check()
+                    if tab is not None:
+                        app.call('close', tab=tab)
+            row('PW-HF1', lambda: https_first_warning('continue'))
+            row('PW-HF2-return', lambda: https_first_warning('return'))
+            row('PW-HF2-escape', lambda: https_first_warning('escape'))
+            row('PW-HF3-tab-close', lambda: https_first_warning('close'))
+            row('PW-HF4-window-close', lambda: https_first_warning('window-close'))
+            row('PW-HF5-navigate', lambda: https_first_warning('navigate'))
+            row('PW-HF6-space', lambda: https_first_warning('space'))
+            row('PW-HF7-quit', lambda: https_first_warning('quit'))
+            guard.check(); results['P-15'] = {'ok': True, 'allExecutedRowsEndedAsExpected': True}
+        finally:
+            if app: app.quit()
+
+
+def run(factory, results, tmp, harness, engine_distribution_sha256=None, row_ids=None, m_only=False):
+    guard = PasswordGuard(factory, results, harness)
+    if row_ids is None:
+        run_save_prompts(guard.launch, guard, tmp, harness)
+        if m_only:
+            return
+        run_manage_pages(guard.launch, guard, tmp, harness)
+    run_engine(guard.launch, guard, tmp, harness, guard, engine_distribution_sha256, row_ids)
