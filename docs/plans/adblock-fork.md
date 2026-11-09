@@ -5104,42 +5104,81 @@ endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 
 
-### Step 5 as built (2026-11-08, build and headless checkpoint)
+### Step 5 as built (2026-11-09, morning screen hold)
 
 **Merged PR candidate: `s13/step5-pr` (PR: pending lead creation).** E5
 merged the complete cosmetics and parser-corpus stack (`cf16a133`) with
-main `518471aa` in `ac15c11a`. Main's strict AD3 attachment-allocation
-measurement and record-only whole-process pairs remain in the harness.
-The merged candidate's build and runtime checks are pending until the
-01:15 local machine gate on 2026-11-09. Earlier receipts below remain
-bound to their stated source and binary; they do not verify this merge.
+main `518471aa` in `ac15c11a`, then overlapping main `195ab60d` in
+`44b90ccc` before building. Release-script-only main `3fb0645c` is merged
+in `183f4ec6`; it changes no App or engine source. Main's strict AD3
+attachment-allocation gate and record-only whole-process pairs remain.
+No budget, baseline, assertion or allowlist is widened.
 
-Patch 0902 also adds non-official verbose numeric traces at extension
-world allocation and the actual `ScriptInjection::InjectJs` execution
-request. The renderer agent records context creation. These traces log
-world, execution kind, frame token and source count, with no page URL,
-script text or extension identifier. `OPEN_E2E_WORLD_AUDIT_DIR` enables
-those verbose scopes in the App harness and saves each launch's engine
-log before its data root can be replaced. The `extensions` run then
-exercises real Dark Reader content scripts in a local page and iframe,
-checks native cosmetic hiding in both, and checks that extension contexts
-have no ad-block binding and the ad-block contexts have no extension API.
-All created extension world IDs and injection targets must differ from
-private world 7; isolated extension worlds must start at 8 or above.
+The merged s13b build passes owned objects/targets, scoped GN/checkdeps,
+the full CEF framework and strict built status **8 PASS / 0 FAIL / 0 WARN**.
+The headless real caller passes official-list load and empty-root refusal
+(2/2). CEF passes all 20 executable rows, including both 30,000-element
+cases at 10/10 hides and yields, and all 45 observers install the binding
+before execution in world 7. Distribution and App Debug build pass;
+Vendor and embedded normalized engine code share SHA-256
+`f44ac4b9dc3cffae21eefd5d02a618c51dc6b676d73c830179012abe7a21eb17`.
+These runtime receipts bind to built source `44b90ccc`.
 
-The merged acceptance scope is CEF 20/20 (including both 30,000-element
-cases), install-before-execute, headless load/empty-root, complete App
-`adblock` with AD3 and cosmetics, `extensions`, `actions`, `extensions-p3`,
-`extensions-e2`, full `extensions-ui`, `features`, `page`, settings preview,
-the full M5 gate, and one C-G1/C-G2 run each. The `extensions` scope includes
-the real Chrome Web Store install; `extensions-p3` also checks local signed
-CRX installation and refusal. Foreground interruptions remain infrastructure
-and can retry at most three times per suite. Results and exact commands
-belong in `.re/s13/e5/PR-BODY.md` and `CHECKPOINT.md`.
+The first merged App adblock run passes all 84 behavior rows, including
+strict AD3, resources/Profile/lifetime and the explicit cosmetic controls:
+`AD3_cosmetic_enabled_hides`, `AD3_cosmetic_excluded_visible`,
+`AD3_cosmetic_global_off_visible`, `AD3_cosmetic_global_on_hides_again`
+and `AD3_cosmetic_gates_reject_inverse_controls`. The suite remains
+**FAIL (audit collector)**, with only 5/9 launch logs saved; all owned
+processes/windows were removed. Collector fixes through `3a7539b1` retain
+per-launch stderr, prefer the selected log destination and preserve live
+allocation-counter reads. Their runtime rerun is **PENDING (morning)**.
+
+Patch 0902 adds non-official verbose numeric traces at extension world
+allocation and the actual `ScriptInjection::InjectJs` execution request.
+The renderer agent records context creation. These traces log world,
+execution kind, frame token and source count, with no page URL, script text
+or extension identifier. `OPEN_E2E_WORLD_AUDIT_DIR` enables these scopes
+and retains each launch's engine file or unique stderr stream. The real
+`extensions` flow checks Dark Reader injection in a local page and iframe,
+native cosmetic hiding in both, and reciprocal absence of the ad-block
+binding and extension API. Numeric proof remains **PENDING (morning)**:
+no extension allocation/injection may use private world 7; isolated and
+user-script worlds must be at least 8; main-world injection must use 0;
+all ad-block observers must use 7. Every owned launch needs a retained log.
+
+Full gate attempt 1 stopped after 15 PASS to release a heavy slot during
+priority starvation. Attempt 2 also passed 15 checks, then Settings preview
+failed `sidebar-defaults` with Foundation mktemp errno 28 (disk full).
+The stopped `sidebar-render` trap row is INTERRUPTED. Neither attempt is
+a full-gate PASS. Raw results and the remaining rows are in
+`.re/s13/e5/PR-BODY.md`; no post-02:35 screen result counts as acceptance.
+
+The lead's 02:42/02:45 rule 8b hold stops all M5 and M1 screen work until
+the user clears the crash dialog in the morning. No E5 job remains;
+heavy slot a is released. **PENDING (morning)**: complete App adblock
+rerun, `extensions`, `actions`, `extensions-p3`, `extensions-e2`, full
+`extensions-ui`, `features`, `page`, Settings preview/full gate, numeric
+world separation and C-G1/C-G2 once each. Extension coverage includes real
+Chrome Web Store installs, local signed-CRX install/refusal and actual
+page/iframe content scripts. The lead creates the PR after acceptance;
+this pending branch misses the 06:15 DMG.
+
+Six interleaved real-App page-load pairs are prepared, not run: this
+network-plus-cosmetics build versus exact main `518471aa` network-only App.
+Both Apps are built and fingerprinted. The adapted E3 harness uses equal
+pinned seeds/fixture/cache policy and requires equal nonzero blocked
+counts. It reports median on-load wall and native matcher/proxy busy-thread
+CPU per load, not whole-App CPU. Quiet lock stays outside the other locks;
+load1 <=12 is the target. Loaded results retain their loads and cannot
+claim quiet acceptance. No page performance result exists yet.
 
 The parser self-test and Rust shim are byte-identical to `cf16a133`, so
 its accepted full-size parser-corpus receipts remain applicable to that
 source. E5 changes no parser policy, corpus size, license or dependency.
+Exact commands, seconds, loads, identities and pending rows are in
+`.re/s13/e5/PR-BODY.md` and `CHECKPOINT.md`. The E4 receipts below are
+historical and retain their stated source/binary and acceptance limits.
 
 
 Branch `s13/step5-cosmetics` started at Step 4 `dc7b985a` and merged
