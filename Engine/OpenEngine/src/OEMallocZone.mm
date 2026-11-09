@@ -21,9 +21,11 @@
 
 #include <malloc/malloc.h>
 #include <mach/mach.h>
+#include <mach/mach_time.h>
 
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 namespace {
 
@@ -81,6 +83,19 @@ void LogSkipped(const char* why) {
 // Before main() and before AppKit, in the app and in every helper (all link
 // OpenEngine). Chrome makes the same call at the start of main().
 __attribute__((constructor)) void OERegisterDelegatingMallocZone() {
+  // Timestamp our only pre-main constructor without Objective-C, timers or
+  // Foundation initialization. This bounds the engine wrapper's static work.
+  const char* value = std::getenv("OPEN_SPEED_TRACE");
+  const bool trace = value && std::strcmp(value, "1") == 0;
+  struct TraceEnd {
+    bool enabled;
+    ~TraceEnd() {
+      if (enabled) fprintf(stderr, "OpenSpeed engine allocatorZoneEnd %llu\n",
+                           (unsigned long long)mach_continuous_time());
+    }
+  } trace_end{trace};
+  if (trace) fprintf(stderr, "OpenSpeed engine allocatorZoneBegin %llu\n",
+                     (unsigned long long)mach_continuous_time());
   // Another library got there first: leave the zones alone.
   if (IsZoneRegistered(kDelegatingZoneName)) {
     LogSkipped(
