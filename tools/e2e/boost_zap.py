@@ -89,7 +89,7 @@ def run(factory, results, tmp, env):
     with fixture_server(tmp) as origin:
         fixture = pathlib.Path(tmp)/"sitecontrol-fixtures"/"zap.html"
         fixture.write_text("""<!doctype html><html><head><script>
-window.zapFirstScript={style:!!document.getElementById('open-boosts-style'),picker:typeof window.__openZap};
+window.zapFirstScript={style:!!document.getElementById('open-boosts-style'),css:document.getElementById('open-boosts-style')?.textContent||'',picker:typeof window.__openZap};
 window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.prototype.attachShadow=function(...args){window.pageShadowCalls++;return attach.apply(this,args)};
 </script><title>Zap fixture</title><style>body{margin:24px}header{height:70px;background:#ddd;width:500px}article{height:40px;width:500px;background:#eee;margin:10px 0}#promo-banner{height:50px;width:500px;background:#fdd}</style></head>
 <body><header>Header</header><div id="promo-banner">One banner</div><main><article class="card">First</article><article class="card">Second</article><article class="card">Third</article></main><button id="normal-button">Normal click</button>
@@ -148,7 +148,8 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 assert not flow.state()["zap"] and not flow.active()
                 assert flow.hidden("#promo-banner") and flow.hidden("article")
                 first = app.eval(tab, "window.zapFirstScript")
-                assert first == {"style":True,"picker":"undefined"}, first
+                assert first["style"] and first["picker"] == "undefined", first
+                assert all(z["selector"] in first["css"] for z in flow.state()["boost"]["zaps"]), first
                 app.call("navigate", tab=tab, url=origin.replace("127.0.0.1","localhost")+"/zap.html")
                 app.call("wait", tab=tab)
                 assert not flow.hidden("#promo-banner") and not flow.active()
@@ -182,10 +183,11 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 js = flow.state()["boost"]["js"]
                 flow.enter(select=True)
                 flow.pick("header", ".select")
-                assert wait(lambda: not flow.state()["selecting"] and flow.state()["boost"]["css"] != original, timeout=5, step=.02)
+                assert wait(lambda: flow.messages("picker:selected"), timeout=5, step=.02)
                 picked = flow.messages("picker:selected")[-1]["selector"]
                 expected = original[:caret]+picked+original[caret:]
-                assert flow.state()["boost"]["css"] == expected and flow.state()["boost"]["js"] == js
+                assert wait(lambda: not flow.state()["selecting"] and flow.state()["boost"]["css"] == expected, timeout=5, step=.02)
+                assert flow.state()["boost"]["js"] == js
                 assert flow.state()["zapCount"] == 0 and not flow.active()
                 flow.tap("editor.code.js")
                 assert not next(c for c in flow.state()["controls"] if c["id"] == "editor.code.pick")["enabled"]
