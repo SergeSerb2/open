@@ -12,6 +12,7 @@
   import OpenExtensionsUI
   import OpenSpaceEditor
   import Synchronization
+  import MachO
 
   /// Executes automation commands (docs/automation.md) on the main actor.
   /// Every command answers `{"id":…, "ok":true, "result":…}` or
@@ -31,17 +32,24 @@
     private var nativeInputStart: Double = 0
     private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
+    private var updaterModalObserver: (any NSObjectProtocol)?
+    private var updaterModalEvents: [[String: Any]] = []
     var firstRunActionTask: Task<Void, Never>?
     var importExtensionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
     var savePromptEvents: [[String: Any]] = []
+    static weak var savePromptOwner: AutomationController?
+    var savePromptPolicy = "hold"
+    var realSavePromptAnswers = NSMapTable<OESavePrompt, NSString>.weakToStrongObjects()
+    var realSavePromptFactories = NSMapTable<OESavePrompt, EngineWebContentHostFactory>.weakToWeakObjects()
+    var realSavePromptPages = NSMapTable<OESavePrompt, OEWebContent>.weakToWeakObjects()
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
     var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
     var profileProofContexts: [String: OEBrowserContext] = [:]
     var recordedOpenWorldCallbacks: [[String: Any]] = []
 
-    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
+    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -97,17 +105,99 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "updater-view-tree":
+        var seen: Set<ObjectIdentifier> = []
+        var webViews: [String] = []
+        let webClasses = ["WKWebView", "WebView"].compactMap(NSClassFromString)
+        func visit(_ view: NSView) {
+          guard seen.insert(ObjectIdentifier(view)).inserted else { return }
+          if webClasses.contains(where: { view.isKind(of: $0) }) { webViews.append(NSStringFromClass(type(of: view))) }
+          for child in view.subviews { visit(child) }
+        }
+        for window in NSApp.windows { if let content = window.contentView { visit(content.superview ?? content) } }
+        let notes = app.updater?.userDriver.updateWindow?.notes?.text
+        let banners = app.windowControllers.compactMap { controller -> [String: Any]? in
+          guard let banner = controller.sidebar.updateBanner else { return nil }
+          return ["title": banner.titleLabel.stringValue, "subtitle": banner.subtitleLabel.stringValue,
+            "frame": rect(banner.frame), "titleFrame": rect(banner.titleLabel.frame),
+            "subtitleFrame": rect(banner.subtitleLabel.frame),
+            "subtitleColor": colorComponents(banner.subtitleLabel.textColor)]
+        }
+        return ["webViewCount": webViews.count, "webViewClasses": webViews,
+          "viewCount": seen.count, "notesViewClass": notes.map { NSStringFromClass(type(of: $0)) } ?? "",
+          "notesIsTextView": notes is NSTextView, "bannerStyles": banners]
+      case "updater-banner-width":
+        guard let width = a["width"] as? Double, (164...400).contains(width), let controller = app.frontWindowController else { throw Failure(message: "expected banner width 164...400") }
+        controller.model.setSidebarWidth(windowID: controller.windowID, width: width)
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        return width
+      case "updater-menu":
+        guard let (menu, index) = findMenuItem("check-for-updates", in: NSApp.mainMenu), let item = menu.item(at: index) else { throw Failure(message: "missing update menu item") }
+        let enabled = menuEnabled(item)
+        return ["title": item.title, "enabled": enabled, "badgeCount": item.badge?.itemCount ?? 0,
+          "canCheck": app.updater?.canCheckForUpdates ?? true]
+      case "updater-act": return app.updater?.userDriver.performAutomationAction(a["action"] as? String ?? "") ?? false
+      case "updater-modal-alert":
+        let action = a["action"] as? String ?? "state"
+        if action == "state" { return updaterModalEvents }
+        if let observer = updaterModalObserver { NotificationCenter.default.removeObserver(observer) }
+        updaterModalObserver = nil
+        if action == "disarm" { return true }
+        guard action == "arm", let button = a["button"] as? Int, (0...1).contains(button) else {
+          throw Failure(message: "expected arm with button 0 or 1, state, or disarm")
+        }
+        updaterModalEvents.removeAll()
+        updaterModalObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
+          object: nil, queue: .main) { [weak self] notification in
+          guard let presented = notification.object as? NSWindow else { return }
+          MainActor.assumeIsolated {
+            guard let self, let alert = self.app.updater?.userDriver.alert,
+              presented === alert.window else { return }
+            // CEF may hold main-queue tasks inside a native modal loop. Observe
+            // the real alert and press its button from that loop, as Downloads does.
+            RunLoop.main.perform(inModes: [.modalPanel]) { [weak self, weak alert] in
+              MainActor.assumeIsolated {
+                guard let self, let alert, alert.buttons.indices.contains(button), self.updaterModalEvents.isEmpty else { return }
+                var row = self.describe(alert.window)
+                row["text"] = self.windowText(alert.window)
+                row["informativeText"] = alert.informativeText
+                row["buttons"] = alert.buttons.map { ["title": $0.title, "enabled": $0.isEnabled] }
+                row["appModal"] = NSApp.modalWindow === alert.window
+                row["active"] = NSApp.isActive
+                row["browserWindows"] = self.app.windowControllers.count
+                row["updaterBeforeAnswer"] = self.app.updater?.automationState
+                row["pressedButton"] = button
+                self.updaterModalEvents.append(row)
+                if let observer = self.updaterModalObserver { NotificationCenter.default.removeObserver(observer) }
+                self.updaterModalObserver = nil
+                alert.buttons[button].performClick(nil)
+              }
+            }
+          }
+        }
+        return true
+      case "updater-background-check": app.updater?.checkInBackgroundForAutomation(); return true
+      case "updater-images": return (0..<_dyld_image_count()).compactMap { _dyld_get_image_name($0).map { String(cString: $0) } }
+      case "child-dialog-button": return try await childDialogButton(a)
       case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
-        // Little Open owns its own page events, even while a main window exists.
-        let owner = (a["window"] as? Int).flatMap { number in
-          app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
-        } ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
-        let pageEvents = owner?.drainEvents() ?? []
-        let events = savePromptEvents; savePromptEvents.removeAll()
-        return pageEvents + events
+        // Keep Section 11's Little Open routing. Every event, including password
+        // offers and Manage links, is recorded by the factory that owns its page.
+        let owner: EngineWebContentHostFactory?
+        if let number = a["window"] as? Int {
+          owner = app.hostFactories.values.first { $0.window?.windowNumber == number }
+            ?? app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
+        } else {
+          owner = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+        }
+        let number = a["window"] as? Int ?? owner?.window?.windowNumber
+        let completions = savePromptEvents.filter { number == nil || $0["window"] as? Int == number }
+        savePromptEvents.removeAll { number == nil || $0["window"] as? Int == number }
+        return (owner?.drainEvents() ?? []) + completions
+      case "credentials": return try await credentialCounts(a)
+      case "credentials-prefs": return try credentialPreferences(a)
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
         return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
@@ -116,6 +206,10 @@
       case "incognito-state": return try incognitoState(a)
       case "incognito-screen": return try incognitoScreen(a)
       case "first-run": return try await runFirstRun(a)
+      case "onboarding": return try await runOnboarding(a)
+      case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
+        return try await mouse(a, nil)
+      case "welcome": return try welcome(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -128,9 +222,10 @@
         return app.model.spaces.map { ["id": $0.id.description, "title": $0.title ?? "", "profile": $0.profileID.description, "pinned": $0.pinned.count, "today": $0.today.count, "focused": false] as [String: Any] }
       case "tabs" where app.frontWindowController == nil: return [] as [String]
       case "windows" where app.frontWindowController == nil:
-        return NSApp.windows.map { nativeWindow in
+        return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
           return row
         }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
@@ -227,6 +322,7 @@
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-adblock": return try settingsAdBlock(a)
+      case "settings-adblock-engine": return settingsAdBlockEngine()
       case "settings-toggle":
         let settings = app.settingsPresenter.settings
         if a["name"] as? String == "updates" { settings.general.updates.toggle(); return settings.general.updates }
@@ -671,7 +767,10 @@
         w.addSplitView(nil)
         return w.visibleTabs.map { describe($0, in: w) }
       case "navigate":
-        try content(a, w).load(try url(a, "url"))
+        let destination = try url(a, "url")
+        guard !WelcomeTab.isInternal(destination) else { throw Failure(message: "internal URL navigation refused") }
+        if let tab = try? modelTab(a, w), let host = w.welcomeHosts[tab.id] { host.load(destination) }
+        else { try content(a, w).load(destination) }
         return true
       case "back":
         try content(a, w).goBack()
@@ -949,9 +1048,10 @@
           for window in NSApp.windows { window.contentView?.layoutSubtreeIfNeeded() }
           try? await Task.sleep(for: .milliseconds(50))
         }
-        return NSApp.windows.map { nativeWindow in
+        return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
           return row
         }
       case "panel-close":
@@ -1205,6 +1305,13 @@
 
       // Dialogs, permissions, scripts, filters, downloads.
       case "policy":
+        if let value = a["savePrompt"] {
+          guard let policy = value as? String, ["record", "save", "never", "dismiss", "hold"].contains(policy) else {
+            throw Failure(message: "invalid savePrompt policy")
+          }
+          savePromptPolicy = policy
+          if let sheet = w.savePrompts?.active { savePromptDidPresent(sheet) }
+        }
         if let v = a["contextMenu"] { w.contextMenuPolicy = v as? String }
         if let v = a["fullscreen"] { w.fullscreenPolicy = v as? String }
         if let v = a["dialogs"] { w.dialogPolicy = v as? String }
@@ -1591,7 +1698,8 @@
     private func describe(_ w: NSWindow) -> [String: Any] {
       [
         "number": w.windowNumber, "title": w.title, "class": String(describing: type(of: w)),
-        "visible": w.isVisible, "key": w.isKeyWindow, "frame": NSStringFromRect(w.frame),
+        "visible": w.isVisible, "key": w.isKeyWindow, "main": w.isMainWindow,
+        "alpha": w.alphaValue, "frame": NSStringFromRect(w.frame),
         "parent": w.parent?.windowNumber ?? 0, "level": w.level.rawValue,
         "sheet": w.isSheet, "attachedSheet": w.attachedSheet?.windowNumber ?? 0,
         "firstResponder": w.firstResponder.map { String(describing: type(of: $0)) } ?? "",
@@ -1603,6 +1711,7 @@
     func windowText(_ window: NSWindow) -> [String] {
       var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
       func walk(_ object: NSObject, depth: Int) {
+        if window.title.hasPrefix("Open Update"), let view = object as? NSView, view.isHiddenOrHasHiddenAncestor { return }
         guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
         for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue"] {
           let selector = NSSelectorFromString(name)
@@ -1618,6 +1727,26 @@
       walk(window, depth: 0)
       if let content = window.contentView { walk(content, depth: 0) }
       return text.sorted()
+    }
+
+    /// Roles only: inspect native Chromium popup accessibility without values.
+    private func windowAccessibilityRoles(_ window: NSWindow) -> [String] {
+      var seen: Set<ObjectIdentifier> = [], roles: Set<String> = []
+      func walk(_ object: NSObject, depth: Int) {
+        guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
+        let role = NSSelectorFromString("accessibilityRole")
+        if object.responds(to: role), let value = object.perform(role)?.takeUnretainedValue() as? String {
+          roles.insert(value)
+        }
+        let children = NSSelectorFromString("accessibilityChildren")
+        if object.responds(to: children), let nodes = object.perform(children)?.takeUnretainedValue() as? [NSObject] {
+          for child in nodes.prefix(512) { walk(child, depth: depth + 1) }
+        }
+        if let view = object as? NSView { for child in view.subviews.prefix(512) { walk(child, depth: depth + 1) } }
+      }
+      walk(window, depth: 0)
+      if let content = window.contentView { walk(content, depth: 0) }
+      return roles.sorted()
     }
 
     // MARK: Helpers
@@ -1709,7 +1838,7 @@
         let enabled = menuEnabled(item)
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
           "modifierMask": item.keyEquivalentModifierMask.rawValue,
-          "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+          "badgeCount": item.badge?.itemCount ?? 0, "enabled": enabled, "checked": item.state == .on, "hidden": item.isHidden, "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
     func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
@@ -1840,8 +1969,8 @@
         "makeHostCount": preview.makeHostCount, "reusedCachedHost": preview.reusedCachedHost, "shows": preview.shows] as [String: Any]
     }
 
-    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
-      let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
+    func mouse(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
+      let number = a["window"] as? Int ?? app.onboardingWindowController?.window?.windowNumber ?? w?.window?.windowNumber ?? 0
       guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
       pointerRequestID += 1
       let motionTag = Self.syntheticPointerTag + pointerRequestID
@@ -2022,7 +2151,7 @@
     /// only: the system keyboard is never touched.
     func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory?) async throws -> Any {
       guard let target = a["window"] as? String == "popup" ? w?.popupPanel :
-        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
+        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
       try await activateForInput(target)
       if let text = a["text"] as? String {
@@ -2130,8 +2259,9 @@
         return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }
       let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
-      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.firstRunWindowController?.window ?? w?.window
+      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
+      guard target.identifier?.rawValue != "onboarding-dim" else { throw Failure(message: "dim window snapshots are excluded") }
       var keyTime: Double?
       var capturedAfterKey: Double?
       let toggle = a["toggleSidebar"] as? Bool == true
@@ -2339,6 +2469,7 @@
     }
     isolated deinit {
       if let managerUndoObserver { NotificationCenter.default.removeObserver(managerUndoObserver) }
+      if let updaterModalObserver { NotificationCenter.default.removeObserver(updaterModalObserver) }
     }
 
     private func timing(_ w: EngineWebContentHostFactory) async -> [String: Any] {

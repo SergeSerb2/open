@@ -12,6 +12,7 @@ async function credential(operation) {
   pending = controller;
   const timer = setTimeout(() => controller.abort(), 5000);
   document.querySelector('#result').textContent = 'pending';
+  document.querySelector('#result').dataset.operation = operation;
   const challenge = new Uint8Array(32).fill(7);
   const publicKey = operation === 'create' ? {
     challenge, rp: {name: 'Open fixture'},

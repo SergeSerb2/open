@@ -26,6 +26,11 @@ struct LaunchOptions {
   var chromeToolbar = false
   /// Test/support overrides. Normal launches detect first run from the snapshot.
   var skipFirstRun = false
+  var introSound = "normal"
+  var reduceMotion = false
+  var measureIntroFrames = false
+  var replayOnboarding = false
+  private(set) var replayRefused = false
   var arcDirectory: URL?
   /// Debug and automation builds: replaces Open's PiP site-rule file (media-pip §4.5.4, e2e).
   var pipSiteRules: URL?
@@ -33,6 +38,9 @@ struct LaunchOptions {
   init(arguments: [String]) {
     let env = ProcessInfo.processInfo.environment
     skipFirstRun = env["OPEN_SKIP_FIRST_RUN"] == "1"
+    #if OPEN_AUTOMATION
+    reduceMotion = env["OPEN_E2E_REDUCE_MOTION"] == "1"
+    #endif
     let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     #if DEBUG
       let defaultDir = support.appendingPathComponent("Open-Dev", isDirectory: true)
@@ -44,14 +52,31 @@ struct LaunchOptions {
     func path(_ v: String) -> URL {
       URL(fileURLWithPath: (v as NSString).expandingTildeInPath, isDirectory: true)
     }
+    var explicitUserData = false
     for arg in arguments.dropFirst() {
       func value(_ name: String) -> String? {
         arg.hasPrefix("--\(name)=") ? String(arg.dropFirst(name.count + 3)) : nil
       }
       if let v = value("user-data-dir") {
         userDataDirectory = path(v)
+        explicitUserData = true
       } else if arg == "--skip-first-run" {
         skipFirstRun = true
+      } else if let v = value("intro-sound") {
+        if ["off", "silent"].contains(v) { introSound = v }
+        #if OPEN_AUTOMATION
+        if v == "fail-device" { introSound = v }
+        #endif
+      } else if arg == "--reduce-motion" {
+        #if OPEN_AUTOMATION
+        reduceMotion = true
+        #endif
+      } else if arg == "--measure-intro-frames" {
+        #if OPEN_AUTOMATION
+        measureIntroFrames = true
+        #endif
+      } else if arg == "--replay-onboarding" {
+        replayOnboarding = true
       } else if let v = value("arc-dir") {
         arcDirectory = path(v)
       } else if let v = value("style") {
@@ -74,6 +99,12 @@ struct LaunchOptions {
     }
     if automationSocket == nil, let p = env["OPEN_AUTOMATION_SOCKET"] {
       automationSocket = URL(fileURLWithPath: p)
+    }
+    if replayOnboarding {
+      let root = userDataDirectory.standardizedFileURL.resolvingSymlinksInPath().path
+      let temp = FileManager.default.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath().path
+      let safe = explicitUserData && (root.hasPrefix("/private/tmp/") || root.hasPrefix("/tmp/") || root.hasPrefix(temp + "/"))
+      replayRefused = !safe
     }
   }
 }

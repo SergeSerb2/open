@@ -1,8 +1,11 @@
 # First run
 
+True first launch now shows [Open's intro](onboarding.md) before this flow.
+Continue shows the setup steps in the same 1280 × 800 window. The Import step hosts the existing choices, consent, progress and report views. Get Started on Ready uses the same save-first completion path described below.
+
 Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C/D now add the App window, startup detection, guarded completion save, shared import runner, model landing and Settings merge. Background History uses the same runner and Profile stores for first run and Settings. Passwords and cookies remain capability OFF. The default-browser offer uses the existing App service only on its button click.
 
-`FirstRunViewModel` and `FirstRunView` live in OpenSettings. `FirstRunWindow.size` is 560 × 520 pt. OpenDesign Settings tokens supply the insets, grouped rows, typography and colors. `SettingsButtonStyle` supplies the prominent default button: accent/white while key, normal gray while inactive. Welcome uses a 28 pt semibold wordmark and 28 pt buttons. Import and Report pin the heading/footer around a scrolling middle with automatic indicators. Sparse screens center a visual and text above the footer. Step transitions use `Motion.selectionFade` and cut with Reduce Motion.
+`FirstRunViewModel` and `FirstRunView` live in OpenSettings. The standalone CLI preview retains `FirstRunWindow.size` at 560 × 520 pt. The App hosts its import content with `embeddedImport: true` inside the setup panel; it does not show that old window on first launch. OpenDesign Settings tokens still supply the grouped import rows, typography and colors. Import and Report keep a scrolling middle with automatic indicators. The standalone preview retains its original headings, footer and `Motion.selectionFade` transitions. See [onboarding.md](onboarding.md) for the production layout, controls and motion.
 
 ## App seam for Step C
 

@@ -57,6 +57,8 @@ typedef NS_ERROR_ENUM(OEErrorDomain, OEErrorCode){
     OEErrorUnsupported = 6,
     OEErrorContextClosed = 7,
     OEErrorProfileDeletionFailed = 8,
+    OEErrorEphemeralContext = 9,
+    OEErrorMockKeychain = 10,
 };
 
 NS_HEADER_AUDIT_END(nullability, sendability)

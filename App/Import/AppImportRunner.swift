@@ -159,12 +159,12 @@ final class AppImportRunner {
     counts["Imported welcome"] = report.importedWelcome
     counts["Session selections"] = report.sessionAppliedSelections
     if plan.boosts {
-      recordBoostImport(imported.boostsByProfile, counts: &counts)
+      counts["Boosts found"] = imported.boostsByProfile.values.reduce(0) { $0 + $1.count }
+      counts["Boosts"] = 0
       counts["Boosts malformed"] = report.boosts.malformed
       counts["Boost fields dropped"] = report.boosts.fieldsDropped.values.reduce(0, +)
       counts["Boost fields unknown"] = report.boosts.unknownFields
       if report.boosts.cacheFound && report.boosts.status != "read" { failures["Boosts"] = "Could not be read" }
-      else if report.boosts.imported > 0 { failures["Boosts"] = "Not imported in this build" }
     }
     var profileMapping: [ProfileID: ProfileID] = [:]
     if !firstRun || !plan.spaces || !hasSidebarData {
@@ -193,7 +193,7 @@ final class AppImportRunner {
     }
     // Even an empty sidebar can have extensions for an existing destination.
     mapExtensions()
-    if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history) {
+    if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history || plan.boosts) {
       do {
         _ = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: false, tabs: false, favorites: false, folders: false, searchSettings: false,
@@ -218,7 +218,8 @@ final class AppImportRunner {
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
-      guard ImportOutcome(counts: counts).didImportAnything || plan.history || (plan.archive && report.archiveImported > 0) else {
+      guard ImportOutcome(counts: counts).didImportAnything || plan.history || (plan.archive && report.archiveImported > 0)
+        || (plan.boosts && report.boosts.imported > 0) else {
         return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
       }
       if plan.spaces && hasSidebarData {
@@ -238,8 +239,8 @@ final class AppImportRunner {
       app.showFirstRunBrowser()
       do {
         try app.snapshotStore.saveNow(model: app.model)
-        app.firstRunSaved = true
-        UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
+        // This is a landing checkpoint. Final setup still owns D3 completion.
+        // Keep ordinary snapshot writes guarded until Get Started succeeds.
       } catch {
         return result(FirstRunViewModel.importedSaveError)
       }
@@ -260,7 +261,7 @@ final class AppImportRunner {
         let beforeProfiles = app.model.profiles.count, beforeRules = app.model.routingRules.count
         let merged = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings, profiles: plan.archive || plan.history, archivedIDsByProfile: archivedIDs,
+          searchSettings: plan.searchSettings, profiles: plan.archive || plan.history || plan.boosts, archivedIDsByProfile: archivedIDs,
           importedAt: Date(), saving: {
             for profile in app.model.profiles { try app.directories.ensureProfileDirectories(for: profile) }
             try app.snapshotStore.saveNow(model: app.model)
@@ -282,6 +283,41 @@ final class AppImportRunner {
     // Resolve metadata only after the live model has landed. Destination
     // directory collision suffixes must never be used to read the Arc source.
     mapExtensions()
+    if plan.boosts {
+      guard !undo.cancelled else { return result() }
+      #if OPEN_AUTOMATION
+      watchdog.beginPhase("writeBoosts")
+      #endif
+      // Resolve the destination only after the model has landed. In particular,
+      // the source Default ID need not be the live Default ID in Settings.
+      var batches: [ProfileID: [Boost]] = [:]
+      for (sourceID, values) in imported.boostsByProfile {
+        let targetID = sourceID == imported.sourceDefaultProfileID
+          ? app.model.defaultProfile?.id : (profileMapping[sourceID] ?? sourceID)
+        guard let targetID, app.model.profile(id: targetID) != nil else {
+          failures["Boosts"] = "Could not be saved"; continue
+        }
+        batches[targetID, default: []].append(contentsOf: values)
+      }
+      for (profileID, values) in batches {
+        guard !undo.cancelled else { break }
+        // AppBoosts loads once on its actor. The existing Sendable store owns
+        // its lock and save queue; never construct a competing store here.
+        let store = app.stores.boosts.store(for: profileID)
+        let added = await Task.detached(priority: .utility) {
+          var added: [Boost] = []
+          for boost in values where store.boost(id: boost.id) == nil {
+            added.append(store.upsert(boost))
+          }
+          return added
+        }.value
+        undo.append(boosts: added, store: store, profileID: profileID)
+        counts["Boosts", default: 0] += added.count
+        counts["Boost duplicates", default: 0] += values.count - added.count
+        counts["Duplicates", default: 0] += values.count - added.count
+        if !added.isEmpty { app.stores.boosts.refresh(profile: profileID) }
+      }
+    }
     #if OPEN_AUTOMATION
     watchdog.beginPhase("writeArchive")
     #endif
@@ -449,16 +485,6 @@ final class AppImportRunner {
       case .split(let split): return split.panes
       }
     }
-  }
-
-  /// Section 12's AppBoosts owner is not on main yet. This seam records source
-  /// counts only; it must never create a BoostStore or write a Boost file.
-  /// Follow-up: app.stores.boosts.store(for: profileID).upsert(boost), then
-  /// app.stores.boosts.refresh(profile: profileID) once per destination Profile.
-  /// Add-only merge, the import's shared Undo, and live-page gates stay blocked.
-  private func recordBoostImport(_ boosts: [ProfileID: [Boost]], counts: inout [String: Int]) {
-    counts["Boosts found"] = boosts.values.reduce(0) { $0 + $1.count }
-    counts["Boosts"] = 0 // Parsed source Boosts have not been stored in the App.
   }
 
   private func ensureSelection(in model: BrowserModel) {

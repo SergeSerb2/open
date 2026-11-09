@@ -12,6 +12,8 @@ import OpenDesign
     public var warn: Bool { get { root.bool("open.general.warnBeforeQuitting") } set { root.set(newValue, for: "open.general.warnBeforeQuitting") } }
     public func refresh() { isDefault = root.actions.isDefaultBrowser() }
     public func setDefault() { errorText = root.actions.setAsDefaultBrowser() ?? ""; isDefault = root.actions.isDefaultBrowser() }
+    public func checkForUpdates() { root.actions.checkForUpdates() }
+    public func openUpdatesHelp() { root.actions.openURL(URL(string: "https://github.com/SergeSerb2/open#updates")!, profileID: root.selectedProfileID) }
     public func openPreviews() { root.showsPreviews = true; root.actions.openPreviewsSettings() }
 }
 public struct GeneralPane: View {
@@ -26,7 +28,8 @@ public struct GeneralPane: View {
         }
         SettingsError(text:model.errorText)
         SettingsGroup {
-            SettingsRow(height:37) { HStack(spacing:4) {Text("Automatically update Open");Image(systemName:"info.circle").font(.system(size:11)).foregroundStyle(.secondary).help("Open checks for updates in the background.");Spacer();Toggle("Automatically update Open",isOn:$model.updates).labelsHidden().toggleStyle(.switch).controlSize(.mini)} }
+            SettingsRow(height:37) { HStack(spacing:4) {Text("Automatically update Open");Button { model.openUpdatesHelp() } label: { Image(systemName:"info.circle").font(.system(size:11)).foregroundStyle(.secondary) }.buttonStyle(.plain).help("Learn more about auto-updating").accessibilityLabel("Learn more about auto-updating");Spacer();Toggle("Automatically update Open",isOn:$model.updates).labelsHidden().toggleStyle(.switch).controlSize(.mini)} }
+            SettingsRow(height:37) { HStack { Button("Check for Updates…") { model.checkForUpdates() }; Spacer() } }
             SettingsRow(height:37,divider:false) { SettingsSwitch("Warn before quitting",isOn:$model.warn).accessibilityIdentifier("warnBeforeQuitPreference") }
         }
         SettingsGroup {

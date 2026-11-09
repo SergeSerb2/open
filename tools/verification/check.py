@@ -246,6 +246,7 @@ def all_passed(text):
 
 
 def build(root):
+    run(str(root / "tools/fetch-adblock-lists.sh"))
     # A new session protects the Swift build from an app restart. Stop on diagnostics,
     # drain its pipe, and count warning lines even when Swift would otherwise exit 0.
     command = ["nice", "-n", "10", "swift", "build", "-c", "release", "-j",
@@ -651,6 +652,7 @@ def adblock_catalog(cli, root):
     require(list(categories.values()) == [3, 2, 5, 35, 1], "catalog category counts differ")
     require({row[0] for row in rows if row[2] == "true"} == {"EasyList", "EasyPrivacy"}, "catalog defaults differ")
     print("catalog 46/46; categories 3/2/5/35/1; defaults verified")
+    runpy.run_path(str(root / "tools/verification/adblock_resources.py"))["verify"](cli, root)
 
 
 def archive_migration(cli):
@@ -932,6 +934,10 @@ def main():
         matches(r"extensions-render check: [1-9]\d* passed, 0 failed", text)
         require(not re.search(r"^FAIL\b", text, re.MULTILINE), "extensions check failure")
         run(renderer, "menus", "--out", str(Path("extensions-menus")))
+    elif name == "onboarding-render":
+        run(sys.executable, str(root / "tools/generate-intro-sound.py"), "--check")
+        decoded = json.loads(run(str(root / "Packages/OpenKit/.build/release/onboarding-render"), "--check-sound"))
+        require(decoded["ok"], "committed intro failed decoded PCM curve comparison")
     elif name == "features-render":
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")

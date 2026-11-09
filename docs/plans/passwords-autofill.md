@@ -1,6 +1,6 @@
 # Passwords, autofill, and imported Arc secrets: implementation plan
 
-Status: plan, 2026-10-26. Closes the two P0 gaps in [status.md](../status.md) §3.1 (gap 1: Open's own password manager; gap 2: writing imported Arc passwords, cookies, cards, and addresses) and the §5.4 decision "Password manager approach".
+Status: App save/update, fill and Manage integration implemented and verified, 2026-11-08; awaiting App PR review and merge. H3 passes Little Open 41, password M 22, full passwords 77 (C-2 M1-only; PW-KC1 user check), features 26 with Widevine, page 85 with existing exclusions, settings-preview and the full gate with one load-qualified timing miss cleared by the single quiet rerun. The Little Open presenter reentrancy fix passes ownership and six-cycle focus/visibility regression rows. User/Arc/signed-build and imported-secret integration gates remain open. See `docs/engine-spike/passwords-acceptance.md`. Original plan: 2026-10-26. Closes the two P0 gaps in [status.md](../status.md) §3.1 (gap 1: Open's own password manager; gap 2: writing imported Arc passwords, cookies, cards, and addresses) and the §5.4 decision "Password manager approach".
 
 Readers: the engine lead (fork patches, §4), the OpenEngine owner (§5), and shell implementers (§6, §8). Each step in §10 is one PR.
 
@@ -13,6 +13,17 @@ Inputs. Read these first; this plan does not repeat them:
 - Coordination: the extensions UI plan (PR #58, `docs/plans/extensions-ui.md` §3.11) specifies the same Arc sheet dialog (EX-15). §6.1 below shares one component with it.
 
 Chromium paths are relative to `~/Developer/open-engine/chromium_git/chromium/src` (Chromium 156.0.8078.48, CEF 8078). Line numbers are from that tree on 2026-10-25.
+
+## Implementation errata (Section 15, 2026-11-08)
+
+- Section 15 uses patch numbers **08xx**. Engine PR #264 merged 0801–0810; the accepted framework SHA-256 is `619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`. The earlier D5 distribution `20b0f936…` crashed during HTTPS-warning teardown and must not be replayed. Engine provenance and the repaired runtime rows are in [PR #264](https://github.com/SergeSerb2/open/pull/264).
+- 0806 supplies the native HTTPS-First modal host. 0807 attaches the fill dropdown to the page's AppKit window and limits menu fallback to keyboard shortcuts. 0808 parents and positions native web-modal dialogs, including WebAuthn. 0809 registers HTTPS warnings after the triggering commit, with stale-navigation checks. 0810 preserves modal unblock state while omitting UI notification after TabFeatures destruction.
+- The card save/fill fixture uses HTTPS with a fresh one-day localhost certificate and a per-run SPKI pin. No system trust setting or global certificate bypass changes. The HTTP negative row still requires no card-save offer. The P-5 change form submits a distinct new password; metadata-only resubmission does not test an update sheet.
+- Q-2 is decided: mandatory card reauthentication stays **on** for new Profiles; no opt-in promotion. Only the disposable P-12 fill fixture disables it and restores it in `finally`. `PW-REAUTH-default` checks the default; `PW-REAUTH-request` proves authentication starts and Open survives. It does not claim that a user completed authentication.
+- Settings has no native saving switches, by Arc parity (IS §18). Each Profile's switches remain on Chromium's Password Manager Settings, Payment methods and Addresses pages (§6.4). The App exposes preference automation; it does not add a second preference store or an Addresses row.
+- Password, card and address offers use `SavePromptPresenter`, including Peek, Little Open and queued background Spaces. Dropdown Manage links route through `AutofillPages` using the source page's Space and Profile. Automation events retain their owning window, including Little Open; a different window cannot consume them.
+- HTTPS-First Return has no default action on macOS. `PW-HF2-return` requires the warning to stay open with no decision, then uses Escape and verifies DONT_PROCEED. Continue waits past Chromium's unchanged 500 ms input guard, then requires PROCEED and the expected document. Lifetime rows cover tab/window close, navigation, Space switch and quit.
+- Passkey acceptance covers virtual create/get and native WebAuthn cancellation with the parent alive. Hardware security-key/phone completion remains unverified; iCloud passkeys require **U-9**, the managed entitlement and provisioning. HTTP authentication uses Chromium's native modal dialog; an Arc-style Open sheet remains a follow-up. Agent runs never use the real Keychain. PW-KC1 and signed-build K-1…K-3 remain user checks; C-2 is M1-only by rule.
 
 ## Goal
 
@@ -79,7 +90,7 @@ Full evidence in [re/passwords-autofill.md](../re/passwords-autofill.md).
 | Arc's importer: Chromium-style `ProfileWriter`, cookie manager, "skip existing cookies". | PW-9 |
 | Password generation: probably off. | PW-10 |
 
-## 2. Current state (verified 2026-10-25)
+## 2. Historical starting state (verified 2026-10-25)
 
 Engine, on `main` plus PR #53:
 
@@ -111,14 +122,19 @@ Shell and libraries:
 | D-5 | Replace Chromium's dialogs that Arc turned off with empty implementations: account chooser, auto sign-in first run, leak warning, card unmask, autofill error (§4.2 H-6). Other autofill bubbles with no Open UI close as "not interacted". | PW-4; no `BrowserView` to host them. |
 | D-6 | Fill on account select on: never fill on page load (§4.5). | Brief: fill only on a user gesture. Chromium already waits in cross-origin iframes, on PSL matches, and on insecure pages (`components/password_manager/core/browser/password_form_filling.cc:224-262`). |
 | D-7 | Password generation stays off in v1 (Chromium's default without sync). | Arc probably had none (PW-10). Screenshot S-4 confirms. |
-| D-8 | Passkeys: v1 ships security keys and phones (hybrid) through Chromium's WebAuthn dialog in a real dialog host (§4.2 H-7). iCloud Keychain passkeys follow when Apple grants the managed entitlement (U-8, §12 Q-3). No Chromium Touch ID authenticator in v1. | Arc had both (PW-7); release.md §4 excludes restricted entitlements from v1. |
+| D-8 | Passkeys: v1 ships security keys and phones (hybrid) through Chromium's WebAuthn dialog in a real dialog host (§4.2 H-7). iCloud Keychain passkeys follow when Apple grants the managed entitlement (U-9, §12 Q-3). No Chromium Touch ID authenticator in v1. | Arc had both (PW-7); release.md §4 excludes restricted entitlements from v1. |
 | D-9 | Key: "Open Safe Storage"/"Open" only. With the mock key, the engine shows no password or card save prompt and the import refuses real secrets (§7.1). | Release C-11; the mock key is public. |
 | D-10 | The import writes per kind and per profile through store APIs in the engine: logins, then addresses and cards, then cookies. Existing Open data wins. Each step ends at a durability barrier and a ledger entry (§8). | Re-runs add nothing; a crash loses at most one step. Matches Arc's "skip existing cookies" (PW-9). |
 | D-11 | Leak detection, Password Checkup, and Credential Management auto sign-in are off by default (§4.5). | No Google services; Arc showed no leak or auto sign-in UI (PW-4). |
 
-## 4. Engine bridge (fork patches, series `05xx`)
+## 4. Engine bridge (fork patches, series `08xx`)
 
-Series numbers: `00xx` ad block, `01xx` tab sleep, `03xx` extensions, `04xx` media (media-pip.md). This plan takes `05xx`. All patches depend on P1 (`0301`, `0302`).
+Errata (Section 15, 2026-11-06): this plan originally reserved `05xx`.
+Section 8 already uses that range for page-platform patches. The lead assigned
+`0801`–`0805` to this work. `06xx` belongs to Section 12 and `07xx` to Section 10.
+The Step 0 HTTPS fallback crash has its own `0806` patch (lead ruling,
+2026-11-06); it does not belong to the empty credential factories in `0804`.
+All patches depend on P1 (`0301`, `0302`).
 
 ### 4.1 Chromium components we keep
 
@@ -142,12 +158,12 @@ Series numbers: `00xx` ad block, `01xx` tab sleep, `03xx` extensions, `04xx` med
 
 | Id | Chromium call | Today in a hosted tab | Open replacement | Patch |
 |---|---|---|---|---|
-| H-1 | `TabDialogsViews::ShowManagePasswordsBubble` / `HideManagePasswordsBubble` (`chrome/browser/ui/views/tab_dialogs_views.cc:63-80`), reached from `ManagePasswordsUIController::ShowBubble()` (`manage_passwords_ui_controller.cc:1536-1547`) after `BubbleManager` approves it (`QueueOrShowBubble`, 1668-1680) | Bubble returns early (no toolbar) | `open_engine::OpenPasswordPromptRouter::Show(web_contents, user_action)`: maps the controller state (table below) to a `CefSavePrompt` or to nothing. Returns `true` when Open handled it. The hook runs for every WebContents that has an Open client, hidden strip or not. | `chromium/0501-open-password-prompt-routing.patch` (one hunk per method in `tab_dialogs_views.cc`) |
+| H-1 | `TabDialogsViews::ShowManagePasswordsBubble` / `HideManagePasswordsBubble` (`chrome/browser/ui/views/tab_dialogs_views.cc:63-80`), reached from `ManagePasswordsUIController::ShowBubble()` (`manage_passwords_ui_controller.cc:1536-1547`) after `BubbleManager` approves it (`QueueOrShowBubble`, 1668-1680) | Bubble returns early (no toolbar) | `open_engine::OpenPasswordPromptRouter::Show(web_contents, user_action)`: maps the controller state (table below) to a `CefSavePrompt` or to nothing. Returns `true` when Open handled it. The hook runs for every WebContents that has an Open client, hidden strip or not. | `chromium/0801-open-password-prompt-routing.patch` (one hunk per method in `tab_dialogs_views.cc`) |
 | H-2 | `BrowserWindow::GetAutofillBubbleHandler()` and `AutofillBubbleHandler::Get(browser->GetUnownedUserDataHost())` | null | `open_engine::OpenAutofillBubbleHandler`, owned by `OpenBrowserWindow` and registered as unowned user data on the `Browser` (the way `AutofillBubbleHandlerImpl` does at `chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.cc:98-102`). It forwards save card, save address, and update address to `CefSavePrompt`. Every other method returns a `NullAutofillBubble` (never null) and posts `OnBubbleClosed(kNotInteracted)` or the type's equivalent. | overlay `open/browser/autofill/open_autofill_bubble_handler.{h,cc}`; one line in PR #53's `open_browser_window.mm` (overlay) |
-| H-3 | `address_bubbles_controller.cc:55-99` reaches the handler through `BrowserWindow::FindBrowserWindowWithWebContents` (a `BrowserView` lookup) | null; no prompt | Use `AutofillBubbleHandler::Get(tab->GetBrowserWindowInterface()->GetUnownedUserDataHost())`, as the TODO at line 96 already asks (crbug.com/381390420) | `chromium/0502-open-address-bubble-handler-lookup.patch` |
-| H-4 | `ChromePasswordManagerClient::NavigateToManagePasswordsPage` (1409-1421) and `ChromeAutofillClient::ShowAutofillSettings` | Expected: a singleton tab in the hidden `Browser`, which P1 adopts as an unplaced Today tab (Step 0 confirms) | `CefOpenAutofillHandler::OnOpenAutofillPage(browser, page)`; the shell opens the page by its own rule (§6.3). Falls through to Chromium when no handler is set. | `chromium/0503-open-autofill-page-routing.patch` |
+| H-3 | `address_bubbles_controller.cc:55-99` reaches the handler through `BrowserWindow::FindBrowserWindowWithWebContents` (a `BrowserView` lookup) | null; no prompt | Use `AutofillBubbleHandler::Get(tab->GetBrowserWindowInterface()->GetUnownedUserDataHost())`, as the TODO at line 96 already asks (crbug.com/381390420) | `chromium/0802-open-address-bubble-handler-lookup.patch` |
+| H-4 | `ChromePasswordManagerClient::NavigateToManagePasswordsPage` (1409-1421) and `ChromeAutofillClient::ShowAutofillSettings` | Expected: a singleton tab in the hidden `Browser`, which P1 adopts as an unplaced Today tab (Step 0 confirms) | `CefOpenAutofillHandler::OnOpenAutofillPage(browser, page)`; the shell opens the page by its own rule (§6.3). Falls through to Chromium when no handler is set. | `chromium/0803-open-autofill-page-routing.patch` |
 | H-5 | `ManagePasswordsUIController::UpdateBubbleAndIconVisibility` (1230-1275) | Updates a page action icon that nobody draws | Keep. Step 0 confirms it does not crash (`BrowserActions` and `ManagePasswordsPageActionController` exist for hidden browsers: `browser_window_features.cc:348`, `tab_features.cc:357-361`). Add null checks only if Step 0 finds a crash. | none expected |
-| H-6 | `CreateAccountChooserPromptView`, `CreateAutoSigninPromptView`, `CreateCredentialLeakPromptView` (`chrome/browser/ui/passwords/password_dialog_prompts.h`), `CreateCardUnmaskPromptView`, `CreateAndShowAutofillErrorDialog` | Views dialogs with no host | Empty implementations, as in Arc (PW-4). Each posts its controller's close call from its `Show…` method (account chooser and auto sign-in: `CredentialManagerDialogController::OnCloseDialog()`, `credential_manager_dialog_controller_impl.cc:209`; leak: `CredentialLeakDialogController::OnCloseDialog()`), so `navigator.credentials.get` resolves with `null` instead of hanging | `chromium/0504-open-null-credential-dialogs.patch` (the five factories, under `open_engine::IsOpenWebContents()`) |
+| H-6 | `CreateAccountChooserPromptView`, `CreateAutoSigninPromptView`, `CreateCredentialLeakPromptView` (`chrome/browser/ui/passwords/password_dialog_prompts.h`), `CreateCardUnmaskPromptView`, `CreateAndShowAutofillErrorDialog` | Views dialogs with no host | Empty implementations, as in Arc (PW-4). Each posts its controller's close call from its `Show…` method (account chooser and auto sign-in: `CredentialManagerDialogController::OnCloseDialog()`, `credential_manager_dialog_controller_impl.cc:209`; leak: `CredentialLeakDialogController::OnCloseDialog()`), so `navigator.credentials.get` resolves with `null` instead of hanging | `chromium/0804-open-null-credential-dialogs.patch` (the five factories, under `open_engine::IsOpenWebContents()`) |
 | H-7 | `OpenBrowserWindow::GetWebContentsModalDialogHost()` (PR #53: host without a view) | WebAuthn and HTTP auth dialogs do not show | A real `WebContentsModalDialogHost`: host view = the hosted tab's parent NSView, position = top center of the page view at its top edge (Chrome's placement; guess for Arc), max size = page view size. Chromium's Views dialogs then show as child windows of the Open window. | overlay change in `open_browser_window.mm`; no new patch |
 
 Password states (`components/password_manager/core/common/password_manager_ui.h`) and what H-1 does:
@@ -160,7 +176,7 @@ Password states (`components/password_manager/core/common/password_manager_ui.h`
 | `KEYCHAIN_ERROR_STATE` | Toast "Open couldn't use your Keychain, so this password wasn't saved." (Open text) |
 | All other states (confirmations, auto sign-in, move to account, biometric promos, passkey confirmations, password change) | Nothing shown; the router calls `OnBubbleShown()` then `OnBubbleHidden()` so the controller does not wait |
 
-The router creates a `SaveUpdateBubbleController(PasswordsModelDelegateFromWebContents(wc), kAutomatic or kUserAction)`. Its constructor calls `OnBubbleShown()`; `OnBubbleClosing()` reports interactions and calls `OnBubbleHidden()` (`password_bubble_controller_base.cc:23, 31-36`). Answers: Save → `OnSaveClicked()`; Never → `OnNeverForThisSiteClicked()`; No / Esc → `OnNotNowClicked()`; withdrawn or tab gone → only `OnBubbleClosing()`. Then always `OnBubbleClosing()`.
+The router creates a `SaveUpdateBubbleController(PasswordsModelDelegateFromWebContents(wc), kAutomatic or kUserAction)`. Its constructor calls `OnBubbleShown()`; `OnBubbleClosing()` reports interactions and calls `OnBubbleHidden()` (`password_bubble_controller_base.cc:23, 31-36`). Answers: Save → `OnSaveClicked()`; Never → `OnNeverForThisSiteClicked()`; No / Esc → `OnNotNowClicked()` for a new password and `OnNoThanksClicked()` for an update, matching `password_save_update_view.cc` (`OnNotNowClicked` CHECKs new-password state); withdrawn or tab gone → only `OnBubbleClosing()`. Then always `OnBubbleClosing()`.
 
 Card and address answers: card Save → `OnSaveButton({})` then `OnBubbleClosed(kAccepted)`; Not Now → `OnBubbleClosed(kCancelled)`; withdrawn → `kNotInteracted` (`PaymentsUiClosedReason`, `components/autofill/core/browser/ui/payments/payments_ui_closed_reasons.h:14-28`). Address Save → `OnUserDecision(kAccepted, profile)`; No Thanks → `kDeclined`; withdrawn → `kIgnored` (`AddressPromptUserDecision`, `components/autofill/core/browser/foundations/autofill_client.h:213-233`), then `OnBubbleClosed()`.
 
@@ -244,20 +260,26 @@ Overlay implementation files (compiled into `libcef_static` through `//open/open
 
 ```text
 # Engine/fork/patches/chromium/series
-0501-open-password-prompt-routing.patch      # H-1: tab_dialogs_views.cc routes password bubbles to Open
-0502-open-address-bubble-handler-lookup.patch # H-3: address bubbles find the handler on the Browser
-0503-open-autofill-page-routing.patch        # H-4: "Manage passwords/addresses/payment methods" go to Open
-0504-open-null-credential-dialogs.patch      # H-6: account chooser, auto sign-in, leak, card unmask, error dialog
-0505-open-autofill-defaults.patch            # §4.5: fill on account select on; leak detection and auto sign-in off
+0801-open-password-prompt-routing.patch      # H-1: tab_dialogs_views.cc routes password bubbles to Open
+0802-open-address-bubble-handler-lookup.patch # H-3: address bubbles find the handler on the Browser
+0803-open-autofill-page-routing.patch        # H-4: "Manage passwords/addresses/payment methods" go to Open
+0804-open-null-credential-dialogs.patch      # H-6: account chooser, auto sign-in, leak, card unmask, error dialog
+0805-open-autofill-defaults.patch            # §4.5: fill on account select on; leak detection and auto sign-in off
+0806-open-https-fallback-dialog-host.patch   # Step 0 PR-7: native modal host, safe cancel if absent
+0807-open-hosted-autofill-popup.patch        # AppKit parent and real dropdown keyboard routing
+0808-open-hosted-modal-dialog.patch          # Native modal parent and page-top positioning
+0809-open-https-warning-after-commit.patch   # Deferred show with navigation-generation guard
+0810-open-modal-unblock-during-tab-teardown.patch # No UI event after TabFeatures destruction
 ```
 
 Manifest paths:
 
-- 0501: `chrome/browser/ui/views/tab_dialogs_views.cc`
-- 0502: `chrome/browser/ui/autofill/address_bubbles_controller.cc`
-- 0503: `chrome/browser/password_manager/chrome_password_manager_client.cc`, `chrome/browser/ui/autofill/chrome_autofill_client.cc`
-- 0504: `chrome/browser/ui/views/passwords/account_chooser_dialog_view.cc`, `auto_signin_first_run_dialog_view.cc`, `credential_leak_dialog_view.cc`, `chrome/browser/ui/views/autofill/payments/card_unmask_prompt_views.cc`, `autofill_error_dialog_view_native_views.cc` (each holds its `Create…` factory in 156). Arc replaced the same factories (PW-4).
-- 0505: `components/password_manager/core/browser/features/password_features.cc` (`kFillOnAccountSelect` default, line 113-115), `components/password_manager/core/browser/password_manager.cc` or the pref registration file for the two defaults.
+- 0801: `chrome/browser/ui/views/tab_dialogs_views.cc`
+- 0802: `chrome/browser/ui/autofill/address_bubbles_controller.cc`
+- 0803: `chrome/browser/password_manager/chrome_password_manager_client.cc`, `chrome/browser/ui/autofill/chrome_autofill_client.cc`
+- 0804: `chrome/browser/ui/views/passwords/account_chooser_dialog_view.cc`, `auto_signin_first_run_dialog_view.cc`, `credential_leak_dialog_view.cc`, `chrome/browser/ui/views/autofill/payments/card_unmask_prompt_views.cc`, `autofill_error_dialog_view_native_views.cc` (each holds its `Create…` factory in 156). Arc replaced the same factories (PW-4).
+- 0805: `components/password_manager/core/browser/features/password_features.cc` (`kFillOnAccountSelect` default, line 113-115), `components/password_manager/core/browser/password_manager.cc` or the pref registration file for the two defaults.
+- 0806: `chrome/browser/ssl/ask_before_http_dialog_controller.cc` (Step 0 PR-7 calls the Views-only `TabDialogManager::CreateTabScopedDialog`, whose absent host CHECK aborts Open). Retain the warning through the real native modal host, or cancel if no parent exists.
 
 No CEF series patch is needed: the API header and its implementation are overlay files, and PR #53 already adds `//open/open_libcef_sources.gni` to CEF's `BUILD.gn`.
 
@@ -265,14 +287,14 @@ No CEF series patch is needed: the API header and its implementation are overlay
 
 | Setting | Default | How |
 |---|---|---|
-| `kFillOnAccountSelect` ("fill-on-account-select") | on | 0505 (Chromium default is off, `password_features.cc:113-115`) |
+| `kFillOnAccountSelect` ("fill-on-account-select") | on | 0805 (Chromium default is off, `password_features.cc:113-115`) |
 | `credentials_enable_service` (offer to save passwords) | on | Chromium default; with the mock key, prompts are suppressed instead (§7.1) |
 | `autofill.profile_enabled`, `autofill.credit_card_enabled` | on | Chromium default; card prompts suppressed with the mock key (§7.1) |
-| `profile.password_manager_leak_detection` | off | 0505 (no Google services, D-11) |
-| `credentials_enable_autosignin` | off | 0505 (no auto sign-in UI, D-11) |
+| `profile.password_manager_leak_detection` | off | 0805 (no Google services, D-11) |
+| `credentials_enable_autosignin` | off | 0805 (no auto sign-in UI, D-11) |
 | `password_manager.biometric_authentication_filling` | off (Chromium default) | user can turn it on in the Password Manager settings page |
 | Password generation | off (no sync, `password_feature_manager_impl.cc:28-36`) | unchanged |
-| Card mandatory re-auth | Q-2 | — |
+| Card mandatory re-auth | on for new profiles; no opt-in bubble (Q-2) | 0805 (`autofill.payment_methods_mandatory_reauth`) |
 
 ### 4.6 Crash-proofing for hosted tabs
 
@@ -286,6 +308,12 @@ No CEF series patch is needed: the API header and its implementation are overlay
 New public header `Engine/OpenEngine/include/OpenEngine/OEAutofill.h`, added to `OpenEngine.h`. Main-thread classes are `NS_SWIFT_UI_ACTOR`, as in the rest of OpenEngine.
 
 ### 5.1 Save prompts
+
+Errata (lead decision, 2026-11-06): the optional delegate includes
+`webContentDidFailToSavePasswordForKeychainError(_:)`. H-1 calls it for
+`KEYCHAIN_ERROR_STATE`, then settles the existing shown/hidden lifecycle.
+The App shows "Open couldn't use your Keychain, so this password wasn't saved."
+This callback exposes no credential values.
 
 ```objc
 typedef NS_ENUM(NSInteger, OESavePromptKind) {
@@ -338,6 +366,9 @@ New optional `OEWebContentDelegate` methods (main thread):
 /// closing). The prompt is already answered as Ignored; remove it.
 - (void)webContent:(OEWebContent*)webContent withdrawSavePrompt:(OESavePrompt*)prompt
     NS_SWIFT_NAME(webContent(_:withdrawSavePrompt:));
+/// Chromium could not save because the Keychain is unavailable.
+- (void)webContentDidFailToSavePasswordForKeychainError:(OEWebContent*)webContent
+    NS_SWIFT_NAME(webContentDidFailToSavePasswordForKeychainError(_:));
 /// A Chromium "Manage…" link (dropdown footer, H-4).
 - (void)webContent:(OEWebContent*)webContent openAutofillPage:(OEAutofillPage)page
     NS_SWIFT_NAME(webContent(_:openAutofillPage:));
@@ -476,7 +507,7 @@ Engine-side mapping:
 
 ```objc
 @interface OEEngine (Autofill)
-/// YES when the running engine has the 05xx patches and §5.3.
+/// YES when the running engine has the 08xx patches and §5.3.
 @property(nonatomic, readonly) BOOL supportsSecretsImport;
 /// YES when the engine encrypts with the mock key (--use-mock-keychain).
 @property(nonatomic, readonly) BOOL usesMockKeychain;
@@ -500,7 +531,7 @@ public enum SavePromptAnswer: Sendable { case save, neverForSite, dismiss }
 }
 ```
 
-`App/EngineBridge.swift` makes `OESavePrompt` conform. The secrets sink for the import is a protocol in `OpenImport` (§8.1), not in OpenWeb, so `OpenImport` keeps depending on `OpenModel` only.
+`App/Autofill/SavePromptBridge.swift` makes `OESavePrompt` conform. The secrets sink for the import is a protocol in `OpenImport` (§8.1), not in OpenWeb, so `OpenImport` keeps depending on `OpenModel` only.
 
 ## 6. UI
 
@@ -537,7 +568,7 @@ Accessibility: the panel has role `AXSheet`, label = title text. The title is `A
 
 Queue rules (`Packages/OpenKit/Sources/OpenFeatures/SavePromptPresenter.swift`, one per window):
 
-1. Show at once when the prompt's page is the focused pane of a visible window and no sheet is open on that window.
+1. Schedule one coalesced next-main-turn pass when the prompt's page is the focused pane of a visible window and no sheet is open on that window. Guard sheet presentation/removal against re-entry. Compare page identity within the presenter's own window; its sheet's key-window transfer does not mean that page lost focus.
 2. Else queue it (FIFO, at most 3 per window; a new prompt for the same page replaces the older one, which the engine has already withdrawn; a fourth prompt drops the oldest unanswered, which the engine then answers "ignored" on release). Show it when its page becomes the focused pane.
 3. Peek pages attach to the window that shows the Peek; Little Open pages to the Little Open window.
 4. `withdrawSavePrompt` removes the prompt from the queue or closes the sheet without an answer.
@@ -595,13 +626,13 @@ Arc's 1.170 Profiles pane has no switches for saving (IS §18). Open shows none 
 
 ### 6.5 Passkeys
 
-- v1: Chromium's WebAuthn dialog (Views) shows through the real dialog host (H-7), centered at the top of the page. Security keys over USB and phones over hybrid (QR code and Bluetooth) work. The app already has the `bluetooth` and `usb` entitlements (release.md §4).
-- After U-8: iCloud Keychain passkeys use the system sheet. That needs `com.apple.developer.web-browser.public-key-credential` (managed; Apple approves it), which Chromium checks at runtime (`device/fido/mac/icloud_keychain_sys.mm:228-240`), plus a provisioning profile. release.md's entitlement list changes then.
+- v1: Chromium's WebAuthn dialog (Views) shows through the real dialog host (H-7), centered at the top of the page. Virtual create/get and native cancellation are verified. Real security keys over USB and phones over hybrid (QR code and Bluetooth) still need a user check. The app already has the `bluetooth` and `usb` entitlements (release.md §4).
+- After U-9: iCloud Keychain passkeys use the system sheet. That needs `com.apple.developer.web-browser.public-key-credential` (managed; Apple approves it), which Chromium checks at runtime (`device/fido/mac/icloud_keychain_sys.mm:228-240`), plus a provisioning profile. release.md's entitlement list changes then.
 - Not in v1: Chromium's Touch ID authenticator. It needs the restricted `keychain-access-groups` entitlement `<Team ID>.<bundle id>.webauthn` (`chrome/browser/webauthn/chrome_web_authentication_delegate.cc:394-408`). Arc's Touch ID passkeys cannot move to Open anyway (PW-7); the import report says so (§8.6).
 
 ### 6.6 HTTP authentication
 
-Chromium's HTTP auth dialog is web-modal too. With H-7 it shows, and the password manager fills it and offers to save from it. Arc used its own dialog (PW-11). Restyling it belongs to app-shell §4.9, not this plan.
+Chromium's HTTP auth dialog is web-modal too. With H-7 the native modal path is available. Full HTTP-auth fill/save acceptance is not claimed by the form-based password suite. Arc used its own dialog (PW-11). Restyling it belongs to app-shell §4.9, not this plan.
 
 ## 7. Security
 
@@ -614,7 +645,8 @@ Chromium's HTTP auth dialog is web-modal too. With H-7 it shows, and the passwor
    - The engine shows no password or card save prompt: H-1 and H-2 answer every save prompt as ignored without calling the shell (`open_engine::SecretsPromptsAllowed()` is false). No pref is written, so a later signed build on the same data keeps the user's settings. Addresses are not secrets and still prompt.
    - `canEnablePasswordSaving` and `canEnableCreditCardsSaving` return NO.
    - `canImportPasswordsAndCookies` is false (§7.4); the wizard shows its "can't be imported yet" copy.
-   - The e2e harness passes `--open-allow-mock-keychain-secrets`, which makes `SecretsPromptsAllowed()` true for fixture data. The switch never lifts the import rule; only the synthetic fixture command (§9.1) writes imported records on a mock-key build.
+   - The e2e harness passes `--open-allow-mock-keychain-secrets`, which permits password/card prompts and their `canEnable*` switches. It never permits imported real secrets.
+   - Errata (lead decision, 2026-11-06): all four §5.3 import methods fail closed with `OEErrorMockKeychain = 8` unless the process has that switch AND every record passes a browser-process fixture check before any write. Both login `signon_realm` and `origin_url` hosts must be `example.com`, a subdomain of `example.com`, `localhost`, or `127.0.0.1`. Cookie domains, after removing a leading dot, must match that host allowlist. Card numbers must be one of the public test values `4111111111111111`, `5555555555554444`, or `378282246310005`. Addresses are allowed with the switch. One non-fixture record rejects the whole batch without writes. Real-key engines do not apply the fixture check. The real wizard still refuses on mock-key engines (§7.4), even with the switch; only synthetic imports use this exception.
 5. Release builds: release.md §4.4 already treats repeated Keychain prompts as a defect. §9.5 adds the checks.
 
 ### 7.2 At rest
@@ -761,8 +793,9 @@ The wizard Report (`ImportWizard.swift`) replaces the single "Passwords and cook
 
 ### 9.1 Fixtures
 
-- Server: `tools/e2e/fixtures/passwords/server.py` (Python standard library, `-I`), one port, started by the harness. Hosts through Open's `additionalSwitches`: `--host-resolver-rules=MAP *.example.com 127.0.0.1:<port>` (rule syntax: `net/dns/mapped_host_resolver.h:41`). Origins: `http://login.example.com`, `http://other.example.com` (cross-site), `http://localhost:<port>` (secure context for cards and passkeys).
-- Pages (our own HTML, synthetic data only): `login.html` (username + password, POST `/login` → 302 `/welcome`), `change.html` (current + new password), `signup.html` (`autocomplete="new-password"`), `iframe.html` (main page on `other.example.com` with the login form in an `http://login.example.com` iframe), `address.html` (shipping form with `autocomplete` tokens), `card.html` (on `localhost`, card number `4111 1111 1111 1111`, a future expiry), `cookies` endpoints (`/set-cookies` sets the cookies in §9.4; `/echo-cookies` returns the names it received as JSON), `webauthn.html` (on `localhost`, `navigator.credentials.create` and `get`).
+- Server: `tools/e2e/fixtures/passwords/server.py` (Python standard library, `-I`), separate ephemeral HTTP and HTTPS ports, started by the harness. Password origins use HTTP through `--host-resolver-rules=MAP *.example.com 127.0.0.1:<http-port>` (rule syntax: `net/dns/mapped_host_resolver.h:41`). Cards and passkeys use `https://localhost:<https-port>`. HTTP localhost is a secure context for some Web APIs, but does not satisfy Chromium's card security-level guard.
+- At harness start, `openssl` generates a throwaway localhost certificate and key in a fresh 0700 temporary directory. Only the e2e App receives `--ignore-certificate-errors-spki-list=<certificate-SPKI-SHA256>`. No global certificate bypass or system trust change is used. Both normal and supervisor cleanup remove the directory.
+- Pages (our own HTML, synthetic data only): `login.html` (username + password, POST `/login` → 302 `/welcome`), `change.html` (current password plus a distinct new password), `signup.html` (`autocomplete="new-password"`), `iframe.html` (main page on `other.example.com` with the login form in an `http://login.example.com` iframe), `address.html` (shipping form with `autocomplete` tokens), `card.html` (HTTPS localhost, public test card and future expiry), `cookies` endpoints (`/set-cookies` sets the cookies in §9.4; `/echo-cookies` returns names only), `webauthn.html` (HTTPS localhost, `navigator.credentials.create` and `get`).
 - Credentials are fixture strings (`fixture-user`, `fixture-password-1`). No real site, no real account.
 
 Automation additions (`docs/automation.md`; App automation only, which the app enables only with its automation flag):
@@ -772,6 +805,7 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | `policy` | `savePrompt`: `record` / `save` / `never` / `dismiss` / `hold` | Answer save sheets automatically or hold them |
 | `save-prompt` | `answer` | Answer the held sheet through the real sheet buttons |
 | `credentials` | `profile` | `OECredentialCounts` |
+| `credentials-prefs` | optional `profile`, strict Boolean saving switches and `cardReauthentication` | Read or change the disposable Profile's engine preferences |
 | `import-secrets-fixture` | `map`: fixture Arc directory → Open profile name (default `{"Default": "Default", "Profile 1": "Work"}`) | Runs `ArcSecretsImporter.runSyntheticFixture` (§8.1) with the real App sinks, returns counts; refuses unless the build is Debug or `--open-e2e` is set |
 | `events` | — | Adds `savePrompt` (`kind`, `displayHost`, `answer`) and `autofillPage` events |
 
@@ -790,18 +824,38 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | P-9 | `address.html` submit | kind `address`; Save → `addresses == 1` |
 | P-10 | Second address form, click a field | Dropdown shows the address; selection fills name, street, city, postal code |
 | P-11 | `card.html` submit | kind `card`; Save → `cards == 1` |
-| P-12 | Card form again, select the card | Number, name, expiry filled; no crash if Chromium offers re-auth (crash risk 1) |
+| P-12 | Card form again, select the card; set `cardReauthentication` false only for this synthetic Profile and restore it in `finally` | Number, name, expiry match in-page |
+| PW-REAUTH-default | Fresh Profile, read `credentials-prefs` | `cardReauthentication` is true |
+| PW-REAUTH-request | Select a saved card with re-auth enabled | Device auth starts; Open remains alive with no new crash; the restored preference survives relaunch. A blocked automation socket is bounded; only a bundle-verified SecurityAgent focus handoff is expected. No system auth input is sent. |
+| PW-CARD-HTTPS | Card page over HTTPS | `window.isSecureContext` and Chromium's secure-context type agree |
+| PW-CARD-HTTP | Same card form over HTTP | No card save offer and no card stored |
 | P-13 | Command bar "Manage Passwords" | A tab at `chrome://password-manager/passwords` in the focused Space; page shows 1 password row (`eval` on the page DOM) |
 | P-14 | Dropdown footer "Manage passwords…" | `autofillPage` event, then the same tab is selected (no second tab) |
 | P-15 | Every flow above | Open's process alive; no crash report in `~/Library/Logs/DiagnosticReports` newer than the run |
 | P-16 | Open the command bar while a dropdown is up; switch Space; hide the sidebar | The dropdown closes each time |
 | P-17 | Second profile (`space-create profile:"Work"`), same login page | No dropdown entry; `credentials(profile:"Work").logins == 0` |
-| P-18 | After the run | `Login Data` copy: `password_value` of every row starts with `v10`; the fixture password bytes are not in the file; `stat` mode of the engine dir is 0700 |
-| P-19 | Incognito window, sign in | No sheet |
+| P-18 | Gracefully close Open, inspect a synthetic `Login Data` copy, then relaunch | Every saved `password_value` starts with `v10`; fixture password bytes are absent; profile directory mode is 0700 |
+| P-19 | Private window with the focused Space's Profile as parent, sign in | The context is off the record and has that parent; no sheet, no private save, and both private and parent stores stay unchanged |
 | P-20 | `webauthn.html` with a DevTools virtual authenticator (`WebAuthn.enable`, `WebAuthn.addVirtualAuthenticator`, ctap2, usb) | `create` and `get` resolve |
 | P-21 | `webauthn.html` without a virtual authenticator | Chromium's WebAuthn dialog shows as a child window (`windows`, `snapshot`); Esc closes it; the promise rejects with `NotAllowedError` |
-| P-22 | Relaunch without `--open-allow-mock-keychain-secrets` (mock-key build); sign in on a new fixture site | No sheet, no `savePrompt` event; `logins` unchanged; `canEnablePasswordSaving` is false |
+| P-22 | Relaunch without `--open-allow-mock-keychain-secrets` (mock-key build); sign in on a new fixture site in an empty Profile | No sheet, no `savePrompt` event; zero logins in that Profile and unchanged parent store; `canEnablePasswordSaving` is false |
 | P-23 | On `login.html` with a saved login, `eval` `navigator.credentials.get({password: true})` | Resolves to `null` within 2 s; no dialog window |
+
+HTTPS-First regression rows use `credentials.supportsSecretsImport` from the
+running engine as their capability gate. The distribution framework SHA-256
+is recorded as evidence; it does not enable or disable a row. Each row restarts
+the engine and navigates from localhost to a separate fixture origin.
+
+| # | Flow | Pass when |
+|---|---|---|
+| PW-HF1 | Enable HTTPS-First in the disposable profile, navigate to the HTTP login fixture, activate the native warning's named Continue button with `child-dialog-button` | The real dialog press succeeds, the warning closes, and the exact `http://` fixture URL and form finish loading |
+| PW-HF2-return | Open the same native warning on a new fixture origin, press Return, then Escape | Return makes no decision, as Chromium configures on macOS. Escape takes Go back, closes the warning and loads the previous localhost page; Open stays alive with no new crash report |
+| PW-HF2-escape | Repeat on another fixture origin, press Esc | Go back closes the warning and loads the previous localhost page; Open stays alive with no new crash report |
+| PW-HF3-tab-close | Close the owned tab while its native HTTPS warning is still open | The warning and tab close, the parent window stays visible, Open answers ping, and no new crash report appears |
+| PW-HF4-window-close | Close the warning's parent window while the warning is open | The window and warning close; Open still answers ping with no new crash report |
+| PW-HF5-navigate | Navigate the warning's tab back to the localhost fixture | The requested form loads, the warning closes, and Open stays alive with no new crash report |
+| PW-HF6-space | Switch to another Space while the warning is open | The other Space becomes focused, the warning becomes hidden, and Open stays alive with no new crash report |
+| PW-HF7-quit | Quit Open directly while the warning is open, before normal harness surface dismissal | Open exits normally; no owned process, window, or new crash report remains |
 
 ### 9.3 Suite `--only secrets-import`
 
@@ -849,12 +903,12 @@ Ad-hoc builds cannot run K-1…K-3; the report says so.
 | Step | Owner | Work | Files | Acceptance |
 |---|---|---|---|---|
 | 0 | engine lead | Probe today's fork with P1: run §9.2 P-1, P-3, P-9, P-11, P-12, P-21 by hand through automation (passwords added through `chrome://password-manager` "Add"). Record what shows and every crash. | `docs/engine-spike/results-passwords-probe.json`; notes in `docs/engine-patches.md` | Results committed; crash list with stacks |
-| 1 | engine lead | Patches 0501–0505; overlay `open/browser/autofill/*`; H-2 and H-7 in `open_browser_window.mm` | `Engine/fork/patches/chromium/05xx-*`, `manifest`, `series`; overlay files | Engine builds; Step 0 flows run with no crash; Chromium's own bubbles never appear |
+| 1 | engine lead | Patches 0801–0805; overlay `open/browser/autofill/*`; H-2 and H-7 in `open_browser_window.mm` | `Engine/fork/patches/chromium/08xx-*`, `manifest`, `series`; overlay files | Engine builds; Step 0 flows run with no crash; Chromium's own bubbles never appear |
 | 2 | OpenEngine | §5 API; mock-key rule; startup name assertion; `docs/engine-api.md` section "Passwords and autofill" | `Engine/OpenEngine/include/OpenEngine/OEAutofill.h`, `src/OEAutofill.mm`, `OEWebContent.mm`, `OEEngine.mm`, `OEClient.mm` | Automation can list prompts and counts on the fork build |
 | 3 | shell | `DialogSheet` (shared), `SavePromptPresenter`, OpenWeb protocol, `features-render` sheet renders; design review by the lead and an Opus designer | `OpenDesign/DialogSheet.swift`, `OpenDesign/Typography.swift` (2 tokens), `OpenFeatures/SavePromptPresenter.swift`, `OpenWeb/OpenWeb.swift`, `features-render` scene | `features-render check` passes with the new renders |
 | 4 | shell (App) | Delegate wiring, Manage pages (§6.3), `manage-passwords` handler, `openProfileSubpage` adapter, automation commands, `--only passwords` suite | `App/EngineBridge.swift`, `App/…` window glue (app-shell files), `App/Automation/*`, `tools/e2e/engine_e2e.py`, `tools/e2e/fixtures/passwords/*` | §9.2 and §9.4 all pass; results in `docs/engine-spike/results-passwords.json` |
 | 5 | shell + import | §8: reader fields, `ArcSecretsImporter`, ledger, `App/SecretsImportSink.swift`, wizard gate and Report, first-run copy (§14), `--only secrets-import` | `OpenImport/ArcSecrets.swift`, `OpenImport/ArcSecretsImporter.swift` (new), `OpenImport/SecretsImportLedger.swift` (new), `OpenImport/SyntheticSecretsFixture.swift`, `OpenSettings/ImportWizard.swift`, `App/SecretsImportSink.swift` | §9.3 all pass; `openkit verify-secrets-fixture` passes; the PR #24 external compile check still rejects token-less calls |
-| 6 | release | After U-1/U-2: K-1…K-3. After U-8: iCloud passkey entitlement and a P-20 run without the virtual authenticator | `App/Open.entitlements`, release docs | §9.5 passes |
+| 6 | release | After U-1/U-2: K-1…K-3. After U-9: iCloud passkey entitlement and a P-20 run without the virtual authenticator | `App/Open.entitlements`, release docs | §9.5 passes |
 
 Steps 0–2 queue behind P1 in the shared Chromium tree (engine-patches lead decision 1). Step 3 can start now (no engine). Each PR runs `tools/verify-all.sh` (AGENTS.md rule 10).
 
@@ -876,7 +930,7 @@ Steps 0–2 queue behind P1 in the shared Chromium tree (engine-patches lead dec
 |---|---|---|
 | Q-1 | Add an "Addresses" row to Settings ▸ Profiles? | No. Arc has none (PW-5). Addresses stay reachable from the payments page and the dropdown footer. |
 | Q-2 | Card re-auth before filling (Chromium "mandatory re-auth": Touch ID or Mac password before a card fills)? | Turn it on by default for new profiles (pref `autofill.payment_methods_mandatory_reauth`, `autofill_prefs.h:214-215`), with no opt-in bubble. Cards are the most sensitive data here, and the system prompt needs no Open UI. Arc's choice is unknown. |
-| Q-3 | iCloud Keychain passkeys in v1? | Yes: request the managed entitlement now (new user item U-8). Ship security keys and phones without it. |
+| Q-3 | iCloud Keychain passkeys in v1? | Yes: request the managed entitlement now (user item U-9). Ship security keys and phones without it. |
 | Q-4 | Show Chromium pages as `open://…` in the URL field and command bar? | Yes, as a display alias only (the engine still loads `chrome://`). Arc showed `arc://…` (PW-5). Small shell item for app-shell §4.3; not in this plan. |
 | Q-5 | Rename Chromium's product name strings to "Open"? | Yes, in P5 (trim and brand): `chrome/app/theme/chromium/BRANDING` and `IDS_PRODUCT_NAME` in `chromium_strings.grd`. Needed before release because the Manage pages show it. |
 | Q-6 | Keep the Credential Management account chooser off (Arc parity) even though some sites use `navigator.credentials.get`? | Yes. Sites fall back to their form; the dropdown still fills. |
@@ -901,7 +955,7 @@ Agents may not launch Arc (AGENTS.md rule 4). Use a throwaway test account on a 
 - `docs/engine-api.md`: new section from §5 (Step 2).
 - `docs/automation.md`: §9.1 commands (Step 4).
 - `docs/plans/first-run.md` §5.4 and S-3: remove "until the browser engine can store secrets, this step checks and counts only" once Step 5 lands.
-- `docs/plans/release.md` §4: entitlement change after Q-3 and U-8.
+- `docs/plans/release.md` §4: entitlement change after Q-3 and U-9.
 - `docs/status.md`: §1.15 "Write imported secrets", §1.17 "Password manager", §3.1 gaps 1–2, §5.4 decision → planned, citing this plan.
 - `docs/plans/settings-library.md` P-9: the row label is "Credit Cards" (IS §18; the code already says so); Arc's symbol for it is `creditcard.and.123` (PW-5).
 
@@ -940,14 +994,14 @@ Agents may not launch Arc (AGENTS.md rule 4). Use a throwaway test account on a 
 
 ## Appendix B. Lead decisions
 
-None yet.
+See the locked decisions below and the implementation errata above.
 
 ## Appendix — Lead decisions (2026-10-26)
 
 - Approved. Use Chromium's built-in password manager and autofill in the fork, with Open's own Arc-style UI. Engine work queues after #53 (P1) and the profiles engine-root fix, because the import writes into the per-profile engine data at `Engine/<profile dir>`.
 - Q-1 No "Addresses" row in Settings ▸ Profiles (Arc parity).
 - Q-2 Card mandatory re-auth is on by default for new profiles, with no opt-in bubble.
-- Q-3 iCloud Keychain passkeys: request the managed entitlement. This becomes release user item **U-9**, not U-8: U-8 is already the public-repo or mirror decision. Security keys and phone passkeys ship without it.
+- Q-3 iCloud Keychain passkeys: request the managed entitlement. This is release user item **U-9**; U-8 is the public-repo or mirror decision. Security keys and phone passkeys ship without it.
 - Q-4 Chromium pages show as `open://…`. This is a display alias only; the engine loads `chrome://`. It is shared with the extensions UI plan, which decided the same.
 - Q-5 Rename Chromium's product-name strings to "Open" in P5 (trim and brand), before release.
 - Q-6 The Credential Management account chooser stays off (Arc parity).

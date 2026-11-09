@@ -1,6 +1,7 @@
 # Release license inventory
 
-Source audit: 2026-11-07, main `df4767ad` (before this license change).
+Source audit: 2026-11-07, main `df4767ad` (before the initial license change).
+Filter-list update: 2026-11-08, after #241 bundled the pinned seeds.
 Pins come from `Engine/fork/VERSIONS`, `project.yml`, the vendor patch and
 Chromium's pinned GN files. Update a row whenever its component changes.
 
@@ -37,8 +38,10 @@ review and the U-8 public source location also remain open.
 | Unicode bidirectional tables | Unicode 16.0.0 (unicode-bidi 0.3.18) | Unicode-3.0 | Ships: IDNA bidirectional property data. | `third_party/rust/chromium_crates_io/vendor/unicode-bidi-v0_3/src/char_data/tables.rs`, `UNICODE_VERSION = (16, 0, 0)`; licenses/Unicode-3.0.txt plus the crate terms and copyright notice. |
 | Unicode normalization tables | Unicode 18.0.0 as labelled by unicode-normalization 0.1.26 | Unicode-3.0 | Ships: generated normalization tables. This is the vendored source's own version constant, not a claim about the system Unicode version. | `third_party/rust/chromium_crates_io/vendor/unicode-normalization-v0_1/src/tables.rs`, `UNICODE_VERSION = (18, 0, 0)` in the committed vendor patch; licenses/unicode-ident-v1-LICENSE-UNICODE.txt plus the crate terms/copyright notice. |
 | Open-generated sounds (own work) | v1; tools/generate-sounds.py | Open-owned | Ships: open-event.caf and open-capture.caf; synthesized from seeded PCM, no reference audio. | `Packages/OpenKit/Sources/OpenFeatures/Resources/Sounds/`; reproducible source and PCM SHA-256 pins in `tools/generate-sounds.py`. No upstream sound license. |
+| Open Intro (own work) | v2; tools/generate-intro-sound.py | Open-owned | Ships: original 20 s stereo AAC score and its PCM measurement reference; deterministic synthesis, no reference audio. | `Packages/OpenKit/Sources/OpenOnboarding/Resources/Onboarding/`; source, fixed seed and PCM SHA-256 pin in `tools/generate-intro-sound.py`. No upstream sound license. |
 | Other Open-owned resources | main source snapshot | Open-owned | Ships: JS runtimes, JSON settings/catalog metadata, scripting definition. No copied fonts, sounds or image artwork. | See the complete resource map below. Derived emoji/PSL files have separate rows. System fonts, symbols, SQLite and Apple frameworks are OS-provided, not redistributed source dependencies. |
-| adblock (Brave adblock-rust) | 0.8.11 | MPL-2.0 | Ships: browser-process network/cosmetic matching; the parser supports resources, but no uBO asset payload ships. | `third_party/rust/adblock/v0_8/README.chromium`, `third_party/rust/chromium_crates_io/vendor/adblock-v0_8/`; https://crates.io/crates/adblock/0.8.11 ; licenses/MPL-2.0.txt. Modified MPL Cargo.toml is in the vendor patch; public exact-source location UNSET (U-8). |
+| adblock (Brave adblock-rust) | 0.8.11 | MPL-2.0 | Ships: browser-process network/cosmetic matching; redirect payloads have their own GPL row below. | `third_party/rust/adblock/v0_8/README.chromium`, `third_party/rust/chromium_crates_io/vendor/adblock-v0_8/`; https://crates.io/crates/adblock/0.8.11 ; licenses/MPL-2.0.txt. Modified MPL Cargo.toml is in the vendor patch; public exact-source location UNSET (U-8). |
+| uBlock Origin resources / scriptlets | 3762a26fd65df422080c116e6a70d13bc8d57d62 | GPL-3.0 | Ships: redirect stubs only (47 resources; no scriptlet templates), plus original redirect-source text and copyright/license notices under AdBlock/Source. | `Engine/fork/adblock/resources-pins.txt`; exact complete corresponding upstream source: https://codeload.github.com/gorhill/uBlock/tar.gz/3762a26fd65df422080c116e6a70d13bc8d57d62 ; source paths `src/web_accessible_resources/`, `src/js/redirect-resources.js`; output SHA-256 `6d4a87b8f0e44e0ffad66c5b66694c4a1da27383eaa11acae218030a29d9575e`; licenses/GPL-3.0.txt. Public distribution review remains U-6 / fork-infra Q-2. |
 | json-rust string escaping excerpt | Embedded in adblock 0.8.11; original upstream revision not recorded | MIT | Ships: adblock resource argument string escaping, adapted from json-rust. | `adblock-v0_8/src/resources/resource_storage.rs:23` explicitly attributes json-rust; https://github.com/maciejhirsz/json-rust ; licenses/MIT-json-rust.txt. The license copy pin is provenance for the text, not a claim about the excerpt revision; review this with U-6. |
 | rust-url parser excerpt | Embedded in adblock 0.8.11; original source header 2013–2016 | Apache-2.0 | Ships: parser code retained by adblock from rust-url. | `adblock-v0_8/src/url_parser/parser.rs` copyright/license header; licenses/rust-url-parser-NOTICE.txt, licenses/Apache-2.0.txt (Apache choice). This is separate from the url 2.5.8 crate row. |
 | Rust: addr | 0.14.0 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/addr/v0_14/README.chromium`, `third_party/rust/chromium_crates_io/vendor/addr-v0_14/`; https://crates.io/crates/addr/0.14.0 ; licenses/Apache-2.0.txt. |
@@ -111,7 +114,9 @@ review and the U-8 public source location also remain open.
 | Rust: zerovec-derive | 0.11.6 | Unicode-3.0 | Build only: host proc macro or its dependency; host executable is not bundled. Generated code notices are retained. | `third_party/rust/zerovec_derive/v0_11/README.chromium`, `third_party/rust/chromium_crates_io/vendor/zerovec-derive-v0_11/`; https://crates.io/crates/zerovec-derive/0.11.6 ; licenses/Unicode-ICU4X.txt. |
 | Rust: zmij | 1.0.23 | MIT | Ships: browser-process adblock dependency. | `third_party/rust/zmij/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/zmij-v1/`; https://crates.io/crates/zmij/1.0.23 ; licenses/seahash-v3-LICENSE.txt. |
 | aho-corasick | 1.1.5 | MIT OR Unlicense | Not shipped: no regex perf-literal feature and no adblock GN dependency; retained for the U-6 review. | Pinned Chromium `third_party/rust/aho_corasick/v1/README.chromium`; source crate cache `aho-corasick-1.1.5/LICENSE-MIT` and `UNLICENSE`; licenses/aho-corasick-LICENSE-MIT.txt, licenses/aho-corasick-UNLICENSE.txt. Other Chromium consumers still require the complete generated Chromium credits. |
-| Filter lists (EasyList, EasyPrivacy; other catalog subscriptions) | EasyList/EasyPrivacy seeds: official easylist/easylist gh-pages commit `256e23a0e35b8a32cd7db5bff4801210cd2ff23d`; SHA-256 EasyList `756ddc9aaae3c4c9a76068dc1dfc10129dba78721ddf79f07340c8102950c2b5`, EasyPrivacy `c1d09df31b339231a79a5e389031ea09745b229f90c9e379aca1f2d4b7e07813` | Dual GPLv3+ / CC BY-SA 3.0+; both retained headers say exactly `! Licence: https://easylist.to/pages/licence.html` (linked upstream terms); GPL terms in licenses/GPL-3.0.txt. | Ships: unmodified upstream text, headers retained; EasyList and EasyPrivacy seed payloads in `Open.app/Contents/Resources/AdBlock`. Other catalog lists: Not shipped (downloaded on enable). | `Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt`, `tools/fetch-adblock-lists.sh`, `tools/embed-adblock.sh`; The EasyList authors (https://easylist.to/); https://github.com/easylist/easylist/tree/256e23a0e35b8a32cd7db5bff4801210cd2ff23d ; https://easylist.to/pages/licence.html ; licenses/GPL-3.0.txt. |
+| EasyList | 202611072258; snapshot commit 256e23a0e35b8a32cd7db5bff4801210cd2ff23d; header source commit b52f0f1aca4574d9a40672a98293baf7a84a0c41 | GPL-3.0-or-later OR CC-BY-SA-3.0 (upstream also permits later CC versions) | Ships: unmodified seed text with headers at Open.app/Contents/Resources/AdBlock/easylist.txt. | The EasyList authors (https://easylist.to/); exact source https://raw.githubusercontent.com/easylist/easylist/256e23a0e35b8a32cd7db5bff4801210cd2ff23d/easylist.txt ; SHA-256 756ddc9aaae3c4c9a76068dc1dfc10129dba78721ddf79f07340c8102950c2b5; pin in Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt; terms https://easylist.to/pages/licence.html ; licenses/GPL-3.0.txt, licenses/CC-BY-SA-3.0.txt. |
+| EasyPrivacy | 202611072258; snapshot commit 256e23a0e35b8a32cd7db5bff4801210cd2ff23d; header source commit b52f0f1aca4574d9a40672a98293baf7a84a0c41 | GPL-3.0-or-later OR CC-BY-SA-3.0 (upstream also permits later CC versions) | Ships: unmodified seed text with headers at Open.app/Contents/Resources/AdBlock/easyprivacy.txt. | The EasyList authors (https://easylist.to/); exact source https://raw.githubusercontent.com/easylist/easylist/256e23a0e35b8a32cd7db5bff4801210cd2ff23d/easyprivacy.txt ; SHA-256 c1d09df31b339231a79a5e389031ea09745b229f90c9e379aca1f2d4b7e07813; pin in Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt; terms https://easylist.to/pages/licence.html ; licenses/GPL-3.0.txt, licenses/CC-BY-SA-3.0.txt. |
+| Other catalog filter subscriptions | Runtime-selected catalog URLs | Per-list terms; not included in this bundle | Not shipped: downloaded only when enabled; no other catalog payload is bundled. | Packages/OpenKit/Sources/OpenAdBlock/Resources/catalog.json; upstream list URLs and terms must be reviewed when adding a bundled list. |
 
 Patent note: release builds enable proprietary codecs. H.264/AAC patent licensing for distribution is
 not granted by any open-source license above and is part of the §10 user
@@ -130,23 +135,51 @@ The generator checks URL syntax only; it does not test public access.
 `--require-public-source` and `--require-cef-credits` refuse an unset offer.
 No source was published or release user step performed by this audit.
 
-## uBlock assets: §7.3(b), not shipped
+## Bundled filter lists and U-6 license choice
 
-No uBlock Origin resources/scriptlets payload ships in today's app or engine
-distribution. There is no shipped inventory row for these assets. The Rust
-crate's parser/assembler is code, not a copy of uBO's resource source. The
-Swift package contains the catalog, list hashes and PSL only. Optional
-extension installs and downloaded user data are not application payloads.
-The Release bundle and distribution file manifests are the evidence; see
-the verification receipt linked below. No replacement resources JSON,
-scriptlets JS, seed EasyList/EasyPrivacy text or DAT exists in those inputs.
+`tools/fetch-adblock-lists.sh` verifies the immutable snapshot URLs and
+SHA-256 values in `list-pins.txt`. `tools/embed-adblock.sh` copies those
+bytes without changes into the app. Both pinned files retain these header
+lines (EasyList and EasyPrivacy each have the same version and source commit):
 
-`licenses/GPL-3.0.txt` is prepared for a future §7.3(a) case. It is omitted
-from current credits. If uBO assets are added, add the exact pin and a public
-corresponding-source URL in a row named `uBlock Origin resources / scriptlets`,
-bundle their source text, pass `--ubo-source`, and include the full GPL text.
-The generator refuses that row without the source input. Do not infer asset
-shipping from the Rust resources parser or a catalog URL.
+```text
+! Version: 202611072258
+! Last modified: 07 Nov 2026 22:58 UTC
+! Commit: b52f0f1aca4574d9a40672a98293baf7a84a0c41
+! Homepage: https://easylist.to/
+! Licence: https://easylist.to/pages/licence.html
+```
+
+The headers link to the terms; they do not spell out the license names.
+That authoritative page states:
+
+> Unless otherwise noted, the contents of the EasyList repository
+> (https://github.com/easylist) is dual licensed under the GNU
+> General Public License version 3 of the License, or (at your option)
+> any later version, and Creative Commons Attribution-ShareAlike 3.0
+> Unported, or (at your option) any later version. You may use and/or
+> modify the files as permitted by either licence; if required,
+> "The EasyList authors (https://easylist.to/)" should be
+> attributed as the source of the material.
+
+U-6 must **confirm the license choice for the bundled filter lists; Open
+distributes them unmodified**. Both alternatives and their full texts are
+retained in acknowledgements pending that written review. Including both
+texts does not select a license or close U-6. The snapshot commit in the
+pin URLs identifies the exact distributed files; the different commit in
+their headers identifies the upstream source used to generate those files.
+
+## uBlock redirect assets: §7.3(b)
+
+The app now ships the pinned redirect resources in the row above. The build
+stages original text sources and LICENSE.txt from the same hash-verified uBO
+archive, embeds them under `AdBlock/Source`, and passes that directory as
+`--ubo-source` to the acknowledgements generator. The exact complete upstream
+archive is linked in the row above; binary stub bodies are encoded unchanged
+by the crate in resources.json. The locked assembly driver is Open-owned
+build code in `tools/adblock-resources/`. No scriptlet templates ship.
+`licenses/GPL-3.0.txt` remains in the generated acknowledgements. This local
+bundle does not close U-6 or authorize a public release.
 
 The Sparkle checkout at the exact pin confirms bspatch is in its shared
 bsdiff library, while sais is used by bsdiff in delta-creation tools. Those
@@ -165,9 +198,12 @@ on OpenAdBlock, so its resources do ship transitively today.
 | Bundle resource | Repository source | Ownership / license |
 |---|---|---|
 | OpenKit_OpenSuggest.bundle/Contents/Resources/public_suffix_list.dat | Sources/OpenSuggest/Resources/public_suffix_list.dat | PSL, MPL-2.0 |
-| OpenKit_OpenAdBlock.bundle/Contents/Resources/Resources/{catalog.json,list-pins.txt,public_suffix_list.dat} | Sources/OpenAdBlock/Resources/ | Open-owned catalog/hash metadata; PSL is MPL-2.0 |
+| OpenKit_OpenAdBlock.bundle/Contents/Resources/Resources/{catalog.json,list-pins.txt,resources-pins.txt,resources.json,public_suffix_list.dat} | Sources/OpenAdBlock/Resources/ | Open-owned catalog/hash metadata; PSL is MPL-2.0; resources.json is GPL-3.0 |
+| AdBlock/{easylist.txt,easyprivacy.txt} | Vendor/adblock/ staged from the commit-pinned URLs in Sources/OpenAdBlock/Resources/list-pins.txt | The EasyList authors; GPL-3.0-or-later OR CC-BY-SA-3.0 (later CC versions also permitted); unmodified headers retained |
+| AdBlock/{resources.json,Source/} | Vendor/adblock/ generated from resources-pins.txt | uBlock Origin redirect stubs and original text sources/notices; GPL-3.0 |
 | OpenKit_OpenSpaceEditor.bundle/Contents/Resources/emoji-index.json | Sources/OpenSpaceEditor/Resources/emoji-index.json | Derived Unicode 17.0 data; Unicode-3.0 |
 | OpenKit_OpenFeatures.bundle/Contents/Resources/Sounds/{open-capture.caf,open-event.caf} | Sources/OpenFeatures/Resources/Sounds/ | Open-owned generated audio |
+| OpenKit_OpenOnboarding.bundle/Contents/Resources/Onboarding/{open-intro.m4a,open-intro-reference.json} | Sources/OpenOnboarding/Resources/Onboarding/ | Open-owned generated intro audio and PCM measurements |
 | OpenKit_OpenBoosts.bundle/Contents/Resources/{boost-applier.js,zap-picker.js} | Sources/OpenBoosts/Resources/ | Open-owned runtime source |
 | OpenKit_OpenTranslate.bundle/Contents/Resources/translate-runtime.js | Sources/OpenTranslate/Resources/ | Open-owned runtime source |
 | OpenKit_OpenMedia.bundle/Contents/Resources/pip-site-rules.json | Sources/OpenMedia/Resources/pip-site-rules.json | Open-owned site rules |
@@ -238,6 +274,7 @@ rows identify each crate's own source file through `README.chromium`.
 | licenses/Apache-2.0.txt | `third_party/rust/chromium_crates_io/vendor/addr-v0_14/LICENSE-APACHE` | `a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2` |
 | licenses/BSD-CEF.txt | CEF `4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f/LICENSE.txt`; also Vendor/cef/LICENSE.txt | `058c3827ffb827ff3edda471ae7e1bb1d1aa5931985f0126043ccd33409e792f` |
 | licenses/BSD-Chromium.txt | Chromium `d0c02bfad08ec92a6ffcf989e53cd995e6381a4c/LICENSE` | `368cca1106be99d39ecd32a38d8305585d802a475effb66380b91ffc9bcf709b` |
+| licenses/CC-BY-SA-3.0.txt | Creative Commons authoritative legal code: https://creativecommons.org/licenses/by-sa/3.0/legalcode.txt (downloaded 2026-11-08; unchanged UTF-8 bytes) | `3f941b3b89cf7b8370ceb83cc76d2120d471b58735d8ca60238a751a48d7f72f` |
 | licenses/FFmpeg-CREDITS.txt | FFmpeg `9db86ce5b5b454dfc96c435f9f0723012980c37f/CREDITS.chromium` | `903a6faa336b60d419bc6eb2bcffe4ca8bd9446735e5de4fcc901c80e9f22327` |
 | licenses/GPL-3.0.txt | https://www.gnu.org/licenses/gpl-3.0.txt (existing committed upstream copy) | `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986` |
 | licenses/LGPL-2.1-FFmpeg.txt | FFmpeg `9db86ce5b5b454dfc96c435f9f0723012980c37f/COPYING.LGPLv2.1` | `246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30` |

@@ -17,6 +17,16 @@ enum MainMenu {
       overrides: app.keyBindings, switchToNinth: UserDefaults.standard.bool(forKey: "open.shortcuts.switchToNinthEnabled"))
     menu.items.first { $0.submenu?.title == "Extensions" }?.submenu?.delegate = app.extensionsMainMenu
     if let windowMenu = menu.items.first(where: { $0.title == "Window" })?.submenu { app.appendLittleOpenMenuItems(to: windowMenu, sessions: true) }
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu {
+      let basics = ClosureMenuItem(title: "Open Basics") { [weak app, weak factory] in
+        guard let app, app.firstRunWindowController == nil else { return }
+        let controller = app.frontWindowController ?? app.makeWindow()
+        let target = factory.flatMap { $0.isClosing ? nil : $0 } ?? controller.flatMap { app.hostFactories[$0.windowID] }
+        target?.openBasics(nil)
+      }
+      basics.identifier = NSUserInterfaceItemIdentifier("open-basics")
+      help.insertItem(basics, at: 0)
+    }
     #if DEBUG || OPEN_AUTOMATION
     if let help = menu.items.first(where: { $0.title == "Help" })?.submenu,
       let troubleshooting = help.items.first(where: { $0.title == "Troubleshooting" })?.submenu {
@@ -26,6 +36,17 @@ enum MainMenu {
       }
       archive.identifier = NSUserInterfaceItemIdentifier("archive-expired-little-open-now")
       troubleshooting.addItem(archive)
+    }
+    #endif
+    if let item = menu.items.first?.submenu?.items.first(where: { $0.identifier?.rawValue == "check-for-updates" }) {
+      item.target = UpdaterMenuTarget.shared; item.action = #selector(UpdaterMenuTarget.check(_:))
+      _ = UpdaterMenuTarget.shared.validateMenuItem(item)
+    }
+    #if DEBUG
+    if let help = menu.items.first(where: { $0.title == "Help" })?.submenu {
+      let replay = ClosureMenuItem(title: "Replay Intro") { [weak app] in app?.showOnboarding(replay: true) }
+      replay.identifier = NSUserInterfaceItemIdentifier("replay-intro")
+      help.items.first(where: { $0.title == "Troubleshooting" })?.submenu?.addItem(replay)
     }
     #endif
     return menu
@@ -86,6 +107,12 @@ enum MainMenu {
   #endif
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
+    // Native intro responder/default button owns unmodified keys. Do not load
+    // browser command services while the first-run welcome is on screen.
+    if let introWindow = app.onboardingWindowController?.window, event.window === introWindow {
+      if event.modifierFlags.contains(.command), ["t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
+      return false
+    }
     if let sheet = event.window as? SavePromptSheet, sheet.isVisible {
       if event.modifierFlags.contains(.command), ["w", "t", "l"].contains(event.charactersIgnoringModifiers ?? "") { return true }
       // The sheet's NSPanel/default button owns Return, Esc and Cmd-., before
@@ -171,7 +198,7 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
-    if id == "check-for-updates" { return app.updater?.canCheckForUpdates ?? true }
+    if id == "check-for-updates" { return true }
     if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
@@ -428,5 +455,19 @@ extension EngineWebContentHostFactory {
       guard let self, let panel, self.pendingSavePanel === panel else { return }
       self.pendingSaveChoice?(response == .OK ? panel.url : nil)
     }
+  }
+}
+
+/// App-only dynamic update menu state; Sparkle never enters OpenCommands.
+@MainActor
+private final class UpdaterMenuTarget: NSObject, NSMenuItemValidation {
+  static let shared = UpdaterMenuTarget()
+  @objc func check(_ sender: Any?) { (NSApp.delegate as? AppDelegate)?.settingsPresenter.checkForUpdates() }
+  func validateMenuItem(_ item: NSMenuItem) -> Bool {
+    let updater = (NSApp.delegate as? AppDelegate)?.updater
+    let available = updater?.started == true && (updater?.foundVersion != nil || updater?.userDriver.available == true)
+    item.title = available ? "Update Available…" : (updater?.canCheckForUpdates ?? true) ? "Check for Updates…" : "Updating…"
+    item.badge = available ? .updates(count: 1) : nil
+    return true
   }
 }

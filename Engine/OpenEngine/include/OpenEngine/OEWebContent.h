@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <OpenEngine/OEBrowserContext.h>
 #import <OpenEngine/OEDefines.h>
+#import <OpenEngine/OEAutofill.h>
 #import <OpenEngine/OENavigationHistory.h>
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
@@ -80,6 +81,22 @@ typedef NS_ENUM(NSInteger, OEWebContentCrashState) {
 NS_SWIFT_UI_ACTOR
 @protocol OEWebContentDelegate <NSObject>
 @optional
+/// Offers and withdrawals arrive on a later main-run-loop turn, after
+/// Chromium updates its controller. The callback may answer immediately or
+/// close the page. Retain a queued offer until the shell answers it.
+/// An unanswered prompt is ignored when the shell releases it.
+- (void)webContent:(OEWebContent*)webContent showSavePrompt:(OESavePrompt*)prompt
+    NS_SWIFT_NAME(webContent(_:showSavePrompt:));
+/// The engine already answered Ignored. Remove the queued or visible sheet.
+- (void)webContent:(OEWebContent*)webContent withdrawSavePrompt:(OESavePrompt*)prompt
+    NS_SWIFT_NAME(webContent(_:withdrawSavePrompt:));
+/// Chromium could not save the password because the Keychain is unavailable.
+- (void)webContentDidFailToSavePasswordForKeychainError:(OEWebContent*)webContent
+    NS_SWIFT_NAME(webContentDidFailToSavePasswordForKeychainError(_:));
+/// A Chromium Manage link, routed to the page's own profile.
+- (void)webContent:(OEWebContent*)webContent openAutofillPage:(OEAutofillPage)page
+    NS_SWIFT_NAME(webContent(_:openAutofillPage:));
+
 /// A message from the Open isolated world. Called on the main thread.
 /// documentID is Chromium's document token; same-document navigation keeps it.
 /// A callback may close the page; the engine retains no iterator across it.

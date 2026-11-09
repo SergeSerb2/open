@@ -17,6 +17,7 @@ final class ActivationTrace {
           self?.append(["event": eventName, "uptime": ProcessInfo.processInfo.systemUptime,
             "active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
             "frontmostApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown",
+            "frontmostBundleID": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "",
             "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0])
         }
       })
@@ -24,9 +25,10 @@ final class ActivationTrace {
     workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] notification in
       let target = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
       let name = target?.localizedName ?? "unknown", pid = target?.processIdentifier ?? 0
+      let bundleID = target?.bundleIdentifier ?? ""
       MainActor.assumeIsolated {
         self?.append(["event": "frontmostChanged", "uptime": ProcessInfo.processInfo.systemUptime,
-          "frontmostApp": name, "frontmostPID": pid])
+          "frontmostApp": name, "frontmostPID": pid, "frontmostBundleID": bundleID])
       }
     }
   }

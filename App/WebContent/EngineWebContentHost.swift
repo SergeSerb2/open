@@ -79,12 +79,12 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       }
     }
   }
-  func load(_ url: URL) { if !closed { content.load(url) } }
+  func load(_ url: URL) { if !closed, !WelcomeTab.isInternal(url) { content.load(url) } }
   func reload() { if !closed { content.reload() } }
   func stop() { if !closed { content.stopLoading() } }
   func goBack() { if !closed { content.goBack() } }
   func goForward() { if !closed { content.goForward() } }
-  func focus() { if !closed { content.focusPage() } }
+  func focus() { if !closed { content.focusPage(); owner?.savePromptFocusChanged() } }
   func rebind(tabID: ItemID, spaceID: SpaceID?) {
     generation += 1; self.tabID = tabID; self.spaceID = spaceID
     refreshPageBackground(); observeMute()
@@ -259,7 +259,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     guard !closed else { return nil }; return owner?.webContent(page, createWebContentFor: request)
   }
   func webContent(_ page: OEWebContent, shouldNavigateTo url: URL, userGesture: Bool, modifiers: NSEvent.ModifierFlags) -> Bool {
-    guard !closed else { return false }
+    guard !closed, !WelcomeTab.isInternal(url) else { return false }
     owner?.record("navigationPolicy", page, ["url": url.absoluteString, "modifiers": modifiers.rawValue, "userGesture": userGesture])
     return !userGesture || shouldNavigate?(url, modifiers) != false
   }
