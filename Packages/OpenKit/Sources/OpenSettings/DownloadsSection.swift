@@ -7,6 +7,10 @@ public struct DownloadsSection: View {
     @Bindable var model: LibraryViewModel
     public init(model: LibraryViewModel) { self.model = model }
     public var body: some View {
+        VStack(spacing: 8) {
+        if !model.downloads.downloadHistoryError.isEmpty {
+            Text(model.downloads.downloadHistoryError).font(.caption).foregroundStyle(.secondary)
+        }
         if model.downloadItems.isEmpty {
             LibraryEmptyState(title: "No downloads", message: "Files you download appear here.", symbol: "arrow.down.circle")
         } else {
@@ -17,12 +21,15 @@ public struct DownloadsSection: View {
                 }
             }.listStyle(.plain)
         }
+        }
     }
     /// Arc formatter facts: page-chrome §4, 0x101cdbc14 / 0x101cdd0e4.
     public static func subtitle(_ item: DownloadItemSnapshot, model: LibraryViewModel) -> String {
         switch item.state {
         case .failed: return "Failed to Download"
-        case .completed: return model.fileAvailable(item) ? "Completed · \(model.downloadLocation(item))" : "File moved or deleted."
+        case .completed:
+            if item.isHistorical && item.fileExists == nil { return "Completed · \(model.downloadLocation(item))" }
+            return model.fileAvailable(item) ? "Completed · \(model.downloadLocation(item))" : "File moved or deleted."
         case .cancelled: return "Cancelled"
         case .paused: return "Paused"
         case .inProgress:
@@ -147,6 +154,7 @@ public final class DownloadRowView: NSView {
         }
         menu.addItem(.separator()); add("Hide from Open") { actions.removeDownload(id: id) }
         if available { add("Move to Trash") { actions.trashDownload(id: id) } }
+        if item.isHistorical { add("Retry") { actions.retryDownload(id: id) } }
         return menu
     }
 }

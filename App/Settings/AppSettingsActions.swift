@@ -260,6 +260,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     library?.refreshSpaceManagerView()
   }
   var downloads: [DownloadItemSnapshot] { app.downloadsCenter.downloads }
+  var downloadHistoryError: String { app.downloadsCenter.downloadHistoryError }
+  func refreshDownloads() async { await app.downloadsCenter.refreshDownloads() }
   private func status(_ message: String, pane: PaneID? = nil) {
     switch pane ?? settings.selectedPane {
     case .general: settings.general.errorText = message
@@ -342,7 +344,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       }
       if let error { return error }
     }
-    if kinds.contains(.downloads) { app.downloadsCenter.clearHistory(profileID: profileID, since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
+    if kinds.contains(.downloads) {
+      do { try await app.downloadsCenter.clearHistory(profileID: profileID, since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
+      catch { return error.localizedDescription }
+    }
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {

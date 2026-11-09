@@ -46,6 +46,7 @@ public struct ProfileDirectories: Sendable {
     private func stateFile(_ file: String, _ name: String) -> URL { profileDirectory(dataDirectoryName: name).appendingPathComponent("State", isDirectory: true).appendingPathComponent(file) }
     public func historyFileURL(dataDirectoryName: String) -> URL { stateFile("history.sqlite3", dataDirectoryName) }
     public func archiveFileURL(dataDirectoryName: String) -> URL { stateFile("archive.sqlite3", dataDirectoryName) }
+    public func downloadsFileURL(dataDirectoryName: String) -> URL { stateFile("downloads.sqlite3", dataDirectoryName) }
     public func sleepFileURL(dataDirectoryName: String) -> URL { stateFile("sleep.sqlite3", dataDirectoryName) }
     public func boostsFileURL(dataDirectoryName: String) -> URL { profileDirectory(dataDirectoryName: dataDirectoryName).appendingPathComponent("Boosts/boosts.json") }
     public func adBlockDirectory(dataDirectoryName: String) -> URL { profileDirectory(dataDirectoryName: dataDirectoryName).appendingPathComponent("AdBlock", isDirectory: true) }

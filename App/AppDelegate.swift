@@ -170,9 +170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     }
     if quitWarning.shouldKeepBrowsing(app: self, downloadsWarned: downloadsWarned) { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
-    if !shutdownPrepared, importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true) {
+    if !shutdownPrepared, downloadsCenter.needsHistoryFlush || importRunner.hasPendingUndo || (historyQuitFlushedAt.map({ now - $0 > 5 }) ?? true) {
       historyQuitTask = Task { @MainActor in
         await self.stores.flushHistory()
+        await self.downloadsCenter.flushHistory()
         await self.importRunner.flushUndoForQuit()
         self.historyQuitFlushedAt = ProcessInfo.processInfo.systemUptime; self.historyQuitTask = nil
         NSApp.terminate(nil)

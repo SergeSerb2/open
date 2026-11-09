@@ -64,8 +64,8 @@ it was retried after the earlier read finished. Raw output stays in `.re/`.
 
 ## Clear download history
 
-`DownloadsCenter` owns a session-only list with bounded terminal history; the
-App has no persisted download-history store. Active transfers are not evicted.
+`DownloadsCenter` owns live session rows and a lazy per-Profile terminal-history
+store. Active transfers are not evicted.
 Settings removes finished, cancelled and failed entries
 for the chosen Profile and range, using their start time. Running and paused
 transfers stay in the list, and downloaded files stay on disk. Library Downloads
@@ -82,3 +82,117 @@ its additional Last 4 weeks range. API evidence:
 removal maps to `Remover::DATA_TYPE_DOWNLOADS` in
 `Engine/fork/src/open/browser/profiles/open_profile_context.cc` (Section 10,
 #222).
+
+## Persistent history and Profile filter (2026-11-09 implementation)
+
+The existing Arc evidence establishes the Profile filter: **FACT**, the strings
+`Filter Downloads` and `Download list filter - profiles section`,
+`DownloadsPageReducer`, and Library Downloads filter titles are recorded in
+[features-advanced DL-1 and §9.6](features-advanced.md#95-downloads).
+The existing menu/action facts are in [page-chrome §4](page-chrome.md#4-downloads).
+No new Arc runtime or reverse-engineering claim is made here.
+
+Open stores terminal downloads in
+`Profiles/<dataDirectoryName>/State/downloads.sqlite3`, beside Archive and History.
+`DownloadHistoryStore` follows ArchiveStore's private serial queue and
+FULL-synchronous SQLite transaction pattern. A new database receives 0600 file
+permissions immediately after open, before journal/schema writes. The insert
+and pruning commit together. The file keeps the newest **1,000 terminal rows per
+Profile**, ordered by end time with a stable ID tie-break. The data includes display name, source
+URL and host, local path, received and total bytes, start/end times, terminal
+state, and Profile ID. Live identifiers include a launch UUID so the engine's
+numeric IDs cannot collide with records from another launch.
+
+The store refuses a database or SQLite sidecar above **32 MiB** before opening
+it, caps SQLite page growth to 32 MiB, runs `quick_check`, and refuses unknown
+schema versions, invalid terminal states, invalid Profile ownership, and
+oversized fields. Loads select only the newest 1,000 rows. A write prunes excess
+rows before inserting and prunes again before commit; it does not decode the
+existing table. Thus a 1,001-row file can load and recover on its next write.
+A JSON row has a 96 KiB limit; names, IDs, source URLs, hosts and local paths
+also have separate limits. SQLite's
+value/row allocation limit is 100 KiB, set before its first schema read. Errors appear
+in the Downloads section. A failed read returns no partial page. Damaged files
+are kept for recovery, and a failed write does not hide the live row.
+
+There is no history read during launch. Opening Library ▸ Downloads loads each
+Profile once on the store queue. Live session rows come first; stored rows whose
+IDs already have session entries are suppressed. Loads retry at most twice when
+the Profile revision changes, then merge with current entries, removal
+tombstones and completed clear ranges taking precedence over the read. File
+existence checks use one coalesced, cancellable task on the file actor when
+Library opens or regains focus, and before file actions. Unknown historical
+availability stays nil until that check finishes, without a main-thread stat or
+a temporary missing-file subtitle. Unchanged results do not publish. No file
+watcher or idle timer is added. Regular-context guards refuse ephemeral contexts and contexts with an
+`originalContext`; Incognito keeps its separate destination-only path.
+
+Historical rows reuse Open/Copy/Show in Finder/Move to Trash/Hide from Open and
+offer the existing **Retry** action for their source URL under the recorded
+Profile. **Open wording, unproven in Arc:** `File moved or deleted.` is the
+existing Open missing-file subtitle. Missing rows disable file actions and stay
+removable and retryable. The Profile menu appears with two or more Profiles.
+`All Profiles` and Profile names reuse the existing Library choices; exact Arc
+menu geometry remains unverified. The menu rebuilds only when its ordered
+Profile IDs, names or selection change.
+
+Settings' Downloads choice clears the selected Profile and start-time range
+after the engine clear succeeds; it waits for the store commit before reporting
+Done. It registers the Profile/range before awaiting the store and suppresses
+terminal writes in that range until the clear completes. A failed clear replays
+the suppressed terminal rows. Downloaded files and active transfers remain.
+Hide/Trash hides the row in memory first, then attempts the disk delete; a store
+error is shown without restoring the hidden row. Quit drains accepted history
+writes. Approved quit cancellations enter the history before the engine shuts down. The registered
+`ProfileDataOwner` retires the queue and closes its database before Profile
+deletion removes the folder, so pending work cannot recreate it.
+
+### Verification state
+
+**Ready for first build; runtime acceptance is pending.** The S11 lead's disk
+hold (03:39) forbids builds and verify-all until explicit clearance. The M5 and
+M1 screen holds also remain active. Only source review, `git diff --check`, and
+in-memory Python syntax parsing were performed. No Open or Arc launch, render
+run, compiler run, defaults command, debugger, or crash probe was performed.
+
+The existing `tools/e2e/downloads.py` now has `history` and `history-errors`
+diagnostic cases. The suite uses its own bundle/domain and transient launch
+arguments for quit-preference variants; it issues no `defaults` commands. All
+rows below are **NOT RUN**, including negative proofs:
+
+| Pending real-App row | Coverage written |
+|---|---|
+| Two Profiles and relaunch | Real transfers; same root; stable IDs; terminal states and metadata persist; no duplicate rows |
+| Profile filter | Hidden with one Profile; native menu with two; first, second and all Profile choices |
+| Private downloads | Real Incognito transfer reaches disk but neither store nor relaunched list contains it |
+| Historical actions | Real file opener receipt, copy URL, recorded reveal, retry URL/Profile and Trash |
+| Missing file | Delete fixture file; reopen Library; missing subtitle, disabled file actions, removable row |
+| Remove and clear | Hide/Trash; Last hour with an older survivor and another Profile; All time; relaunch after each |
+| Profile deletion | Real typed Settings sheet; folder and rows stay absent after Library reopen and relaunch |
+| Bounds and corruption | 0600 file mode; 1,000 rows accepted; 1,001 rows load newest 1,000 and the next write prunes; invalid record, corrupt SQLite and 32 MiB + 1 byte file refused; valid file restored |
+| Quit flush | Approved quit without an explicit history flush; relaunch waits for the exact cancelled ID, state, Profile and source URL for both warning-preference values |
+| Existing downloads regression | Controls, destination uniqueness/fallback, native save sheets, per-Profile destination, badge/idle, clear ranges and quit |
+
+After explicit disk-hold clearance, **build first**, only through the requested
+S11/heavy wrappers with `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`.
+After screen-hold clearance, run one downloads suite
+per on-screen lock invocation with `OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS=1`.
+The new diagnostic selection is `OPEN_DOWNLOADS_CASE=history,history-errors`.
+Then run the full downloads suite and the affected off-screen settings checks.
+If the second-Profile callback is missing, run the same failing row on unchanged
+main **518471aa** before attributing it to this change. That comparison remains
+pending with the screen hold.
+
+**Break-and-revert proof, pending until both holds end:** temporarily disable
+`DownloadsCenter.persist()`, rebuild under the required wrappers, run the history
+and quit diagnostic cases in separate on-screen invocations, and record their
+FAIL rows (including the quit-cancellation restoration checks). Restore
+`persist()`, rebuild and rerun to record PASS. A missing expected ID must time
+out or fail; an empty list never satisfies the relaunch check. Do not commit the
+temporary break.
+
+Source review against `docs/review-checklist.md`: input bounds, transaction and
+queue ordering, private-context exclusion, stable IDs, and Profile-owner teardown
+were reviewed. Runtime lifetimes, native control presentation, limits/corruption
+acceptance, quiet idle behavior, and negative proofs remain **UNVERIFIED**. No
+new dependencies or engine patches were added.
