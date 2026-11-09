@@ -59,6 +59,49 @@ hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
 0.08 s; sound preparation deadline 0.3 s; frame measurement 0–8 s;
 resident measurement 3 s; orb periods 18/22/26 s.
 
+The worker publishes prepared-player readiness under a lock before notifying the
+main actor. At the animation start gate, the main actor reads that state directly.
+If preparation is still pending, its 300 ms deadline starts at that gate. An
+expired main-actor task from synchronous engine startup cannot discard a ready
+player. The receipt includes `prepareStart`, `workerReady`, `startRequest`,
+`decision` and actual animated `t0` host timestamps.
+
+First run prepares audio off main while the engine starts, without creating an
+onboarding window or dim overlay. After `engine.start` and the first native
+message-loop burst return, it creates and rasterizes the scene while unshown.
+Playback uses the common 80 ms lead. At t=0 it submits the window, every scene
+track and the dim fade together; the first visible intro frame is animated.
+The pre-start guard checks that both windows are unshown, all scene/dim
+animation keys are empty, and music has not started. Missing presentation layers
+are reported as such while unshown, never replaced by model layers.
+
+Launch-to-first-onboarding-frame is INFO for cold and repeat launches. Engine
+startup varied from 110 ms to 2,421 ms on the same executable, so there is no
+visible static-room budget or cold-only exception. Dyld/signature checks are a
+hypothesis, not an attributed cause. Audio/animation starts stay within 20 ms.
+Returning launches keep the snapshot-backed browser's confirmed frame before
+engine startup and create no onboarding scene or audio worker.
+
+Automation measures display-link intervals over t=0–8 s from the first animated
+frame. `onboarding action=state` reports launch, engine start begin/end, native
+loop settled, window creation and first onboarding frame timestamps in `startup`.
+It also reports `preAnimationStatic` (real scene/dim animation keys, presentation
+availability, visibility and pre-start audio playhead), and the common host clock.
+The display-link confirmation timestamp can follow the common submission time;
+the receipt reports that difference explicitly. This confirms a main-thread
+display-link callback, not a render-server frame statistic.
+The opt-in pacing trace records each interval above 1.5 times nominal as
+`stalls: [{start, end, ms, regions, regionOverlapMS}]`. Region totals are
+inclusive main-thread milliseconds; nested regions must not be added together.
+`preparationMainThreadMS` retains work before animated t=0. Signposts and the
+bounded recorder are absent from normal Release builds.
+
+The onboarding suite measures a product-only launch without polling or PNG
+capture in the frame window. It then uses a separate launch for the original
+functional keys, phase checks and native snapshots. The diagnostic
+`OPEN_E2E_ONBOARDING_SNAPSHOT_CONTROL=1` adds a PNG to the frame window for
+attribution only. Pacing limits remain p95 ≤1.5 times nominal and drops ≤1%.
+
 Continue replaces the foreground inside the same 1280×800 onboarding window.
 The room, dim child and music keep their clocks through the setup steps below.
 The intro never writes a snapshot. A small screen (both width ≤1280 and height

@@ -2,6 +2,9 @@ import AppKit
 import OpenEngine
 import Security
 import QuartzCore
+#if OPEN_AUTOMATION
+import OpenOnboarding
+#endif
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
@@ -49,10 +52,14 @@ if let receipt = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SCRIPTING_
 #endif
 // Finish AppKit launch and draw the snapshot-backed sidebar before loading
 // Chromium. The same sidebar survives engine readiness; no page exists yet.
+if appDelegate.isFirstRun { appDelegate.prepareOnboardingSound() }
 app.setActivationPolicy(.regular)
 LaunchTiming.shared.phase("finishLaunchingBegin")
 app.finishLaunching()
 LaunchTiming.shared.phase("finishLaunchingEnd")
+// First run has no window until the engine and its first native loop burst
+// return. Returning launches keep this snapshot-before-engine path unchanged.
+if !appDelegate.isFirstRun {
 appDelegate.drawWindowsBeforeEngine()
 LaunchTiming.shared.phase("sidebarSubmitted")
 
@@ -97,9 +104,13 @@ if firstFrame.presented {
 }
 
 appDelegate.firstRunWindowController?.startProbeAfterDisplay()
+}
 
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.
+#if OPEN_AUTOMATION
+let engineConfigurationRegion = IntroPacingTrace.begin("engine.configuration")
+#endif
 let configuration = OEEngineConfiguration()
 // root_cache_path = <root>/Engine. The default profile's engine data is
 // Engine/Default (CEF's fixed name for the global context); other profiles
@@ -133,14 +144,22 @@ if AutomationNotificationSetup.suppressesSystemSetup {
 }
 #endif
 
+#if OPEN_AUTOMATION
+engineConfigurationRegion?.end()
+#endif
 OEEngine.shared.delegate = appDelegate
 LaunchTiming.shared.mark("engineStart")
 #if OPEN_AUTOMATION
+if appDelegate.isFirstRun { appDelegate.onboardingStartup["engineStartBeginHostTime"] = CACurrentMediaTime() }
 if let data = try? JSONSerialization.data(withJSONObject: LaunchTiming.shared.report, options: [.sortedKeys]) {
   FileHandle.standardError.write(Data("Open: pre-engine timing ".utf8) + data + Data("\n".utf8))
 }
 #endif
 do {
+  #if OPEN_AUTOMATION
+  let pacingRegion = IntroPacingTrace.begin("engine.start")
+  defer { pacingRegion?.end() }
+  #endif
   try OEEngine.shared.start(configuration: configuration)
 } catch {
   FileHandle.standardError.write(Data("Open: engine failed to start: \(error)\n".utf8))
@@ -160,7 +179,13 @@ do {
   exit(1)
 }
 LaunchTiming.shared.mark("engineStarted")
+#if OPEN_AUTOMATION
+if appDelegate.isFirstRun { appDelegate.onboardingStartup["engineStartEndHostTime"] = CACurrentMediaTime() }
+#endif
 
+#if OPEN_AUTOMATION
+IntroPacingTrace.current?.engineMessageLoopWillStart()
+#endif
 OEEngine.shared.runMessageLoop()
 appDelegate.saveState()
 appDelegate.prepareForEngineShutdown()
@@ -172,6 +197,10 @@ exit(0)
 /// The running app's code signature.
 enum CodeSignature {
   static var hasTeamIdentifier: Bool {
+    #if OPEN_AUTOMATION
+    let region = Thread.isMainThread ? MainActor.assumeIsolated { IntroPacingTrace.begin("engine.signatureCheck") } : nil
+    defer { if let region { MainActor.assumeIsolated { region.end() } } }
+    #endif
     var code: SecCode?
     guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return false }
     var staticCode: SecStaticCode?

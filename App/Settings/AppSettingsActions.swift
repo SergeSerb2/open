@@ -42,6 +42,15 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func modelWasInstalled() { settingsStorage = nil }
   // Registry callbacks never instantiate Settings or open another Profile.
   func refreshAdBlockWarning() { settingsStorage?.adBlock?.refreshOtherBlocker() }
+  // Async fresh-context store preparation may finish after Settings already
+  // exists. Attach only that model; never instantiate Settings in this callback.
+  func adBlockStoreDidOpen(_ store: AdBlockStore) {
+    guard let settingsStorage, settingsStorage.adBlock == nil else { return }
+    settingsStorage.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) })
+    if settingsStorage.advanced.statusText == "Ad blocking settings could not be opened." {
+      settingsStorage.advanced.statusText = ""
+    }
+  }
   func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool {
     guard app.engineReady, let profile = app.model.profile(id: profileID),
       let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return false }
@@ -143,11 +152,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       switch intent {
       case .unloadTab: return false
       case .close(let id) where self.app.model.isPinned(tabID: id): return false
-      case .copyLink(let id, let markdown):
-        guard let tab = self.app.model.tab(id: id) else { return false }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString, forType: .string)
-        return true
+      case .copyLink(let id, let markdown), .copyAllLinks(let id, let markdown):
+        return Self.copyCleanLinks(self.app.model, ids: [id], markdown: markdown)
+      case .copyLinks(let ids, let markdown):
+        return Self.copyCleanLinks(self.app.model, ids: ids, markdown: markdown)
       default: break
       }
       let accepted = ModelSidebarActions(context: context).perform(intent)
@@ -465,5 +473,15 @@ private final class SpaceManagerPreferences: UserDefaults, @unchecked Sendable {
   override func bool(forKey defaultName: String) -> Bool {
     if defaultName == "open.general.previewsEnabled" { return false }
     return super.bool(forKey: defaultName)
+  }
+}
+
+extension AppSettingsActions {
+  /// Space Manager copies with no browser window: the same clean payload as the sidebar, without
+  /// a toast (no window to show it in).
+  @MainActor static func copyCleanLinks(_ model: BrowserModel, ids: [ItemID], markdown: Bool) -> Bool {
+    guard let payload = model.cleanLinkPayload(ids: ids, markdown: markdown) else { return false }
+    NSPasteboard.general.clearContents()
+    return NSPasteboard.general.setString(payload.text, forType: .string)
   }
 }

@@ -8,6 +8,7 @@ public enum URLCleaner {
     /// Arc's toast titles after Copy URL (PG-1.10, main binary strings): something removed, or the
     /// URL as it was.
     public static let cleanedTitle = "Copied a clean link without trackers"
+    public static let cleanedLinksTitle = "Copied clean links without trackers"
     public static let plainTitle = "Copied Current URL"
 
     /// The URL without tracking query items, and the removed names. Keeps item order and the
