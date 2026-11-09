@@ -12419,6 +12419,10 @@ def main():
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
         launch_args = [arg for arg in extra if load_extensions or not arg.startswith("--load-extension=")]
+        if opts.only == "firstrun":
+            # Every first-run helper uses this factory, including F12 and the
+            # multi-Profile importer. Exercise the real player at zero volume.
+            launch_args += ["--intro-sound=silent"]
         app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
