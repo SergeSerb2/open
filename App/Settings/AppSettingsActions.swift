@@ -146,7 +146,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       case .copyLink(let id, let markdown):
         guard let tab = self.app.model.tab(id: id) else { return false }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString, forType: .string)
+        let clean = URLCleaner.clean(tab.url).url
+        NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(clean.absoluteString))" : clean.absoluteString, forType: .string)
         return true
       default: break
       }

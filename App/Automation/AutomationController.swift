@@ -338,6 +338,8 @@
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
+      case "pasteboard-preserve": return AutomationPasteboard.preserve()
+      case "pasteboard-restore": return AutomationPasteboard.restore()
       case "pasteboard":
         // `text`: replace the contents first (checks that must see a fresh copy).
         if let text = a["text"] as? String { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }

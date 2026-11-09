@@ -830,10 +830,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   private func copyLinks(ids: [ItemID], markdown: Bool) -> Bool {
     var seen = Set<ItemID>(), lines: [String] = []
+    var removedTrackers = false
     func append(_ node: SidebarNode) {
       guard seen.insert(node.id).inserted else { return }
       switch node {
-      case .tab(let tab): lines.append(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString)
+      case .tab(let tab):
+        let (clean, removed) = URLCleaner.clean(tab.url)
+        removedTrackers = removedTrackers || !removed.isEmpty
+        lines.append(markdown ? "[\(tab.displayTitle)](\(clean.absoluteString))" : clean.absoluteString)
       case .folder(let folder): folder.children.forEach(append)
       case .split(let split): split.panes.forEach { append(.tab($0)) }
       }
@@ -855,7 +859,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     guard !lines.isEmpty else { return false }
     NSPasteboard.general.clearContents()
-    return NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    let copied = NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    if copied, removedTrackers {
+      controller?.toasts.show(ToastContent(title: lines.count == 1 ? URLCleaner.cleanedTitle : URLCleaner.cleanedLinksTitle))
+    }
+    return copied
   }
 
   private func moveSelectionToNewSpace(ids: [ItemID]) -> Bool {

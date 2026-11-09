@@ -127,6 +127,22 @@ extension EngineWebContentHostFactory {
     return components.url
   }
 
+  @discardableResult
+  func sharePage() -> Bool {
+    guard !isClosing, let url = pageURL, let container = controller?.container else { return false }
+    sidebarSharePicker?.close()
+    shareToastHandle?.hold(false); shareToastHandle = nil
+    let clean = URLCleaner.clean(url).url
+    let picker = NSSharingServicePicker(items: [clean])
+    sidebarSharePicker = picker; picker.delegate = self
+    #if OPEN_AUTOMATION
+    sidebarShareRequest = ["url": clean.absoluteString, "node": "page", "requested": true,
+      "servicesRequested": false, "closed": false]
+    #endif
+    picker.show(relativeTo: container.bounds, of: container, preferredEdge: .maxY)
+    return true
+  }
+
   // MARK: Share from the toast
 
   /// The system share picker for the cleaned URL, anchored to the toast's button. The toast stays
@@ -134,13 +150,14 @@ extension EngineWebContentHostFactory {
   func shareFromToast(_ url: URL, handle: ToastHandle) {
     guard !isClosing, let button = handle.accessoryButton, button.window != nil else { return }
     sidebarSharePicker?.close()
-    let picker = NSSharingServicePicker(items: [url])
+    let clean = URLCleaner.clean(url).url
+    let picker = NSSharingServicePicker(items: [clean])
     sidebarSharePicker = picker; picker.delegate = self
     shareToastHandle?.hold(false); shareToastHandle = handle
     handle.hold(true)
     #if OPEN_AUTOMATION
     let anchor = controller.map { $0.contentView.convert(button.bounds, from: button) } ?? .zero
-    sidebarShareRequest = ["url": url.absoluteString, "node": "toast",
+    sidebarShareRequest = ["url": clean.absoluteString, "node": "toast",
       "anchor": [anchor.minX, anchor.minY, anchor.width, anchor.height], "requested": true,
       "servicesRequested": false, "closed": false]
     #endif

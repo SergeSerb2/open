@@ -260,7 +260,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         coordinator?.moveToSpace(sessionID: session.id, spaceID: spaceID)
     }
     public func copyURL() {
-        let url = currentURL ?? session.tab.url
+        let url = URLCleaner.clean(currentURL ?? session.tab.url).url
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(url.absoluteString, forType: .string)
     }
     public func showSpacePicker() {
