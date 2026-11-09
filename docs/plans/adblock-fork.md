@@ -4504,7 +4504,7 @@ then replace 0310 and apply 0311 from this branch's `patches/cef/`.
 
 The adapter now posts exclusions, the deterministic Profile list directory,
 and enabled state when a context is created, including Default at engine
-readiness. It does not construct the IO-backed store before paint. A separate
+readiness. Context configuration does not need an IO-backed store. A separate
 read-only background task prefetches saved settings/exclusions; until it
 returns, the existing store's in-memory values win, otherwise defaults are
 on/no exclusions. **Lead fresh-profile ruling (2026-11-09 04:30):** one
