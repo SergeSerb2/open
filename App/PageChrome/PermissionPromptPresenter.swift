@@ -1,5 +1,6 @@
 import AppKit
 import OpenEngine
+import OpenDesign
 
 @MainActor
 final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
@@ -124,6 +125,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     popover.contentViewController?.view = view
     popover.show(relativeTo: anchor.rect, of: anchor.view, preferredEdge: anchor.edge)
     if let promptWindow = view.window {
+      // This NSPopover is ours; its native window class alone cannot prove
+      // ownership to the browser's child-window appearance policy.
+      (anchor.view.window as? any WindowContentAppearanceHost)?.contentAppearanceDidChange(for: promptWindow, inheritsAppearance: popover.appearance == nil)
       if promptWindow.parent == nil { anchor.view.window?.addChildWindow(promptWindow, ordered: .above) }
       promptWindow.makeKeyAndOrderFront(nil)
       promptWindow.makeFirstResponder(view)
@@ -153,6 +157,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   func owns(_ window: NSWindow) -> Bool { isShown && presentedWindow === window }
   private func finish(_ decision: OEPermissionState?) {
     guard !finishing, let entry = current else { return }
+    let promptWindow = card == nil ? view.window : nil
     finishing = true; current = nil
     // Remove ownership before the engine callback, which may navigate/close.
     if decision == .allow { entry.request.grant() }
@@ -174,7 +179,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       self.card = nil
       card.dismiss(animated: decision != nil && !closed)
       if !closed, owner?.pageChrome.isVisible(entry.page) == true { entry.page.focusPage() }
-    } else { popover.close() }
+    } else {
+      popover.close()
+      if let promptWindow, let parent = promptWindow.parent { parent.removeChildWindow(promptWindow) }
+    }
     finishing = false; presentPending()
   }
   func cancel(page: OEWebContent) {

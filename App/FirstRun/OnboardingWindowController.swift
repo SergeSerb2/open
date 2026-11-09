@@ -35,6 +35,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   let sound: IntroSound
   let replay: Bool
   var steps: OnboardingStepsController?
+  var favoriteIcons: OnboardingFavicons?
   private let dim: NSWindow
   private var started = false
   private var measureFrames = false
@@ -198,6 +199,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
           fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
           dimView.layer?.add(fade, forKey: "intro-dim")
           CATransaction.commit(); CATransaction.flush()
+          lifecycle.append(Task(priority: .utility) { [weak self] in
+            try? await Task.sleep(for: .seconds(IntroTimeline.beat("sellIntro").start))
+            guard !Task.isCancelled else { return }
+            if let self { favoriteIcons?.start(introElapsed: intro.elapsed) }
+          })
           lifecycle.append(Task { [weak self] in
             try? await Task.sleep(for: .seconds(IntroTimeline.beat("measureMemory").start))
             guard !Task.isCancelled, let self else { return }
