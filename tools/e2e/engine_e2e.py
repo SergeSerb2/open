@@ -301,6 +301,10 @@ class Open:
         # child that stays alive until quit. Keep strict death checks for both.
         self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls and not launch_without_wait
         self.launch_output = open(self.launch_log_path, "a") if self.direct_child and self.world_audit_dir else None
+        self.aggregate_log = self.log if self.launch_output else None
+        if self.launch_output:
+            # Existing allocation checks read app.log while the App runs.
+            self.log = self.launch_output
         self.proc = subprocess.Popen(args if self.direct_child else launch,
                                      env=env if self.direct_child else None,
                                      stdout=self.launch_output or self.log, stderr=subprocess.STDOUT)
@@ -537,9 +541,12 @@ class Open:
                 self.proc.wait()
             if self.launch_output:
                 self.launch_output.close()
-            if os.path.exists(self.launch_log_path):
-                self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
-            self.log.close()
+                self.aggregate_log.write(Path(self.launch_log_path).read_text(errors="replace"))
+                self.aggregate_log.close()
+            else:
+                if os.path.exists(self.launch_log_path):
+                    self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
+                self.log.close()
             self.closed = True
             if self.world_audit_dir:
                 # Save every launch before a fresh factory clears its data root.
