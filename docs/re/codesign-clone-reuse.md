@@ -140,13 +140,13 @@ no launch gain or live-update safety result.
 | Row | Required proof | Current state |
 |---|---|---|
 | a | Executable ctime and link count stay unchanged for three full runs after the first clone | PASS, normal App; `stability/receipt.json` |
-| b | Seven simple relaunches have no attributable ChangetimeScan | Not run; retain the initial clone and assessment warm-up logs separately |
+| b | Seven simple relaunches have no attributable ChangetimeScan | FAIL: renewed normal-App set has 6/7 windows without a scan; first has a 143 ms candidate despite unchanged executable metadata. No gain claim |
 | c | An in-place executable copy keeps the inode but recreates the clone | PASS, normal App; `stability/receipt.json` |
 | d | Two install paths use distinct clones with no cross-reuse | PASS, normal App; `stability/receipt.json` |
-| e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Main ad-hoc control FAIL: first new page stayed blank; branch swap not run. Both plain controls PASS, branch clone reused. DLV PENDING M1 clear |
+| e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Requested ad-hoc path PASS on main and reused-clone branch (fresh renderers/audio utility; GPU retained). Extra forced GPU/network restart control FAIL retained. DLV PENDING M1 clear |
 | f | An unwritable cache falls back to a per-run clone and still works | PASS, normal App; full render and helper types; `adhoc-branch-plain-unwritable/receipt.json`. Fallback live swap not run |
-| g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | Pending on cleared M5; wait for load outside all locks |
-| h | Shell, features, updater and engine-status pass | Shell PASS (7 rows); features PASS with intentional crash row DEFERRED to M1; engine-status: 7 PASS, 0 FAIL, 1 order WARN; updater pending |
+| g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | PENDING tonight: executable `window-timing.sh`, dry check only. Daytime set retained, no gain claim |
+| h | Shell, features, updater and engine-status pass | Shell PASS (7 rows); features PASS (26 rows) with intentional crash row DEFERRED to M1; updater PASS (21 rows); engine-status: 7 PASS, 0 FAIL, 1 order WARN |
 
 The rebuilt branch engine passed. The incremental build took 48 seconds;
 its distribution SHA-256 is
@@ -313,9 +313,9 @@ CODESIGNING or Killed: 9 event. The ad-hoc/unknown-chain AMFI message alone
 does not establish a signing kill. The cause remains unassigned; service
 restart and initial navigation overlapped.
 
-The matrix stopped at this main control. The branch live-swap proof has not
-run. This failure does not establish either a PASS or a failure of persistent
-clone reuse after replacement. The saved extracts are
+At that checkpoint, the matrix stopped at this main control before the branch
+live-swap proof. This failure does not establish either a PASS or a failure
+of persistent clone reuse after replacement. The saved extracts are
 `adhoc-main-swap/failure-app-events.json` and
 `adhoc-main-swap/failure-signing-events.json`. No failed control was retried.
 The independent normal-App rows may continue. Hardened DLV rows remain
@@ -331,3 +331,208 @@ three helper types. The source executable link count was 1 before launch,
 stayed absent, and the App did not repair the cache permissions. This was
 a plain functional run, not another live-swap attempt. It left no owned
 process, window or new real Open crash report.
+
+### Requested ad-hoc live replacement
+
+`requested-adhoc-matrix.json` records PASS for the requested whole-directory
+swap path on matched main and the reused-clone branch. The earlier control
+added simultaneous SIGTERM of GPU and network services. It failed on main
+and remains a separate, unassigned robustness failure. It was not retried
+or erased. The requested path does not terminate either service. It opens
+three distinct sites after replacement, then starts a silent Web Audio
+stream to require a new audio utility process. The stream reports state
+`running` and gain zero. Both cases require fresh renderer and audio utility
+PIDs, live DOM content on all three sites, successful log collection and no
+new real Open crash report. The existing GPU remains alive; no fresh-GPU
+success is claimed for this path.
+
+`requested-adhoc-main-swap/receipt.json` and
+`requested-adhoc-branch-swap/receipt.json` both passed. The branch primed its
+clone in a prior full run, then reused it before replacement: ctime, mtime,
+inode and link count two stayed equal to the post-prime snapshot. After the
+whole-App exchange and removal of the old staging App, three new sites
+rendered with fresh helpers. Both cases ended with no owned process, window
+or new real `.ips`. The main case ran at load1 9.54–9.29. These are functional
+results, not launch measurements. Hardened DLV acceptance remains PENDING
+on the held M1; it has not launched on the M5.
+
+The existing shell suite passed 7 rows. Features passed 26 rows; the explicit
+renderer-kill row is DEFERRED to the M1 by the crash-probe rule. Updater
+passed all 21 result rows with seven disposable App instances and restored
+its App preferences. All suite cleanup passed. Receipts are under
+`suites/shell`, `suites/features` and `suites/updater`. The final read-only
+`engine-status-normal.json` still reports 7 PASS, 0 FAIL and the required
+0106-after-08xx order WARN.
+
+### Daytime scan set and quiet-window handoff
+
+The first seven-pair set did not pass its scan assertion. All seven branch
+runs retained the executable's post-prime ctime, inode, size, mtime and link
+count two. Its first three exact launch windows nevertheless contained
+ChangetimeScan candidates. The last four contained none. All seven main
+windows contained a scan. The scan signposts have private paths; the collector
+conservatively retains every scan between request and the process's main
+mark. Do not treat the first three candidates as attributed source-executable
+ctime changes. No such change was observed. Their remaining assessment/cache
+cause is unassigned. No launch-gain claim is based on this set.
+
+| Pair | Main scan candidate ms | Branch scan candidate ms | Branch executable ctime changed |
+|---|---:|---:|---|
+| 1 | 145.68 | 148.98 | no |
+| 2 | 144.30 | 148.13 | no |
+| 3 | 143.64 | 144.50 | no |
+| 4 | 156.45 | none | no |
+| 5 | 153.65 | none | no |
+| 6 | 160.50 | none | no |
+| 7 | 153.98 | none | no |
+
+Receipts: `measurements/results.json`, `measurements/scan-proof.json`, exact
+per-sample `.ndjson` files, and `launch-seven-pairs-path-retry.json` (exit 1
+at the scan assertion). The earlier pair-three path-query assertion was a
+harness interruption. Its initial query value was not captured. Cleanup
+found the requested executable path and no remaining owned process or
+window. Both halves of that incomplete pair remain in
+`measurements/interrupted-path-query/`. The harness now records path queries
+and retries the exact same comparison for at most two seconds. It does not
+accept an inode-only match. No retry was needed in the completed samples.
+
+The lead's 17:35 ruling moves row g and the existing window launch rows to
+tonight's quiet window. No daytime timing runner remains active. The old
+priority-setting coordinators are retired. `window-timing.sh` sets no priority
+flag and uses only the frozen Apps named in `window-inputs.json`. It takes
+quiet then screen for each measuring set; log reading happens outside those
+locks. It checks load1 ≤12, stops on a new real Open crash report, and limits
+the whole invocation to twenty minutes. It records all failures and exits
+nonzero on a harness or budget failure. It writes receipts under `window/`.
+Every timing sample is retained, including scan-bearing launches. The scan
+acceptance result stays separate from row g; a scan does not cause sample
+replacement or suppress the later warm-profile rows. Only `bash -n` and
+frozen-App path existence were dry-checked; the script has
+not run. Both cold and warm rows use the existing window assertions verbatim;
+the remaining window suite is outside this timing handoff.
+
+The priority flag caused an unfair shared-screen wait. This task no longer
+sets it.
+The new functional seven-relaunch set uses the ordinary screen queue, without
+the quiet lock or priority. Earlier failed observations remain in this report.
+
+### Functional seven-relaunch result after the 17:35 ruling
+
+`functional-seven-relaunches.json` records seven completed normal-App
+launches and clean exits under one ordinary screen-lock invocation, without
+priority or the quiet lock. `functional-seven-scan-logs.json` records exit 1
+at the scan assertion. The executable's saved stat identity, ctime and link
+count two stayed unchanged in all seven runs. There was no repeated
+pre-engine executable-ctime change. Six launch windows had no ChangetimeScan;
+the first had one 143.06 ms candidate. This is **6/7, FAIL**, not the requested
+7/7 proof. These functional launches make no launch-gain claim. The separate stat
+process requested 1 ms polling; its largest observed gap was 9.74 ms. This
+set does not prove a maximum 5 ms polling interval. All seven owned-process
+and window cleanup checks passed. Load1 was 11.12–11.59.
+
+| Functional relaunch | Launch-window ChangetimeScan candidate ms | Executable stat unchanged |
+|---|---:|---|
+| 1 | 143.06 | yes |
+| 2 | none | yes |
+| 3 | none | yes |
+| 4 | none | yes |
+| 5 | none | yes |
+| 6 | none | yes |
+| 7 | none | yes |
+
+This set reused the same frozen bundle and profile as the earlier four
+scan-free daytime launches. No copy, xattr write or signing step occurred
+between those sets. The first functional scan therefore cannot be discarded
+as first-clone setup without further evidence.
+
+The precise scan trigger remains unassigned. The signpost paths are private,
+so the report uses the conservative launch-window candidate count. The result
+does not establish a new executable writer or justify discarding the first
+launch. All exact-window logs, the matching RunningBoard process-start lines,
+stat polls and cleanup receipts are in `functional-scans/`. No extra retry set
+was started. The lead's quiet-window runner will produce row g separately;
+its source Apps and profiles are retained for that handoff.
+
+Read-only sequence detail: in `functional-scans/01-branch.ndjson`, lines
+101–103 report that code was already evaluated and that its scan returns
+quickly. The next assessment begins ChangetimeScan at lines 165–167 and
+records a cache miss at line 195; the scan ends at line 224. The assessments
+have different evaluation IDs. Their target paths are private. This does
+not identify which code object missed the cache, and it does not establish
+another executable-ctime writer.
+
+`functional-bundle-ctime-audit.json` is a later read-only `lstat` walk of the
+frozen branch bundle. None of its 1,115 stat observations found a remaining
+entry whose current ctime fell inside the seven functional runs. This is not
+a recursive before/after snapshot. Deleted transient entries and later
+changes are outside its coverage. It does not identify the scan target or
+prove a Gatekeeper cache-expiry cause.
+
+The gap audit in `between-sets-bundle-ctime-audit.json` also examines the
+original bundle and its persistent clone (761 distinct paths each). No
+remaining entry had a current ctime between the previous fast set and the
+end of the functional set. Its post-run-snapshot limits remain the same.
+
+### M1 staging, no runtime acceptance
+
+`stage-m1.json` and `m1-staged-apps.json` record copying both already prepared
+runtime/DLV temp Apps to a private M1 temp directory. Both executable hashes
+match their source receipts, and both deep strict signature checks pass.
+This is headless file staging and static inspection only. No App was launched
+and no engine was built on the M1. The plain-launch and live-swap DLV gates
+remain PENDING until the lead forwards `M1 clear`.
+
+### Full gate on the merged head
+
+`full-verify.json` and `verify-all/summary.txt` record the full
+`s16-heavy.sh tools/verify-all.sh` run on `bb1d6824`, which contains main
+`d26300e6`. It ran on 2026-11-08 from 17:42:17 to 18:23:32 local time.
+The wrapper's load1 was 9.47 at start and 12.21 at finish. Each on-screen
+check used its own screen-lock invocation. No priority flag was set by this
+run. The command exited 1: **24 PASS, 1 FAIL**, with no SKIP or interruption.
+The optional user-data import was not selected.
+
+| Check | Result | Seconds, including queue wait |
+|---|---|---:|
+| build | PASS | 80 |
+| commands-demo | PASS | 6 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 3 |
+| space-editor | PASS | 234 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 24 |
+| commands-dump | PASS | 1 |
+| route | PASS | 17 |
+| favicons | PASS | 3 |
+| media-demo | PASS | 1 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 4 |
+| profiles | PASS | 3 |
+| settings-preview | PASS | 1473 |
+| sidebar-render | PASS | 111 |
+| sidebar-compare | PASS | 149 |
+| commandbar-render | FAIL | 46 |
+| features-render | PASS | 90 |
+| extensions-render | PASS | 9 |
+| sitecontrol-render | PASS | 182 |
+| onboarding-render | PASS | 22 |
+| boosts | PASS | 4 |
+| verify-secrets-fixture | PASS | 7 |
+
+`verify-all/commandbar-render.log:164–177` records 149/151 passing rows.
+Row 150 measured main-thread CPU p95 10.34 ms against the 8 ms limit.
+Row 151 measured inline-completion cycle overhead p95 0.612 ms against
+0.3 ms; maximum layout passes remained one. The check's load averages were
+29.1, 23.5 and 18.7. These are retained failures. This branch changes none
+of `OpenCommandBar`, `OpenSuggest`, `OpenCommands` or `OpenDesign` relative
+to merged main. That fact does not prove main fails the same way. No quiet
+recovery run or main comparison has run, and no threshold changed.
+
+`functional-final-audit.json` records no remaining owned fixture process
+and no new real Open crash report found by its read-only check since the
+full gate began. The frozen Apps and primed timing profiles remain for
+tonight's handoff. No quiet-window measurement or M1 launch has run.
+The scan failure, timing handoff, full-gate failure and pending M1 rows
+remain separate acceptance gaps. No PR or launch-gain claim is made at
+this checkpoint.

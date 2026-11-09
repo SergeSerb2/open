@@ -95,12 +95,16 @@ validation (`-67065`); the enabled-clone control passed. Work stopped for lead
 review. See [the evidence report](../re/codesign-clone-off.md).
 
 **2026-11-08 follow-up decision.** The unconditional disable is rejected.
-Section 16 is implementing engine patch 0106 to reuse a valid hard-link clone,
+Engine patch 0106 reuses a valid hard-link clone,
 with Chromium's per-run clone as the failure fallback. The live-replacement
 gate must pass with an already reused clone, for ad-hoc and temporary hardened
 DLV copies. The historical failed candidate below remains evidence, not a
 proposed release setting. See [the reuse report](../re/codesign-clone-reuse.md)
-for the design and verification status.
+for the design and verification status. Normal-App reuse, invalidation,
+separate installs, fallback and the requested ad-hoc live swap passed.
+The functional scan gate remains FAIL at 6/7 with unchanged executable
+metadata. Quiet-window timing is pending. The full gate recorded 24 PASS
+and one `commandbar-render` FAIL on two timing rows at load1 29.1.
 The 16:31 lead ruling supersedes the earlier M5 exception: hardened-runtime
 DLV copies are crash-capable and may launch only on the M1 after `M1 clear`,
 under its screen lock. Each exact temporary copy must pass one plain launch
@@ -823,7 +827,14 @@ The matched-main live-swap control then failed: its first new page stayed
 blank after the harness restarted GPU and network helpers. Fresh helpers
 were alive; no new `.ips` or helper code-signing kill was identified. The
 cause is unassigned. The matrix stopped before the branch swap. The live-swap
-gate remains unproved; see [the current receipts and limits](../re/codesign-clone-reuse.md).
+gate was unproved at that checkpoint. The later requested-path matrix passed
+on both matched main and the reused-clone branch: three new sites rendered
+with fresh renderers and a fresh silent audio utility. It did not terminate
+GPU or network services; the existing GPU stayed alive. The forced-restart
+control remains a separate FAIL with no assigned cause. The functional scan
+gate is FAIL at 6/7 despite stable executable metadata; no launch gain is
+claimed. Quiet-window timing remains PENDING. Hardened DLV proof is still
+PENDING M1 clearance. See [the current receipts and limits](../re/codesign-clone-reuse.md).
 
 ### 6.1 Dependency (one new dependency, with reason)
 
