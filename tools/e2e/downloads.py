@@ -22,8 +22,11 @@ def server():
         def log_message(self, *_): pass
         def do_GET(self):
             route = self.path.split('?', 1)[0]
-            if route == '/':
+            if route in ('/', '/arm'):
                 body = b'<!doctype html><title>Downloads fixture</title><body>Downloads fixture</body>'
+                if route == '/arm':
+                    body = (b'<!doctype html><title>Unload fixture</title><button id=arm '
+                            b'onclick="onbeforeunload=e=>{e.preventDefault();e.returnValue=1}">Arm</button>')
                 self.send_response(200); self.send_header('Connection', 'close'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body); return
             unknown = route == '/unknown'
             slow = route in ('/slow', '/unknown', '/finish')
@@ -398,6 +401,44 @@ def checks(factory, results, tmp, config, harness):
         app.quit()
         check('generic_quit_downloads_close_one', download_exit and alerts == [2, 0] and not app.quit_report['forced'],
               alerts=alerts, quit=app.quit_report)
+
+        # Review R1 finding 1: an approved attempt that a page's beforeunload "Stay" ends
+        # must not leave the next quit prompt-free. Close Open, Stay, new download, quit:
+        # the downloads alert must appear again.
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        tab = E.new_tab(app, base + '/')
+        profile_id = next(v['profile'] for v in app.call('spaces') if v['focused'])
+        app.call('download-settings', profile=profile_id, directory=str(first), ask=False)
+        armed = E.new_tab(app, base + '/arm')
+        app.call('wait', tab=armed)
+        try:
+            app.call('click', tab=armed, selector='#arm')  # beforeunload needs a user activation
+            running = start('/slow')
+            wait(lambda: item(running).get('received', 0) > 0)
+            app.call('download-policy', quit='close')
+            downloads_before = download_alerts()
+            request('quit')
+            def dialog_visible():
+                return bool((E._try(lambda: app.call('dialog-state')) or {}).get('visible'))
+            stay = wait(lambda: dialog_visible() or None, 10)
+            if stay: app.call('dialog-button', accept=False)
+            survived = wait(lambda: (not dialog_visible() and bool(app.process_path(app.pid))) or None, 5)
+            again = start('/slow')
+            wait(lambda: item(again).get('received', 0) > 0)
+            app.call('download-policy', quit='keep')
+            request('cancel')
+            asked_again = wait(lambda: download_alerts() >= downloads_before + 2 or None, 10)
+            check('generic_quit_stay_then_requit', bool(stay) and bool(survived) and bool(asked_again)
+                  and item(again).get('state') == 'inProgress' and app.process_path(app.pid),
+                  stay=bool(stay), survived=bool(survived), downloadAlerts=download_alerts() - downloads_before,
+                  again=item(again))
+        finally:
+            # Leave no page or quit prompt behind (review checklist §4).
+            E._try(lambda: app.call('dialog-button', accept=False) if (app.call('dialog-state') or {}).get('visible') else None)
+            E._try(lambda: app.eval(armed, 'onbeforeunload=null;true'))
+            E._try(lambda: app.call('download-policy', quit='close'))
+            app.quit()
 
         # The harness must still exit with the setting on and no alert policy.
         relaunch()

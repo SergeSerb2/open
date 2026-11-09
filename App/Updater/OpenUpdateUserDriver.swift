@@ -316,6 +316,8 @@ final class OpenUpdateUserDriver: NSObject, SPUUserDriver {
     showStatus("Installing update... ", button: "Cancel", progress: nil, enabled: false, hidden: true)
     if !applicationTerminated, terminationWasCancelled { applicationTerminationCancelled() }
   }
+  /// The quit that would install ended without a retry; the next quit is a normal one.
+  func clearInstallationRelaunchRequest() { installationRelaunchRequested = false }
   func applicationTerminationCancelled() {
     // The quit event can arrive before Sparkle reports installation stage 2.
     terminationWasCancelled = true

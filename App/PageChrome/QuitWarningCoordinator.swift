@@ -6,8 +6,13 @@ import OpenModel
 @MainActor
 final class QuitWarningCoordinator {
   private var approved = false
-  private var presenting = false
+  private(set) var presenting = false
   private var systemQuit = false
+  private var relaunchQuit = false
+  /// Set when this quit attempt returned `.terminateCancel` only to retry itself (history flush,
+  /// sleep capture, page beforeunload replies). The retry keeps the attempt's approval and
+  /// reasons; any other entry starts a fresh attempt.
+  private(set) var retryPending = false
   private(set) var withoutPrompts = false
   #if OPEN_AUTOMATION
   var harnessQuit = false
@@ -15,21 +20,36 @@ final class QuitWarningCoordinator {
   private(set) var alerts: [[String: Any]] = []
   #endif
 
-  func updateQuitReason(relaunch: Bool) {
-    // Retain the reason across the async history/sleep shutdown retries.
+  /// Starts or continues a quit attempt. Returns true for a fresh attempt.
+  @discardableResult
+  func beginAttempt(relaunch: Bool) -> Bool {
+    let fresh = !retryPending
+    retryPending = false
+    if fresh {
+      // A logout another app aborted, or an install quit that was not retried, must not
+      // leave later quits prompt-free.
+      approved = false; systemQuit = false; relaunchQuit = relaunch
+    }
+    // Retain the reason across the async history/sleep shutdown retries, which have no
+    // Apple event of their own.
     let reason = NSAppleEventManager.shared().currentAppleEvent?
       .paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))?.enumCodeValue
     if let reason, [kAELogOut, kAEReallyLogOut, kAERestart, kAEShutDown].contains(reason) {
       systemQuit = true
     }
-    withoutPrompts = systemQuit || relaunch
+    withoutPrompts = systemQuit || relaunchQuit
     #if OPEN_AUTOMATION
     if AutomationOwnerWatch.quittingWithoutPrompts { withoutPrompts = true }
     #endif
+    return fresh
   }
 
+  /// The attempt cancelled itself only to run async work and ask again.
+  func markRetryPending() { retryPending = true }
+
+  /// The user or a page ended the attempt (an alert's Cancel, a beforeunload "Stay").
   func resetApproval() {
-    approved = false
+    approved = false; retryPending = false
     #if OPEN_AUTOMATION
     harnessQuit = false
     #endif
@@ -46,7 +66,7 @@ final class QuitWarningCoordinator {
     guard UserDefaults.standard.bool(forKey: "open.general.warnBeforeQuitting") else { return false }
     presenting = true
     defer { presenting = false }
-    let models = [app.model!] + app.hostFactories.values.map(\.model)
+    let models = (app.model.map { [$0] } ?? []) + app.hostFactories.values.map(\.model)
     let tabs = Set(models.flatMap { $0.index.values.compactMap { $0.tab?.id } })
       .union(app.littleOpenHosts.keys).count
     let windows = app.windowControllers.count + (app.littleOpenCoordinator?.sessions.count ?? 0)
@@ -74,6 +94,8 @@ final class QuitWarningCoordinator {
     }
     defer { if let observer { NotificationCenter.default.removeObserver(observer) } }
     #endif
+    // Quit from the Dock or a script can arrive while Open is in the background.
+    NSApp.activate()
     approved = alert.runModal() == .alertFirstButtonReturn
     return !approved
   }
