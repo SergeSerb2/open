@@ -434,6 +434,8 @@ def real_engine(factory, results, wait):
         body = (generation / resource['file']).read_bytes()
         return dict(generation=live['generation'],
                     manifestVerified=hashlib.sha256(manifest_bytes).hexdigest() == live['manifestSHA256'],
+                    listSHA256s={f['listID']: f['sha256'] for f in manifest['files']
+                                 if f['listID'] != '_resources'},
                     resourceSHA256=hashlib.sha256(body).hexdigest(),
                     resourceVerified=resource['file'] == 'resources.json'
                         and resource['bytes'] == len(body) and resource['sha256'] == resource_digest,
@@ -575,7 +577,9 @@ def real_engine(factory, results, wait):
         memory_after = [browser_footprint() for _ in range(5)]
         delta = statistics.median(memory_after) - statistics.median(memory_before)
         row('shared_engine_footprint', status(other['id'])['engine_shared'] and delta <= 2 * 1024 * 1024,
-            before=memory_before, after=memory_after, deltaBytes=delta, load=os.getloadavg())
+            before=memory_before, after=memory_after, deltaBytes=delta, load=os.getloadavg(),
+            status=status(other['id']), listInputsMatch=
+                resource_manifest(original)['listSHA256s'] == resource_manifest(other)['listSHA256s'])
         app.call('ext-shortcuts', action='close')
         app.call('select', tab=other_tab)
         app.call('menu-perform', id='new-incognito-window')

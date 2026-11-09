@@ -4743,7 +4743,10 @@ Step 5 remains **in progress**. The real CEF functional suite passes
 18 executable rows in 86.94 s (load 10.40/12.98/17.41 to 8.91/11.55/16.39).
 Late generic elements hide 10/10; top-of-body inline-script elements hide
 10/10 and appear in the initial scan 10/10. C-9 remains reserved.
-App acceptance and timing gates are pending. The lead cleared the M5
+The real App passes the EasyList on/excluded/off/on-again cosmetic controls.
+The Page suite exits successfully with 85 PASS, 4 existing BLOCKED rows and
+1 DEFERRED row. The complete adblock suite and timing gates are pending.
+The lead cleared the M5
 screen hold before these flows queued; the M1 remains held.
 
 The follow-up source audit checked each new overlay header and source against
@@ -4878,10 +4881,11 @@ reply cap is independent of the 500-token input cap.
 | Full engine build / strict built status | PASS at 335e9f8d, 30.60 s; load 20.82/22.41/22.69 to 15.16/20.85/22.11; strict 8/0/0 |
 | Owned GN targets / objects / scoped include checks | PASS; renderer/Mojo checkdeps, Open subtree GN includes and both CEF hook objects |
 | Headless real-service loaded root / empty root | PASS 2/2 on final binary; 5.53 s; load 12.70/19.68/21.64 to 12.57/19.53/21.57 |
+| Full M5 `tools/verify-all.sh --with-arc-data` | PASS 26/0/0; 997.09 s; load 9.03/7.59/10.36 to 16.81/11.14/10.19 |
 | C-1…C-8/C-10, both C-4 variants ×10, install-before-execute | PASS; 18 executable rows, late 10/10, inline hidden and initially scanned 10/10; binding order correct for all 25 started documents; C-9 reserved |
 | Contended C-G1/C-G2, T/R/check count, C-G3, worst-case payload | PENDING; no timing result or load receipt exists |
-| Receiver drop, quit-during-load ×5 | Receiver drop PASS: network blocks 3 requests, hiding fails open without a wait; quit ×5 PENDING |
-| Real-App EasyList on/excluded/off controls and `adblock` + `page` suites | Authorized with s13b distribution; PENDING build and screen clearance |
+| Receiver drop, quit-during-load ×5 | PASS: receiver drop keeps 3 network blocks without hiding or a wait; quit 5/5, owned groups gone in 20.10–23.26 ms, no new crash report; command 6.12 s, load 5.53/7.17/9.27 to 5.22/7.05/9.21 |
+| Real-App EasyList on/excluded/off controls and `adblock` + `page` suites | Cosmetic controls and inverse controls PASS on the final engine; Page exit 0 with 85 PASS, 4 BLOCKED, 1 DEFERRED (89.16 s, load 5.58/6.90/9.05 to 12.44/8.82/9.57). Complete adblock suite remains unaccepted at the shared-engine footprint row; see attribution below |
 
 **Fixture errata.** Remove the domain-specific `.late-ad` rule so C-4
 requires the generic observer. The initial generic element uses
@@ -4896,6 +4900,32 @@ rejects `$generichide` on a blocking rule (`filters/network.rs`,
 `NetworkFilterError::GenericHideWithoutException`). The earlier fixture
 could not disable generic hiding. The corrected C-3 case keeps the
 domain-specific `.ad-slot` rule and suppresses generic token calls.
+
+**App fixture corrections.** A successful update with identical list bytes
+correctly skips an engine reload (`ListRepository` compares the combined
+hash, and `AdBlockStore` reloads only changed results). The local refresh
+fixture now adds a comment to the official bytes so its generation assertion
+has a real changed input; the rules and 40-second deadline stay the same.
+The rerun passes that assertion and the list-disable/re-enable controls.
+It then exposed a separate fixture mismatch: Settings opens a Profile with
+no Space in Little Open, while `tabs` enumerates the main window. The
+cross-Profile tab fixture now creates an explicit Space and asserts that
+the returned main tab belongs to the intended Profile. Both corrected
+flows pass in the next complete-suite attempt.
+
+**App footprint attribution, incomplete.** That attempt then stops at
+`AD3_shared_engine_footprint`: +6,766,592 browser-process bytes against
+2 MiB, at load 16.50/11.36/10.29. A separate diagnostic pair reuses the
+same real App flow with fresh roots and blocking on versus forced off.
+Both final statuses report `engine_shared=true`, with identical list
+input hashes. The empty-to-shared transition measures +5,029,888 bytes
+on and +163,840 bytes off: net +4,866,048 bytes, still above 2 MiB.
+The 144.53-second pair ran at load 29.08/19.24/14.13 to
+16.10/16.66/13.82; all owned windows and processes closed. Separate
+Profile/window deltas vary widely (+14,827,592 and -5,816,272 bytes),
+so these measurements do not establish an allocation cause. The matched
+Step 4 App comparison is pending. No product fix or budget change follows
+from this partial attribution.
 
 The priority lane and no-wait fallback are not added speculatively. Run
 both contended gates first, then apply §8.2 escalation if required.
