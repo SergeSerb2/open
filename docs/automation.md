@@ -1542,3 +1542,11 @@ Automation-only screenshot/export hooks: `set-appearance appearance=light|dark` 
 The `first-run` API remains the importer verification seam. Its compatibility actions walk setup's real navigation; the `screen` field names the new screen while `step` names Section 7's import state. No legacy first-run window is shown.
 
 Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.
+
+### Generic quit warning
+
+`quit` is harness cleanup and skips the generic warning. `quit-warning` returns
+the bounded generic-alert receipts; `{button:"cancel"|"quit", request:true}`
+queues the real `quit-open` command, observes its native modal window, and presses
+that alert's own NSButton. This does not send desktop input. The `downloads` suite
+includes `OPEN_DOWNLOADS_CASE=generic-quit` for this focused real-App flow.
