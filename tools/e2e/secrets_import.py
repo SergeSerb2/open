@@ -15,6 +15,7 @@ import signal
 import ssl
 import subprocess
 import threading
+import time
 
 
 @contextlib.contextmanager
@@ -63,6 +64,8 @@ def run(factory, results, tmp, h):
             'Change Profile warning missing', 'Profile reassignment did not finish',
             'Profile deletion sheet missing',
             'fixture import wizard not ready',
+            'fixture import wizard counts differ',
+            'fixture import wizard Next did not advance',
         }
         safe_runtime_errors = {
             'first-run: Passwords copy reference requires capability OFF': 'wizard copy reference not ready',
@@ -346,6 +349,13 @@ def _run(factory, results, tmp, h):
 
             # On mock-key builds the real consent button is absent. Even a
             # direct adapter action cannot mint a token or reach the Keychain.
+            wizard_counts = {
+                'Spaces': 2, 'Pinned and Today tabs': 6, 'Favorites': 1, 'Folders': 1,
+                'Skipped easels': 1, 'Skipped notes': 0, 'Skipped unknown': 0,
+                'Welcome items': 1, 'Profiles': 1, 'Search settings': 1,
+                'Routing rules': 1, 'Boosts': 0, 'Archive': 2, 'History': 3,
+                'Passwords and cookies': 3,
+            }
             for allow in (False, True):
                 launch(fresh=True, allow=allow)
                 chosen = app.call('first-run', action='settings-import', directory=str(source))
@@ -353,10 +363,29 @@ def _run(factory, results, tmp, h):
                 # It can supersede choose()'s request, so that await can return
                 # while the newer count is still active. Follow the real Next
                 # button's readable/idle gate before entering the copy reference.
+                ready_started = time.monotonic()
+                ready_deadline = ready_started + 10
                 def wizard_ready():
-                    state = app.call('first-run', action='settings-inspect')
-                    return state['settingsReadable'] and not state['settingsBusy']
-                assert h.wait_until(wizard_ready, timeout=10, step=.05), 'fixture import wizard not ready'
+                    remaining = ready_deadline - time.monotonic()
+                    if remaining <= 0:
+                        return None
+                    state = app.call('first-run', action='settings-inspect', timeout=remaining)
+                    return state if state['settingsReadable'] and not state['settingsBusy'] else None
+                ready = h.wait_until(wizard_ready, timeout=10, step=.05)
+                ready_elapsed = time.monotonic() - ready_started
+                assert ready and ready_elapsed <= 10, 'fixture import wizard not ready'
+                assert ready['settingsCounts'] == wizard_counts, 'fixture import wizard counts differ'
+                # Prove a user can continue once counting settles, through the
+                # real App key path and SwiftUI's default Next button.
+                app.call('key', key='return', route='app')
+                advanced = bool(h.wait_until(lambda: app.call('first-run', action='settings-inspect')['settingsStep'] == 'Review',
+                                            timeout=5, step=.05))
+                assert advanced, 'fixture import wizard Next did not advance'
+                row('I-8-readiness-' + ('allow-switch' if allow else 'no-switch'),
+                    ready['settingsCanContinue'] and advanced,
+                    busyAfterChoose=chosen['settingsBusy'], readableAfterChoose=chosen['settingsReadable'],
+                    busyClearedWithinSeconds=10, observedWaitSeconds=round(ready_elapsed, 3),
+                    counts=ready['settingsCounts'], nextThroughAppKey=True)
                 app.call('first-run', action='settings-passwords')
                 app.call('first-run', action='settings-inspect')
                 app.call('first-run', action='settings-allow-passwords')
