@@ -23,3 +23,4 @@
 0808-open-hosted-modal-dialog.patch  # H-7: attach and position Views web-modal dialogs in their AppKit parent
 0809-open-https-warning-after-commit.patch  # H-7: defer hosted HTTPS warning beyond its triggering commit; cancel stale shows
 0810-open-modal-unblock-during-tab-teardown.patch  # H-7: keep modal unblock state but omit UI events after tab features are destroyed
+0106-open-code-sign-clone-reuse.patch  # S16: reuse the signed hard-link clone without advancing executable ctime on warm launches; after main's 0801–0810

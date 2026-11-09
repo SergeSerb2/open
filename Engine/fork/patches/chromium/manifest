@@ -59,3 +59,6 @@ paths: chrome/browser/ssl/https_only_mode_tab_helper.cc, chrome/browser/ssl/http
 paths: chrome/browser/ui/tabs/tab_strip_model.cc
 # 0601-open-script-world.patch
 paths: chrome/common/chrome_isolated_world_ids.h
+
+# 0106-open-code-sign-clone-reuse.patch
+paths: chrome/browser/mac/BUILD.gn chrome/browser/mac/code_sign_clone_manager.h chrome/browser/mac/code_sign_clone_manager.mm
