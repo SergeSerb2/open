@@ -127,8 +127,9 @@ are wired. Legacy opens Code mode. File ▸ Boost Gallery and the command-bar ac
 open the same Library window with a local card grid. The command is disabled in
 private windows and when `open.advanced.enableBoosts` is off. `view-boosts` opens
 the list. The in-window List/Gallery control changes layout without changing
-Profile. An existing key Library or visible Boosts section keeps its Profile
-picker; otherwise the invoking browser supplies its Profile. `view-library`
+Profile. Only the key Library keeps its Profile picker; otherwise the invoking
+browser or editor supplies its Profile, even if the Library is already open
+on another Profile. `view-library`
 preserves layout and Profile. Both layouts use the same search, Profile picker
 and sole `app.stores.boosts` owner. Gallery cards use the existing
 Boost glyph and brand colour, with name, site, enable switch, Edit and Delete.

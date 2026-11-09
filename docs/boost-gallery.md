@@ -7,8 +7,8 @@ grid. Window ▸ View Boosts keeps the list. Both commands reuse
 does not add a preference or a second window.
 
 Browser commands pass the invoking factory's Profile; Little Open passes its
-session Profile. If the Library is key or already visible on Boosts, its Profile
-picker stays unchanged. Otherwise an explicit Boosts open uses the caller's
+session Profile. Only when the Library itself is key does its Profile picker
+stay unchanged. Otherwise an explicit Boosts open uses the caller's
 Profile, or the default regular Profile for an app-level command. A plain
 `view-library` call changes neither Profile nor presentation. The optional
 presentation parameter defaults to nil, which preserves the current layout.
@@ -59,7 +59,7 @@ do not prove runtime acceptance.
 |---|---|---|
 | BG1 menu | File ▸ Boost Gallery opens Boosts in gallery mode. Open View Boosts, then Gallery again; the Library window number stays the same and each route restores its own layout. | NOT RUN |
 | BG1 command bar | Use Cmd+T, type Boost Gallery, select that action and press Return through the App event path. The same Library window shows the grid. | NOT RUN |
-| F1 preserve Profile | Select Profile B in the Library with browser A behind it. With the Library key, File ▸ Boost Gallery keeps B. Repeat from browser A while the Library remains visible on Boosts. When opening a closed Library from browser B, it uses B. Restore the old Profile reset temporarily and record the preservation case failing. | NOT RUN |
+| F1 Profile ownership | Select Profile B in the Library with browser A behind it. With the Library key, File ▸ Boost Gallery keeps B. With browser A key and Library still open on B, Gallery selects A. Manage Boosts from a Profile A editor also selects A in that already-open Library. A closed Library opened from B uses B. Restore the old reset to record the Library-key case failing; restore the old visible-on-Boosts preservation branch to record the browser/editor caller case failing. | NOT RUN |
 | F2 preserve layout | Open Gallery, select another Library section, return through the Boosts sidebar, then choose List in the layout control. `view-library` keeps both the selected Profile and layout; `view-boosts` explicitly chooses List. Also check `view-library` with History selected. With the old default `.list` parameter/implicit Profile reset restored, record the preservation case failing. | NOT RUN |
 | F4 captured Profile | Exercise a row/card Toggle and Edit around a queued Profile change in the real App. The callback retains its rendered Profile and does not act on the newly selected Profile. | NOT RUN |
 | F6 preference | Toggle Boosts in real Settings; verify the runtime, editor, Turn On action, menu and command-bar gates agree on the shared preference. | NOT RUN |

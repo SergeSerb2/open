@@ -1215,7 +1215,7 @@ the render harness passes fakes).
 | `.customizePage(tabID:)` | `edit-boost` for that tab |
 | `new-boost`, `edit-boost`, `new-legacy-boost` | §4.1 |
 | `view-boosts` | Library window, section `boosts`, explicit list presentation |
-| `boost-gallery` | Same Library window, section `boosts`, gallery presentation; preserve the Library picker if key or already visible on Boosts, otherwise use the invoking Profile |
+| `boost-gallery` | Same Library window, section `boosts`, gallery presentation; preserve the Library picker only if Library is key, otherwise use the invoking browser/editor Profile even when Library is already open |
 | Tab selection change, Space switch, window resign main | Close the panel; close the editor if its bound tab is no longer shown |
 | Panel open/close; matcher result for the selected tab | Set the URL field's `siteControlState` (§3.10): `rest`, `open`, `boosted`, or `openBoosted` (enum declared in OpenSidebar next to `URLFieldView`, because OpenSidebar must not import OpenSiteControl) |
 
