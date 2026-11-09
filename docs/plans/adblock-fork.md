@@ -2734,7 +2734,7 @@ Every new Swift generation has `_resources`, independently of
 bundle on the next publication (open, update, reset or list change). An app
 resource-pin change also republishes on open without changing enabled lists.
 Copyable debug info includes `resources=6d4a87b8f0e4`.
-Engine resources-after-DAT acceptance N-19 remains E3's separate gate.
+Engine resources-after-DAT N-19 passes in E3's merged 32/32 set. The strict real App scope also passes text stubs, verified DAT relaunch/reapplication, and a no-engine zero-list generation followed by one-list restoration.
 
 ### 9.4 The 46-list catalog (committed data file)
 
@@ -3316,8 +3316,9 @@ App and its production API:
 - [x] Forced failure with a delete sheet open proves finally cleanup:
       `s15-adblock-delete-cleanup-r1`, exact expected failure, zero
       owned processes/windows after finally.
-- [ ] Existing page/features/extensions-ui/settings-preview scopes and the
-      full verification gate pass on this integrated engine.
+- [x] Existing page/features/extensions-ui/settings-preview scopes complete
+      with the explicit existing qualifiers below; all runnable rows pass.
+      Full verification passes 25/25 on the final merged source.
 
 **Step 8 acceptance errata (lead ruling, 2026-11-08).** This AD3 predicate
 supersedes the API-DESIGN-derived single `phys_footprint` delta. Five real
@@ -3370,8 +3371,8 @@ at endpoint loads 16.06/63.92/79.97 -> 6.00/10.09/26.08.
 Its raw expected failure and the separate AD3 failure are retained.
 Page passes 81 rows with no FAIL or foreground interruption. Five known
 BLOCKED rows, the hosted-tab activation SKIP and the user smart-zoom
-DEFERRED row remain explicit. Features, extensions-ui, settings-preview
-and the full gate follow on the later merged App build.
+DEFERRED row remain explicit. The later Features, Chrome Extensions UI,
+Settings preview and final full-gate results are recorded below.
 
 **AD3 accepted capture, 20:53 lead ruling.** F's `d5e44abe` records 79/79
 PASS on its full adblock scope, including 11 record-only whole-process
@@ -3381,8 +3382,8 @@ with `engine_shared=false`. E3 merges that harness and the list-change
 wait fix in `11dd8b60`, keeping its live-page and disk-publication waits.
 The Debug rebuild passes in 50.600 s, including 20 s in the heavy queue,
 at endpoint loads 12.19/11.36/11.12 -> 12.57/11.61/11.22.
-No native engine or production adapter change is needed. E3's next full
-adblock scope uses the strict harness without its historical AD3 bypass.
+No native engine or production adapter change is needed. The merged E3
+scopes below use the strict harness without the historical AD3 bypass.
 The earlier failed receipts keep their original predicate and result.
 
 **Merged E3 strict scope.** `s15-adblock-r7` passes 79/79, including 11
@@ -3402,6 +3403,19 @@ context existed. The readiness poll now waits for that context within the
 same 40 s. The successful run records `sawMissingContext=true`, then a loaded
 engine for that exact Profile, and passes both deletion controls. No engine
 or App production change is involved; the prior failed receipt is retained.
+
+**Final default-Chrome acceptance and gate.** `s15-adblock-r10` passes
+79/79 with nine clean launches. AD3 n=5 PA allocated median is −46,144 B,
+non-PA malloc in-use delta zero; different-list control +25,129,024 B with
+sharing=false. Resources-only generation4 -> one-list generation5 and
+held-load Cancel/deletion/relaunch pass. Full Chrome Extensions UI has
+71 PASS and one existing BLOCKED picker row. Features has27PASS; Page
+has81PASS with five existing BLOCKED, one SKIP and one DEFERRED qualifier.
+Settings preview passes47functional checks plus native pane renders.
+Main e8d4acd4 is merged with no further Engine/fork change; its Debug
+rebuild and full verification gate pass (25/25, noFAIL/SKIP). Exact final
+commands, load averages and the complete gate table are in E3's
+VALIDATION.md and PR-BODY.md. Step4-as-built below records provenance.
 
 Later Step 5/9 acceptance remains open: two renderer processes with
 independent cosmetic selectors/exclusions, and cross-Profile C-G2 wait
@@ -4881,7 +4895,7 @@ G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
 262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
 The 64.900 ms value is Step 5's C-G2 input T for this engine.
 
-The final pre-gate source merge includes main `50028c98` (imported-secrets
+An earlier App source merge includes main `50028c98` (imported-secrets
 App and harness changes), with no further Engine/fork change. The Debug
 rebuild passes in 38.887 s at endpoint loads 11.76/10.84/10.80 ->
 12.27/11.08/10.89. Its strict App rerun (`s15-adblock-r9`) passes 79/79,
@@ -4892,14 +4906,42 @@ has no engine/resources/error; one-list generation 5 blocks and redirects
 again. The earlier r8 run lost foreground at its first row and is
 INTERRUPTED, with cleanup PASS; it is not acceptance evidence.
 
-**Remaining delivery gates.** Strict App acceptance passes 79/79,
-including resources/DAT, zero-list restore, independent Profiles/OTR and
-held-load deletion/relaunch. Forced-sheet cleanup and the page regression
-pass. Features, extensions-ui, settings-preview and the full gate remain
-in progress. The accepted AD3 allocation capture passes in E3's merged
-scope: PA median +26,704 bytes; non-PA malloc in-use zero; different-list
-control +25,074,288 bytes with sharing=false. F's harness/ruling is merged
-from `d5e44abe` and documented in the Step 8 erratum.
+**Default App hosting and regression.** Default-Chrome acceptance
+(`s15-adblock-r10`) passes 79/79, including resources/DAT, zero-list restore,
+independent Profiles/OTR and held-load deletion/relaunch. All nine launches
+clean up with no interruption. AD3 PA allocated median is −46,144 bytes;
+non-PA malloc in-use delta zero; different-list control +25,129,024 bytes
+with sharing=false. F's harness/ruling is merged from `d5e44abe` and
+recorded in the Step 8 erratum. Forced-sheet cleanup also passes.
+
+The page regression has 81 PASS, five existing BLOCKED, one SKIP and one
+DEFERRED row. Features has 27 PASS. Full default-Chrome Extensions UI has
+71 PASS and the existing X13 picker BLOCKED because the App Site Control
+presenter is absent. Settings preview passes 47 functional checks plus
+native pane renders. Raw receipts retain all qualifiers.
+
+The private runner initially omitted `--style`, selecting legacy Alloy.
+Its full and focused P10 runs fail the exact Work popup assertion. Changing
+only to `--style chrome` passes all 16 P10 rows and the runnable full
+Extensions UI scope. The App defaults to Chrome (`App/LaunchOptions.swift`),
+and the prior P10 receipt also used Chrome. No product code, assertion,
+threshold or baseline changed. Both Alloy failures remain retained; this
+work does not claim that Alloy's popup is fixed.
+
+The final source merge is main `e8d4acd4` in `bd006cc3`, after a fresh
+Engine/fork log found no changes since the recorded distribution's base
+`d26300e6`. The Debug rebuild passes in 37.101 s at endpoint loads
+8.88/8.99/9.14 -> 8.17/8.81/9.07. It adds opt-in launch diagnostics and the
+Welcome hover fix, with no ad-block policy, adapter or fixture logic change.
+The Chrome App receipts above bind the main50028c98 build separately.
+Full verification passes **25/25**, with no FAIL or SKIP, on that merged
+source. The wrapper takes 969.011 s including lock waits, at endpoint loads
+8.44/8.71/9.01 -> 6.80/7.03/8.00. Exact commands and the complete summary
+are in `.re/s13/e3/VALIDATION.md` and `s15-full-gate-r1-logs/summary.txt`.
+The final fresh fetch still resolves main to `e8d4acd4`; its Engine/fork
+log since the last merge is empty. The review checklist is complete and
+the final audit finds no owned process or screen-priority flag. The child
+hands the branch and PR body draft to the lead; it opens no PR.
 
 Historical whole-process AD3 FAILs remain unchanged: E3 5.734/6.078 MiB
 and E4 11.11 MiB. Whole-process on/off pairs are now record-only under the
