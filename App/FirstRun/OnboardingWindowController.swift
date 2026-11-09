@@ -45,6 +45,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   #endif
   private var closingForHandoff = false
   private var finishing = false
+  var isFinishing: Bool { finishing }
   private var nextContent: NSViewController?
   private var lifecycle: [Task<Void, Never>] = []
   private let residentBaseline: UInt64

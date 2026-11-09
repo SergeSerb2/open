@@ -20,7 +20,7 @@ extension AppDelegate {
   /// This is the only production entrance into OpenOnboarding. Returning and
   /// skip-first-run launches do not initialize a scene, resource or player.
   func showOnboarding(replay: Bool) {
-    if let controller = onboardingWindowController {
+    if let controller = onboardingWindowController, !controller.isFinishing || controller.window?.isVisible == true {
       // Launch and engine-ready callbacks can both reach this while playback
       // is scheduled and the window is still unshown. Keep that one start.
       if controller.window?.isVisible == true { controller.showWindow(nil) }
