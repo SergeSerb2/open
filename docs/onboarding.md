@@ -87,8 +87,9 @@ frame. `onboarding action=state` reports launch, engine start begin/end, native
 loop settled, window creation and first onboarding frame timestamps in `startup`.
 It also reports `preAnimationStatic` (real scene/dim animation keys, presentation
 availability, visibility and pre-start audio playhead), and the common host clock.
-The confirmed display timestamp can follow submission by one display refresh;
-the receipt reports that difference explicitly.
+The display-link confirmation timestamp can follow the common submission time;
+the receipt reports that difference explicitly. This confirms a main-thread
+display-link callback, not a render-server frame statistic.
 The opt-in pacing trace records each interval above 1.5 times nominal as
 `stalls: [{start, end, ms, regions, regionOverlapMS}]`. Region totals are
 inclusive main-thread milliseconds; nested regions must not be added together.
