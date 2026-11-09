@@ -4524,9 +4524,12 @@ was still unstarted; its generation was already published before onboarding
 finished. Warm relaunch exposed the remaining first-engine gap. Saved-off and
 excluded controls loaded. The Chrome-style App ad-block suite passed 81 rows.
 Raw receipts are in `.re/s13/i/resume-0952/`. Main's engine exposes no cold-hold
-counters; browser resource durations do not prove native hold time. Fresh/warm
-first-paint pairs are a separate gate. Native deadline/boundary proofs still
-belong to the companion branch.
+counters; browser resource durations do not prove native hold time. Five
+interleaved Release pairs for each of fresh/warm Profiles at load1 7.82–9.35
+showed no first-paint slowdown against main `1a37e49a`: fresh medians main
+797 ms / branch 719 ms, warm 755 / 655 ms; paired median differences were
+−92 / −100 ms. All samples, including the slow first fresh pair, were kept.
+Native deadline/boundary proofs still belong to the companion branch.
 
 ### Section 13 lead decisions (2026-11-07)
 

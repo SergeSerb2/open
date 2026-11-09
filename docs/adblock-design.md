@@ -295,8 +295,14 @@ controls also loaded. The main engine has no cold-hold counters, so the probe's
 browser resource durations are not native hold measurements. Receipts are in
 `.re/s13/i/resume-0952/probe-branch/`; the Chrome-style App ad-block suite passed
 81 rows. The companion native first-request/deadline proof remains pending.
-Fresh and warm first-paint comparisons each require at least five interleaved
-main/branch pairs and are recorded separately from these functional results.
+Five interleaved Release pairs per mode used the same recorded main engine,
+with the quiet lock outside the screen lock and load1 7.82–9.35. Fresh first
+paint medians were main 797 ms / App branch 719 ms (paired median difference
+−92 ms); warm medians were 755 / 655 ms (−100 ms). All 20 launches had a
+confirmed first frame, active App, and clean process/window teardown. The
+first fresh pair's 4,792 / 4,465 ms samples remain in the result; no outlier
+was removed. These compare startup with main `1a37e49a`; they do not establish
+the absolute launch budget. Raw pairs and binary hashes are beside the probe.
 
 ### Site Control Center and Settings UI
 
