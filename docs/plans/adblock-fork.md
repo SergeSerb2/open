@@ -3199,7 +3199,9 @@ No virtual methods are added to `cef_request_context.h` or `cef_browser.h`.
 Enable/exclusion changes reset existing factories in the context's loaded
 storage partitions, using Chromium's proxy-transition path. Disabled/excluded
 documents have no proxy (§7.2), so this permits enabling without navigation.
-The next-request network proof remains part of real-App acceptance.
+The real-App acceptance run `s15-adblock-r5` proves the next blocked
+request after enabling or re-including the current document, and the
+next allowed request after disabling, without navigation.
 
 All calls run on the browser-process UI thread. Mutators return false for
 an unavailable or uninitialized context; status returns null. They never
@@ -3221,7 +3223,9 @@ Acceptance:
 - [x] Headless real-CEF control flow (21 PASS): defaults/status schema, enable/off/on,
   exclusions, same-path no-op, generation reload, failed load, unload during
   a pending load, OTR settings isolation/sharing and closed-context refusal.
-- [ ] Real App integration after the recorded distribution: §12.1 and Step 8.
+- [x] Real App request/control integration after the recorded distribution:
+  §12.1 and Step 8. The separate AD3 incremental-footprint row fails and
+  is owned by F; regression/full-gate acceptance remains below.
 
 Step 4, Step 6 and Step 8 ship as one engine milestone under the lead's
 integration gate. Smoke switches remain non-official only.
@@ -3287,23 +3291,26 @@ This milestone combines Steps 4/6/8, per API-DESIGN (2026-11-07). It is
 network blocking before Step 5 cosmetics. Acceptance through the real M5
 App and its production API:
 
-- [ ] Debug App builds against the recorded integrated distribution.
-- [ ] Enable -> page: native blocked count >0, CDP ERR_BLOCKED_BY_CLIENT,
+- [x] Debug App builds against the recorded integrated distribution.
+- [x] Enable -> page: native blocked count >0, CDP ERR_BLOCKED_BY_CLIENT,
       ad absent at the fixture server; an allowed control script runs.
-- [ ] Exclude -> reload: count 0 and ad loads; re-include blocks again.
-- [ ] Global off/on works without relaunch. Re-including/enabling also
+- [x] Exclude -> reload: count 0 and ad loads; re-include blocks again.
+- [x] Global off/on works without relaunch. Re-including/enabling also
       blocks the next request from a document created while unproxied.
-- [ ] Two Profiles keep exclusions/lists independent; identical lists
-      produce engine_shared=true in the second context. The second
-      context already exists for the <=2 MiB incremental engine window.
-- [ ] OTR shares its parent's engine and follows later parent exclusions.
-- [ ] Settings list toggle publishes a generation, advances load_generation
+- [x] Two Profiles keep exclusions/lists independent; identical lists
+      produce engine_shared=true in the second context.
+- [ ] AD3 incremental engine footprint <=2 MiB with the second context
+      already present. FAIL 5.734 MiB in the full App run; owned by F
+      (`s13/ad3-footprint`), per lead 18:22. No budget waiver.
+- [x] OTR shares its parent's engine and follows later parent exclusions.
+- [x] Settings list toggle publishes a generation, advances load_generation
       and changes blocking. All lists off verifies a no-engine generation, with no loaded resources or error.
-- [ ] Deleting a Profile during held real HTTP with its native engine
+- [x] Deleting a Profile during held real HTTP with its native engine
       loaded retires the context; no crash; folder absent after relaunch.
-- [ ] Debug copy has the 11-key native schema and no path, page URL or site.
-- [ ] Real opposite request states reject the corresponding new gates;
-      forced failure with a delete sheet open proves finally cleanup.
+- [x] Debug copy has the 11-key native schema and no path, page URL or site.
+- [x] Real opposite request states reject the corresponding new gates;
+      Cancel deletion retains the native context and folder.
+- [ ] Forced failure with a delete sheet open proves finally cleanup.
 - [ ] Existing page/features/extensions-ui/settings-preview scopes and the
       full verification gate pass on this integrated engine.
 
