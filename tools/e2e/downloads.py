@@ -455,6 +455,10 @@ def checks(factory, results, tmp, config, harness):
         wait(lambda: next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile2)['spaces'] == 0)
         # Settings shows a Profile by name; its SwiftUI controls install a moment later.
         app.call('profiles-shell', action='show', profile=profile_row['name'])
+        # A first Settings visit can attach the search-suggestions notice; answer it.
+        if wait(lambda: 'Got it' in (app.call('profiles-shell').get('sheetText') or []) or None, 2):
+            app.call('profiles-shell', action='press', label='Got it')
+            wait(lambda: app.call('profiles-shell')['sheet'] == 0 or None, 5)
         try:
             def press_delete():
                 try:
