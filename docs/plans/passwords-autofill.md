@@ -690,7 +690,7 @@ Profile folders are created with mode 0700 (`S_IRWXU` in `base::CreateDirectory`
 
 **Section 15 App/fixture errata (2026-11-08):** Address and card fixture GUIDs must be valid UUID strings. Address street tokens use stored type 77 (`ADDRESS_HOME_STREET_ADDRESS`), not derived type 30 (`ADDRESS_HOME_LINE1`); name type 7 remains stored. A cookie partition key must use canonical schemeful-site serialization. The synthetic Secure cookie uses a canonical HTTPS localhost partition site. These fixture corrections are documented with source evidence in [the import fixture notes](../re/import-secrets-fixture.md).
 
-`AppImportRunner` registers once as a `ProfileDataOwner`. Retirement marks both the Profile ID and directory as retired, cancels and awaits a mapped import task, drains pending sink writes, and drops the sink context and reload callback before folder removal. A retired destination is refused before context lookup. Cancellation checks before ledger begin, step commit, and finish prevent late ledger writes. The runner does not remove Profile folders or change the ledger during retirement. The same tracked task owns real consented imports and synthetic imports.
+`AppImportRunner` registers once as a `ProfileDataOwner`. Retirement marks both the Profile ID and directory as retired, cancels and awaits a mapped import task, drains pending sink writes, and drops the sink context and reload callback before folder removal. A retired destination is refused before context lookup. Cancellation checks before ledger begin, step commit, and finish prevent late ledger writes. The runner does not remove Profile folders or change the ledger during retirement. The same tracked task owns real consented imports and synthetic imports. Ten runnable M5 synthetic acceptance rows passed, including both Profile deletion cases and both mock-key wizard switch modes; I-5/I-6 recovery probes remain M1-only. See the [count-only acceptance receipt](../engine-spike/imported-secrets-acceptance.md).
 
 ### 8.1 Shape and profile mapping
 
@@ -968,7 +968,7 @@ Agents may not launch Arc (AGENTS.md rule 4). Use a throwaway test account on a 
 - `docs/engine-patches.md`: add P9 "Passwords and autofill bridge" pointing here (Step 1).
 - `docs/engine-api.md`: new section from §5 (Step 2).
 - `docs/automation.md`: §9.1 commands (Step 4).
-- `docs/plans/first-run.md` §5.4 and S-3: remove "until the browser engine can store secrets, this step checks and counts only" once Step 5 lands.
+- `docs/plans/first-run.md` §5.4 and shared S-3/S-4 now describe consented writes through each mapped engine Profile and counts-only reports. Mock-key builds keep the real capability OFF; synthetic acceptance and the user-present real Keychain check are separate gates.
 - `docs/plans/release.md` §4: entitlement change after Q-3 and U-9.
 - `docs/status.md`: §1.15 "Write imported secrets", §1.17 "Password manager", §3.1 gaps 1–2, §5.4 decision → planned, citing this plan.
 - `docs/plans/settings-library.md` P-9: the row label is "Credit Cards" (IS §18; the code already says so); Arc's symbol for it is `creditcard.and.123` (PW-5).

@@ -60,6 +60,8 @@ def run(factory, results, tmp, h):
             'autofill dropdown missing', 'autofill dropdown did not close',
             'autofill dropdown did not appear after a field click',
             'password manager unavailable', 'fixture checkpoint not reached',
+            'Change Profile warning missing', 'Profile reassignment did not finish',
+            'Profile deletion sheet missing',
         }
         detail = ': ' + str(error) if isinstance(error, AssertionError) and str(error) in safe_assertions else ''
         raise RuntimeError('synthetic secrets suite stopped: ' + type(error).__name__ + detail) from None
@@ -167,7 +169,8 @@ def _run(factory, results, tmp, h):
         try:
             launch(fresh=True, allow=False)
             for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed',
-                        'open.import.lastArcDir', 'open.settings.lastPane'):
+                        'open.import.lastArcDir', 'open.settings.lastPane',
+                        'open.profiles.confirmInterProfileMove'):
                 saved[key] = app.call('defaults', key=key, persistent=True)
                 app.call('defaults', key=key, value=None if key in ('open.import.lastArcDir', 'open.settings.lastPane') else True)
             spaces = setup()
@@ -201,9 +204,16 @@ def _run(factory, results, tmp, h):
             updated = app.eval(manager, '''(async () => {
               const entries = await chrome.passwordsPrivate.getSavedPasswordList();
               const entry = entries.find(e => e.username === 'fixture-0-1');
-              if (!entry) return false;
-              await chrome.passwordsPrivate.changeCredential({id:entry.id, username:entry.username, password:'fixture-open-newer'});
-              return !chrome.runtime.lastError;
+              if (!entry || entry.isPasskey) return false;
+              // Preserve the schema's required fields. Do not send optional
+              // passkey displayName when updating a password credential.
+              await chrome.passwordsPrivate.changeCredential({
+                affiliatedDomains:entry.affiliatedDomains, id:entry.id,
+                username:entry.username, storedIn:entry.storedIn,
+                isPasskey:entry.isPasskey, hidden:entry.hidden,
+                isAutomaticPasswordChangeSupported:entry.isAutomaticPasswordChangeSupported,
+                password:'fixture-open-newer'});
+              return true;
             })()''')
             existing = app.call('import-secrets-fixture')
             # Select that specific account by typing its fixture username first.
@@ -246,12 +256,25 @@ def _run(factory, results, tmp, h):
                 before_ledger = (Path(app.user_data) / 'State/secrets-import.json').read_bytes()
                 work = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Work')
                 folders = [Path(app.user_data) / kind / work['directory'] for kind in ('Profiles', 'Engine')]
-                # Disposable roots live outside Application Support, so Chromium's
-                # cache is inside the Engine folder (ProfileDirectories contract).
+                # Follow ProfileDirectories: Application Support roots put
+                # Chromium caches under Library/Caches with the same suffix.
+                support = Path.home() / 'Library/Application Support'
+                try:
+                    suffix = folders[1].relative_to(support)
+                except ValueError:
+                    pass  # Other disposable roots keep caches in Engine.
+                else:
+                    folders.append(Path.home() / 'Library/Caches' / suffix)
                 had_folders = all(p.is_dir() for p in folders[:2])
                 app.call('space-profile', space=spaces['Work'], profile='Default')
+                warning = app.call('alert')
+                assert 'Change Profile?' in warning['texts'] and 'Change Profile' in warning['buttons'], 'Change Profile warning missing'
+                app.call('alert', button='Change Profile')
+                assert h.wait_until(lambda: any(p['id'] == work['id'] and p['spaces'] == 0
+                    for p in app.call('profiles-shell')['profiles']), timeout=5), 'Profile reassignment did not finish'
                 profile_space('Default')
                 app.call('profiles-shell', action='show', profile='Work')
+                h.time.sleep(.15)  # Same Settings render settlement as profiles_shell.show.
                 app.call('profiles-shell', action='press', label='Delete Profile')
                 assert h.wait_until(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5), 'Profile deletion sheet missing'
                 app.call('profiles-shell', action='type-delete', text='Work')

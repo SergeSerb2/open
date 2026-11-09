@@ -23,3 +23,12 @@ fixture requirements, not changes to the engine's import policy.
 The prior G3 real-App run passed I-1 after these fixture corrections. That result
 does not prove later import rows or the real Keychain path. Current receipts
 must identify their own App head and engine fingerprint.
+
+I-4 updates an imported password through Chromium's normal Password Manager
+WebUI API. `changeCredential` takes a `PasswordUiEntry`, including its required
+domain, store and state fields; the ID/username/password subset is not valid.
+The harness preserves the required fields from `getSavedPasswordList` and does
+not send optional passkey `displayName` for a password. Evidence at the pinned
+commit above: [`passwords_private.webidl` lines 247–299 and 477–482](https://github.com/chromium/chromium/blob/d0c02bfad08ec92a6ffcf989e53cd995e6381a4c/chrome/common/extensions/api/passwords_private.webidl#L247),
+and [`passwords_private_delegate_impl.cc` lines 478–506](https://github.com/chromium/chromium/blob/d0c02bfad08ec92a6ffcf989e53cd995e6381a4c/chrome/browser/extensions/api/passwords_private/passwords_private_delegate_impl.cc#L478).
+The API returns only success/failure to the harness; no credential is logged.
