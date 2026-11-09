@@ -252,9 +252,27 @@ The prior launch's link creation/removal advances the executable ctime **after**
 
 ### Fix options and remaining gate
 
-The existing App/engine configuration can append `--disable-features=MacAppCodeSignClone` before CEF starts. The functional control proves that this removes the ctime writer; it does not measure a shipping launch gain. No product default or switch was changed in this PR.
+The feature-off control isolated the ctime writer. It is not a shipping fix.
+The unconditional disable was rejected after a live bundle replacement broke
+helper signature validation and navigation. Chromium's clone must remain so
+the running browser can start helpers from a matching signed bundle after an
+external update replaces the original App path. Sparkle normally waits for
+host termination, but that does not replace the live-swap safety gate.
 
-For Debug/ad-hoc builds with no in-place updater, an App-side opt-out is the bounded option. For shipping builds, first prove the updater never replaces a bundle while its old process is alive, or preserve Chromium's protection. A protection-preserving engine option is to keep and reuse an executable/version-specific anchor across launches, with safe multi-instance/update cleanup, instead of creating and deleting a hard link every run. That needs an engine-owner design and authorized root; it is not implemented here. Simply delaying the clone until after paint would still invalidate the next launch's assessment.
+The separate [PR #266](https://github.com/SergeSerb2/open/pull/266) implements
+engine patch `chromium/0106`: retain and reuse a valid per-install hard-link
+clone, with Chromium's original per-run clone as the failure fallback.
+See its [ctime-writer and clone-reuse evidence report](https://github.com/SergeSerb2/open/blob/a3ed9e6e2c4ed22800bed204f84ae9ea7136e9dc/docs/re/codesign-clone-reuse.md)
+(`docs/re/codesign-clone-reuse.md`). That report records stable executable
+ctime/link count across reuse, same-inode copy invalidation, separate install
+caches, fallback and the requested ad-hoc live swap. Its seven-relaunch scan
+target remains FAIL: residual first-after-gap scans, cause open. Hardened DLV
+acceptance waits for M1 clearance, and launch timing waits for the approved
+quiet-window runner. No launch gain is claimed here or from those functional
+rows. This diagnostics PR changes no cloning feature or product default.
+
+Simply delaying the original per-run clone until after paint would still
+invalidate the next launch's assessment.
 
 The 148–157 ms scan is the measured opportunity bound from earlier paired research. These functional runs do not establish its removal on the first notarized Developer ID distribution, and do not accept the sidebar/paint budgets. The signed-build check above remains required.
 
