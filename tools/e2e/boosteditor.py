@@ -13,6 +13,10 @@ from sitecontrol_fixtures import fixture_server
 
 
 def run(factory, results, tmp, env):
+    if os.environ.get("OPEN_E2E_BOOST_ZAP_ONLY") == "1":
+        import boost_zap
+        boost_zap.run(factory, results, tmp, env)
+        return
     original_factory=factory
     def factory(**kwargs):
         if os.environ.get("OPEN_BOOST_NEGATIVE_APP"):
@@ -96,7 +100,17 @@ def run(factory, results, tmp, env):
                 ok=wait_until(lambda: probe(tab)["font"].startswith("Avenir") and abs(float(probe(tab)["zoom"])-1.1)<.001 and probe(tab)["transform"] == "capitalize", timeout=5, step=.02)
                 return dict(positive=bool(ok),negative=not (before["font"].startswith("Avenir") and str(before["zoom"]) == "1.1" and before["transform"] == "capitalize"),before=before,live=probe(tab))
             row("B3_font_text", b3)
-            results["B4_zap"]={"status":"BLOCKED","reason":"P7: isolated world and native page-message channel"}
+            def b4():
+                from boost_zap import PickerFlow
+                picker = PickerFlow(app, tab, wait_until)
+                picker.enter()
+                picker.pick("#promo-banner", ".this")
+                assert wait_until(lambda: call()["zapCount"] == 1 and picker.hidden("#promo-banner"), timeout=5, step=.02)
+                picker.overlay_click(".reveal")
+                assert wait_until(lambda: call()["zapCount"] == 0 and not picker.hidden("#promo-banner"), timeout=5, step=.02)
+                tap("zap")
+                return dict(positive=True, negative=not call()["zap"], countAfterReveal=call()["zapCount"])
+            row("B4_zap", b4)
             def b5():
                 originalCSS=call()["boost"]["css"]
                 first="window.boostEditorJSRuns=(window.boostEditorJSRuns||0)+1;window.boostEditorJSVersion='one';"

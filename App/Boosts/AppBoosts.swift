@@ -38,7 +38,12 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
   private(set) var revision = 0
   private(set) var boostsGloballyEnabled: Bool
   @ObservationIgnored lazy var adapter = BoostEngineAdapter(boosts: self)
-  @ObservationIgnored lazy var editorHost = AppBoostEditorHost(boosts: self)
+  @ObservationIgnored private var editorHostStorage: AppBoostEditorHost?
+  var existingEditorHost: AppBoostEditorHost? { editorHostStorage }
+  var editorHost: AppBoostEditorHost {
+    if let editorHostStorage { return editorHostStorage }
+    let host = AppBoostEditorHost(boosts: self); editorHostStorage = host; return host
+  }
   @ObservationIgnored private var pendingEditors: [ItemID: BoostID] = [:]
 
   init(app: AppDelegate) {
@@ -126,6 +131,7 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     let enabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
     guard enabled != boostsGloballyEnabled else { return }
     boostsGloballyEnabled = enabled; revision &+= 1
+    if !enabled { existingEditorHost?.stopPicker() }
     adapter.globalSwitchChanged()
     for factory in app.hostFactories.values { factory.controller?.boostEditor?.view?.refresh() }
     for observer in Array(observers.values) { observer() }
@@ -209,5 +215,5 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
       profiles[id]?.store.saveNow(); profiles[id]?.needsSave = false
     }
   }
-  func stop() { adapter.stop(); saveNow() }
+  func stop() { existingEditorHost?.stopPicker(); adapter.stop(); saveNow() }
 }

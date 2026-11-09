@@ -61,6 +61,9 @@ extension AutomationController {
       guard target.boostEditor?.session != nil else { throw Failure(message: "could not open Boost editor") }
       return try boostEditorState(target.boostEditor)
     case "close": controller.boostEditor?.close()
+    case "zap-available":
+      guard let raw = args["tab"] as? String, let uuid = UUID(uuidString: raw) else { throw Failure(message: "invalid tab ID") }
+      return boosts.editorHost.zapAvailability(tabID: ItemID(rawValue: uuid))
     case "state": break
     case "drag":
       guard let editor = controller.boostEditor, let panel = editor.panel, let view = editor.view, let points = args["points"] as? [[Double]],
@@ -136,7 +139,9 @@ extension AutomationController {
     }
     let rect = view.pad.frame
     return ["open": true, "boost": try boostJSON(session.boost), "profile": session.context.profileID.description,
-      "tab": session.context.tabID.description, "mode": view.isCodeMode ? "code" : "simple", "zap": false, "zapCount": session.boost.zaps.count,
+      "tab": session.context.tabID.description, "mode": view.isCodeMode ? "code" : "simple", "zap": session.isZapActive, "selecting": session.isSelecting,
+      "zapAvailable": session.zapAvailable, "zapCount": session.boost.zaps.count,
+      "codeSelection": view.codeView.map { [$0.editor.selectedRange().location, $0.editor.selectedRange().length] } ?? [],
       "loadedJS": app.stores.boosts.editorHost.loadedJS(boostID: session.boost.id, tabID: session.context.tabID).map { $0 as Any } ?? NSNull(),
       "refreshToRun": view.codeView?.showsRefreshToRun ?? false,
       "canUndo": session.undoManager.canUndo, "undoCount": session.undoManager.groupingLevel + (session.undoManager.canUndo ? 1 : 0),

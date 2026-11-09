@@ -4,7 +4,7 @@ Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileUR
 
 `OpenBoosts` is a Swift 6, macOS 26+ library in OpenKit. It depends only on
 `OpenModel` for `ProfileID`. It provides the data, persistence, matching, injection
-plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing, imports and Zap transport remain future work.
+plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing remains future work. Zap and Pick Selector use the App host and P7 Open-world transport.
 
 ## API
 
@@ -51,8 +51,8 @@ True overlay secrecy requires the engine adapter to inject the picker in an
 captured functions alone do not protect a main-world picker from page code that
 ran before injection. Inject the managed applier in that world too, so its state
 and Boost IDs remain private. User-authored Boost JS still runs in the main world
-through its script element. This is a required engine integration gate, not an
-implemented App/engine adapter in this milestone.
+through a separate page-world document-start script. `BoostEngineAdapter` installs
+the managed applier in `.open` and uses `.open` for live stylesheet refresh.
 
 The engine must deliver native commands directly into that isolated world and
 accept its native binding there. Do not forward capabilities through page-visible
@@ -131,20 +131,34 @@ Undo/Redo preserve the current enabled flag and current Library name, except
 that the editor's own Rename step restores its recorded name. Library Delete
 closes matching editors before deleting the stored Boost.
 
-**Limits:** managed scripts currently run in the main world. Overlay secrecy is
-not proven. P7 isolated-world/native message support blocks Zap; `enterZap`
-returns false. Code mode uses the native CSS/JS text views from #203. CSS saves
-refresh live pages; JS saves replace future document-start scripts without live
-execution. The runtime retains the installed JS snapshot for each current
-document, independently of store changes and same-document navigation. Real
-document commits update that snapshot and notify the editor. Main currently
-loses updated script registrations when a renderer is replaced, so prompt
-removal alone does not prove execution. B5 remains **BLOCKED: engine defect,
-targeted by #202 patch 0602** (lead, 2026-11-07). The strict B5/B28 reload
-checks still fail on main engine `7a90e70e…`; engine child E owns the fix and
-its page-execution proof. Color uses the documented interim
-filter math until the paint-time remap lands. The existing isolated-world harness
-receipts below do not prove the App's current world isolation.
+**Zap App transport:** `AppBoostEditorHost` delegates to `AppBoostPicker`. Entry is
+available only for a live, loaded, regular HTTP(S) tab in an editable session.
+A native challenge first obtains the engine's main-frame document token. The
+picker is then injected on demand in `.open`; a private-world marker prevents a
+queued request from entering another document. `__open.postMessage` sends typed
+JSON through `__openNative.postMessage`. The coordinator uses the engine token,
+Boost ID, and native nonce before any store mutation or editor event.
+
+The native adapter refuses unknown types/fields, wrong document tokens/nonces,
+invalid counts, duplicate list entries, and payloads over 64 KiB. Selectors cap
+at 4,096 UTF-8 bytes, labels at 1,024 bytes, and a picker session at 1,024 Zaps.
+Stored selectors are the authority for list replies. Accepted commits and reveal
+requests use the existing Profile store and refresh path. Native removal echoes
+clear preview state without a second store mutation. Counts and persisted labels
+refresh the in-page reveal chips; the editor shows the stored Zap count.
+
+Exit expires native authority before page teardown. Navigation, reload, tab/editor
+close, renderer loss, and the global switch all end the session. `pagehide` also
+removes page listeners and hides the overlay before a page enters Back/Forward
+cache. Selector mode inserts at the native CSS editor caret and cannot mutate
+Zaps. User Boost JavaScript remains a separate page-world document-start script;
+CSS saves and Zap edits refresh only the managed Open-world stylesheet.
+
+Code mode retains the installed JS snapshot for each document. Real document
+commits update that snapshot and notify the editor. P7 and patch 0602 are on main;
+the former B5/B28 replacement-renderer blocker is no longer an API limitation.
+Color still uses the documented interim filter math until paint-time remapping
+lands. The older package harness receipts below are separate from real-App proof.
 
 The PR records redacted real-App counts, timings and load averages. The e2e
 runner writes local receipts under `docs/engine-spike/`; do not commit their
@@ -315,7 +329,7 @@ one full-Boost undo step per commit/reveal. `endPickerSession()` is the App hook
 tab switch, same-URL reload, frame destruction, and transport loss. Close removes
 the observation. Idle lifecycle notifications send no exit command or picker
 redraw; close still sends one unconditional exit. The required host query
-`zapAvailability(tabID:)` returns false before P7 or without an Open world. The
+`zapAvailability(tabID:)` returns false for unavailable, private, or internal pages. The
 button reads it on each refresh and shows "Zap isn't available yet." when false.
 A transient failed entry leaves Zap off and enabled while the host is available,
 so the user can retry.
@@ -327,7 +341,8 @@ writes in this mode. The App host must implement
 `BoostEditorHost.enterSelectorPicker(boostID:tabID:) -> Bool`; there is no default
 implementation. Code mode binds `session.insertSelectorAtCaret` to its
 CSS NSTextView and calls `session.pickSelector()`; selection inserts and exits.
-No App or engine wiring is supplied by this package change (B4 remains external).
+The App host now supplies the P7 wiring; the original package-only receipts below
+do not by themselves prove that App flow.
 The coordinator owns `BoostPickerEvent`; OpenSiteControl exposes a public alias.
 App adapters fan out `lastEvent` only after coordinator validation. They must handle
 the added `labels` argument when matching `.listZaps`: selectors remain on the wire,

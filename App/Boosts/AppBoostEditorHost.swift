@@ -1,5 +1,6 @@
 import AppKit
 import OpenBoosts
+import OpenEngine
 import OpenModel
 import OpenSiteControl
 
@@ -7,6 +8,11 @@ import OpenSiteControl
 final class AppBoostEditorHost: BoostEditorHost {
   unowned let boosts: AppBoosts
   private var pickerObservers: [SiteControlObservationToken: @MainActor (ItemID, BoostPickerEvent) -> Void] = [:]
+  private var pickerStorage: AppBoostPicker?
+  private var picker: AppBoostPicker {
+    if let pickerStorage { return pickerStorage }
+    let picker = AppBoostPicker(host: self); pickerStorage = picker; return picker
+  }
   init(boosts: AppBoosts) { self.boosts = boosts }
   func store(for profile: ProfileID) -> BoostStore { boosts.store(for: profile) }
   func preview(_ boost: Boost, tabID: ItemID) {
@@ -21,18 +27,24 @@ final class AppBoostEditorHost: BoostEditorHost {
     return try? await host.content.takeSnapshot()
   }
   func zapAvailability(tabID: ItemID) -> Bool {
-    // Blocked on P7: isolated world
-    false
+    picker.isAvailable(tabID: tabID)
   }
-  // Blocked on P7: isolated world and a native page-message channel.
-  func enterZap(boostID: BoostID, tabID: ItemID) -> Bool { false }
+  func enterZap(boostID: BoostID, tabID: ItemID) -> Bool {
+    picker.enter(boostID: boostID, tabID: tabID, mode: .zap)
+  }
   func enterSelectorPicker(boostID: BoostID, tabID: ItemID) -> Bool {
-    // Blocked on P7: isolated world
-    false
+    picker.enter(boostID: boostID, tabID: tabID, mode: .select)
   }
-  func exitZap(tabID: ItemID) {}
-  func removeZapFromSession(_ selector: String, tabID: ItemID) {}
-  func requestZapCounts(tabID: ItemID) {}
+  func exitZap(tabID: ItemID) { pickerStorage?.exit(tabID: tabID) }
+  func removeZapFromSession(_ selector: String, tabID: ItemID) { pickerStorage?.remove(selector, tabID: tabID) }
+  func requestZapCounts(tabID: ItemID) { pickerStorage?.requestCounts(tabID: tabID) }
+  func receivePickerMessage(_ page: OEWebContent, type: String, payloadJSON: String, documentID: String) {
+    pickerStorage?.receive(page, type: type, payloadJSON: payloadJSON, documentID: documentID)
+  }
+  func stopPicker() { pickerStorage?.stop() }
+  func publishPickerEvent(_ event: BoostPickerEvent, tabID: ItemID) {
+    for observer in Array(pickerObservers.values) { observer(tabID, event) }
+  }
   func observePickerEvents(_ observer: @escaping @MainActor (ItemID, BoostPickerEvent) -> Void) -> SiteControlObservationToken {
     let token = SiteControlObservationToken(); pickerObservers[token] = observer; return token
   }

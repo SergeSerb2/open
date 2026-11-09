@@ -428,6 +428,7 @@
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); exitWithReason("esc"); }
     else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); }
   }
+  function pagehide() { exitWithReason("navigation"); }
   function enter(options) {
     if (active) { if (options?.boostID !== boostID) post("picker:error", { kind: "already-active" }); return; }
     // Only a native-issued capability can yield messages accepted by native.
@@ -442,6 +443,7 @@
     query(overlay, ".undo").hidden = mode === "select";
     document.addEventListener("mousemove", move, true); document.addEventListener("click", click, true); document.addEventListener("keydown", keydown, true);
     window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition);
+    window.addEventListener("pagehide", pagehide);
     post("picker:ready", { boostID });
   }
   function exitWithReason(reason) {
@@ -449,6 +451,7 @@
     active = false; rootObserver?.disconnect(); rootObserver = null; invalidateRoots();
     document.removeEventListener("mousemove", move, true); document.removeEventListener("click", click, true); document.removeEventListener("keydown", keydown, true);
     window.removeEventListener("scroll", reposition, true); window.removeEventListener("resize", reposition);
+    window.removeEventListener("pagehide", pagehide);
     cancelAnimationFrame(frame); frame = 0; clearTimeout(flashTimer); clearMulti(); hovered = null; lastMove = null; host.hidden = true;
     if (previewStyles.size) { window.addEventListener("open-boosts-applied", removePreview, { once: true }); graceTimer = setTimeout(removePreview, 500); }
     post("picker:exited", { boostID, reason });
