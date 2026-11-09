@@ -373,8 +373,12 @@ def contrast_matrix(factory, results, tmp, api):
                     if active:
                         app.call('window-focus', id=window['id'], activate=True)
                     else:
-                        peer = app.foreground_peer()
-                        peer_roots.add(Path(peer.user_data))
+                        if peer is None:
+                            peer = app.foreground_peer()
+                            peer_roots.add(Path(peer.user_data))
+                        else:
+                            app.call('yield-activation', pid=peer.pid)
+                            peer.call('window-focus', id=peer.call('window-state')['id'], activate=True)
                         # Keep the Welcome window uncovered, on the M5's main
                         # 2560 pt screen, while the owned peer is active.
                         peer.call('window-frame', frame=[1540, 70, 720, 500])
@@ -407,9 +411,6 @@ def contrast_matrix(factory, results, tmp, api):
                     rows[name] = row
                     (evidence / 'ratios.json').write_text(json.dumps(rows, indent=2))
                     results[name] = row
-                    if peer:
-                        peer.quit(); peer = None
-                        app.call('window-focus', id=window['id'], activate=True)
     finally:
         if peer: peer.quit()
         if app: app.quit()
