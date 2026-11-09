@@ -54,10 +54,40 @@ extension AutomationController {
     switch action {
     case "profile":
       guard !settings, let name = args["name"] as? String,
-        let popup = nodes.compactMap({ $0 as? NSPopUpButton }).first(where: { $0.itemTitles.contains(name) }),
-        let item = popup.item(withTitle: name), item.isEnabled else { throw Failure(message: "Profile picker item not found") }
-      popup.selectItem(withTitle: name)
-      if let selector = popup.action { NSApp.sendAction(selector, to: popup.target, from: popup) }
+        let profile = app.model.profiles.first(where: { $0.name == name }) else { throw Failure(message: "Profile picker item not found") }
+      if let popup = nodes.compactMap({ $0 as? NSPopUpButton }).first(where: { $0.itemTitles.contains(name) }),
+        let item = popup.item(withTitle: name), item.isEnabled {
+        popup.selectItem(withTitle: name)
+        if let selector = popup.action { NSApp.sendAction(selector, to: popup.target, from: popup) }
+      } else {
+        let current = app.model.profile(id: app.settingsPresenter.library!.historyProfileID)?.name ?? ""
+        let matches = nodes.filter {
+          [NSAccessibility.Role.popUpButton.rawValue, NSAccessibility.Role.button.rawValue].contains(string($0, "accessibilityRole"))
+            && [string($0, "accessibilityLabel"), string($0, "accessibilityTitle"), string($0, "accessibilityValue")].contains(current)
+        }
+        guard matches.count == 1, let target = matches.first else { throw Failure(message: "Profile picker control not found") }
+        let observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { note in
+          nonisolated(unsafe) let menu = note.object as? NSMenu
+          MainActor.assumeIsolated {
+            guard let menu else { return }
+            nonisolated(unsafe) let trackingMenu = menu
+            let timer = Timer(timeInterval: 0.05, repeats: false) { _ in
+              MainActor.assumeIsolated {
+                if let index = trackingMenu.items.firstIndex(where: { $0.title == name && $0.isEnabled }) { trackingMenu.performActionForItem(at: index) }
+                trackingMenu.cancelTrackingWithoutAnimation()
+              }
+            }
+            RunLoop.main.add(timer, forMode: .eventTracking)
+          }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        try press(target)
+        for _ in 0..<100 {
+          if app.settingsPresenter.library?.historyProfileID == profile.id { break }
+          try await Task.sleep(for: .milliseconds(20))
+        }
+        guard app.settingsPresenter.library?.historyProfileID == profile.id else { throw Failure(message: "Profile menu selection did not apply") }
+      }
     case "section":
       guard !settings, let raw = args["section"] as? String, let section = LibrarySection(rawValue: raw),
         let index = LibrarySection.allCases.firstIndex(of: section),
@@ -99,7 +129,7 @@ extension AutomationController {
     }
     if action != "state" { await Task.yield() }
     return ["window": owner.windowNumber, "key": owner.isKeyWindow,
-      "controls": nodes.map { ["id": string($0, "accessibilityIdentifier"), "label": string($0, "accessibilityLabel"),
+      "controls": nodes.map { ["class": String(describing: type(of: $0)), "id": string($0, "accessibilityIdentifier"), "label": string($0, "accessibilityLabel"),
         "title": string($0, "accessibilityTitle"), "role": string($0, "accessibilityRole"), "value": string($0, "accessibilityValue")] },
       "popupItems": nodes.compactMap { ($0 as? NSPopUpButton)?.itemTitles }] as [String: Any]
   }
