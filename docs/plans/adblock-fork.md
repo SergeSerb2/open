@@ -4913,7 +4913,8 @@ cross-Profile tab fixture now creates an explicit Space and asserts that
 the returned main tab belongs to the intended Profile. Both corrected
 flows pass in the next complete-suite attempt.
 
-**App footprint attribution, incomplete.** That attempt then stops at
+**App footprint attribution: reproduces on Step 4 App, owned by F.**
+That attempt stops at
 `AD3_shared_engine_footprint`: +6,766,592 browser-process bytes against
 2 MiB, at load 16.50/11.36/10.29. A separate diagnostic pair reuses the
 same real App flow with fresh roots and blocking on versus forced off.
@@ -4924,8 +4925,13 @@ The 144.53-second pair ran at load 29.08/19.24/14.13 to
 16.10/16.66/13.82; all owned windows and processes closed. Separate
 Profile/window deltas vary widely (+14,827,592 and -5,816,272 bytes),
 so these measurements do not establish an allocation cause. The matched
-Step 4 App comparison is pending. No product fix or budget change follows
-from this partial attribution.
+Step 4 App (without cosmetics) also misses: +13,336,600 bytes on,
++1,687,552 bytes off, net +11,649,048 bytes. Both statuses again report
+shared engines and matching inputs; the accepted framework hash stays
+unchanged. That pair takes 161.79 seconds at load 21.23/20.15/15.93 to
+12.18/16.57/15.16 and closes all owned windows and processes. The lead
+assigned AD3 to child F, including repeatability, purge and allocator
+attribution. E4 makes no product fix or budget change for this row.
 
 The priority lane and no-wait fallback are not added speculatively. Run
 both contended gates first, then apply §8.2 escalation if required.
