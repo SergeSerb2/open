@@ -232,6 +232,13 @@ final class WelcomeCardView: NSControl {
     setAccessibilityChildren([])
     setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Replay", target: self, selector: #selector(accessibilityPerformPress))])
     toolTip = "Replay \(title)"
+    // One hover area for the card's life. inVisibleRect follows bounds, so it
+    // never needs replacing (a replaced area synthesizes a new entered event
+    // beneath a stationary pointer and restarts the demo). Installing it here,
+    // not in updateTrackingAreas, guarantees it exists even when AppKit never
+    // calls updateTrackingAreas for this view.
+    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+    addTrackingArea(area); tracking = area
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   override var isFlipped: Bool { true }
@@ -242,11 +249,8 @@ final class WelcomeCardView: NSControl {
   override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill() }
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
-    // inVisibleRect follows bounds. Replacing this area during layout synthesizes
-    // a new entered event beneath a stationary pointer and restarts the demo.
-    guard tracking == nil else { return }
-    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
-    addTrackingArea(area); tracking = area
+    // Restore the single hover area only if something removed it.
+    if let tracking, !trackingAreas.contains(where: { $0 === tracking }) { addTrackingArea(tracking) }
   }
   func resetHover() { isHovered = false }
   override func viewDidHide() { super.viewDidHide(); resetHover() }
