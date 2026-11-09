@@ -2183,8 +2183,11 @@ parser or top-of-body inline scripts. The scan and each mutation batch stop
 after 65,536 node/token inspection steps, in addition to the existing
 65,536 distinct-token and 4,194,304 UTF-16-unit lifetime caps. Queued generic
 reports still send at most 500 tokens per flush. The new C-4 inline variant
-requires hiding and initial-scan evidence in 10/10 navigations. These changes
-are written; rebuilt runtime acceptance is pending.
+requires hiding and initial-scan evidence in 10/10 navigations. The rebuilt
+`335e9f8d` binary passes both C-4 variants 10/10; the inline variant also
+records its generic class in the initial scan 10/10. The real CEF suite
+passes all 18 executable rows, including binding-before-observer ordering
+for all 25 documents that start the observer.
 
 ### 8.3 Payload: sanitizing, insertion, and what v1 drops (D-14)
 
@@ -4729,15 +4732,19 @@ network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 Branch `s13/step5-cosmetics` started at Step 4 `dc7b985a` and merged
 Step 4 `f06011e7` before its first build. The lead assigned
 `~/Developer/open-engine-s13b` at 14:00. Engine apply and GN generation
-passed there. The final `cefsimple cefclient cef_framework` build at
-`f0d6734e` passes in 224 s, with load 10.90/13.56/16.59 at start and
-33.11/19.87/18.33 at finish. Strict built status is 8 PASS, 0 FAIL,
-0 WARN. The final binary loads the two official lists in a real headless
-service check and rejects an empty root with the expected diagnostic error
-(2/2 PASS; command 5.63 s, load 25.75/20.86/18.86 to 26.01/21.00/18.92).
-Step 5 remains **in progress**. Windowed renderer and App acceptance are
-pending. The lead cleared the M5 screen hold before these flows queued;
-the M1 remains held.
+passed there. After the observer-start fix, the final
+`cefsimple cefclient cef_framework` build at `335e9f8d` passes in 30.60 s,
+with load 20.82/22.41/22.69 at start and 15.16/20.85/22.11 at finish.
+Strict built status is 8 PASS, 0 FAIL, 0 WARN. The final binary loads the
+two official lists in a real headless service check and rejects an empty
+root with the expected diagnostic error (2/2 PASS; command 5.53 s, load
+12.70/19.68/21.64 to 12.57/19.53/21.57).
+Step 5 remains **in progress**. The real CEF functional suite passes
+18 executable rows in 86.94 s (load 10.40/12.98/17.41 to 8.91/11.55/16.39).
+Late generic elements hide 10/10; top-of-body inline-script elements hide
+10/10 and appear in the initial scan 10/10. C-9 remains reserved.
+App acceptance and timing gates are pending. The lead cleared the M5
+screen hold before these flows queued; the M1 remains held.
 
 The follow-up source audit checked each new overlay header and source against
 the pinned Chromium definitions. Public GN dependencies now propagate the
@@ -4778,6 +4785,9 @@ and final build pass. No failed build output was launched.
   script interpolation or main-world global is created.
 - The fixed class/ID observer runs in
   `ISOLATED_WORLD_ID_CHROME_INTERNAL` only after native binding installation.
+  It starts in the frame's next task, after Blink's script prohibition
+  ends. A bounded scan of existing document tokens precedes mutation
+  observation, so parser and early inline-script nodes are included.
   An early context callback installs the binding idempotently; its
   `v8::Global<Context>` follows release. Weak callbacks read the current
   payload lazily. Generic replies carry a document epoch and old replies
@@ -4865,12 +4875,12 @@ reply cap is independent of the 500-token input cap.
 | Extracted fixed observer `node --check` | PASS (syntax only) |
 | Rust sanitizer review against §8.3 and Step 2 refinements | Source reviewed; unchanged; runtime verification pending |
 | Engine apply / GN generation | PASS in assigned s13b: 12 patches applied, 27 retained, 36 overlay files copied; load 51.21/46.27/45.55 at lock acquisition |
-| Full engine build / strict built status | PASS at f0d6734e, 224 s; load 10.90/13.56/16.59 to 33.11/19.87/18.33; strict 8/0/0 |
+| Full engine build / strict built status | PASS at 335e9f8d, 30.60 s; load 20.82/22.41/22.69 to 15.16/20.85/22.11; strict 8/0/0 |
 | Owned GN targets / objects / scoped include checks | PASS; renderer/Mojo checkdeps, Open subtree GN includes and both CEF hook objects |
-| Headless real-service loaded root / empty root | PASS 2/2 on final binary; 5.63 s; load 25.75/20.86/18.86 to 26.01/21.00/18.92 |
-| C-1…C-8/C-10, C-4 ×10, install-before-execute | PENDING; C-9 stays reserved |
+| Headless real-service loaded root / empty root | PASS 2/2 on final binary; 5.53 s; load 12.70/19.68/21.64 to 12.57/19.53/21.57 |
+| C-1…C-8/C-10, both C-4 variants ×10, install-before-execute | PASS; 18 executable rows, late 10/10, inline hidden and initially scanned 10/10; binding order correct for all 25 started documents; C-9 reserved |
 | Contended C-G1/C-G2, T/R/check count, C-G3, worst-case payload | PENDING; no timing result or load receipt exists |
-| Receiver drop, quit-during-load ×5 | PENDING |
+| Receiver drop, quit-during-load ×5 | Receiver drop PASS: network blocks 3 requests, hiding fails open without a wait; quit ×5 PENDING |
 | Real-App EasyList on/excluded/off controls and `adblock` + `page` suites | Authorized with s13b distribution; PENDING build and screen clearance |
 
 **Fixture errata.** Remove the domain-specific `.late-ad` rule so C-4

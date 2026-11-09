@@ -389,8 +389,10 @@ live Open Default; named Profiles still match stable import IDs only.
 
 - Step 5 source is on `s13/step5-cosmetics`; assigned s13b full CEF build,
   strict status (8/0/0), owned includes, real headless load/empty-root checks
-  (2/2) and distribution pass. All C-cases, contended C-G1/C-G2, C-G3, worst-case
-  renderer footprint/style-recalc record, receiver-drop, five quit-load
+  (2/2) and distribution pass at 335e9f8d. The CEF functional suite passes
+  18 executable rows, including late and inline-before-observer C-4 at
+  10/10 each and the receiver-drop negative. Contended C-G1/C-G2, C-G3, worst-case
+  renderer footprint/style-recalc record, five quit-load
   runs and real-App on/excluded/off proofs remain pending. App use of the
   s13b distribution is authorized; the App build is running. The M5 screen
   hold is cleared; windowed checks use the shared screen lock after builds.

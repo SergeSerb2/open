@@ -557,9 +557,9 @@ Only lead rulings 2a and 4a replace the original budgets.
 
 | Piece | Source change | Verification |
 |---|---|---|
-| P-3, `cef/0311` registry hook | Register the per-Profile matcher on `AdBlockCosmeticsTaskRunner()`. No request returns to UI. Network/socket hunks retained. | Assigned s13b full CEF build PASS at f0d6734e; strict built status 8/0/0; headless service load/empty-root 2/2 PASS. |
-| P-4, `cef/0901-open-adblock-renderer-agent.patch` | Include and attach one per-frame cosmetic agent. Mojo host, isolated observer and user-origin sheets live in overlay; generated Mojo files stay out of patches. | Patch application and observer syntax PASS; C-cases and gates pending. |
-| Non-official harness | Existing off switch plus paced `--open-adblock-bench-load` / `--open-adblock-bench-load-rate` and receiver-drop switch. Renderer verbose logs include timing, counts and in-process footprint. | Source only; no runtime/timing claim. |
+| P-3, `cef/0311` registry hook | Register the per-Profile matcher on `AdBlockCosmeticsTaskRunner()`. No request returns to UI. Network/socket hunks retained. | Assigned s13b full CEF build PASS at 335e9f8d; strict built status 8/0/0; headless service load/empty-root 2/2 PASS. |
+| P-4, `cef/0901-open-adblock-renderer-agent.patch` | Include and attach one per-frame cosmetic agent. Mojo host, isolated observer and user-origin sheets live in overlay; generated Mojo files stay out of patches. The observer starts after Blink's script prohibition, scans existing tokens once, then observes mutations. | CEF functional suite PASS (18 executable rows); late and inline-before-observer C-4 both hide 10/10, with initial-scan evidence 10/10. Timing/App gates pending. |
+| Non-official harness | Existing off switch plus paced `--open-adblock-bench-load` / `--open-adblock-bench-load-rate` and receiver-drop switch. Renderer verbose logs include timing, counts and in-process footprint. | Off/excluded/drop negatives PASS. Dropped receiver preserves network blocking and skips hiding without waiting. Contended timing pending. |
 
 The unchanged sanitizer's exact quote, escape, delimiter, procedural and
 256 KiB rules are quoted in the plan's "Step 5 as built" security callout
