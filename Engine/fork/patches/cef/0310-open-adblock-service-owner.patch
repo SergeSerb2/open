@@ -27,7 +27,7 @@ index 456c6c2d4..fedb18e8b 100644
  
  using content::BrowserThread;
  
-@@ -208,11 +219,70 @@ void CefBrowserContext::Initialize() {
+@@ -208,11 +219,73 @@ void CefBrowserContext::Initialize() {
  
    iothread_state_ = base::MakeRefCounted<CefIOThreadState>();
    cookieable_schemes_ = MakeSupportedSchemes(settings_);
@@ -53,18 +53,21 @@ index 456c6c2d4..fedb18e8b 100644
 +    const base::FilePath root =
 +        command_line->GetSwitchValuePath("open-adblock-dir");
 +    if (command_line->HasSwitch("open-adblock-selftest")) {
-+      // Exit 0 only on PASS; a FAIL exits 1 and a run over the limit (10 s,
-+      // 300 s with --open-adblock-bench) exits 3.
++      // Exit 0 only on PASS; a FAIL exits 1. Ordinary runs have a 10 s
++      // watchdog (300 s with --open-adblock-bench). Full parser fuzz has
++      // no time limit and keeps its active input on disk before parsing.
 +      static bool open_adblock_selftest_done = false;
-+      const bool bench = command_line->HasSwitch("open-adblock-bench");
-+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-+          FROM_HERE, base::BindOnce([] {
-+            if (!open_adblock_selftest_done) {
-+              fprintf(stderr, "OpenAdBlockSelftest: FAIL timeout\n");
-+              base::Process::TerminateCurrentProcessImmediately(3);
-+            }
-+          }),
-+          base::Seconds(bench ? 300 : 10));
++      if (!command_line->HasSwitch("open-adblock-fuzz-full")) {
++        const bool bench = command_line->HasSwitch("open-adblock-bench");
++        base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++            FROM_HERE, base::BindOnce([] {
++              if (!open_adblock_selftest_done) {
++                fprintf(stderr, "OpenAdBlockSelftest: FAIL timeout\n");
++                base::Process::TerminateCurrentProcessImmediately(3);
++              }
++            }),
++            base::Seconds(bench ? 300 : 10));
++      }
 +      open_engine::RunOpenAdBlockSelftest(
 +          open_adblock_service(), root, base::BindOnce([](bool passed) {
 +            open_adblock_selftest_done = true;
@@ -98,7 +101,7 @@ index 456c6c2d4..fedb18e8b 100644
  #if DCHECK_IS_ON()
    is_shutdown_ = true;
  #endif
-@@ -230,6 +300,29 @@ void CefBrowserContext::Shutdown() {
+@@ -230,6 +303,29 @@ void CefBrowserContext::Shutdown() {
    weak_ptr_factory_.InvalidateWeakPtrs();
  }
  

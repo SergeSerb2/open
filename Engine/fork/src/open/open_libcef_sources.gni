@@ -66,6 +66,7 @@ open_libcef_deps = [
   "//chrome/browser/ssl",
   # Native ad blocking: the per-Profile service (docs/plans/adblock-fork.md).
   "//open/adblock",
+  "//open/adblock/renderer",
 
   # Tab sleeping: navigation history capture and restore with Chromium's
   # session serializer (docs/plans/memory-fork.md §5.3).

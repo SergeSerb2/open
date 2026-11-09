@@ -1,0 +1,12 @@
+<!doctype html>
+<html><head><link rel="icon" href="data:,"></head><body>
+<script>
+// Parser input, before the observer's posted task. Only four class tokens
+// repeat across 30,000 elements, so the document token cap is not involved.
+document.write('<div data-bulk class="bulk-a bulk-b bulk-c"></div>'.repeat(29999) +
+  '<div data-bulk class="bulk-a bulk-b bulk-c generic-ad">last generic</div>');
+addEventListener('DOMContentLoaded', () => {
+  window.bulkElementsAtLoad = document.querySelectorAll('[data-bulk]').length;
+});
+</script>
+</body></html>

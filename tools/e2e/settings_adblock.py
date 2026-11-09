@@ -438,6 +438,7 @@ def real_engine(factory, results, wait):
         body = (repo / 'Vendor/adblock' / name).read_bytes()
         assert hashlib.sha256(body).hexdigest() == digest, 'fixture must match the official bundled pin'
         pinned[name] = body
+    assert b'##.ad-slot' in pinned['easylist.txt'].splitlines(), 'cosmetic control must use a pinned EasyList rule'
     synthetic_lists = threading.Event()
     hold_lists, list_started, release_lists = (threading.Event() for _ in range(3))
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -450,7 +451,11 @@ def real_engine(factory, results, wait):
                 name = Path(urllib.parse.urlsplit(self.path).path).name
                 body = (b'[Adblock Plus 2.0]\n||demand.supply/ad.js$script\n'
                         b'||demand.supply/resource.js$script,redirect=noopjs\n'
-                        if synthetic_lists.is_set() else pinned[name])
+                        # A byte-identical 200 response correctly skips reload.
+                        # Change only a comment so the refresh assertion observes
+                        # a new generation with the same official blocking rules.
+                        if synthetic_lists.is_set() else
+                        pinned[name] + b'\n! Open local refresh fixture\n')
                 mime = 'text/plain'
             elif self.path.startswith('/resource.js'):
                 body, mime = b'window.__resourceNetwork=true;', 'application/javascript'
@@ -462,7 +467,8 @@ def real_engine(factory, results, wait):
                 body = b'''<!doctype html><title>Open ad-block acceptance</title>
 <link rel="icon" href="data:,"><script>window.__done=0;</script>
 <script src="http://demand.supply/ad.js" onload="__done++" onerror="__done++"></script>
-<script src="/control.js" onload="__done++" onerror="__done++"></script>'''
+<script src="/control.js" onload="__done++" onerror="__done++"></script>
+<div class="ad-slot">Open cosmetic acceptance</div>'''
                 mime = 'text/html'
             self.send_response(200)
             self.send_header('Content-Type', mime)
@@ -515,6 +521,24 @@ def real_engine(factory, results, wait):
         print('AD3_' + name, evidence.get('status', 'PASS' if ok else 'FAIL'), flush=True)
         results['AD3_' + name] = dict(ok=bool(ok), **evidence)
     observations = {}
+    cosmetic_observations = {}
+    cosmetic_state = '''(() => ({
+        display: getComputedStyle(document.querySelector('.ad-slot')).display,
+        sheets: document.styleSheets.length,
+        globals: Object.getOwnPropertyNames(window).filter(n => n.startsWith('__openAdBlock'))
+    }))()'''
+    def cosmetic_verdict(state, hidden):
+        return ((state['display'] == 'none') == hidden
+                and state['sheets'] == 0 and state['globals'] == [])
+    def cosmetic(tab, name, hidden):
+        if hidden:
+            wait(lambda: app.call('eval', tab=tab, js=cosmetic_state)['display'] == 'none', timeout=10)
+        else:
+            # Observe after the generic observer's 100 ms batching interval.
+            app.call('eval', tab=tab, js='new Promise(resolve => setTimeout(() => resolve(true), 300))')
+        state = app.call('eval', tab=tab, js=cosmetic_state)
+        cosmetic_observations[name] = state
+        row('cosmetic_' + name, cosmetic_verdict(state, hidden), **state)
     tab_windows = {}
     def request_verdict(evidence, blocked):
         state = evidence['scriptState']
@@ -577,6 +601,8 @@ def real_engine(factory, results, wait):
         body = (generation / resource['file']).read_bytes()
         return dict(generation=live['generation'],
                     manifestVerified=hashlib.sha256(manifest_bytes).hexdigest() == live['manifestSHA256'],
+                    listSHA256s={f['listID']: f['sha256'] for f in manifest['files']
+                                 if f['listID'] != '_resources'},
                     resourceSHA256=hashlib.sha256(body).hexdigest(),
                     resourceVerified=resource['file'] == 'resources.json'
                         and resource['bytes'] == len(body) and resource['sha256'] == resource_digest,
@@ -643,16 +669,28 @@ def real_engine(factory, results, wait):
             expectedResources=resource_count, status=status(original['id']), manifest=manifest)
         tab = app.call('open', url='about:blank')['id']
         visit(tab, 'enabled_blocks', True)
+        cosmetic(tab, 'enabled_hides', True)
         app.call('settings-adblock', host='open-adblock.test', excluded=True)
         visit(tab, 'excluded_allows', False)
+        cosmetic(tab, 'excluded_visible', False)
         app.call('settings-adblock', host='open-adblock.test', excluded=False)
         next_request(tab, 'reincluded_next_request_same_document', True)
         visit(tab, 'reincluded_blocks', True)
         app.call('settings-adblock', enabled=False)
         visit(tab, 'global_off_allows', False)
+        cosmetic(tab, 'global_off_visible', False)
         app.call('settings-adblock', enabled=True)
         next_request(tab, 'global_on_next_request_same_document', True)
         visit(tab, 'global_on_blocks_same_process', True)
+        cosmetic(tab, 'global_on_hides_again', True)
+        cosmetic_pairs = [('enabled_hides', 'excluded_visible'),
+                          ('global_on_hides_again', 'global_off_visible')]
+        row('cosmetic_gates_reject_inverse_controls', all(
+            cosmetic_verdict(cosmetic_observations[positive], True)
+            and cosmetic_verdict(cosmetic_observations[negative], False)
+            and not cosmetic_verdict(cosmetic_observations[negative], True)
+            and not cosmetic_verdict(cosmetic_observations[positive], False)
+            for positive, negative in cosmetic_pairs), pairs=cosmetic_pairs)
         app.call('settings-adblock', enabled=False)
         next_request(tab, 'global_off_next_request_same_document', False)
         app.call('settings-adblock', enabled=True)
