@@ -13,10 +13,11 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
     sidebarSharePicker?.close()
     // Closing a picker the copy toast opened releases that toast too.
     shareToastHandle?.hold(false); shareToastHandle = nil
-    let picker = NSSharingServicePicker(items: [tab.url])
+    let clean = URLCleaner.clean(tab.url).url
+    let picker = NSSharingServicePicker(items: [clean])
     sidebarSharePicker = picker; picker.delegate = self
     #if OPEN_AUTOMATION
-    sidebarShareRequest = ["url": tab.url.absoluteString, "node": id.description,
+    sidebarShareRequest = ["url": clean.absoluteString, "node": id.description,
       "anchor": [rect.minX, rect.minY, rect.width, rect.height], "requested": true,
       "servicesRequested": false, "closed": false]
     #endif
@@ -28,6 +29,7 @@ extension EngineWebContentHostFactory: @preconcurrency NSSharingServicePickerDel
                             proposedSharingServices proposedServices: [NSSharingService]) -> [NSSharingService] {
     #if OPEN_AUTOMATION
     sidebarShareRequest["servicesRequested"] = true
+    sidebarShareRequest["payloadURLs"] = items.compactMap { ($0 as? URL)?.absoluteString }
     if dismissSidebarShareForAutomation {
       stopShareDismissalForAutomation()
       sidebarShareDismissAttemptsForAutomation = 0
