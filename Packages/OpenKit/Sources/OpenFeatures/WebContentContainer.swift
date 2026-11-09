@@ -50,12 +50,16 @@ public final class PaneSlotView: NSView {
         let hadPageFocus = (window?.firstResponder as? NSView).map { responder in
             [contentHostView, sadTabView].compactMap { $0 }.contains { responder === $0 || responder.isDescendant(of: $0) }
         } ?? false
-        if tab.live.isCrashed {
+        // The model is shared between windows; each window owns a different host.
+        let isCrashed = host?.liveState.isCrashed ?? tab.live.isCrashed
+        // Without a host, show the normal placeholder rather than a dead Reload.
+        if isCrashed, host != nil {
             contentHostView?.isHidden = true; contentHostView?.removeFromSuperview()
             contentHostView = nil; lastHostWindowRect = nil
             placeholderView?.removeFromSuperview(); placeholderView = nil
             let sad = sadTabView ?? SadTabView(style: style)
-            sadTabView = sad; sad.style = style; sad.onReload = reload; sad.onClose = closeSadTab
+            sadTabView = sad; if sad.style != style { sad.style = style }
+            sad.onReload = reload; sad.onClose = closeSadTab
             if sad.superview !== clip { clip.addSubview(sad, positioned: .below, relativeTo: paneChrome) }
             if hadPageFocus && !wasSad { window?.makeFirstResponder(sad) }
         } else if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen || tab.live.sleepPhase == .sleeping {
@@ -286,7 +290,9 @@ public final class WebContentContainer: NSView {
         guard let live = tabProvider(id)?.live else { return }
         live.hasWebContent = true; live.isLoading = state.isLoading; live.progress = state.progress
         live.canGoBack = state.canGoBack; live.canGoForward = state.canGoForward
-        let crashChanged = live.isCrashed != state.isCrashed
+        // Another window may already have written the same shared model flag.
+        // Compare with this window's replacement to catch its own host transition.
+        let crashChanged = slots.contains { $0.tabID == id && ($0.sadTabView != nil) != state.isCrashed }
         live.isAudible = state.isAudible; live.isCrashed = state.isCrashed
         if crashChanged { updateSlots() }
     }
@@ -304,8 +310,14 @@ public final class WebContentContainer: NSView {
                            close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
                            url: { [weak self] in self?.onURLField?() }, copy: { [weak self] changed in self?.toasts?.show(ToastContent(title: changed ? URLCleaner.cleanedTitle : URLCleaner.plainTitle)) },
                            toolbarMenu: { [weak self] in self?.onToolbarMenu?() },
-                           reload: { [weak self] in self?.cache[id]?.reload() },
-                           closeSadTab: { [weak self] in self?.onSadTabClose?(id) })
+                           reload: { [weak self] in self?.reloadContent(id) },
+                           closeSadTab: { [weak self] in
+                               guard let self else { return }
+                               // Read current layout at click time, including a split
+                               // that changed after this view was configured.
+                               if self.ids.count > 1, self.ids.contains(id) { self.onPaneClose?(id) }
+                               else { self.onSadTabClose?(id) }
+                           })
             slot.paneChrome?.extensionsUI = extensionsUI
         }
     }
@@ -379,6 +391,10 @@ public final class WebContentContainer: NSView {
     private func focusContent(_ id: ItemID) {
         if let sad = slots.first(where: { $0.tabID == id })?.sadTabView { window?.makeFirstResponder(sad) }
         else { cache[id]?.focus() }
+    }
+    private func reloadContent(_ id: ItemID) {
+        if let host = registeredHost(for: id) { host.reload() }
+        else { ensureHost(id); updateSlots() }
     }
     func observeClick(_ event: NSEvent) {
         guard event.window === window, !transitioning else { return }

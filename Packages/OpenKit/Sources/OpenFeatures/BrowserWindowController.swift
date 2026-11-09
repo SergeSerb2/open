@@ -960,6 +960,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         let webFocused = !textFocused && (eventWindow !== window || container.slots.contains { within($0.contentHostView) }
             || (peekStorage?.isShown == true && within(peekStorage?.stack.last?.host?.view)))
+        // Sad Tab controls qualify only for pane switching, never web editing.
+        let paneFocused = webFocused || container.slots.contains { within($0.sadTabView) }
+            || (peekStorage?.isShown == true && within(peekStorage?.overlay.sadTabView))
         // Web editing keys go through Chromium's text system. Its unconsumed
         // hook can still offer them to the menu (for model undo, for example).
         let routing = RoutingContext(isAppActive: isApplicationActive?() ?? true,
@@ -990,7 +993,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
               isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
         // These bindings have window scope in the registry; restrict them to the
         // page here so sidebar controls and AppKit field editors retain their keys.
-        if id.hasPrefix("focus-split-pane-"), !webFocused { return false }
+        if id.hasPrefix("focus-split-pane-"), !paneFocused { return false }
         if id == "tab-switcher-forward" || id == "tab-switcher-backward" {
             let previous = tabSwitcherKeyEvent
             tabSwitcherKeyEvent = event

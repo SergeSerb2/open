@@ -4,7 +4,8 @@ import OpenFeatures
 import OpenModel
 
 extension AutomationController {
-  /// Inspect the actual replacement view and invoke its AppKit buttons; no synthetic crash state.
+  /// Inspect the actual replacement view, focus it, or invoke its AppKit buttons.
+  /// Never synthesizes a crash state.
   func runSadTabCommand(_ cmd: String, _ args: [String: Any]) throws -> Any {
     guard let controller = try window.controller else { throw Failure(message: "no browser window") }
     let view: SadTabView?
@@ -19,13 +20,18 @@ extension AutomationController {
       switch args["action"] as? String {
       case "reload": view.reloadButton.performClick(nil)
       case "close": view.closeButton.performClick(nil)
-      default: throw Failure(message: "action must be reload or close")
+      case "focus":
+        guard view.window?.makeFirstResponder(view) == true else { throw Failure(message: "Sad Tab could not take focus") }
+      default: throw Failure(message: "action must be reload, close, or focus")
       }
       return true
     }
     guard let view else { return ["shown": false] }
     controller.contentView.layoutSubtreeIfNeeded()
+    let responder = view.window?.firstResponder as? NSView
     return ["shown": view.window?.isVisible == true && !view.isHiddenOrHasHiddenAncestor,
+      "focused": responder.map { $0 === view || $0.isDescendant(of: view) } ?? false,
+      "label": view.accessibilityLabel() ?? "",
       "id": view.accessibilityIdentifier(), "default": view.reloadButton.keyEquivalent == "\r",
       "buttons": [view.reloadButton, view.closeButton].map {
         ["id": $0.accessibilityIdentifier(), "label": $0.accessibilityLabel() ?? "", "enabled": $0.isEnabled] as [String: Any]
