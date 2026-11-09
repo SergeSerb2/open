@@ -1,5 +1,24 @@
 # Follow-ups
 
+- Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
+  `onboarding` measures main-thread display-link intervals, not render-server
+  frames. The intro's animations run on the render server; the main thread is
+  busy with engine startup during the first seconds. One M5 run at load1 10.9
+  (240 Hz display): p50/p95 4.167 ms, max 144.9 ms, 22 of 1,848 intervals over
+  1.5 × nominal (1.2 %, row limit 1 %). Needs a render-side measurement
+  (Core Animation frame statistics without a debugger prompt) and quiet ×3
+  runs; consider starting the intro animations only after the engine's
+  synchronous startup work, if the render side also shows hitches.
+- Section 17 speed proof — the returning-launch comparison against a build
+  without Section 17 (three merges reverted) is pending: the plain
+  `git revert -m 1` of #260 conflicts with later commits. `window` measured
+  cold sidebar/first paint 436/725 ms and warm 452/701 ms at load1 ≈ 10–13,
+  above the known-main 400/700 limits; an interleaved control run decides
+  whether Section 17 adds anything (the returning path adds only nil checks).
+- Arc first-launch capture (Section 17) — the user-only screen recording in
+  `docs/status.md` §5.2 settles the open questions in
+  `docs/re/onboarding.md` §9 (intro button caption, clock alignment, music
+  stop/mute, setup reachability, browser reveal).
 - Section 15 non-fatal file-icon fault — one simulated `ExcUserFault` at 17:21:51 on 2026-11-08 matches the passing H3 features run, through `ISMutableIcns addCGImage:scale:error:`, `NSWorkspace setIcon:forFile:options:` and Chromium `shortcuts::SetIconForFile`. The App exited cleanly; TANDEM §8c classifies it as a fault, not a crash. Cause and regression attribution are unknown. H3 has no new real crash report. [Acceptance and regression receipt](engine-spike/passwords-acceptance.md#the-1402-crash-and-regression-proof).
 - Section 15 imported secrets — the App writer and explicit-consent adapter are implemented separately from save/fill. Mock-key builds keep `canImportPasswordsAndCookies == false`. Ten runnable M5 synthetic import rows passed. I-5/I-6 recovery probes remain M1-only and unrun while M1 is on HOLD. The user-present real Keychain import after U-1/U-2 remains open (see the hand check below).
 - Section 15 Arc captures **S-1…S-6** — use the user's combined capture session and a throwaway account. S-1: save/update password, card and address sheets (size, icon, colors, button order); S-2: fill dropdown; S-3: post-save feedback; S-4: generation offer; S-5: Passwords/Credit Cards pages and switch placement; S-6: the internal URL display. Native App acceptance does not prove Arc pixel parity. See [passwords/autofill §13](plans/passwords-autofill.md#13-screenshots-needed-from-the-user-arc-their-own-mac).
