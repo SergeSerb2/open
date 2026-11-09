@@ -447,6 +447,12 @@ def checks(factory, results, tmp, config, harness):
         dismiss_library(); app.call('space', space=home_space)
         profile_row = next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile2)
         profile_dir = Path(app.user_data) / 'Profiles' / profile_row['directory']
+        # Settings offers Delete Profile only for a Profile with no Spaces: move the second
+        # Space to Default first (the same path as boost_profile_retirement.py).
+        for space in [v for v in app.call('spaces') if v['profile'] == profile2]:
+            assert app.call('space-profile', space=space['id'], profile='Default')
+            E._try(lambda: app.call('alert', button='Change Profile'))
+        wait(lambda: next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile2)['spaces'] == 0)
         # Settings shows a Profile by name; its SwiftUI controls install a moment later.
         app.call('profiles-shell', action='show', profile=profile_row['name'])
         try:
