@@ -35,6 +35,7 @@ OPEN_KEYS = {'open.general.automaticallyUpdate', 'open.general.updateChannel',
              'open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed',
              'NSWindow Frame SUUpdateAlert2', 'open.updates.lastInstalledBuild',
              'open.updates.summaryShownBuild', 'open.updates.bannerDismissalCount',
+             'open.general.warnBeforeQuitting',
              'open.sidebar.autoArchiveBannerEligible', 'open.sidebar.autoArchiveBannerDismissed'}
 FIXTURE = 'data:text/html,<title>Updater fixture</title><h1>Updater fixture</h1>'
 
@@ -89,7 +90,8 @@ def make_feed(folder, tools, openssl, origin):
     key.write_bytes(base64.b64encode(seed_der[-32:]))
     os.chmod(key, 0o600)
     # A valid disposable update bundle lets the real installer prepare. It is
-    # never launched or installed: the suite answers Skip before it quits.
+    # never launched or installed: either Skip cancels it, or R2 pauses its
+    # owned installer before the host can exit and kills it without resuming.
     fixture = folder / 'payload' / 'Open.app'
     executable = fixture / 'Contents/MacOS/Open'
     executable.parent.mkdir(parents=True)
@@ -822,30 +824,38 @@ def installer_processes():
     return rows
 
 
-def stop_review_installer(app, before, results, copied):
-    # The real Sparkle install is waiting for this live App. Stop only the
-    # installer created inside our exclusive screen run, before quitting Open.
+def pause_review_installer(app, before, copied):
+    # #283 deliberately lets installer quits bypass every user prompt. Freeze
+    # the real, already prepared installer BEFORE answering Install, so even
+    # an unexpected host exit cannot install the fixture. Never resume it.
+    app.review_binary_sha = file_sha256(copied / 'Contents/MacOS/Open')
+    app.review_installers = {pid: path for pid, path in installer_processes().items() if pid not in before}
+    assert app.review_installers, 'Refuse installation without identified suite-owned installer cleanup'
+    for pid, path in app.review_installers.items():
+        assert harness.Open.process_path(pid) == path, 'Installer ownership changed before pause'
+        os.kill(pid, signal.SIGSTOP)
+    def stopped():
+        return {pid: subprocess.check_output(['ps', '-p', str(pid), '-o', 'stat='], text=True).strip()
+                for pid, path in app.review_installers.items() if harness.Open.process_path(pid) == path}
+    app.review_paused = wait(stopped, lambda rows: len(rows) == len(app.review_installers)
+                             and all('T' in state for state in rows.values()), 'installer did not pause')
+
+
+def stop_review_installer(app, results, copied):
+    # Only the new installers observed during this exclusive screen run belong
+    # to us. SIGKILL also ends a paused installer; SIGTERM would stay pending.
     owned = getattr(app, 'review_installers', {})
-    assert owned, 'No suite-owned Sparkle installer found; keep the App running'
-    alive = bool(app.call('ping'))
+    assert owned, 'No suite-owned Sparkle installer found'
     for pid, path in owned.items():
         if harness.Open.process_path(pid) == path:
-            try: os.kill(pid, signal.SIGTERM)
+            try: os.kill(pid, signal.SIGKILL)
             except ProcessLookupError: pass
-    try:
-        wait(lambda: [pid for pid, path in owned.items() if harness.Open.process_path(pid) == path],
-             lambda pids: not pids, 'suite-owned Sparkle installer did not stop')
-    finally:
-        # As in the App harness's process cleanup, kill only an identified
-        # owned survivor. Never let the host quit with a live installer.
-        for pid, path in owned.items():
-            if harness.Open.process_path(pid) == path:
-                try: os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError: pass
+    wait(lambda: [pid for pid, path in owned.items() if harness.Open.process_path(pid) == path],
+         lambda pids: not pids, 'suite-owned Sparkle installer did not stop')
     after = file_sha256(copied / 'Contents/MacOS/Open')
-    results['R2_no_install_cleanup'] = {'ok': alive and after == app.review_binary_sha
+    results['R2_no_install_cleanup'] = {'ok': bool(getattr(app, 'review_paused', {})) and after == app.review_binary_sha
         and all(harness.Open.process_path(pid) != path for pid, path in owned.items()),
-        'installerPIDs': sorted(owned), 'hostAliveWhenStopped': alive,
+        'installerPIDs': sorted(owned), 'pausedBeforeInstallReply': getattr(app, 'review_paused', {}),
         'binarySHA256Before': app.review_binary_sha, 'binarySHA256After': after}
 
 
@@ -855,7 +865,7 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
     import downloads
     feed = folder / 'appcast.xml'; base = feed.read_text()
     sparkle = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
-    for variant in ('ready-menu', 'termination-retry', 'scheduled-errors'):
+    for variant in ('ready-menu', 'termination-relaunch', 'scheduled-errors'):
         tree = ET.fromstring(base)
         if variant == 'scheduled-errors':
             for item in tree.find('channel').findall('item'):
@@ -910,52 +920,80 @@ def exercise_review_regressions(opts, folder, results, launch, public, origin, o
                     and pending['ui']['banner'] == '' and pending['ui']['alertWindow'] == 0,
                     'ready': ready, 'alertAX': row, 'pendingAfterCancel': pending}
                 continue
-            # Downloads' existing policy presses the real modal Keep browsing
-            # button; no fake termination callback or synthetic updater state.
+            # A real normal-quit control proves each prompt is armed. #283
+            # bypasses all three for installer relaunch, including beforeunload;
+            # there is no longer a user-cancel path for the former R2 retry row.
             with downloads.server() as base_url:
+                installing = True
+                pause_review_installer(app, before_installers, folder / 'Open.app')
+                if opts.force_failure:
+                    raise AssertionError('forced failure with the prepared installer paused')
                 tab = app.call('tabs')[0]['id']
                 snapshot = json.loads(Path(app.call('save')).read_text())
                 destination = folder / 'retry-downloads'; destination.mkdir(exist_ok=True)
                 app.call('download-settings', profile=snapshot['profiles'][0]['id'], directory=str(destination), ask=False)
                 app.call('download-policy', quit='keep')
-                app.eval(tab, '(() => {let a=document.createElement("a");a.href=%s;a.id="review-download";a.textContent="download";document.body.append(a)})()' % json.dumps(base_url + '/slow'))
-                app.call('click', tab=tab, selector='#review-download')
-                wait(lambda: app.call('downloads-state'), lambda s: s['running'] and any(i['received'] > 0 for i in s['items']),
-                     'real download did not start')
-                app.review_binary_sha = file_sha256(folder / 'Open.app/Contents/MacOS/Open')
-                app.review_installers = {pid: path for pid, path in installer_processes().items() if pid not in before_installers}
-                assert app.review_installers, 'Refuse installation without identified suite-owned installer cleanup'
-                installing = True
+                app.call('defaults', key='open.general.warnBeforeQuitting', value=True)
+                app.call('quit-warning', button='cancel', request=True)
+                generic = wait(lambda: app.call('quit-warning'), lambda rows: len(rows) == 1,
+                               'normal quit did not show the generic warning')
+                app.call('defaults', key='open.general.warnBeforeQuitting', value=False)
+                app.call('navigate', tab=tab, url=base_url + '/arm')
+                app.call('wait', tab=tab)
+                app.call('click', tab=tab, selector='#arm')
+                wait(lambda: app.call('engine-sleep', tab=tab), lambda s: s['unloadHandlers'], 'beforeunload not armed')
+                app.call('quit-warning', request=True)
+                page = wait(lambda: app.call('dialog-state'), lambda s: s.get('visible'), 'normal quit did not show beforeunload')
+                app.call('dialog-button', accept=False)
+                wait(lambda: app.call('dialog-state'), lambda s: not s.get('pending'), 'beforeunload stayed open')
+                app.call('defaults', key='open.general.warnBeforeQuitting', value=True)
+
+                def start_download():
+                    app.eval(tab, '(() => {let a=document.createElement("a");a.href=%s;a.id="review-download";a.textContent="download";document.body.append(a)})()' % json.dumps(base_url + '/slow'))
+                    app.call('click', tab=tab, selector='#review-download')
+                    return wait(lambda: app.call('downloads-state'),
+                                lambda s: s['running'] and any(i['received'] > 0 for i in s['items']), 'real download did not start')
+                start_download()
+                app.call('quit-warning', request=True)
+                downloads_control = wait(lambda: app.call('downloads-state'), lambda s: len(s['quitAlerts']) == 1,
+                                         'normal quit did not show Downloads warning')
+                results['R2_normal_quit_controls'] = {'ok': generic[0]['title'] == 'Quit Open?'
+                    and page.get('title') == 'Leave site?' and page.get('buttons') == ['OK', 'Cancel']
+                    and page.get('kind') == 3
+                    and downloads_control['quitAlerts'][0]['title'] == 'Downloads in progress'
+                    and bool(app.call('ping')), 'generic': generic, 'beforeunload': page,
+                    'downloads': downloads_control['quitAlerts']}
+                assert results['R2_normal_quit_controls'].get('ok'), 'Quit controls did not prove the prompts are armed'
+                running = app.call('downloads-state')
+                assert running['running'], 'Download finished before relaunch proof'
+                assert app.call('engine-sleep', tab=tab)['unloadHandlers'], 'beforeunload was disarmed'
+                before_log = app.log_text()
+                app.discover_owned_processes()
+                app.activation_trace = app.call('activation-events')
                 app.call('updater-act', action='primary')
-                rejected = wait(lambda: app.call('downloads-state'), lambda s: len(s['quitAlerts']) >= 1,
-                                'Sparkle did not request termination')
-                try:
-                    wait(lambda: ax(app, ui(app).get('statusWindow')),
-                         lambda r: 'Install and Relaunch' in r.get('text', []), 'retry button did not return')
-                except AssertionError:
-                    pass  # Record the old code's missing button, then test R3 too.
-                state = ui(app); row = ax(app, state.get('statusWindow'))
-                retry_visible = 'Install and Relaunch' in row.get('text', [])
-                if retry_visible:
-                    app.call('menu-perform', id='check-for-updates')
-                    app.call('updater-act', action='primary')
-                    retried = wait(lambda: app.call('downloads-state'), lambda s: len(s['quitAlerts']) > len(rejected['quitAlerts']),
-                                   'retry did not reach the real termination request')
-                else:
-                    retried = app.call('downloads-state')
-                if retry_visible:
-                    wait(lambda: ax(app, ui(app).get('statusWindow')),
-                         lambda r: 'Install and Relaunch' in r.get('text', []), 'retry button did not return after second Keep')
-                final = ui(app)
-                results['R2_cancelled_termination_retry'] = {'ok': retry_visible
-                    and len(retried['quitAlerts']) > len(rejected['quitAlerts'])
-                    and 'Install and Relaunch' in ax(app, final.get('statusWindow')).get('text', [])
-                    and bool(app.call('ping')), 'statusAX': row, 'firstQuit': rejected['quitAlerts'],
-                    'secondQuit': retried['quitAlerts'], 'final': final}
+                # The paused installer cannot send its quit event. Use the real
+                # App menu command after the native Install button has requested
+                # relaunch. This is NOT harness `quit`, which bypasses warnings.
+                app.call('quit-warning', request=True)
+                exited = harness.wait_until(lambda: not app.process_path(app.pid), timeout=15, step=.05)
+                after_log = app.log_text()
+                markers = ('generic-quit-alert-presented', 'downloads-quit-alert-presented')
+                results['R2_install_relaunch_skips_prompts'] = {'ok': bool(exited)
+                    and all(after_log.count(m) == before_log.count(m) for m in markers),
+                    'normalQuitCommand': 'quit-open', 'installerPaused': app.review_paused,
+                    'downloadsRunning': running['running'], 'beforeunloadArmed': True,
+                    'warningCountsBefore': [before_log.count(m) for m in markers],
+                    'warningCountsAfter': [after_log.count(m) for m in markers], 'hostExited': bool(exited)}
         finally:
-            if installing:
-                stop_review_installer(app, before_installers, results, folder / 'Open.app')
-            close_updates(app); app.quit()
+            if installing and getattr(app, 'review_installers', {}):
+                stop_review_installer(app, results, folder / 'Open.app')
+            if app.process_path(app.pid):
+                if variant == 'termination-relaunch':
+                    if app.call('dialog-state').get('visible'): app.call('dialog-button', accept=False)
+                    app.eval(tab, 'onbeforeunload=null;true')
+                    app.call('download-policy', quit='close')
+                close_updates(app)
+            app.quit()
         results.tracker.checkpoint()
     feed.write_text(base)
 
