@@ -558,8 +558,8 @@ Only lead rulings 2a and 4a replace the original budgets.
 | Piece | Source change | Verification |
 |---|---|---|
 | P-3, `cef/0311` registry hook | Register the per-Profile matcher on `AdBlockCosmeticsTaskRunner()`. No request returns to UI. Network/socket hunks retained. | Assigned s13b full CEF build PASS at 335e9f8d; strict built status 8/0/0; headless service load/empty-root 2/2 PASS. |
-| P-4, `cef/0901-open-adblock-renderer-agent.patch` | Include and attach one per-frame cosmetic agent. Mojo host, isolated observer and user-origin sheets live in overlay; generated Mojo files stay out of patches. The observer starts after Blink's script prohibition, scans existing tokens once, then observes mutations. | CEF functional suite PASS (18 executable rows); late and inline-before-observer C-4 both hide 10/10, with initial-scan evidence 10/10. Timing/App gates pending. |
-| Non-official harness | Existing off switch plus paced `--open-adblock-bench-load` / `--open-adblock-bench-load-rate` and receiver-drop switch. Renderer verbose logs include timing, counts and in-process footprint. | Off/excluded/drop negatives PASS. Dropped receiver preserves network blocking and skips hiding without waiting. Contended timing pending. |
+| P-4, `cef/0901-open-adblock-renderer-agent.patch` | Include and attach one per-frame cosmetic agent. Mojo host, isolated observer and user-origin sheets live in overlay; generated Mojo files stay out of patches. The observer starts after Blink's script prohibition, scans existing tokens once, then observes mutations. | CEF functional suite PASS (18 executable rows); both C-4 variants hide 10/10, with initial-scan evidence 10/10. Full M5 gate 26/0/0, App cosmetic controls and Page pass. C-G1/C-G2/C-G3 pass; worst payload recorded. AD3 reproduces on Step 4 App, owned by F. |
+| Non-official harness | Existing off switch plus paced `--open-adblock-bench-load` / `--open-adblock-bench-load-rate` and receiver-drop switch. Renderer verbose logs include timing, counts and in-process footprint. | Off/excluded/drop negatives and quit-load 5/5 PASS. C-G1 p50 123 µs/p99 505 µs, load1 10.71–14.03; C-G2 p50 84 µs, load1 8.49–13.31, T=64.9 ms, R=9,244.9923/s, 239,510 checks. C-G3 353 µs for 431 selectors, load1 13.98. Worst record +56.22 MiB/264.297 ms across 67 recalculations, load1 14.47–14.53. |
 
 The unchanged sanitizer's exact quote, escape, delimiter, procedural and
 256 KiB rules are quoted in the plan's "Step 5 as built" security callout
@@ -567,7 +567,7 @@ The unchanged sanitizer's exact quote, escape, delimiter, procedural and
 fixed `display:none!important` declaration. No scriptlets, style/remove
 or procedural action executes. Generic requests carry the top origin to
 re-check the global toggle and site exclusions for every batch. See the
-plan's errata and explicit pending acceptance table.
+plan's errata and acceptance table, including the separate App AD3 owner.
 
 ### Control API (Section 13, 2026-11-07)
 

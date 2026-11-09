@@ -391,11 +391,16 @@ live Open Default; named Profiles still match stable import IDs only.
   strict status (8/0/0), owned includes, real headless load/empty-root checks
   (2/2) and distribution pass at 335e9f8d. The CEF functional suite passes
   18 executable rows, including late and inline-before-observer C-4 at
-  10/10 each and the receiver-drop negative. Contended C-G1/C-G2, C-G3, worst-case
-  renderer footprint/style-recalc record, five quit-load
-  runs and real-App on/excluded/off proofs remain pending. App use of the
-  s13b distribution is authorized; the App build is running. The M5 screen
-  hold is cleared; windowed checks use the shared screen lock after builds.
+  10/10 each and the receiver-drop negative. Five quit-load runs, real-App
+  on/excluded/off proofs, Page (85 PASS/4 BLOCKED/1 DEFERRED) and the full
+  M5 gate (26/0/0) pass. Contended C-G1 passes at p50 123 µs/p99 505 µs,
+  load1 10.71–14.03; C-G2 passes at p50 84 µs, load1 8.49–13.31. The lead
+  accepts these loaded passes; no lane or S16 rerun is needed. C-G3 passes
+  at 353 µs for 431 real-list selectors, load1 13.98. Worst payload is
+  recorded: +56.22 MiB renderer footprint and 264.297 ms over 67 style
+  recalculations, load1 14.47–14.53 (record only).
+  AD3 reproduces on Step 4 App, owned by F. Windowed checks use the shared
+  screen lock after builds; timing calls also take the quiet lock.
 - Scriptlets, `:style()`, `:remove*()` and procedural filters remain
   post-v1 by lead ruling 6. The shared Chrome internal isolated world is
   kept for this milestone; coordinate a dedicated cosmetic world with P7
