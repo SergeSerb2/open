@@ -355,49 +355,58 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-Historical pre-review App source `64e62f34` on `s12/scc-app` contains main `195ab60d`
-and #249, #202, #205, repaired #252, #261, #264 and #271. SCC forwards to
-the sole `app.stores.boosts` owner. Private matching rows use the session
-parent Profile, and `factory.isIncognito` guards actions. Fresh branch and
-unchanged-main Debug/Release builds, 45-key uniqueness checks and engine
-fingerprints pass on framework `8e8a461c`.
+Step 3 verification (child A, 2026-11-09): App source `36cbf553`
+merges main `7ae68e4a` (#266); the fixture-only correction is `a60949dc`.
+Framework SHA-256 is
+`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+Branch and unchanged-main Debug/Release builds and engine fingerprints PASS;
+both post-Debug key greps report 45/45 unique keys. Fresh Debug/Release smokes
+and the unchanged-main loader PASS, with clean shutdown.
 
-The draft is **Gate incomplete (screen hold 02:35)**. Before the hold, both
-fresh smokes, the compiled omitted-provider runtime negative, native F25
-11/11 and the Advanced Settings cleanup/defaults canary passed. Source and
-positive Debug binary restoration are exact. The main loader at 02:42:57
-is void under the hold; main features never acquired the screen lock.
-The eleven App suites, real saved-Boost/private S4/S10 proofs, S2, X13,
-paired startup groups and the full high gate remain pending on this engine.
-Earlier `619324d3` receipts are history and do not qualify the new head.
-`no_snapshot_history_change` must PASS when incognito resumes (#261).
+Under LEAD-UPDATE item31, targeted functional receipts on `8e8a461c` stand:
+commandbar 77/77, app-actions 77/77, extensions-ui 72/72 (including real-App
+`X13_picker`), toolbar 10/10, features 27/27, split 40/40, space-editor 167/167
+and incognito 31/31 PASS. `no_snapshot_history_change` PASS includes #261.
+Page has 85 PASS, four external BLOCKED rows and one DEFERRED row. Both main
+and branch features pass Widevine, so no known-main Widevine label applies.
+The interrupted first extensions attempt and the first features failure are
+retained in the PR; the completed features diagnostic run changed no assertion.
 
-PR #276 round-1 code edits re-read current ad-block state on toggle, make
-panel permission reads leave the origin index unchanged (including initial
-load), disable private Manage Boosts, and compare S1 with the real store.
-The new S2 stale-tile, permission file content/mtime and S10 menu proofs and
-their negatives are prepared, **NOT RUN**. Under lead item27, source
-`73496efe` merges main `3fb0645c` with unchanged Engine/fork: Debug/Release,
-the compiled omitted-provider negative, restored Debug, exact source/binary
-restoration, deep code-sign verification and the fresh 45-key grep PASS.
-Off-screen `verify-all --only` passes 7/7 groups (build plus commands-demo,
-commands-dump, adblock-perf, adblock-catalog, profiles, extensions-render),
-with zero Swift warnings/errors. No Open launch or e2e ran. `sidebar-render`
-orders native windows and `features-render` presents windows; those rows,
-sitecontrol-render, settings-preview and space-editor remain pending with
-the App suites and full gate until M5 clear (Section 16 DMG first). Earlier
-runtime receipts above apply only to source `64e62f34`. F2/F4-rest/F6/F7/F8
-are recorded in `docs/followups.md`. No new worktree or engine copy was made.
-The native ad-block tile showed On in the compiled-negative App; full S2
-is not yet measured. S11/S12 remain **FAIL, known:
-material and element colors, follow-up S12-V (lead 22:20)**, not parity.
-E1–E3 remain deferred under lead 22:38. Gap item 1(c) is PARTIAL: host-cookie
-Clear Cookies uses the legacy bridge, and Clear Cache is absent/refused.
-S12-G moves both Site Control … menu operations onto `clearSiteData` after
-A and G merge (lead 2026-11-09 02:35). The renamed Settings row checks the
-Library Boosts section and rejects the obsolete unavailable-error assertion;
-fresh `commandbar` and `app-actions` runs remain pending. Exact receipt
-counts, loads, hold invalidation and the review checklist belong to the draft PR.
+On `34619927`, Site Control completes with 32 PASS and only the lead-accepted
+S11/S12 visual FAILs (S12-V). Window completes with 83 PASS and two startup
+budget FAILs; paired main/branch timing on this engine is still pending.
+The real saved Boost and private S4/S10 rows, F3 stale-tile directions,
+F5 permission content/mtime, F9 S1 state and F4 private menu positives PASS.
+The compiled provider negative PASSes after one T3 interruption; F3's old
+stale-tile behavior FAILs in both directions as required, with exact source
+and signed-payload restoration. The other mutation negatives remain pending.
+
+S2 initially FAILED on the old same-origin `/ad.js` fixture. Unchanged main
+loads that URL with its native filter loaded, but blocks the shipped EasyList
+rule `||demand.supply^$script`. The S12 lead ruled this a fixture defect at
+12:40. The fixture now maps that rule's domain to its local server and verifies
+the pinned EasyList hash. All S2 assertions and thresholds remain unchanged.
+Initial On blocks, Off plus reload loads, and On plus reload blocks: PASS.
+The old-fixture mutation negative is prepared and remains pending.
+
+The screen/disk holds ended under item29. No final full gate has run yet.
+Remaining work: remaining round-1 mutations and the old-fixture mutation
+with exact restoration, native F25 and cleanup canary,
+paired startup groups, final preflight/checklist and the full high gate.
+New main `dc8c7709` changes overlapping App files without an Engine/fork
+change, so rule5a requires a merge, rebuild and affected-suite rerun before
+final acceptance. The queued F5 call was cancelled before any App launch;
+no proof was interrupted. The PR stays DRAFT until that work completes.
+Loads and exact row statuses
+belong to the PR and private receipts; no visual parity is claimed.
+
+F1 is by design under D-10 and §Incognito: parent-Profile Boost metadata is
+read-only in private windows, with no application, writes or enabled actions.
+F2/F4-rest/F6/F7/F8 remain in `docs/followups.md`. The private ad-block API
+switch follows both #276 and Section 13's API PR. E1–E3 remain deferred.
+Gap item1(c) is PARTIAL: host-cookie Clear Cookies uses the legacy bridge;
+Clear Cache is absent/refused. S12-G moves both Site Control … menu operations
+onto `clearSiteData` after A and G merge. No engine root was edited or built; no M1 work was done.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|

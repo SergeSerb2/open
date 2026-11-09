@@ -1487,48 +1487,58 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-09; draft, screen hold): App source
-`64e62f34` contains #271 and uses framework SHA-256
-`8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
-Branch and unchanged-main Debug/Release, 45-key uniqueness and engine
-fingerprints pass. Both fresh smokes, the compiled omitted-provider runtime
-negative, F25 11/11, exact source/positive-binary restoration and the forced
-Advanced Settings cleanup/defaults canary completed before 02:35.
+Step 3 verification (child A, 2026-11-09): App source `36cbf553`
+merges main `7ae68e4a` (#266); the fixture-only correction is `a60949dc`.
+Framework SHA-256 is
+`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+Branch and unchanged-main Debug/Release builds and engine fingerprints PASS;
+both post-Debug key greps report 45/45 unique keys. Fresh Debug/Release smokes
+and the unchanged-main loader PASS, with clean shutdown.
 
-**Gate incomplete (screen hold 02:35):** the later main loader is void;
-main features, all eleven App suites, saved-Boost/private S4/S10 positives
-and negatives, S2, X13, paired startup and the full high gate remain pending.
-Lead item27 lifts the disk hold for existing-worktree builds and off-screen
-`verify-all --only` only; the M5 screen hold stays. Source `73496efe` merges
-main `3fb0645c` without an Engine/fork change. Debug/Release, compiled provider
-omission, restored Debug, exact source/executable/signing-file restoration,
-deep code-sign verification and 45 unique keys PASS. The off-screen subset
-passes 7/7 groups: build, commands-demo, commands-dump, adblock-perf,
-adblock-catalog, profiles and extensions-render (zero Swift warnings/errors).
-No Open launch, e2e, full verifier, new worktree or engine copy ran. The
-window-presenting features/sidebar rows stay pending along with the other
-screen rows until explicit M5 clear and Section 16's DMG launch goes first.
-The earlier engine6193 results below are history
-only. The real tile showed On in the compiled-negative App; round-1 F9 now
-authorizes S1 to compare with the real store's available/unavailable state.
-F3 re-reads current blocking state on toggle; `S2_stale_tile` retains a tile,
-changes the real exclusion through automation and delivers the retained
-callback in both directions. F5 adds read-only permission lookup and avoids
-rewriting the unchanged index on load; `S1_permission_read_only` and
-`S3_permission_index_unchanged` compare file content/hash and mtime before
-and after opening on a never-decided origin (absent and populated index).
-F4 disables Manage Boosts in private menus, asserted in `S10_incognito`.
-All round-1 real-App proof and negative runs are **NOT RUN** under item25;
-the source64e62f34 runtime receipts do not qualify the review edits. After
-screen clearance, restore each old behavior separately, show its new row FAIL,
-restore exact source and rebuild before the positive rows and final gate.
+Under LEAD-UPDATE item31, targeted functional receipts on `8e8a461c` stand:
+commandbar 77/77, app-actions 77/77, extensions-ui 72/72 (including real-App
+`X13_picker`), toolbar 10/10, features 27/27, split 40/40, space-editor 167/167
+and incognito 31/31 PASS. `no_snapshot_history_change` PASS includes #261.
+Page has 85 PASS, four external BLOCKED rows and one DEFERRED row. Both main
+and branch features pass Widevine, so no known-main Widevine label applies.
+The interrupted first extensions attempt and the first features failure are
+retained in the PR; the completed features diagnostic run changed no assertion.
+
+On `34619927`, Site Control completes with 32 PASS and only the lead-accepted
+S11/S12 visual FAILs (S12-V). Window completes with 83 PASS and two startup
+budget FAILs; paired main/branch timing on this engine is still pending.
+The real saved Boost and private S4/S10 rows, F3 stale-tile directions,
+F5 permission content/mtime, F9 S1 state and F4 private menu positives PASS.
+The compiled provider negative PASSes after one T3 interruption; F3's old
+stale-tile behavior FAILs in both directions as required, with exact source
+and signed-payload restoration. The other mutation negatives remain pending.
+
+S2 initially FAILED on the old same-origin `/ad.js` fixture. Unchanged main
+loads that URL with its native filter loaded, but blocks the shipped EasyList
+rule `||demand.supply^$script`. The S12 lead ruled this a fixture defect at
+12:40. The fixture now maps that rule's domain to its local server and verifies
+the pinned EasyList hash. All S2 assertions and thresholds remain unchanged.
+Initial On blocks, Off plus reload loads, and On plus reload blocks: PASS.
+The old-fixture mutation negative is prepared and remains pending.
+
+The screen/disk holds ended under item29. No final full gate has run yet.
+Remaining work: remaining round-1 mutations and the old-fixture mutation
+with exact restoration, native F25 and cleanup canary,
+paired startup groups, final preflight/checklist and the full high gate.
+New main `dc8c7709` changes overlapping App files without an Engine/fork
+change, so rule5a requires a merge, rebuild and affected-suite rerun before
+final acceptance. The queued F5 call was cancelled before any App launch;
+no proof was interrupted. The PR stays DRAFT until that work completes.
+Loads and exact row statuses
+belong to the PR and private receipts; no visual parity is claimed.
+
 F1 is by design under D-10 and §Incognito: parent-Profile Boost metadata is
-read-only in private windows, with no Boost application or writes.
-F2/F4-rest/F6/F7/F8 are deferred in `docs/followups.md`.
-S2 must report its real #271 result.
-Gap item 1(c) is PARTIAL: host-cookie Clear Cookies uses the legacy bridge;
-Clear Cache is absent/refused. S12-G owns both … menu clearSiteData bindings
-after A and G merge. E1–E3 remain deferred in A.
+read-only in private windows, with no application, writes or enabled actions.
+F2/F4-rest/F6/F7/F8 remain in `docs/followups.md`. The private ad-block API
+switch follows both #276 and Section 13's API PR. E1–E3 remain deferred.
+Gap item1(c) is PARTIAL: host-cookie Clear Cookies uses the legacy bridge;
+Clear Cache is absent/refused. S12-G moves both Site Control … menu operations
+onto `clearSiteData` after A and G merge. No engine root was edited or built; no M1 work was done.
 
 Historical pre-#271 verification (child A, 2026-11-08): App source
 `d534c708` includes main `d26300e6`, #249's sole `AppBoosts` owner, #202,
