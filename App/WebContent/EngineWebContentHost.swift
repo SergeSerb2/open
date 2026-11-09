@@ -109,6 +109,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       (changes.contains(.live) && !page.isLive) || changes.contains(.crash) {
       owner.app.stores.boosts.existingEditorHost?.exitZap(tabID: tabID)
     }
+    if changes.contains(.loading) || changes.contains(.live) || changes.contains(.crash) {
+      owner.app.stores.boosts.existingEditorHost?.pickerAvailabilityChanged(tabID: tabID)
+    }
     if changes.contains(.loading), page.isLoading { historyRecorder.loadingChanged(true) }
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
       // OEWebContent still exposes the previous document's favicon here.

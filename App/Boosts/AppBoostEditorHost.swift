@@ -36,6 +36,13 @@ final class AppBoostEditorHost: BoostEditorHost {
     picker.enter(boostID: boostID, tabID: tabID, mode: .select)
   }
   func exitZap(tabID: ItemID) { pickerStorage?.exit(tabID: tabID) }
+  func pickerAvailabilityChanged(tabID: ItemID) {
+    guard let editor = boosts.factory(for: tabID)?.controller?.boostEditor,
+      editor.session?.context.tabID == tabID else { return }
+    // Commit can refresh while the page is still loading. Recheck the controls
+    // when loading ends, including a same-URL reload with no later URL event.
+    editor.view?.refresh()
+  }
   func removeZapFromSession(_ selector: String, tabID: ItemID) { pickerStorage?.remove(selector, tabID: tabID) }
   func requestZapCounts(tabID: ItemID) { pickerStorage?.requestCounts(tabID: tabID) }
   func receivePickerMessage(_ page: OEWebContent, type: String, payloadJSON: String, documentID: String) {
