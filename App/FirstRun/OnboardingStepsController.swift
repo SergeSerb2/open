@@ -19,7 +19,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     let host: String
     var url: URL { URL(string: "https://" + host + "/")! }
   }
-  static let sites = [Site(name: "Gmail", host: "mail.google.com"), Site(name: "Google Calendar", host: "calendar.google.com"), Site(name: "YouTube", host: "youtube.com"), Site(name: "Notion", host: "notion.com"), Site(name: "Slack", host: "slack.com"), Site(name: "Figma", host: "figma.com"), Site(name: "GitHub", host: "github.com"), Site(name: "Linear", host: "linear.app"), Site(name: "Spotify", host: "spotify.com"), Site(name: "WhatsApp", host: "web.whatsapp.com"), Site(name: "ChatGPT", host: "chatgpt.com"), Site(name: "Wikipedia", host: "wikipedia.org")]
+  static let sites = [Site(name: "Gmail", host: "mail.google.com"), Site(name: "Google Maps", host: "maps.google.com"), Site(name: "YouTube", host: "youtube.com"), Site(name: "Notion", host: "notion.com"), Site(name: "Slack", host: "slack.com"), Site(name: "Figma", host: "figma.com"), Site(name: "GitHub", host: "github.com"), Site(name: "Linear", host: "linear.app"), Site(name: "Spotify", host: "spotify.com"), Site(name: "WhatsApp", host: "web.whatsapp.com"), Site(name: "ChatGPT", host: "chatgpt.com"), Site(name: "Wikipedia", host: "wikipedia.org")]
   unowned let app: AppDelegate
   let firstRun: FirstRunViewModel
   let replay: Bool

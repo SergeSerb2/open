@@ -114,7 +114,7 @@ def run(factory, results, tmp, h):
         gate('keyboard_space', lambda s: s.get('favorites')==[0], spaced, favorites)
         app.call('key', key='tab'); tabbed = state()
         app.call('key', key='tab', modifiers=['shift']); backwards = state()
-        gate('keyboard_tab_order', lambda s: s.get('focus')=='Google Calendar', tabbed, backwards)
+        gate('keyboard_tab_order', lambda s: s.get('focus')=='Google Maps', tabbed, backwards)
         action('toggle-favorite', index=6)
         selected = state(); shot('favorites-selected-light')
         gate('favorite_selection', lambda s: s.get('favorites')==[0,6], selected, favorites)
@@ -254,8 +254,8 @@ def run(factory, results, tmp, h):
         retried_tabs = app.call('tabs')
         results['steps_save_retry_no_duplicates'] = dict(ok=len([t for t in retried_tabs if t['section']=='favorites'])==2
             and len([t for t in retried_tabs if t['url']=='open://welcome'])==1, load=os.getloadavg())
-        gate('calendar_favorite', lambda ts: any(t['section']=='favorites' and t['title']=='Google Calendar'
-            and t['url']=='https://calendar.google.com/' for t in ts), retried_tabs, tabs)
+        gate('maps_favorite', lambda ts: any(t['section']=='favorites' and t['title']=='Google Maps'
+            and t['url']=='https://maps.google.com/' for t in ts), retried_tabs, tabs)
         # Already default is a read-only automation outcome. No system prompt runs.
         launch(directory=empty, OPEN_AUTOMATION_DEFAULT_BROWSER='already'); skip_to_ready()
         already = state(); action('back'); offered = screen('defaultBrowser'); shot('already-default-light')
@@ -520,21 +520,23 @@ def run_favorite_icons(factory, results, tmp, h):
         # discovery reason instead of calling a generic login icon a product icon.
         trace_rows = [json.loads(line) for line in trace.read_text().splitlines()] if trace.is_file() else []
         google = []
-        for tile, origin in zip(network['favoriteTiles'][:2], ('https://mail.google.com','https://calendar.google.com')):
+        for tile, origin in zip(network['favoriteTiles'][:2], ('https://mail.google.com','https://maps.google.com')):
             events = [entry for entry in trace_rows if entry['origin']==origin]
             discovery = [entry for entry in events if entry['event'].startswith('discovered:')]
             declarations = [entry for entry in events if entry['event'].startswith('declared:')]
             google.append(dict(name=tile['name'], pixelSize=tile['pixelSize'], sourceKind=tile['sourceKind'],
                 declarations=declarations, discovery=discovery,
                 reason='no icon declared in bounded final page head' if discovery and not declarations else 'declared icon available'))
-        stored_images = [data for origin,data,_ in before_store if origin in ('https://mail.google.com','https://calendar.google.com')]
-        distinct_products = len(stored_images)==2 and stored_images[0]!=stored_images[1] \
-            and all(min(tile['pixelSize'])>=64 for tile in network['favoriteTiles'][:2])
-        no_declarations = all(item['discovery'] and all(entry['event'].startswith('discovered:0:') for entry in item['discovery'])
-            and not item['declarations'] for item in google)
-        row('google_product_discovery', distinct_products or no_declarations, productIcons=distinct_products, sites=google)
-        row('google_product_discovery_negative', not distinct_products if no_declarations else not no_declarations,
-            expected='FAIL', observed='generic fallback cannot count as distinct product artwork' if no_declarations else 'declared icons cannot count as absent')
+        stored_images = [data for origin,data,_ in before_store if origin in ('https://mail.google.com','https://maps.google.com')]
+        distinct_products = len(stored_images)==2 and stored_images[0]!=stored_images[1]
+        gmail, maps = google
+        gmail_reason = gmail['discovery'] and all(entry['event'].startswith('discovered:0:') for entry in gmail['discovery']) \
+            and not gmail['declarations']
+        maps_declared = maps['declarations'] and maps['sourceKind'] in ('apple-touch','manifest','link') and min(maps['pixelSize'])>=64
+        row('google_product_discovery', distinct_products and gmail_reason and maps_declared, sites=google,
+            distinctImages=distinct_products, reason='Gmail sign-in page declares none; Maps has distinct declared artwork')
+        row('google_product_discovery_negative', not maps_declared or min(gmail['pixelSize'])<64,
+            expected='FAIL', observed='Gmail fallback cannot satisfy the Maps declared-artwork predicate')
         while state()['screen']!='ready':
             s=state()['screen']
             if s=='defaultBrowser': action('choose-default', yes=False); action('next')

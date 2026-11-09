@@ -52,6 +52,8 @@ private struct OnboardingFaviconSiteResolver: FaviconSiteResolver {
       #endif
       let report = await fetcher.prefetch(urls, overallTimeout: 12) { [weak self] result in
         let index = result.index-1
+        // Prefetch writes an origin fallback. A later engine favicon event goes
+        // through StoredFaviconCache.report and its exact-page record wins.
         let bitmap = result.status == .ok ? await store.decodedIcon(for: urls[index]) : nil
         if bitmap != nil { await cache?.refreshFromStore(for: urls[index]) }
         await self?.received(result, bitmap: bitmap)
