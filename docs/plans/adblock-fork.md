@@ -4517,8 +4517,8 @@ fixture and official pinned-list/resources flow also passed 26 rows each.
 The root's clone hold ended at 14:00; M5 screen clearance arrived at
 16:30. Headless corpus/footprint/G-2/G-6 passed. The merged N run passes
 32/32, production COUNT and its allowed control pass, and quiet page
-G-4/G-5/G-6 pass. The wrong-document control and URL edges are still
-awaiting their merged-build receipts.
+G-4/G-5/G-6 pass. Both COUNT negative controls and the merged URL
+edge rerun also pass.
 The same-context explicit-unload control for zero-list memory passed
 offscreen. The dev distribution and Debug App build also passed offscreen;
 the App's normalized engine code matches the recorded framework. Its bundle
@@ -4730,11 +4730,27 @@ completes exactly three GETs, keeps the old count at 5 and the new count
 at zero through the same late reading. Outgoing unload CDP events remain
 zero in both variants and are not part of the predicate.
 
+The post-Section-15 wrong-document control also passes (`s15-count-wrong-r2`).
+Its blocked URLs never reach the server, while the old id stays at 5 and
+new id 4 rises to 3 after load and remains 3 at the late reading. The
+predicate fails specifically for the incorrect document attribution. Its
+allowed control completes three GETs, with unchanged old count and new
+count zero. Production remains byte-identical to the recorded distribution.
+
 **Unicode/IDN page edges.** All 16 cases pass against both the saved
 pre-ASCII build and the integrated build (32 rows). CDP observes the
 actual canonical ASCII specs, and allow/block verdicts remain identical
 for IDN hosts, escaped UTF-8 paths, separators, end anchors and user regex
 ASCII classes. Receipt: `.re/s13/e3/ascii-edge-page-results.json`.
+
+The post-Section-15 browser rerun passes 32 fresh rows: the same 16
+Unicode/IDN inputs through current text and verified DAT loads. Every
+actual canonical ASCII spec and verdict matches the retained pre-ASCII
+browser witness. The original `/tmp/open-adblock` fixture and saved
+pre-ASCII app were missing; the first attempt stopped before browser
+launch. E3 restored the exact original inputs and rules in its canonical
+private evidence directory. The baseline rows remain historical. Receipts:
+`.re/s13/e3/s15-edges-r1.log` and `s15-edges-r2-results.json`.
 
 **Page timing after idle.** The integrated page run observed exactly one
 idle purge before measured load 2. All 15 loads had 200 requests and 200
@@ -4756,9 +4772,12 @@ G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
 262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
 The 64.900 ms value is Step 5's C-G2 input T for this engine.
 
-**Remaining delivery gates.** The merged wrong-document negative and
-URL edges, real App acceptance (including bundled resources and DAT
-reapplication), suites and the full verify gate remain pending in E3.
+**Remaining delivery gates.** Real App acceptance (including bundled
+resources and DAT reapplication), suites and the full verify gate remain
+pending in E3. The lead assigns the AD3 two-Profile footprint row to
+child F (`s13/ad3-footprint`): E4 measured 11.11 MiB net on this App
+with `engine_shared=true`, against the unchanged 2 MiB limit. E3 will
+retain its own measured row as FAIL, owned by F, and continue other flows.
 The no-engine generation revision, distribution, Debug App build and
 quiet G-5 gate now pass. Retain the earlier loaded CPU receipts
 (12.756 ms at load1 48–50 and 8.576 ms at 40–42) as historical attempts.
