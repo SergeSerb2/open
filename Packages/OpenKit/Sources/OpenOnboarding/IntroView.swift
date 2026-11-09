@@ -178,26 +178,25 @@ public final class IntroView: NSView {
         add(mark, "position.y", [336, 276], "markMove", spring: true)
         add(mark, "transform.scale", [1, 0.8], "markMove", spring: true)
         let rect = CGRect(x: 596, y: 276, width: 88, height: 120)
-        let path = CGPath(roundedRect: rect, cornerWidth: 44, cornerHeight: 44, transform: nil)
+        let brand = OnboardingBrandMark.components(in: rect)
+        let path = brand.doorway.path
         let interior = CAGradientLayer(); interior.frame = full
         interior.colors = [IntroColors.color(0xFFF3DC).cgColor, IntroColors.color(0xFFC680).cgColor]
         interior.startPoint = .init(x: 0.5, y: 0.34); interior.endPoint = .init(x: 0.5, y: 0.51)
         let mask = CAShapeLayer(); mask.frame = full; mask.path = path; mask.fillColor = NSColor.white.cgColor
         interior.mask = mask; mark.addSublayer(interior); add(interior, "opacity", [0, 0.92], "spill")
         for glow in [true, false] {
-            let door = CAShapeLayer(); door.frame = full; door.path = path
-            door.fillColor = nil; door.strokeColor = NSColor.white.cgColor
-            door.lineWidth = 7; door.lineCap = .round; door.strokeStart = 0.08; door.strokeEnd = 0.88
+            let door = glow ? OnboardingBrandMark.components(in: rect).doorway : brand.doorway
+            door.frame = full
             door.name = glow ? "doorGlow" : "door"
-            if glow { door.shadowPath = path.copy(strokingWithWidth: 7, lineCap: .round, lineJoin: .round, miterLimit: 0); door.shadowColor = NSColor.white.cgColor; door.shadowRadius = 18; door.shadowOpacity = 0.6; door.shadowOffset = .zero }
+            if glow { door.shadowPath = path?.copy(strokingWithWidth: door.lineWidth, lineCap: .round, lineJoin: .round, miterLimit: 0); door.shadowColor = NSColor.white.cgColor; door.shadowRadius = 18; door.shadowOpacity = 0.6; door.shadowOffset = .zero }
             mark.addSublayer(door)
             add(door, "strokeEnd", [0.08, 0.88], "door", curve: [0.65, 0, 0.35, 1])
             if glow { add(door, "opacity", [0, 1], "door", curve: [0.65, 0, 0.35, 1]) }
         }
         let sunClip = CALayer(); sunClip.frame = .init(x: 0, y: 0, width: 1280, height: rect.maxY); sunClip.masksToBounds = true
         mark.addSublayer(sunClip)
-        let sun = CALayer(); sun.bounds = .init(x: 0, y: 0, width: 22, height: 22); sun.cornerRadius = 11
-        sun.backgroundColor = IntroColors.color(0xFF9F2E).cgColor; sun.position = .init(x: 657, y: 316)
+        let sun = brand.sun
         sun.shadowColor = IntroColors.color(0xFF9F2E).cgColor; sun.shadowRadius = 30; sun.shadowOpacity = 0.9
         sun.shadowOffset = .zero; sun.shadowPath = CGPath(ellipseIn: sun.bounds, transform: nil); sun.name = "sun"
         sunClip.addSublayer(sun)
@@ -318,7 +317,7 @@ public final class IntroView: NSView {
     }
     /// Later screens reuse the room/orbs without rebuilding or restarting sound.
     public func showBackgroundOnly() {
-        composition.isHidden = true; button.isHidden = true
+        composition.isHidden = true; button.isHidden = true; ambient.opacity = 0.4
     }
     public override func cancelOperation(_ sender: Any?) { skip() }
     public override func keyDown(with event: NSEvent) {

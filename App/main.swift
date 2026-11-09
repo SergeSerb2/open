@@ -5,6 +5,16 @@ import QuartzCore
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
+LaunchTiming.shared.phase("entry")
+#if OPEN_AUTOMATION
+// Validate the loader without creating NSApplication or a window. This is
+// used before the first on-screen launch of a changed link set.
+if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LOADER_CHECK"] == "1" {
+  FileHandle.standardError.write(Data("Open: loader check passed\n".utf8))
+  exit(0)
+}
+LaunchTiming.shared.recordEntryImages()
+#endif
 let app = OEApplication.shared as! OEApplication
 LaunchTiming.shared.mark("main")
 // Open restores windows from its own snapshot (OpenStore), never through
@@ -12,14 +22,22 @@ LaunchTiming.shared.mark("main")
 // after a crash.
 UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
 let appDelegate = AppDelegate()
+LaunchTiming.shared.phase("delegateCreated")
 app.delegate = appDelegate
 #if OPEN_AUTOMATION
 AutomationOwnerWatch.install()
 #endif
 // Reserved app shortcuts beat the page (Cmd-T, Cmd-W, Cmd-L, ...).
-app.keyEquivalentHandler = { event in MainMenu.performReservedShortcut(event) }
+app.keyEquivalentHandler = { event in
+  let handled = MainMenu.performReservedShortcut(event)
+  #if OPEN_AUTOMATION
+  LaunchTiming.shared.recordKeyReadiness(event, handled: handled)
+  #endif
+  return handled
+}
 
 let options = LaunchOptions(arguments: CommandLine.arguments)
+LaunchTiming.shared.phase("optionsParsed")
 appDelegate.options = options
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
@@ -32,8 +50,11 @@ if let receipt = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SCRIPTING_
 // Finish AppKit launch and draw the snapshot-backed sidebar before loading
 // Chromium. The same sidebar survives engine readiness; no page exists yet.
 app.setActivationPolicy(.regular)
+LaunchTiming.shared.phase("finishLaunchingBegin")
 app.finishLaunching()
+LaunchTiming.shared.phase("finishLaunchingEnd")
 appDelegate.drawWindowsBeforeEngine()
+LaunchTiming.shared.phase("sidebarSubmitted")
 
 // Wait for a display callback whose last refresh is later than the flushed
 // window transaction. Chromium's observers must first run in its own loop,
@@ -62,6 +83,11 @@ if appDelegate.terminationRequested {
 LaunchTiming.shared.recordFirstFrame(confirmed: firstFrame.presented)
 if firstFrame.presented {
   LaunchTiming.shared.mark("sidebarDrawn")
+  #if OPEN_AUTOMATION
+  LaunchTiming.shared.recordSidebarImages()
+  appDelegate.recordFirstFrameMenuProbe()
+  LaunchTiming.shared.postKeyReadinessProbe(to: appDelegate.frontWindowController?.window)
+  #endif
 } else {
   // An off-screen/asleep display may never tick. Presentation confirmation
   // is measurement evidence, not a requirement for starting the browser.
@@ -173,6 +199,7 @@ final class FirstWindowFrameObserver: NSObject {
   init(view: NSView?) { self.view = view }
   func start() {
     submittedAt = CACurrentMediaTime()
+    LaunchTiming.shared.phase("frameObserverStarted")
     var observeDisplay = true
     #if OPEN_AUTOMATION
     observeDisplay = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SKIP_DISPLAY_LINK"] != "1"
@@ -187,6 +214,7 @@ final class FirstWindowFrameObserver: NSObject {
   }
   @objc private func frame(_ link: CADisplayLink) {
     guard link.timestamp >= submittedAt else { return }
+    LaunchTiming.shared.phase("frameCallback")
     presented = true; CFRunLoopStop(CFRunLoopGetMain())
   }
   func stop() { link?.invalidate(); link = nil; timeout?.invalidate(); timeout = nil }

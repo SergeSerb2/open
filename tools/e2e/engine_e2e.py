@@ -54,6 +54,7 @@ _ACTIVE_FOCUS_TRACKER = None
 _OWNED_APPS = []
 _SUITE_CRASH_BASELINE = None
 _ROW_TIMEOUT = None
+_CONTINUE_ON_TIMING_FAILURE = False
 _ROW_NAME = 'startup'
 
 EXT = {
@@ -69,6 +70,10 @@ class FocusInterruption(RuntimeError):
     def __init__(self, message, evidence):
         super().__init__(message)
         self.evidence = evidence
+
+
+class AppDied(RuntimeError):
+    fatal_app_death = True
 
 
 class SuiteAppDied(BaseException):
@@ -149,11 +154,27 @@ def check_suite_app_death(app=None):
 
 class FocusTracker:
     """Native input and every timed polling/capture interval keep separate trace bounds."""
-    def __init__(self):
+    def __init__(self, stop_on_app_death=False):
         self.apps = []
         self.checkpoints = {}
         self.timing_checkpoints = {}
         self.observation_checkpoints = {}
+        self.crashes_before = _open_crash_reports()
+        self.fatal_app_death = False
+        self.stop_on_app_death = stop_on_app_death
+
+    def check_alive(self):
+        if not self.stop_on_app_death:
+            return
+        # Intentional quit/SIGKILL recovery closes the owned instance before
+        # recording a row or launching its replacement.
+        crashed = bool(_open_crash_reports() - self.crashes_before)
+        dead = any(app.pid and not app.closed and
+                   app.process_path(app.pid) != os.path.realpath(app.executable)
+                   for app in self.apps)
+        if crashed or dead:
+            self.fatal_app_death = True
+            raise AppDied('App death or new crash report; stopped before the next flow')
 
     def loss(self):
         interruptions = []
@@ -193,6 +214,7 @@ class CheckedResults(dict):
         if isinstance(value, dict) and ("ok" in value or "status" in value):
             value.setdefault("load", os.getloadavg())
         if isinstance(value, dict) and "ok" in value:
+            self.tracker.check_alive()
             interruptions = self.tracker.loss()
             if interruptions:
                 # Retain even a successful assertion as INTERRUPTED. It cannot
@@ -204,8 +226,11 @@ class CheckedResults(dict):
         super().__setitem__(key, value)
         if _ROW_TIMEOUT is not None:
             if isinstance(value, dict) and value.get('ok') is False:
-                print(key + ' FAIL; stopping before the next row', flush=True)
-                raise SuiteStopped('row failed: ' + key)
+                if _CONTINUE_ON_TIMING_FAILURE and value.get('timing') is True:
+                    print(key + ' FAIL (timing); continuing functional rows', flush=True)
+                else:
+                    print(key + ' FAIL; stopping before the next row', flush=True)
+                    raise SuiteStopped('row failed: ' + key)
             begin_row('after ' + key)
 
 
@@ -253,14 +278,20 @@ class Open:
         self.launch_log_path = log_path + ".launch-%d.log" % time.time_ns()
         # The first-frame timeout fixture also uses open without -W. Its
         # successful early launcher exit must not be mistaken for app exit.
-        wait_args = [] if (extra_env or {}).get("OPEN_E2E_NO_LAUNCH_WAIT") == "1" else ["-W"]
+        launch_without_wait = (extra_env or {}).get("OPEN_E2E_NO_LAUNCH_WAIT") == "1"
+        wait_args = [] if launch_without_wait else ["-W"]
         launch = ["/usr/bin/open", "-n"] + wait_args + ["-a", self.bundle] + list(delivery_urls) + [
                   "--stdout", self.launch_log_path, "--stderr", self.launch_log_path]
         for key, value in env.items():
             if key.startswith("OPEN_") or key in (extra_env or {}):
                 launch += ["--env", key + "=" + value]
         launch += ["--args"] + args[1:]
-        self.direct_child = _ROW_TIMEOUT is not None
+        # Cold external-URL fixtures require LaunchServices to send the real
+        # open-URL Apple event during startup. Keep their unique data root,
+        # owner-exit watcher and verified-PID cleanup under strict supervision.
+        # The early-launcher-exit fixture must exercise open(1), not the App
+        # child that stays alive until quit. Keep strict death checks for both.
+        self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls and not launch_without_wait
         self.proc = subprocess.Popen(args if self.direct_child else launch,
                                      env=env if self.direct_child else None,
                                      stdout=self.log, stderr=subprocess.STDOUT)
@@ -564,39 +595,57 @@ def new_tab(app, url, **kw):
 
 @contextlib.contextmanager
 def passwords_fixture_server():
-    """Own one loopback server/ephemeral port; share URLs and engine switches.
+    """Loopback HTTP plus HTTPS, trusted only by this run's certificate SPKI.
 
-    Pass ``engine_switches`` as factory(extra_args=...). CEF receives the
-    App's argv (OEEngine.mm, CefMainArgs), in addition to additionalSwitches.
-    No form values or HTTP headers are logged by the server.
+    The throwaway certificate/key never enter the repo or the system trust
+    store. HTTP remains available to prove payment security guards.
     """
     import select
     server = os.path.join(ROOT, 'tools/e2e/fixtures/passwords/server.py')
-    proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0'],
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    try:
-        if not select.select([proc.stdout], [], [], 10)[0]:
-            raise RuntimeError('passwords fixture server startup timed out')
-        port = int(proc.stdout.readline().strip())
-        local = 'http://localhost:%d' % port
-        login = 'http://login.example.com'
-        yield {'port': port, 'login': login + '/login.html',
-               'change': login + '/change.html', 'signup': login + '/signup.html',
-               'iframe': 'http://other.example.com/iframe.html',
-               'address': login + '/address.html', 'card': local + '/card.html',
-               'webauthn': local + '/webauthn.html', 'basic': login + '/basic',
-               'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
-               'local_login': local + '/login.html',
-               'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
-                                   '--no-proxy-server']}
-    finally:
-        proc.terminate()
+    with tempfile.TemporaryDirectory(prefix='open-passwords-tls-',
+                                     dir=os.environ.get('OPEN_E2E_RESOURCE_DIR')) as certificate_dir:
+        os.chmod(certificate_dir, 0o700)
+        cert = os.path.join(certificate_dir, 'localhost.pem')
+        key = os.path.join(certificate_dir, 'localhost-key.pem')
+        config = os.path.join(certificate_dir, 'openssl.cnf')
+        Path(config).write_text('[req]\ndistinguished_name=dn\nx509_extensions=extensions\nprompt=no\n'
+                                '[dn]\nCN=localhost\n[extensions]\n'
+                                'subjectAltName=DNS:localhost,DNS:*.example.com,DNS:example.com\n')
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                        '-config', config, '-keyout', key, '-out', cert],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
+        os.chmod(key, 0o600)
+        public_key = subprocess.check_output(['openssl', 'x509', '-in', cert, '-pubkey', '-noout'], timeout=10)
+        spki = subprocess.check_output(['openssl', 'pkey', '-pubin', '-outform', 'DER'], input=public_key, timeout=10)
+        pin = base64.b64encode(hashlib.sha256(spki).digest()).decode('ascii')
+        proc = subprocess.Popen([sys.executable, '-I', server, '--port', '0', '--cert', cert, '--key', key],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        proc.stdout.close()
+            if not select.select([proc.stdout], [], [], 10)[0]:
+                raise RuntimeError('passwords fixture server startup timed out')
+            ports = json.loads(proc.stdout.readline())
+            port = ports['http']; tls_port = ports['https']
+            assert all(isinstance(p, int) and 0 < p < 65536 for p in [port, tls_port])
+            local = 'http://localhost:%d' % port
+            secure = 'https://localhost:%d' % tls_port
+            login = 'http://login.example.com'
+            yield {'port': port, 'login': login + '/login.html',
+                   'change': login + '/change.html', 'signup': login + '/signup.html',
+                   'iframe': 'http://other.example.com/iframe.html',
+                   'address': login + '/address.html', 'card': secure + '/card.html',
+                   'http_card': local + '/card.html',
+                   'webauthn': secure + '/webauthn.html', 'basic': login + '/basic',
+                   'set_cookies': login + '/set-cookies', 'echo_cookies': login + '/echo-cookies',
+                   'local_login': local + '/login.html',
+                   'engine_switches': ['--host-resolver-rules=MAP *.example.com 127.0.0.1:%d' % port,
+                                       '--no-proxy-server', '--ignore-certificate-errors-spki-list=' + pin]}
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill(); proc.wait()
+            proc.stdout.close()
 
 
 def frame(f):
@@ -822,6 +871,7 @@ def feature_checks(app, style, results, tmp):
              fullscreen="record")
 
     def run(name, fn):
+        begin_row(name)
         try:
             results[name] = fn()
         except Exception as e:
@@ -1036,7 +1086,11 @@ def feature_checks(app, style, results, tmp):
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
-        got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=120, step=2)
+        # Leave time inside the 120 s row cap for EME/playback and publish a
+        # concrete prerequisite failure instead of expiring at the wait boundary.
+        got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=60, step=2)
+        if not got:
+            return {"ok": False, "reason": "Widevine component updater did not download a CDM within 60 s", "cdm_versions": None}
         w = new_tab(app, "https://example.com/")
         r = app.eval(w, '(async () => { try { const a = await navigator.requestMediaKeySystemAccess("com.widevine.alpha",'
                         ' [{initDataTypes: ["cenc"], videoCapabilities: [{contentType: \'video/webm; codecs="vp9"\','
@@ -7613,6 +7667,7 @@ def littleopen_checks(factory, results, tmp):
     import copy
     import plistlib
     import uuid
+    crashes_before = _open_crash_reports()
     domain = 'io.github.sergeserb2.open'
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
             'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
@@ -7740,6 +7795,76 @@ def littleopen_checks(factory, results, tmp):
         record('B9_page_frame', loaded['window'] == bar['window'] and rect_equal(loaded['frame'], expected_page), session=loaded)
         record('B4_real_engine', loaded['url'] == url and loaded['runtimeStyle'] == 'chrome' and not loaded['sidebarTab']
                and loaded['content'] > 0, session=loaded)
+        # Section 11's per-window page log and Section 15's save completion
+        # must both stay with Little Open while a main browser window exists.
+        action(bar['id'], 'focus')
+        app.call('save-prompt', mock={'kind': 'password', 'host': 'login.example.com'})
+        save_sheet = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
+        if not save_sheet: raise RuntimeError('Little Open save sheet did not appear')
+        sheet_windows = app.call('windows')
+        sheet_window = next(w for w in sheet_windows if w['number'] == save_sheet['window'])
+        owner_window = next(w for w in sheet_windows if w['number'] == loaded['window'])
+        # AppKit sheet ownership is attachedSheet/sheetParent, separate from
+        # the generic child-window parent relation used by Chromium dialogs.
+        sheet_owned = sheet_window.get('sheet') is True and owner_window.get('attachedSheet') == save_sheet['window']
+        try:
+            app.call('key', window=save_sheet['window'], key='escape', route='app')
+            dismissed = wait_until(lambda: not app.call('save-prompt', state=True).get('visible'), timeout=5, step=.05)
+            main_number = app.call('shell-windows')[0]['number']
+            main_events = app.call('events', window=main_number)
+            little_events = app.call('events', window=loaded['window'])
+            completions = [e for e in little_events if e.get('type') == 'savePrompt']
+            alive = app.call('ping')['pid'] == app.pid and not (_open_crash_reports() - crashes_before)
+            record('littleopen_events_owner', dismissed
+                   and not any(e.get('type') == 'savePrompt' for e in main_events)
+                   and len(completions) == 1 and completions[0].get('answer') == 'dismiss'
+                   and completions[0].get('window') == loaded['window']
+                   and completions[0].get('content') == loaded['content']
+                   and sheet_owned and alive
+                   and any(e.get('type') == 'load' and e.get('content') == loaded['content'] for e in little_events),
+                   mainSaveEvents=sum(e.get('type') == 'savePrompt' for e in main_events),
+                   littleSaveEvents=len(completions),
+                   sheetOwned=sheet_owned, childParentMatches=sheet_window.get('parent') == loaded['window'],
+                   answerDismissed=len(completions) == 1 and completions[0].get('answer') == 'dismiss',
+                   answerWindowOwned=len(completions) == 1 and completions[0].get('window') == loaded['window'],
+                   answerPageOwned=len(completions) == 1 and completions[0].get('content') == loaded['content'],
+                   pageLogOwned=any(e.get('type') == 'load' and e.get('content') == loaded['content'] for e in little_events),
+                   appAlive=alive, answers=len(completions))
+        finally:
+            app.call('save-prompt', withdraw=True)
+
+        # Real window hide/show and key transfers must preserve this sheet,
+        # even while the main browser window is still alive.
+        action(bar['id'], 'focus')
+        app.call('events', window=loaded['window'])
+        app.call('save-prompt', mock={'kind': 'password', 'host': 'login.example.com'})
+        stress_sheet = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
+        if not stress_sheet: raise RuntimeError('Little Open stress sheet did not appear')
+        try:
+            main_window = app.call('shell-windows')[0]
+            for _ in range(6):
+                action(bar['id'], 'hide')
+                assert wait_until(lambda: not session(bar['id'])['visible'], timeout=5, step=.05)
+                app.call('window-focus', id=main_window['id'], activate=True)
+                assert not any(e.get('type') == 'savePrompt' for e in app.call('events', window=main_window['number']))
+                action(bar['id'], 'focus')
+                assert wait_until(lambda: session(bar['id'])['visible'], timeout=5, step=.05)
+                current = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
+                assert current and current['window'] == stress_sheet['window'] and current['queueLength'] == 0
+                assert not any(e.get('type') == 'savePrompt' for e in app.call('events', window=loaded['window']))
+            app.call('key', window=stress_sheet['window'], key='escape', route='app')
+            assert wait_until(lambda: not app.call('save-prompt', state=True).get('visible'), timeout=5, step=.05)
+            answers = [e for e in app.call('events', window=loaded['window']) if e.get('type') == 'savePrompt']
+            alive = app.call('ping')['pid'] == app.pid and not (_open_crash_reports() - crashes_before)
+            extra = [e for e in app.call('events', window=loaded['window']) if e.get('type') == 'savePrompt']
+            record('littleopen_save_sheet_focus_visibility_stress', alive and len(answers) == 1
+                   and answers[0].get('answer') == 'dismiss' and answers[0].get('window') == loaded['window']
+                   and answers[0].get('content') == loaded['content'] and not extra,
+                   cycles=6, appAlive=alive, answers=len(answers), extraAnswers=len(extra))
+        finally:
+            action(bar['id'], 'focus')
+            app.call('save-prompt', withdraw=True)
+
         menu('new-little-open-window')
         second = next(s for s in sessions() if s['id'] != bar['id'])
         record('B9_second_first_frame', rect_equal(second['frame'], expected_bar)
@@ -8051,7 +8176,8 @@ def littleopen_checks(factory, results, tmp):
         restored = snapshot_model()['windows']
         expected_ids = {w['id'] for w in saved_seed['windows']}
         restored_ids = {w['id'] for w in restored}
-        little_key = sessions()[0]['key'] and app.call('native-focus-state')['keyWindow'] == sessions()[0]['window']
+        cold_session = next((r for r in sessions() if r['url'] == cold_url), {})
+        little_key = bool(cold_session.get('key')) and app.call('native-focus-state')['keyWindow'] == cold_session.get('window')
         record('B6_cold_saved_windows_stay', cold_reached and restored_ids == expected_ids
                and state()['mainWindows'] == 2 and little_key and not state()['autoCreatedLaunchWindow'],
                state=state(), restored=restored, expected=saved_seed['windows'])
@@ -12094,7 +12220,7 @@ def page_translate_checks(factory, results, tmp):
 
 
 def main():
-    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT
+    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
@@ -12103,7 +12229,7 @@ def main():
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import"])
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
                     help='features: prove ignored save offers with main App code and no password delegate')
@@ -12111,16 +12237,21 @@ def main():
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
+    ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
+    ap.add_argument('--passwords-m-only', action='store_true', help='run only the real-App save-sheet M rows')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument('--stop-on-app-death', action='store_true',
                     help='stop every remaining flow after an App death or new Open crash report')
+    ap.add_argument('--continue-on-timing-failure', action='store_true',
+                    help='retain timing FAIL rows and the failing exit status, but continue functional rows; crash stops and watchdogs remain active')
     ap.add_argument('--row-timeout', type=int, default=120, help='strict-run row deadline in seconds (default 120)')
     ap.add_argument('--suite-timeout', type=int, default=600, help='strict-run whole-suite cap, including cleanup (default 600)')
     ap.add_argument('--e2e-supervised', action='store_true', help=argparse.SUPPRESS)
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    _CONTINUE_ON_TIMING_FAILURE = opts.continue_on_timing_failure
     if opts.stop_on_app_death:
         _SUITE_CRASH_BASELINE = _open_crash_reports()
         if not 1 <= opts.row_timeout <= 120 or not opts.row_timeout <= opts.suite_timeout <= 3600:
@@ -12139,17 +12270,27 @@ def main():
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     startup_peek = {key: domain_before.get(key) for key in
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
+    if opts.only in ('firstrun', 'onboarding', 'import-robust', 'welcome'):
+        startup_peek['open.onboarding.name'] = domain_before.get('open.onboarding.name')
     if opts.only in ('window', 'sidebar'):
         startup_peek['open.sidebar.hideHintShown'] = domain_before.get('open.sidebar.hideHintShown')
-    if opts.only == 'passwords-probe':
-        for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed'):
+    if opts.only in ('passwords-probe', 'passwords'):
+        for key in ('open.links.littleOpenNUXSeen', 'open.general.searchSuggestNoticeDismissed', 'open.sidebar.hideHintShown'):
             startup_peek[key] = domain_before.get(key)
     if not 0 <= opts.focus_retry_delay_seconds <= 600:
         ap.error("--focus-retry-delay-seconds must be between 0 and 600")
     if opts.only is None and not opts.engine_fingerprint_only:
         ap.error("--only is required unless --engine-fingerprint-only is set")
-    if opts.only == 'passwords-probe' and opts.style != 'chrome':
-        ap.error('passwords-probe requires --style chrome')
+    if opts.only in ('passwords-probe', 'passwords', 'secrets-import') and opts.style != 'chrome':
+        ap.error('passwords suites and secrets-import require --style chrome')
+    if opts.passwords_rows is not None:
+        allowed = {'PW-HF1', 'PW-HF2-return', 'PW-HF2-escape', 'PW-HF3-tab-close',
+                   'PW-HF4-window-close', 'PW-HF5-navigate', 'PW-HF6-space', 'PW-HF7-quit'}
+        selected = opts.passwords_rows.split(',')
+        if opts.only != 'passwords' or not set(selected) <= allowed or len(set(selected)) != len(selected):
+            ap.error('--passwords-rows requires passwords and unique HTTPS-First lifetime row ids')
+    if opts.passwords_m_only and (opts.only != 'passwords' or opts.passwords_rows is not None):
+        ap.error('--passwords-m-only requires passwords without --passwords-rows')
     if opts.passwords_probe_rows is not None and (opts.only != 'passwords-probe' or
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
@@ -12169,6 +12310,8 @@ def main():
     root_kind = "sidebarc" if opts.only == "sidebar-completion" else opts.only
     if opts.only == 'passwords-probe':
         root_kind = 'pwprobe'  # Leave room for automation.sock in macOS sun_path.
+    if opts.only == 'secrets-import':
+        root_kind = 'secrets'
     run_name = "Open-E2E-%s-%s-%d-%s" % (root_kind, opts.style, os.getpid(), os.urandom(4).hex())
     sweep_stale_runs()
     user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
@@ -12246,10 +12389,11 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
-    tracker = FocusTracker()
+    tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
     _ACTIVE_FOCUS_TRACKER = tracker
 
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
+        tracker.check_alive()
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
@@ -12356,14 +12500,18 @@ def main():
                 row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None,
                 result_name=probe_result_name,
                 engine_distribution_sha256=results['engine']['distributionSHA256'])
+        elif opts.only == "secrets-import":
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/secrets_import.py'))['run'](
+                factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "onboarding":
             results["onboarding"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools/e2e/onboarding.py"))["run"](
                 factory, results["onboarding"], tmp, sys.modules[__name__])
         elif opts.only == "welcome":
-            import welcome
             results["welcome"] = CheckedResults(tracker)
-            welcome.run(factory, results["welcome"], tmp, sys.modules[__name__])
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/welcome.py"))["run"](
+                factory, results["welcome"], tmp, sys.modules[__name__])
         elif opts.only == "firstrun":
             results["firstrun"] = CheckedResults(tracker)
             # The executable's -I shebang omits the script directory from
@@ -12492,7 +12640,9 @@ def main():
                     factory, results[opts.only], tmp, opts.config, new_tab, wait_until)
         elif opts.only == "passwords":
             results["passwords"] = CheckedResults(tracker)
-            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](factory, results["passwords"], tmp, globals())
+            runpy.run_path(os.path.join(ROOT, "tools/e2e/passwords.py"))["run"](
+                factory, results["passwords"], tmp, globals(), results['engine']['distributionSHA256'],
+                row_ids=opts.passwords_rows.split(',') if opts.passwords_rows else None, m_only=opts.passwords_m_only)
         elif opts.only == "measure":
             results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
@@ -12529,29 +12679,38 @@ def main():
 
     interrupted_attempts = []
     # Never replay a potentially crashing probe row after foreground loss.
-    max_attempts = 1 if opts.stop_on_app_death or opts.only == 'passwords-probe' else 3
+    max_attempts = 1 if opts.stop_on_app_death or opts.only == 'passwords-probe' else 2 if opts.only == 'passwords' else 3
     for attempt in range(1, max_attempts + 1):
-        tracker = FocusTracker()
+        tracker = FocusTracker(stop_on_app_death=opts.only in ('secrets-import', 'firstrun', 'features'))
         _ACTIVE_FOCUS_TRACKER = tracker
         shutil.rmtree(user_data, ignore_errors=True)
         interruption = None
         try:
+            if opts.only in ('firstrun', 'onboarding', 'import-robust', 'welcome'):
+                _restore_defaults(None, {'open.onboarding.name': None})
             if opts.stop_on_app_death:
                 begin_row('startup')
-            if opts.only == 'passwords-probe':
+            if opts.only in ('passwords-probe', 'passwords'):
                 _restore_defaults(None, {'open.links.littleOpenNUXSeen': True,
-                                         'open.general.searchSuggestNoticeDismissed': True})
+                                         'open.general.searchSuggestNoticeDismissed': True,
+                                         'open.sidebar.hideHintShown': True})
             if opts.only in ('window', 'sidebar'):
                 # Deterministic chrome captures; restore the user's value in finally.
                 _restore_defaults(None, {'open.sidebar.hideHintShown': True})
             execute()
+            tracker.check_alive()
         except FocusInterruption as error:
-            interruption = {"reason": str(error), "focus": error.evidence}
+            try:
+                tracker.check_alive()
+            except AppDied as death:
+                dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(death)})
+            else:
+                interruption = {"reason": str(error), "focus": error.evidence}
         except (Exception, SuiteAppDied, SuiteStopped) as error:
             if opts.stop_on_app_death:
                 signal.setitimer(signal.ITIMER_REAL, 0)
             try:
-                loss = [] if getattr(error, 'fatal_app_death', False) else tracker.loss()
+                loss = [] if getattr(error, 'fatal_app_death', False) or tracker.fatal_app_death else tracker.loss()
             except Exception:
                 loss = []  # A crashed owned app cannot answer a focus query.
             if loss:
@@ -12584,19 +12743,20 @@ def main():
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
     name = (probe_result_name if opts.only == 'passwords-probe' else
+            'results-passwords-m-%s.json' % opts.config.lower() if opts.passwords_m_only else
             "results-actions-p2.json" if opts.only == "actions" else
             "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata"):
+    for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata", "secrets-import"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata")
+    failures = [k for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "space-editor", "incognito", "passwords", "sitedata", "secrets-import")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

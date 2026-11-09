@@ -53,7 +53,7 @@ import CryptoKit
                 record.isSecure && !record.valueBytes.isEmpty
             if record.name.hasSuffix("-2") { valid = valid && record.expiresUTC == nil }
             if record.name.hasSuffix("-3") { valid = valid && record.isHTTPOnly }
-            if record.name.hasSuffix("-4") { valid = valid && record.topFrameSiteKey != nil && record.hasCrossSiteAncestor }
+            if record.name.hasSuffix("-4") { valid = valid && record.topFrameSiteKey == "https://localhost" && record.hasCrossSiteAncestor }
             result.append(cookies.insert([record.name, record.hostKey, record.path, record.topFrameSiteKey ?? "", String(record.hasCrossSiteAncestor)]).inserted)
         }
         let counts = count(result)
@@ -65,7 +65,7 @@ import CryptoKit
         var result: [Bool] = []
         for index in batch.indices {
             let record = batch[index]
-            valid = valid && record.verificationStatuses == [7: 3, 30: 4] && record.fields.count == 2 && record.dateModified != nil && record.languageCode == "en" && record.useCount == 3
+            valid = valid && record.verificationStatuses == [7: 3, 77: 4] && record.fields.count == 2 && record.dateModified != nil && record.languageCode == "en" && record.useCount == 3
             let content = digest(record.fields.keys.sorted().flatMap { [String($0), record.fields[$0]!] })
             let existing = addressGUIDs.contains(record.guid) || addresses.contains(content)
             if !existing { addressGUIDs.insert(record.guid); addresses.insert(content) }

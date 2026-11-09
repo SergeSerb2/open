@@ -3,6 +3,8 @@
 import argparse
 import http.server
 import json
+import ssl
+import threading
 from pathlib import Path
 from http.cookies import SimpleCookie, CookieError
 from urllib.parse import urlsplit
@@ -43,7 +45,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path.removeprefix('/') in PAGES:
             self.reply(200, (ROOT / path.removeprefix('/')).read_bytes())
         elif path == '/welcome':
-            self.reply(200, b'<!doctype html><title>Fixture welcome</title><h1 id="welcome">Submitted</h1>')
+            redirect = (b'<script>location.replace("/dashboard")</script>'
+                        if self.headers.get('Host', '').split(':', 1)[0] == 'redirect.example.com' else b'')
+            self.reply(200, b'<!doctype html><title>Fixture welcome</title><h1 id="welcome">Submitted</h1>' + redirect)
+        elif path == '/dashboard':
+            self.reply(200, b'<!doctype html><title>Fixture dashboard</title><h1 id="dashboard">Dashboard</h1>')
         elif path == '/set-cookies':
             self.reply(200, b'<!doctype html><title>Cookies set</title><p>Fixture cookies set.</p>', headers=[
                 ('Set-Cookie', 'oe_persist=fixture; Path=/; Max-Age=86400; HttpOnly'),
@@ -91,16 +97,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=0)
+    parser.add_argument('--cert')
+    parser.add_argument('--key')
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error('port must be between 0 and 65535')
+    if bool(args.cert) != bool(args.key):
+        parser.error('cert and key must be supplied together')
     with http.server.ThreadingHTTPServer(('127.0.0.1', args.port), Handler) as server:
         server.daemon_threads = True
-        print(server.server_port, flush=True)
+        secure = None
+        worker = None
         try:
+            if args.cert:
+                secure = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+                secure.daemon_threads = True
+                tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                tls.load_cert_chain(args.cert, args.key)
+                secure.socket = tls.wrap_socket(secure.socket, server_side=True)
+                worker = threading.Thread(target=secure.serve_forever, daemon=True)
+                worker.start()
+                print(json.dumps({'http': server.server_port, 'https': secure.server_port}), flush=True)
+            else:
+                print(server.server_port, flush=True)
             server.serve_forever()
         except KeyboardInterrupt:
             pass
+        finally:
+            if secure:
+                secure.shutdown()
+                secure.server_close()
+            if worker:
+                worker.join(timeout=5)
 
 
 if __name__ == '__main__':

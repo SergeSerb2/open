@@ -1108,15 +1108,14 @@ it never destroys an engine under a lock.
 | Text lifetime | List texts are freed right after `open_adblock_build` returns, before serialize and the cache write; the DAT is written from the Rust `Vec<u8>` through a `base::span`, with no `std::string` copy | 100-5 |
 | Resources JSON | 4 MiB read cap (bundled file; Step 7: 142,493 bytes, 47 redirect resources) | Headroom above the pinned payload; source and output hashes are recorded in §9.3 |
 
-**Budgets (measured as `phys_footprint` of the browser process,
-`footprint` tool or `vmmap --summary`; the step that gates each row is
-named):**
+**Budgets (browser-process `phys_footprint`, except the Step 8 AD3
+allocator predicate below; the step that gates each row is named):**
 
 | Measure | Budget | Basis | Gated at |
 |---|---|---|---|
 | One EasyList + EasyPrivacy engine, steady state, with the D-12 regex features | ≤ 57 MiB, text and DAT, median of 5 | Lead footprint ruling §13.5.1 item 4a (2026-11-07 20:40); record PA allocated breakdown | Step 4 (single context, `cefsimple`) |
 | After the full-corpus check plus one idle purge | ≤ 60 MiB, text and DAT, median of 5 | Same ruling 4a; one idle-triggered, rate-limited purge, no request-path purge or idle timer loop; G-2/G-4 unchanged | Step 4 (single context, `cefsimple`) |
-| Second Profile with the same lists | ≤ +2 MiB over the window below, and the second Profile's status shows `engine_shared=1` | Shared engine; only matcher state (exclusions, toggle) is per Profile. **Window (review r2 N-8):** create both request contexts first and take the baseline; the measure is the delta from the second context's `LoadFromDirectory` to its `engine_shared=1` status. The cost of creating a context itself is not in this budget | Step 8 (two request contexts need the app or the test host; `cefsimple` has one context, §13.1; review r1 finding 9) |
+| Second Profile with the same verified inputs | `engine_shared=true`; median of 5 attachment-only PA allocated deltas ≤ +2 MiB; median non-PA malloc in-use delta ≤ +2 MiB | Both contexts and stores exist before baseline; store IO stays idle. Different-list control must show `engine_shared=false` and PA allocated delta ≥8 MiB, else AD3 is INVALID (insensitive). Record PA committed deltas and whole-process paired median/spread; whole-process deltas do not gate AD3. See Step 8 acceptance errata (2026-11-08) | Step 8 (two request contexts need the App; `cefsimple` has one context) |
 | Text build transient | ≤ +100 MiB above steady state, back to steady state ≤ 5 s after the swap | 80 MiB measured | Step 9 |
 | All 5 generic + privacy lists enabled | Record only (no gate in v1) | R-7; decides whether any non-default list becomes a default | Step 9 |
 | Renderer, worst-case cosmetic payload: the initial sheet at the 256 KiB cap plus 64 generic sheets of 500 rules (about 163,000 user-origin rules at most: the cap bounds bytes, so the shortest selectors give the largest count — 256 KiB / 2 B ≈ 131k, plus 64 × 500 generic; review r2 N-7) | Record only in v1: renderer `phys_footprint` delta and style-recalc time with that payload | Review r1 finding 14: the rule count has no other bound | Step 5 |
@@ -2775,7 +2774,7 @@ Every new Swift generation has `_resources`, independently of
 bundle on the next publication (open, update, reset or list change). An app
 resource-pin change also republishes on open without changing enabled lists.
 Copyable debug info includes `resources=6d4a87b8f0e4`.
-Engine resources-after-DAT acceptance N-19 remains E3's separate gate.
+Engine resources-after-DAT N-19 passes in E3's merged 32/32 set. The strict real App scope also passes text stubs, verified DAT relaunch/reapplication, and a no-engine zero-list generation followed by one-list restoration.
 
 ### 9.4 The 46-list catalog (committed data file)
 
@@ -3240,7 +3239,9 @@ No virtual methods are added to `cef_request_context.h` or `cef_browser.h`.
 Enable/exclusion changes reset existing factories in the context's loaded
 storage partitions, using Chromium's proxy-transition path. Disabled/excluded
 documents have no proxy (§7.2), so this permits enabling without navigation.
-The next-request network proof remains part of real-App acceptance.
+The real-App acceptance run `s15-adblock-r5` proves the next blocked
+request after enabling or re-including the current document, and the
+next allowed request after disabling, without navigation.
 
 All calls run on the browser-process UI thread. Mutators return false for
 an unavailable or uninitialized context; status returns null. They never
@@ -3262,7 +3263,9 @@ Acceptance:
 - [x] Headless real-CEF control flow (21 PASS): defaults/status schema, enable/off/on,
   exclusions, same-path no-op, generation reload, failed load, unload during
   a pending load, OTR settings isolation/sharing and closed-context refusal.
-- [ ] Real App integration after the recorded distribution: §12.1 and Step 8.
+- [x] Real App request/control integration after the recorded distribution:
+  §12.1 and Step 8. F's accepted allocation capture replaces the historical
+  whole-process AD3 predicate; merged rerun/full-gate acceptance remains below.
 
 Step 4, Step 6 and Step 8 ship as one engine milestone under the lead's
 integration gate. Smoke switches remain non-official only.
@@ -3328,31 +3331,132 @@ This milestone combines Steps 4/6/8, per API-DESIGN (2026-11-07). It is
 network blocking before Step 5 cosmetics. Acceptance through the real M5
 App and its production API:
 
-- [ ] Debug App builds against the recorded integrated distribution.
-- [ ] Enable -> page: native blocked count >0, CDP ERR_BLOCKED_BY_CLIENT,
+- [x] Debug App builds against the recorded integrated distribution.
+- [x] Enable -> page: native blocked count >0, CDP ERR_BLOCKED_BY_CLIENT,
       ad absent at the fixture server; an allowed control script runs.
-- [ ] Exclude -> reload: count 0 and ad loads; re-include blocks again.
-- [ ] Global off/on works without relaunch. Re-including/enabling also
+- [x] Exclude -> reload: count 0 and ad loads; re-include blocks again.
+- [x] Global off/on works without relaunch. Re-including/enabling also
       blocks the next request from a document created while unproxied.
-- [ ] Two Profiles keep exclusions/lists independent; identical lists
-      produce engine_shared=true in the second context. The second
-      context already exists for the <=2 MiB incremental engine window.
-- [ ] OTR shares its parent's engine and follows later parent exclusions.
-- [ ] Settings list toggle publishes a generation, advances load_generation
+- [x] Two Profiles keep exclusions/lists independent; identical lists
+      produce engine_shared=true in the second context.
+- [x] AD3 requires matching verified input hashes and engine_shared=true;
+      median of n=5 attachment-only PA allocated deltas <=2 MiB, and median
+      non-PA malloc in-use delta <=2 MiB. Both contexts/stores exist before
+      baseline, with store IO idle. Different-list control must show
+      sharing=false and PA allocated delta >=8 MiB, else AD3 is INVALID.
+      Record PA committed deltas and whole-process on/off paired median/spread.
+      F's accepted capture and E3's strict 79/79 scope pass (below).
+- [x] OTR shares its parent's engine and follows later parent exclusions.
+- [x] Settings list toggle publishes a generation, advances load_generation
       and changes blocking. All lists off verifies a no-engine generation, with no loaded resources or error.
-- [ ] Deleting a Profile during held real HTTP with its native engine
+- [x] Deleting a Profile during held real HTTP with its native engine
       loaded retires the context; no crash; folder absent after relaunch.
-- [ ] Debug copy has the 11-key native schema and no path, page URL or site.
-- [ ] Real opposite request states reject the corresponding new gates;
-      forced failure with a delete sheet open proves finally cleanup.
-- [ ] Existing page/features/extensions-ui/settings-preview scopes and the
-      full verification gate pass on this integrated engine.
+- [x] Debug copy has the 11-key native schema and no path, page URL or site.
+- [x] Real opposite request states reject the corresponding new gates;
+      Cancel deletion retains the native context and folder.
+- [x] Forced failure with a delete sheet open proves finally cleanup:
+      `s15-adblock-delete-cleanup-r1`, exact expected failure, zero
+      owned processes/windows after finally.
+- [x] Existing page/features/extensions-ui/settings-preview scopes complete
+      with the explicit existing qualifiers below; all runnable rows pass.
+      Full verification passes 25/25 on the final merged source.
+
+**Step 8 acceptance errata (lead ruling, 2026-11-08).** This AD3 predicate
+supersedes the API-DESIGN-derived single `phys_footprint` delta. Five real
+App on/off pairs had a net median of +1,064,936 B, with a range from
+−10,584,088 to +10,862,616 B (20.45 MiB spread). That process noise cannot
+decide a 2 MiB allocation budget. Keep five whole-process empty→reset pairs
+as record-only rows. Measure five native attachments separately, after
+stores and verified inputs exist and update timers have been cancelled.
+Use fixed 6 s settles before five own-process counter samples per phase;
+this wait does not prove an idle purge. Record purge occurrence from the
+native log. Background memory-infra dumps provide PA allocated/committed
+direct-root totals without counting parent/child totals twice. Documented
+malloc-zone counters provide non-PA in-use/allocated bytes. PA serves Swift
+as well as native code, so non-PA counters alone are not Swift attribution.
+Missing dumps/counters, changed inputs, active store IO, or a weak negative
+control make the capture INVALID, never PASS or SKIP. These errata change
+only the two-Profile AD3 gate; Step 4 single-engine budgets stay as written.
 
 No CEF type crosses the Swift surface. Section 12 owns the existing Site
 Control tile: .on when enabled/not excluded, .off when excluded and
 .unavailable when globally off or the binding/Profile is unavailable.
 The conditional tile proof runs only once its App source is on main;
 E3 must not create a second tile.
+
+**Historical whole-process predicate, real App (2026-11-08).** `s15-adblock-r5` records 61 PASS
+and one FAIL, AD3 footprint owned by F. All nine direct App launches quit
+cleanly, with no foreground interruption or surviving process/window.
+The run uses main `40c2ab94` and the recorded `8e8a461c…` distribution.
+Its wrapper takes 146.963 s, at endpoint loads 20.40/94.13/91.93 ->
+16.06/63.92/79.97. The raw harness exits 1; continuation of the exact
+owned AD3 row does not convert it to PASS.
+
+| Real App acceptance | Result and witness |
+|---|---|
+| Enable, exclude, re-include, global off/on | PASS: native counts, CDP blocked-by-client errors, script completion and server request log agree; same-document next requests also change without navigation. |
+| Profile independence and sharing | PASS: independent exclusions/lists, shared holder for identical inputs; a different-list control creates a separate engine and exceeds 2 MiB. |
+| AD3 incremental footprint | **FAIL, owned by F:** 5.734 MiB net, `engine_shared=true`, against 2 MiB, at load 18.54/71.19/83.19. |
+| OTR | PASS: shared parent engine; later parent exclusions and re-inclusion change real requests. |
+| Settings list generation | PASS: native generations 1 -> 3 -> 4 and opposite allowed/blocked requests. An unchanged scheduled download publishes disk generation 2 while correctly retaining native generation 1. |
+| Resources and verified DAT | PASS: 47 pinned resources, real text stub, verified DAT relaunch and reapplied stub. |
+| Zero lists and one-list restore | PASS: generation 4 has count 0, no engine/resources/error and allowed requests; generation 5 has exactly one list and resumes blocking/stubs. |
+| Delete during load | PASS: native engine loaded, real held HTTP request, Cancel control retains folder/context; deletion retires them and folder stays absent after relaunch. |
+| Debug copy | PASS: exact 11-key schema, no path, URL or site name. |
+| Warning and adapter scopes | PASS: AD1 11 rows and AD2 9 rows, with no native support override. |
+| Forced delete-sheet cleanup | PASS: expected failure in the specific real sheet, then zero owned processes/windows. |
+| Section 12 App tile | N/A: its App adapter is absent from this main. |
+
+The forced-sheet control takes 1,377.209 s including its screen queue,
+at endpoint loads 16.06/63.92/79.97 -> 6.00/10.09/26.08.
+Its raw expected failure and the separate AD3 failure are retained.
+Page passes 81 rows with no FAIL or foreground interruption. Five known
+BLOCKED rows, the hosted-tab activation SKIP and the user smart-zoom
+DEFERRED row remain explicit. The later Features, Chrome Extensions UI,
+Settings preview and final full-gate results are recorded below.
+
+**AD3 accepted capture, 20:53 lead ruling.** F's `d5e44abe` records 79/79
+PASS on its full adblock scope, including 11 record-only whole-process
+rows. Attachment-only PA allocated median is −26,464 bytes; non-PA malloc
+in-use delta is zero. The different-list control allocates 25,461,840 bytes
+with `engine_shared=false`. E3 merges that harness and the list-change
+wait fix in `11dd8b60`, keeping its live-page and disk-publication waits.
+The Debug rebuild passes in 50.600 s, including 20 s in the heavy queue,
+at endpoint loads 12.19/11.36/11.12 -> 12.57/11.61/11.22.
+No native engine or production adapter change is needed. The merged E3
+scopes below use the strict harness without the historical AD3 bypass.
+The earlier failed receipts keep their original predicate and result.
+
+**Merged E3 strict scope.** `s15-adblock-r7` passes 79/79, including 11
+record-only whole-process rows, with no foreground interruption. All nine
+owned App launches close without force and leave zero processes/windows.
+The accepted AD3 n=5 PA allocated median is −4,016 bytes (range −307,488
+through +24,976; spread 332,464; MAD 21,920); PA committed median is zero,
+and non-PA malloc in-use delta is zero. The different-list control has
+`engine_shared=false` and PA allocated +25,117,360 bytes. Verified input
+hashes and all requested background dumps pass. Endpoint loads are
+9.12/9.73/10.34 -> 10.84/12.65/11.92; wrapper time is 1,031.002 s including
+the screen queue. Real held-HTTP deletion, Cancel control and relaunch pass.
+
+The preceding strict attempt passed AD3 but stopped during deletion setup:
+its load helper read a newly created Profile before its asynchronous native
+context existed. The readiness poll now waits for that context within the
+same 40 s. The successful run records `sawMissingContext=true`, then a loaded
+engine for that exact Profile, and passes both deletion controls. No engine
+or App production change is involved; the prior failed receipt is retained.
+
+**Final default-Chrome acceptance and gate.** `s15-adblock-r10` passes
+79/79 with nine clean launches. AD3 n=5 PA allocated median is −46,144 B,
+non-PA malloc in-use delta zero; different-list control +25,129,024 B with
+sharing=false. Resources-only generation4 -> one-list generation5 and
+held-load Cancel/deletion/relaunch pass. Full Chrome Extensions UI has
+71 PASS and one existing BLOCKED picker row. Features has27PASS; Page
+has81PASS with five existing BLOCKED, one SKIP and one DEFERRED qualifier.
+Settings preview passes47functional checks plus native pane renders.
+Main e8d4acd4 is merged with no further Engine/fork change; its Debug
+rebuild and full verification gate pass (25/25, noFAIL/SKIP). Exact final
+commands, load averages and the complete gate table are in E3's
+VALIDATION.md and PR-BODY.md. Step4-as-built below records provenance.
 
 Later Step 5/9 acceptance remains open: two renderer processes with
 independent cosmetic selectors/exclusions, and cross-Profile C-G2 wait
@@ -4646,22 +4750,60 @@ are measurements for optimization, not final gate acceptance.
 ### Step 4 as built (2026-11-08, integrated engine)
 
 Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
-Source now includes main `d26300e6` (Section 15's Chromium 0801–0810),
-the final App adapter `fcd1ef25`, and Step 7 resources. Every main patch
+Source now includes main `50028c98`, including the final Section 15 App
+and imported-secrets integration,
+the final App adapter `fcd1ef25`, and Step 7 resources. Engine inputs are
+unchanged since main `d26300e6` (Section 15's Chromium 0801–0810). Every main patch
 is retained. The engine applies Chromium's 08xx before the CEF series,
 including ad-block 0310/0311/0314; 0601/0602 precede 0701 within CEF.
 There are no Section 15 08xx entries in the CEF series.
 
-The earlier integrated dev build of `cefsimple cefclient` passed
-built-artifact engine-status: 8 PASS, 0 FAIL, 0 WARN, with 28 patches,
-109 overlays and 47 required exports. The runtime receipts below precede
-Section 15's merge and must be rerun on the merged engine. The root is
-read-only during the lead's clone hold. After release: apply/build,
-headless/API/N/COUNT/footprint/G-2/G-6, zero-list proof, then distribution
-and App acceptance. Before distribution and again before the done report,
+The merged dev build of `cefsimple cefclient` passed built-artifact
+engine-status: 8 PASS, 0 FAIL, 0 WARN, with 38 patches, 123 overlays and
+49 required exports. The production API passed 21 rows and native lifetime
+passed 14 rows on this build. The resources-only generation API flow
+passed 26 rows, including no-engine status, the same-context unload
+control and exactly one restored list at generation 3. The zero-file
+fixture and official pinned-list/resources flow also passed 26 rows each.
+The root's clone hold ended at 14:00; M5 screen clearance arrived at
+16:30. Headless corpus/footprint/G-2/G-6 passed. The merged N run passes
+32/32, production COUNT and its allowed control pass, and quiet page
+G-4/G-5/G-6 pass. Both COUNT negative controls and the merged URL
+edge rerun also pass.
+The same-context explicit-unload control for zero-list memory passed
+offscreen. The dev distribution and Debug App build also passed offscreen;
+the App's normalized engine code matches the recorded framework. Its bundle
+contains the 47 pinned redirect resources. Real App acceptance records
+79 PASS and zero FAIL, including 11 record-only whole-process rows. The forced delete-sheet
+cleanup control passes. Remaining regression suites and the full gate
+remain in progress.
+Before distribution and again before the done report,
 fetch main and check `Engine/fork` changes since the last merged main.
 Any new engine change requires merge, rebuild and engine reproof first.
-The distribution receipt must identify its main commit and framework SHA.
+The distribution receipt identifies main `d26300e6` and framework SHA-256
+`8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
+Distribution took 73.991 s at endpoint loads 13.48/15.48/18.08 ->
+13.86/15.23/17.78. The Debug App build took 108.305 s at
+13.59/15.12/17.71 -> 12.66/14.95/17.37. The existing no-window
+CEF command also passes 47 load/matcher/safety checks, including decoded
+limits, trailing-data refusal and bounded fuzz input. These native checks
+do not replace browser N rows or document COUNT witnesses. The current
+browser driver creates windows for every N/COUNT case.
+
+After the final Section 15 App merge, the Debug rebuild also passed:
+37.755 s, endpoint loads 15.56/13.40/13.27 -> 18.65/14.68/13.76.
+App acceptance and regression receipts use this merged build. The queued
+earlier App attempt was canceled before launch; it is not test evidence.
+
+Main `dd240186` was then merged in `eb88d72a`. The fresh `Engine/fork`
+log since `40c2ab94` is empty, so the recorded distribution is unchanged.
+The Debug rebuild passes in 47.107 s at endpoint loads
+10.99/10.55/11.78 -> 7.92/9.82/11.44. Before the queued suites launch,
+updater PR #253 reaches main `25b9c950`. This overlapping main update is
+merged in `e864ca1d`; its Engine/fork log is also empty. The next Debug
+build passes in 49.824 s at loads 6.86/8.69/10.73 -> 10.13/9.40/10.88.
+Features and extensions-ui reruns use that build. Both earlier Features
+waiters were canceled before launch and provide no test result.
 
 **Request path and lifetime.** Open's outermost factory proxy checks
 subresources and redirects on one matcher sequence. Main documents pass
@@ -4716,40 +4858,56 @@ runs. Browser CPU medians are 86.103/88.604 ms text/DAT versus 113.418 ms
 without an engine; these loaded whole-browser samples do not establish a
 precise causal CPU delta. Raw control receipts remain in `.re/s13/e1/`.
 
-**Integrated headless proof.** Five runs per cap/input, each followed by
-another full corpus, produce 40 byte-identical dumps of 20,311 rows.
+**Integrated headless proof.** The final main `d26300e6` build passed five
+runs per cap/input, each followed by another full corpus. Its framework
+SHA-256 is `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`;
+the recorded dev distribution has the same bytes. All 20 native
+processes exited cleanly. The 40 dumps each have 20,311 rows and match
+the pre-integration baseline byte for byte.
 SHA-256: 16 KiB `10c74cb476adccafc4f750bbc2ae6c1a85363b9945a6fe1470507e9dc845fe02`;
 8 KiB `ba80db77c8651ce7ec35b71bfeade9e04624d4f564ada4cf8fde16c229f475b6`.
 Every initial and resumed burst adds zero regex compiles, and every run
 observes exactly one production idle purge. These are medians of per-run
-statistics under the quiet lock; endpoint load1 spans 10.35-72.14. They
+statistics under the quiet lock; endpoint load1 spans 9.87-24.34. They
 support the CPU/footprint rulings and are not Step 9's load1 <=4 wall proof.
 
 | Cap / input | CPU mean / p99 / warm max, µs | First CPU max, µs | Warm wall max, µs | Steady / post-corpus+purge, MiB |
 |---|---:|---:|---:|---:|
-| 16 KiB text | 3.699 / 16.000 / 140.125 | 150.000 | 139.958 | 55.188 / 56.875 |
-| 16 KiB DAT | 3.645 / 15.667 / 135.084 | 161.000 | 134.958 | 51.516 / 53.469 |
-| 8 KiB text | 3.575 / 15.792 / 139.042 | 144.041 | 222.291 | 55.313 / 57.063 |
-| 8 KiB DAT | 3.486 / 15.500 / 134.875 | 162.084 | 134.750 | 51.531 / 53.531 |
+| 16 KiB text | 3.488 / 15.125 / 132.333 | 142.791 | 132.167 | 55.157 / 57.094 |
+| 16 KiB DAT | 3.505 / 15.542 / 135.333 | 147.125 | 135.209 | 52.110 / 54.188 |
+| 8 KiB text | 3.444 / 15.209 / 134.500 | 193.750 | 143.917 | 56.407 / 58.266 |
+| 8 KiB DAT | 3.399 / 14.875 / 135.333 | 154.459 | 136.750 | 52.844 / 54.860 |
+
+The following-burst warm CPU max medians are 134.625/130.791 µs
+for 16 KiB text/DAT and 128.834/134.458 µs for 8 KiB. All four
+groups meet the 500 µs CPU limit. No native check exceeds 1 ms;
+the largest is 360 µs.
 
 | PA component, median 16 KiB, all roots | Text MiB | DAT MiB |
 |---|---:|---:|
-| Rules/index/build residual allocated delta | 36.804 | 36.493 |
+| Rules/index/build residual allocated delta | 36.785 | 36.484 |
 | Immutable regex programs (exact crate counter) | 6.941 | 6.941 |
-| Regex caches/metadata/rounding residual | 6.505 | 6.573 |
-| Other to settled | -0.214 | -0.182 |
-| Settled allocated delta | 50.048 | 49.807 |
-| Settled resident delta | 52.344 | 49.750 |
-| Post-idle allocated delta | 50.983 | 50.753 |
+| Regex caches/metadata/rounding residual | 6.505 | 6.575 |
+| Other to settled | -0.191 | -0.202 |
+| Settled allocated delta | 50.066 | 49.793 |
+| Settled resident delta | 52.266 | 49.750 |
+| Post-idle allocated delta | 50.970 | 50.754 |
 
 PA phase deltas include concurrent browser allocations and rounding; the
 residuals are not exact ownership tags. Physical footprint is a separate
-`task_info` measure. Median text service load is 438 ms, including parse
-152.177, serialize 72.924, decode/replace/free 144.341, regex compile 45.168
-and build reclaim 2.292 ms. DAT load is 176 ms, including decode 119.588,
-compile 44.057 and reclaim 1.251 ms. Separate medians need not sum.
-Receipts: `.re/s13/e3/integrated-headless-summary.json`,
-`integrated-headless-pa-phases.json` and `integrated-verdict-identity.json`.
+`task_info` measure. Median text service load is 427 ms, including parse
+140.510, serialize 81.694, decode/replace/free 147.161, regex compile 42.695
+and build reclaim 2.538 ms. DAT load is 182 ms, including decode 132.503,
+compile 43.574 and reclaim 0.963 ms. Separate medians need not sum.
+Receipts: `.re/s13/e3/s15-headless-r3-accepted-gates.json`,
+`s15-headless-r3-summary.json` and `s15-headless-r3-pa-phases.json`.
+
+The first merged attempt completed its measured bursts, then exited 1
+when Chromium's 10-second macOS teardown watchdog expired. That failed
+receipt remains in `s15-headless-r1.log`. The unchanged retry r2 and
+the final-artifact refresh r3 each had 20 clean exits. The cause of
+the first shutdown failure is unproven;
+no watchdog or assertion was disabled for the retry.
 
 **Valid empty generation.** All lists off publishes a valid zero-file
 manifest in the Swift store. The first fix loaded a zero-rule engine
@@ -4766,7 +4924,21 @@ freed pages after its old holder is destroyed. Status advances
 `load_generation`, with `list_count=0`, `engine_loaded=false`,
 `resources_loaded=0` and empty `last_error`. The valid generation is a
 successful API load. Nonempty generations retain the normal build path.
-New native no-engine/restore and App request proofs remain pending.
+
+The rebuilt native API flow passes 26 rows for zero-file, resources-only
+and official pinned EasyList/EasyPrivacy/resources inputs. Each restores
+exactly one list at generation 3. The official-input run observes the
+native no-build marker and no empty-generation DAT or cache receipt.
+Its resources-only phase exceeds an explicit unload in the same warmed
+context by 49,152 physical bytes and 14,368 PA allocated bytes; resident
+and committed bytes are equal. These are raw process-wide differences,
+including other browser allocations, with no new memory tolerance.
+The initial pre-build baseline has a separate 3,211,576-byte physical
+delta and does not isolate engine retention. Endpoint load1 is
+22.07 -> 21.55. Evidence:
+`.re/s13/e3/s15-empty-resources-warm-control-evidence.json` and
+`s15-zero-list-official-r2.log`. App zero-list/restore request proofs also pass in the strict 79-row scope;
+the distribution and Debug App build are ready.
 Historical receipts: `.re/s13/e3/empty-generation-before.log`,
 `empty-generation-after.log` and `empty-corpus-identity.json`; Step 7
 reproduction: `empty-resources-before.log`.
@@ -4818,11 +4990,35 @@ all 32 rows (`integrated-N-r2.results.json`), including the native/server
 count predicate, limits, workers, sockets, extension ordering, DAT reload
 and in-flight close/driver-failure cleanup.
 
+The post-Section-15 rerun also passes 32/32 (`s15-N-r1.results.json`).
+The production-default focused COUNT rerun (`s15-count-positive-r2`)
+records blocked old id 2 at 5 -> 8, new id 4 at zero at commit, load
+and 4.013 s after the witness, with zero server GETs. Its allowed control
+completes exactly three GETs, keeps the old count at 5 and the new count
+at zero through the same late reading. Outgoing unload CDP events remain
+zero in both variants and are not part of the predicate.
+
+The post-Section-15 wrong-document control also passes (`s15-count-wrong-r2`).
+Its blocked URLs never reach the server, while the old id stays at 5 and
+new id 4 rises to 3 after load and remains 3 at the late reading. The
+predicate fails specifically for the incorrect document attribution. Its
+allowed control completes three GETs, with unchanged old count and new
+count zero. Production remains byte-identical to the recorded distribution.
+
 **Unicode/IDN page edges.** All 16 cases pass against both the saved
 pre-ASCII build and the integrated build (32 rows). CDP observes the
 actual canonical ASCII specs, and allow/block verdicts remain identical
 for IDN hosts, escaped UTF-8 paths, separators, end anchors and user regex
 ASCII classes. Receipt: `.re/s13/e3/ascii-edge-page-results.json`.
+
+The post-Section-15 browser rerun passes 32 fresh rows: the same 16
+Unicode/IDN inputs through current text and verified DAT loads. Every
+actual canonical ASCII spec and verdict matches the retained pre-ASCII
+browser witness. The original `/tmp/open-adblock` fixture and saved
+pre-ASCII app were missing; the first attempt stopped before browser
+launch. E3 restored the exact original inputs and rules in its canonical
+private evidence directory. The baseline rows remain historical. Receipts:
+`.re/s13/e3/s15-edges-r1.log` and `s15-edges-r2-results.json`.
 
 **Page timing after idle.** The integrated page run observed exactly one
 idle purge before measured load 2. All 15 loads had 200 requests and 200
@@ -4833,13 +5029,77 @@ blocking-on median 118.2 ms versus off 144.7 ms. G-5 busy CPU failed at
 Receipt: `.re/s13/e3/integrated-page-loaded-r1-page-scopes.json`. These
 loaded numbers do not establish the quiet gate or a cause for the miss.
 
-**Remaining delivery gates.** The no-engine generation revision,
-recorded distribution, real App acceptance (including bundled resources
-and DAT reapplication) and the full verify gate remain pending in E3.
-The lead's 2026-11-08 12:27 ruling requires one more quiet load1 <=12
-opportunity after the App build. If none occurs, retain both loaded CPU
-receipts (12.756 ms at load1 48–50 and 8.576 ms at 40–42) and route the
-quiet G-5 row to Section 16 under ruling 2a; it does not block this PR. N-18 currently proves hook reachability only: no HTTP/3
+The lead's 17:43 priority instruction enabled a post-Section-15 quiet
+run after the App build. It passes G-4, G-5 CPU/wall and G-6, with
+all sampled load1 values 8.13–9.07 (limit 12). Loads 2–5 have on-load
+wall times 58.9/61.4/68.4/70.7 ms, median **64.900 ms**; off median is
+113.200 ms. Median busy thread CPU is **8.500 ms**, within 9 ms.
+The production idle purge occurs before measured load 2. G-4 includes
+all five loads: 1,000 requests, p50 <=32 µs, p99 <=256 µs, max <=512 µs.
+G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
+262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
+The 64.900 ms value is Step 5's C-G2 input T for this engine.
+
+An earlier App source merge includes main `50028c98` (imported-secrets
+App and harness changes), with no further Engine/fork change. The Debug
+rebuild passes in 38.887 s at endpoint loads 11.76/10.84/10.80 ->
+12.27/11.08/10.89. Its strict App rerun (`s15-adblock-r9`) passes 79/79,
+with zero interruptions and nine clean launches. AD3 PA allocated median
+is +26,704 bytes, non-PA malloc in-use delta zero, and different-list
+control +25,074,288 bytes with sharing=false. Resources-only generation 4
+has no engine/resources/error; one-list generation 5 blocks and redirects
+again. The earlier r8 run lost foreground at its first row and is
+INTERRUPTED, with cleanup PASS; it is not acceptance evidence.
+
+**Default App hosting and regression.** Default-Chrome acceptance
+(`s15-adblock-r10`) passes 79/79, including resources/DAT, zero-list restore,
+independent Profiles/OTR and held-load deletion/relaunch. All nine launches
+clean up with no interruption. AD3 PA allocated median is −46,144 bytes;
+non-PA malloc in-use delta zero; different-list control +25,129,024 bytes
+with sharing=false. F's harness/ruling is merged from `d5e44abe` and
+recorded in the Step 8 erratum. Forced-sheet cleanup also passes.
+
+The page regression has 81 PASS, five existing BLOCKED, one SKIP and one
+DEFERRED row. Features has 27 PASS. Full default-Chrome Extensions UI has
+71 PASS and the existing X13 picker BLOCKED because the App Site Control
+presenter is absent. Settings preview passes 47 functional checks plus
+native pane renders. Raw receipts retain all qualifiers.
+
+The private runner initially omitted `--style`, selecting legacy Alloy.
+Its full and focused P10 runs fail the exact Work popup assertion. Changing
+only to `--style chrome` passes all 16 P10 rows and the runnable full
+Extensions UI scope. The App defaults to Chrome (`App/LaunchOptions.swift`),
+and the prior P10 receipt also used Chrome. No product code, assertion,
+threshold or baseline changed. Both Alloy failures remain retained; this
+work does not claim that Alloy's popup is fixed.
+
+The final source merge is main `e8d4acd4` in `bd006cc3`, after a fresh
+Engine/fork log found no changes since the recorded distribution's base
+`d26300e6`. The Debug rebuild passes in 37.101 s at endpoint loads
+8.88/8.99/9.14 -> 8.17/8.81/9.07. It adds opt-in launch diagnostics and the
+Welcome hover fix, with no ad-block policy, adapter or fixture logic change.
+The Chrome App receipts above bind the main50028c98 build separately.
+Full verification passes **25/25**, with no FAIL or SKIP, on that merged
+source. The wrapper takes 969.011 s including lock waits, at endpoint loads
+8.44/8.71/9.01 -> 6.80/7.03/8.00. Exact commands and the complete summary
+are in `.re/s13/e3/VALIDATION.md` and `s15-full-gate-r1-logs/summary.txt`.
+The final fresh fetch still resolves main to `e8d4acd4`; its Engine/fork
+log since the last merge is empty. The review checklist is complete and
+the final audit finds no owned process or screen-priority flag. The child
+hands the branch and PR body draft to the lead; it opens no PR.
+
+Historical whole-process AD3 FAILs remain unchanged: E3 5.734/6.078 MiB
+and E4 11.11 MiB. Whole-process on/off pairs are now record-only under the
+explicit lead ruling. The earlier private continuation is retired; the
+current scope uses the strict harness with no AD3 bypass. F also observes
+browser PA growth of about 32 MB over 25 s with both engines unloaded;
+the owner is unknown and the allocation-stack follow-up remains open.
+The optional Section 12 App tile adapter is absent from this main, so its
+acceptance is N/A; E3 does not create a second tile.
+The no-engine generation, distribution, Debug build and quiet G-5 gates
+pass. Retain the earlier loaded CPU receipts (12.756 ms at load1 48–50
+and 8.576 ms at 40–42) as historical attempts.
+N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 

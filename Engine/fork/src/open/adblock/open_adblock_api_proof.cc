@@ -125,14 +125,14 @@ class AdBlockApiProof final : public CefRequestContextHandler,
             !status->GetBool("engine_from_dat") && status->GetInt("list_count") == 0 &&
             status->GetInt("resources_loaded") == 0 && status->GetString("last_error").empty(),
             "all lists off publishes no engine or resources without error");
-        Post(&AdBlockApiProof::RestoreLists, base::Seconds(6));
+        Post(&AdBlockApiProof::EmptyUnloadControl, base::Seconds(6));
       } else {
         FailNextLoad();
       }
     } else if (phase_ == 5) {
-      Row(status->GetBool("engine_loaded") && status->GetInt("list_count") > 0 &&
+      Row(status->GetBool("engine_loaded") && status->GetInt("list_count") == 1 &&
           status->GetDouble("load_generation") > 2 && status->GetString("last_error").empty(),
-          "lists restored through production API advance generation");
+          "one list restored through production API advances generation");
       live_generation_ = 3;
       FailNextLoad();
     } else if (phase_ == 3) {
@@ -161,14 +161,31 @@ class AdBlockApiProof final : public CefRequestContextHandler,
       CloseOtr();
     }
   }
-  void RestoreLists() {
+  void EmptyUnloadControl() {
     RecordOpenAdBlockMemoryPhase("api-empty-after-reclaim");
+    // Compare with an explicit no-directory unload in this already-warm
+    // context. The initial no-engine reading precedes the first engine build
+    // and can include unrelated browser/thread-pool warm-up in its delta.
+    Row(CefSetOpenAdBlockListDirectory(context_, ""),
+        "empty generation unload control accepted");
+    auto status = CefGetOpenAdBlockStatus(context_);
+    Row(status && !status->GetBool("engine_loaded") &&
+        !status->GetBool("engine_shared") &&
+        status->GetInt("list_count") == 0 &&
+        status->GetInt("resources_loaded") == 0 &&
+        status->GetString("last_error").empty(),
+        "explicit unload control has no engine or resources");
+    Post(&AdBlockApiProof::RestoreLists, base::Seconds(6));
+  }
+  void RestoreLists() {
+    RecordOpenAdBlockMemoryPhase("api-no-engine-after-empty-unload");
     std::string restored;
     if (!base::ReadFileToString(root_.Append("restored-current.json"), &restored) ||
         !base::WriteFile(root_.Append("current.json"), restored)) {
       Row(false, "publish restored fixture generation"); Finish(); return;
     }
-    Row(CefReloadOpenAdBlockLists(context_), "restore lists reload accepted");
+    Row(CefSetOpenAdBlockListDirectory(context_, root_.value()),
+        "restore lists load accepted");
     Wait(5);
   }
   void FailNextLoad() {

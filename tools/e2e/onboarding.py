@@ -15,6 +15,8 @@ import time
 
 
 def run(factory, results, tmp, h):
+    if os.environ.get('OPEN_E2E_ONBOARDING_STEPS_ONLY') == '1':
+        return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/onboarding_steps.py'))['run'](factory, results, tmp, h)
     source = Path(tmp)/'intro-arc-synthetic'
     shutil.rmtree(source, ignore_errors=True)
     runpy.run_path(str(Path(h.ROOT)/'tools/e2e/firstrun.py'))['fixture'](source)
@@ -80,7 +82,7 @@ def run(factory, results, tmp, h):
         print('intro frames p50=%.3f p95=%.3f max=%.3f drops=%d count=%d load1=%.2f nominal=%.3f' %
               (stats['p50MS'], stats['p95MS'], stats['maxMS'], stats['drops'], stats['count'], load[0], stats['nominalMS']), flush=True)
         if 'Apple M5' in h.subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True) and load[0] <= 12 and stats['nominalMS'] <= 8.34:
-            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), stats=stats, load=load)
+            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), timing=True, stats=stats, load=load)
         else:
             results['strict_120hz'] = dict(status='INFO', reason='requires M5 120 Hz and load1 <= 12', stats=stats, load=load)
         paused = elapsed(23.7)
@@ -90,7 +92,7 @@ def run(factory, results, tmp, h):
         until(lambda: app.call('first-run').get('probeReady', False))
         first_run = app.call('first-run')
         app.call('snapshot', path=str(evidence/'intro-handoff-first-run.png'))
-        gate('get_started_handoff', lambda s: s.get('screen')=='first-run' and not s['active'], state(), phase2)
+        gate('get_started_handoff', lambda s: s.get('screen')=='name' and s['active'], state(), phase2)
         gate('handoff_import_fresh_choices', lambda s: s.get('active') and s.get('step')=='welcome' and s.get('probeReady'), first_run, phase2)
         before_landing = dict(windows=app.call('windows'), snapshot=Path(app.user_data, 'State/browser.json').exists())
         app.call('first-run', action='fresh')
@@ -125,7 +127,7 @@ def run(factory, results, tmp, h):
         until(lambda: app.call('first-run')['active'])
         gate('native_return_handoff', lambda s: s.get('active') and s.get('step')=='welcome', app.call('first-run'), escaped)
         music_after_continue = state()
-        gate('music_continues_after_continue', lambda s: s.get('sound', {}).get('playerCreated') and s['sound']['decision']=='played' and s.get('screen')=='first-run', music_after_continue, skipped_launch)
+        gate('music_continues_after_continue', lambda s: s.get('sound', {}).get('playerCreated') and s['sound']['decision']=='played' and s.get('screen')=='name', music_after_continue, skipped_launch)
         app.call('first-run', action='fresh')
         until(lambda: state().get('sound', {}).get('playerCreated') is False)
         gate('finish_releases_player', lambda s: not s.get('sound', {}).get('playerCreated') and s.get('sound', {}).get('decision')=='played', state(), music_after_continue)
@@ -134,10 +136,21 @@ def run(factory, results, tmp, h):
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
         until(lambda: app.call('first-run')['active'])
         before_close = state()
+        before_close_windows = app.owned_windows()
+        close_pid = app.pid
         app.call('key', key='w', modifiers=['command'])
-        closed_pred = lambda s: not s.get('sound', {}).get('playerCreated') and not s.get('dim', {}).get('exists')
-        until(lambda: closed_pred(state()))
-        gate('closing_setup_releases_music_and_dim', closed_pred, state(), before_close)
+        # Closing setup quits after its fade. Once the process exits its socket
+        # is gone too; prove resource/window cleanup without polling that socket.
+        exited = until(lambda: not app.process_path(close_pid))
+        app.quit()
+        closed_pred = lambda s: s.get('exited') and s.get('cleanup') and not s.get('forced') \
+            and s.get('windows')==0 and not s.get('snapshot')
+        gate('closing_setup_releases_music_and_dim', closed_pred,
+            dict(exited=exited, cleanup=app.quit_report['ok'], forced=app.quit_report.get('forced',False),
+                 windows=app.quit_report['windows_after_quit']['count'],
+                 snapshot=Path(app.user_data,'State/browser.json').exists()),
+            dict(exited=not before_close['active'], cleanup=False, forced=False,
+                 windows=before_close_windows['count'], snapshot=False))
         launch('--reduce-motion')
         reduced_initial = state()
         reduced = elapsed(1.2)
@@ -172,6 +185,13 @@ def run(factory, results, tmp, h):
         replay = state()
         gate('replay_over_browser', lambda s: s.get('active') and s.get('replay'), replay, returning)
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+        assert until(lambda: state()['screen']=='name'), state()
+        for _ in range(7):
+            screen = state()['screen']
+            if screen == 'ready': break
+            app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
+            assert until(lambda: state()['screen']!=screen), state()
+        app.call('onboarding', action='get-started')
         until(lambda: not state()['active'])
         unchanged = dict(same=snapshot.read_bytes()==prior, firstRun=app.call('first-run')['active'])
         app.call('open', url='about:blank'); app.call('save')
@@ -195,8 +215,27 @@ def run(factory, results, tmp, h):
             app.focus_tracker = h._ACTIVE_FOCUS_TRACKER
             h._ACTIVE_FOCUS_TRACKER.apps.append(app)
             replay_launch = state()
+            replay_launch_windows = app.call('windows')
+            replay_before_finish = dict(same=Path(root,'State/browser.json').read_bytes()==prior,
+                browserVisible=any(w['class']=='BrowserWindow' and w['visible'] and w['alpha']==1 and w['key'] for w in replay_launch_windows),
+                firstRun=app.call('first-run')['active'])
             gate('replay_temp_root_allowed', lambda s: s.get('active') and s.get('screen')=='intro', replay_launch, returning)
             gate('replay_default_root_refused', lambda s: s.get('exit')==64 and s.get('refused'), denied_state, replay_launch)
+            app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+            assert until(lambda: state()['screen']=='name'), state()
+            for _ in range(7):
+                screen = state()['screen']
+                if screen == 'ready': break
+                app.call('onboarding', action='skip' if screen in ('name','import','favorites','theme','blocker') else 'next')
+                assert until(lambda: state()['screen']!=screen), state()
+            app.call('onboarding', action='get-started')
+            assert until(lambda: not state()['active']), state()
+            replay_windows = app.call('windows')
+            replay_finished = dict(same=Path(root,'State/browser.json').read_bytes()==prior,
+                browserVisible=any(w['class']=='BrowserWindow' and w['visible'] and w['alpha']==1 and w['key'] for w in replay_windows),
+                firstRun=app.call('first-run')['active'])
+            gate('replay_launch_finishes_read_only', lambda s: s['same'] and s['browserVisible'] and not s['firstRun'],
+                 replay_finished, replay_before_finish)
             app.quit()
         launch('--intro-sound=off')
         before_intro_close = state()
@@ -211,3 +250,4 @@ def run(factory, results, tmp, h):
         if app and not app.closed: app.quit()
         h._restore_defaults(None, saved)
         (evidence/'negative-proofs.json').write_text(json.dumps(negatives, indent=2))
+    runpy.run_path(str(Path(h.ROOT)/'tools/e2e/onboarding_steps.py'))['run'](factory, results, tmp, h)

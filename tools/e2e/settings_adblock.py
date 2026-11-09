@@ -288,6 +288,7 @@ def real_engine(factory, results, wait):
     import threading
     import urllib.parse
     from engine_e2e import _restore_defaults
+    from adblock_memory import measure, summary, purges
 
     requests = []
     repo = Path(__file__).resolve().parents[2]
@@ -347,13 +348,29 @@ def real_engine(factory, results, wait):
             'open.general.searchSuggestNoticeDismissed': True,
             'open.links.littleOpenNUXSeen': True}
     args = ['--host-resolver-rules=MAP open-adblock.test 127.0.0.1:%d, MAP demand.supply 127.0.0.1:%d' %
-            (server.server_port, server.server_port), '--no-proxy-server']
+            (server.server_port, server.server_port), '--no-proxy-server', '--enable-logging=stderr', '--vmodule=open_adblock*=1',
+            '--disable-features=MallocDumpProviderPopulateDiscardableBytes']
     def query(): return app.call('settings-adblock-engine')
     def profile_state(profile): return next(p for p in query()['profiles'] if p['profile'] == profile)
     def status(profile, private=False):
         return next(c['adBlockStatus'] for c in profile_state(profile)['contexts'] if c['offTheRecord'] == private)
     def loaded(profile, private=False):
-        return wait(lambda: (lambda s: s if s['engine_loaded'] else None)(status(profile, private)), timeout=40)
+        missing_context = False
+        def ready():
+            nonlocal missing_context
+            # Context creation is asynchronous, including transient Profile
+            # pages. An absent context is not a loaded-engine verdict.
+            context = next((c for c in profile_state(profile)['contexts']
+                            if c['offTheRecord'] == private), None)
+            if context is None:
+                missing_context = True
+                return None
+            state = context['adBlockStatus']
+            return state if state['engine_loaded'] else None
+        value = wait(ready, timeout=40)
+        print('AD3_context_readiness ' + json.dumps(dict(profile=profile, private=private,
+            sawMissingContext=missing_context, loaded=bool(value), state=profile_state(profile))), flush=True)
+        return value
     def count(tab):
         page = app.call('tab-state', tab=tab)['page']['identifier']
         return next(p['blockedCount'] for profile in query()['profiles']
@@ -362,8 +379,8 @@ def real_engine(factory, results, wait):
         return next(p['footprint'] for p in app.call('metrics', interval=0)['processes']
                     if p['pid'] == app.pid)
     def row(name, ok, **evidence):
+        print('AD3_' + name, evidence.get('status', 'PASS' if ok else 'FAIL'), flush=True)
         results['AD3_' + name] = dict(ok=bool(ok), **evidence)
-        print('AD3_' + name, 'PASS' if ok else 'FAIL', flush=True)
     observations = {}
     cosmetic_observations = {}
     cosmetic_state = '''(() => ({
@@ -390,6 +407,11 @@ def real_engine(factory, results, wait):
                 and ('net::ERR_BLOCKED_BY_CLIENT' in evidence['networkErrors']) == blocked
                 and evidence['adReachedServer'] == (not blocked))
     def visit(tab, name, blocked):
+        initial_page = app.call('tab-state', tab=tab)['page']
+        # open() returns a tab before CEF's asynchronous OnAfterCreated.
+        # Observe its real live/load state before installing Network observers.
+        ready_page = app.call('wait', tab=tab)
+        assert ready_page['live'], ready_page
         app.call('devtools', tab=tab, method='Network.enable')
         app.call('events')
         requests.clear()
@@ -403,7 +425,8 @@ def real_engine(factory, results, wait):
                   if e['type'] == 'devtools' and e['method'] == 'Network.loadingFailed']
         native_count = count(tab)
         evidence = dict(blockedCount=native_count, scriptState=state, networkErrors=errors,
-                        adReachedServer=any(p.startswith('/ad.js') for p in requests))
+                        adReachedServer=any(p.startswith('/ad.js') for p in requests),
+                        initiallyLive=initial_page['live'], liveBeforeObserver=ready_page['live'])
         observations[name] = evidence
         ok = request_verdict(evidence, blocked)
         row(name, ok, **evidence)
@@ -440,6 +463,23 @@ def real_engine(factory, results, wait):
                     resourceVerified=resource['file'] == 'resources.json'
                         and resource['bytes'] == len(body) and resource['sha256'] == resource_digest,
                     datPresent=(generation / 'engine.dat').is_file())
+    def initial_update(profile):
+        # The real scheduled check publishes a generation even when the pinned
+        # fixture bytes are unchanged. The store deliberately skips the native
+        # reload in that case. Wait for publication and drained work, not for a
+        # native generation change that only changed inputs require.
+        def finished():
+            manifest = resource_manifest(profile)
+            updating = app.call('profiles-shell', adblockProfile=profile['id'])['adblockProfileUpdating']
+            state_path = Path(app.user_data) / 'Profiles' / profile['directory'] / 'AdBlock' / 'catalog-state.json'
+            error = json.loads(state_path.read_text()).get('lastError')
+            return (dict(publishedGeneration=manifest['generation'], nativeStatus=status(profile['id']),
+                         updateInFlight=updating, error=error)
+                    if manifest['generation'] > 1 and not updating and not error else None)
+        evidence = wait(finished, timeout=40)
+        assert evidence, dict(manifest=resource_manifest(profile), nativeStatus=status(profile['id']))
+        print('AD3_initial_update ' + json.dumps(evidence, sort_keys=True), flush=True)
+        return evidence
     def resource_probe(tab, name, redirected):
         before = count(tab)
         app.call('events')
@@ -511,29 +551,33 @@ def real_engine(factory, results, wait):
         next_request(tab, 'global_off_next_request_same_document', False)
         app.call('settings-adblock', enabled=True)
 
-        assert wait(lambda: status(original['id'])['load_generation'] > 1, timeout=40), status(original['id'])
+        original_update = initial_update(original)
         before = status(original['id'])['load_generation']
         app.call('settings-adblock', list='EasyList', listEnabled=False)
-        assert wait(lambda: status(original['id'])['load_generation'] > before, timeout=40)
+        assert wait(lambda: status(original['id'])['load_generation'] > before
+                    and status(original['id'])['list_count'] == 1, timeout=40)
         disabled = status(original['id'])
         visit(tab, 'list_disabled_allows', False)
         app.call('settings-adblock', list='EasyList', listEnabled=True)
-        assert wait(lambda: status(original['id'])['load_generation'] > disabled['load_generation'], timeout=40)
+        assert wait(lambda: status(original['id'])['load_generation'] > disabled['load_generation']
+                    and status(original['id'])['list_count'] == 2, timeout=40)
         restored = status(original['id'])
         visit(tab, 'list_enabled_blocks', True)
         row('settings_generation_reload', disabled['load_generation'] > before
             and restored['load_generation'] > disabled['load_generation'],
-            before=before, disabled=disabled['load_generation'], restored=restored['load_generation'])
+            before=before, disabled=disabled['load_generation'], restored=restored['load_generation'],
+            initialUpdate=original_update)
 
         app.call('profiles-shell', action='create', name='Engine Independent')
         other = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Engine Independent')
-        # A Profile without a Space opens a Little Open page, which is not
-        # part of the main window's tabs. Bind this tab fixture to a Space.
+        # A Profile without a Space opens Settings links in a transient page,
+        # which is intentionally absent from the sidebar tab enumeration.
+        # Give this regular two-Profile fixture its own real Space and tab.
         app.call('space-create', title='Engine Independent', profile=other['name'])
         other_tab = app.call('open', url='about:blank')['id']
         assert app.call('tab-state', tab=other_tab)['profile'] == other['id']
         assert loaded(other['id'])
-        assert wait(lambda: status(other['id'])['load_generation'] > 1, timeout=40)
+        initial_update(other)
         shared = status(other['id'])
         row('second_profile_shares_engine', shared['engine_shared'], status=shared)
         app.call('profiles-shell', profile=other['id'], action='adblock-open')
@@ -542,22 +586,16 @@ def real_engine(factory, results, wait):
         row('profile_exclusions_independent', not profile_state(original['id'])['storeExcludedDomains']
             and profile_state(other['id'])['storeExcludedDomains'] == ['open-adblock.test'])
         app.call('settings-adblock', host='open-adblock.test', excluded=False)
-        time.sleep(6)
-        independent_before = [browser_footprint() for _ in range(5)]
+        before = status(other['id'])['load_generation']
         app.call('settings-adblock', list='EasyList', listEnabled=False)
-        assert wait(lambda: status(other['id'])['list_count'] == 1, timeout=40)
-        time.sleep(6)
-        independent_after = [browser_footprint() for _ in range(5)]
+        assert wait(lambda: status(other['id'])['load_generation'] > before
+                    and status(other['id'])['list_count'] == 1, timeout=40)
         visit(other_tab, 'other_profile_list_independent', False)
         independent = status(other['id'])
         row('profile_lists_independent', status(original['id'])['list_count'] == 2
             and independent['list_count'] == 1)
-        independent_delta = statistics.median(independent_after) - statistics.median(independent_before)
-        row('sharing_rejects_different_lists_control', not independent['engine_shared']
-            and independent_delta > 2 * 1024 * 1024,
-            listCount=independent['list_count'], engineShared=independent['engine_shared'],
-            before=independent_before, after=independent_after, deltaBytes=independent_delta,
-            load=os.getloadavg())
+        measure(app, other_tab, [original, other], status, wait, row, negative=True)
+        app.call('profiles-shell', profile=other['id'], action='adblock-open')
         previous_generation = status(other['id'])['load_generation']
         app.call('settings-adblock', list='EasyPrivacy', listEnabled=False)
         assert wait(lambda: status(other['id'])['load_generation'] > previous_generation
@@ -567,19 +605,39 @@ def real_engine(factory, results, wait):
             and not empty['engine_from_dat'] and empty['resources_loaded'] == 0
             and empty['last_error'] == '', status=empty)
         visit(other_tab, 'all_lists_disabled_allows', False)
-        # Both contexts already exist. Price only the empty → shared engine
-        # transition, after idle reclaim, rather than Profile/window creation.
-        time.sleep(6)
-        memory_before = [browser_footprint() for _ in range(5)]
-        app.call('settings-adblock', resetLists=True)
-        assert wait(lambda: status(other['id'])['list_count'] == 2, timeout=40)
-        time.sleep(6)
-        memory_after = [browser_footprint() for _ in range(5)]
-        delta = statistics.median(memory_after) - statistics.median(memory_before)
-        row('shared_engine_footprint', status(other['id'])['engine_shared'] and delta <= 2 * 1024 * 1024,
-            before=memory_before, after=memory_after, deltaBytes=delta, load=os.getloadavg(),
-            status=status(other['id']), listInputsMatch=
-                resource_manifest(original)['listSHA256s'] == resource_manifest(other)['listSHA256s'])
+        # Keep the old empty→reset whole-process pair as a record only. Both
+        # contexts exist, five on/off pairs use the same fixed 6 s settle.
+        process_pairs = []
+        for index in range(1, 6):
+            pair = {}
+            for enabled in (True, False):
+                purge_start = len(purges(app))
+                app.call('settings-adblock', enabled=enabled)
+                for list_id in ('EasyList', 'EasyPrivacy'):
+                    app.call('settings-adblock', list=list_id, listEnabled=False)
+                assert wait(lambda: status(other['id'])['list_count'] == 0, timeout=40)
+                time.sleep(6)
+                before_memory = [browser_footprint() for _ in range(5)]
+                app.call('settings-adblock', resetLists=True)
+                assert wait(lambda: status(other['id'])['list_count'] == 2
+                            and status(other['id'])['engine_shared'], timeout=40)
+                time.sleep(6)
+                after_memory = [browser_footprint() for _ in range(5)]
+                label = 'on' if enabled else 'off'
+                pair[label] = dict(before=before_memory, after=after_memory,
+                    deltaBytes=statistics.median(after_memory) - statistics.median(before_memory),
+                    load=os.getloadavg(), idleReclaimEvents=purges(app)[purge_start:])
+                row('whole_process_pair_%d_%s_record' % (index, label), True,
+                    recordOnly=True, **pair[label])
+            pair['netBytes'] = pair['on']['deltaBytes'] - pair['off']['deltaBytes']
+            process_pairs.append(pair)
+        row('whole_process_pairs_record', True, recordOnly=True, pairs=process_pairs,
+            net=summary([p['netBytes'] for p in process_pairs]),
+            on=summary([p['on']['deltaBytes'] for p in process_pairs]),
+            off=summary([p['off']['deltaBytes'] for p in process_pairs]))
+        app.call('settings-adblock', enabled=True)
+        assert loaded(original['id']) and loaded(other['id'])
+        measure(app, other_tab, [original, other], status, wait, row)
         app.call('ext-shortcuts', action='close')
         app.call('select', tab=other_tab)
         app.call('menu-perform', id='new-incognito-window')
@@ -670,7 +728,12 @@ def real_engine(factory, results, wait):
             and empty['resources_loaded'] == 0 and empty['last_error'] == '', status=empty)
         app.call('settings-adblock', list='EasyList', listEnabled=True)
         assert wait(lambda: status(resource_profile['id'])['load_generation'] > empty['load_generation']
-                    and status(resource_profile['id'])['engine_loaded'], timeout=40)
+                    and status(resource_profile['id'])['engine_loaded']
+                    and status(resource_profile['id'])['list_count'] == 1, timeout=40)
+        one_list = status(resource_profile['id'])
+        row('one_list_restore_advances_generation', one_list['list_count'] == 1
+            and one_list['load_generation'] > empty['load_generation']
+            and one_list['last_error'] == '', beforeGeneration=empty['load_generation'], status=one_list)
         visit(resource_tab, 'one_list_restored_blocks', True)
         resource_probe(resource_tab, 'one_list_restored_stub', True)
 

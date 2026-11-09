@@ -48,7 +48,8 @@ final class WelcomePageView: NSScrollView {
   private(set) var completionCount = 0
   var reduceMotion: Bool {
     #if OPEN_AUTOMATION
-    if ProcessInfo.processInfo.environment["OPEN_E2E_REDUCE_MOTION"] == "1" { return true }
+    if (NSApp.delegate as? AppDelegate)?.options.reduceMotion == true
+      || ProcessInfo.processInfo.environment["OPEN_E2E_REDUCE_MOTION"] == "1" { return true }
     #endif
     return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
   }
@@ -214,6 +215,12 @@ final class WelcomeCardView: NSControl {
   let detail: NSTextField
   var replay: (() -> Void)?
   private var tracking: NSTrackingArea?
+  /// Automation: the hover area this card installed, matched by identity.
+  /// AppKit may add its own tooltip area to the same view.
+  var ownTrackingAreaCount: Int {
+    guard let tracking else { return 0 }
+    return trackingAreas.filter { area in area === tracking }.count
+  }
   private(set) var isHovered = false
   init(index: Int, title: String, detail: String) {
     self.index = index; illustration = WelcomeIllustrationView(kind: index)
@@ -225,6 +232,13 @@ final class WelcomeCardView: NSControl {
     setAccessibilityChildren([])
     setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Replay", target: self, selector: #selector(accessibilityPerformPress))])
     toolTip = "Replay \(title)"
+    // One hover area for the card's life. inVisibleRect follows bounds, so it
+    // never needs replacing (a replaced area synthesizes a new entered event
+    // beneath a stationary pointer and restarts the demo). Installing it here,
+    // not in updateTrackingAreas, guarantees it exists even when AppKit never
+    // calls updateTrackingAreas for this view.
+    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+    addTrackingArea(area); tracking = area
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   override var isFlipped: Bool { true }
@@ -235,11 +249,8 @@ final class WelcomeCardView: NSControl {
   override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill() }
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
-    // inVisibleRect follows bounds. Replacing this area during layout synthesizes
-    // a new entered event beneath a stationary pointer and restarts the demo.
-    guard tracking == nil else { return }
-    let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
-    addTrackingArea(area); tracking = area
+    // Restore the single hover area only if something removed it.
+    if let tracking, !trackingAreas.contains(where: { $0 === tracking }) { addTrackingArea(tracking) }
   }
   func resetHover() { isHovered = false }
   override func viewDidHide() { super.viewDidHide(); resetHover() }
