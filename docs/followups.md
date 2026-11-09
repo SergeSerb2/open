@@ -362,9 +362,10 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   engine lane's Step 4R; filters can affect images/video/canvas.
 - Code mode is integrated from #203, including live CSS and document-bound JS
   reload state. The local Gallery shares the Library's Boost owner and actions;
-  Debug/Release and five targeted off-screen verifier rows passed on 2026-11-09.
-  BG1–BG3, private/global-off negatives, screen-based regressions and the full
-  gate remain pending the Section 12 screen hold. See
+  BG1–BG3, Profile/layout and private/global-off flows pass in the real App on
+  2026-11-09; targeted Settings and Site Control render checks pass. Deliberate
+  source regressions, remaining App suites, the final Release rebuild and the
+  full merge-order gate remain pending. See
   [Gallery acceptance](boost-gallery.md).
   P7 still blocks selector picking.
 - Library command readiness (BG review F5, Section 12 lead, 2026-11-09):

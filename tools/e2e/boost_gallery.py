@@ -199,7 +199,17 @@ def run(factory, results, tmp, env):
                 env['shot'](app, 'boost-gallery-rest.png', window=state()['library'])
                 app.call('mouse', action='hover', window=state()['library'], x=300, y=150)
                 env['shot'](app, 'boost-gallery-hover.png', window=state()['library'])
-                return {'liveToggleOffOn': True, 'otherSiteUnchanged': True, 'searchAndProfiles': True}
+                gallery_number = state()['library']
+                def library_frame():
+                    return next(w['frame'] for w in app.call('windows') if w['number'] == gallery_number)
+                original_frame = library_frame()
+                app.call('menu-perform', id='zoom-window')
+                assert wait(lambda: library_frame() != original_frame, timeout=5)
+                assert all('boosts.' + id + '.card' in ids() for id in [first, second])
+                env['shot'](app, 'boost-gallery-resized.png', window=state()['library'])
+                app.call('menu-perform', id='zoom-window')
+                assert wait(lambda: library_frame() == original_frame, timeout=5)
+                return {'liveToggleOffOn': True, 'otherSiteUnchanged': True, 'searchAndProfiles': True, 'nativeZoomResize': True}
             row('BG2_cards_toggle', bg2)
             def f4_toggle():
                 gallery(); ui('press', id='boosts.' + first + '.enabled', profileBeforePress=profile_b)
