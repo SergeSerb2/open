@@ -211,7 +211,7 @@ def run(factory, results, tmp, env):
             row('F4_toggle_profile', f4_toggle)
             def edit_card(queued=False):
                 gallery(); ui('press', id='boosts.' + first + '.edit', **({'profileBeforePress': profile_b} if queued else {}))
-                assert wait(lambda: editor().get('open') and editor().get('boost', {}).get('id') == first, timeout=15), editor()
+                assert wait(lambda: editor().get('open') and editor().get('boost', {}).get('id') == first, timeout=15), {'editor': editor(), 'tabs': app.call('tabs'), 'library': state()}
                 assert editor()['profile'] == profile_a
                 if queued: assert state()['boostsProfile'] == profile_b
                 target = editor()['tab']; app.call('wait', tab=target)
