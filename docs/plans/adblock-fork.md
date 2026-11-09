@@ -4538,7 +4538,7 @@ are measurements for optimization, not final gate acceptance.
 ### Step 4 as built (2026-11-08, integrated engine)
 
 Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
-Source now includes main `40c2ab94`, including the final Section 15 App,
+Source now includes main `dd240186`, including the final Section 15 App,
 the final App adapter `fcd1ef25`, and Step 7 resources. Engine inputs are
 unchanged since main `d26300e6` (Section 15's Chromium 0801–0810). Every main patch
 is retained. The engine applies Chromium's 08xx before the CEF series,
@@ -4560,8 +4560,10 @@ edge rerun also pass.
 The same-context explicit-unload control for zero-list memory passed
 offscreen. The dev distribution and Debug App build also passed offscreen;
 the App's normalized engine code matches the recorded framework. Its bundle
-contains the 47 pinned redirect resources. Real App acceptance, suites
-and the full gate remain in progress.
+contains the 47 pinned redirect resources. Real App acceptance records
+61 PASS and one AD3 footprint FAIL owned by F. The forced delete-sheet
+cleanup control passes. Remaining regression suites and the full gate
+remain in progress.
 Before distribution and again before the done report,
 fetch main and check `Engine/fork` changes since the last merged main.
 Any new engine change requires merge, rebuild and engine reproof first.
@@ -4579,6 +4581,13 @@ After the final Section 15 App merge, the Debug rebuild also passed:
 37.755 s, endpoint loads 15.56/13.40/13.27 -> 18.65/14.68/13.76.
 App acceptance and regression receipts use this merged build. The queued
 earlier App attempt was canceled before launch; it is not test evidence.
+
+Main `dd240186` was then merged in `eb88d72a`. The fresh `Engine/fork`
+log since `40c2ab94` is empty, so the recorded distribution is unchanged.
+The Debug rebuild passes in 47.107 s at endpoint loads
+10.99/10.55/11.78 -> 7.92/9.82/11.44. Features and extensions-ui reruns
+use this build. The earlier Features waiter was canceled before launch;
+it does not provide a test result.
 
 **Request path and lifetime.** Open's outermost factory proxy checks
 subresources and redirects on one matcher sequence. Main documents pass
@@ -4815,12 +4824,14 @@ G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
 262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
 The 64.900 ms value is Step 5's C-G2 input T for this engine.
 
-**Remaining delivery gates.** Real App acceptance (including bundled
-resources and DAT reapplication), suites and the full verify gate remain
-pending in E3. The lead assigns the AD3 two-Profile footprint row to
+**Remaining delivery gates.** Real App acceptance, including bundled
+resources, DAT reapplication, zero-list restore and loaded-Profile deletion,
+records 61 PASS and one AD3 footprint FAIL. Forced-sheet cleanup passes.
+Remaining regression suites and the full verify gate remain pending in E3.
+The lead assigns the AD3 two-Profile footprint row to
 child F (`s13/ad3-footprint`): E4 measured 11.11 MiB net on this App
-with `engine_shared=true`, against the unchanged 2 MiB limit. E3 will
-retain its own measured row as FAIL, owned by F, and continue other flows.
+with `engine_shared=true`, against the unchanged 2 MiB limit. E3 retains
+its own measured row as FAIL, owned by F, and continues other flows.
 E3's first completed measurement is also FAIL: 6,373,376 bytes
 (6.078 MiB) net, with `engine_shared=true`, at endpoint load
 48.29/121.46/100.42 (`s15-adblock-real-r6-results.json`). The preceding
