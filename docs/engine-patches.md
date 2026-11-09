@@ -550,7 +550,7 @@ Working same-binary idle measurements meet lead ruling 4a: 16 KiB text/DAT
 purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
 135.291/131.750 µs and zero added regex compiles. See
 `.re/s13/e1/idle-resume-proof.json` and `idle-resume-verdict-identity.json`.
-The later main `d26300e6` integration passes 20 native processes and 40 baseline-identical initial/resumed corpus dumps. Its 16 KiB text/DAT physical deltas are 55.157/52.110 MiB steady and 57.094/54.188 MiB after the corpus plus idle purge. G-2 CPU, G-6 and ruling 4a pass. Merged N 32/32, positive/allowed COUNT and quiet G-4/G-5/G-6 pass. Both COUNT negative controls pass; App gates remain pending. The dev distribution is recorded; the Debug App builds with matching normalized engine code. Only lead rulings 2a and 4a replace the original budgets.
+The later main `d26300e6` integration passes 20 native processes and 40 baseline-identical initial/resumed corpus dumps. Its 16 KiB text/DAT physical deltas are 55.157/52.110 MiB steady and 57.094/54.188 MiB after the corpus plus idle purge. G-2 CPU, G-6 and ruling 4a pass. Merged N 32/32, positive/allowed COUNT and quiet G-4/G-5/G-6 pass. Both COUNT negative controls pass; strict App acceptance passes 79/79, including 11 record-only rows. Regression/full-gate work remains pending. The dev distribution is recorded; the Debug App builds with matching normalized engine code. Only lead rulings 2a and 4a replace the original budgets.
 
 ### Control API (Section 13, 2026-11-07)
 
@@ -573,7 +573,7 @@ Pre-init values apply through a weak ready callback; closed contexts return
 defaults. The status snapshot has 11 scalar keys and fixed error summaries,
 with no paths or page URLs. The integrated real-CEF API and lifetime flows pass 21 and 14 rows.
 The complete series builds with 8 PASS/0 FAIL/0 WARN in built-artifact
-status. The dev distribution has SHA-256 `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`, based on main `d26300e6`. The Debug App builds and its normalized framework code matches. Merged N 32/32, production COUNT/allowed control and quiet G-4/G-5/G-6 pass. Quiet on/off wall medians are 64.900/113.200 ms, busyCPU 8.500 ms, at load1 8.13–9.07. Both COUNT negative controls pass. Real App acceptance records 61 PASS/1 FAIL: AD3 footprint is 5.734 MiB net with engine_shared=true against 2 MiB, owned by F. All nine App launches clean up. Regression/full-gate work remains in E3.
+status. The dev distribution has SHA-256 `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`, based on main `d26300e6`. The Debug App builds and its normalized framework code matches. Merged N 32/32, production COUNT/allowed control and quiet G-4/G-5/G-6 pass. Quiet on/off wall medians are 64.900/113.200 ms, busyCPU 8.500 ms, at load1 8.13–9.07. Both COUNT negative controls pass. Strict real App acceptance passes 79/79, including 11 whole-process record rows. AD3 passes the accepted attachment-only allocation predicate: PA median −4,016 bytes, non-PA malloc in-use zero, different-list control +25,117,360 bytes with sharing=false. Earlier whole-process FAIL receipts remain historical under the Step 8 erratum. All nine App launches clean up. Regression/full-gate work remains in E3.
 The new symbols are listed in `verification/expected-symbols.txt`.
 
 ### Security review (Step 1, 2026-10-26)

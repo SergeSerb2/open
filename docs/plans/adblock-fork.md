@@ -3298,13 +3298,13 @@ App and its production API:
       blocks the next request from a document created while unproxied.
 - [x] Two Profiles keep exclusions/lists independent; identical lists
       produce engine_shared=true in the second context.
-- [ ] AD3 requires matching verified input hashes and engine_shared=true;
+- [x] AD3 requires matching verified input hashes and engine_shared=true;
       median of n=5 attachment-only PA allocated deltas <=2 MiB, and median
       non-PA malloc in-use delta <=2 MiB. Both contexts/stores exist before
       baseline, with store IO idle. Different-list control must show
       sharing=false and PA allocated delta >=8 MiB, else AD3 is INVALID.
       Record PA committed deltas and whole-process on/off paired median/spread.
-      F's accepted 79/79 receipt passes; E3 reruns the merged harness below.
+      F's accepted capture and E3's strict 79/79 scope pass (below).
 - [x] OTR shares its parent's engine and follows later parent exclusions.
 - [x] Settings list toggle publishes a generation, advances load_generation
       and changes blocking. All lists off verifies a no-engine generation, with no loaded resources or error.
@@ -3384,6 +3384,24 @@ at endpoint loads 12.19/11.36/11.12 -> 12.57/11.61/11.22.
 No native engine or production adapter change is needed. E3's next full
 adblock scope uses the strict harness without its historical AD3 bypass.
 The earlier failed receipts keep their original predicate and result.
+
+**Merged E3 strict scope.** `s15-adblock-r7` passes 79/79, including 11
+record-only whole-process rows, with no foreground interruption. All nine
+owned App launches close without force and leave zero processes/windows.
+The accepted AD3 n=5 PA allocated median is −4,016 bytes (range −307,488
+through +24,976; spread 332,464; MAD 21,920); PA committed median is zero,
+and non-PA malloc in-use delta is zero. The different-list control has
+`engine_shared=false` and PA allocated +25,117,360 bytes. Verified input
+hashes and all requested background dumps pass. Endpoint loads are
+9.12/9.73/10.34 -> 10.84/12.65/11.92; wrapper time is 1,031.002 s including
+the screen queue. Real held-HTTP deletion, Cancel control and relaunch pass.
+
+The preceding strict attempt passed AD3 but stopped during deletion setup:
+its load helper read a newly created Profile before its asynchronous native
+context existed. The readiness poll now waits for that context within the
+same 40 s. The successful run records `sawMissingContext=true`, then a loaded
+engine for that exact Profile, and passes both deletion controls. No engine
+or App production change is involved; the prior failed receipt is retained.
 
 Later Step 5/9 acceptance remains open: two renderer processes with
 independent cosmetic selectors/exclusions, and cross-Profile C-G2 wait
@@ -4596,7 +4614,7 @@ The same-context explicit-unload control for zero-list memory passed
 offscreen. The dev distribution and Debug App build also passed offscreen;
 the App's normalized engine code matches the recorded framework. Its bundle
 contains the 47 pinned redirect resources. Real App acceptance records
-61 PASS and one AD3 footprint FAIL owned by F. The forced delete-sheet
+79 PASS and zero FAIL, including 11 record-only whole-process rows. The forced delete-sheet
 cleanup control passes. Remaining regression suites and the full gate
 remain in progress.
 Before distribution and again before the done report,
@@ -4759,7 +4777,7 @@ The initial pre-build baseline has a separate 3,211,576-byte physical
 delta and does not isolate engine retention. Endpoint load1 is
 22.07 -> 21.55. Evidence:
 `.re/s13/e3/s15-empty-resources-warm-control-evidence.json` and
-`s15-zero-list-official-r2.log`. App request proofs remain pending;
+`s15-zero-list-official-r2.log`. App zero-list/restore request proofs also pass in the strict 79-row scope;
 the distribution and Debug App build are ready.
 Historical receipts: `.re/s13/e3/empty-generation-before.log`,
 `empty-generation-after.log` and `empty-corpus-identity.json`; Step 7
@@ -4862,27 +4880,26 @@ G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
 262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
 The 64.900 ms value is Step 5's C-G2 input T for this engine.
 
-**Remaining delivery gates.** Real App acceptance, including bundled
-resources, DAT reapplication, zero-list restore and loaded-Profile deletion,
-records 61 PASS and one AD3 footprint FAIL. Forced-sheet cleanup passes.
-Remaining regression suites and the full verify gate remain pending in E3.
-The lead assigns the AD3 two-Profile footprint row to
-child F (`s13/ad3-footprint`): E4 measured 11.11 MiB net on this App
-with `engine_shared=true`, against the unchanged 2 MiB limit. E3 retains
-its own measured row as FAIL, owned by F, and continues other flows.
-E3's first completed measurement is also FAIL: 6,373,376 bytes
-(6.078 MiB) net, with `engine_shared=true`, at endpoint load
-48.29/121.46/100.42 (`s15-adblock-real-r6-results.json`). The preceding
-21 native App rows pass, including independent Profile exclusions/lists
-and all-lists-off requests. Cleanup passes. The strict harness stopped
-at AD3; later rows were not run in that attempt. A private continuation
-retains this exact failed row and its unchanged threshold, while preserving
-the normal App-death, focus and watchdog checks for the remaining flows.
-The optional Section 12 App tile adapter is absent from this main, so
-its tile acceptance is N/A; E3 does not create a second tile.
-The no-engine generation revision, distribution, Debug App build and
-quiet G-5 gate now pass. Retain the earlier loaded CPU receipts
-(12.756 ms at load1 48–50 and 8.576 ms at 40–42) as historical attempts.
+**Remaining delivery gates.** Strict App acceptance passes 79/79,
+including resources/DAT, zero-list restore, independent Profiles/OTR and
+held-load deletion/relaunch. Forced-sheet cleanup and the page regression
+pass. Features, extensions-ui, settings-preview and the full gate remain
+in progress. The accepted AD3 allocation capture passes in E3's merged
+scope: PA median −4,016 bytes; non-PA malloc in-use zero; different-list
+control +25,117,360 bytes with sharing=false. F's harness/ruling is merged
+from `d5e44abe` and documented in the Step 8 erratum.
+
+Historical whole-process AD3 FAILs remain unchanged: E3 5.734/6.078 MiB
+and E4 11.11 MiB. Whole-process on/off pairs are now record-only under the
+explicit lead ruling. The earlier private continuation is retired; the
+current scope uses the strict harness with no AD3 bypass. F also observes
+browser PA growth of about 32 MB over 25 s with both engines unloaded;
+the owner is unknown and the allocation-stack follow-up remains open.
+The optional Section 12 App tile adapter is absent from this main, so its
+acceptance is N/A; E3 does not create a second tile.
+The no-engine generation, distribution, Debug build and quiet G-5 gates
+pass. Retain the earlier loaded CPU receipts (12.756 ms at load1 48–50
+and 8.576 ms at 40–42) as historical attempts.
 N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
 network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
