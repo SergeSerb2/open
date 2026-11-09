@@ -475,14 +475,16 @@ def real_engine(factory, results, wait):
         next_request(tab, 'global_off_next_request_same_document', False)
         app.call('settings-adblock', enabled=True)
 
-        assert wait(lambda: status(original['id'])['load_generation'] > 1, timeout=40)
+        # An unchanged scheduled publication need not reload the native engine.
         before = status(original['id'])['load_generation']
         app.call('settings-adblock', list='EasyList', listEnabled=False)
-        assert wait(lambda: status(original['id'])['load_generation'] > before, timeout=40)
+        assert wait(lambda: status(original['id'])['load_generation'] > before
+                    and status(original['id'])['list_count'] == 1, timeout=40)
         disabled = status(original['id'])
         visit(tab, 'list_disabled_allows', False)
         app.call('settings-adblock', list='EasyList', listEnabled=True)
-        assert wait(lambda: status(original['id'])['load_generation'] > disabled['load_generation'], timeout=40)
+        assert wait(lambda: status(original['id'])['load_generation'] > disabled['load_generation']
+                    and status(original['id'])['list_count'] == 2, timeout=40)
         restored = status(original['id'])
         visit(tab, 'list_enabled_blocks', True)
         row('settings_generation_reload', disabled['load_generation'] > before
@@ -495,7 +497,6 @@ def real_engine(factory, results, wait):
         other_tab = app.call('open', url='about:blank')['id']
         assert app.call('tab-state', tab=other_tab)['profile'] == other['id']
         assert loaded(other['id'])
-        assert wait(lambda: status(other['id'])['load_generation'] > 1, timeout=40)
         shared = status(other['id'])
         row('second_profile_shares_engine', shared['engine_shared'], status=shared)
         app.call('profiles-shell', profile=other['id'], action='adblock-open')
@@ -504,8 +505,10 @@ def real_engine(factory, results, wait):
         row('profile_exclusions_independent', not profile_state(original['id'])['storeExcludedDomains']
             and profile_state(other['id'])['storeExcludedDomains'] == ['open-adblock.test'])
         app.call('settings-adblock', host='open-adblock.test', excluded=False)
+        before = status(other['id'])['load_generation']
         app.call('settings-adblock', list='EasyList', listEnabled=False)
-        assert wait(lambda: status(other['id'])['list_count'] == 1, timeout=40)
+        assert wait(lambda: status(other['id'])['load_generation'] > before
+                    and status(other['id'])['list_count'] == 1, timeout=40)
         visit(other_tab, 'other_profile_list_independent', False)
         independent = status(other['id'])
         row('profile_lists_independent', status(original['id'])['list_count'] == 2
