@@ -54,6 +54,7 @@ _ACTIVE_FOCUS_TRACKER = None
 _OWNED_APPS = []
 _SUITE_CRASH_BASELINE = None
 _ROW_TIMEOUT = None
+_CONTINUE_ON_TIMING_FAILURE = False
 _ROW_NAME = 'startup'
 
 EXT = {
@@ -204,8 +205,11 @@ class CheckedResults(dict):
         super().__setitem__(key, value)
         if _ROW_TIMEOUT is not None:
             if isinstance(value, dict) and value.get('ok') is False:
-                print(key + ' FAIL; stopping before the next row', flush=True)
-                raise SuiteStopped('row failed: ' + key)
+                if _CONTINUE_ON_TIMING_FAILURE and value.get('timing') is True:
+                    print(key + ' FAIL (timing); continuing functional rows', flush=True)
+                else:
+                    print(key + ' FAIL; stopping before the next row', flush=True)
+                    raise SuiteStopped('row failed: ' + key)
             begin_row('after ' + key)
 
 
@@ -12077,7 +12081,7 @@ def page_translate_checks(factory, results, tmp):
 
 
 def main():
-    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT
+    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
@@ -12098,12 +12102,15 @@ def main():
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     ap.add_argument('--stop-on-app-death', action='store_true',
                     help='stop every remaining flow after an App death or new Open crash report')
+    ap.add_argument('--continue-on-timing-failure', action='store_true',
+                    help='retain timing FAIL rows and the failing exit status, but continue functional rows; crash stops and watchdogs remain active')
     ap.add_argument('--row-timeout', type=int, default=120, help='strict-run row deadline in seconds (default 120)')
     ap.add_argument('--suite-timeout', type=int, default=600, help='strict-run whole-suite cap, including cleanup (default 600)')
     ap.add_argument('--e2e-supervised', action='store_true', help=argparse.SUPPRESS)
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    _CONTINUE_ON_TIMING_FAILURE = opts.continue_on_timing_failure
     if opts.stop_on_app_death:
         _SUITE_CRASH_BASELINE = _open_crash_reports()
         if not 1 <= opts.row_timeout <= 120 or not opts.row_timeout <= opts.suite_timeout <= 3600:

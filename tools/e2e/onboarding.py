@@ -82,7 +82,7 @@ def run(factory, results, tmp, h):
         print('intro frames p50=%.3f p95=%.3f max=%.3f drops=%d count=%d load1=%.2f nominal=%.3f' %
               (stats['p50MS'], stats['p95MS'], stats['maxMS'], stats['drops'], stats['count'], load[0], stats['nominalMS']), flush=True)
         if 'Apple M5' in h.subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True) and load[0] <= 12 and stats['nominalMS'] <= 8.34:
-            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), stats=stats, load=load)
+            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), timing=True, stats=stats, load=load)
         else:
             results['strict_120hz'] = dict(status='INFO', reason='requires M5 120 Hz and load1 <= 12', stats=stats, load=load)
         paused = elapsed(23.7)
