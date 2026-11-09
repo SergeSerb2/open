@@ -59,6 +59,31 @@ hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
 0.08 s; sound preparation deadline 0.3 s; frame measurement 0–8 s;
 resident measurement 3 s; orb periods 18/22/26 s.
 
+The first room frame appears before engine startup and stays static while the
+engine starts and returns from its first native message-loop burst. Audio player
+creation, preparation and the first device start stay on an audio worker. After
+that burst, playback is scheduled with the common 80 ms lead. At t=0, the scene
+tracks and the dim layer fade are installed together. No animation keys are
+installed during the static room. The measured static duration must be at most
+400 ms, and scheduled audio and animation starts must differ by at most 20 ms.
+Returning launches allocate none of this work.
+
+Automation measures display-link intervals over t=0–8 s from the first animated
+frame. `onboarding action=state` reports `animationDelayMS` from the first room
+frame, `preAnimationStatic` (real scene/dim animation keys, presentation/model
+comparison and pre-start audio playhead), and the common host-clock times.
+The opt-in pacing trace records each interval above 1.5 times nominal as
+`stalls: [{start, end, ms, regions, regionOverlapMS}]`. Region totals are
+inclusive main-thread milliseconds; nested regions must not be added together.
+`preparationMainThreadMS` retains work before animated t=0. Signposts and the
+bounded recorder are absent from normal Release builds.
+
+The onboarding suite measures a product-only launch without polling or PNG
+capture in the frame window. It then uses a separate launch for the original
+functional keys, phase checks and native snapshots. The diagnostic
+`OPEN_E2E_ONBOARDING_SNAPSHOT_CONTROL=1` adds a PNG to the frame window for
+attribution only. Pacing limits remain p95 ≤1.5 times nominal and drops ≤1%.
+
 Continue replaces the foreground inside the same 1280×800 onboarding window.
 The room, dim child and music keep their clocks through the setup steps below.
 The intro never writes a snapshot. A small screen (both width ≤1280 and height

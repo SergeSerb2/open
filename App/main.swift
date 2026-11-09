@@ -188,8 +188,8 @@ exit(0)
 enum CodeSignature {
   static var hasTeamIdentifier: Bool {
     #if OPEN_AUTOMATION
-    let region = IntroPacingTrace.begin("engine.signatureCheck")
-    defer { region?.end() }
+    let region = Thread.isMainThread ? MainActor.assumeIsolated { IntroPacingTrace.begin("engine.signatureCheck") } : nil
+    defer { if let region { MainActor.assumeIsolated { region.end() } } }
     #endif
     var code: SecCode?
     guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return false }
@@ -234,9 +234,6 @@ final class FirstWindowFrameObserver: NSObject {
   }
   @objc private func frame(_ link: CADisplayLink) {
     guard link.timestamp >= submittedAt else { return }
-    #if OPEN_AUTOMATION
-    (view as? IntroView)?.recordFirstPresentation(at: link.timestamp)
-    #endif
     LaunchTiming.shared.phase("frameCallback")
     presented = true; CFRunLoopStop(CFRunLoopGetMain())
   }

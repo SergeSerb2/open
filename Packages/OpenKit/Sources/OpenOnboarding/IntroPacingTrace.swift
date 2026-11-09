@@ -44,6 +44,7 @@ public final class IntroPacingTrace {
     public init() {
         spans.reserveCapacity(4096)
         stalls.reserveCapacity(128)
+        observeRunLoop()
     }
 
     public static func begin(_ name: String) -> Region? { current?.beginRegion(name) }
@@ -66,6 +67,9 @@ public final class IntroPacingTrace {
         guard startHostTime == nil else { return }
         startHostTime = hostTime
         endHostTime = hostTime + IntroTimeline.beat("measureFrames").end
+    }
+
+    private func observeRunLoop() {
         // AppKit and CEF use run-loop sources and before-waiting observers.
         // These broad regions distinguish otherwise unattributed native work.
         // The before-waiting span includes the implicit CA commit; only an

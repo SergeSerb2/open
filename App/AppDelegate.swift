@@ -669,6 +669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if !isFirstRun || firstRunSaved { completeLinkRestoration() }
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
+    onboardingWindowController?.engineDidBecomeReady()
     #if OPEN_AUTOMATION
       let socket =
         options.automationSocket

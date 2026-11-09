@@ -99,6 +99,9 @@ public final class IntroView: NSView {
     public override var acceptsFirstResponder: Bool { true }
     public let reduceMotion: Bool
     private let useScreenBlend: Bool
+    private var roomSubmittedHostTime = 0.0
+    private var roomLink: CADisplayLink?
+    public var onFirstPresentation: (@MainActor () -> Void)?
     public var onGetStarted: (@MainActor () -> Void)?
     public private(set) var animationStartHostTime = 0.0
     public private(set) var skipped = false
@@ -117,7 +120,6 @@ public final class IntroView: NSView {
     private var tasks: [Task<Void, Never>] = []
     private var measureLink: CADisplayLink?
     private var previousFrame: Double?
-    private var measurementSubmittedHostTime = 0.0
     public private(set) var firstFrameHostTime: Double?
     private var measurementDeadline: Task<Void, Never>?
     private var intervals: [Double] = []
@@ -145,7 +147,7 @@ public final class IntroView: NSView {
         layoutScene()
     }
     required init?(coder: NSCoder) { return nil }
-    isolated deinit { measureLink?.invalidate(); measurementDeadline?.cancel(); tasks.forEach { $0.cancel() } }
+    isolated deinit { roomLink?.invalidate(); measureLink?.invalidate(); measurementDeadline?.cancel(); tasks.forEach { $0.cancel() } }
 
     public override func layout() { super.layout(); layoutScene() }
     private func layoutScene() {
@@ -279,6 +281,7 @@ public final class IntroView: NSView {
         #endif
         guard animationStartHostTime == 0 else { return }
         animationStartHostTime = hostTime
+        if measureFrames { beginFrameMeasurement(at: hostTime) }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         scene.beginTime = hostTime
         if reduceMotion {
@@ -323,26 +326,32 @@ public final class IntroView: NSView {
         if skipped { skip() }
         schedule(at: reduceMotion ? buttonBeat.end : buttonBeat.start) { [weak self] in self?.enableButton() }
         schedule(at: IntroTimeline.beat("idlePause").start) { [weak self] in self?.pauseAmbient() }
-        // The controller arms measurement before ordering the window. Keep
-        // this fallback for callers that start an already-presented view.
-        if measureFrames, measureLink == nil, firstFrameHostTime == nil { measureFramesFromFirstPresentation() }
+
     }
 
-    public func measureFramesFromFirstPresentation() {
-        guard measureLink == nil, firstFrameHostTime == nil else { return }
-        measurementSubmittedHostTime = CACurrentMediaTime()
+    /// The room is presented before Chromium starts. It has no animations.
+    public func observeRoomPresentation() {
+        guard firstFrameHostTime == nil, roomLink == nil else { return }
+        roomSubmittedHostTime = CACurrentMediaTime()
+        let link = displayLink(target: self, selector: #selector(roomPresented(_:)))
+        roomLink = link; link.add(to: .main, forMode: .common)
+    }
+    @objc private func roomPresented(_ link: CADisplayLink) {
+        if link.timestamp >= roomSubmittedHostTime { recordFirstPresentation(at: link.timestamp) }
+    }
+    public func recordFirstPresentation(at hostTime: Double) {
+        guard firstFrameHostTime == nil else { return }
+        firstFrameHostTime = hostTime; roomLink?.invalidate(); roomLink = nil
+        onFirstPresentation?(); onFirstPresentation = nil
+    }
+
+    private func beginFrameMeasurement(at hostTime: Double) {
+        guard measureLink == nil else { return }
+        previousFrame = hostTime
         nominalInterval = 1/Double(max(1, window?.screen?.maximumFramesPerSecond ?? 60))
         let link = displayLink(target: self, selector: #selector(recordFrame(_:)))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: Float(1/nominalInterval), maximum: Float(1/nominalInterval), preferred: Float(1/nominalInterval))
         measureLink = link; link.add(to: .main, forMode: .common)
-    }
-
-    /// Also called by the launch's first-window observer before engine.start.
-    /// Measurement always includes startup after the first room frame, even
-    /// when the animated timeline and music have not started yet.
-    public func recordFirstPresentation(at hostTime: Double) {
-        guard measureLink != nil, firstFrameHostTime == nil, hostTime >= measurementSubmittedHostTime else { return }
-        firstFrameHostTime = hostTime; previousFrame = hostTime
         #if DEBUG || OPEN_AUTOMATION
         IntroPacingTrace.current?.start(at: hostTime)
         #endif
@@ -356,6 +365,32 @@ public final class IntroView: NSView {
             #endif
         }
     }
+
+    #if DEBUG || OPEN_AUTOMATION
+    /// Inspect the real backing tree, including masks and the native button.
+    /// A missing presentation layer is reported, never replaced by the model.
+    public static func staticLayerState(_ root: CALayer?) -> [String: Any] {
+        var count = 0, missing = 0, differences = 0, keys: [String] = []
+        func inspect(_ layer: CALayer) {
+            count += 1; keys += layer.animationKeys() ?? []
+            if let p = layer.presentation() {
+                if p.opacity != layer.opacity || p.position != layer.position || p.bounds != layer.bounds
+                    || p.anchorPoint != layer.anchorPoint || p.isHidden != layer.isHidden
+                    || !CATransform3DEqualToTransform(p.transform, layer.transform)
+                    || !CATransform3DEqualToTransform(p.sublayerTransform, layer.sublayerTransform) { differences += 1 }
+                if let shape = layer as? CAShapeLayer, let displayed = p as? CAShapeLayer,
+                   shape.strokeStart != displayed.strokeStart || shape.strokeEnd != displayed.strokeEnd { differences += 1 }
+            } else { missing += 1 }
+            (layer.sublayers ?? []).forEach(inspect)
+            if let mask = layer.mask { inspect(mask) }
+        }
+        if let root { inspect(root) }
+        return ["layerCount": count, "animationKeys": keys, "missingPresentation": missing,
+                "presentationDifferences": differences, "static": count > 0 && missing == 0 && differences == 0 && keys.isEmpty]
+    }
+    public var staticSceneState: [String: Any] { Self.staticLayerState(layer) }
+    #endif
+
     private func schedule(at time: Double, action: @escaping @MainActor () -> Void) {
         tasks.append(Task { [weak self] in
             guard let self else { return }
@@ -405,6 +440,7 @@ public final class IntroView: NSView {
         return super.hitTest(point)
     }
     public func stop() {
+        roomLink?.invalidate(); roomLink = nil
         tasks.forEach { $0.cancel() }; tasks.removeAll(); measureLink?.invalidate(); measureLink = nil
         measurementDeadline?.cancel(); measurementDeadline = nil
         #if DEBUG || OPEN_AUTOMATION
@@ -418,9 +454,8 @@ public final class IntroView: NSView {
         commitIntroTransaction(); ambientPaused = true
     }
     @objc private func recordFrame(_ link: CADisplayLink) {
-        recordFirstPresentation(at: link.timestamp)
-        guard let firstFrameHostTime, link.timestamp > (previousFrame ?? firstFrameHostTime),
-              link.timestamp <= firstFrameHostTime+IntroTimeline.beat("measureFrames").end else { return }
+        guard link.timestamp > (previousFrame ?? animationStartHostTime),
+              link.timestamp <= animationStartHostTime+IntroTimeline.beat("measureFrames").end else { return }
         if let previousFrame, intervals.count < 4096 {
             intervals.append(link.timestamp-previousFrame)
             #if DEBUG || OPEN_AUTOMATION
@@ -435,7 +470,7 @@ public final class IntroView: NSView {
         func percentile(_ p: Double) -> Double { ordered.isEmpty ? 0 : ordered[min(ordered.count-1, Int(Double(ordered.count-1)*p))]*1000 }
         return ["count": ordered.count, "p50MS": percentile(0.5), "p95MS": percentile(0.95), "maxMS": percentile(1),
                 "drops": intervals.filter { $0 > nominalInterval*1.5 }.count, "nominalMS": nominalInterval*1000, "running": measureLink != nil,
-                "startHostTime": firstFrameHostTime as Any? ?? NSNull(), "duration": IntroTimeline.beat("measureFrames").end]
+                "startHostTime": animationStartHostTime, "duration": IntroTimeline.beat("measureFrames").end]
     }
     public var state: [String: Any] {
         func keys(_ root: CALayer) -> [String] {

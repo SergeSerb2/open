@@ -54,6 +54,8 @@ def run(factory, results, tmp, h):
             if stall['ms'] > 16:
                 print('intro stall %.6f..%.6f %.3f ms %s' %
                       (stall['start'], stall['end'], stall['ms'], ', '.join(stall['regions'])), flush=True)
+        print('intro startup engine.start=%.3f ms room-to-t0=%.3f ms' %
+              (measured.get('preparationMainThreadMS', {}).get('engine.start', 0), measured.get('animationDelayMS', 0)), flush=True)
         stalls = measured.get('stalls')
         (evidence/'intro-frames.json').write_text(json.dumps(measured, indent=2))
         results['stall_trace'] = dict(ok=isinstance(stalls, list) and len(stalls)==stats['drops']
@@ -67,22 +69,36 @@ def run(factory, results, tmp, h):
     try:
         h._restore_defaults(None, {key: None for key in keys})
         launch('--measure-intro-frames')
-        if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1':
-            # The App measures from the first presented room frame. Leave
-            # the main thread alone: no screenshots, keys or state polling in
-            # the eight-second window. This is the same strict pacing gate.
-            deadline = time.monotonic()+8.5
-            if os.environ.get('OPEN_E2E_ONBOARDING_SNAPSHOT_CONTROL') == '1':
-                # A/B control: identical product launch and idle frame window,
-                # with exactly the original suite's mid-intro PNG capture.
-                time.sleep(1.7)
-                app.call('snapshot', path=str(evidence/'intro-native-control.png'))
-            time.sleep(max(0, deadline-time.monotonic()))
-            measured = state()
-            frames(measured)
-            results['frame_window_completed'] = dict(ok=measured['frameStats']['count'] >= 30
-                and not measured['frameStats']['running'], load=os.getloadavg())
-            return
+        # Measure a real launch with product work only. No state polls, input
+        # or PNG capture run during the eight-second animated frame window.
+        deadline = time.monotonic()+8.5
+        if os.environ.get('OPEN_E2E_ONBOARDING_SNAPSHOT_CONTROL') == '1':
+            # Diagnostic A/B control only; final proof never sets this switch.
+            time.sleep(1.7)
+            app.call('snapshot', path=str(evidence/'intro-native-control.png'))
+        time.sleep(max(0, deadline-time.monotonic()))
+        measured = state()
+        frames(measured)
+        results['frame_window_completed'] = dict(ok=measured['frameStats']['count'] >= 30
+            and not measured['frameStats']['running'], load=os.getloadavg())
+        static = measured.get('preAnimationStatic') or {}
+        static_pred = lambda s: bool(s.get('scene', {}).get('static')) and bool(s.get('dim', {}).get('static')) \
+            and s.get('musicStarted') is False and abs(s.get('scheduledPlayhead', 1)) <= .002 \
+            and s.get('scheduledDeviceLeadMS', 0) > 0
+        # The negative is the actual running scene, read after measurement.
+        running = dict(scene=measured.get('currentSceneLayers', {}),
+            dim=measured.get('currentDimLayers', {}), musicStarted=measured.get('sound', {}).get('decision')=='played')
+        gate('static_before_t0', static_pred, static, running)
+        results['static_room_duration'] = dict(ok=isinstance(measured.get('animationDelayMS'), (int,float))
+            and 0 <= measured['animationDelayMS'] <= 400, ms=measured.get('animationDelayMS'), load=os.getloadavg())
+        sound = measured.get('sound', {})
+        sync = abs(sound.get('audioStartHostTime', 0)-measured['animationStartHostTime'])*1000
+        results['animated_start_audio_sync'] = dict(ok=sound.get('decision')=='played' and sync <= 20,
+            ms=sync, load=os.getloadavg())
+        if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
+        # Run every existing functional predicate on a separate unmeasured
+        # launch. Its early keys, phase polling and PNGs cannot perturb frames.
+        launch()
         before = state()
         intro = elapsed(.3)
         # Native Return/Space reach OEApplication, and cannot advance early.
@@ -109,10 +125,8 @@ def run(factory, results, tmp, h):
             except RuntimeError: invalid.append(True)
             else: invalid.append(False)
         gate('unknown_automation_input_refused', lambda s: all(s), invalid, [bool(phase1.get('error'))])
-        measured = phase2
         # At 3 s, task_info must report an actual resident delta.
         gate('resident_3_seconds', lambda s: isinstance(s.get('residentDelta3Seconds'), int), phase1, intro)
-        frames(measured)
         paused = elapsed(23.7)
         gate('idle_pauses', lambda s: s.get('ambientPaused') is True, paused, phase1)
         app.call('onboarding', action='get-started')

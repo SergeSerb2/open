@@ -35,7 +35,7 @@ extension AppDelegate {
         self?.onboardingReceipt = final
       }
     }
-    controller.showIntro(measureFrames: options.measureIntroFrames)
+    controller.showIntro(measureFrames: options.measureIntroFrames, engineReady: engineReady)
   }
   func showFirstRunSteps(replay: Bool = false) {
     guard let onboarding = onboardingWindowController, let window = onboarding.window else { return }
