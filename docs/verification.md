@@ -1305,6 +1305,18 @@ main. Final full verification rebuilds and runs the restored source.
 
 ## Quiet-machine budgets
 
+Window 2 record (Section 16, 2026-11-09): 2026-11-08 23:45–2026-11-09
+00:11, **main e8d4acd4, engine 619324d3, pre-#271**, load1 4.3–7.1.
+Two misses remain without an owner fix: Site Control cold-open CPU p95
+8.07 ms against <8 ms, and adblock profile-integrity scan p95 11.24 ms
+against <10 ms (forwarded to Section 13). Source:
+`.re/s16/window2/budgets.out`. Find first-open p95 25.2 ms was one outlier;
+the 00:25 rerun on `518471aa` passed at p95 5.67 ms
+(`.re/s16/window3/find.out`). The post-#271 static ten-page idle A/B had
+median total CPU 0.21 % before and 0.42 % after, five runs per revision
+(window 2 plus `.re/s16/window3/` receipts). These records do not clear the
+remaining budget misses.
+
 `tools/budgets.sh --out <receipt.json>` runs the existing performance
 measurements against an already-built Release App and release OpenKit CLIs.
 It prints one table: row, unchanged budget, measured value, samples, PASS/FAIL,
@@ -1377,10 +1389,60 @@ screen work. Tell the lead before any further launch.
 
 Budget inventory (the Python source cites each numeric limit):
 
+First-run definition after Section 17 (#267/#270, 2026-11-09): keep both
+numeric budgets and both clocks. Five fresh Release automation profiles measure
+kernel process start → `sidebarDrawn` (median ≤250 ms). `App/main.swift` records
+that mark only after `FirstWindowFrameObserver` confirms the first frame of
+`AppDelegate.firstContentView`. That view is now the initial Intro composition,
+before its animation completes. Capture its timing and onboarding state before
+using the same `skip-intro` → `get-started` actions as the `firstrun` e2e factory
+to reach Name (the shared first-run model's `welcome` step). Do not restart the
+clock at Continue, include the intro's duration, or substitute the later Name
+frame. Use `--intro-sound=silent`: the real player prepares at volume zero.
+
+Imported paint stays `firstContentfulPaint - firstRunLandingStarted` (median
+≤700 ms), using the existing renderer Performance-clock mapping and synthetic
+import with deterministic local saved pages. `showFirstRunBrowser` marks the
+landing checkpoint and prepares the selected imported page during import.
+Capture that page's identity and FCP before final setup inserts/selects native
+`open://welcome`, which has no renderer FCP. Then complete the real setup and
+verify the native Welcome tab. No new timer, mock import, bypass flag, page
+reselection or navigation is used. Receipts retain per-sample loads, both clocks,
+the initial Intro state, Name/Welcome state, imported tab and final completion.
+The report reader still accepts the older `welcome` timing field.
+
+**Meaning for lead review:** the first-frame span is unchanged, but its surface
+changed from the old native Welcome panel to Intro. The imported renderer FCP
+still measures preparation from the same landing mark; Section 17 now keeps
+that prepared browser at alpha zero until final hand-off. It does not measure
+the later native Welcome reveal, the 2.5-second dim fade, or physical visibility
+of the imported page. These distinctions follow the first-run plan's Section 17
+errata and `docs/onboarding.md` / `docs/welcome.md`; quiet acceptance remains
+separate from a loaded functional run. The runner resets/restores the onboarding
+name and sound preference along with its existing App defaults. It never writes
+an Apple defaults domain.
+
+Functional receipt (2026-11-09, M5, automation App at main `518471aa`, runner
+`b1b21881`): `tools/budgets.sh --only first-run --app build/Release/Open.app
+--max-seconds 600 --out /tmp/s16-fr-20261109.json`. No quiet lock or load guard.
+All five fresh profiles reached Intro, Name/Welcome, the imported local page and
+final native Welcome. Every Intro reported sound reason `silent`. All five App
+cleanups passed with zero remaining windows/processes; defaults and private roots
+were restored/removed. This proves the flow, not quiet timing acceptance.
+
+| Row | Budget | Median | p95 | Samples | Result | Load1 start → end |
+|---|---|---|---|---|---|---|
+| First content | ≤250 ms | 486 ms | 3119 ms | 5 | FAIL | 5.50 → 6.11 |
+| Imported paint | ≤700 ms | 194 ms | 232 ms | 5 | PASS | 5.50 → 6.11 |
+
+First-content samples: 3119, 432, 486, 568, 412 ms. Imported-paint samples:
+232, 194, 204, 177, 160 ms. Keep the first-content miss; the thresholds and
+process-start clock are unchanged.
+
 | Workload | Existing measurement and limits |
 |---|---|
 | Existing-profile launch | `engine_e2e.py` `warm_existing_profile`, extracted from S16 `run_launch.py`: seven launches; sidebar median ≤250 ms, first paint median ≤700 ms. Also main ≤50 ms and modelLoaded ≤120 ms intermediate marks from the app-shell plan. Kernel process birth and a confirmed sidebar frame are required. Process-cold, warm file caches. |
-| First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh Welcome roots, median first content ≤250 ms, selected imported-tab paint from `firstRunLandingStarted` ≤700 ms. Uses the existing synthetic import fixture with local deterministic saved pages. |
+| First run | `firstrun.py` F12 and the saved Release-timing procedure: five fresh first-run roots, median first confirmed Intro content frame ≤250 ms, selected imported-tab renderer FCP from `firstRunLandingStarted` ≤700 ms. Intro skip/handoff uses the real onboarding actions with silent playback; capture imported paint before native Welcome replaces the selection. See the definition and review note above. |
 | Idle, animated and static | S16 `run_idle.py` and `process_cpu_window`: Section 8's ordered ten-page set, Python selected last; second row replaces that page with a deterministic local static page. Each settles 90 s, then samples 60 s without polling or tracing. JSON retains Mach/ps counters, per-process/per-kind splits and churn. Lead ruling, 2026-11-08 09:30: static total CPU ≤0.5%; always print and retain its measured value. The animated row has no numeric ceiling and shows `NO NUMERIC BUDGET` with measured CPU. Missing data or failed cleanup still fails in either row. See `docs/architecture.md` performance budgets. |
 | Site Control | Full `sitecontrol-render check`: cold-open CPU p95 <8 ms; simple-editor CPU p95 <12 ms using the required full-check procedure; both instruction gates; idle <10 ms CPU/2 s; ten-page refresh <100 ms; pad CPU p95 <2 ms; off-main hue <15 ms; ≤61 previews/120 inputs; code highlight CPU p95 <2 ms. Unknown instruction baselines fail closed. |
 | SM6 and mini-player | `sidebar-render check`: one declared warm-up and five fresh processes, accepted instruction ceiling, first-layout wall median ≤120 ms, structural gates, MC8 paused idle CPU ≤0.5%. |
