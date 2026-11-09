@@ -598,6 +598,8 @@ def favicons(cli, seed):
             image = Path(output).read_bytes()
             require(image[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", image[16:24]) == (size, size), "wrong PNG dimensions")
         matches(r"ok=1 missing=0 failed=0 count=1", run(cli, "favicons", "stats", "--db", "icons.sqlite3"))
+        runpy.run_path(str(Path(__file__).parent / "favicon_discovery.py"))["run"](
+            cli, directory, site, origin, env, run, require)
         (site / "icon.png").unlink()
         (site / "index.html").write_text("<html><head></head><body>No icon</body></html>")
         matches(r"requested=1 alreadyCached=0 fetched=0 missing=1 failed=0",
