@@ -1,3 +1,4 @@
+import OpenOnboarding
 import AppKit
 import OpenEngine
 import OpenModel
@@ -20,6 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var firstRunWelcomeID: ItemID?
   var firstRunWindowController: FirstRunWindowController?
   var onboardingWindowController: OnboardingWindowController?
+  var preparedOnboardingSound: IntroSound?
+  var onboardingStartObserver: CFRunLoopObserver?
+  var onboardingEngineSettled = false
+  #if OPEN_AUTOMATION
+  var onboardingStartup: [String: Any] = [:]
+  #endif
   var onboardingActivated = false
   var onboardingHandedOff = false
   var onboardingReceipt: [String: Any]?
@@ -114,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("app.didFinishLaunching")
+    defer { pacingRegion?.end() }
+    #endif
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
     LaunchTiming.shared.phase("settingsRegistered")
@@ -201,6 +212,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let wasEngineReady = engineReady
     let icons = wasEngineReady && !windowControllers.isEmpty ? stores.sidebarFavicons : nil
     terminationRequested = true
+    preparedOnboardingSound?.stop(); preparedOnboardingSound = nil
+    if let onboardingStartObserver { CFRunLoopObserverInvalidate(onboardingStartObserver); self.onboardingStartObserver = nil }
     onboardingWindowController?.stop()
     for controller in windowControllers { controller.closeThemeEditor() }
     extensionPrompts.cancelAll()
@@ -333,6 +346,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// Runs at the first of applicationDidFinishLaunching and
   /// engineDidInitialize (their order is not fixed).
   private func showWindowsIfNeeded(ignoringLittleOpen: Bool = false) {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("browser.showWindowsIfNeeded")
+    defer { pacingRegion?.end() }
+    #endif
     prepareData()
     if isFirstRun && !firstRunSaved && windowControllers.isEmpty {
       if !onboardingHandedOff {
@@ -353,6 +370,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func drawWindowsBeforeEngine() {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("browser.drawWindowsBeforeEngine")
+    defer { pacingRegion?.end() }
+    #endif
     LaunchTiming.shared.phase("sidebarDisplayBegin")
     showWindowsIfNeeded()
     onboardingWindowController?.window?.contentView?.displayIfNeeded()
@@ -366,7 +387,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       controller.window?.displayIfNeeded()
       LaunchTiming.shared.phase("sidebarDisplayed")
     }
+    #if OPEN_AUTOMATION
+    let flushRegion = IntroPacingTrace.begin("browser.CATransaction.flush")
+    #endif
     CATransaction.flush()
+    #if OPEN_AUTOMATION
+    flushRegion?.end()
+    #endif
     LaunchTiming.shared.phase("sidebarFlushed")
     startupEvidence = [
       "sidebarClass": windowControllers.first.map { String(reflecting: type(of: $0.sidebar)) } ?? "",
@@ -389,6 +416,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   @discardableResult
   private func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil) -> BrowserWindowController {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("browser.windowAndFactory.create")
+    defer { pacingRegion?.end() }
+    #endif
     LaunchTiming.shared.phase("windowCreateBegin")
     let windowModel = privateModel ?? model!
     windowModel.setWindowContentVisible(windowID: state.id, visible: true)
@@ -650,6 +681,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   // MARK: OEEngineDelegate
 
   func engineDidInitialize() {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("engine.didInitialize")
+    defer { pacingRegion?.end() }
+    #endif
     LaunchTiming.shared.mark("engineInitialized")
     engineReady = true
     adBlockEngineAdapter.engineDidInitialize()
@@ -668,19 +703,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     EngineWebProfile.onPermissionChange = { [weak self] context in self?.tabSleep.permissionsChanged(context: context) }
     scheduleMenuRebuild()
     #if OPEN_AUTOMATION
-      let socket =
-        options.automationSocket
-        ?? options.userDataDirectory.appendingPathComponent("automation.sock")
-      let server = AutomationServer(socketURL: socket, controller: AutomationController(app: self))
-      do {
-        try server.start()
-        automation = server
-        FileHandle.standardError.write(Data("Open: automation socket at \(socket.path)\n".utf8))
-      } catch {
-        FileHandle.standardError.write(Data("Open: automation socket failed: \(error)\n".utf8))
-      }
+    if !isFirstRun { startAutomationIfNeeded() }
     #endif
   }
+
+  #if OPEN_AUTOMATION
+  func startAutomationIfNeeded() {
+    guard automation == nil else { return }
+    let region = IntroPacingTrace.begin("automation.server.start")
+    defer { region?.end() }
+    let socket =
+      options.automationSocket
+      ?? options.userDataDirectory.appendingPathComponent("automation.sock")
+    let server = AutomationServer(socketURL: socket, controller: AutomationController(app: self))
+    do {
+      try server.start()
+      automation = server
+      FileHandle.standardError.write(Data("Open: automation socket at \(socket.path)\n".utf8))
+    } catch {
+      FileHandle.standardError.write(Data("Open: automation socket failed: \(error)\n".utf8))
+    }
+  }
+  #endif
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
     let owner = hostFactories.values.first { $0.isIncognito && $0.incognitoSession?.context === request.context }
@@ -783,10 +827,18 @@ extension AppDelegate: CommandDispatcher {
     hostFactories.values.first { $0.ownsKeyWindow(window) }
   }
   func scheduleMenuRebuild() {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("menu.scheduleRebuild")
+    defer { pacingRegion?.end() }
+    #endif
     guard !shutdownPrepared, menuRebuildTask == nil else { return }
     menuRebuildTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(30))
       guard let self, !Task.isCancelled else { return }
+      #if OPEN_AUTOMATION
+      let region = IntroPacingTrace.begin("menu.rebuild")
+      defer { region?.end() }
+      #endif
       self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
     }
   }
@@ -857,6 +909,10 @@ extension AppDelegate: CommandDispatcher {
     reloadKeyBindings()
   }
   func reloadKeyBindings() {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("menu.reloadKeyBindings")
+    defer { pacingRegion?.end() }
+    #endif
     let file = options.userDataDirectory.appendingPathComponent("State/keybindings.json")
     do {
       let loaded = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
