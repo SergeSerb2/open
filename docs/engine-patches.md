@@ -31,9 +31,22 @@ Design, rejected-disable evidence and current verification status are in
 separate installs, fallback and the requested ad-hoc live swap passed.
 The scan gate is FAIL against the 7/7 target: residual first-after-gap
 scans, cause open, despite stable executable metadata (functional set 6/7).
-Hardened DLV and quiet-window timing remain pending. The full gate recorded
-24 PASS and 1 FAIL (`commandbar-render`, two timing rows at load1 29.1).
+Hardened DLV remains pending M1 clearance. The pre-#271 quiet-window runner
+completed seven pairs, but both variants failed the cold/warm budgets.
+Timing on the rebuilt post-#271 engine remains pending the next quiet window.
+The earlier full gate recorded 24 PASS and 1 FAIL (`commandbar-render`, two
+timing rows at load1 29.1); the report keeps that historical failure.
 Chromium `0106` follows main's `0801–0810`; the numeric-order WARN is expected.
+
+After merging #271 and main `3fb0645c`, the S16 rebuild/distribution and both
+normal App builds passed. Distribution SHA-256 is
+`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+Engine-status is 7 PASS, 0 FAIL, 1 order WARN. Normal-App rows a/c/d/f pass
+again on this engine. See the report's post-#271 cohort for suite and full-gate
+results. No launch-gain claim follows from these functional rows.
+The post-#271 full gate was interrupted by the real-crash STOP rule after
+15 PASS; its active Settings check was cancelled and nine checks did not run.
+No full-gate PASS is claimed. Ownership and cause of the crash remain open.
 
 ### E11/E12 and tab event follow-ups (2026-11-05)
 

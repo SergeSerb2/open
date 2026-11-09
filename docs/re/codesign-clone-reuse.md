@@ -130,14 +130,14 @@ branch with matched main. Both include #264 and share its public engine API;
 the native difference is `0106`. The harness requires different executable
 SHA-256 values and removes the old staging bundle after the directory swap.
 
-### Required acceptance rows on the rebuilt engine
+### Pre-#271 acceptance rows
 
-These rows must use the S16 distribution with `0801–0810`, then `0106`.
-The previous build, object compilation and patch round trip do not count as
-runtime acceptance. The following table records the current state; it claims
-no launch gain or live-update safety result.
+These historical rows use the S16 distribution with `0801–0810`, then `0106`.
+The earlier build, object compilation and patch round trip do not count as
+runtime acceptance. This table records the pre-#271 cohort. It does not close
+the full live-update gate or establish a gain on the rebuilt engine.
 
-| Row | Required proof | Current state |
+| Row | Required proof | Pre-#271 result |
 |---|---|---|
 | a | Executable ctime and link count stay unchanged for three full runs after the first clone | PASS, normal App; `stability/receipt.json` |
 | b | Seven simple relaunches have no attributable ChangetimeScan | FAIL against the 7/7 target; residual first-after-gap scans, cause open. Functional set: 6/7 scan-free, unchanged executable metadata in all seven. No gain claim |
@@ -145,7 +145,7 @@ no launch gain or live-update safety result.
 | d | Two install paths use distinct clones with no cross-reuse | PASS, normal App; `stability/receipt.json` |
 | e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Requested ad-hoc path PASS on main and reused-clone branch (fresh renderers/audio utility; GPU retained). Extra forced GPU/network restart control FAIL retained. DLV PENDING M1 clear |
 | f | An unwritable cache falls back to a per-run clone and still works | PASS, normal App; full render and helper types; `adhoc-branch-plain-unwritable/receipt.json`. Fallback live swap not run |
-| g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | PENDING tonight: executable `window-timing.sh`, dry check only. Daytime set retained, no gain claim |
+| g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | Pre-#271 runner completed seven pairs; both cold/warm budget sets FAIL. See the quiet-window record below. Rebuilt-engine timing remains PENDING the next quiet window |
 | h | Shell, features, updater and engine-status pass | Shell PASS (7 rows); features PASS (26 rows) with intentional crash row DEFERRED to M1; updater PASS (21 rows); engine-status: 7 PASS, 0 FAIL, 1 order WARN |
 
 The rebuilt branch engine passed. The incremental build took 48 seconds;
@@ -612,5 +612,208 @@ time-dependent assessment rule is another untested possibility. The scan
 target paths remain private, so the cause stays open.
 
 The lead approved opening the PR with these failures and pending rows
-explicit. It is not ready to merge. The approved quiet-window script remains
-unchanged and unrun; hardened DLV launches still wait for `M1 clear`.
+explicit. It is not ready to merge. The approved quiet-window script and its
+frozen inputs remain unchanged; hardened DLV launches still wait for `M1 clear`.
+
+### Pre-#271 quiet-window record
+
+The lead's runner executed the approved script on 2026-11-08 at
+23:57:39–23:58:38 in the host's fixed GMT−07 clock. The labels are
+**pre-#271 main** and **pre-#271 +0106**. Neither App includes #271.
+This remains a valid comparison of that frozen cohort. It does not validate
+the engine rebuilt after #271. No timing script was rerun for this update.
+
+`window/receipt.json`, `window/pairs/results.json` and
+`post271-20261109/pre271-timing-summary.json` retain all samples. Seven pairs
+completed at load1 5.48–5.60, with no discarded sample. The scan result is
+6/7 without a launch-window candidate, so the 7/7 target still FAILS.
+
+| Pre-#271 variant | Samples | Median main ms | Median sidebarDrawn ms | Median first paint ms |
+|---|---:|---:|---:|---:|
+| main | 7 | 291 | 427 | 874 |
+| +0106 | 7 | 139 | 287 | 725 |
+
+The separate window-suite rows also retain their original thresholds.
+Both variants fail the cold and warm budgets. These measurements do not
+establish a gain on the rebuilt engine or close the launch budget.
+
+| Pre-#271 variant | Row, five samples | Sidebar median ms | First-paint median ms | Result | Load1 range |
+|---|---|---:|---:|---|---|
+| main | cold_fresh_profile | 431 | 873 | FAIL | 5.53–6.48 |
+| main | warm_existing_profile | 437 | 899 | FAIL | 5.53–6.48 |
+| +0106 | cold_fresh_profile | 252 | 654 | FAIL | 6.18–6.28 |
+| +0106 | warm_existing_profile | 273 | 672 | FAIL | 6.18–6.28 |
+
+The runner exited 2 in 59.14 seconds and found no new real Open crash.
+Both window-row commands exited 2. No priority flag or build was used.
+The frozen executable and framework hashes still match `window-inputs.json`;
+the read-only check is `post271-20261109/frozen-audit-before.json`.
+
+### Rebuild after #271, 2026-11-09
+
+The host clock read 01:22:52 GMT−07 before resumed work, after the 01:20
+gate. Merge `046a077850c645c3918e0094a0507f42cae168d3` includes main
+`3fb0645c1c41ff3d66d064fe3a9cb223afa3718d`, including #271 at `518471aa`.
+Main's #271 distribution is
+`8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`
+(`docs/engine-patches.md`, ad-block Step 8). Native ad blocking remains on by
+default. These are functional checks; no rebuilt-engine launch gain is claimed.
+
+The only engine root used was `~/Developer/open-engine-s16`.
+`post271-20261109/preflight.json` records no stale `open-engine-s8` path in
+its state, `.gclient`, `args.gn` or `build.ninja`. The pre-apply status correctly
+found the older ad-block inputs and symbols. Its first JSON output path was
+refused because it was outside the worktree/state; later status output uses
+the S16 state directory and is copied into the receipt directory.
+
+The old checked-in CEF `0310` and Rust `0001` patches were reversed before
+applying their current main versions. The Rust apply then found an existing,
+byte-identical `gnrt_config.toml.open` overlay at a newly patch-owned path.
+That file was preserved outside the tree, then apply created it from main's
+patch. The failed apply receipts and saved input remain in
+`post271-20261109/`. No patch artifact or 0106 source changed. Its three
+wiring hashes still match `roundtrip.json`, as recorded in `artifacts.json`.
+No new authoring round trip was needed.
+
+The exact active Chromium order is:
+
+```text
+0301 0302 0303 0304 0305 0306
+0401 0402 0403
+0501 0504 0506
+0601
+0801 0802 0803 0804 0805 0806 0807 0808 0809 0810
+0106
+```
+
+CEF order is `0101, 0104, 0105, 0302, 0303, 0304, 0305, 0310, 0311,
+0314, 0505, 0601, 0602, 0701`; Rust is `0001`. Full filenames and apply
+outcomes are in `artifacts.json`, `engine-apply-recovery.log` and the series
+files. Engine-status reports all 39 active patches applied, all 125 overlay
+files matching, and all 49 expected symbols present: **7 PASS, 0 FAIL,
+1 WARN**. The sole WARN is the intentional Chromium numeric-order difference,
+with 0106 after 08xx. It is not a failure or a reordered series.
+
+Every engine job used the shared engine lock and S16 heavy wrapper. The build
+used the script's nice setting and `--jobs 10`; no sync ran. Build PASS:
+859 executed steps in 154.32 seconds, wrapper load1 6.66→35.99. Distribution
+PASS in 67.23 seconds, load1 27.07→17.60. The new branch distribution is:
+
+```text
+346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd
+```
+
+Fetch and both App builds used `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s16`.
+Release with automation passed in 137.24 seconds; Debug passed in 40.22 seconds.
+The wrapper load1 was 15.35→9.74. Both deep strict signature checks and both
+engine-fingerprint checks passed. The embedded code hash matches the
+distribution after excluding the embedding signature:
+`983ddb7a61e82970c8315db8f980881bd2495fe996148436d016b17c5610a1ba`.
+The Release executable is
+`8d5550414aa91994a8882024bc5eb4b9fecbc5fd4a75f72997960ba7c8f61bc0`;
+Debug is `8bcebde38fbec1c27629528d923505b02647c57788e7ad9161d9fc1158f560b1`.
+See `artifacts.json` and `functional-preflight.log` for complete identities.
+
+`post271-20261109/functional/receipt.json` records nine full normal-App runs
+from disposable copies of the new Release App. They ran at 01:48:20–01:48:50
+GMT−07, at load1 8.58–10.53, under one functional-suite screen-lock invocation.
+The source App and frozen cohort were not modified. Each run rendered the
+fixture and observed renderer, GPU and utility helpers. All process/window
+cleanup checks passed; all test installs, profiles and caches were removed.
+The two startup preference keys were restored. Read-only report checks found
+no new real Open crash.
+
+| Row | Post-#271 result | Evidence and limits |
+|---|---|---|
+| a | PASS | Prime creates the link once. Three subsequent full runs retain identical executable stat, link count two, saved identity and clone bundle inode. No repeated pre-engine ctime change appears in this cohort |
+| b | Existing FAIL; not rerun | Residual first-after-gap scans, cause open. The pre-#271 functional and quiet-window sets each remain 6/7 scan-free; this update starts no new row-b launches |
+| c | PASS | Ordinary `cp` keeps device/inode `16777229/1158080489`, changes nanosecond mtime, and recreates the clone with a new saved identity and clone bundle inode |
+| d | PASS | Two install paths create distinct hash directories and executable inodes. Returning to the first reuses its own clone |
+| e | Historical ad-hoc PASS; DLV PENDING | The requested pre-#271 ad-hoc result and separate failed stress control remain above. Neither live swap nor DLV was rerun. M1 remains held |
+| f | PASS | Two normal runs with the test install directory at 0500 render and launch all helper types. No persistent clone is created; each run has link count 1→2→1 and ctime changes, proving per-run fallback. The harness restores/removes its own test directory afterward |
+| g | PENDING next quiet window | No timing on the rebuilt engine. The pre-#271 runner results above remain a separate cohort |
+| h | PASS for the requested M5 functional scope | Shell 7 PASS; features 26 PASS with intentional crash recovery DEFERRED M1; updater 103 result rows PASS; engine-status 7 PASS, 0 FAIL, 1 order WARN |
+
+Each suite used its own screen-lock invocation, with no quiet lock, load gate,
+priority flag or simultaneous build. Both shell/features engine fingerprints
+match the new distribution. The updater's original and copied bundles use
+the rebuilt Debug App. `suites/<name>/suite-receipt.json`, the result JSONs,
+and `<name>-screen.json` record cleanup and read-only crash checks. All suites
+exited zero and left no owned process/window or new real Open crash.
+
+| Functional suite | Result | Seconds after screen acquisition | Load1 start→end |
+|---|---|---:|---|
+| shell | 7 PASS | 21.94 | 9.40→12.59 |
+| features | 26 PASS; intentional crash row DEFERRED M1 | 97.07 | 4.97→5.79 |
+| updater | 103 PASS | 130.09 | 5.49→6.33 |
+
+The later `engine-status-final.json` again records 7 PASS, 0 FAIL and the
+same order WARN. No new row-b, live-swap, hardened DLV or timing run was
+started. Those limits apply even though the requested functional rows pass.
+
+### Post-#271 full verification and STOP
+
+The full `s16-heavy.sh tools/verify-all.sh` ran on native/merge head
+`046a077850c645c3918e0094a0507f42cae168d3`, containing main `3fb0645c`.
+It started at 02:06:27 GMT−07 and stopped at 02:35:42 on 2026-11-09.
+The wrapper load1 was 5.15→7.77. After the 310-second heavy-slot wait, the
+guard's execution start load1 was 4.04. Optional user-data import was not selected.
+
+**INTERRUPTED by the crash STOP rule: 15 PASS, one cancelled active check,
+nine later checks not run.** The guard exited 86; the verifier exited 130
+on SIGINT. The raw table records `settings-preview FAIL 0` because the
+verifier's signal trap writes that row. It is not an assertion failure.
+The settings check had passed 47 internal rows and finished its image render;
+the final `dump-keys` phase was cancelled. No complete full-gate PASS is claimed.
+
+| Check | Result | Seconds, including queue wait |
+|---|---|---:|
+| build | PASS | 87 |
+| commands-demo | PASS | 4 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 2 |
+| space-editor | PASS | 361 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 22 |
+| commands-dump | PASS | 0 |
+| route | PASS | 9 |
+| favicons | PASS | 2 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 3 |
+| profiles | PASS | 2 |
+| settings-preview | INTERRUPTED (raw `FAIL` from SIGINT) | 0 |
+| sidebar-render | NOT RUN after STOP | — |
+| sidebar-compare | NOT RUN after STOP | — |
+| commandbar-render | NOT RUN after STOP | — |
+| features-render | NOT RUN after STOP | — |
+| extensions-render | NOT RUN after STOP | — |
+| sitecontrol-render | NOT RUN after STOP | — |
+| onboarding-render | NOT RUN after STOP | — |
+| boosts | NOT RUN after STOP | — |
+| verify-secrets-fixture | NOT RUN after STOP | — |
+
+The read-only guard detected `Open-2026-11-09-023542.ips`, a real
+`EXC_CRASH` / `SIGABRT` report (PID 80131, parent Python PID 79175).
+Its top Open frames are `SpaceThemeWindow.preserveAppearance(of:)` and
+`SpaceThemeWindow.addChildWindow(_:ordered:)`. The report redacts its App path.
+Its main-image UUID differs from both rebuilt Apps. Ownership and cause remain
+unassigned; this does not attribute the crash to 0106. Our verifier was running
+the Settings CLI, not an Open App. The guard cancelled the verifier, all owned
+processes exited, and no launch or retry followed. The lead was notified.
+Full verification remains PENDING renewed screen clearance.
+
+`full-verify.json`, `verify-crash-guard.json`, `verify-all/results.tsv`,
+`verify-all/summary.txt`, `verify-all/settings-preview.log` and `crash-stop.json`
+retain the exact outcome. The historical 24 PASS / 1 timing FAIL above remains
+separate and unchanged.
+
+A final fetch/merge still found main `3fb0645c` already included. Native source
+and engine inputs remain identical to tested merge head `046a0778`; the final
+commit changes evidence docs only. `final-audit.json` records no remaining
+owned process and both functional cache paths removed. All 11 audited frozen
+executable, framework, script and input hashes match the pre-resume audit,
+including the saved executable/framework inodes. Frozen Apps, profiles and
+approved timing inputs remain in place. No priority flag was set or shared
+lock file removed. The one new real report is retained as the STOP event.

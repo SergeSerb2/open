@@ -834,8 +834,14 @@ with fresh renderers and a fresh silent audio utility. It did not terminate
 GPU or network services; the existing GPU stayed alive. The forced-restart
 control remains a separate FAIL with no assigned cause. The functional scan
 gate is FAIL at 6/7 despite stable executable metadata; no launch gain is
-claimed. Quiet-window timing remains PENDING. Hardened DLV proof is still
-PENDING M1 clearance. See [the current receipts and limits](../re/codesign-clone-reuse.md).
+claimed. The pre-#271 quiet-window runner later completed seven pairs; both
+variants still failed the cold/warm budgets. After merging #271, S16 rebuilt
+the full engine series, then 0106, and repeated normal-App rows a/c/d/f with
+PASS results on distribution `34619927…`. Timing on that rebuilt engine is
+PENDING the next quiet window. Hardened DLV proof is still PENDING M1
+clearance. The post-#271 full verifier stopped on a new real Open crash report
+after 15 PASS; its remaining checks are not complete. Crash ownership and
+cause are unassigned. See [the current receipts and limits](../re/codesign-clone-reuse.md).
 
 ### 6.1 Dependency (one new dependency, with reason)
 
