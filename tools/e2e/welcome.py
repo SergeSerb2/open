@@ -371,6 +371,8 @@ def contrast_matrix(factory, results, tmp, api):
                     name = 'W36_contrast_%s_%s_%s' % (theme, appearance, 'active' if active else 'inactive')
                     peer_frame = None
                     if active:
+                        if peer is not None:
+                            peer.call('yield-activation', pid=app.pid)
                         app.call('window-focus', id=window['id'], activate=True)
                     else:
                         if peer is None:
