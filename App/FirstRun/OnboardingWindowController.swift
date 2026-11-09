@@ -37,6 +37,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   var steps: OnboardingStepsController?
   private let dim: NSWindow
   private var started = false
+  private var measureFrames = false
   private let dimView = NSView()
   #if OPEN_AUTOMATION
   private var staticProof: [String: Any]?
@@ -147,6 +148,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   /// Keep both windows unshown until the common audio/animation start.
   func showIntro(measureFrames: Bool) {
     guard let window, !started else { return }; started = true
+    self.measureFrames = measureFrames
     window.contentView?.layoutSubtreeIfNeeded()
     window.displayIfNeeded()
     func rasterize(_ layer: CALayer) {
