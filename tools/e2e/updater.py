@@ -516,6 +516,15 @@ def capture_pair(app, opts, name, number, results=None):
             results['S6_' + name + '_' + appearance + '_secondary_color'] = {
                 'ok': bool(styles) and all(s.get('subtitleColor') == expected for s in styles),
                 'styles': styles, 'expected': expected}
+            title_height = 34 if name == 'available-banner-narrow' else 18
+            card_height = 86 if name == 'available-banner-narrow' else 68
+            results['S6_' + name + '_' + appearance + '_content_height'] = {
+                'ok': bool(styles) and all(
+                    s.get('titleFrame', [0, 0, 0, 0])[3] == title_height
+                    and s.get('subtitleFrame', [0, 0])[1] == 12 + title_height + 4
+                    and s.get('frame', [0, 0, 0, 0])[3] == card_height for s in styles),
+                'styles': styles, 'expectedTitleHeight': title_height,
+                'expectedCardHeight': card_height, 'expectedTitleSubtitleGap': 4}
     return captures
 
 

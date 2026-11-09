@@ -114,6 +114,8 @@
         let banners = app.windowControllers.compactMap { controller -> [String: Any]? in
           guard let banner = controller.sidebar.updateBanner else { return nil }
           return ["title": banner.titleLabel.stringValue, "subtitle": banner.subtitleLabel.stringValue,
+            "frame": rect(banner.frame), "titleFrame": rect(banner.titleLabel.frame),
+            "subtitleFrame": rect(banner.subtitleLabel.frame),
             "subtitleColor": colorComponents(banner.subtitleLabel.textColor)]
         }
         return ["webViewCount": webViews.count, "webViewClasses": webViews,

@@ -60,6 +60,11 @@ Updated! Its What's New action opens that version's release page. Dismissal
 is stored for the build. A first install shows no summary. Neither update
 banner has an automatic dismissal timer.
 
+Banner titles use their measured wrapping height. The narrow summary's
+single-line Updated! title keeps the same 4 pt gap before its subtitle as
+the other banners, without reserving a second title line. The card uses
+the existing one- or two-line height and keeps the BannerMetrics insets.
+
 User-requested errors show Update error!, OK, and Download manually.
 Error and restart alerts use a browser-window sheet when one exists. With no
 browser window, they activate Open and show the same centered app-modal alert.

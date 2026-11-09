@@ -64,7 +64,7 @@ public final class SidebarView: NSView {
     public var onUpdateBannerDismiss: (() -> Void)?
     public private(set) var updateBanner: UpdateBannerView?
     private var activeBanner: NSView? { updateBanner ?? banner }
-    private func slotHeight(_ width: CGFloat) -> CGFloat { updateBanner?.requiredHeight ?? banner?.height(for: width) ?? 0 }
+    private func slotHeight(_ width: CGFloat) -> CGFloat { updateBanner?.height(for: width) ?? banner?.height(for: width) ?? 0 }
     private var banner: SidebarBannerView?
     private var bannerShown = false
     private var bannerGeneration = 0

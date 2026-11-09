@@ -43,7 +43,15 @@ public final class UpdateBannerView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     isolated deinit { observation?.cancel() }
     public override var isFlipped: Bool { true }
-    public var requiredHeight: CGFloat { context.sidebarWidth < 200 ? 86 : 68 }
+    private func titleHeight(for width: CGFloat) -> CGFloat {
+        let textWidth = max(1, width - BannerMetrics.padding - 21 - 16)
+        let measured = titleLabel.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: textWidth, height: 1000)).height ?? 18
+        return measured > 18 ? 34 : 18
+    }
+    public func height(for width: CGFloat) -> CGFloat {
+        // Keep the existing one- and two-line geometry, based on the actual title.
+        titleHeight(for: width) > 18 ? 86 : 68
+    }
     private func refresh() {
         let narrow = context.sidebarWidth < 200
         titleLabel.stringValue = state == .available ? (narrow ? "An update is ready!" : "Open is ready to update!") : (narrow ? "Updated!" : "Open Updated!")
@@ -70,8 +78,8 @@ public final class UpdateBannerView: NSView {
         let x = BannerMetrics.padding + 21
         let width = max(1, bounds.width - x - 16)
         symbol.frame = NSRect(x: BannerMetrics.padding, y: 14, width: 13, height: 16)
-        titleLabel.frame = NSRect(x: x, y: 12, width: width, height: requiredHeight > 68 ? 34 : 18)
-        subtitleLabel.frame = NSRect(x: x, y: requiredHeight > 68 ? 50 : 34, width: width, height: 20)
+        titleLabel.frame = NSRect(x: x, y: 12, width: width, height: titleHeight(for: bounds.width))
+        subtitleLabel.frame = NSRect(x: x, y: titleLabel.frame.maxY + 4, width: width, height: 20)
         actionButton.frame = state == .available ? bounds : subtitleLabel.frame
         dismissButton.frame = NSRect(x: bounds.width - 22, y: 2, width: 20, height: 20)
     }
