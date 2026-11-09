@@ -52,6 +52,7 @@ if let receipt = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SCRIPTING_
 #endif
 // Finish AppKit launch and draw the snapshot-backed sidebar before loading
 // Chromium. The same sidebar survives engine readiness; no page exists yet.
+if appDelegate.isFirstRun { appDelegate.prepareOnboardingSound() }
 app.setActivationPolicy(.regular)
 LaunchTiming.shared.phase("finishLaunchingBegin")
 app.finishLaunching()

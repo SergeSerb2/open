@@ -5,11 +5,11 @@ import OpenOnboarding
 extension AppDelegate {
   /// First-run only. No scene or window exists while engine.start blocks.
   /// Returning launches never enter this preparation path.
-  private func prepareOnboardingSound() {
+  func prepareOnboardingSound() {
     guard preparedOnboardingSound == nil else { return }
     #if OPEN_AUTOMATION
     if options.measureIntroFrames, IntroPacingTrace.current == nil { IntroPacingTrace.current = IntroPacingTrace() }
-    if onboardingStartup.isEmpty {
+    if onboardingStartup["launchHostTime"] == nil {
       onboardingStartup["launchHostTime"] = CACurrentMediaTime()-LaunchTiming.shared.elapsedMilliseconds/1000
     }
     #endif
@@ -20,8 +20,11 @@ extension AppDelegate {
   /// This is the only production entrance into OpenOnboarding. Returning and
   /// skip-first-run launches do not initialize a scene, resource or player.
   func showOnboarding(replay: Bool) {
-    if let controller = onboardingWindowController, controller.window?.isVisible == true {
-      controller.showWindow(nil); return
+    if let controller = onboardingWindowController {
+      // Launch and engine-ready callbacks can both reach this while playback
+      // is scheduled and the window is still unshown. Keep that one start.
+      if controller.window?.isVisible == true { controller.showWindow(nil) }
+      return
     }
     guard replay || !onboardingHandedOff else { return }
     prepareOnboardingSound()

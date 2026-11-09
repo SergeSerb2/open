@@ -683,6 +683,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   #if OPEN_AUTOMATION
   func startAutomationIfNeeded() {
     guard automation == nil else { return }
+    let region = IntroPacingTrace.begin("automation.server.start")
+    defer { region?.end() }
     let socket =
       options.automationSocket
       ?? options.userDataDirectory.appendingPathComponent("automation.sock")
