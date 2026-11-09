@@ -410,11 +410,23 @@ def run_favorite_icons(factory, results, tmp, h):
         if blocked: flags.append('--favicon-network=blocked')
         if reduced: flags.append('--reduce-motion')
         app = factory(urls=(), fresh=True, extra_args=flags, extra_env={'OPEN_FAVICON_DIAGNOSTICS':'1'})
+        first = state()
+        database = Path(app.user_data)/'State/favicons.sqlite3'
+        existing_rows = 0
+        if database.exists():
+            with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
+                if db.execute("SELECT 1 FROM sqlite_master WHERE name='favicons'").fetchone():
+                    existing_rows = db.execute('SELECT count(*) FROM favicons').fetchone()[0]
+        proof = dict(factoryFresh=True, pid=app.pid, initialScreen=first['screen'],
+            firstRunCompleted=app.call('first-run')['completed'], faviconRowsBeforePrefetch=existing_rows,
+            prefetchStarted=first['faviconFetch']['started'],
+            snapshotExists=(Path(app.user_data)/'State/browser.json').exists())
         action('skip-intro'); action('get-started')
         until(lambda: state()['screen']=='name')
-        name = state()
+        name = state(); name['firstLaunchProof'] = proof
         action('skip'); until(lambda: state()['screen']=='favorites')
-        return name, state()
+        initial = state(); initial['firstLaunchProof'] = proof
+        return name, initial
     def capture(label):
         captures = {}
         for appearance in ('light', 'dark'):
@@ -440,7 +452,7 @@ def run_favorite_icons(factory, results, tmp, h):
     def quality(s):
         tiles = s.get('favoriteTiles',[])
         icons = [t for t in tiles if t.get('iconState')=='icon']
-        return len(tiles)==12 and len(icons)>=10 and all(min(t['pixelSize'])>=32
+        return len(tiles)==len(icons)==12 and all(min(t['pixelSize'])>=32
             and t['elapsedMS']<=12000 and t['sourceKind'] in ('apple-touch','manifest','link','favicon.ico') for t in icons) \
             and all(t['renderedKind']=='monogram' for t in tiles if t['iconState']!='icon')
     def monograms(s):
@@ -453,8 +465,32 @@ def run_favorite_icons(factory, results, tmp, h):
             and a['frame'][2:]==b['frame'][2:]==[88,84] for a,b in zip(lhs,rhs))
     def row(name, ok, **data):
         results['favorite_icons_'+name] = dict(ok=bool(ok), load=os.getloadavg(), **data)
+    def fresh(proof):
+        return proof['factoryFresh'] and proof['initialScreen']=='intro' and not proof['firstRunCompleted'] \
+            and proof['faviconRowsBeforePrefetch']==0 and not proof['prefetchStarted'] and not proof['snapshotExists']
+    def pixel_icons(s, captures, fallback, fallback_captures):
+        # The negative reference is this tile's actual monogram in a fresh,
+        # blocked-network window, in the same appearance and selection state.
+        # Sample the inner 24x24 pt square, avoiding rounded corners/shadows.
+        # Require mean CIEDE2000 >=6 and >=25% of pixels with delta >=8.
+        observed = []
+        for appearance, shot in captures.items():
+            _,height,pixel = h.read_image(shot['path'], srgb=True)
+            _,mono_height,mono_pixel = h.read_image(fallback_captures[appearance]['path'], srgb=True)
+            scale, mono_scale = shot['scale'], fallback_captures[appearance]['scale']
+            for tile, monogram in zip(s['favoriteTiles'], fallback['favoriteTiles']):
+                x,y,_,_ = tile['iconWindowFrame']; mx,my,_,_ = monogram['iconWindowFrame']
+                deltas = [h.chrome_delta_e(pixel(round((x+dx)*scale),round(height-(y+dy)*scale)),
+                    mono_pixel(round((mx+dx)*mono_scale),round(mono_height-(my+dy)*mono_scale)))
+                    for dx in range(4,28) for dy in range(4,28)]
+                mean = sum(deltas)/len(deltas); changed = sum(d>=8 for d in deltas)/len(deltas)
+                observed.append(dict(name=tile['name'],appearance=appearance,meanDeltaE00=mean,
+                    changedFraction=changed,ok=mean>=6 and changed>=.25))
+        return dict(ok=len(observed)==24 and all(t['ok'] for t in observed),
+            meanDeltaE00Minimum=6, changedPixelDeltaE00=8, changedFractionMinimum=.25, tiles=observed)
     try:
         name, initial = launch()
+        row('fresh_launch', fresh(initial['firstLaunchProof']), observed=initial['firstLaunchProof'])
         # Capture the actual initial fallback before the delayed intro prefetch.
         until(lambda: state().get('faviconFetch',{}).get('finished'), timeout=17)
         network = state()
@@ -598,6 +634,27 @@ def run_favorite_icons(factory, results, tmp, h):
         row('network_negative', not quality(blocked), expected='FAIL', state=blocked)
         row('blocked_negative', not monograms(network), expected='FAIL', state=network)
         row('blocked_fixed_frames', stable(blocked_initial,blocked), initial=blocked_initial, final=blocked)
+        detected = pixel_icons(network, shots, blocked, blocked_shots)
+        row('network_pixels', detected['ok'], observed=detected)
+        rejected = pixel_icons(blocked, blocked_shots, blocked, blocked_shots)
+        row('network_pixels_negative', not rejected['ok'] and all(not t['ok'] for t in rejected['tiles']),
+            expected='FAIL', observed=rejected)
+        print('C7_SIX_DESIGN_CAPTURES_READY '+str(evidence), flush=True)
+        # Repeat with the same normal launch options and another fresh root.
+        # A cache hit or monogram fails, even if the other eleven sites succeed.
+        _, repeat_initial = launch()
+        until(lambda: state()['faviconFetch']['finished'], timeout=17)
+        repeated = state(); action('toggle-favorite', index=0); action('toggle-favorite', index=6)
+        repeat_shots = capture('network-repeat')
+        repeat_pixels = pixel_icons(repeated, repeat_shots, blocked, blocked_shots)
+        repeat_trace = Path(app.user_data)/'favicon-trace.jsonl'
+        if repeat_trace.is_file(): shutil.copyfile(repeat_trace, evidence/'network-repeat-trace.jsonl')
+        row('fresh_launch_repeat', fresh(repeat_initial['firstLaunchProof']), observed=repeat_initial['firstLaunchProof'])
+        row('network_repeat', quality(repeated) and all(not t['storeHit'] for t in repeated['favoriteTiles']),
+            state=repeated, missing=[t['name'] for t in repeated['favoriteTiles'] if t['iconState']!='icon'])
+        row('network_repeat_pixels', repeat_pixels['ok'], observed=repeat_pixels)
+        receipts['networkRepeat'] = dict(initial=repeat_initial, final=repeated, captures=repeat_shots, pixels=repeat_pixels)
+        receipts['network']['pixels'] = detected
         # Same window and real downloaded images with Reduce Motion: no fade.
         _, reduced_initial = launch(reduced=True)
         until(lambda: state()['faviconFetch']['finished'], timeout=17)
