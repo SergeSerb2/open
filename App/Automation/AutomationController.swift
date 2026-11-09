@@ -154,6 +154,9 @@
         return try await runArchiveCommand(cmd, a)
       case _ where Self.downloadCommands.contains(cmd): return try await runDownloadCommand(cmd, a)
       case "metrics": return await metrics(interval: a["interval"] as? Double ?? 1)
+      #if DEBUG
+      case "adblock-memory": return try await adBlockMemory(a)
+      #endif
       case _ where Self.mediaCommands.contains(cmd): return try await runMediaCommand(cmd, a)
       case _ where Self.notificationCommands.contains(cmd): return try await runNotificationCommand(cmd, a)
       case _ where Self.sleepCommands.contains(cmd): return try await runSleepCommand(cmd, a)
