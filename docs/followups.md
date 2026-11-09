@@ -3,7 +3,7 @@
 - First onboarding frame waits for engine.start, 0.1–2.4 s observed on the same binary; final cold/repeat proof measured 2.552/2.498/2.416 s for engine.start and 3.435/3.295/3.230 s from launch to the first onboarding frame (INFO). Owner: launch budget (Section 8 item 13 / Section 16). Dyld/signature checks are a hypothesis; the attributed work is synchronous engine.start.
 - Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
   `onboarding` measures main-thread display-link intervals, not render-server
-  frames. The intro's animations run on the render server; the main thread is
+  frames. The intro's animations run on the render server; the main thread
   was busy with engine startup during the first seconds. One M5 run at load1 10.9
   (240 Hz display): p50/p95 4.167 ms, max 144.9 ms, 22 of 1,848 intervals over
   1.5 × nominal (1.2 %, row limit 1 %). Needs a render-side measurement
