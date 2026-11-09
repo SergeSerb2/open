@@ -382,3 +382,29 @@ The single "load + 1,000 lookups < 1 ms" gate mixed two different costs once war
 |---|---|---|
 | 1,000 allowlist lookups (what page loads pay) | p95 < 1 ms | 0.444 ms |
 | Profile open incl. SHA-256 scan of the live generation (once per profile, off the main thread) | p95 < 10 ms | 6.555 ms |
+
+**Lead decision — 2026-11-09:** profile-open timing now takes **40 samples**
+and reports both nearest-rank p95 (sorted sample 38 of 40) and max. The
+**10 ms p95 limit is unchanged**. With the former ten samples, nearest-rank
+p95 was the maximum; one slow sample therefore made a maximum-time gate
+out of the intended percentile. All 40 samples construct a fresh Store,
+open the same persisted Profile, and verify every live-generation file's
+size and SHA-256. A private root is seeded once before timing; no sample
+skips verification or trusts a persisted verified flag. The ten groups of
+1,000 lookups and their 5,000-match requirement stay unchanged. `check.py`
+requires the 40-sample receipt; `budgets.py` records p95 with `samples=40`
+and retains max as information, without a separate maximum budget.
+
+Three quiet Release runs of `tools/budgets.sh --only adblock` on 2026-11-09
+passed both unchanged limits. Each used 40 opens and ten lookup groups
+(5,000 matches in 10,000 lookups), under the quiet lock with load1 below 12:
+
+| Run | Profile-open p95 | Profile-open max (info) | 1,000-lookups p95 | Load1 start → end |
+|---|---|---|---|---|
+| 1 | 3.0811 ms | 20.8206 ms | 0.1360 ms | 9.37 → 9.34 |
+| 2 | 2.6520 ms | 2.7639 ms | 0.1517 ms | 9.34 → 9.34 |
+| 3 | 2.5167 ms | 2.9143 ms | 0.3190 ms | 9.34 → 9.72 |
+
+Run 1 retains its slow sample in max and in the full sample list; no sample
+is discarded before computing p95. Verification and timed boundaries are
+unchanged. The correction changes the sample count, not the 10 ms limit.
