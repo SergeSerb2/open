@@ -1,6 +1,6 @@
 # Passwords, autofill, and imported Arc secrets: implementation plan
 
-Status: App integration implemented, 2026-11-08; password suite passes; H2 features (including Widevine) and runnable page checks pass, but Little Open save-sheet reentrancy stops final acceptance. The prepared presenter fix needs runtime validation after M5 clearance. No App PR yet. See `docs/engine-spike/passwords-acceptance.md`. Original plan: 2026-10-26. Closes the two P0 gaps in [status.md](../status.md) §3.1 (gap 1: Open's own password manager; gap 2: writing imported Arc passwords, cookies, cards, and addresses) and the §5.4 decision "Password manager approach".
+Status: App save/update, fill and Manage integration implemented and verified, 2026-11-08; awaiting App PR review and merge. H3 passes Little Open 41, password M 22, full passwords 77 (C-2 M1-only; PW-KC1 user check), features 26 with Widevine, page 85 with existing exclusions, settings-preview and the full gate with one load-qualified timing miss cleared by the single quiet rerun. The Little Open presenter reentrancy fix passes ownership and six-cycle focus/visibility regression rows. User/Arc/signed-build and imported-secret integration gates remain open. See `docs/engine-spike/passwords-acceptance.md`. Original plan: 2026-10-26. Closes the two P0 gaps in [status.md](../status.md) §3.1 (gap 1: Open's own password manager; gap 2: writing imported Arc passwords, cookies, cards, and addresses) and the §5.4 decision "Password manager approach".
 
 Readers: the engine lead (fork patches, §4), the OpenEngine owner (§5), and shell implementers (§6, §8). Each step in §10 is one PR.
 
@@ -531,7 +531,7 @@ public enum SavePromptAnswer: Sendable { case save, neverForSite, dismiss }
 }
 ```
 
-`App/EngineBridge.swift` makes `OESavePrompt` conform. The secrets sink for the import is a protocol in `OpenImport` (§8.1), not in OpenWeb, so `OpenImport` keeps depending on `OpenModel` only.
+`App/Autofill/SavePromptBridge.swift` makes `OESavePrompt` conform. The secrets sink for the import is a protocol in `OpenImport` (§8.1), not in OpenWeb, so `OpenImport` keeps depending on `OpenModel` only.
 
 ## 6. UI
 
@@ -853,8 +853,8 @@ the engine and navigates from localhost to a separate fixture origin.
 | # | Flow | Pass when |
 |---|---|---|
 | PW-HF1 | Enable HTTPS-First in the disposable profile, navigate to the HTTP login fixture, activate the native warning's named Continue button with `child-dialog-button` | The real dialog press succeeds, the warning closes, and the exact `http://` fixture URL and form finish loading |
-| PW-HF2-return | Open the same native warning on a new fixture origin, press Return | The warning closes and the previous localhost page finishes loading; Open stays alive with no new crash report |
-| PW-HF2-escape | Repeat on another fixture origin, press Esc | Same Go back result and crash checks as Return |
+| PW-HF2-return | Open the same native warning on a new fixture origin, press Return, then Escape | Return makes no decision, as Chromium configures on macOS. Escape takes Go back, closes the warning and loads the previous localhost page; Open stays alive with no new crash report |
+| PW-HF2-escape | Repeat on another fixture origin, press Esc | Go back closes the warning and loads the previous localhost page; Open stays alive with no new crash report |
 | PW-HF3-tab-close | Close the owned tab while its native HTTPS warning is still open | The warning and tab close, the parent window stays visible, Open answers ping, and no new crash report appears |
 | PW-HF4-window-close | Close the warning's parent window while the warning is open | The window and warning close; Open still answers ping with no new crash report |
 | PW-HF5-navigate | Navigate the warning's tab back to the localhost fixture | The requested form loads, the warning closes, and Open stays alive with no new crash report |
