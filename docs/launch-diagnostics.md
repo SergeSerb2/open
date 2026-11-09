@@ -2,6 +2,8 @@
 
 The 2026-11-08 M5 window found no measurable gain from the five launch candidates. They were all reverted: menu deferral/coalescing, optional framework delays, initial layout coalescing, unused dylib stripping, and Sparkle delay-load. PR #251 keeps default-off diagnostics and the batch harness. No further optimization is implemented.
 
+The executable ctime writer is Chromium's code-sign clone hard link. The separate [PR #266](https://github.com/SergeSerb2/open/pull/266) and its [`docs/re/codesign-clone-reuse.md` evidence report](https://github.com/SergeSerb2/open/blob/a3ed9e6e2c4ed22800bed204f84ae9ea7136e9dc/docs/re/codesign-clone-reuse.md) track the protected clone-reuse fix. Its residual scan cause and timing acceptance remain open. No gain is claimed here.
+
 The window medians were floor 141 ms, matched-links 149 ms, main 375 ms and branch 377 ms, with seven launches per variant. Main/branch paint was 744/771 ms; key acceptance was 489/490 ms in a separate set. All 119 valid samples and the multi-second outliers remain in the PR table. The 250/700 ms budgets remain open.
 
 ## What the marks mean
@@ -71,7 +73,7 @@ WebKit is informational. Sparkle adds WebKit to the entry image set, while the n
 
 These are measured opportunity bounds, not accepted fix gains:
 
-1. **Stop invalidating the security scan cache on every run:** the follow-ups below identify about 148–157 ms in `syspolicyd` `ChangetimeScan`, then identify Chromium's per-run code-sign clone hard link as the ctime writer. The feature can be disabled from the App, but its update-safety purpose must be preserved or proved unnecessary before shipping that choice. The first signed-build check remains required. Changing the harness request is not a product launch improvement.
+1. **Stop invalidating the security scan cache on every run:** the follow-ups below identify about 148–157 ms in `syspolicyd` `ChangetimeScan`, then identify Chromium's per-run code-sign clone hard link as the ctime writer. The unconditional disable was rejected by the live-swap check. Persistent clone reuse is tracked in [PR #266](https://github.com/SergeSerb2/open/pull/266) and the evidence report linked below. Its residual first-after-gap scans remain unexplained. The first signed-build check remains required. Changing the harness request is not a product launch improvement.
 2. **Reduce the executable's real loader footprint only if worthwhile:** the measured pool is about 5.9 ms. Class/Swift metadata registration,48.8k fixups and touched code/signature pages remain combined. A module split or metadata reduction cannot claim the full 107 ms hypothesis from this evidence.
 3. **Embedded framework work is low priority:** roughly 1 ms in the Swift floor and 3 ms in the C graph control. Do not revive Sparkle/framework-delay candidates without a new measured gain.
 
@@ -278,11 +280,11 @@ The 148–157 ms scan is the measured opportunity bound from earlier paired rese
 
 Raw evidence is in `.re/s16/launch-fixes/pre-main/ctime-writer/`: `summary.json`, `source-evidence.json`, source excerpts, and `normal/`, `clone-disabled/`, `before-engine/`, `current-debug/` receipts and stat logs. `current-debug/phase-signposts.json` indexes the unified-log lines. Frozen batch artifacts and the engine source tree remain untouched.
 
-## Current-source validation
+## Historical source validation
 
 The earlier Release build of diagnostic source `0922a78c`, after merging main `caf42f74`, exited 65 in 7.3 seconds at load1 5.11→5.18. Main required missing world/site-control headers and a security-state callback in the authorized engine view. Validation stopped at that external block; no other engine root was used or fetched.
 
-The lead refreshed `open-engine-s8-main` in the morning to main's engine SHA-256 `47af3007153a883fac2acd10e491451de0abcac030c4fbebb14f15f1052115d9`. Main `cdd147ca` merged cleanly in `fc007a04`. The Debug build through `s16-heavy.sh`, with that authorized root exported, passes in 87.8 seconds at load1 44.08→28.67. The current Debug functional launch and cleanup also pass.
+The lead refreshed `open-engine-s8-main` in the morning to main's engine SHA-256 `47af3007153a883fac2acd10e491451de0abcac030c4fbebb14f15f1052115d9`. Main `cdd147ca` merged cleanly in `fc007a04`. The Debug build through `s16-heavy.sh`, with that authorized root exported, passes in 87.8 seconds at load1 44.08→28.67. The morning Debug functional launch and cleanup also passed.
 
 | M5 functional suite | Result | Load1 before → after |
 |---|---|---|
@@ -291,4 +293,4 @@ The lead refreshed `open-engine-s8-main` in the morning to main's engine SHA-256
 | Window |83 PASS, including pixel rows; 2 Release budget rows SKIP in Debug; fingerprint/cleanup PASS|10.11→12.03|
 | Updater |21/21 PASS; defaults restored; cleanup PASS|24.46→30.73|
 
-Full M5 verify-all on `20ded861` was cancelled by the T3 restart after 15 PASS checks, before Settings preview completed. This is INTERRUPTED, not a full-gate pass. The queued floor cleanup failure proof never launched. Cleanup found no owned process, no extra executable hard link, and removed the owned verify scratch directory; shared locks were retained. Evidence is in `.re/s16/launch-fixes/validation-20261108/`. The lead prioritized the separate `s16/codesign-clone-off` fix before finishing #251. Earlier pinned-cohort timings/menu proofs remain historical. PR #251 is not ready to merge.
+Full M5 verify-all on `20ded861` was cancelled by the T3 restart after 15 PASS checks, before Settings preview completed. This is INTERRUPTED, not a full-gate pass. The queued floor cleanup failure proof never launched. Cleanup found no owned process, no extra executable hard link, and removed the owned verify scratch directory; shared locks were retained. Evidence is in `.re/s16/launch-fixes/validation-20261108/`. The lead prioritized the separate `s16/codesign-clone-off` fix before finishing #251. Earlier pinned-cohort timings/menu proofs remain historical. At that checkpoint, PR #251 was not ready to merge.
