@@ -812,16 +812,21 @@ def real_engine(factory, results, wait):
         row('otr_new_session_drops_old_choice', reopened_choice['privateSession'] != private_id
             and reopened_choice['shouldBlock'] and reopened_choice['excludedDomains'] == [], state=reopened_choice)
         app.call('profiles-shell', profile=other['id'], action='adblock-open')
-        closed_profile = app.call('settings-adblock-profile', profile=other['id'], action='close')
+        closed_profile = app.call('settings-adblock-lifecycle', profile=other['id'], action='close')
         closed_site = app.call('settings-adblock-site', tab=other_tab)
-        row('closed_profile_unavailable', not closed_profile['open'] and not closed_site['available']
+        row('closed_profile_unavailable', closed_profile['didChangeCount'] > 0
+            and all(not n['open'] and not n['snapshotEnabled'] for n in closed_profile['notifications'])
+            and not closed_profile['snapshotEnabled'] and not closed_profile['open'] and not closed_site['available']
             and not profile_state(other['id'])['storeReady'], profile=closed_profile, site=closed_site)
         app.call('settings-adblock', enabled=False)
         app.call('settings-adblock', enabled=True)
         closed_contexts = profile_state(other['id'])['contexts']
         row('global_toggle_keeps_closed_profile_detached', bool(closed_contexts)
             and all(not c['adBlockEnabled'] and not c['listDirectorySet'] for c in closed_contexts), contexts=closed_contexts)
-        app.call('settings-adblock-profile', profile=other['id'], action='open')
+        reopened_profile = app.call('settings-adblock-lifecycle', profile=other['id'], action='open')
+        row('profile_open_notifies_after_publication', reopened_profile['didChangeCount'] > 0
+            and reopened_profile['open'] and reopened_profile['snapshotEnabled']
+            and all(n['open'] and n['snapshotEnabled'] for n in reopened_profile['notifications']), state=reopened_profile)
         assert loaded(other['id']) and loaded(other['id'], True)
         visit(other_tab, 'reopened_parent_blocks', True)
         visit(reopened_tab, 'reopened_parent_otr_blocks', True)
@@ -853,9 +858,11 @@ def real_engine(factory, results, wait):
             and not request_verdict(observations[negative], True)
             and not request_verdict(observations[positive], False)
             for positive, negative in pairs), pairs=pairs)
-        retired_profile = app.call('settings-adblock-profile', profile=other['id'], action='retire')
+        retired_profile = app.call('settings-adblock-lifecycle', profile=other['id'], action='retire')
         retired_site = app.call('settings-adblock-site', tab=other_tab)
-        row('retired_profile_unavailable', retired_profile['retired'] and not retired_profile['open']
+        row('retired_profile_unavailable', retired_profile['didChangeCount'] > 0
+            and all(not n['open'] and not n['snapshotEnabled'] for n in retired_profile['notifications'])
+            and not retired_profile['snapshotEnabled'] and retired_profile['retired'] and not retired_profile['open']
             and not retired_site['available'] and not profile_state(other['id'])['storeReady'],
             profile=retired_profile, site=retired_site)
 
