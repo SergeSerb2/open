@@ -404,8 +404,13 @@ live Open Default; named Profiles still match stable import IDs only.
 - Scriptlets, `:style()`, `:remove*()` and procedural filters remain
   post-v1 by lead ruling 6. The 19:08 review reserves private cosmetics
   world 7 (Chromium 0902), separate from Chrome internal 4 and Open/P7 6.
-  It also makes the 65,536-step task budget yield and resume. Rebuild and
-  real CEF/App reruns, including two 30,000-element cases, are pending.
+  It also makes the 65,536-step task budget yield and resume. Verified at
+  5074218a: own targets/full framework, strict 8/0/0, CEF 20/20; both
+  30,000-element cases hide the last generic element 10/10 with yields.
+  All 45 observers use world 7 after binding installation. App cosmetic
+  14/14 passes. C-G1 rerun passes at p50 133 µs/p99 824 µs, load1
+  22.57–24.73. The original full-gate/Page/quit and C-G2/C-G3/payload
+  receipts above remain pre-review evidence; AD3 stays with F.
 - Generic collection stops at 65,536 distinct tokens or 4,194,304 UTF-16
   code units per document; native inputs also cap each token at 2,048
   UTF-8 bytes. A page beyond those limits can miss generic hiding. Review

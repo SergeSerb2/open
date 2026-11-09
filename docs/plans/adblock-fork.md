@@ -2188,7 +2188,7 @@ scan are queued. Only the 65,536 distinct-token / 4,194,304 UTF-16-unit
 lifetime caps, or a negative native report result, disconnect. Queued generic
 reports still send at most 500 tokens per flush. The new C-4 inline variant
 requires hiding and initial-scan evidence in 10/10 navigations. The rebuilt
-`335e9f8d` binary passes both C-4 variants 10/10; the inline variant also
+pre-review `335e9f8d` binary passes both C-4 variants 10/10; the inline variant also
 records its generic class in the initial scan 10/10. The real CEF suite
 passes all 18 executable rows, including binding-before-observer ordering
 for all 25 documents that start the observer.
@@ -2355,7 +2355,10 @@ The overlay's `renderer/open_adblock_isolated_world.h` defines and statically
 checks `kOpenAdBlockIsolatedWorldId`. Chrome internal world 4 and the existing
 Open/P7 world 6 have different V8 globals and cannot see this binding.
 The pinned enum had no free slot, so the patch explicitly reserves one;
-the extension allocator starts above it. Build/runtime rerun pending.
+the extension allocator starts above it. The reservation is declared after
+the extension boundary so patch 0601 remains independently reversible.
+The `5074218a` rebuild passes strict status 8/0/0 and 20 CEF functional
+rows; all 45 started observers run in world 7 after binding installation.
 
 *Historical co-tenants of the shared world (review r1 finding 10;
 superseded by the private-world correction above).* An isolated world separates scripts from the **page**, not
@@ -4891,7 +4894,7 @@ The observer task budget yields and resumes; its token/character lifetime limits
 64-slot reservation are explicit implementation bounds. The 500-selector
 reply cap is independent of the 500-token input cap.
 
-| Acceptance | Current result |
+| Acceptance | Accepted pre-review result (335e9f8d) |
 |---|---|
 | Patch syntax/application against pinned public CEF source fixture | PASS (0311 and 0901; static only) |
 | Extracted fixed observer `node --check` | PASS (syntax only) |
@@ -4978,13 +4981,40 @@ Both contended gates pass, so the priority lane and no-wait fallback
 are not required. Neither gate needs a quiet rerun or an S16 routing row.
 Runtime receipts and each milestone checkpoint belong in `.re/s13/e4/`.
 
-**19:08 review correction, validation pending.** The observer no longer
-disconnects at its per-task step budget. Two real CEF fixtures cover 30,000
-initial parser elements and one 30,000-node insertion, each with a final
-generic-rule element and repeated class tokens below the lifetime cap.
-The requested rerun is the 18 functional rows plus these two cases,
-binding-before-observer/world-7 checks, real-App cosmetic controls and one
-C-G1 run after rebuilding own targets then the full framework in s13b.
+**19:08 review correction, verified at 5074218a (2026-11-08).** The observer
+retains its walker, element token position and mutation-record position.
+It yields after 65,536 inspection steps and continues in a later task.
+Only the lifetime caps or a negative native report stop collection.
+Chromium patch 0902 reserves private world 7; extensions start at 8.
+The overlay defines the ID and checks the reservation at compile time.
+
+| Review check | Result and evidence |
+|---|---|
+| Own objects/targets, checkdeps, scoped GN, then full framework | PASS; full framework 53.39 s, load 66.11/35.28/22.56 to 87.05/46.53/27.55; strict status 8/0/0 |
+| Headless real-service load and empty root | PASS 2/2; loaded 4.37 s, empty 1.21 s; load1 88.85–89.42 |
+| Original 18 CEF rows plus two large-DOM rows | PASS 20/20 in 130.40 s; load 114.62/74.89/42.73 to 85.08/78.69/48.97; C-9 reserved |
+| 30,000 initial parser elements, generic element last | Hidden 10/10; each document has 30,000 nodes at load and records a budget yield |
+| One 30,000-node post-load insertion, generic element last | Hidden 10/10; each run records a budget yield; repeated tokens keep both cases below lifetime caps |
+| Binding before execution, private world | PASS for all 45 started documents (44 main-suite, one Alloy), all in world 7; late and inline C-4 remain 10/10 |
+| C-G1 once after review changes | PASS at load: p50 133 µs, p99 824 µs, 100 documents; 28.31 s, load1 22.57–24.73; three corpus processes keep loading; ordering 272/272 |
+| s13b distribution and App Debug build | PASS, 77.75 s and 56.48 s; load1 67.70→27.31 and 27.31→21.96. Existing signature-normalized fingerprint check passes; UUID 4C4C44A0-5555-3144-A190-9A1923E95595 |
+| Real-App cosmetic flow | PASS 14 scoped rows in 8.57 s, load 21.28/25.47/46.50 to 18.69/24.78/46.01. On/excluded/off/on-again, inverse controls, no page global or style sheet, defaults restored, no owned windows/processes remain |
+
+Raw commands, per-row loads and receipts are in
+`.re/s13/e4/REVIEW-VALIDATION.md`. The first review build compiled but its
+strict status exposed overlapping patch context; patch 0902 now leaves
+0601 independently reversible. The App packaging wrapper's raw-hash
+assertion failed after a successful build because embedding re-signs the
+framework. The existing `--engine-fingerprint-only` check then confirmed
+all normalized code bytes match the new s13b distribution. Both raw
+failures remain recorded with those qualifications.
+
+C-G1 passes under the lead's loaded-run ruling. C-G2 runs with blocking off
+and never starts this observer; C-G3 measures sheet insertion before the
+observer. Their accepted pre-review receipts and the record-only payload
+remain valid; no lane or S16 rerun is needed. The full M5 gate, Page and
+quit-load rows above are pre-review evidence. AD3 still reproduces on the
+Step 4 App and is owned by F; this scoped App rerun does not accept AD3.
 
 
 ### Step 5 root and shared-sequence bounds (2026-11-08 14:00)
