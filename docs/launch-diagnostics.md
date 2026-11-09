@@ -294,3 +294,29 @@ The lead refreshed `open-engine-s8-main` in the morning to main's engine SHA-256
 | Updater |21/21 PASS; defaults restored; cleanup PASS|24.46→30.73|
 
 Full M5 verify-all on `20ded861` was cancelled by the T3 restart after 15 PASS checks, before Settings preview completed. This is INTERRUPTED, not a full-gate pass. The queued floor cleanup failure proof never launched. Cleanup found no owned process, no extra executable hard link, and removed the owned verify scratch directory; shared locks were retained. Evidence is in `.re/s16/launch-fixes/validation-20261108/`. The lead prioritized the separate `s16/codesign-clone-off` fix before finishing #251. Earlier pinned-cohort timings/menu proofs remain historical. At that checkpoint, PR #251 was not ready to merge.
+
+## Merged-head validation, 2026-11-08 evening
+
+Main `25b9c950` merged in `30e1449f`, keeping onboarding snapshot, activation and updater behavior alongside the phase marks. Main then advanced to `50028c98` (#269). Merge `d45bc05c` keeps both main's unfinished-import startup check and the diagnostic `settingsRegistered` mark. The final merge `b5b9b25c` also retains #270's Welcome hover fix from main `b94557b3`; it resolved cleanly and preserves both sides of the status/follow-up docs. The Debug rebuild passes in 15.7 seconds at load1 7.34→7.49, against main's engine distribution `619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`.
+
+The affected first-run/window flows and normal LaunchServices diagnostic check were rerun after the final merge, per TANDEM §4.5a. Other functional rows below retain their recorded source heads. Every suite takes its own screen-lock invocation. Loads include queue endpoints; these are functional results, not quiet launch measurements.
+
+| M5 Debug functional suite | Source head | Result | Load1 before → after |
+|---|---|---|---|
+| shell | `8af995f7` | 7 PASS; cleanup PASS | 9.71→11.35 |
+| context-menus | `8af995f7` | 35 PASS; cleanup PASS | 12.20→8.66 |
+| commandbar | `8af995f7` | 77 PASS; cleanup PASS | 8.66→14.48 |
+| media | `8af995f7` | 1 BLOCKED, 31 PASS; cleanup PASS | 14.48→8.38 |
+| firstrun | `b5b9b25c` | 97 PASS; cleanup PASS | 6.79→6.94 |
+| window | `b5b9b25c` | 83 PASS, 2 SKIP; cleanup PASS | 6.38→16.38 |
+| updater | `5a867149` | 103 PASS; cleanup PASS | 9.29→14.15 |
+
+The media BLOCKED row needs camera/microphone permission. The two window SKIP rows are Release launch budgets, which are not evaluated in Debug. Neither is reported as a new budget pass.
+
+The first strict window run exposed a harness path error: the no-wait LaunchServices fixture ran as the long-lived direct App child. The App stayed healthy, while `launch_waiter_early_exit` failed with `launcherExit=null`. Commit `5a867149` keeps that fixture on `open(1)` without changing its assertions. The corrected row reports launcher exit 0, an early launcher exit before automation, and a live rendered page. The full window run passes 83 rows. The original failure and the corrected receipts are retained. Some first-run/window retries lost the foreground to Zen or T3 Pretty. One later window attempt refused the owned activation peer and stopped as INTERRUPTED. Their cleanup passed; all interrupted attempts are excluded from acceptance and remain in the receipts. Fresh full runs are in the table.
+
+The real default-off/opt-in check passes. Default-off reports omit precise counters, image lists and key/menu probes. Opt-in reports include phases, images, all 107 routable registry shortcuts and `keyAccepted`. An earlier direct-child control reported `keyRejected` before activation; it remains a negative diagnostic observation. The temporary helper's acceptance-only assertion was corrected, not the product. Normal LaunchServices produced the result above. No injected observer or interposer was used.
+
+The final full M5 `s16-heavy.sh tools/verify-all.sh --with-arc-data` on source `b5b9b25c` passes **26/26**, with **0 FAIL and 0 SKIP**, at load1 7.21→8.86. The PR contains its full summary table. An earlier full run on `8af995f7` also passed 26/26. Python syntax, batch CLI help, rejection of load limits 0 and 13, and `git diff --check` pass. No unit tests were added.
+
+Raw receipts are in `.re/s16/launch-fixes/finish-20261108/`: the Debug build receipts, `suites/`, each supervisor JSON, diagnostic receipts, and `verify-main270/summary.txt` / `results.tsv`. The original timing checkout, frozen Apps and runner inputs were left unchanged. This evening update used no priority flag or system-setting operation. No new real Open crash was observed. The verifier that was waiting on Settings at `d45bc05c` was stopped before the #270 merge; its partial receipt is INTERRUPTED, not a full pass. No new launch timing or gain claim is included; the budgets and #266 acceptance remain separate.
