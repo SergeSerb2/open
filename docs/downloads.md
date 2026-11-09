@@ -1,11 +1,12 @@
 # Downloads (S11)
 
-The persisted-history work on `s11/downloads-history` is **ready for its first
-build**, with no runtime acceptance yet. The 2026-11-09 disk hold forbids builds
-and verify-all until the lead clears it; both screen holds remain in force.
-See [the implementation and pending rows](re/downloads-s11.md#persistent-history-and-profile-filter-2026-11-09-implementation).
+The Little Open tray branch includes persisted history from
+`s11/downloads-history`. Its separate scope and acceptance are recorded in
+[the history report](re/downloads-s11.md#persistent-history-and-profile-filter-2026-11-09-implementation).
+[The tray receipt](engine-spike/s11-littleopen-downloads-tray.md) covers the new
+per-window session UI; it does not claim a full persisted-history regression.
 The older acceptance receipts below apply to the original session-download
-implementation, not to the new history work.
+implementation.
 
 This branch implements the lead's Downloads design. Transfers and controls use
 the real App, native Library rows, native save sheets and the engine automation
@@ -37,8 +38,8 @@ rotation. The finite completion animation uses the evidenced checkmark and
 timings; Reduce Motion omits scale/spring. A new transfer interrupts completion
 from presentation opacity values. No download animation remains at rest.
 Geometry (32 pt plate, 2 pt ring inset/stroke) and the 60-second Home click rule
-are the lead's marked guesses, not measured Arc parity. The existing Library
-window owns the list; no toolbar popover or Little Open tray is added.
+are the lead's marked guesses, not measured Arc parity. The existing Library window owns the main list. Little Open now also shows a
+compact per-window session tray; see [the tray receipt](engine-spike/s11-littleopen-downloads-tray.md).
 
 The quit guard presents the exact Downloads warning before sleep capture. Keep
 browsing cancels termination. Close Open cancels transfers and follows the

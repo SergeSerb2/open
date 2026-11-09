@@ -47,6 +47,7 @@ extension AppDelegate {
     // Fan out to the shared visibility feed, deadline and menus.
     coordinator.onChange = { [weak self, weak coordinator] in
       guard let self, let coordinator else { return }
+      self.downloadsCenter.refreshLittleOpenTrays()
       for controller in coordinator.controllers.values {
         let view = controller.container.host(for: controller.session.tab.id)?.view as? LittleOpenSurfaceView
         view?.owner?.windowOrderedFront()
@@ -152,6 +153,7 @@ extension AppDelegate {
 
   func handleLittleOpenKey(_ event: NSEvent) -> Bool {
     guard let controller = keyLittleOpen, event.type == .keyDown else { return false }
+    if downloadsCenter.littleOpenTrays[controller.session.id]?.handleKey(event) == true { return true }
     let context = RoutingContext(isAppActive: NSApp.isActive,
       isTextFocused: controller.window?.firstResponder is NSTextView || controller.window?.firstResponder is NSTextField)
     guard case .browserCommand(let id)? = fallbackKeyboard.route(event: event, context: context, overrides: keyBindings),

@@ -555,6 +555,24 @@ hook waits for the real navigation intent before resuming creation. The close
 hook continues through the production cancellation guard. Normal creation uses
 neither hook. `little-open-action {id:"…", action:"hide"}` orders out that owned window; `focus` resurfaces it. The save-sheet stress flow uses these native lifecycle actions without system input. See [the deferred Browser report](little-open/deferred-browser.md).
 
+## Little Open downloads tray
+
+`little-open-downloads {id:"<session UUID>"}` reads the window's Downloads button,
+aggregate progress, session items, visible native rows and popover window number.
+`action:"toggle"` presses the actual title-bar button; `action:"row"` requires
+`download:"<download ID>"` and `button:"Pause"|"Resume"|"Cancel"|"Open"|"Show in Finder"`
+and presses that row's visible, enabled NSButton. `action:"close"` closes the owned
+popover. `action:"escape"` sends Escape down/up through `OEApplication.sendEvent`
+to its actual popover window, without activating another window. This avoids the
+generic key harness's contradictory key-window reports for transient popovers.
+Missing sessions, hidden buttons and unavailable row actions are refused.
+
+`OPEN_DOWNLOADS_CASE=littleopen tools/e2e/engine_e2e.py --only downloads --style chrome`
+runs the focused real-App flow. The default downloads suite also includes it.
+It uses the normal built bundle, a temporary Foundation home and data/cache roots,
+real loopback transfers, native tray controls and the existing file-opener probe.
+See [the tray receipt](engine-spike/s11-littleopen-downloads-tray.md).
+
 ## Window pixels
 
 `snapshot` captures only Open's windows, from inside Open, so it needs no Screen Recording permission:

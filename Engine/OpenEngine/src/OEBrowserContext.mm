@@ -857,6 +857,7 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
 }
 
 - (void)oe_handleDownloadUpdated:(CefRefPtr<CefDownloadItem>)item
+                      webContent:(OEWebContent*)webContent
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback {
   if (_state == OEBrowserContextStateClosed || _oe_closing) {
     if (callback && item->IsInProgress()) callback->Cancel();
@@ -864,7 +865,9 @@ class OEBrowsingDataCallback : public CefOpenProfileCallback {
   }
   OEDownload* download = _downloads[@(item->GetId())];
   if (!download) {
-    download = [[OEDownload alloc] initOEWithItem:item webContent:nil];
+    // Progress can precede OnBeforeDownload. Preserve this callback's source
+    // before the destination request reuses the same download wrapper.
+    download = [[OEDownload alloc] initOEWithItem:item webContent:webContent];
     _downloads[@(download.identifier)] = download;
   }
   [download oe_updateWithItem:item callback:callback];

@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import Observation
 import OpenEngine
+import OpenFeatures
 import OpenModel
 import OpenSettings
 import OpenSidebar
@@ -63,6 +64,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   @ObservationIgnored let files: DownloadFiles
   @ObservationIgnored private var entries: [String: Entry] = [:]
   @ObservationIgnored private var order: [String] = []
+  @ObservationIgnored private(set) var littleOpenTrays: [WindowID: LittleOpenDownloadsTray] = [:]
   @ObservationIgnored private var publishQueued = false
   @ObservationIgnored private(set) var choices: [String: DownloadDestinationChoice] = [:]
   @ObservationIgnored private var reserved: [String: URL] = [:]
@@ -114,6 +116,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   #endif
   private struct Entry {
     let download: OEDownload
+    let littleOpenSessionID: WindowID?
     var snapshot: DownloadItemSnapshot
     var hidden = false
   }
@@ -206,7 +209,15 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     snapshot.endedAt = terminal ? (state == previous?.snapshot.state ? previous?.snapshot.endedAt ?? Date() : Date()) : nil
     snapshot.fileExists = state == .completed && previous?.snapshot.state != .completed
       ? download.destinationURL != nil : previous?.snapshot.fileExists ?? false
-    entries[key] = Entry(download: download, snapshot: snapshot, hidden: previous?.hidden ?? removedHistory.contains(key))
+    // Capture the source once, before navigation/close can detach its page.
+    // A session identity survives Profile switches and never follows keyWindow.
+    let source = previous?.littleOpenSessionID ?? (previous == nil ? download.webContent?.view.window.flatMap { window in
+      app.littleOpenCoordinator?.controllers.values.first { $0.window === window }?.session.id
+    } : nil)
+    entries[key] = Entry(download: download, littleOpenSessionID: source, snapshot: snapshot, hidden: previous?.hidden ?? removedHistory.contains(key))
+    if let source, littleOpenTrays[source] == nil, let controller = app.littleOpenCoordinator?.controllers[source] {
+      littleOpenTrays[source] = LittleOpenDownloadsTray(controller: controller, center: self)
+    }
     if previous == nil { order.insert(key, at: 0) }
     if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date(); refreshFiles() }
     if state == .completed || state == .failed || state == .cancelled {
@@ -231,6 +242,16 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
         .sorted { $0.endedAt == $1.endedAt ? $0.id < $1.id : ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
       downloads = live + historical
       updateBadges()
+      refreshLittleOpenTrays()
+    }
+  }
+  func refreshLittleOpenTrays() {
+    guard !littleOpenTrays.isEmpty else { return }
+    for (id, tray) in Array(littleOpenTrays) {
+      guard app.littleOpenCoordinator?.controllers[id] != nil else {
+        tray.close(); littleOpenTrays[id] = nil; continue
+      }
+      tray.update(downloads.filter { entries[$0.id]?.littleOpenSessionID == id })
     }
   }
   func updateBadges() {
