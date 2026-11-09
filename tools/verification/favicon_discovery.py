@@ -79,13 +79,18 @@ def run(cli, snapshot, site, origin, env, invoke, require):
         '<use href="https://example.invalid/external.svg#icon"/></svg>')
     invoke(cli,'favicons','ingest','https://vector.invalid/external','--db','vectors.sqlite3',
         '--file','external.svg',expected=1,env=env)
+    Path('external-base.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" '
+        'xml:base="https://example.invalid/external.svg"><use href="#icon"/></svg>')
+    invoke(cli,'favicons','ingest','https://vector.invalid/base','--db','vectors.sqlite3',
+        '--file','external-base.svg',expected=1,env=env)
     print('FV13 direct HTTP discovery: apple >=120, manifest largest <=512, link largest, fallback, persisted metadata/cache; negatives PASS')
     print('FV14 manifest entry cap refused; source dimensions accept 1024 and refuse 1025: PASS')
-    print('FV20 real CLI SVG: 128 px raster; accept 2048 static elements, refuse 2049 and external resources PASS')
+    print('FV20 real CLI SVG: 128 px raster; element/depth boundaries, external resources and xml:base refusal PASS')
     # A real HTTP redirect and Set-Cookie traverse the release CLI's PSL guard
     # and ephemeral session. The cross-site target must receive no connection.
     requests = []
     cross_site = False
+    icon_hops = 0
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
         def do_GET(self):
@@ -99,6 +104,16 @@ def run(cli, snapshot, site, origin, env, invoke, require):
                 self.send_response(200); self.end_headers()
                 self.wfile.write(b'<head><link rel="apple-touch-icon" href="/touch.png" sizes="128x128"></head>')
             elif self.path == '/touch.png':
+                if icon_hops:
+                    self.send_response(302); self.send_header('Location', '/icon-one'); self.end_headers()
+                else:
+                    self.send_response(200); self.end_headers(); self.wfile.write(image(128))
+            elif self.path == '/icon-one':
+                if icon_hops == 2:
+                    self.send_response(302); self.send_header('Location', '/icon-two'); self.end_headers()
+                else:
+                    self.send_response(200); self.end_headers(); self.wfile.write(image(128))
+            elif self.path == '/icon-two':
                 self.send_response(200); self.end_headers(); self.wfile.write(image(128))
             else:
                 self.send_response(404); self.end_headers()
@@ -119,6 +134,16 @@ def run(cli, snapshot, site, origin, env, invoke, require):
             require(('/landing' in [path for path,_,_ in requests]) != blocked,
                 'cross-site redirect connected or same-site redirect failed')
         print('FV19 real HTTP redirects: same site accepted, cross-site refused before connection, no cookies/credentials PASS')
+        cross_site = False
+        for hops in (1,2):
+            icon_hops = hops; requests.clear()
+            text = invoke(cli, 'favicons', 'fetch', '--snapshot', snapshot, '--db', 'icon-hops-%d.sqlite3' % hops,
+                '--treat-as-public', '127.0.0.1', env=env)
+            require(('fetched=1 missing=0 failed=0' if hops == 1 else 'fetched=0 missing=0 failed=1') in text,
+                'icon redirect hop boundary differs')
+            require('/icon-one' in [path for path,_,_ in requests] and '/icon-two' not in [path for path,_,_ in requests],
+                'second icon redirect connected')
+        print('FV21 real HTTP icon redirects: one hop accepted, second hop refused before connection PASS')
     finally:
         http.shutdown(); http.server_close(); worker.join()
         (Path(snapshot)/'State/browser.json').write_bytes(original)

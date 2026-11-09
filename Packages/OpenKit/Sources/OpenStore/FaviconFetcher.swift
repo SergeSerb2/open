@@ -172,7 +172,10 @@ public actor FaviconFetcher {
             let page = try await download(pageURL, limit: 256 * 1024, html: true, policy: policy, deadline: deadline)
             if (200..<300).contains(page.status) {
                 let links = FaviconHeadScanner.candidates(in: page.data, baseURL: page.url, charset: page.charset)
-                diagnostic?(origin, page.url.absoluteString, "discovered:\(links.count):head-bytes=\(page.data.count)")
+                diagnostic?(origin, page.url.absoluteString, "discovered:\(links.count):head-bytes=\(page.data.count):head-limit=262144")
+                for link in links {
+                    diagnostic?(origin, link.url.absoluteString, "declared:\(link.kind.rawValue):manifest=\(link.manifestDocument)")
+                }
                 var manifests = 0
                 candidates = links.filter { candidate in
                     guard candidate.manifestDocument else { return true }
@@ -206,6 +209,7 @@ public actor FaviconFetcher {
                         deadline: min(deadline, ContinuousClock.now.advanced(by: .seconds(1.5))))
                     if (200..<300).contains(response.status) {
                         let icons = FaviconCandidate.manifest(response.data, baseURL: response.url).filter { !attempted.contains($0.url) }
+                        for icon in icons { diagnostic?(origin, icon.url.absoluteString, "declared:manifest-icon") }
                         let iconURLs = Set(icons.map(\.url))
                         candidates.removeAll { iconURLs.contains($0.url) }
                         let fallbacks = candidates.filter { $0.kind == .favicon }
@@ -272,6 +276,11 @@ public actor FaviconFetcher {
     private func download(_ url: URL, limit: Int, html: Bool, policy: FaviconDestinationPolicy,
                           deadline: ContinuousClock.Instant) async throws -> FaviconDownload {
         guard url.absoluteString.utf8.count <= 8192, url.user == nil, url.password == nil else { throw FaviconDownloadError.invalidResponse }
+        // A page may explicitly declare an icon/manifest on any public HTTPS
+        // host. HTTP resources remain usable only on the original HTTP origin.
+        guard html || url.scheme == "https" || FaviconOrigin.key(url) == policy.pageOrigin else {
+            throw FaviconDownloadError.invalidResponse
+        }
         let requestDeadline = min(deadline, ContinuousClock.now.advanced(by: .seconds(timeout)))
         try await policy.check(url, deadline: requestDeadline)
         let remaining = FaviconDestinationPolicy.remaining(requestDeadline)
@@ -283,7 +292,8 @@ public actor FaviconFetcher {
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
         let requestToSend = request
         diagnostic?(policy.pageOrigin, url.absoluteString, "request")
-        let redirectGuard = FaviconRedirectGuard(policy: policy, deadline: requestDeadline, timeout: requestTimeout, resourceURL: url, siteResolver: siteResolver, diagnostic: diagnostic)
+        let redirectGuard = FaviconRedirectGuard(policy: policy, deadline: requestDeadline, timeout: requestTimeout,
+            resourceURL: url, siteResolver: siteResolver, maximumRedirects: html ? nil : 1, diagnostic: diagnostic)
         do {
             return try await withThrowingTaskGroup(of: FaviconDownload.self) { group in
                 group.addTask {
@@ -461,15 +471,18 @@ private final class FaviconRedirectGuard: NSObject, URLSessionTaskDelegate, @unc
     private let timeout: TimeInterval
     private let resourceURL: URL
     private let siteResolver: (any FaviconSiteResolver)?
+    private let maximumRedirects: Int?
     private let diagnostic: (@Sendable (String, String, String) -> Void)?
     private let lock = NSLock()
     private var storedFailure: (any Error)?
+    private var redirects = 0
     var failure: (any Error)? { lock.withLock { storedFailure } }
 
     init(policy: FaviconDestinationPolicy, deadline: ContinuousClock.Instant, timeout: TimeInterval,
-         resourceURL: URL, siteResolver: (any FaviconSiteResolver)?, diagnostic: (@Sendable (String, String, String) -> Void)?) {
+         resourceURL: URL, siteResolver: (any FaviconSiteResolver)?, maximumRedirects: Int?, diagnostic: (@Sendable (String, String, String) -> Void)?) {
         self.policy = policy; self.deadline = deadline; self.timeout = timeout
         self.resourceURL = resourceURL; self.siteResolver = siteResolver
+        self.maximumRedirects = maximumRedirects
         self.diagnostic = diagnostic
     }
 
@@ -483,6 +496,8 @@ private final class FaviconRedirectGuard: NSObject, URLSessionTaskDelegate, @unc
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest) async -> URLRequest? {
         do {
+            let hop = lock.withLock { redirects += 1; return redirects }
+            guard maximumRedirects.map({ hop <= $0 }) ?? true else { throw FaviconDownloadError.invalidResponse }
             guard let url = request.url, url.absoluteString.utf8.count <= 8192,
                   url.user == nil, url.password == nil else { throw FaviconDownloadError.invalidResponse }
             if let siteResolver {
@@ -491,7 +506,9 @@ private final class FaviconRedirectGuard: NSObject, URLSessionTaskDelegate, @unc
             } else {
                 guard resourceURL.host == url.host else { throw FaviconDownloadError.invalidResponse }
             }
-            guard resourceURL.scheme != "https" || url.scheme == "https" else { throw FaviconDownloadError.invalidResponse }
+            guard (resourceURL.scheme != "https" && response.url?.scheme != "https") || url.scheme == "https" else {
+                throw FaviconDownloadError.invalidResponse
+            }
             try await policy.check(url, deadline: deadline)
             let remaining = FaviconDestinationPolicy.remaining(deadline)
             guard remaining > 0 else { throw FaviconDownloadError.timedOut }

@@ -515,6 +515,26 @@ def run_favorite_icons(factory, results, tmp, h):
         database = Path(app.user_data)/'State/favicons.sqlite3'
         with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
             before_store = list(db.execute('SELECT origin,png64,fetched_at FROM favicons WHERE status=0 ORDER BY origin'))
+        # Product pages can redirect to a sign-in page with no icon declaration.
+        # Distinct product artwork must be >=64 px; otherwise record the real
+        # discovery reason instead of calling a generic login icon a product icon.
+        trace_rows = [json.loads(line) for line in trace.read_text().splitlines()] if trace.is_file() else []
+        google = []
+        for tile, origin in zip(network['favoriteTiles'][:2], ('https://mail.google.com','https://calendar.google.com')):
+            events = [entry for entry in trace_rows if entry['origin']==origin]
+            discovery = [entry for entry in events if entry['event'].startswith('discovered:')]
+            declarations = [entry for entry in events if entry['event'].startswith('declared:')]
+            google.append(dict(name=tile['name'], pixelSize=tile['pixelSize'], sourceKind=tile['sourceKind'],
+                declarations=declarations, discovery=discovery,
+                reason='no icon declared in bounded final page head' if discovery and not declarations else 'declared icon available'))
+        stored_images = [data for origin,data,_ in before_store if origin in ('https://mail.google.com','https://calendar.google.com')]
+        distinct_products = len(stored_images)==2 and stored_images[0]!=stored_images[1] \
+            and all(min(tile['pixelSize'])>=64 for tile in network['favoriteTiles'][:2])
+        no_declarations = all(item['discovery'] and all(entry['event'].startswith('discovered:0:') for entry in item['discovery'])
+            and not item['declarations'] for item in google)
+        row('google_product_discovery', distinct_products or no_declarations, productIcons=distinct_products, sites=google)
+        row('google_product_discovery_negative', not distinct_products if no_declarations else not no_declarations,
+            expected='FAIL', observed='generic fallback cannot count as distinct product artwork' if no_declarations else 'declared icons cannot count as absent')
         while state()['screen']!='ready':
             s=state()['screen']
             if s=='defaultBrowser': action('choose-default', yes=False); action('next')

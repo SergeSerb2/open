@@ -480,7 +480,7 @@ private final class FaviconSVGValidator: NSObject, XMLParserDelegate {
         guard depth <= 32, elements <= 2048, Self.tags.contains(name.lowercased()), attributes.count <= 64 else { valid = false; parser.abortParsing(); return }
         for (key, value) in attributes {
             let key = key.lowercased(), value = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if key.hasPrefix("on") || key == "style" || value.contains("@import") || value.contains("javascript:") ||
+            if key.hasPrefix("on") || key == "style" || key == "xml:base" || value.contains("@import") || value.contains("javascript:") ||
                (key.hasSuffix("href") && !value.hasPrefix("#")) ||
                (value.contains("url(") && value.range(of: #"^url\(\s*['"]?#[a-z0-9_:-]+['"]?\s*\)$"#, options: .regularExpression) == nil) {
                 valid = false; parser.abortParsing(); return
