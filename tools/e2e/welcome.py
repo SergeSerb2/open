@@ -402,6 +402,7 @@ def contrast_matrix(factory, results, tmp, api):
                                appearanceOK=appearance_ok, activationOK=activation_ok, themeOK=theme_ok,
                                fullyDisplayed=displayed, frame=native_window['frame'], peerFrame=peer_frame,
                                window=state['windowState'], themeState=theme_state,
+                               layout=state['layout'],
                                capture=capture, screenshot=str(path), loadAverage=list(os.getloadavg()))
                     rows[name] = row
                     (evidence / 'ratios.json').write_text(json.dumps(rows, indent=2))
@@ -513,7 +514,7 @@ def design_gates(state, appearance):
         if 'otherSidebar' in paint:
             color_ok = color_ok and abs(paint['otherSidebar'][3] - .55) <= .005
         if 'text' in paint:
-            home_surface = composite(paint['otherSidebar'], composite(paint['sidebar'], surface))
+            home_surface = composite(paint['otherSidebar'], composite(paint['row'], composite(paint['sidebar'], surface)))
             text_luma, surface_luma = luminance(paint['text']), luminance(home_surface)
             home_ratio = (max(text_luma, surface_luma) + .05) / (min(text_luma, surface_luma) + .05)
             color_ok = color_ok and abs(paint['text'][3] - 1) <= .005 and home_ratio >= 5.19

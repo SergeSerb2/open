@@ -169,7 +169,10 @@ final class WelcomeIllustrationView: NSView {
       item.backgroundColor = color.cgColor
     }
     let sidebarSurface = WelcomeTextColors.opaque(sidebarTint.withAlphaComponent(0.55), over: surface)
-    let homeSurface = WelcomeTextColors.opaque(otherTint.withAlphaComponent(0.55), over: sidebarSurface)
+    // Home overlaps the first sidebar's heading row beneath the second tint.
+    // This is the weaker of the two surfaces crossed by its glyphs.
+    let headingRowSurface = WelcomeTextColors.opaque(row, over: sidebarSurface)
+    let homeSurface = WelcomeTextColors.opaque(otherTint.withAlphaComponent(0.55), over: headingRowSurface)
     for (text, active) in textLayers {
       // At this tiny rasterized size, leave room for core pixels that are not
       // fully covered. Passing Home seeds keep their original visible color.
