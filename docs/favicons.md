@@ -23,14 +23,13 @@ The first actor operation opens SQLite off the main actor.
 - `icon(for:) -> FaviconImage?` returns an exact path match first, then the origin icon.
   It skips negative/error rows. Successful expired images remain available until replaced
   or purged, so a refresh does not blank a tab. `FaviconImage` is Sendable and contains
-  `png32: Data`, `png64: Data?`, and `iconURL: URL?`.
+  `png32: Data`, `png64: Data?`, `iconURL: URL?`, and optional `info: FaviconImageInfo` (source kind, original pixel dimensions, opacity).
 - `ingest(imageData:iconURL:for:pageSpecific:) throws` decodes with ImageIO. It supports
   PNG, ICO, JPEG, GIF, WebP, and BMP. ICO uses the frame closest to 64 pixels by maximum
   dimension. Other raster formats use the first frame. Decoding downsamples to 64 pixels.
-  Input is limited to 512 KiB even for direct engine ingestion. Before thumbnailing,
+  The optional `minimumDimension` rejects smaller source images and selects the largest acceptable ICO frame when at least 64 pixels are requested. Ingest returns the source information after the write succeeds. Input is limited to 512 KiB even for direct engine ingestion. Before thumbnailing,
   ImageIO must report both dimensions in 1...1024 and depth in 1...8 bits
-  (the selected ICO frame); at most 32 frames are allowed. Vector images are refused
-  before AppKit rasterization. Invalid images throw
+  (the selected ICO frame); at most 32 frames are allowed. Static SVG uses a fixed 128-pixel AppKit raster. Before rasterization, an XML validator refuses active content, external resources, entities, style rules, depth above 32, or more than 2048 elements. Natural SVG dimensions stay within 1024 pixels. Other unsupported input is refused before AppKit rasterization. Invalid images throw
   `FaviconStoreError.invalidImage`; invalid page URLs and failed writes also throw.
 - Rendering uses a high-interpolation sRGB CGContext with transparency. It fits the image
   inside a 32×32 or 64×64 square without changing its aspect ratio, then encodes PNGs.
@@ -44,12 +43,11 @@ The first actor operation opens SQLite off the main actor.
   returns the number deleted. `count() -> Int` returns all rows, including negatives/errors.
 - `statistics()` returns counts by status and the sum of both PNG payload lengths.
 
-`FaviconFetcher` is an actor. Its initializer accepts a store, URLSession (default `.shared`),
-`maxConcurrent` (default 6, minimum 1), and a per-request timeout (default and maximum 5 seconds).
+`FaviconFetcher` is an actor. Its initializer accepts a store and an optional URLSession. The default session is ephemeral, without cookie storage, credentials or a URL cache. `maxConcurrent` defaults to six and is clamped to 1...6; request timeout defaults to five seconds and is capped at six. `originTimeout` defaults to eight seconds and is capped at eight. Callers can request a preferred minimum source dimension, an optional smaller fallback minimum, and inject their existing PSL implementation through `FaviconSiteResolver`. Without a resolver, redirects stay on the exact host; with one, they stay within each resource's registrable site. Pages can declare icons or manifests on any public HTTPS host. Icon and manifest requests permit at most one redirect hop within that resource's site; page requests can follow multiple same-site hops. HTTP resources must stay on the original HTTP page origin. A redirect cannot downgrade HTTPS to HTTP. The CLI uses the existing `AdBlockSites` resolver.
 Its in-flight registry is keyed by origin and shared by `prefetch` and `fetchOne`. Concurrent
 calls on the same fetcher await one task, including its cache check. The first page supplied
 for that origin wins. Cancellation of a waiter does not cancel the work shared by other callers.
-`prefetch(_:)` returns a Sendable `FetchReport`: `requested`, `alreadyCached`, `fetched`,
+`prefetch(_:overallTimeout:onResult:)` can impose an overall deadline and deliver each result as it finishes. It returns a Sendable `FetchReport`: `requested`, `alreadyCached`, `fetched`,
 `missing`, `failed`, `durationMs`, plus redacted per-origin results. `requested` counts
 unique eligible origins; the other counts partition that number. Cached negative/error
 rows count as `alreadyCached`, not as new missing/failed requests. `fetchOne(_:)` returns
@@ -74,6 +72,7 @@ CREATE TABLE IF NOT EXISTS favicons(
   expires_at REAL NOT NULL,
   status INTEGER NOT NULL,
   copy_token TEXT,
+  image_info TEXT,
   PRIMARY KEY(origin, page_key)
 );
 ```
@@ -105,18 +104,14 @@ on database failure. Fetching checks that its negative/error cache write actuall
    declaration in the first 1024 bytes. Fall back to UTF-8, then Latin-1. Encode remaining
    non-ASCII URL characters as percent-encoded UTF-8 bytes.
    Accept `icon` (including `shortcut icon`), `apple-touch-icon`, and
-   `apple-touch-icon-precomposed`. Ignore `mask-icon`.
+   `apple-touch-icon-precomposed`, and `manifest`. Ignore `mask-icon`.
 4. Resolve hrefs against the final response URL, including relative paths after redirects.
    Decode common named and numeric HTML entities in hrefs. Permit HTTP(S) images and small
    `data:image/png;base64` images only (32 KiB decoded, at most 44 KiB encoded URL).
-5. Try the smallest declared square/rectangular size whose two dimensions are at least 64,
-   then the remaining sizes in ascending order. Next try Apple touch icons, then other
-   icons, preserving document order for ties. Deduplicate after ranking and cap at 16.
-   Reserve the final slot for `/favicon.ico`, so there are at most 15 declared candidates
-   plus the fallback, and at most 16 total icon attempts.
-6. Try `<original-origin>/favicon.ico` last. Downloads are limited to 512 KiB, including
+5. Prefer apple-touch icons with at least 120 source pixels, then manifest icons (largest declared size up to 512), then declared icons from largest to smallest. A manifest is fetched after apple-touch attempts, is limited to 64 KiB and 64 icon entries, and has a 1.5-second discovery deadline inside the site's remaining budget. Read at most two declared manifests and 64 link candidates. Unknown image sizes are checked by ImageIO before use. At most 16 attempts cover manifests, icons and fallbacks.
+6. Try `/favicon.ico` on the final page origin, then the original origin, last. Downloads are limited to 512 KiB, including
    responses without Content-Length. A 404, invalid image, unsupported SVG, or oversized
-   image advances to the next candidate. Store the first success as an origin-level icon.
+   image advances to the next candidate. Store the first success as an origin-level icon. With a fallback minimum, retain only the largest eligible small candidate (at most 512 KiB) and publish it after larger candidates fail. Existing cached icons above that fallback minimum remain usable.
 7. Check the initial page, every network icon, and every redirect hop before connecting.
    A private destination is allowed only if the original page itself is private and the
    destination has the same canonical scheme, host, and port. `localhost`, `*.localhost`,
@@ -551,7 +546,7 @@ cache misses do not start network requests or disk access on the main thread.
 Limits:
 
 - 512 KiB encoded image input; 1024 pixels per source edge; 8 bits per component;
-  at most 32 frames. Raster decoding selects one frame. Vector images are refused.
+  at most 32 frames. Raster decoding selects one frame. Static SVG uses a bounded 128-pixel raster; active or external content is refused (see the codec limits above).
 - 8192 bytes per page/icon URL. The store retains at most 4096 records and 8 MiB
   of accounted storage: PNG bytes, URL bytes, origin/path bytes twice for the
   primary-key index, and 512 bytes per row for metadata/index overhead. Oldest

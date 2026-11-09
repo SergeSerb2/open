@@ -10,6 +10,7 @@ extension AppDelegate {
     guard replay || !onboardingHandedOff else { return }
     onboardingWindowController?.stop()
     let controller = OnboardingWindowController(options: options, replay: replay)
+    controller.favoriteIcons = OnboardingFavicons(app: self)
     onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
     controller.onHandoff = { [weak self] in
       guard let self else { return }
@@ -37,7 +38,7 @@ extension AppDelegate {
     let model = OpenSettings.FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
     let holder = FirstRunWindowController(model: model, hostedIn: window)
     if !replay { firstRunWindowController = holder; lastFirstRunStep = "welcome" }
-    let steps = OnboardingStepsController(app: self, firstRun: model, replay: replay, reduceMotion: onboarding.intro.reduceMotion)
+    let steps = OnboardingStepsController(app: self, firstRun: model, replay: replay, reduceMotion: onboarding.intro.reduceMotion, icons: onboarding.favoriteIcons ?? OnboardingFavicons(app: self))
     onboarding.steps = steps
     onboarding.show(content: steps)
     window.displayIfNeeded()
