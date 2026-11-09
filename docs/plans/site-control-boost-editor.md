@@ -1487,58 +1487,73 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-09): App source `36cbf553`
-merges main `7ae68e4a` (#266); the fixture-only correction is `a60949dc`.
-Framework SHA-256 is
+Step 3 verification (child A, 2026-11-09): App proof source
+`15e4b89e` merges main `aeebabd9` (#291), including #266. Framework SHA-256:
 `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
-Branch and unchanged-main Debug/Release builds and engine fingerprints PASS;
-both post-Debug key greps report 45/45 unique keys. Fresh Debug/Release smokes
-and the unchanged-main loader PASS, with clean shutdown.
+Branch and unchanged-main Debug/Release builds, engine fingerprints, 45/45
+unique automation keys and smokes PASS. Branch normal features passes
+27 rows. Uninstrumented main features has a retained js_dialogs AppDied-check
+FAIL (26 PASS); an assertion-preserving read-only identity diagnostic passes
+27/27, with cause unestablished. Widevine PASS on both; no Widevine
+known-failure label applies.
 
-Under LEAD-UPDATE item31, targeted functional receipts on `8e8a461c` stand:
-commandbar 77/77, app-actions 77/77, extensions-ui 72/72 (including real-App
-`X13_picker`), toolbar 10/10, features 27/27, split 40/40, space-editor 167/167
-and incognito 31/31 PASS. `no_snapshot_history_change` PASS includes #261.
-Page has 85 PASS, four external BLOCKED rows and one DEFERRED row. Both main
-and branch features pass Widevine, so no known-main Widevine label applies.
-The interrupted first extensions attempt and the first features failure are
-retained in the PR; the completed features diagnostic run changed no assertion.
+Fresh M5 suites on this source: commandbar 77, app-actions
+77, extensions-ui 72 (including real-App
+`X13_picker`), toolbar 10, features 27, page
+105, split 40, space-editor 167
+and incognito 31 PASS. Incognito's
+`no_snapshot_history_change` PASS includes #261. Page retains four BLOCKED
+rows and one DEFERRED row; incognito's native 2x capture remains DEFERRED.
+Site Control has 32 PASS, with only the lead-accepted
+S11/S12 visual FAILs (S12-V). Window has 83 PASS plus known
+startup budget FAILs: cold sidebar/paint 275/503 ms, warm 283/514 ms, within
+the TANDEM §4a 400/700 known-main bars. Paired startup is PENDING, 0/4
+groups: one queued attempt exited 77 before launch when load rose. Work
+stopped after the pre-final fetch found #292 changes under Engine/fork.
+No final preflight or full high gate ran. Main moved to `3b45f509` (#292)
+with Engine/fork changes while the read-only engine view still reports
+`34619927`; no merge or new build was started after this discovery. #276
+remains DRAFT, awaiting the S12 lead's engine ruling.
+The PR retains all raw medians, loads, first failures and interruptions.
 
-On `34619927`, Site Control completes with 32 PASS and only the lead-accepted
-S11/S12 visual FAILs (S12-V). Window completes with 83 PASS and two startup
-budget FAILs; paired main/branch timing on this engine is still pending.
-The real saved Boost and private S4/S10 rows, F3 stale-tile directions,
-F5 permission content/mtime, F9 S1 state and F4 private menu positives PASS.
-The compiled provider negative PASSes after one T3 interruption; F3's old
-stale-tile behavior FAILs in both directions as required, with exact source
-and signed-payload restoration. The other mutation negatives remain pending.
+S2 initially FAILED with the old same-origin `/ad.js` fixture on branch;
+unchanged main also loads that script with blocking On, while its loaded
+native filter blocks shipped EasyList rule `||demand.supply^$script`.
+The S12 lead's 12:40 ruling classifies this as a fixture defect. The ad
+request now uses that pinned domain, resolved to the ephemeral local server
+for every suite launch, including performance launches. The EasyList pin
+and rule text are verified before launch. Every original S2 assertion and
+threshold is unchanged. Initial On blocks, Off/site exclusion plus reload
+loads, and On again plus reload blocks: PASS. Restoring only the old
+same-origin request makes S2 and its initial-On proof FAIL as required.
 
-S2 initially FAILED on the old same-origin `/ad.js` fixture. Unchanged main
-loads that URL with its native filter loaded, but blocks the shipped EasyList
-rule `||demand.supply^$script`. The S12 lead ruled this a fixture defect at
-12:40. The fixture now maps that rule's domain to its local server and verifies
-the pinned EasyList hash. All S2 assertions and thresholds remain unchanged.
-Initial On blocks, Off plus reload loads, and On plus reload blocks: PASS.
-The old-fixture mutation negative is prepared and remains pending.
+The saved real Boost, live off/on glyph/CSS, edit, host-boundary negative
+and same-parent private S4/S10 rows PASS. Compiling without the sole provider
+binding rejects the saved row/glyph proof. F3's stale-tile proof PASSes in
+both directions and rejects the old callback; F5's content/mtime proof
+rejects both old read and unconditional initialization writes; F9 rejects
+the old unavailable assertion; F4 rejects enabled private Manage Boosts.
+The F4 mutation also has an extra S2 FAIL: the script loads after toggling
+On and reloading. A restored-positive suite passes all 29 functional rows.
+An unchanged-main real Settings toggle/reload control shows the same
+On/reload failure in cycle 3 of 5 (and an Off/reload failure in cycle 1).
+This is a retained native-path failure, not a claim that F4 caused it; no
+S2 row or assertion was changed. All six mutation cases and the provider
+variant restore exact source and signed positive payload bytes, then the
+restored real-App rows PASS.
+Native F25 and the Advanced Settings early-failure cleanup/defaults canary
+PASS. The final preflight, full-gate summary and checklist belong to #276.
 
-The screen/disk holds ended under item29. No final full gate has run yet.
-Remaining work: remaining round-1 mutations and the old-fixture mutation
-with exact restoration, native F25 and cleanup canary,
-paired startup groups, final preflight/checklist and the full high gate.
-New main `dc8c7709` changes overlapping App files without an Engine/fork
-change, so rule5a requires a merge, rebuild and affected-suite rerun before
-final acceptance. The queued F5 call was cancelled before any App launch;
-no proof was interrupted. The PR stays DRAFT until that work completes.
-Loads and exact row statuses
-belong to the PR and private receipts; no visual parity is claimed.
-
-F1 is by design under D-10 and §Incognito: parent-Profile Boost metadata is
-read-only in private windows, with no application, writes or enabled actions.
-F2/F4-rest/F6/F7/F8 remain in `docs/followups.md`. The private ad-block API
-switch follows both #276 and Section 13's API PR. E1–E3 remain deferred.
-Gap item1(c) is PARTIAL: host-cookie Clear Cookies uses the legacy bridge;
-Clear Cache is absent/refused. S12-G moves both Site Control … menu operations
-onto `clearSiteData` after A and G merge. No engine root was edited or built; no M1 work was done.
+Per D-10 and §Incognito, parent-Profile Boost metadata is read-only in
+private windows, with no application, writes or enabled actions. F2's
+close/retire notices are resolved by main #291. F4-rest/F6/F7/F8 remain in
+`docs/followups.md`; the private-session tile API switch remains a separate
+PR after #276, per lead item32. E1–E3 remain deferred. Gap item1(c) is
+PARTIAL: host-cookie Clear Cookies uses the legacy bridge; Clear Cache is
+absent/refused. S12-G moves both … menu operations onto `clearSiteData`
+after A and G merge. P1's forced-draw path is automation-only and does not
+establish shipping first-draw acceptance. No visual parity is claimed.
+No engine root was edited or built; no M1 work was done.
 
 Historical pre-#271 verification (child A, 2026-11-08): App source
 `d534c708` includes main `d26300e6`, #249's sole `AppBoosts` owner, #202,
