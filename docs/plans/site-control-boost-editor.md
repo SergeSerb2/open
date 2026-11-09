@@ -1498,8 +1498,17 @@ Advanced Settings cleanup/defaults canary completed before 02:35.
 **Gate incomplete (screen hold 02:35):** the later main loader is void;
 main features, all eleven App suites, saved-Boost/private S4/S10 positives
 and negatives, S2, X13, paired startup and the full high gate remain pending.
-No new build or runtime check resumes before both the lead's explicit M5
-clear and disk-hold release. The earlier engine6193 results below are history
+Lead item27 lifts the disk hold for existing-worktree builds and off-screen
+`verify-all --only` only; the M5 screen hold stays. Source `73496efe` merges
+main `3fb0645c` without an Engine/fork change. Debug/Release, compiled provider
+omission, restored Debug, exact source/executable/signing-file restoration,
+deep code-sign verification and 45 unique keys PASS. The off-screen subset
+passes 7/7 groups: build, commands-demo, commands-dump, adblock-perf,
+adblock-catalog, profiles and extensions-render (zero Swift warnings/errors).
+No Open launch, e2e, full verifier, new worktree or engine copy ran. The
+window-presenting features/sidebar rows stay pending along with the other
+screen rows until explicit M5 clear and Section 16's DMG launch goes first.
+The earlier engine6193 results below are history
 only. The real tile showed On in the compiled-negative App; round-1 F9 now
 authorizes S1 to compare with the real store's available/unavailable state.
 F3 re-reads current blocking state on toggle; `S2_stale_tile` retains a tile,
@@ -1509,9 +1518,9 @@ rewriting the unchanged index on load; `S1_permission_read_only` and
 `S3_permission_index_unchanged` compare file content/hash and mtime before
 and after opening on a never-decided origin (absent and populated index).
 F4 disables Manage Boosts in private menus, asserted in `S10_incognito`.
-All round-1 proof and negative runs are **NOT RUN** under items25–26; the
-source64e62f34 builds/receipts do not qualify the review edits. After both
-holds end, restore each old behavior separately, show its new row FAIL,
+All round-1 real-App proof and negative runs are **NOT RUN** under item25;
+the source64e62f34 runtime receipts do not qualify the review edits. After
+screen clearance, restore each old behavior separately, show its new row FAIL,
 restore exact source and rebuild before the positive rows and final gate.
 F1 is by design under D-10 and §Incognito: parent-Profile Boost metadata is
 read-only in private windows, with no Boost application or writes.

@@ -355,7 +355,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app`, App acceptance source `64e62f34` contains main `195ab60d`
+Historical pre-review App source `64e62f34` on `s12/scc-app` contains main `195ab60d`
 and #249, #202, #205, repaired #252, #261, #264 and #271. SCC forwards to
 the sole `app.stores.boosts` owner. Private matching rows use the session
 parent Profile, and `factory.isIncognito` guards actions. Fresh branch and
@@ -376,10 +376,18 @@ PR #276 round-1 code edits re-read current ad-block state on toggle, make
 panel permission reads leave the origin index unchanged (including initial
 load), disable private Manage Boosts, and compare S1 with the real store.
 The new S2 stale-tile, permission file content/mtime and S10 menu proofs and
-their negatives are prepared, **NOT RUN**. The earlier builds and runtime
-receipts above apply to source `64e62f34`, not these review edits. Both M5
-screen clearance and disk-hold release are required before new builds or
-runtime checks. F2/F4-rest/F6/F7/F8 are recorded in `docs/followups.md`.
+their negatives are prepared, **NOT RUN**. Under lead item27, source
+`73496efe` merges main `3fb0645c` with unchanged Engine/fork: Debug/Release,
+the compiled omitted-provider negative, restored Debug, exact source/binary
+restoration, deep code-sign verification and the fresh 45-key grep PASS.
+Off-screen `verify-all --only` passes 7/7 groups (build plus commands-demo,
+commands-dump, adblock-perf, adblock-catalog, profiles, extensions-render),
+with zero Swift warnings/errors. No Open launch or e2e ran. `sidebar-render`
+orders native windows and `features-render` presents windows; those rows,
+sitecontrol-render, settings-preview and space-editor remain pending with
+the App suites and full gate until M5 clear (Section 16 DMG first). Earlier
+runtime receipts above apply only to source `64e62f34`. F2/F4-rest/F6/F7/F8
+are recorded in `docs/followups.md`. No new worktree or engine copy was made.
 The native ad-block tile showed On in the compiled-negative App; full S2
 is not yet measured. S11/S12 remain **FAIL, known:
 material and element colors, follow-up S12-V (lead 22:20)**, not parity.
