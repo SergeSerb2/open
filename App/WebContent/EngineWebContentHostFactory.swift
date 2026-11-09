@@ -844,33 +844,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
 
   private func copyLinks(ids: [ItemID], markdown: Bool) -> Bool {
-    var seen = Set<ItemID>(), lines: [String] = []
-    func append(_ node: SidebarNode) {
-      guard seen.insert(node.id).inserted else { return }
-      switch node {
-      case .tab(let tab): lines.append(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString)
-      case .folder(let folder): folder.children.forEach(append)
-      case .split(let split): split.panes.forEach { append(.tab($0)) }
-      }
-    }
-    // Selected containers cover their descendants, even if a child also appears
-    // earlier in the payload. Preserve the displayed order of top-level nodes.
-    let selected = Set(ids)
-    for id in ids {
-      var parent = model.parent(of: id), covered = false
-      while let current = parent {
-        switch current {
-        case .folder(let ancestor), .splitPane(let ancestor):
-          if selected.contains(ancestor) { covered = true }
-          parent = model.parent(of: ancestor)
-        default: parent = nil
-        }
-      }
-      if !covered, let node = model.node(id: id) { append(node) }
-    }
-    guard !lines.isEmpty else { return false }
+    guard let payload = model.cleanLinkPayload(ids: ids, markdown: markdown) else { return false }
     NSPasteboard.general.clearContents()
-    return NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+    let copied = NSPasteboard.general.setString(payload.text, forType: .string)
+    // The toast belongs to the window the user acted in: a Library Space Manager copy
+    // (this window not key) copies silently.
+    if copied, let title = payload.toastTitle, controller?.window?.isKeyWindow == true {
+      controller?.toasts.show(ToastContent(title: title))
+    }
+    return copied
   }
 
   private func moveSelectionToNewSpace(ids: [ItemID]) -> Bool {
