@@ -4881,13 +4881,24 @@ G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
 262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
 The 64.900 ms value is Step 5's C-G2 input T for this engine.
 
+The final pre-gate source merge includes main `50028c98` (imported-secrets
+App and harness changes), with no further Engine/fork change. The Debug
+rebuild passes in 38.887 s at endpoint loads 11.76/10.84/10.80 ->
+12.27/11.08/10.89. Its strict App rerun (`s15-adblock-r9`) passes 79/79,
+with zero interruptions and nine clean launches. AD3 PA allocated median
+is +26,704 bytes, non-PA malloc in-use delta zero, and different-list
+control +25,074,288 bytes with sharing=false. Resources-only generation 4
+has no engine/resources/error; one-list generation 5 blocks and redirects
+again. The earlier r8 run lost foreground at its first row and is
+INTERRUPTED, with cleanup PASS; it is not acceptance evidence.
+
 **Remaining delivery gates.** Strict App acceptance passes 79/79,
 including resources/DAT, zero-list restore, independent Profiles/OTR and
 held-load deletion/relaunch. Forced-sheet cleanup and the page regression
 pass. Features, extensions-ui, settings-preview and the full gate remain
 in progress. The accepted AD3 allocation capture passes in E3's merged
-scope: PA median −4,016 bytes; non-PA malloc in-use zero; different-list
-control +25,117,360 bytes with sharing=false. F's harness/ruling is merged
+scope: PA median +26,704 bytes; non-PA malloc in-use zero; different-list
+control +25,074,288 bytes with sharing=false. F's harness/ruling is merged
 from `d5e44abe` and documented in the Step 8 erratum.
 
 Historical whole-process AD3 FAILs remain unchanged: E3 5.734/6.078 MiB
