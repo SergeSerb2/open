@@ -753,6 +753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     littleOpenCoordinator?.closeAll()
+    downloadsCenter.closeDetachedPages()
     engineReady = false
     refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }

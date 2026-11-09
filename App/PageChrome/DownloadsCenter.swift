@@ -63,6 +63,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   unowned let app: AppDelegate
   @ObservationIgnored let files: DownloadFiles
   @ObservationIgnored private var entries: [String: Entry] = [:]
+  @ObservationIgnored private var detachedPages: [ObjectIdentifier: (page: OEWebContent, close: () -> Void)] = [:]
   @ObservationIgnored private var order: [String] = []
   @ObservationIgnored private(set) var littleOpenTrays: [WindowID: LittleOpenDownloadsTray] = [:]
   @ObservationIgnored private var publishQueued = false
@@ -98,11 +99,23 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   @ObservationIgnored private(set) var presentingQuitAlert = false
   #if OPEN_AUTOMATION
   var recordFileActions = false
+  var detachedPageCountForAutomation: Int { detachedPages.count }
   var fileOpenerForAutomation: URL?
   private(set) var fileOpenerPID: Int32 = 0
   private(set) var fileActions: [[String: String]] = []
   var quitAlertPolicy: String?
   private(set) var quitAlerts: [[String: Any]] = []
+  // One real download callback stream can be held across the destination
+  // boundary, to prove attribution before its source host is detached.
+  var holdProgressForAutomation = false
+  private var heldProgressForAutomation: (OEDownload, OEBrowserContext)?
+  var afterDestinationForAutomation: ((String) -> Void)?
+  func releaseProgressForAutomation() {
+    holdProgressForAutomation = false
+    let held = heldProgressForAutomation; heldProgressForAutomation = nil
+    if let held { updated(held.0, context: held.1) }
+  }
+  func sourceSessionForAutomation(_ key: String) -> String? { entries[key]?.littleOpenSessionID?.description }
   /// Ages a real engine transfer for range-boundary e2e fixtures, never creates rows.
   func setStartForAutomation(_ key: String, age: TimeInterval) -> Bool {
     guard entries[key] != nil, age.isFinite, (0...31_536_000).contains(age) else { return false }
@@ -147,6 +160,25 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     return app.model.profiles.first { $0.id.description == context.identifier || app.directories.engineDirectory(for: $0).standardizedFileURL == context.directory?.standardizedFileURL }
       ?? (context === OEEngine.shared.defaultContext ? app.model.defaultProfile : nil)
   }
+  /// Chromium's download callbacks belong to the source browser. Detach its UI
+  /// now, but keep that browser until its last transfer reaches a terminal state.
+  func retainDetachedPage(_ page: OEWebContent, close: @escaping () -> Void) -> Bool {
+    guard !app.shutdownPrepared, !app.terminationRequested, page.context.downloads.contains(where: {
+      $0.webContent === page && ($0.state == .pending || $0.state == .inProgress)
+    }) else { return false }
+    detachedPages[ObjectIdentifier(page)] = (page, close)
+    return true
+  }
+  func closeDetachedPages(profileID: ProfileID? = nil, force: Bool = true) {
+    for (id, detached) in Array(detachedPages) {
+      if let profileID, profile(for: detached.page.context)?.id != profileID { continue }
+      if !force, detached.page.context.downloads.contains(where: {
+        $0.webContent === detached.page && ($0.state == .pending || $0.state == .inProgress)
+      }) { continue }
+      detachedPages[id] = nil
+      detached.close()
+    }
+  }
   func id(_ download: OEDownload, _ context: OEBrowserContext) -> String { "\(sessionID):\(context.identifier):\(download.identifier)" }
   var hasRunning: Bool { entries.values.contains { $0.snapshot.state == .inProgress || $0.snapshot.state == .paused } || !choices.isEmpty }
   func decide(_ download: OEDownload, context: OEBrowserContext, filename: String, window: NSWindow?, directoryOverride: URL? = nil, completion: @escaping @MainActor (URL?) -> Void) {
@@ -155,6 +187,9 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     let name = filename.isEmpty ? "download" : (filename as NSString).lastPathComponent
     guard ![".", "..", "/"].contains(name), name.utf8.count <= Int(NAME_MAX) else { completion(nil); return }
     suggestedNames[key] = name
+    // Capture while the source host still belongs to its Little Open session,
+    // before choosing a destination yields or the user moves/closes the page.
+    updated(download, context: context, atDestination: true)
     let path = directoryOverride?.path ?? profile.settings.downloadDirectory
     let ask = directoryOverride == nil && profile.settings.askWhereToSaveEachFile
     Task { [weak self, weak window] in
@@ -179,12 +214,21 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
           guard !app.terminationRequested, !retiredProfiles.contains(profile.id), app.model.profile(id: profile.id) != nil else { await files.release(url); completion(nil); return }
           reserved[key] = url
           completion(url)
+          #if OPEN_AUTOMATION
+          let after = afterDestinationForAutomation; afterDestinationForAutomation = nil
+          after?(key)
+          #endif
         }
       } catch { lastFileError = error.localizedDescription; completion(nil) }
     }
   }
-  func updated(_ download: OEDownload, context: OEBrowserContext) {
+  func updated(_ download: OEDownload, context: OEBrowserContext, atDestination: Bool = false) {
     guard let profile = profile(for: context) else { return }
+    #if OPEN_AUTOMATION
+    if holdProgressForAutomation && !atDestination {
+      heldProgressForAutomation = (download, context); return
+    }
+    #endif
     updateCount += 1
     let key = id(download, context), previous = entries[key]
     let state: DownloadState
@@ -209,11 +253,11 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     snapshot.endedAt = terminal ? (state == previous?.snapshot.state ? previous?.snapshot.endedAt ?? Date() : Date()) : nil
     snapshot.fileExists = state == .completed && previous?.snapshot.state != .completed
       ? download.destinationURL != nil : previous?.snapshot.fileExists ?? false
-    // Capture the source once, before navigation/close can detach its page.
-    // A session identity survives Profile switches and never follows keyWindow.
-    let source = previous?.littleOpenSessionID ?? (previous == nil ? download.webContent?.view.window.flatMap { window in
-      app.littleOpenCoordinator?.controllers.values.first { $0.window === window }?.session.id
-    } : nil)
+    // Retry a missing link on each callback. Once known it never follows focus,
+    // a view's window, or a later Profile/session hosting the same URL.
+    let source = previous?.littleOpenSessionID ?? download.webContent.flatMap { page in
+      app.littleOpenHosts.values.first { $0.content === page }?.owner?.littleOpenController?.session.id
+    }
     entries[key] = Entry(download: download, littleOpenSessionID: source, snapshot: snapshot, hidden: previous?.hidden ?? removedHistory.contains(key))
     if let source, littleOpenTrays[source] == nil, let controller = app.littleOpenCoordinator?.controllers[source] {
       littleOpenTrays[source] = LittleOpenDownloadsTray(controller: controller, center: self)
@@ -243,6 +287,9 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       downloads = live + historical
       updateBadges()
       refreshLittleOpenTrays()
+      // Outside the engine callback stack, close only browsers whose final
+      // transfer has ended. No timer or work exists when there are no transfers.
+      closeDetachedPages(force: false)
     }
   }
   func refreshLittleOpenTrays() {
@@ -503,6 +550,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   }
   var needsHistoryFlush: Bool { historyWriteRevision != flushedHistoryRevision || !historyMutations.isEmpty }
   func retireProfile(_ profileID: ProfileID, directory: String) async {
+    closeDetachedPages(profileID: profileID)
     retiredProfiles.insert(profileID); historyRevisions[profileID, default: 0] += 1
     let prefixes = ["\(sessionID):\(directory):", "\(sessionID):\(profileID.description):"]
     let keys = Set(order.filter { entries[$0]?.snapshot.profileID == profileID })

@@ -40,7 +40,13 @@ from presentation opacity values. No download animation remains at rest.
 Geometry (32 pt plate, 2 pt ring inset/stroke) and the 60-second Home click rule
 are the lead's marked guesses, not measured Arc parity. The existing Library
 window owns the main list. Little Open now also shows a compact per-window
-session tray; see [the tray receipt](engine-spike/s11-littleopen-downloads-tray.md).
+session tray with file icons, Retry and the same opaque surface as its Space
+picker. It renders the newest 100 session items, counts only transferring items
+as active, and labels paused-only transfers as paused. Attribution captures the
+source content identity at destination selection and retries until known. When
+a source window moves or closes during a transfer, its browser stays detached
+until the last transfer ends; Library keeps the shared item. See
+[the tray receipt](engine-spike/s11-littleopen-downloads-tray.md).
 
 The quit guard presents the exact Downloads warning before sleep capture. Keep
 browsing cancels termination. Close Open cancels transfers and follows the

@@ -92,7 +92,9 @@ extension AppDelegate {
   }
 
   var keyLittleOpen: LittleOpenWindowController? {
-    littleOpenCoordinator?.controllers.values.first { $0.window === NSApp.keyWindow }
+    littleOpenCoordinator?.controllers.values.first {
+      $0.window === NSApp.keyWindow || downloadsCenter.littleOpenTrays[$0.session.id]?.ownsPopoverWindow(NSApp.keyWindow) == true
+    }
   }
 
   func noteLaunchWindowInput(_ window: NSWindow?) {

@@ -559,18 +559,34 @@ neither hook. `little-open-action {id:"…", action:"hide"}` orders out that own
 
 `little-open-downloads {id:"<session UUID>"}` reads the window's Downloads button,
 aggregate progress, session items, visible native rows and popover window number.
-`action:"toggle"` presses the actual title-bar button; `action:"row"` requires
-`download:"<download ID>"` and `button:"Pause"|"Resume"|"Cancel"|"Open"|"Show in Finder"`
+Closed session IDs return `exists:false` and `trayExists:false`. State includes
+`parentKey`, `parentFocusRestored`, `popoverKey`, `firstAction`, `handledKeys`,
+`axRowOrder`, each row's `axChildren` and icon availability, and the tray update count.
+`downloads-state` adds each item's `littleOpenSession`, each save sheet's
+`parent` window number, and the retained source-browser count `detachedPages`.
+
+`action:"toggle"` presses the actual title-bar button. `action:"row"` requires
+`download:"<download ID>"` and `button:"Pause"|"Resume"|"Cancel"|"Open"|"Show in Finder"|"Retry"`
 and presses that row's visible, enabled NSButton. `action:"close"` closes the owned
-popover. `action:"escape"` sends Escape down/up through `OEApplication.sendEvent`
-to its actual popover window, without activating another window. This avoids the
-generic key harness's contradictory key-window reports for transient popovers.
-Missing sessions, hidden buttons and unavailable row actions are refused.
+popover. `action:"key", key:"Escape"|"Return"|"Cmd+W", target:"parent"|"popover"`
+sends key down/up through `OEApplication.sendEvent` to the specified owned window.
+`action:"escape"` is the popover Escape shorthand. `action:"move"` presses the
+native title-bar Space pill. Missing sessions refuse actions; hidden buttons
+and unavailable row actions are refused.
+
+`action:"arm-early-move"` holds real progress callbacks at the DownloadsCenter
+boundary. Immediately after the next destination continuation, it moves that
+source Little Open to Space, then releases the held callback. It neither creates
+snapshots nor changes the engine transfer. This gives the attribution row a
+repeatable destination-before-progress boundary.
 
 `OPEN_DOWNLOADS_CASE=littleopen tools/e2e/engine_e2e.py --only downloads --style chrome`
 runs the focused real-App flow. The default downloads suite also includes it.
 It uses the normal built bundle, a temporary Foundation home and data/cache roots,
 real loopback transfers, native tray controls and the existing file-opener probe.
+For an image over the source page, `snapshot` accepts
+`overlayWindows:[<owned visible popover window number>]`. It composites those
+owned windows at their actual positions over the page capture.
 See [the tray receipt](engine-spike/s11-littleopen-downloads-tray.md).
 
 ## Window pixels
