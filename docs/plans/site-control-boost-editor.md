@@ -1510,7 +1510,14 @@ Library Boosts section and rejects the old Advanced-error assertion;
 read-back. F25 passes 11/11 on attempt 1 after lead item 22 cleared the
 earlier UserNotificationCenter interruption. The expected-error Advanced
 Settings canary restores defaults and leaves zero owned windows/processes.
-Final overlapping-suite counts, loads and the full gate stay in the PR.
+Fresh overlapping suites pass: commandbar/app-actions 77 each, extensions
+72 (including X13), toolbar 10, features 27, page 85, split 40, space-editor
+167 and incognito 31. Incognito's completed retry has zero interruptions
+and `no_snapshot_history_change` PASS. Two T3-window focus interruptions
+are retained separately. Main and branch both pass Widevine. Window has
+83 PASS plus cold/warm startup budget misses (463/738 and 458/729 ms,
+sidebar/paint); the required paired main/branch receipt, loads and full
+gate belong to the PR.
 
 S11/S12 are **FAIL, known: material and element colors, follow-up S12-V
 (lead 22:20)**, accepted as known failures for this PR only, not parity.
