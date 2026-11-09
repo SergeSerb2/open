@@ -77,6 +77,7 @@
         if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if cmd == "boost-editor", ["key", "type", "tap", "drag"].contains(args["action"] as? String ?? "") { inputCommand = true }
+        if cmd == "boost-gallery-ui", args["action"] as? String != "state" { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -684,6 +685,7 @@
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
       case "boost-editor", "boosts", "boost-library":
         return try await runBoostCommand(cmd, a)
+      case "boost-gallery-ui": return try await boostGalleryUI(a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
       case "peek-open":
