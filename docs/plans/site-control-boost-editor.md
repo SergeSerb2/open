@@ -1488,13 +1488,14 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 
 
 Step 3 verification (child A, 2026-11-08; PR pending): App source
-`214b4476` includes main `ebbeeb83`, #249's sole `AppBoosts` owner, and both
-required engine merges, #202 (`be8c8d52`) and #205 (`0c760e0b`). The factory
+`d534c708` includes main `d26300e6`, #249's sole `AppBoosts` owner, #202,
+#205, repaired #252, #261 and #264. The factory
 binds SCC through `app.stores.boosts`; no second store exists. The context
 reads `factory.isIncognito`. Matching private-window rows read the session
 parent Profile, while creation/edit/toggle/Customize actions stay disabled.
 
-Fresh Debug/Release and smoke checks pass on engine `47af3007`. The real
+Fresh Debug/Release and smoke checks pass on engine `619324d3` (framework
+SHA-256 `619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`). The real
 `sitecontrol` suite records 28 PASS, S2 BLOCKED, S11/S12 known FAIL. All S4 and S10
 real-store cases pass: editor-saved CSS, matching row, live off/on without
 reload, Edit, boosted glyph, unmatched-host negative, and same-parent
@@ -1504,7 +1505,11 @@ restored byte for byte and rebuilt. The generated rebuild was archived;
 the saved positive Debug App bundle was restored and its original binary
 SHA-256 verified exactly. All 45 literal automation keys are unique,
 including left/right once. The Settings View Boosts row now checks the real
-Library Boosts section and rejects the old Advanced-error assertion.
+Library Boosts section and rejects the old Advanced-error assertion;
+`commandbar` and `app-actions` each pass 77/77 with the eleven-key defaults
+read-back. F25 passes 11/11 on attempt 1 after lead item 22 cleared the
+earlier UserNotificationCenter interruption. The expected-error Advanced
+Settings canary restores defaults and leaves zero owned windows/processes.
 Final overlapping-suite counts, loads and the full gate stay in the PR.
 
 S11/S12 are **FAIL, known: material and element colors, follow-up S12-V
