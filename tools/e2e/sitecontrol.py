@@ -31,9 +31,14 @@ def run(factory, results, tmp, env, functional_only=False):
                    if line.startswith('easylist.txt '))
         easylist = (repo/'Vendor/adblock/easylist.txt').read_bytes()
         assert hashlib.sha256(easylist).hexdigest() == pin and rule in easylist.decode().splitlines()
-        app = factory(urls=('about:blank',), extra_args=[
+        fixture_args = [
             '--host-resolver-rules=MAP demand.supply 127.0.0.1:'+origin.rsplit(':',1)[1],
-            '--no-proxy-server'])
+            '--no-proxy-server']
+        original_factory = factory
+        def factory(*args, **kwargs):
+            kwargs['extra_args'] = [*kwargs.get('extra_args', []), *fixture_args]
+            return original_factory(*args, **kwargs)
+        app = factory(urls=('about:blank',))
         saved = {}
         private = Path(env['ROOT']) / '.re/handoff/sections/s12/A-sitecontrol'
         private.mkdir(parents=True, exist_ok=True)
