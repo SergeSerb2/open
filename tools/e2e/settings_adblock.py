@@ -366,6 +366,11 @@ def real_engine(factory, results, wait):
                 and ('net::ERR_BLOCKED_BY_CLIENT' in evidence['networkErrors']) == blocked
                 and evidence['adReachedServer'] == (not blocked))
     def visit(tab, name, blocked):
+        initial_page = app.call('tab-state', tab=tab)['page']
+        # open() returns a tab before CEF's asynchronous OnAfterCreated.
+        # Observe its real live/load state before installing Network observers.
+        ready_page = app.call('wait', tab=tab)
+        assert ready_page['live'], ready_page
         app.call('devtools', tab=tab, method='Network.enable')
         app.call('events')
         requests.clear()
@@ -379,7 +384,8 @@ def real_engine(factory, results, wait):
                   if e['type'] == 'devtools' and e['method'] == 'Network.loadingFailed']
         native_count = count(tab)
         evidence = dict(blockedCount=native_count, scriptState=state, networkErrors=errors,
-                        adReachedServer=any(p.startswith('/ad.js') for p in requests))
+                        adReachedServer=any(p.startswith('/ad.js') for p in requests),
+                        initiallyLive=initial_page['live'], liveBeforeObserver=ready_page['live'])
         observations[name] = evidence
         ok = request_verdict(evidence, blocked)
         row(name, ok, **evidence)
