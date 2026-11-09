@@ -7,6 +7,10 @@ public struct DownloadsSection: View {
     @Bindable var model: LibraryViewModel
     public init(model: LibraryViewModel) { self.model = model }
     public var body: some View {
+        VStack(spacing: 8) {
+        if !model.downloads.downloadHistoryError.isEmpty {
+            Text(model.downloads.downloadHistoryError).font(.caption).foregroundStyle(.secondary)
+        }
         if model.downloadItems.isEmpty {
             LibraryEmptyState(title: "No downloads", message: "Files you download appear here.", symbol: "arrow.down.circle")
         } else {
@@ -16,6 +20,7 @@ public struct DownloadsSection: View {
                         .listRowInsets(.init(top: 0, leading: 8, bottom: 0, trailing: 8))
                 }
             }.listStyle(.plain)
+        }
         }
     }
     /// Arc formatter facts: page-chrome §4, 0x101cdbc14 / 0x101cdd0e4.
@@ -147,6 +152,7 @@ public final class DownloadRowView: NSView {
         }
         menu.addItem(.separator()); add("Hide from Open") { actions.removeDownload(id: id) }
         if available { add("Move to Trash") { actions.trashDownload(id: id) } }
+        if item.isHistorical { add("Retry") { actions.retryDownload(id: id) } }
         return menu
     }
 }

@@ -6,7 +6,15 @@ import OpenModel
 import OpenSettings
 
 extension AutomationController {
-  static let downloadCommands: Set<String> = ["downloads-state", "download-settings", "download-row", "download-menu", "download-save", "download-policy", "download-home", "download-idle", "download-library-close", "download-start-age", "settings-clear-data"]
+  static let downloadCommands: Set<String> = ["downloads-state", "download-settings", "download-row", "download-menu", "download-save", "download-policy", "download-home", "download-idle", "download-library-close", "download-start-age", "settings-clear-data", "download-profile-filter", "download-history-flush"]
+  private func downloadProfileControl() -> NSPopUpButton? {
+    func find(_ view: NSView) -> NSPopUpButton? {
+      if let button = view as? NSPopUpButton, button.identifier?.rawValue == "download-profile-filter" { return button }
+      for child in view.subviews { if let found = find(child) { return found } }
+      return nil
+    }
+    return app.settingsPresenter.libraryPresenter?.window?.contentView.flatMap(find)
+  }
   private func downloadRows() -> [DownloadRowView] {
     func rows(_ view: NSView) -> [DownloadRowView] {
       (view as? DownloadRowView).map { [$0] } ?? view.subviews.flatMap(rows)
@@ -16,6 +24,15 @@ extension AutomationController {
   func runDownloadCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {
     let center = app.downloadsCenter
     switch cmd {
+    case "download-history-flush":
+      await center.flushHistory(); return true
+    case "download-profile-filter":
+      guard let button = downloadProfileControl(), let selection = args["profile"] as? String else { throw Failure(message: "Downloads Profile filter is not visible") }
+      let index = selection == "all" ? 0 : button.itemArray.firstIndex { ($0.representedObject as? String) == selection }
+      guard let index else { throw Failure(message: "unknown Downloads Profile filter") }
+      button.selectItem(at: index)
+      guard button.sendAction(button.action, to: button.target) else { throw Failure(message: "Downloads Profile filter action unavailable") }
+      return true
     case "download-start-age":
       guard let key = args["id"] as? String, let age = args["seconds"] as? Double,
         center.setStartForAutomation(key, age: age) else { throw Failure(message: "expected an existing download and age in 0...31536000 seconds") }
@@ -53,11 +70,16 @@ extension AutomationController {
         ["id": item.id, "name": item.fileName, "state": item.state.rawValue, "received": item.receivedBytes,
          "total": item.totalBytes as Any? ?? NSNull(), "speed": item.bytesPerSecond, "path": item.filePath ?? "",
          "profile": item.profileID.description, "startedAt": item.startedAt.timeIntervalSince1970,
+         "endedAt": item.endedAt?.timeIntervalSince1970 as Any? ?? NSNull(),
+         "source": item.sourceURL?.absoluteString ?? "", "historical": item.isHistorical,
          "fileExists": item.fileExists ?? false] as [String: Any]
       }, "rows": downloadRows().map { ["id": $0.item.id, "subtitle": $0.subtitle.stringValue, "buttons": $0.buttons.map { $0.identifier?.rawValue ?? "" }] },
        "badge": app.frontWindowController?.sidebar.downloadBadgeEvidence ?? [:], "running": center.hasRunning,
        "queued": center.queued, "updates": center.updateCount, "publishes": center.publishCount,
-       "openerPID": center.fileOpenerPID,
+       "openerPID": center.fileOpenerPID, "historyError": center.downloadHistoryError,
+       "profileFilter": downloadProfileControl().map { ["visible": !$0.isHidden, "titles": $0.itemTitles,
+         "selected": ($0.selectedItem?.representedObject as? String) ?? "all"] as [String: Any] } ?? [:],
+       "visibleItems": app.settingsPresenter.library?.downloadItems.map(\.id) ?? [],
        "copiedFileURL": NSPasteboard.general.string(forType: .fileURL) ?? "",
        "fallbacks": center.fallbackCount, "error": center.lastFileError, "fileActions": center.fileActions, "quitAlerts": center.quitAlerts,
        "sheets": center.choices.map { ["id": $0.key, "name": $0.value.panel.nameFieldStringValue,

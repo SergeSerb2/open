@@ -6,7 +6,7 @@ final class SQLiteDB: @unchecked Sendable {
     private var db: OpaquePointer?
     private let dataRootLock: DataRootLock
 
-    init(path: String) throws {
+    init(path: String, maximumValueBytes: Int32? = nil) throws {
         dataRootLock = try DataRootLock.acquire(root: OpenDataRoot.root(forStoreFileURL: URL(fileURLWithPath: path)))
         if sqlite3_open(path, &db) != SQLITE_OK {
             let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "open failed"
@@ -14,6 +14,9 @@ final class SQLiteDB: @unchecked Sendable {
             db = nil
             throw NSError(domain: "OpenStore.SQLite", code: 1, userInfo: [NSLocalizedDescriptionKey: msg])
         }
+        // Apply before any PRAGMA/schema read. A corrupt record's declared size
+        // must not cause SQLite to allocate its default (up to 1 GiB) value limit.
+        if let maximumValueBytes { sqlite3_limit(db, SQLITE_LIMIT_LENGTH, maximumValueBytes) }
         exec("PRAGMA journal_mode=WAL;")
         exec("PRAGMA synchronous=NORMAL;")
         exec("PRAGMA foreign_keys=ON;")

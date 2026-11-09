@@ -1255,7 +1255,9 @@ warning. Run with the on-screen lock, one suite per invocation.
 
 | Command | Arguments / behavior |
 |---|---|
-| `downloads-state` | Session items, actual visible native row subtitles/buttons, real Home badge layers, queued publications, pending save sheets, recorded file actions and actual quit-alert strings. |
+| `downloads-state` | Live and lazily loaded historical items (source URL, end time, historical flag), actual native row subtitles/buttons, filtered item IDs, Profile menu titles/selection, history errors, real Home badge layers, queued publications, pending save sheets, file actions and quit-alert strings. Does not trigger a history read. |
+| `download-profile-filter` | `profile=<Profile UUID>|all`; selects the visible native Downloads Profile menu item and sends its control action. Fails when fewer than two Profiles make the filter unavailable. |
+| `download-history-flush` | Waits for accepted history writes and remove actions. Does not load historical rows. |
 | `download-settings` | `profile`, optional `directory`, `ask`; changes the real Profiles settings model in the disposable data root. |
 | `download-row` | `id`, `action=Pause|Resume|Cancel|Retry|Show in Finder`; presses the visible row's actual `NSButton`. |
 | `download-menu` | `id`, optional exact `select` title; reads/performs the same native `NSMenu` returned for a row right-click. Disabled or invisible items fail. |
@@ -1265,13 +1267,20 @@ warning. Run with the on-screen lock, one suite per invocation.
 | `download-library-close` | Uses the Library window's normal close action. |
 | `download-idle` | S8 observer actions `begin|reset|canary|end` and counts. Available only when the runner injects `feature-idle-probe.m`. Canary is a real repeating timer that is then invalidated. |
 
-The suite gives its cloned App a unique preferences domain and restores each
-`open.*` preference it changes in `finally`. It
+The suite gives its cloned App a unique empty preferences domain. Quit-preference
+variants use transient launch arguments, with no `defaults` commands. It
 cancels pending save sheets before verified-PID cleanup, including forced early
 failure (`OPEN_DOWNLOADS_FAIL_IN_SHEET=1`). The receiver verifies the real Open
 document URL, bytes and SHA-256. Finder dispatch is recorded without opening a
 Finder window. Home geometry and the 60-second recent-download click rule remain the
 lead's marked guesses. No Little Open tray is added.
+
+`OPEN_DOWNLOADS_CASE=history,history-errors` selects the persisted-history rows:
+two Profiles, relaunch, native Profile filter, private exclusion, missing files,
+file actions/retry, remove/ranged clear, Profile deletion, count bounds and corrupt
+or oversized files. All use the real App and existing loopback download fixture.
+The damaged-file fixtures change only the disposable root while Open is stopped.
+These rows and their negative proofs await the lead's disk and screen clearance.
 
 The `extensions-e2` suite also checks three-action pin/move/unpin sequences through `ext-pin`, `ext-move`, and `actions`. It checks raw engine ids and pinned indices, plus `extensions.duplicatesDropped == 0` when the App guard is present. `OPEN_E2E_E2_SCOPE=pins` selects this reproduction alone.
 
