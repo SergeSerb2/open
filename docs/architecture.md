@@ -93,6 +93,12 @@ still fails. See `docs/verification.md` for the runner and receipts.
 
 Tactics: build the window and sidebar from the snapshot before the engine finishes starting. Create web content only for visible or recently used tabs. Put tabs to sleep after a period without use (configurable). Load features on first use (command bar panel, settings, Little Open, editors). Ship only the locales we need.
 
+Launch time starts at the kernel process-start counter, before the first App constructor. `sidebarDrawn` requires a display callback whose timestamp is at or after the flushed window transaction. It does not mean that the window was merely ordered or that drawing was queued. CEF loads after this confirmed frame. First web paint and the first accepted key are separate milestones; a sidebar change must preserve both.
+
+`OPEN_SPEED_TRACE=1` enables fixed startup signposts and precise phase counters. It is off by default. Automation can separately capture loaded images at the confirmed sidebar frame with `OPEN_SPEED_IMAGES=1`. This image scan stays out of primary timing runs. Floor calibration uses a standalone AppKit window and a second variant with the same direct system links as Open. Both use the same kernel origin, LaunchServices path and frame rule. In the macOS 27.2 control, both standalone floor apps load WebKit by the confirmed first frame. Image presence is informational; it does not establish a removable cost.
+
+The 2026-11-08 M5 window measured 141 ms for the standalone AppKit floor, 149 ms with Open’s direct system links, 375 ms for main and 377 ms for the candidate branch. Seven launches per variant ran at load1 6.3–8.2. The menu, optional framework, layout and dylib-strip candidates showed no measurable gain and were reverted. First paint was 744/771 ms and key acceptance was 489/490 ms for main/branch in their separate sets. The budgets remain open. The [pre-main research](launch-diagnostics.md) measures about 5.9 ms for the executable loader pool and about 148–157 ms in a `syspolicyd` change-time scan. Chromium's code-sign clone hard link advances the executable ctime during each full run and invalidates the next launch's scan cache. A fix must preserve live-update code-signature protection; no new optimization is implemented.
+
 ## Testing
 
 No unit tests. Each feature is verified end to end on the real app through the automation channel (`docs/automation.md`, built by the engine spike): open URLs, read tab and sidebar state, run JavaScript in pages, and capture PNGs of our own window. We never drive the user's desktop.
