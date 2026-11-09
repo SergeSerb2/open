@@ -1,59 +1,153 @@
 # Passwords and autofill acceptance (Section 15)
 
 This continues [the D4 dropdown investigation](passwords-dropdown.md).
-The current App integration uses engine PR #264, framework SHA-256
+The App save/update, fill and Manage integration is **implemented and verified**
+on the Section 15 branch, awaiting PR review and merge. User and release gates
+below remain open. The engine is main's PR #264, framework SHA-256
 `619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`.
-The post-main-merge H run passes the full password suite: **77 PASS**,
-**C-2 M1-only by rule**, **PW-KC1 user hand check**. It has zero interrupted
-attempts, zero new crash reports and clean owned-process/window shutdown.
-The sanitized per-row loads are in [results-passwords.json](results-passwords.json).
-H initially stopped before PR creation: the features suite passed 17 rows, then failed
-because the Widevine component updater provided no CDM in its bounded wait.
-The first attempt expired at the 120 s row watchdog; the suite correction
-starts the named row and limits the download wait to 60 s, preserving the
-playback acceptance criterion. The corrected attempt reports the missing
-component at load 21.29 / 45.44 / 47.58, with clean owned-process/window
-shutdown and zero interruptions. This is a component prerequisite failure;
-no engine root was changed and no engine regression cause is inferred.
 
-## H2 continuation and Little Open crash stop (2026-11-08)
+## Final H3 acceptance (2026-11-08)
 
-H2 reran `features` once on App head `221f2127`, on the same #264 engine.
-All 26 runnable rows pass, including downloaded Widevine EME playback;
-`crash_recovery` remains M1-only by rule. The conditional unchanged-main
-control is not needed. `page` passes 85 rows, with its four existing blocked
-rows (macOS notification delivery, service-worker window opening, the Apple
-translation pack and the incognito capture fixture) and smart zoom deferred.
-Both runs have zero interruptions and clean owned-process/window shutdown.
-Sanitized rows and loads are in [results-passwords-h2.json](results-passwords-h2.json).
+Final native fix: `c60340f3`; final code head: `d7dd37ba`, containing merged main
+`d26300e6`. H3 changes the Little Open harness and plan text only. All runtime
+suites below exercised that final native code. The final Debug build and full
+gate ran after the H3 harness corrections were committed. This receipt and
+status reconciliation are documentation-only additions after that code gate.
+[The sanitized receipt](results-passwords-h3.json) includes every row, load,
+source head, working-diff hash, cleanup result, command and prior attempt.
 
-Little Open passes its first eight rows, then crashes while showing the save
-sheet for the new ownership row. The 14:02:21 MST crash has repeated
-`SavePromptPresenter.showNext` / `pageDidBecomeFocused` frames through
-`standaloneSurfaceVisibilityChanged` and
-`LittleOpenWindowController.windowDidResignKey`. Presenting the sheet transfers
-the key window; the old focus predicate treats that transfer as page loss,
-parks the sheet inside `beginSheet`, and re-enters presentation. The local
-receipt is `Open-2026-11-08-140223.ips`; the stack and failed run are preserved
-under `.re/s15/h2/`. Cleanup leaves no owned process or window.
+| Run | Result | Load at screen acquisition 1 / 5 / 15 | Load after 1 / 5 / 15 |
+|---|---|---|---|
+| littleopen-initial | 8 PASS; ownership FAIL; suite FAIL (harness) | 16.52 / 19.54 / 18.65 | 18.14 / 19.77 / 18.75 |
+| littleopen-cold-failure | 37 PASS; suite FAIL (cold fixture) | 33.40 / 24.25 / 20.60 | 42.83 / 28.04 / 22.19 |
+| littleopen | 41 PASS | 25.42 / 24.80 / 23.36 | 20.80 / 23.70 / 23.03 |
+| passwords-m-interrupted | 20 PASS then INTERRUPTED; excluded | 27.85 / 24.61 / 23.45 | 23.48 / 23.99 / 23.27 |
+| passwords-m-interrupted-2 | 13 PASS then INTERRUPTED; excluded | 8.96 / 16.45 / 20.17 | 8.12 / 15.78 / 19.84 |
+| passwords-m | 22 PASS | 8.84 / 10.40 / 15.18 | 9.54 / 10.45 / 15.03 |
+| passwords | 77 PASS, 2 BLOCKED | 6.08 / 7.40 / 11.83 | 7.11 / 7.18 / 11.10 |
+| features | 26 PASS, 1 DEFERRED | 17.09 / 9.68 / 11.04 | 11.15 / 10.27 / 11.15 |
+| page | 85 PASS, 4 BLOCKED, 1 DEFERRED | 17.34 / 11.61 / 10.38 | 10.21 / 10.69 / 10.15 |
 
-The prepared fix coalesces all presenter triggers into one asynchronous pass,
-guards sheet presentation/removal against re-entry, and compares the active
-page with the focused pane of the presenter's own window. A sheet's own key
-transfer does not park its request. The Little Open coverage checks the sheet
-parent, page/event ownership, App survival and exactly one answer, then stresses
-six real window hide/show and focus cycles with the same sheet.
+The accepted runs each have zero interruptions and cleanup PASS. Passwords has
+only the accepted C-2 M1-only and PW-KC1 user-hand-check blocks. Features passes
+Widevine encrypted playback; its intentional crash row stays M1-only. Page's
+existing exclusions are `N1_macos_delivered`, `N6_click_opens_tab`,
+`X1_apple_backend` (language pack absent), `capture_c7_incognito` (fixture gap),
+and deferred `Z3_smart_zoom` (user gesture). These are not new acceptance claims.
 
-This fix is not runtime accepted. M5 screen work is held until the lead relays
-clearance after the crash dialog is dismissed. Password M rows, Little Open,
-settings-preview and the full verify-all gate remain pending on the fix.
-The App PR is not open and status remains implemented with acceptance
-incomplete. Full commands and loads are in `.re/s15/h2/REPORT.md`.
+Debug build: PASS, 19.15 s; load 12.33 / 9.76 / 9.52 before and
+18.03 / 11.15 / 10.02 after. Targeted `verify-all --only settings-preview`:
+build PASS (112 s), settings PASS (949 s including lock waits), load
+9.53 / 10.50 / 10.09 before and 9.23 / 9.16 / 9.32 after.
+The full gate below has 24 PASS and one timing FAIL in `commandbar-render`.
+Inline completion added 0.510 ms against the 0.3 ms limit at measured load
+15.6 / 19.0 / 17.9; its main CPU p95 row passed at 6.77 ms. The single
+quiet rerun below passes: overhead 0.181 ms, main CPU p95 4.74 ms, measured
+load 10.1 / 12.9 / 15.3 (pre-lock load1 8.32). No threshold changed,
+and no other full-gate check failed. Check seconds include shared lock waits.
+
+| Name | Result | Seconds | Load before 1 / 5 / 15 | Load after 1 / 5 / 15 |
+|---|---|---:|---|---|
+| build | PASS | 4 | 21.71 / 14.06 / 11.26 | 21.89 / 14.23 / 11.33 |
+| commands-demo | PASS | 10 | 21.89 / 14.23 / 11.33 | 25.52 / 15.27 / 11.74 |
+| roundtrip | PASS | 1 | 25.52 / 15.27 / 11.74 | 25.52 / 15.27 / 11.74 |
+| space-legacy | PASS | 3 | 25.52 / 15.27 / 11.74 | 24.84 / 15.30 / 11.77 |
+| space-editor | PASS | 426 | 24.84 / 15.30 / 11.77 | 15.13 / 16.45 / 13.76 |
+| space-pad-compare | PASS | 2 | 15.13 / 16.45 / 13.76 | 15.13 / 16.45 / 13.76 |
+| suggest-check | PASS | 25 | 15.13 / 16.45 / 13.76 | 15.50 / 16.37 / 13.80 |
+| commands-dump | PASS | 0 | 15.50 / 16.37 / 13.80 | 15.50 / 16.37 / 13.80 |
+| route | PASS | 22 | 15.50 / 16.37 / 13.80 | 19.13 / 17.24 / 14.20 |
+| favicons | PASS | 4 | 19.13 / 17.24 / 14.20 | 19.13 / 17.24 / 14.20 |
+| media-demo | PASS | 1 | 19.13 / 17.24 / 14.20 | 19.13 / 17.24 / 14.20 |
+| sleep-demo | PASS | 1 | 19.13 / 17.24 / 14.20 | 18.64 / 17.17 / 14.19 |
+| adblock-perf | PASS | 1 | 18.64 / 17.17 / 14.19 | 18.64 / 17.17 / 14.19 |
+| adblock-catalog | PASS | 5 | 18.64 / 17.17 / 14.19 | 18.03 / 17.07 / 14.17 |
+| profiles | PASS | 5 | 18.03 / 17.07 / 14.17 | 18.11 / 17.10 / 14.20 |
+| settings-preview | PASS | 603 | 18.11 / 17.10 / 14.20 | 32.82 / 23.13 / 18.30 |
+| sidebar-render | PASS | 110 | 32.82 / 23.13 / 18.30 | 19.06 / 21.90 / 18.47 |
+| sidebar-compare | PASS | 134 | 19.06 / 21.90 / 18.47 | 16.46 / 19.65 / 18.03 |
+| commandbar-render | FAIL | 37 | 16.46 / 19.65 / 18.03 | 15.63 / 18.98 / 17.85 |
+| features-render | PASS | 90 | 15.63 / 18.98 / 17.85 | 11.29 / 16.80 / 17.13 |
+| extensions-render | PASS | 7 | 11.29 / 16.80 / 17.13 | 10.95 / 16.64 / 17.07 |
+| sitecontrol-render | PASS | 165 | 10.95 / 16.64 / 17.07 | 10.34 / 14.39 / 16.08 |
+| onboarding-render | PASS | 22 | 10.34 / 14.39 / 16.08 | 9.51 / 13.94 / 15.88 |
+| boosts | PASS | 3 | 9.51 / 13.94 / 15.88 | 10.11 / 13.99 / 15.89 |
+| verify-secrets-fixture | PASS | 8 | 10.11 / 13.99 / 15.89 | 9.62 / 13.76 / 15.78 |
+
+| Quiet rerun | Result | Seconds | Load before 1 / 5 / 15 | Load after 1 / 5 / 15 |
+|---|---|---:|---|---|
+| build | PASS | 4 | 8.32 / 13.12 / 15.49 | 8.14 / 13.00 / 15.44 |
+| commandbar-render | PASS | 34 | 8.14 / 13.00 / 15.44 | 10.08 / 12.92 / 15.30 |
+
+Every shell exports `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main` and
+`OPEN_E2E_NO_CRASH_PROBES=1`. Builds/checks use heavy lock `a` and `heavy.sh`.
+Each App suite has its own screen `lockf -k`, priority checks and strict
+`--stop-on-app-death --row-timeout 120 --suite-timeout 900` bounds. No owned App
+is left behind. M1 stayed held. No intentional crash was run on M5.
+
+## The 14:02 crash and regression proof
+
+H2's `Open-2026-11-08-140223.ips` crash at 14:02:21 MST occurred while presenting
+a Little Open save sheet. Its repeated `SavePromptPresenter.showNext` /
+`pageDidBecomeFocused` frames through `standaloneSurfaceVisibilityChanged` and
+`LittleOpenWindowController.windowDidResignKey` establish reentrant sheet
+parking: `beginSheet` transfers the key window, which the old focus predicate
+treated as page loss. The local crash and failed run remain under `.re/s15/h2/`.
+That failed build was not replayed on M5.
+
+The fix coalesces presenter triggers to the next main turn, guards sheet
+presentation/removal against reentry, and checks the focused page inside the
+presenter's own window. Closing requests release before window/page metadata
+dies; AppKit sheet teardown is deferred. A sheet's own key transfer preserves
+its request. `littleopen_events_owner` proves the owning window's attached
+sheet, correct page/event routing (including Section 11 #240), exactly one
+answer and App survival. `littleopen_save_sheet_focus_visibility_stress`
+passes six real hide/show and own-window focus cycles with the same sheet,
+one answer and no extra answer. Both pass at load 24.11 / 24.54 / 23.29.
+
+H3 corrected two harness defects without changing native code. The first
+attempt's ownership assertion used `NSWindow.parent`; AppKit sheets instead
+use `attachedSheet`/`sheetParent`. The accepted row requires a real sheet and
+the owner's `attachedSheet`, and records every page/window/answer condition.
+It observes `sheetOwned=true` and `childParentMatches=false`. The next attempt
+passed 37 rows, then strict cold launch dropped the real startup open-URL
+event. Only those cold fixtures now retain LaunchServices delivery; the owner
+watcher, unique root, crash guard and verified-PID/window cleanup stay active.
+A missing session is a failed row, not an index exception. Both full cold rows
+pass in the final 41-row run. Two M-only attempts lost foreground to Messages
+and T3 Pretty Internal; both are INTERRUPTED and excluded, with clean cleanup.
+
+No new real crash report appeared during H3. One non-fatal `ExcUserFault`
+(bug_type 309, simulated) matches the passing features run at 17:21:51 and
+crosses `ISMutableIcns addCGImage:scale:error:` →
+`NSWorkspace setIcon:forFile:options:` → Chromium `shortcuts::SetIconForFile`.
+The App exited cleanly. TANDEM §8c classifies this as a fault, not a crash.
+Its cause and regression attribution are unknown; it remains a follow-up.
+Six other faults do not match the recorded H3 App PIDs.
+
+## Open user and integration gates
+
+Arc captures S-1…S-6, PW-KC1, signed-build K-1…K-3 after release U-1/U-2,
+HTTP-auth sheet/save/fill acceptance, iCloud passkeys U-9, and real hardware
+security-key/phone authentication remain open. Imported-secret engine/App
+integration is separate and `canImportPasswordsAndCookies` remains false.
+No real Keychain or Arc secret was read. Fixture acceptance does not qualify
+those gates or Arc pixel parity.
+
+## Earlier H/H2 diagnosis
+
+The earlier H password run had 77 PASS before the presenter fix. H initially
+stopped when the component updater did not supply Widevine within its bounded
+wait. The harness starts the named row and limits that wait to 60 s inside the
+120 s cap; it still requires encrypted playback. H2 on `221f2127` passed all
+26 runnable features rows, including Widevine, and 85 page rows before the
+Little Open crash. H3 repeats these suites on the fixed native code, so those
+older receipts do not stand in for fixed-head acceptance. Historical receipts
+remain [H](results-passwords.json) and [H2](results-passwords-h2.json).
 
 The sections below retain D5/D6 diagnosis history. D5's old framework is not
-accepted or replayed. Raw historical receipts remain in the engine checkout's
-`.re/s15/d5/` and `.re/s15/d6/`; H/H2 receipts are under `.re/s15/h/` and `.re/s15/h2/` in the App
-checkout. Receipts contain no credential values.
+accepted or replayed. Raw historical receipts stay in the engine checkout's
+`.re/s15/d5/` and `.re/s15/d6/`; App H/H2/H3 evidence stays under `.re/s15/`.
 
 ## Historical D5 causes
 
@@ -136,7 +230,7 @@ That sent a tab UI event while `GetTabFeatures()` was already null, and
 `ask_before_http_dialog_controller.cc:184`, and `tab_ui_helper.cc:199`.
 The local `Open-2026-11-07-210523.ips` stack confirms that order. The suite
 stopped at its first App death and cleanup left no owned process or window.
-The M5 screen is held until the user dismisses the crash dialog.
+The M5 screen was held at that checkpoint until the user dismissed the crash dialog.
 
 Prepared engine patch 0810 keeps the blocked-state update and skips only
 the UI event after tab features are gone. Modal security checks, fullscreen
