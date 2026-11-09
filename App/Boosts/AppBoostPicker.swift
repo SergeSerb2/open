@@ -147,7 +147,10 @@ final class AppBoostPicker {
     send(type: wire.type, payload: wire.payloadJSON, binding: binding, tabID: tabID, prefix: prefix)
   }
   private func send(type: String, payload: String, binding: Binding, tabID: ItemID, prefix: String = "") {
-    guard type.utf8.count + payload.utf8.count <= AppBoostPickerList.wireLimit else { return }
+    guard type.utf8.count + payload.utf8.count <= AppBoostPickerList.wireLimit else {
+      if type != "zap:list" { exit(tabID: tabID) }
+      return
+    }
     let source = """
       (() => {
         if (window.__openZapBinding !== \(BoostEngineAdapter.json(binding.challenge))) return false;
