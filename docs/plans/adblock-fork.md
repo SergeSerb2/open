@@ -4501,8 +4501,9 @@ are measurements for optimization, not final gate acceptance.
 ### Step 4 as built (2026-11-08, integrated engine)
 
 Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
-Source now includes main `d26300e6` (Section 15's Chromium 0801–0810),
-the final App adapter `fcd1ef25`, and Step 7 resources. Every main patch
+Source now includes main `40c2ab94`, including the final Section 15 App,
+the final App adapter `fcd1ef25`, and Step 7 resources. Engine inputs are
+unchanged since main `d26300e6` (Section 15's Chromium 0801–0810). Every main patch
 is retained. The engine applies Chromium's 08xx before the CEF series,
 including ad-block 0310/0311/0314; 0601/0602 precede 0701 within CEF.
 There are no Section 15 08xx entries in the CEF series.
@@ -4536,6 +4537,11 @@ CEF command also passes 47 load/matcher/safety checks, including decoded
 limits, trailing-data refusal and bounded fuzz input. These native checks
 do not replace browser N rows or document COUNT witnesses. The current
 browser driver creates windows for every N/COUNT case.
+
+After the final Section 15 App merge, the Debug rebuild also passed:
+37.755 s, endpoint loads 15.56/13.40/13.27 -> 18.65/14.68/13.76.
+App acceptance and regression receipts use this merged build. The queued
+earlier App attempt was canceled before launch; it is not test evidence.
 
 **Request path and lifetime.** Open's outermost factory proxy checks
 subresources and redirects on one matcher sequence. Main documents pass

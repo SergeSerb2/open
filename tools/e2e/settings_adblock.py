@@ -414,6 +414,23 @@ def real_engine(factory, results, wait):
                     resourceVerified=resource['file'] == 'resources.json'
                         and resource['bytes'] == len(body) and resource['sha256'] == resource_digest,
                     datPresent=(generation / 'engine.dat').is_file())
+    def initial_update(profile):
+        # The real scheduled check publishes a generation even when the pinned
+        # fixture bytes are unchanged. The store deliberately skips the native
+        # reload in that case. Wait for publication and drained work, not for a
+        # native generation change that only changed inputs require.
+        def finished():
+            manifest = resource_manifest(profile)
+            updating = app.call('profiles-shell', adblockProfile=profile['id'])['adblockProfileUpdating']
+            state_path = Path(app.user_data) / 'Profiles' / profile['directory'] / 'AdBlock' / 'catalog-state.json'
+            error = json.loads(state_path.read_text()).get('lastError')
+            return (dict(publishedGeneration=manifest['generation'], nativeStatus=status(profile['id']),
+                         updateInFlight=updating, error=error)
+                    if manifest['generation'] > 1 and not updating and not error else None)
+        evidence = wait(finished, timeout=40)
+        assert evidence, dict(manifest=resource_manifest(profile), nativeStatus=status(profile['id']))
+        print('AD3_initial_update ' + json.dumps(evidence, sort_keys=True), flush=True)
+        return evidence
     def resource_probe(tab, name, redirected):
         before = count(tab)
         app.call('events')
@@ -473,7 +490,7 @@ def real_engine(factory, results, wait):
         next_request(tab, 'global_off_next_request_same_document', False)
         app.call('settings-adblock', enabled=True)
 
-        assert wait(lambda: status(original['id'])['load_generation'] > 1, timeout=40)
+        original_update = initial_update(original)
         before = status(original['id'])['load_generation']
         app.call('settings-adblock', list='EasyList', listEnabled=False)
         assert wait(lambda: status(original['id'])['load_generation'] > before, timeout=40)
@@ -485,14 +502,15 @@ def real_engine(factory, results, wait):
         visit(tab, 'list_enabled_blocks', True)
         row('settings_generation_reload', disabled['load_generation'] > before
             and restored['load_generation'] > disabled['load_generation'],
-            before=before, disabled=disabled['load_generation'], restored=restored['load_generation'])
+            before=before, disabled=disabled['load_generation'], restored=restored['load_generation'],
+            initialUpdate=original_update)
 
         app.call('profiles-shell', action='create', name='Engine Independent')
         other = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Engine Independent')
         app.call('profiles-shell', profile=other['id'], action='open-url', url='about:blank')
         other_tab = next(t['id'] for t in app.call('tabs') if t['profile'] == other['id'])
         assert loaded(other['id'])
-        assert wait(lambda: status(other['id'])['load_generation'] > 1, timeout=40)
+        initial_update(other)
         shared = status(other['id'])
         row('second_profile_shares_engine', shared['engine_shared'], status=shared)
         app.call('profiles-shell', profile=other['id'], action='adblock-open')
