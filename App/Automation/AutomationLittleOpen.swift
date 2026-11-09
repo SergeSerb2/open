@@ -42,6 +42,8 @@ extension AutomationController {
       }
       return ["id": state.id.description, "window": window.windowNumber, "frame": frame(window.frame),
         "state": state.state.rawValue, "url": state.currentURL.absoluteString, "title": window.title,
+        "windowAppearance": window.effectiveAppearance.name.rawValue,
+        "contentAppearance": controller.contentView.effectiveAppearance.name.rawValue,
         "profile": state.profileID.description, "pillSpace": state.pillSpaceID?.description ?? "",
         "lastActiveAt": state.lastActiveAt.timeIntervalSince1970,
         "screenFrame": frame(window.screen?.frame ?? .zero), "visibleFrame": frame(window.screen?.visibleFrame ?? .zero),

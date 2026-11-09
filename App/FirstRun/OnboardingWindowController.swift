@@ -35,6 +35,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
   let sound: IntroSound
   let replay: Bool
   var steps: OnboardingStepsController?
+  var favoriteIcons: OnboardingFavicons?
   private let dim: NSWindow
   private var started = false
   private var closingForHandoff = false
@@ -112,6 +113,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
           dim.animator().alphaValue = 0.85
         }
       }
+      lifecycle.append(Task(priority: .utility) { [weak self] in
+        try? await Task.sleep(for: .seconds(IntroTimeline.beat("sellIntro").start+IntroTimeline.beat("syncLead").end))
+        guard !Task.isCancelled else { return }
+        if let self { favoriteIcons?.start(introElapsed: intro.elapsed) }
+      })
       lifecycle.append(Task { [weak self] in
         try? await Task.sleep(for: .seconds(IntroTimeline.beat("measureMemory").start+IntroTimeline.beat("syncLead").end))
         guard !Task.isCancelled, let self else { return }
