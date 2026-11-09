@@ -59,16 +59,12 @@ hand-off fade 0.45 s, sound fade 0.8 s; common audio/CA scheduling lead
 0.08 s; sound preparation deadline 0.3 s; frame measurement 0–8 s;
 resident measurement 3 s; orb periods 18/22/26 s.
 
-Continue hides the 1280×800 intro window and opens Section 7's existing
-560×520 first-run window. The existing shared importer, source probe, guarded
-save and Start Fresh behavior remain its owners. The intro never writes a
-snapshot. A small screen (both width ≤1280 and height ≤800) uses its full
-screen size minus 72 pt in each dimension. The mouse-transparent dim child
-window covers that screen at 85% black. It is excluded from automation window
-lists and snapshots and transfers to the existing first-run window. Music keeps playing through Continue.
-Only completion or closing fades the music over 0.8 s and the dim over 2.5 s.
-`OnboardingWindowController.show(content:)` replaces the foreground above the
-shared room for later setup screens, without changing the music clock.
+Continue replaces the foreground inside the same 1280×800 onboarding window.
+The room, dim child and music keep their clocks through the setup steps below.
+The intro never writes a snapshot. A small screen (both width ≤1280 and height
+≤800) uses its full screen size minus 72 pt in each dimension. The mouse-transparent
+dim child covers that screen at 85% black, and is excluded from ordinary window
+lists and snapshots. Only final completion or closing fades music and the dim.
 
 Esc or a scene click completes the visual tracks and enables Continue.
 The music continues on its original clock. Return and Space cannot advance
@@ -105,3 +101,21 @@ at 2x. `CARenderer` draws that layer tree into a Metal texture, preserving
 the native radial gradients and blend filters. It creates an unshown window
 for AppKit backing; it never orders it front. Real-window acceptance is the
 separate `onboarding` e2e suite.
+
+## Setup in the same window
+
+Continue replaces only the foreground with Name → Import (when source data exists) → Favorites (unless import brought Favorites) → Theme → Blocker → Default browser → Ready. The shared room, dim overlay and music keep their clocks. Name is optional, trimmed and limited to 40 characters. Every selection stays in memory until Get Started. Closing the window quits without applying those selections.
+
+`OnboardingStepsController` hosts Section 7's `FirstRunView(embeddedImport: true)` and the same `FirstRunViewModel` / `ImportWizardViewModel`. Settings ▸ Import keeps its existing wizard. Consent tokens, import idempotency, progress, reports and save errors stay in the shared implementation. The import landing save is a checkpoint; final setup owns the completed flag.
+
+Favorites use direct site favicon requests (2 seconds, 256 KiB, 64-pixel thumbnail, no cookies and no redirects). A monogram is visible immediately. Theme uses `OpenSpaceEditor`'s preset strip, color pad, state reducer and appearance bar. The selected style is applied to the focused Space at finish. Blocker uses the existing `AdBlockStore.setEnabled` global `nativeAdBlockEnabled` setting in `adblock-settings.json`, the same setting as Advanced.
+
+`OnboardingBrandMark` supplies the intro's trimmed rounded doorway and sun to the intro, Name preview and both marks on the card. The Theme preview keeps its traffic lights, URL bar, four tinted sidebar rows and three neutral page bars live with the selected Space style. The second Favorite suggestion is Google Calendar (`https://calendar.google.com/`).
+
+The Ready card uses one original drawing routine for the screen and 1200 × 750 PNG output. Its gradient midpoint supplies the sRGB relative luminance. Above 0.55, the name uses black at 0.82 and the date uses black at 0.55; otherwise they use white and white at 0.72. The date is 17 points in the card's design coordinates. Save opens `NSSavePanel`; Shuffle cycles six deterministic patterns. The two 32-point circle buttons sit 12 points apart, centered 16 points below the card. Their white fill changes from 0.16 to 0.24 on hover, with white glyphs at 0.9. Confetti emits above the card once for 0.6 seconds, in a separate layer below the card and its text, then removes its layer. Reduce Motion uses cross-fades and no confetti.
+
+The default-browser service runs only on Next with Yes selected. Setup awaits the existing Settings request's completion, then shows its outcome for 1.2 seconds before advancing. Automation sockets always use a bounded outcome stub (`OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed`, default declined); they never invoke the system prompt.
+
+Get Started applies choices and uses Section 7's `finishFirstRun`: save the choices, insert and select the ordinary Welcome tab, save again, then set completion. A failure keeps Ready open for retry without adding another Welcome tab. The importer can prepare a browser early for background History and extension installs. During setup, that browser has alpha zero, cannot become key or main, and stays below the dim overlay. Hand-off enables activation and fades its alpha to one below onboarding and above the dim overlay. Onboarding rises 24 points over 0.4 seconds and fades over 0.6 seconds; dim fades over 2.5 seconds. Reduce Motion cross-fades all three over 0.3 seconds. Music fades over 0.8 seconds if still playing. Replay uses the same screens but performs no import, model, preference or default-browser writes.
+
+The hidden-browser guard ends when the final save succeeds. A new browser window opened during the remaining dim fade starts visible and can become key. External URL requests received before Get Started stay in the existing intake queue without opening a browser or Little Open; hand-off marks the intake ready and drains them after the save.

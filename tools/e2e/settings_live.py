@@ -63,16 +63,21 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         results['settings_general_action_error'] = {'ok': s['pane'] == 'general'
             and s['generalError'] == 'Updates are not set up in this build.', 'error': s['generalError']}
         library_before = app.call('library-section')
+        before_boosts = app.call('settings-state')
         app.call('menu-perform', id='view-boosts')
         library = wait_until(lambda: (lambda s: s if s['visible'] and s['section'] == 'boosts' else None)(
             app.call('library-section')), timeout=5, step=.05)
         s = app.call('settings-state')
+        boosts_window = next((window for window in app.call('windows') if window['number'] == s['library']), None)
         legacy_error = 'Boost editing is not available in this build.'
         legacy_assertion = s['pane'] == 'advanced' and s['advancedStatus'] == legacy_error
         results['settings_view_boosts_library'] = {'ok': not library_before['visible']
             and bool(library) and s['library'] > 0 and s['librarySection'] == 'boosts'
+            and bool(boosts_window and boosts_window['visible'] and boosts_window['key'])
+            and not (before_boosts['library'] > 0 and before_boosts['librarySection'] == 'boosts')
             and s['advancedStatus'] == '' and not legacy_assertion,
-            'library': library, 'window': s['library'], 'advancedStatus': s['advancedStatus'],
+            'library': library, 'window': s['library'], 'nativeWindow': boosts_window,
+            'advancedStatus': s['advancedStatus'], 'negativeBeforeWindow': before_boosts['library'] == 0,
             'negativeClosed': library_before, 'legacyExpectedError': legacy_error,
             'negativeOldAssertionRejected': not legacy_assertion}
         app.call('key', key='w', modifiers=['cmd'], window=s['library'], route='app')
