@@ -208,6 +208,7 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 flow.enter();app.call("boost-editor", action="close")
                 assert wait(lambda: not flow.active(), timeout=5, step=.02)
                 app.call("boost-editor", action="open", boost=boost_id)
+                assert wait(lambda: flow.state()["colorsReady"], timeout=10, step=.02)
                 return {"escape":True,"done":True,"editorClose":True,"pageClicks":1}
             row("Z6_exit_cleanup", z6)
 
