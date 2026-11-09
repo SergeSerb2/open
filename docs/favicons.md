@@ -623,3 +623,7 @@ relaunches, then requires placeholder pixels and zero exact-page SQLite records.
 FV14 still covers the unchanged-icon `/a` to `/b` path. The real row harness also
 covers preserving a destination image, copy deletion/redraw, token mismatch and
 an ordinary report surviving a late copy revocation.
+
+Optional curated sources
+
+`FaviconFetcher.prefetch` accepts an optional page-URL to icon-URL map. A curated source must use HTTPS and passes the existing destination, credential, cookie, one same-site redirect, 512 KiB and 1024-pixel decode limits. Its source kind is `curated`; its image is stored against the original page URL. Download failure or invalid artwork leaves the existing discovery chain and cache behavior intact. The request uses at most 1.5 seconds of the existing per-site budget. Only the onboarding Gmail suggestion supplies one; the icon is fetched at runtime from Google, never bundled.

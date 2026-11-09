@@ -86,7 +86,9 @@ public actor FaviconFetcher {
         diagnosticPublicHost = FaviconDestinationPolicy.normalizedHost(host)
     }
 
-    public nonisolated func prefetch(_ pageURLs: [URL], overallTimeout: TimeInterval? = nil,
+    /// Optional caller-curated sources use the same bounded, credential-free
+    /// download path. A failed source leaves ordinary discovery/cache untouched.
+    public nonisolated func prefetch(_ pageURLs: [URL], iconSourceURLs: [URL: URL] = [:], overallTimeout: TimeInterval? = nil,
         onResult: (@Sendable (FaviconFetchResult) async -> Void)? = nil) async -> FetchReport {
         let start = ContinuousClock.now
         let deadline = overallTimeout.flatMap { $0.isFinite && $0 > 0 ? start.advanced(by: .seconds($0)) : nil }
@@ -103,7 +105,7 @@ public actor FaviconFetcher {
                 next += 1
                 group.addTask {
                     let siteStart = ContinuousClock.now
-                    let result = await self.fetchShared(page, deadline: deadline)
+                    let result = await self.fetchShared(page, iconSourceURL: iconSourceURLs[page], deadline: deadline)
                     return FaviconFetchResult(index: index, status: result.status,
                                               durationMs: result.alreadyCached ? 0 : Self.milliseconds(since: siteStart),
                                               elapsedMs: Self.milliseconds(since: start), alreadyCached: result.alreadyCached, imageInfo: result.imageInfo)
@@ -129,16 +131,56 @@ public actor FaviconFetcher {
         await fetchShared(pageURL).status == .ok
     }
 
-    private func fetchShared(_ pageURL: URL, deadline: ContinuousClock.Instant? = nil) async -> OriginResult {
+    private func fetchShared(_ pageURL: URL, iconSourceURL: URL? = nil, deadline: ContinuousClock.Instant? = nil) async -> OriginResult {
         guard let origin = FaviconOrigin.key(pageURL) else { return OriginResult(status: .failed) }
         if let existing = inFlight[origin] { return await existing.value }
         // Register before the first suspension, including the cache lookup. A shared task
         // survives cancellation of one waiter so it can still serve the other callers.
-        let task = Task { await fetchIfNeeded(pageURL, origin: origin, outerDeadline: deadline) }
+        let task = Task {
+            let deadline = min(deadline ?? ContinuousClock.now.advanced(by: .seconds(originTimeout)),
+                               ContinuousClock.now.advanced(by: .seconds(originTimeout)))
+            if let iconSourceURL, let result = await fetchCurated(iconSourceURL, for: pageURL, origin: origin, deadline: deadline) {
+                return result
+            }
+            return await fetchIfNeeded(pageURL, origin: origin, outerDeadline: deadline)
+        }
         inFlight[origin] = task
         let result = await task.value
         inFlight[origin] = nil
         return result
+    }
+
+    private func fetchCurated(_ source: URL, for pageURL: URL, origin: String,
+                              deadline: ContinuousClock.Instant) async -> OriginResult? {
+        if await store.cachedStatus(for: pageURL) == 0, let icon = await store.icon(for: pageURL),
+           icon.info?.sourceKind == .curated, icon.iconURL == source,
+           let info = icon.info, min(info.width, info.height) >= (fallbackMinimumDimension ?? minimumDimension) {
+            return OriginResult(status: .ok, alreadyCached: true, imageInfo: info)
+        }
+        do {
+            guard source.scheme == "https" else { throw FaviconDownloadError.invalidResponse }
+            let policy = try await FaviconDestinationPolicy(pageURL: pageURL, origin: origin,
+                diagnosticPublicHost: diagnosticPublicHost, deadline: deadline)
+            // Reserve the remainder of the site's existing budget for discovery.
+            let response = try await download(source, limit: 512 * 1024, html: false, policy: policy,
+                deadline: min(deadline, ContinuousClock.now.advanced(by: .seconds(1.5))))
+            guard (200..<300).contains(response.status) else { throw FaviconDownloadError.invalidResponse }
+            let info: FaviconImageInfo
+            do {
+                // Start at >=64 so multi-frame ICOs choose their sharpest frame.
+                info = try await store.ingest(imageData: response.data, iconURL: response.url, for: pageURL,
+                    pageSpecific: false, minimumDimension: max(64, minimumDimension), sourceKind: .curated)
+            } catch FaviconStoreError.invalidImage {
+                guard let fallbackMinimumDimension else { throw FaviconStoreError.invalidImage }
+                info = try await store.ingest(imageData: response.data, iconURL: response.url, for: pageURL,
+                    pageSpecific: false, minimumDimension: max(32, fallbackMinimumDimension), sourceKind: .curated)
+            }
+            diagnostic?(origin, source.absoluteString, "accepted:curated:\(info.width)x\(info.height)")
+            return OriginResult(status: .ok, imageInfo: info)
+        } catch {
+            diagnostic?(origin, source.absoluteString, "rejected:curated:\(error):falling-back")
+            return nil
+        }
     }
 
     private func fetchIfNeeded(_ pageURL: URL, origin: String, outerDeadline: ContinuousClock.Instant?) async -> OriginResult {
@@ -535,6 +577,7 @@ private struct FaviconCandidate {
     var manifestDocument = false
     var rank: (Int, Int) {
         let category: Int = switch kind {
+        case .curated: -1
         case .appleTouch: size.map { $0 >= 120 ? 0 : 3 } ?? 0
         case .manifest: 1
         case .link: 2

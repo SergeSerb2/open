@@ -6,6 +6,50 @@ import OpenSettings
 import OpenEngine
 
 extension AutomationController {
+  #if DEBUG
+  /// Lifecycle seam for a real-App fixture that keeps Site Control presented.
+  func settingsAdBlockProfile(_ args: [String: Any]) async throws -> [String: Any] {
+    guard Set(args.keys).isSubset(of: ["profile", "action", "privateSession"]),
+      let raw = args["profile"] as? String,
+      let profile = app.model.profiles.first(where: { $0.id.description == raw }),
+      let store = app.stores.existingAdBlock else { throw Failure(message: "expected an existing Profile and store") }
+    switch args["action"] as? String ?? "state" {
+    case "state": break
+    case "close": try store.closeProfile(profile.id)
+    case "open": try await store.openProfile(profile.id,
+      directory: app.directories.adBlockDirectory(dataDirectoryName: profile.dataDirectoryName), scheduleUpdates: false)
+    case "retire": await store.retireProfile(profile.id)
+    default: throw Failure(message: "unknown ad-block Profile action")
+    }
+    return ["open": store.isProfileOpen(profile.id), "retired": store.isRetired(profile.id),
+      "privateSessionOpen": (args["privateSession"] as? String).map { store.isPrivateSessionOpen($0, profile: profile.id) } ?? false]
+  }
+  #endif
+
+  /// Exercise the production per-site API on the real page's context. Does not
+  /// instantiate Settings or create a store, Profile, or private session.
+  func settingsAdBlockSite(_ args: [String: Any]) throws -> [String: Any] {
+    guard Set(args.keys).isSubset(of: ["tab", "excluded"]),
+      let raw = args["tab"] as? String,
+      let factory = app.hostFactories.values.first(where: { $0.hosts.keys.contains { $0.description == raw } }),
+      let entry = factory.hosts.first(where: { $0.key.description == raw }), !entry.value.closed,
+      let host = entry.value.content.url?.host(),
+      let store = app.stores.existingAdBlock else { throw Failure(message: "expected a live website tab and store") }
+    let profile = factory.incognitoSession?.parent.id ?? entry.value.profileID
+    let context = entry.value.content.context
+    let session = context.originalContext == nil ? nil : context.identifier
+    if args["excluded"] != nil {
+      guard let excluded = args["excluded"] as? Bool else { throw Failure(message: "expected exclusion state") }
+      try store.setExcluded(host, excluded: excluded, profile: profile, privateSession: session)
+    }
+    let snapshot = store.siteSnapshot(for: profile, privateSession: session)
+    return ["profile": profile.description, "privateSession": session ?? "",
+      "available": store.onEngineEvent != nil && store.isProfileOpen(profile) && store.isEnabled
+        && (session.map { store.isPrivateSessionOpen($0, profile: profile) } ?? true),
+      "shouldBlock": try snapshot.shouldBlock(host: host),
+      "excludedDomains": snapshot.excludedDomains.sorted()]
+  }
+
   func settingsAdBlock(_ args: [String: Any]) async throws -> [String: Any] {
     let adapter = app.settingsPresenter
     guard let model = adapter.settings.adBlock else { throw Failure(message: "ad blocking unavailable") }
@@ -89,6 +133,9 @@ extension AutomationController {
           "storeExcludedDomains": store?.excludedDomains(for: profile.id) ?? [],
           "contexts": contexts.map { context -> [String: Any] in
             ["identifier": context.identifier, "offTheRecord": context.originalContext != nil,
+              "storePrivateSessionOpen": store?.isPrivateSessionOpen(context.identifier, profile: profile.id) ?? false,
+              "storeEffectiveExcludedDomains": store?.excludedDomains(for: profile.id,
+                privateSession: context.originalContext == nil ? nil : context.identifier) ?? [],
               "adBlockEnabled": context.isAdBlockEnabled,
               "listDirectorySet": context.adBlockListDirectory != nil,
               "listDirectoryMatchesProfile": context.adBlockListDirectory?.standardizedFileURL == expected,

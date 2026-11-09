@@ -7,6 +7,7 @@ public enum AdBlockEngineEvent: Sendable {
     case configure(profile: ProfileID, listDirectory: URL, enabled: Bool, excludedDomains: [String])
     case enabled(Bool)
     case exclusions(profile: ProfileID, domains: [String])
+    case privateExclusions(profile: ProfileID, session: String, domains: [String])
     case reload(profile: ProfileID, listDirectory: URL)
     case closed(profile: ProfileID)
 }
@@ -98,11 +99,19 @@ public final class AdBlockStore {
     public let root: URL
     public let catalog: AdBlockCatalog
     public var onScheduledUpdate: (@MainActor (_ outcome: String, _ nextDelay: TimeInterval) -> Void)?
-    public var onEngineEvent: (@MainActor (AdBlockEngineEvent) -> Void)?
+    public var onEngineEvent: (@MainActor (AdBlockEngineEvent) -> Void)? {
+        didSet { NotificationCenter.default.post(name: Self.didChange, object: self) }
+    }
     public private(set) var isEnabled: Bool
     public private(set) var lastUpdateResults: [ProfileID: [AdBlockUpdateResult]] = [:]
     private var states: [ProfileID: AdBlockProfileState] = [:]
     private var exclusions: [ProfileID: Set<String>] = [:]
+    private struct PrivateSession {
+        let profile: ProfileID
+        var exclusions: Set<String> = []
+    }
+    // IDs come from live OTR contexts. Never serialize private browsing choices.
+    private var privateSessions: [String: PrivateSession] = [:]
     private var busy = Set<ProfileID>()
     private var directories: [ProfileID: URL] = [:]
     private var retired = Set<ProfileID>()
@@ -184,6 +193,8 @@ public final class AdBlockStore {
             self.states[profile] = state; self.exclusions[profile] = normalized
             self.onEngineEvent?(.configure(profile: profile, listDirectory: lists,
                                           enabled: self.isEnabled, excludedDomains: normalized.sorted()))
+            // Includes the fresh-context path that opens before first paint.
+            NotificationCenter.default.post(name: Self.didChange, object: self)
         }
         try checkActive(profile)
         NotificationCenter.default.post(name: Self.didChange, object: self)
@@ -221,8 +232,10 @@ public final class AdBlockStore {
         let directory = directories.removeValue(forKey: profile)
         schedules.removeValue(forKey: profile)?.cancel()
         states.removeValue(forKey: profile); exclusions.removeValue(forKey: profile)
+        privateSessions = privateSessions.filter { $0.value.profile != profile }
         lastUpdateResults.removeValue(forKey: profile)
         onEngineEvent?(.closed(profile: profile))
+        NotificationCenter.default.post(name: Self.didChange, object: self)
         if temporaryRoot != nil, let directory {
             let path = directory.deletingLastPathComponent()
             if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
@@ -234,6 +247,9 @@ public final class AdBlockStore {
     public func retireProfile(_ profile: ProfileID) async {
         if let task = retirements[profile] { await task.value; return }
         guard retired.insert(profile).inserted else { return }
+        privateSessions = privateSessions.filter { $0.value.profile != profile }
+        // isProfileOpen becomes false at this barrier, before any IO drain.
+        NotificationCenter.default.post(name: Self.didChange, object: self)
         schedules.removeValue(forKey: profile)?.cancel()
         let operation = operations[profile]
         operation?.cancel()
@@ -244,6 +260,7 @@ public final class AdBlockStore {
             self.directories.removeValue(forKey: profile)
             self.lastUpdateResults.removeValue(forKey: profile)
             self.onEngineEvent?(.closed(profile: profile))
+            NotificationCenter.default.post(name: Self.didChange, object: self)
         }
         retirements[profile] = task
         await task.value
@@ -265,16 +282,68 @@ public final class AdBlockStore {
 
     public func listReceipt(_ id: String, profile: ProfileID) -> AdBlockListReceipt? { states[profile]?.lists[id] }
 
-    public func excludedDomains(for profile: ProfileID) -> [String] { exclusions[profile, default: []].sorted() }
-
-    public func siteSnapshot(for profile: ProfileID) -> AdBlockSiteSnapshot {
-        AdBlockSiteSnapshot(isEnabled: isEnabled, excludedDomains: exclusions[profile, default: []])
+    public func isPrivateSessionOpen(_ id: String, profile: ProfileID) -> Bool {
+        privateSessions[id]?.profile == profile && isProfileOpen(profile)
     }
 
-    public func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID) throws {
+    /// Register the engine's live OTR identifier after the parent has opened.
+    /// A closed identifier cannot be used by setExcluded until registered again.
+    public func openPrivateSession(_ id: String, profile: ProfileID) throws {
+        try checkActive(profile)
+        guard isProfileOpen(profile) else { throw AdBlockError("profile is not open") }
+        guard !id.isEmpty, id.utf8.count <= 128 else { throw AdBlockError("invalid private session") }
+        if let session = privateSessions[id] {
+            guard session.profile == profile else { throw AdBlockError("private session belongs to another Profile") }
+            return
+        }
+        guard privateSessions.count < 128 else { throw AdBlockError("too many private sessions") }
+        privateSessions[id] = PrivateSession(profile: profile)
+    }
+
+    public func closePrivateSession(_ id: String) {
+        guard privateSessions.removeValue(forKey: id) != nil else { return }
+        NotificationCenter.default.post(name: Self.didChange, object: self)
+    }
+
+    public func excludedDomains(for profile: ProfileID, privateSession: String? = nil) -> [String] {
+        (effectiveExclusions(for: profile, privateSession: privateSession) ?? []).sorted()
+    }
+
+    private func effectiveExclusions(for profile: ProfileID, privateSession: String?) -> Set<String>? {
+        var domains = exclusions[profile, default: []]
+        if let id = privateSession {
+            guard let session = privateSessions[id], session.profile == profile else { return nil }
+            domains.formUnion(session.exclusions)
+        }
+        return domains
+    }
+
+    public func siteSnapshot(for profile: ProfileID, privateSession: String? = nil) -> AdBlockSiteSnapshot {
+        guard let domains = effectiveExclusions(for: profile, privateSession: privateSession) else {
+            return AdBlockSiteSnapshot(isEnabled: false, excludedDomains: [])
+        }
+        return AdBlockSiteSnapshot(isEnabled: isEnabled && isProfileOpen(profile), excludedDomains: domains)
+    }
+
+    public func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID, privateSession: String? = nil) throws {
         try checkActive(profile)
         guard states[profile] != nil else { throw AdBlockError("profile is not open") }
         let site = try AdBlockSites.shared.registrableDomain(domain)
+        if let id = privateSession {
+            guard var session = privateSessions[id], session.profile == profile else { throw AdBlockError("private session is not open") }
+            if excluded {
+                // Bound retained site choices independently of private navigation count.
+                guard session.exclusions.contains(site) || session.exclusions.count < 4096 else {
+                    throw AdBlockError("too many private site exclusions")
+                }
+                session.exclusions.insert(site)
+            } else { session.exclusions.remove(site) }
+            privateSessions[id] = session
+            onEngineEvent?(.privateExclusions(profile: profile, session: id,
+                domains: excludedDomains(for: profile, privateSession: id)))
+            NotificationCenter.default.post(name: Self.didChange, object: self)
+            return
+        }
         var domains = exclusions[profile, default: []]
         if excluded { domains.insert(site) } else { domains.remove(site) }
         if temporaryRoot == nil {
