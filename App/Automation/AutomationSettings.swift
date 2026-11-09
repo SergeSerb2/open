@@ -6,10 +6,16 @@ import OpenSettings
 import OpenEngine
 
 extension AutomationController {
-  func settingsAdBlock(_ args: [String: Any]) throws -> [String: Any] {
+  func settingsAdBlock(_ args: [String: Any]) async throws -> [String: Any] {
     let adapter = app.settingsPresenter
     guard let model = adapter.settings.adBlock else { throw Failure(message: "ad blocking unavailable") }
     if let enabled = args["enabled"] as? Bool { model.setEnabled(enabled) }
+    if let list = args["list"] as? String {
+      guard model.lists.contains(where: { $0.id == list }),
+        let enabled = args["listEnabled"] as? Bool else { throw Failure(message: "expected a known list and enabled state") }
+      await model.setList(list, enabled: enabled)
+    }
+    if args["resetLists"] as? Bool == true { await model.reset() }
     if let host = args["host"] as? String {
       guard host.utf8.count <= 253, let excluded = args["excluded"] as? Bool else { throw Failure(message: "expected a site host and exclusion state") }
       model.setExcluded(host, excluded: excluded)
@@ -40,6 +46,7 @@ extension AutomationController {
     return ["enabled": model.enabled, "hasOtherBlocker": model.hasOtherBlocker,
       "ready": model.isReady, "error": model.errorText,
       "copiedDebugInfo": copiedDebug ?? "",
+      "lists": model.lists.map { ["id": $0.id, "enabled": model.enabledIDs.contains($0.id)] as [String: Any] },
       "listStatus": model.lists.filter(\.bundled).map { model.listStatus($0) },
       "text": adapter.settingsPresenter.window.map { windowText($0) } ?? []]
   }
@@ -64,7 +71,10 @@ extension AutomationController {
               "adBlockEnabled": context.isAdBlockEnabled,
               "listDirectorySet": context.adBlockListDirectory != nil,
               "listDirectoryMatchesProfile": context.adBlockListDirectory?.standardizedFileURL == expected,
-              "excludedDomains": context.adBlockExcludedDomains, "adBlockStatus": context.adBlockStatus]
+              "excludedDomains": context.adBlockExcludedDomains, "adBlockStatus": context.adBlockStatus,
+              "pages": OEEngine.shared.allWebContents.filter { $0.context === context }.map {
+                ["identifier": $0.identifier, "blockedCount": $0.adBlockBlockedCount] as [String: Any]
+              }]
           }]
       }]
   }

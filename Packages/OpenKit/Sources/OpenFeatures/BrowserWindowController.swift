@@ -12,6 +12,11 @@ import OpenSiteControl
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
     public var contentView: NSView { root }
     public let windowID: WindowID
+    /// Setup can prepare engine hosts without allowing its hidden browser to activate.
+    public var allowsWindowActivation: Bool {
+        get { (window as? BrowserWindow)?.allowsActivation ?? true }
+        set { (window as? BrowserWindow)?.allowsActivation = newValue }
+    }
     public let model: BrowserModel
     let root: BrowserRootView
     public let background = ThemeBackgroundView(frame: .zero)
@@ -230,6 +235,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Title of the newest toast shown, for checks.
     public var lastToastTitle: String { toasts.lastTitle }
     public init(model: BrowserModel, windowID: WindowID, factory: any WebContentHostFactory, size: CGSize? = nil, defaults: UserDefaults = .standard, snapshotStore: SnapshotStore? = nil, incognitoTitle: String? = nil) {
+        WindowSpeedTrace.mark("controllerInitBody")
         self.model = model; self.windowID = windowID; self.snapshotStore = snapshotStore
         self.factory = factory; self.defaults = defaults
         let state = model.windows.first { $0.id == windowID }
@@ -237,9 +243,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root = BrowserRootView(frame: CGRect(origin: .zero, size: dimensions))
         context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
         context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+        WindowSpeedTrace.mark("sidebarInitBegin")
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
+        WindowSpeedTrace.mark("sidebarAndContainerCreated")
         splitController = SplitViewController(model: model, windowID: windowID, container: container)
         let window = BrowserWindow(contentRect: root.bounds, styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        WindowSpeedTrace.mark("nativeWindowCreated")
         window.isReleasedWhenClosed = false; window.isRestorable = false
         window.title = incognitoTitle == nil ? "Open" : "Incognito";
         if incognitoTitle != nil { window.appearance = NSAppearance(named: .darkAqua) }; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
@@ -260,6 +269,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         emptyPanelHost.wantsLayer = true; emptyPanelHost.layer?.addSublayer(emptyPanel)
         root.addSubview(emptyPanelHost)
         root.addSubview(container); root.addSubview(cardShadow); root.addSubview(sidebar); root.addSubview(resizeHandle)
+        WindowSpeedTrace.mark("windowViewsAttached")
         cardShadow.isHidden = true
         resizeHandle.onBegin = { [weak self] in self?.beginSidebarResize() }
         resizeHandle.onCancel = { [weak self] in self?.cancelSidebarResize() }
@@ -339,7 +349,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             }
             return consumed ? nil : event
         }
+        WindowSpeedTrace.mark("initialRefreshBegin")
         refresh()
+        WindowSpeedTrace.mark("controllerInitEnd")
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     isolated deinit { hintWork?.cancel(); observing = false; if let treeObserver { model.removeObserver(treeObserver) }; if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; container.closeAll(); reveal.reset(); cardSampleTask?.cancel(); if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; if let captureMonitor { NSEvent.removeMonitor(captureMonitor) }; captureStorage?.tearDown(); trafficLightObservers.forEach(NotificationCenter.default.removeObserver) }
@@ -1177,6 +1189,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 /// draws, so the traffic lights can be placed after AppKit's own title bar layout.
 @MainActor
 final class BrowserWindow: NSWindow {
+    var allowsActivation = true
+    override var canBecomeKey: Bool { allowsActivation && super.canBecomeKey }
+    override var canBecomeMain: Bool { allowsActivation && super.canBecomeMain }
     var onLayoutPass: (() -> Void)?
     var onCloseRequest: (() -> Void)?
     override func performClose(_ sender: Any?) {

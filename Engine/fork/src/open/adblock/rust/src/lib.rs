@@ -29,9 +29,9 @@ use adblock::Engine;
 /// Bumped on any change to `ParseOptions`, permissions, crate or regex
 /// features, or bridge semantics: a cached DAT from another format is never
 /// loaded (§5.5, review 100-1(a)).
-const SHIM_VERSION: u32 = 3;
+const SHIM_VERSION: u32 = 4;
 /// The adblock crate's features (third_party/rust/adblock/v0_8/BUILD.gn).
-const CRATE_FEATURES: &str = "embedded-domain-resolver,full-regex-handling,resource-assembler";
+const CRATE_FEATURES: &str = "chromium-domain-resolver,full-regex-handling,resource-assembler";
 /// The regex crate's features (the adblock-v0_8 crate patch, review 97-1).
 const REGEX_FEATURES: &str =
     "perf-backtrack,perf-cache,perf-dfa,perf-inline,perf-onepass,std,unicode";
@@ -179,6 +179,11 @@ mod ffi {
         list_count: u32,
     }
 
+    unsafe extern "C++" {
+        include!("open/adblock/rust/domain_resolver.h");
+        fn open_adblock_domain_start(host: &str) -> usize;
+    }
+
     extern "Rust" {
         type OpenAdblockEngine;
 
@@ -212,6 +217,12 @@ mod ffi {
             ids: &[String],
             exceptions: &[String],
         ) -> OpenHiddenSelectors;
+        fn open_adblock_warm_regexes(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_dat_reshared_count(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_complete_regex_count(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_complete_regex_program_bytes(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_regex_program_memory_usage(engine: &OpenAdblockEngine) -> u64;
+        fn open_adblock_regex_compile_count(engine: &OpenAdblockEngine) -> u64;
         fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo;
     }
 }
@@ -227,6 +238,7 @@ pub struct OpenAdblockEngine {
     inner: Engine,
     list_count: u32,
     serialized_size: AtomicU64,
+    dat_reshared: u64,
     report: BuildReport,
 }
 
@@ -240,7 +252,7 @@ struct BuildReport {
 
 impl OpenAdblockEngine {
     fn new(inner: Engine, list_count: u32, report: BuildReport) -> Box<Self> {
-        Box::new(Self { inner, list_count, serialized_size: AtomicU64::new(0), report })
+        Box::new(Self { inner, list_count, serialized_size: AtomicU64::new(0), dat_reshared: 0, report })
     }
 }
 
@@ -250,7 +262,27 @@ pub fn open_adblock_engine_format() -> String {
     )
 }
 
+struct ChromiumDomainResolver;
+
+impl adblock::url_parser::ResolvesDomain for ChromiumDomainResolver {
+    fn get_host_domain(&self, host: &str) -> (usize, usize) {
+        // C++ returns a byte offset in the supplied host; keep this safe even
+        // if a future resolver changes its bounds or UTF-8 assumptions.
+        let start = ffi::open_adblock_domain_start(host);
+        let start = if host.is_char_boundary(start) { start } else { 0 };
+        (start, host.len())
+    }
+}
+
+fn ensure_domain_resolver() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        let _ = adblock::url_parser::set_domain_resolver(Box::new(ChromiumDomainResolver));
+    });
+}
+
 pub fn open_adblock_create_empty() -> Box<OpenAdblockEngine> {
+    ensure_domain_resolver();
     OpenAdblockEngine::new(Engine::new(true), 0, BuildReport::default())
 }
 
@@ -349,6 +381,7 @@ fn check_build_limits(list_texts: &[String]) -> Result<(), String> {
 /// task runner only. Lists over the R3-2 limits are not parsed: the engine
 /// is empty and the build report says why (`refused`).
 pub fn open_adblock_build(list_texts: &[String], resources_json: &str) -> Box<OpenAdblockEngine> {
+    ensure_domain_resolver();
     if let Err(refused) = check_build_limits(list_texts) {
         let report = BuildReport { refused, ..Default::default() };
         return OpenAdblockEngine::new(Engine::new(true), 0, report);
@@ -484,6 +517,7 @@ pub fn open_adblock_deserialize(
     }
     match engine.inner.deserialize(dat) {
         Ok(()) => {
+            engine.dat_reshared = engine.inner.share_deserialized_filters() as u64;
             engine.serialized_size.store(dat.len() as u64, Ordering::Relaxed);
             let mut report = BuildReport::default();
             apply_resources(&mut engine.inner, resources_json, &mut report);
@@ -834,4 +868,29 @@ pub fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo {
 fn _assert_send_sync() {
     fn is_send_sync<T: Send + Sync>() {}
     is_send_sync::<OpenAdblockEngine>();
+}
+
+/// Called only on the background build runner, before publishing the engine.
+pub fn open_adblock_warm_regexes(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.warm_network_regexes() as u64
+}
+
+pub fn open_adblock_regex_compile_count(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.compiled_network_regex_count() as u64
+}
+
+pub fn open_adblock_regex_program_memory_usage(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.regex_program_memory_usage() as u64
+}
+
+pub fn open_adblock_complete_regex_count(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.complete_regex_stats().0 as u64
+}
+
+pub fn open_adblock_complete_regex_program_bytes(engine: &OpenAdblockEngine) -> u64 {
+    engine.inner.complete_regex_stats().1 as u64
+}
+
+pub fn open_adblock_dat_reshared_count(engine: &OpenAdblockEngine) -> u64 {
+    engine.dat_reshared
 }

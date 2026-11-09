@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var model: BrowserModel!
   private(set) var isFirstRun = false
   var firstRunSaved = false
+  private var firstRunWelcomeID: ItemID?
   var firstRunWindowController: FirstRunWindowController?
   var onboardingWindowController: OnboardingWindowController?
   var onboardingActivated = false
@@ -115,8 +116,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
     SettingsDefaults.register(in: .standard)
+    LaunchTiming.shared.phase("settingsRegistered")
+    _ = importRunner.unfinishedSecretsImportAtLaunch
     NSApp.mainMenu = MainMenu.build()
+    LaunchTiming.shared.phase("mainMenuBuilt")
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
+    LaunchTiming.shared.phase("initialMenuRetargeted")
     NSApp.setActivationPolicy(.regular)
     // The window and sidebar come from the snapshot and do not wait for the
     // engine (docs/architecture.md, launch tactics). Pages created before
@@ -125,9 +130,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     tabSleep.installSettingsPolicy()
     adBlockEngineAdapter.installProfilePolicy()
     installScripting()
+    LaunchTiming.shared.phase("didFinishLaunchingEnd")
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    if isFirstRun && !firstRunSaved, let onboarding = onboardingWindowController {
+      onboarding.window?.makeKeyAndOrderFront(nil)
+      return false
+    }
     if let frontWindowController { frontWindowController.showWindow(nil) }
     else { showWindowsIfNeeded(ignoringLittleOpen: true) }
     return false
@@ -136,6 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private lazy var pageQuit = PageQuitCoordinator(app: self)
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    // Sparkle may retry after a user cancels or the quit preflight defers.
+    defer { if !terminationRequested { updater?.userDriver.applicationTerminationCancelled() } }
     if historyQuitTask != nil || faviconShutdownTask != nil || sleepQuitTask != nil { return .terminateCancel }
     if downloadsCenter.shouldKeepBrowsing() { return .terminateCancel }
     let now = ProcessInfo.processInfo.systemUptime
@@ -193,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   @discardableResult
   func prepareData() -> ProfileDirectories {
     if let directories { return directories }
+    LaunchTiming.shared.phase("prepareDataBegin")
     let root = options.userDataDirectory
     if options.replayRefused {
       FileHandle.standardError.write(Data("Open: --replay-onboarding requires --user-data-dir in a temporary directory\n".utf8)); exit(64)
@@ -204,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     do {
       engine = try OpenDataRoot.prepareEngineLayout(root: root)
       try ProfileTeardown.finishPendingWipes(directories: ProfileDirectories(root: engine.root))
+      LaunchTiming.shared.phase("engineLayoutPrepared")
     } catch {
       FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
       exit(1)
@@ -219,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     var loaded: BrowserModel?
     do {
       loaded = try snapshotStore.loadData().map(SnapshotMapper.model(from:))
+      LaunchTiming.shared.phase("snapshotLoaded")
     } catch {
       let kept = snapshotStore.fileURL.deletingLastPathComponent()
         .appendingPathComponent("browser.unreadable-\(Int(Date().timeIntervalSince1970)).json")
@@ -250,6 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     self.directories = directories
     if isFirstRun { firstRunDefaultModel = model }
     installModel(model)
+    LaunchTiming.shared.phase("modelInstalled")
     // Launch URLs enter the snapshot-backed model before window composition.
     // Only the final selection gets a page after engine readiness.
     if let state = model.windows.first(where: { $0.style == .standard }),
@@ -294,16 +310,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     prepareData()
     if isFirstRun && !firstRunSaved && windowControllers.isEmpty {
       if !onboardingHandedOff {
-        showOnboarding(replay: false)
+        showOnboarding(replay: options.replayOnboarding)
         return
       }
-      if firstRunWindowController == nil {
-        let actions = AppFirstRunActions(app: self)
-        let viewModel = FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
-        firstRunWindowController = FirstRunWindowController(model: viewModel)
-        lastFirstRunStep = "welcome"
-      }
-      firstRunWindowController?.showWindow(nil)
+      onboardingWindowController?.showWindow(nil)
       return
     }
     guard windowControllers.isEmpty else { return }
@@ -317,16 +327,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func drawWindowsBeforeEngine() {
+    LaunchTiming.shared.phase("sidebarDisplayBegin")
     showWindowsIfNeeded()
     onboardingWindowController?.window?.contentView?.displayIfNeeded()
     firstRunWindowController?.window?.contentView?.layoutSubtreeIfNeeded()
     firstRunWindowController?.window?.displayIfNeeded()
     for controller in windowControllers {
       controller.prepareForInitialDisplay()
+      LaunchTiming.shared.phase("sidebarPrepared")
       controller.window?.contentView?.layoutSubtreeIfNeeded()
+      LaunchTiming.shared.phase("sidebarLaidOut")
       controller.window?.displayIfNeeded()
+      LaunchTiming.shared.phase("sidebarDisplayed")
     }
     CATransaction.flush()
+    LaunchTiming.shared.phase("sidebarFlushed")
     startupEvidence = [
       "sidebarClass": windowControllers.first.map { String(reflecting: type(of: $0.sidebar)) } ?? "",
       "pagesBeforeEngine": OEEngine.shared.allWebContents.count,
@@ -335,23 +350,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     ]
   }
 
+  /// Capture shortcuts at the confirmed first frame, after AppKit's native
+  /// launch run-loop work, and before Chromium starts.
+  func recordFirstFrameMenuProbe() {
+    #if OPEN_AUTOMATION
+    if ProcessInfo.processInfo.environment["OPEN_SPEED_MENU_PROBE"] == "1" {
+      startupEvidence["firstFrameMenuShortcuts"] = MainMenu.shortcutSnapshot(NSApp.mainMenu)
+      startupEvidence["firstFrameRegistryRoutes"] = MainMenu.registryShortcutRoutes(self)
+    }
+    #endif
+  }
+
   @discardableResult
   private func createWindowController(state: BrowserWindowState, privateModel: BrowserModel? = nil, session: IncognitoSession? = nil) -> BrowserWindowController {
+    LaunchTiming.shared.phase("windowCreateBegin")
     let windowModel = privateModel ?? model!
     windowModel.setWindowContentVisible(windowID: state.id, visible: true)
     let factory = EngineWebContentHostFactory(app: self, state: state, model: windowModel, incognitoSession: session)
     hostFactories[state.id] = factory
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
-      snapshotStore: session == nil ? snapshotStore : nil, incognitoTitle: title)
+      snapshotStore: session == nil && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title)
+    LaunchTiming.shared.phase("windowControllerCreated")
+    if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay {
+      controller.allowsWindowActivation = false
+      controller.window?.alphaValue = 0
+    }
     if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
     factory.attach(controller)
     windowControllers.append(controller)
+    updater?.userDriver.attach(controller)
     if session == nil { media.attach(factory); tabSleep.attach(factory) }
     activeWindowID = state.id
+    LaunchTiming.shared.phase("windowServicesAttached")
     MainMenu.targetWindowCommands(factory)
+    LaunchTiming.shared.phase("windowMenuBuilt")
     if session == nil { todayAutoArchive?.attach(context: controller.context) }
     controller.showWindow(nil)
+    LaunchTiming.shared.phase("windowOrdered")
+    if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay,
+      let window = controller.window { onboarding.hidePreparedBrowser(window) }
     if session == nil { showMissingProfileNoticeIfNeeded(on: controller.window) }
     if engineReady { factory.engineDidBecomeReady() }
     return controller
@@ -416,6 +454,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func focusWindow(_ id: WindowID, activate: Bool = false) {
+    if isFirstRun && !firstRunSaved, let onboarding = onboardingWindowController {
+      onboarding.window?.makeKeyAndOrderFront(nil)
+      if activate { NSApp.activate() }
+      return
+    }
     didFocusWindow(id)
     windowControllers.first { $0.windowID == id }?.window?.makeKeyAndOrderFront(nil)
     if activate { NSApp.activate() }
@@ -483,7 +526,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     return BrowserModel(profiles: [profile], spaces: [space], windows: [window])
   }
 
-  /// Shell window lifetime cannot be undone as a sidebar edit. Preserve an
+  /// Shell window lifetime and the setup-created Welcome tab are not sidebar
+  /// edits. Preserve an
   /// enclosing caller's disabled registration state, including on early return.
   private func withoutWindowUndo<T>(_ body: () -> T) -> T {
     let wasEnabled = undoManager.isUndoRegistrationEnabled
@@ -516,26 +560,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("firstRunLandingStarted")
     let states = model.windows.filter { $0.style == .standard }
     for state in states { createWindowController(state: state) }
-    firstRunWindowController?.window?.makeKeyAndOrderFront(nil)
+    if let onboarding = onboardingWindowController, !onboarding.replay, let window = onboarding.window {
+      for controller in windowControllers {
+        controller.allowsWindowActivation = false
+        if let browser = controller.window { onboarding.hidePreparedBrowser(browser) }
+      }
+      window.makeKeyAndOrderFront(nil)
+    } else { firstRunWindowController?.window?.makeKeyAndOrderFront(nil) }
   }
 
   func finishFirstRun(imported: Bool) {
     guard firstRunWindowController != nil else { return }
     assert(imported || model === firstRunDefaultModel, "A fresh finish must keep the original default model")
+    let priorBlocker = stores.adBlock?.isEnabled
     do {
+      try onboardingWindowController?.steps?.applyChoices()
       try snapshotStore.saveNow(model: model)
+      // Save the choices first, then insert Welcome before any browser is built.
+      // Retain its ID across a failed second save so retry cannot add a duplicate.
+      if firstRunWelcomeID.flatMap({ model.tab(id: $0) }) == nil,
+        let space = onboardingWindowController?.steps?.focusedSpace ?? model.spaces.first {
+        // Keep the import's native Undo as the first user action after setup.
+        firstRunWelcomeID = withoutWindowUndo { WelcomeTab.insert(into: model, spaceID: space.id) }
+      }
+      try snapshotStore.saveNow(model: model)
+      onboardingWindowController?.steps?.persistName()
       firstRunSaved = true
       UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
     } catch {
+      if let priorBlocker { try? stores.adBlock?.setEnabled(priorBlocker) }
       firstRunWindowController?.model.reportSaveFailure(imported: imported)
       return
     }
     lastFirstRunStep = firstRunWindowController?.model.step.rawValue ?? lastFirstRunStep
-    onboardingWindowController?.finish()
-    firstRunWindowController?.close(); firstRunWindowController = nil
+    firstRunWindowController = nil
     prepareLittleOpen()
     showWindowsIfNeeded()
-    frontWindowController?.window?.makeKeyAndOrderFront(nil)
+    if let onboarding = onboardingWindowController?.window {
+      for controller in windowControllers {
+        controller.allowsWindowActivation = true
+        controller.window?.order(.below, relativeTo: onboarding.windowNumber)
+        NSAnimationContext.runAnimationGroup { context in
+          context.duration = onboardingWindowController?.intro.reduceMotion == true ? 0.3:0.6
+          context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+          controller.window?.animator().alphaValue = 1
+        }
+      }
+      frontWindowController?.window?.makeKey()
+      onboardingWindowController?.finish()
+    } else { frontWindowController?.window?.makeKeyAndOrderFront(nil) }
     settingsPresenter.attachBrowserStores()
     startAutoArchiveIfNeeded(); todayAutoArchive?.finishStartupComposition()
     for url in options.initialURLs {
@@ -806,7 +879,7 @@ extension AppDelegate: CommandDispatcher {
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     guard allowsFirstRunCommand(id) else { return false }
     if id == "settings", settingsShortcutCaptured { return false }
-    if id == "check-for-updates" { return updater?.canCheckForUpdates ?? true }
+    if id == "check-for-updates" { return true }
     if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift

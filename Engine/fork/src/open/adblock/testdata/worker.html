@@ -1,0 +1,11 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>workers</title></head>
+<body>
+<script>
+  window.__worker = new Promise(resolve => {
+    const worker = new Worker('/worker.js');
+    worker.onmessage = e => resolve(e.data);
+  });
+  window.__sw = navigator.serviceWorker.register('/sw.js').then(r => 'registered');
+</script>
+</body></html>

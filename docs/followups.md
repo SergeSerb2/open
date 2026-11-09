@@ -1,5 +1,33 @@
 # Follow-ups
 
+- Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
+  `onboarding` measures main-thread display-link intervals, not render-server
+  frames. The intro's animations run on the render server; the main thread is
+  busy with engine startup during the first seconds. One M5 run at load1 10.9
+  (240 Hz display): p50/p95 4.167 ms, max 144.9 ms, 22 of 1,848 intervals over
+  1.5 × nominal (1.2 %, row limit 1 %). Needs a render-side measurement
+  (Core Animation frame statistics without a debugger prompt) and quiet ×3
+  runs; consider starting the intro animations only after the engine's
+  synchronous startup work, if the render side also shows hitches.
+- Section 17 speed proof — the returning-launch comparison against a build
+  without Section 17 (three merges reverted) is pending: the plain
+  `git revert -m 1` of #260 conflicts with later commits. `window` measured
+  cold sidebar/first paint 436/725 ms and warm 452/701 ms at load1 ≈ 10–13,
+  above the known-main 400/700 limits; an interleaved control run decides
+  whether Section 17 adds anything (the returning path adds only nil checks).
+- Arc first-launch capture (Section 17) — the user-only screen recording in
+  `docs/status.md` §5.2 settles the open questions in
+  `docs/re/onboarding.md` §9 (intro button caption, clock alignment, music
+  stop/mute, setup reachability, browser reveal).
+- Section 15 non-fatal file-icon fault — one simulated `ExcUserFault` at 17:21:51 on 2026-11-08 matches the passing H3 features run, through `ISMutableIcns addCGImage:scale:error:`, `NSWorkspace setIcon:forFile:options:` and Chromium `shortcuts::SetIconForFile`. The App exited cleanly; TANDEM §8c classifies it as a fault, not a crash. Cause and regression attribution are unknown. H3 has no new real crash report. [Acceptance and regression receipt](engine-spike/passwords-acceptance.md#the-1402-crash-and-regression-proof).
+- Section 15 imported secrets — the App writer and explicit-consent adapter are implemented separately from save/fill. Mock-key builds keep `canImportPasswordsAndCookies == false`. Ten runnable M5 synthetic import rows passed. I-5/I-6 recovery probes remain M1-only and unrun while M1 is on HOLD. The user-present real Keychain import after U-1/U-2 remains open (see the hand check below).
+- Section 15 Arc captures **S-1…S-6** — use the user's combined capture session and a throwaway account. S-1: save/update password, card and address sheets (size, icon, colors, button order); S-2: fill dropdown; S-3: post-save feedback; S-4: generation offer; S-5: Passwords/Credit Cards pages and switch placement; S-6: the internal URL display. Native App acceptance does not prove Arc pixel parity. See [passwords/autofill §13](plans/passwords-autofill.md#13-screenshots-needed-from-the-user-arc-their-own-mac).
+- Section 15 HTTP authentication — replace the hosted Chromium dialog with an Arc-style Open sheet after capture evidence (PW-11). Current WebAuthn/HTTPS-First modal-host checks do not establish HTTP-auth fill/save acceptance.
+- Section 15 **PW-KC1** — user hand check of a real Keychain failure and the "password wasn't saved" toast. No synthetic failure hook or agent access to the real Keychain. Save/fill fixture acceptance uses the mock Keychain only.
+- Section 15 signed-build **K-1…K-3** — after release U-1/U-2, the user checks Open Safe Storage item attributes, prompt-free second launch, and that Open creates no Chromium Safe Storage item. Ad-hoc fixture results do not qualify these checks.
+- Section 15 iCloud passkeys **U-9** — obtain Apple's managed `com.apple.developer.web-browser.public-key-credential` entitlement and provisioning, then run a real iCloud passkey flow. Virtual create/get and native cancellation are covered; real security-key/phone authentication completion and Arc-bound Touch ID passkey migration are not claimed.
+
+
 - Welcome playlist (Section 17, 2026-11-08) — unexplained one-off W06 timeout
   after an earlier attempt lost foreground to another app. The retry used a
   fresh App; the old failure receipt lacked final state. A diagnostic rerun
@@ -19,6 +47,10 @@
   — Section 14 C7, 2026-11-08
 
 Small items found during review and verification. Each line: area — issue — where found.
+
+- media idle CPU (absolute) and mixed-row scroll never re-measured on a quiet machine; both were under budget under load (03-media-done.md §2). — Section 16, 2026-11-09
+
+- Launch (Section 16) — the 250 ms sidebar budget remains open. The 2026-11-08 M5 interleaved window measured floor141 ms, matched-system-links149 ms, main375 ms and branch377 ms, seven samples each, load1 6.3–8.2. Main/branch first paint was744/771 ms; native key acceptance489/490 ms in a separate set. None of the five candidates showed a measurable gain; menu deferral, optional framework delays, layout coalescing, dylib stripping and Sparkle delay-load were reverted. Keep only opt-in diagnostics. [Research](launch-diagnostics.md) found about 5.9 ms in the retained executable loader pool and about 148–157 ms in `syspolicyd` change-time scans. Chromium's `CodeSignCloneManager` creates/removes a hard link to Open's executable during each full run, advancing its ctime and invalidating the next launch's scan cache. [PR #266](https://github.com/SergeSerb2/open/pull/266) implements persistent clone reuse while retaining live-update protection. Its residual scan and timing acceptance remains open; #251 claims no gain. — 2026-11-08
 
 - Boost code mode (Step 7 package, [Code mode #203](https://github.com/SergeSerb2/open/pull/203)) — App Step 5 now implements `BoostEditorHost.loadedJS(boostID:tabID:)` from the installed document snapshot and calls `BoostEditorController.boundPageDidCommit(tabID:)` after real document commits. Real-page B5 checks live CSS, deferred JS, Refresh to Run and reload. Native code flows (including available CSS selector insertion and one-step undo) and bar comparison cover the package; real-App rest/hover snapshots await host integration. The JS notice uses the lead’s 2026-11-06 ruling recorded in plan §4.10. Package evidence and negative-proof logs are in the PR body. — Section 12 child C, 2026-11-06.
 
@@ -115,8 +147,8 @@ Small items found during review and verification. Each line: area — issue — 
   with those springs once a capture shows the motion.
 - Shell (P2) — an extension action while Peek is open acts on the tab under the Peek page (`activeTab`, `chrome.tabs.query` see that tab). Decide when the toolbar UI lands: close Peek first, or refuse the action. — engine review r1 of #93 (Q4), 2026-10-26
 - Engine (P2) — a window without a live Chrome tab reads the profile's action list, but nothing tells it when pins change in another window (only the live model observes `ToolbarActionsModel`). Observe the profile's model in the strip when the toolbar UI needs it. — engine lead, 2026-10-26
-- Engine (ad-block, engine review r1 of #100) — 100-7: stale builds are not cancelled (five quick list toggles run five full builds, and builds queued at shutdown still write their cache); share an atomic latest-load id with the build task and check it before the build and before the cache write. 100-8: the "any thread" methods have no safe handle off the UI thread; Step 4's matcher state (a ref-counted object on the matcher sequence, plan §6.6) replaces them. 100-9: `profile_dir_` is unused (the other 100-9 part, R2-5, is fixed: every load's `done` runs with an `AdBlockLoadResult`). R2-7: `IsExcluded` stops at Chromium's registrable domain while Swift's `SiteRules` walks to the last label, so an entry stored above a private suffix that only Chromium's list knows never matches in C++; make both walk the same way when Step 6 wires the Swift list in. Patch hygiene: move Open's `cef/BUILD.gn` hooks (the `.gni` import, `open_libcef_mac_sources`, `open_libcef_deps`) into a small neutral patch such as `0301-open-libcef-build-hooks.patch`, so P1 and ad blocking can be dropped or rebased alone. — engine lead, 2026-10-26
-- Engine (ad-block, engine review r1 of #97/#98) — 97-2: build adblock without `embedded-domain-resolver` and give the crate a domain resolver backed by Chromium's `net::registry_controlled_domains` (CXX), which drops `addr`, `psl` and `psl-types` (about 825 KiB) and the third Public Suffix List snapshot. 98-5: report per-rule parse failures (the crate does not count them today). Add the 4-byte DAT and the review's CSS injection lines to the fuzz corpus. — engine lead, 2026-10-26
+- Engine (ad-block, engine review r1 of #100) — 100-7: implemented in the Step 4 engine branch: a shared atomic latest-load id rejects stale work before parse and before cache write, including after serialization; shutdown invalidates the id. Native OTR teardown with a queued load reports cancellation. Final branch gates remain pending. 100-8: replaced in the Step 4 branch by ref-counted matcher state on the matcher sequence (plan §6.6). 100-9: `profile_dir_` is unused (the other 100-9 part, R2-5, is fixed: every load's `done` runs with an `AdBlockLoadResult`). R2-7: `IsExcluded` stops at Chromium's registrable domain while Swift's `SiteRules` walks to the last label, so an entry stored above a private suffix that only Chromium's list knows never matches in C++; make both walk the same way when Step 6 wires the Swift list in. Patch hygiene: move Open's `cef/BUILD.gn` hooks (the `.gni` import, `open_libcef_mac_sources`, `open_libcef_deps`) into a small neutral patch such as `0301-open-libcef-build-hooks.patch`, so P1 and ad blocking can be dropped or rebased alone. — engine lead, 2026-10-26
+- Engine (ad-block, engine review r1 of #97/#98) — 97-2: implemented and built in the Step 4 engine branch: adblock uses Chromium's `net::registry_controlled_domains` through CXX, with private registries included. `embedded-domain-resolver`, `addr`, `psl` and `psl-types` are removed from the vendor closure and license inventory. All 20,311 corpus verdicts match at both caps for text and DAT. The main d26300e6 dev distribution is recorded (8e8a461c…); final real App/browser gates remain pending the cleared-screen rerun. 98-5: report per-rule parse failures (the crate does not count them today). Add the 4-byte DAT and the review's CSS injection lines to the fuzz corpus. — engine lead, 2026-10-26
 - Shell (profiles) — when a launch keeps the old engine layout (a locked file or a running old engine blocks the one-time migration), non-default Profiles do not open in that launch (docs/plans/profiles.md, "A legacy launch"). Today only stderr says so. Show a user-visible notice for a deferred Profile (for example in its Space: "This profile opens after Open restarts", with the reason), and clear it when the next launch finishes the migration. — lead decision, 2026-10-26
 
 - Command bar motion — **closed in Section 2 Step 0.** Arc's command bar opens and closes with no visible animation (4 of 4 Cmd+T / Esc events change between two frames 17–39 ms apart; `video/21-motion.mov` at 9.66, 10.86, 13.00, 14.18 s, `docs/re/interaction-states.md` §9.3, CC-44). Step 0 deletes `Motion.commandBarOpen*`/`commandBarClose*` and their Core Animation code; `commandbar-render` flow 87 (first frame fully drawn, no animation key; gone in the next frame) proves it. — window-buttons PR, 2026-10-26; closed 2026-10-29
@@ -273,8 +305,16 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Reference captures and system grants.** [Page-chrome §7](re/page-chrome.md#7-captures-that-would-settle-the-remaining-questions) still needs user-operated Arc captures. Permission width/edge and Downloads ring geometry/recent interval remain guesses. Combined camera/microphone and real macOS authorization/delivery remain BLOCKED under the no-credential-prompt rule; notifications/MIDI fixtures do not prove them (#180). Owner: user captures / lead, with the owning engine sections for system grants.
 
 
-- First run / Section 7: passwords and cookies remain capability OFF until the
-  engine supplies its secret writer. F10 uses the disabled selection and the
+- Section 15 user hand check — after U-1/U-2, use the signed build with the user
+  present to import the user's real Arc secrets through the App's explicit
+  consent step. Check the real Keychain approval/denial paths, per-Profile
+  storage, repeat-import counts, and the report without recording secret values.
+  Synthetic fixture acceptance does not close this gate. Agents must not run
+  this import, read the real Keychain, or decrypt real Arc secrets.
+
+- First run / Section 7: passwords and cookies remain capability OFF on
+  mock-key builds, including builds with the synthetic-fixture allow switch.
+  F10 uses the disabled selection and the
   shared skip action's code path, with no real Keychain request. A missing
   alternate-icon cache requires reselection; launch never renders replacement
   SwiftUI artwork. The first-run Release 250 ms budget and imported-tab 700 ms
@@ -372,8 +412,18 @@ The lead decided against provenance migration for earlier Settings imports:
 only pre-release development builds made them. Arc Default maps by role to the
 live Open Default; named Profiles still match stable import IDs only.
 
+- Engine (ad-block Step 4) — N-18 HTTP/3 endpoint remains open: the WebTransport smoke proves hook reachability only. No local HTTP/3 endpoint proves `ready` rejection or the absence of a server session. Keep that limit in the acceptance table. — Section 13, 2026-11-07
+
+- App ad blocking, AD3 — resolved by the lead's 2026-11-08 acceptance of F's attachment-only allocation capture (`s13/ad3-footprint`, d5e44abe). F's full adblock scope passes 79/79: median PA allocated delta −26,464 bytes, non-PA malloc in-use delta zero, and different-list control +25,461,840 bytes with `engine_shared=false`. Matching input hashes and five attachment samples are required; an insensitive negative control makes the capture INVALID. Whole-process on/off pairs are record-only under the Step 8 erratum. Historical whole-process FAIL receipts remain unchanged: E3 5.734/6.078 MiB and E4 11.11 MiB. The merged E3 strict default-Chrome suite passes 79/79, with PA median −46,144 bytes and different-list control +25,129,024 bytes; all nine launches clean up. Independent unloaded-process growth is tracked below.
+
+- Engine (ad-block, post-v1) — restructure the adblock crate's rule data and indexes (≈37 MiB allocated of the ≈50 MiB engine delta, measured 2026-11-07, 5d4d15a5): all-root PA median16KiB rule/index/build residual37.15MiB text/36.84MiB DAT; immutable regex programs6.94MiB each; regex cache/metadata/rounding residual6.50/6.58MiB; settled allocated delta50.39/50.14MiB. Phase deltas include browser allocations and rounding, so the residual is not exact cache ownership. Receipts `.re/s13/e1/default-roundtrip-working-pa-phases.json`, `default-roundtrip-working-summary.json`, and `default-roundtrip-verdict-identity.json`. Preserve full20311-row verdict identity and user-regex semantics for any restructuring. Footprint ruling §13.5.1 item4a accepts57MiB steady/60MiB postcorpus+idlepurge for v1; data restructuring is not a v1 blocker. — Section13 lead,2026-11-07 20:40
+
+- Engine (ad-block, post-v1) — throttle-based interception for allowed subresources to cut G-5 below 5 ms. The post-S15 quiet run passes the v1 gate with 8.500 ms busy thread CPU and on/off wall medians 64.900/113.200 ms at load1 8.13–9.07 (main d26300e6; `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`). Historical working data: the repaired proxy uses 8.576 ms busy thread CPU per 200-request load (working median, load1 40.60–42.34, `5d4d15a5`). Request CPU is 5.565 ms, including crate checks 2.258 ms and cached-source/GURL selection 0.027 ms; the remaining ≈3.3 ms includes Mojo decode/re-issue and request allocations. Client callbacks cost 2.525 ms; redirects/rechecks cost 0.526 ms. Scopes overlap and separate medians need not sum to the total. Receipt `.re/s13/e1/default-roundtrip-working-page-scopes.json` and `default-roundtrip-pages.log`. Preserve N-15: redirect targets, including extension DNR redirects, must still be re-checked. The post-response client-pipe handoff (`38242581`) violated Mojo's unwritten-endpoint precondition and broke N-9 worker completion; `dc98292e` reverted it. Ruling §13.5.1 item 2a accepts ≤9 ms for v1, off the UI thread, with blocking-on wall time faster than off and the final number at quiet load1 ≤12. — Section 13 lead, 2026-11-07 20:58
+
 ## Settings consumers (Section 11, 2026-11-07)
 
 - Closed: restore-windows preference App consumer. Off opens one centered default-size standard window on the most recently focused Space and selection; on restores the saved windows and frames. The sidebar model is retained.
 - Closed: Profile Clear Browsing Data downloads consumer. Terminal session rows clear by start time for every range. Running/paused downloads and files remain; invalid selections fail before mutation. No persisted App download-history store exists; Section 10's granular OpenEngine API now clears native download history too. Main's Last 4 weeks range and independent cookies/cache choices are retained.
 - Closed: Library History default Profile follows the front standard window when it opens, falls back to the default Profile without a standard window, and preserves a manual choice while visible. The Settings Profile page stays at its five parity rows; it has no History entry.
+
+- Engine idle memory — browser process PartitionAlloc grew ~32 MB over ~25 s with both ad-block engines unloaded (Section 13 F receipt, 2026-11-08); owner unknown; attribute with memory-infra allocation stacks.

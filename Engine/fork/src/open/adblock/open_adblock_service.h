@@ -7,56 +7,54 @@
 
 #include <atomic>
 #include <memory>
-#include <mutex>
-#include <set>
-#include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/sequenced_task_runner.h"
+#include "open/adblock/open_adblock_matcher.h"
 #include "open/adblock/open_adblock_types.h"
-#include "open/adblock/rust/src/lib.rs.h"
-
-class GURL;
 
 namespace open_engine {
 
-// adblock-fork §7.7: a check matches at most this much of a URL (16 KiB).
-// Step 4 measures its gates at 8 and 16 KiB; the cap becomes 8 KiB only if a
-// gate fails at 16 KiB.
-inline constexpr uint32_t kOpenAdBlockMatchCapBytes = 16 * 1024;
-
-// One per CefBrowserContext (one Open Profile): the current adblock engine,
-// the master switch, and the excluded sites (docs/plans/adblock-fork.md §6).
+// One per CefBrowserContext (one Open Profile): the master switch, the
+// excluded sites, the list loads, and the Profile's matcher
+// (docs/plans/adblock-fork.md §6.3, §6.7).
 //
-// Threading: public methods run on the UI thread, except Check(),
-// CosmeticResources(), HiddenSelectors(), IsEnabled() and IsExcluded(),
-// which network throttles may call from any thread.
+// Threading: UI thread only. Every engine call runs on the matcher sequence
+// through matcher(); this class only posts state to it (SetEngine,
+// SetEnabled, SetExclusions on AdBlockCosmeticsTaskRunner(), lead decision
+// 2026-10-26) and keeps UI mirrors of the switch and the exclusions for the
+// hooks' factory-time decisions (§7.2).
 class OpenAdBlockService {
  public:
-  // |profile_dir| is the context's cache path.
+  // |profile_dir| is the context's cache path. Makes the matcher at once
+  // (disabled, no engine), so the hooks always have one.
   explicit OpenAdBlockService(base::FilePath profile_dir);
   ~OpenAdBlockService();
 
   OpenAdBlockService(const OpenAdBlockService&) = delete;
   OpenAdBlockService& operator=(const OpenAdBlockService&) = delete;
 
-  // Drops pending builds and the engine. From then on every check allows.
+  // Drops the engine reference and stops loads. Afterwards the matcher
+  // answers "off" and the context returns no service (§6.7). The first
+  // Shutdown() in the process prints the G-4 latency histogram at --v=1
+  // (§7.8).
   void Shutdown();
 
   void SetEnabled(bool enabled);
+  // UI mirror of the switch (and not shut down).
   bool IsEnabled() const;
 
   // Normalized and checked here; the callers' input is not trusted.
   void SetExcludedDomains(std::vector<std::string> registrable_domains);
-  // Is the page's host, or a parent domain of it down to its registrable
-  // domain, excluded? The Swift rule (OpenAdBlock SiteRules): an entry
-  // covers that domain and its subdomains, at a label boundary. Any thread.
-  bool IsExcluded(const GURL& top_level_url) const;
+  // UI mirror: is |host| (lowercase, no trailing dot) or a parent domain of
+  // it down to its registrable domain excluded (§6.7)?
+  bool IsExcludedOnUi(std::string_view host) const;
 
   // Loads the adblock root (adblock-fork §9.2): current.json selects a
   // generation, whose manifest lists the inputs. Every input is verified
@@ -64,25 +62,21 @@ class OpenAdBlockService {
   // replaces the old one when it is ready; on failure the old one stays.
   // |done| (optional) runs on the UI thread after that, once, with the
   // result: also for a load that a newer one replaced (kStale), and after
-  // Shutdown() or the service's destruction (kCancelled).
+  // Shutdown() or the service's destruction (kCancelled; at once when the
+  // load is asked for after Shutdown()).
   void LoadFromDirectory(
       base::FilePath adblock_root,
       bool prefer_dat,
       base::OnceCallback<void(AdBlockLoadResult)> done = {});
-  // Loads the root of the last LoadFromDirectory() again.
+  // Production control path: same directory is a no-op; empty unloads and
+  // invalidates pending loads without changing enabled/exclusions.
+  void SetListDirectory(base::FilePath adblock_root);
+  // Loads the root of the last LoadFromDirectory() again, with no |done|.
   void ReloadLists();
 
-  // One network check. Any thread. A null engine, or an invalid URL, allows.
-  open_adblock::OpenBlockerResult Check(
-      const GURL& url,
-      const GURL& source_url,
-      open_adblock::OpenRequestType request_type) const;
-  // The cosmetic filters for one frame URL. Any thread.
-  open_adblock::OpenCosmeticResources CosmeticResources(const GURL& url) const;
-  std::vector<std::string> HiddenSelectors(
-      const std::vector<std::string>& classes,
-      const std::vector<std::string>& ids,
-      const std::vector<std::string>& exceptions) const;
+  // The Profile's matcher; any thread may hold it, only the matcher
+  // sequence may call it.
+  scoped_refptr<OpenAdBlockMatcher> matcher() const { return matcher_; }
 
   AdBlockStatus GetStatus() const;
   // Runs on the UI thread after every load and setting change.
@@ -91,13 +85,6 @@ class OpenAdBlockService {
 
   base::WeakPtr<OpenAdBlockService> GetWeakPtr();
 
-  // The engine of one load; immutable once published.
-  struct EngineHolder {
-    explicit EngineHolder(rust::Box<open_adblock::OpenAdblockEngine> engine);
-    ~EngineHolder();
-    rust::Box<open_adblock::OpenAdblockEngine> engine;
-  };
-
   // The result of one background load.
   struct BuildResult {
     BuildResult();
@@ -105,11 +92,21 @@ class OpenAdBlockService {
     BuildResult& operator=(BuildResult&&);
     ~BuildResult();
 
-    std::unique_ptr<EngineHolder> engine;
+    std::shared_ptr<const EngineHolder> engine;
+    // Verified generation with no enabled lists. Success without creating an
+    // engine, loading resources, or entering the engine registry.
+    bool empty_generation = false;
     bool from_dat = false;
+    // Found in the process-wide registry (another Profile's engine).
+    bool shared = false;
+    // A newer load started before this one finished; nothing was published.
+    bool stale = false;
     // The build could be cached: a DAT restores the same engine (no
     // $removeparam or :remove*() rules, which a v0 DAT drops).
     bool lossless = true;
+    std::vector<std::string> lossy_kinds;
+    uint32_t resources_loaded = 0;
+    std::string resources_version;
     int64_t generation = 0;
     uint32_t list_count = 0;
     uint64_t dat_size_bytes = 0;
@@ -119,7 +116,6 @@ class OpenAdBlockService {
   };
 
  private:
-  std::shared_ptr<const EngineHolder> CurrentEngine() const;
   // The reply of a load: runs |done| even when |service| is gone.
   static void OnBuiltReply(base::WeakPtr<OpenAdBlockService> service,
                            uint64_t load_id,
@@ -128,36 +124,21 @@ class OpenAdBlockService {
   void OnBuilt(uint64_t load_id,
                base::OnceCallback<void(AdBlockLoadResult)> done,
                BuildResult result);
-  // Destroys |engine| on the build runner: freeing an engine takes 15 to
-  // 18 ms, too long for the UI thread (review 100-2).
-  void ReleaseOnBuildRunner(std::shared_ptr<const EngineHolder> engine);
+  void PostToMatcher(base::OnceCallback<void(OpenAdBlockMatcher*)> update);
   void NotifyStatus();
 
   const base::FilePath profile_dir_;
+  const scoped_refptr<OpenAdBlockMatcher> matcher_;
   base::FilePath adblock_root_;
-  std::atomic<bool> enabled_{false};
-  std::atomic<bool> shut_down_{false};
+  bool enabled_ = false;
+  bool shut_down_ = false;
+  base::flat_set<std::string> excluded_domains_;
 
-  mutable std::shared_mutex engine_mutex_;
-  std::shared_ptr<const EngineHolder> engine_;  // Guarded by engine_mutex_.
+  // The latest load id, shared with the build tasks so a stale build stops
+  // before it parses and before it writes the cache (§6.6, review 100-7).
+  const std::shared_ptr<std::atomic<uint64_t>> latest_load_id_;
 
-  mutable std::mutex exclusions_mutex_;
-  std::set<std::string> excluded_domains_;  // Guarded by exclusions_mutex_.
-
-  scoped_refptr<base::SequencedTaskRunner> build_runner_;
-  // UI thread: a result from an older load is dropped.
-  uint64_t load_id_ = 0;
-
-  mutable std::mutex status_mutex_;
-  AdBlockStatus status_;  // Guarded by status_mutex_.
-  // CosmeticResources() runs on any thread: its counters are summed here and
-  // copied into the status by GetStatus().
-  mutable std::atomic<uint64_t> cosmetic_dropped_procedural_{0};
-  mutable std::atomic<uint64_t> cosmetic_dropped_unsafe_{0};
-  mutable std::atomic<uint64_t> cosmetic_dropped_style_{0};
-  mutable std::atomic<uint64_t> cosmetic_dropped_remove_{0};
-  mutable std::atomic<uint64_t> cosmetic_dropped_scriptlet_{0};
-  mutable std::atomic<uint64_t> cosmetic_dropped_over_cap_{0};
+  AdBlockStatus status_;
   base::RepeatingCallback<void(const AdBlockStatus&)> status_callback_;
 
   base::WeakPtrFactory<OpenAdBlockService> weak_ptr_factory_{this};

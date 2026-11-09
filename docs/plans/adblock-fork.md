@@ -101,7 +101,7 @@ How to use this plan:
 | Network blocking | Revised 2026-10-26: `OpenAdBlockURLLoaderFactory`, a URLLoaderFactory proxy installed by `ChromeContentBrowserClientCef::WillCreateURLLoaderFactory` ahead of Chrome's interceptors, plus WebSocket and WebTransport hooks; block / stub response for `$redirect` / `$removeparam` / subframe CSP; main frame never blocked; per-tab counters (§7) |
 | Cosmetic hiding | Revised 2026-10-26: the renderer pulls the frame's sanitized hide selectors at `DidCreateDocumentElement` over one process-level Mojo interface served on the matcher sequence, inserts them as user-origin style sheets, and runs the class/ID observer in an isolated world; `generichide` / `#@#` exceptions (§8). Plain CSS hiding only (lead ruling 6): no scriptlets, `:style()`, `:remove*()` or procedural filters in v1 (post-v1 design: §8.5) |
 | Lists | Bundled EasyList + EasyPrivacy fetched at build time from official URLs with pinned SHA-256 (never from Arc's bundle or mirror); a bundled, pinned `resources.json` that in v1 serves only `$redirect` stubs (changes only with an app update, lead ruling 7); per-Profile storage, ETag update flow, DAT fast startup only for lossless list sets (§9) |
-| CEF API | New methods on `CefRequestContext` + `CefBrowserHost` in `cef/include/*.h`, translator regeneration, `libcef` implementations (§11 Step 6) |
+| CEF API | Six free functions in overlay `cef_open_adblock.h`, translator-generated C API/wrappers and a libcef overlay implementation; no new context/browser virtuals (§11 Step 6) |
 | OpenEngine + Swift | ObjC++ surface in `Engine/OpenEngine/` and the Swift `AdBlockStore` contract for `OpenFeatures` (§12) |
 | Acceptance | `cefsimple` smoke harness (test-only patch), local test site, CDP checks, perf budgets (§13) |
 
@@ -334,7 +334,7 @@ committed).
 | P-2 `0001-open-adblock-service-owner.patch` | `cef` | `cef/libcef/browser/browser_context.h`, `cef/libcef/browser/browser_context.cc` | `open_adblock_service()` accessor + member + shutdown hook (§6.1) |
 | P-3 `03xx-open-adblock-network-hooks.patch` (revised 2026-10-26) | `cef` | `cef/libcef/browser/chrome/chrome_content_browser_client_cef.h`, `.cc` only (plus `cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.h`, `.cc` only if Step 5 builds the §7.6 priority lane) | One call at the top of the CEF branch of `WillCreateURLLoaderFactory`; one line in `ExposeInterfacesToRenderer`; three new one-line overrides `WillInterceptWebSocket`, `CreateWebSocket`, `WillCreateWebTransport` that forward to `open_engine::` free functions; one include (§7.1, §8.2). With the lane only: a `PostDestroyThreads()` override that stops the lane thread (§7.6 lane rule 3). Budget: about +45/−0 lines (about +10 more with the lane). `//open/adblock` already reaches `libcef_static` through `open_libcef_deps` (Step 3 as built), so no `cef/BUILD.gn` hunk. **Shared owner patch:** Boost Step 4R also hooks this file (`RenderProcessWillLaunch`; `docs/plans/boost-color-remap.md` §10.1). One path has one owner patch (`docs/engine-fork.md:119`), so whichever feature lands second adds its hunks to the existing owner patch. Prefer the feature-neutral name `0401-open-browser-client-hooks.patch` for both |
 | P-4 `03xx-open-adblock-renderer-hook.patch` (revised 2026-10-26) | `cef` | `cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc` only | In `RenderFrameCreated` (`:41-50`), one line after the `CefRenderFrameObserver` is made: `new open_engine::OpenAdBlockRendererAgent(render_frame);  // Deletes itself.`, plus one include (§8.3). The agent is its own `content::RenderFrameObserver`. Budget: about +3/−0 lines. **No** `cef.mojom`, `frame_host_impl`, `frame_impl` or `render_frame_observer` change. **Shared owner patch:** Boost Step 4R also hooks this file (`RenderThreadStarted`, `RenderFrameCreated`; `docs/plans/boost-color-remap.md` §10.1). Whichever feature lands second adds its hunks to the existing owner patch. Prefer the feature-neutral name `0402-open-renderer-client-hooks.patch` for both |
-| P-5 `0004-open-adblock-cef-api.patch` | `cef` | `cef/include/cef_request_context.h`, `cef/include/cef_browser.h`, `cef/libcef/browser/request_context_impl.h/.cc`, `cef/libcef/browser/browser_host_base.h/.cc` + translator output under `cef/include/capi/`, `cef/libcef_dll/` | The §11 Step 6 API. Translator output files **are** committed in the tree and therefore appear in this patch; regenerate, never hand-edit them |
+| P-5 (overlay, revised 2026-11-07) | `src` | `cef/include/cef_open_adblock.h`, `open/adblock/open_adblock_api.cc`, `open/open_libcef_sources.gni` | Six free functions (§11 Step 6); engine-apply regenerates translator outputs and build entries from the overlay header. No upstream patch or virtual-method change is needed |
 | P-6 `0005-open-adblock-cefsimple-smoke.patch` | `cef` | `cef/tests/cefsimple/simple_app.cc`, `cef/tests/cefsimple/simple_handler.cc/.h` | **Test-only.** Switch-gated harness (§13.1). Keep last in the series so it can be dropped without touching P-2…P-5 |
 
 No `patches/chromium/` entries. If implementation proves a Chromium-side
@@ -359,7 +359,7 @@ prefixes are sort hints, the series file wins):
 0001-open-adblock-service-owner.patch   # CefBrowserContext owns open::OpenAdBlockService (adblock-fork §6)
 0002-open-adblock-network-hooks.patch   # URLLoaderFactory proxy, WebSocket/WebTransport, cosmetics binder (§7, §8.2; revised 2026-10-26)
 0003-open-adblock-renderer-hook.patch   # renderer client creates the per-frame OpenAdBlockRendererAgent (§8.3; revised 2026-10-26)
-0004-open-adblock-cef-api.patch         # CefRequestContext/CefBrowserHost ad-block API + translator output (§11 Step 6)
+# Control API is an overlay header + implementation; engine-apply runs the translator (§11 Step 6).
 0005-open-adblock-cefsimple-smoke.patch # test-only cefsimple harness switches (§13)
 ```
 
@@ -1108,14 +1108,14 @@ it never destroys an engine under a lock.
 | Text lifetime | List texts are freed right after `open_adblock_build` returns, before serialize and the cache write; the DAT is written from the Rust `Vec<u8>` through a `base::span`, with no `std::string` copy | 100-5 |
 | Resources JSON | 4 MiB read cap (bundled file; Step 7: 142,493 bytes, 47 redirect resources) | Headroom above the pinned payload; source and output hashes are recorded in §9.3 |
 
-**Budgets (measured as `phys_footprint` of the browser process,
-`footprint` tool or `vmmap --summary`; the step that gates each row is
-named):**
+**Budgets (browser-process `phys_footprint`, except the Step 8 AD3
+allocator predicate below; the step that gates each row is named):**
 
 | Measure | Budget | Basis | Gated at |
 |---|---|---|---|
-| One EasyList + EasyPrivacy engine, steady state, with the D-12 regex features | ≤ 40 MiB | 32 MiB measured standalone (F-35); the in-tree allocator and the regex lazy-DFA caches can add some (guess) | Step 4 (single context, `cefsimple`) |
-| Second Profile with the same lists | ≤ +2 MiB over the window below, and the second Profile's status shows `engine_shared=1` | Shared engine; only matcher state (exclusions, toggle) is per Profile. **Window (review r2 N-8):** create both request contexts first and take the baseline; the measure is the delta from the second context's `LoadFromDirectory` to its `engine_shared=1` status. The cost of creating a context itself is not in this budget | Step 8 (two request contexts need the app or the test host; `cefsimple` has one context, §13.1; review r1 finding 9) |
+| One EasyList + EasyPrivacy engine, steady state, with the D-12 regex features | ≤ 57 MiB, text and DAT, median of 5 | Lead footprint ruling §13.5.1 item 4a (2026-11-07 20:40); record PA allocated breakdown | Step 4 (single context, `cefsimple`) |
+| After the full-corpus check plus one idle purge | ≤ 60 MiB, text and DAT, median of 5 | Same ruling 4a; one idle-triggered, rate-limited purge, no request-path purge or idle timer loop; G-2/G-4 unchanged | Step 4 (single context, `cefsimple`) |
+| Second Profile with the same verified inputs | `engine_shared=true`; median of 5 attachment-only PA allocated deltas ≤ +2 MiB; median non-PA malloc in-use delta ≤ +2 MiB | Both contexts and stores exist before baseline; store IO stays idle. Different-list control must show `engine_shared=false` and PA allocated delta ≥8 MiB, else AD3 is INVALID (insensitive). Record PA committed deltas and whole-process paired median/spread; whole-process deltas do not gate AD3. See Step 8 acceptance errata (2026-11-08) | Step 8 (two request contexts need the App; `cefsimple` has one context) |
 | Text build transient | ≤ +100 MiB above steady state, back to steady state ≤ 5 s after the swap | 80 MiB measured | Step 9 |
 | All 5 generic + privacy lists enabled | Record only (no gate in v1) | R-7; decides whether any non-default list becomes a default | Step 9 |
 | Renderer, worst-case cosmetic payload: the initial sheet at the 256 KiB cap plus 64 generic sheets of 500 rules (about 163,000 user-origin rules at most: the cap bounds bytes, so the shortest selectors give the largest count — 256 KiB / 2 B ≈ 131k, plus 64 × 500 generic; review r2 N-7) | Record only in v1: renderer `phys_footprint` delta and style-recalc time with that payload | Review r1 finding 14: the rule count has no other bound | Step 5 |
@@ -1398,9 +1398,12 @@ stops blocking at once for that page's later requests.
 Rules, in order:
 
 1. **Pass through** when the matcher is disabled, the top site is
-   excluded, the URL is not `http`/`https`, or
-   `request.is_outermost_main_frame` is true (defensive; such factories
-   are not wrapped). The proxy calls the target's `CreateLoaderAndStart`
+   excluded, the URL is not `http`/`https`, or the request is a main-frame
+   document (`request.destination == kDocument`; defensive, such factories
+   are not wrapped). Corrected at Step 4: not `is_outermost_main_frame`,
+   which is true for every request the main frame makes, its subresources
+   included (`url_request.mojom`: "True if |frame_id| is the outermost main
+   frame"); the first N-1 run passed every page subresource through. The proxy calls the target's `CreateLoaderAndStart`
    with the original `receiver` and `client` and keeps nothing: the
    request then flows without Open's hop.
 2. Otherwise run `open_adblock_check`. **Block** when `matched` is true
@@ -1854,7 +1857,7 @@ medians unless stated:
 | G-2 | Check cost on real URLs, at both caps | `--open-adblock-selftest --open-adblock-bench=<corpus file> --open-adblock-bench-cap=<8192\|16384>` (non-official only): each corpus URL 10× through the real shim on the matcher sequence, real lists. **Warm-up (review r2 N-2):** repetition 1 of every URL is warm-up and is left out of mean, p99 and max, because a first-use regex compile can hold the engine for up to 6.78 ms (F-35) whatever the cap is. The bench prints the first-pass max on its own line; no gate reads it (G-6 still counts such stalls in page loads) | at each cap, over repetitions 2–10: mean ≤ 8 µs, p99 ≤ 60 µs, max ≤ 1 ms |
 | G-3 | Long URLs, at both caps | same bench with synthetic 8 KiB, 16 KiB, 100 KiB and 2 MiB URLs (path of random letters), each checked 10× under the same warm-up rule as G-2 (repetition 1 excluded, first-pass max reported apart), so G-3 measures the cap, not a first compile | each ≤ 1 ms over repetitions 2–10, at each cap |
 | G-4 | Added request latency | one **process-wide** histogram (fixed log-scale buckets from 1 µs to 100 ms, atomic counters, no locks), fed by every factory on the matcher sequence with the time from `CreateLoaderAndStart` arrival to the forward. **Print site (review r2 N-9):** printed at `--v=1` synchronously on the UI thread from `OpenAdBlockService::Shutdown()` (§6.3), once per process (the first `Shutdown()` prints; `cefsimple` has one context). A normal quit after the loads therefore always prints it, where a matcher task could be dropped by `SKIP_ON_SHUTDOWN` (§7.6); the self-test bench also prints it at the end of its own run. Runs: `corpus.html?sample=0`, five loads in one process (the G-5 on-launch), then quit normally and read the print. G-4 keeps load 1: a first regex compile delays one request of about 1,000, so it moves p99 only if more than 1 % of requests compile, and G-6 counts those stalls | p50 ≤ 50 µs, p99 ≤ 500 µs over all requests of the five loads |
-| G-5 | Page wall time | `corpus.html?sample=0` (exactly 200 requests), `performance.now()` at `load` over CDP, real lists, blocking on vs off. **Process and warm-up (review r2 N-2):** the five loads of each condition share one `cefsimple` process (two launches: on, then off). That is how the harness really runs them: one CDP target reloads the page, and G-4's process-wide histogram is fed by the same on-loads. Five fresh processes would fold process start and first regex compiles into wall time, which is not the per-page cost this gate prices (real browsing is warm). Load 1 of each condition is warm-up: its wall time and busy time are reported apart, and the gate reads loads 2–5 only | median delta (on minus off, loads 2–5) ≤ 5 ms; median matcher busy time of loads 2–5 ≤ 3 ms per load |
+| G-5 | Page wall time | `corpus.html?sample=0` (exactly 200 requests), `performance.now()` at `load` over CDP, real lists, blocking on vs off. **Process and warm-up (review r2 N-2):** the five loads of each condition share one `cefsimple` process (two launches: on, then off). That is how the harness really runs them: one CDP target reloads the page, and G-4's process-wide histogram is fed by the same on-loads. Five fresh processes would fold process start and first regex compiles into wall time, which is not the per-page cost this gate prices (real browsing is warm). Load 1 of each condition is warm-up: its wall time and busy time are reported apart, and the gate reads loads 2–5 only | blocking on faster than off; median busy thread CPU of loads 2–5 ≤ 9 ms per 200-request load, off the UI thread; quiet load1 ≤ 12 (§13.5.1 item 2a) |
 | G-6 | Stalls | log every check > 1 ms with its URL length and duration (no cause: the shim cannot see a regex compile inside the crate) during the G-5 runs and the Step 9 soak | ≤ 1 per 1,000 checks; none > 10 ms |
 | G-7 | Off costs nothing | the same page in a Profile with blocking off vs a build without P-3 | delta within run-to-run spread; report both medians |
 
@@ -2459,14 +2462,22 @@ Purpose: stage EasyList + EasyPrivacy (+ the §9.3 resources file) under
 `Vendor/adblock/` for the app bundle and for `cefsimple` acceptance.
 Never commit list text. Never read `/Applications/Arc.app`.
 
-`Engine/fork/adblock/list-pins.txt` (committed, exact format):
+**Erratum — 2026-11-07:** EasyList republishes its live URL many times per
+day. A release hash on that URL breaks clean builds and seed repair after
+upstream moves. Bundled seeds now use immutable URLs from the official
+`easylist/easylist` repository's `gh-pages` branch. Both files use the same
+40-character commit. Runtime updates and their ETag flow still use the
+catalog's live `easylist.to` URLs.
+
+`Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt`
+(committed, exact format):
 
 ```text
 # Open bundled filter lists. One line per file:
-# <local-name> <official-url> <sha256-hex-lowercase>
+# <local-name> <seed-url> <sha256-hex-lowercase>
 # Update only via: tools/fetch-adblock-lists.sh --update-pins (reviewed PR).
-easylist.txt https://easylist.to/easylist/easylist.txt <fill at Step 7>
-easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt <fill at Step 7>
+easylist.txt https://raw.githubusercontent.com/easylist/easylist/<40-hex-commit>/easylist.txt <sha256>
+easyprivacy.txt https://raw.githubusercontent.com/easylist/easylist/<same-commit>/easyprivacy.txt <sha256>
 ```
 
 Script behavior (Bash, `set -euo pipefail`, no fork-script sourcing —
@@ -2476,8 +2487,11 @@ Script behavior (Bash, `set -euo pipefail`, no fork-script sourcing —
 tools/fetch-adblock-lists.sh [--update-pins] [--dest <dir, default Vendor/adblock>]
 ```
 
-1. Read `list-pins.txt` (+ `resources-pins.txt`, §9.3). For each entry:
-   download with `curl -fsSL --retry 3 -o <dest>/<name>.tmp <url>`
+1. Read `list-pins.txt` (+ `resources-pins.txt`, §9.3). Allow only the
+   exact `https://raw.githubusercontent.com/easylist/easylist/<40 lowercase hex>/`
+   seed URL with the matching `easylist.txt` or `easyprivacy.txt` filename.
+   Without `--update-pins`, fetch exactly that URL (or reuse a verified cache).
+   For each missing entry, download with `curl -fsSL --retry 3 -o <dest>/<name>.tmp <url>`
    (follow the official URL only; an HTTP error is fatal, no fallback
    mirror).
 2. Verify: first non-empty line matches `^\[Adblock Plus` (lists) and
@@ -2485,15 +2499,15 @@ tools/fetch-adblock-lists.sh [--update-pins] [--dest <dir, default Vendor/adbloc
    print expected vs actual, exit 1. **Never** overwrite a good staged
    file with an unverified one — rename `.tmp` over the target only
    after both checks pass.
-3. `--update-pins`: after a successful verify-except-hash download,
-   rewrite the pin file with the new hash and print a one-line summary
-   per changed file (`<name>: <old> -> <new>`). This mode is how a list
-   update is reviewed; a normal run must never edit pins.
+3. `--update-pins`: resolve `refs/heads/gh-pages` once with
+   `git ls-remote https://github.com/easylist/easylist refs/heads/gh-pages`.
+   Download both lists at that commit, then rewrite both URLs and hashes
+   after successful header verification. Print old → new URLs and hashes.
+   This mode is how a list update is reviewed; a normal run must never edit pins.
 4. Print `fetch-adblock-lists: <n> files, <bytes> bytes -> <dest>`.
 
-At Step 7 the implementer runs the script once, then `--update-pins`
-once to fill the two `<fill at Step 7>` hashes from the real downloads,
-and commits the filled pins. Record the byte sizes and line counts in
+Use `--update-pins` to refresh both committed URLs and hashes together.
+Record the resolved commit, byte sizes, and line counts in
 the PR (expect ~80k lines EasyList, ~57k EasyPrivacy per the design's
 count of the same upstream lists; a wildly different count means the
 wrong URL).
@@ -2507,21 +2521,34 @@ files beside `cefsimple` via the smoke harness switch (§13.1).
 
 **Lead decision — 2026-10-25: use generations.** This replaces the earlier
 `AdBlock/lists/` layout and any directory-enumeration or unbound-DAT instructions
-elsewhere in this plan. The Swift slice uses `<root>/Profiles/<UUID>/adblock/`.
-The CEF/OpenEngine directory parameter names this `adblock/` root.
+elsewhere in this plan.
+
+**Folder correction — 2026-11-07.** The caller passes
+`ProfileDirectories.adBlockDirectory(dataDirectoryName:)` to
+`AdBlockStore.openProfile(_:directory:)`: `<root>/Profiles/<dataDirectoryName>/AdBlock/`.
+Swift settings and exclusions stay there; list generations, download caches and
+`current.json` live under `AdBlock/lists/`. The CEF/OpenEngine directory parameter
+names that **lists** directory. A UUID is the Profile identity, not its folder name.
+On first open with no new state, the old `Profiles/<UUID>/adblock/` contents migrate
+through a staged copy and atomic destination rename; failure leaves the old data
+untouched and opens defaults. Existing `AdBlock/exclusions.json` remains readable.
+The App registers its lazy store owner with `ProfileTeardown`; retirement marks
+the Profile deleted, cancels its schedule and tracked IO task, waits for IO to
+finish, drops state and emits `closed` before teardown removes its folder.
 
 ```text
-<profile-dir>/adblock/
-  catalog-state.json            Swift state, persisted before current.json moves
-  exclusions.json               Swift exclusion set
-  downloads/<listID>/<n>.body   source caches; never engine inputs
-  current.json                  live {generation, manifestSHA256}, previous ref
-  generations/<n>/
-    <listID>.txt                 exactly one per enabled list
-    manifest.json               generation, full file inventory, state snapshot
-    engine.dat                  optional browser-owned cache for THIS generation
-    engine-inputs.json          browser-owned DAT receipt (see below)
-  quarantine/<n>-<unique>/       rejected generation; never engine inputs
+<profile-dir>/AdBlock/
+  catalog-state.json              Swift state, persisted before current.json moves
+  exclusions.json                 Swift exclusion set
+  lists/                          engine directory
+    downloads/<listID>/<n>.body    source caches; never engine inputs
+    current.json                  live {generation, manifestSHA256}, previous ref
+    generations/<n>/
+      <listID>.txt                exactly one per enabled list
+      manifest.json              generation, full file inventory, state snapshot
+      engine.dat                 optional browser-owned cache for THIS generation
+      engine-inputs.json         browser-owned DAT receipt (see below)
+    quarantine/<n>-<unique>/       rejected generation; never engine inputs
 ```
 
 `current.json` is `{ "live": { "generation": n, "manifestSHA256": "..." },
@@ -2707,7 +2734,7 @@ Every new Swift generation has `_resources`, independently of
 bundle on the next publication (open, update, reset or list change). An app
 resource-pin change also republishes on open without changing enabled lists.
 Copyable debug info includes `resources=6d4a87b8f0e4`.
-Engine resources-after-DAT acceptance N-19 remains E3's separate gate.
+Engine resources-after-DAT N-19 passes in E3's merged 32/32 set. The strict real App scope also passes text stubs, verified DAT relaunch/reapplication, and a no-engine zero-list generation followed by one-list restoration.
 
 ### 9.4 The 46-list catalog (committed data file)
 
@@ -2821,7 +2848,7 @@ Per document (renderer main thread -> matcher sequence):
 
 Per tab (UI thread):
   OpenAdBlockTabHelper (WebContentsUserData) counts; reset on primary main-frame commit.
-  CefBrowserHost::GetOpenAdBlockBlockedCount() reads it (§11 Step 6).
+  CefGetOpenAdBlockBlockedCount(browser) reads it (§11 Step 6).
 ```
 
 Thread rules (violations are Step-blocking bugs):
@@ -3147,140 +3174,60 @@ the lane is built) + the P-6 switches + overlay files +
 otherwise the PR states that it verified the #98 form). One PR. The PR
 quotes the sanitizer rules as implemented (security callout, 98-2).
 
-### Step 6 — CEF C API + translator (patch P-5)
+### Step 6 — CEF control API + translator (overlay, revised 2026-11-07)
 
-New API (all guarded `CEF_API_ADDED(CEF_API_VERSION_EXPERIMENTAL)`,
-F-12; `/*--cef()--*/` annotations so the translator emits the C API):
+The binding Section 13 design uses free functions in
+`Engine/fork/src/cef/include/cef_open_adblock.h`, guarded by
+`CEF_API_ADDED(CEF_EXPERIMENTAL)` and annotated for the CEF translator.
+No virtual methods are added to `cef_request_context.h` or `cef_browser.h`.
 
-In `cef/include/cef_request_context.h` (per-Profile control; impl in
-`CefRequestContextImpl`, forwarding to
-`browser_context()->open_adblock_service()` — `browser_context()` exists,
-F-13):
+- `CefSetOpenAdBlockEnabled(context, enabled)` sets the context's switch.
+- `CefSetOpenAdBlockListDirectory(context, list_dir)` starts an asynchronous
+  load from the root holding current.json. The same path is a no-op; an
+  empty path unloads and invalidates pending loads.
+- `CefReloadOpenAdBlockLists(context)` re-reads the last directory.
+- `CefSetOpenAdBlockExcludedDomains(context, domains)` replaces exclusions.
+- `CefGetOpenAdBlockStatus(context)` returns enabled, engine_loaded,
+  engine_from_dat, engine_shared, dat_policy, list_count, resources_loaded,
+  last_build_ms, last_error, excluded_count and load_generation. No URLs,
+  paths or exclusion names enter the dictionary. Errors use a fixed summary.
+- `CefGetOpenAdBlockBlockedCount(browser)` reads the existing current-document
+  helper's blocked plus redirected count, or zero without a helper. There
+  is no manual reset API; navigation owns resets.
 
-```cpp
-///
-/// Open: enable or disable native ad blocking for this request context
-/// (one Open Profile). Takes effect on the next navigation; no restart.
-/// The default is disabled until SetOpenAdBlockListDirectory has loaded
-/// an engine. Can be called on any CEF thread; marshals to the UI thread.
-///
-/*--cef()--*/
-virtual void SetOpenAdBlockEnabled(bool enabled) = 0;
+Enable/exclusion changes reset existing factories in the context's loaded
+storage partitions, using Chromium's proxy-transition path. Disabled/excluded
+documents have no proxy (§7.2), so this permits enabling without navigation.
+The real-App acceptance run `s15-adblock-r5` proves the next blocked
+request after enabling or re-including the current document, and the
+next allowed request after disabling, without navigation.
 
-/*--cef()--*/
-virtual bool IsOpenAdBlockEnabled() = 0;
+All calls run on the browser-process UI thread. Mutators return false for
+an unavailable or uninitialized context; status returns null. They never
+wait for an engine build and never fall back to Default. The implementation
+is a libcef overlay in `open/adblock/open_adblock_api.cc`, compiled
+through `open_libcef_sources.gni`. The existing translator generates C API,
+wrapper, dylib and build-file entries when engine-apply copies the header;
+no new upstream wiring patch is required.
 
-///
-/// Point the ad-block service at the adblock root and load current.json
-/// asynchronously. Verify only manifest-listed generation inputs and use
-/// a DAT only with its matching generation/input receipt (§9.2).
-///
-/*--cef(optional_param=list_dir)--*/
-virtual void SetOpenAdBlockListDirectory(const CefString& list_dir) = 0;
-
-///
-/// Re-read the directory from the last SetOpenAdBlockListDirectory call
-/// (use after the client has written updated list files). No-op if no
-/// directory was set.
-///
-/*--cef()--*/
-virtual void ReloadOpenAdBlockLists() = 0;
-
-///
-/// Replace the per-site exclusion set (registrable domains, e.g.
-/// "example.com"). Excluded top-level sites skip network blocking and
-/// cosmetic filtering after the next navigation.
-///
-/*--cef()--*/
-virtual void SetOpenAdBlockExcludedDomains(
-    const std::vector<CefString>& domains) = 0;
-
-/*--cef()--*/
-virtual void GetOpenAdBlockExcludedDomains(
-    std::vector<CefString>& domains) = 0;
-
-///
-/// Snapshot of ad-block state for this context as a dictionary with
-/// keys: enabled (bool), engine_loaded (bool), engine_from_dat (bool),
-/// list_count (int), dat_size_bytes (int), last_build_ms (int),
-/// last_error (string), excluded_domains (list of strings). Suitable
-/// for a "copy debug info" action. Contains no page URLs.
-/// Added 2026-10-26: engine_shared (bool, §6.6), dat_policy ("dat" |
-/// "text-only"), lossy_kinds (list of strings), resources_version
-/// (first 12 hex digits), resources_loaded (int), cosmetic_dropped_procedural
-/// (int), cosmetic_dropped_unsafe (int), cosmetic_dropped_style (int),
-/// cosmetic_dropped_remove (int), cosmetic_dropped_scriptlet (int),
-/// match_cap_bytes (int), checks_truncated (int, §7.7).
-///
-/*--cef()--*/
-virtual CefRefPtr<CefDictionaryValue> GetOpenAdBlockStatus() = 0;
-```
-
-In `cef/include/cef_browser.h`, class `CefBrowserHost` (per-tab counts;
-impl in `CefBrowserHostBase`, reading
-`open::OpenAdBlockTabHelper::FromWebContents(GetWebContents())`,
-creating nothing — absent helper means 0):
-
-```cpp
-/*--cef()--*/
-virtual int GetOpenAdBlockBlockedCount() = 0;   // blocked + redirected, current load
-/*--cef()--*/
-virtual void ResetOpenAdBlockBlockedCount() = 0;
-```
-
-Implementation + regeneration procedure (exact):
-
-1. Edit the two headers. Run the translator from `cef/`:
-   `cef/tools/translator.sh` (it runs
-   `python3 translator.py --root-dir ..`; pass no extra flags for the
-   default run). Expect regenerated: `cef/include/capi/cef_request_context_capi.h`,
-   `cef/include/capi/cef_browser_capi.h`, the `*_versions` headers,
-   `cef/libcef_dll/cpptoc/request_context_cpptoc.cc`,
-   `cef/libcef_dll/cpptoc/browser_host_cpptoc.cc` (names per the
-   translator's class mapping — accept what it emits), and
-   `cef/include/cef_api_versions.h` / hash updates if the tool writes
-   them. **Never hand-edit generated files.** If the translator emits
-   `AUTO-GENERATED CONTENT - DELETE THIS COMMENT` stubs in impl files,
-   that is the signal for step 2.
-2. Implement the C++ methods: `CefRequestContextImpl` (in
-   `cef/libcef/browser/request_context_impl.{h,cc}` — add the overrides
-   to the header's public section; bodies marshal to the UI thread with
-   the file's existing `CEF_REQUIRE_UIT` / post-task pattern and call
-   the service). `CefBrowserHostBase` (in
-   `cef/libcef/browser/browser_host_base.{h,cc}` — it already owns
-   `GetWebContents()`, F-13). Status dictionary: build with
-   `CefDictionaryValue::Create()` and the service's `AdBlockStatus`
-   (§6.2) field-for-field.
-3. API version bookkeeping: new methods compile only under the
-   experimental API (default). Do **not** run `version_manager.py` and
-   do not assign a numbered version — numbered assignment happens at
-   CEF upstream-merge time, which Open does not do (F-12).
-4. Add the new exported symbols to
-   `Engine/fork/verification/expected-symbols.txt` (fork-infra §10.2)
-   from real `nm -gU` output on the built framework (expect C symbols
-   like `_cef_request_context_set_open_ad_block_enabled` — copy the
-   real spellings, mangled C++ listed with a `# demangled:` comment
-   where applicable). `engine-status` S-7 must pass with them.
-5. Capture as P-5 via `engine-refresh-patches` (paths per §3.3). The
-   generated translator files are in-tree files and **do** belong in
-   the patch.
+Each OTR context has its own service, switch and exclusions. The App supplies
+its parent's list directory, allowing the registry to share the engine.
+Native close shuts down the OTR service before its parent and all setters
+reject a retained closed OTR wrapper.
 
 Acceptance:
 
-- [ ] Translator run is clean (no `not implemented` warnings left in
-      generated impls); re-running it produces no further diff
-      (`git -C "$SRC_DIR" status --short` stable across a second run).
-- [ ] Build green; `engine-status` all PASS including S-7 with the new
-      symbols.
-- [ ] §13.3 cases still pass, now driven **only** through the new CEF
-      API from the P-6 harness (the harness switches call
-      `SetOpenAdBlock*`, never `//open` headers directly).
-- [ ] N-20 (mid-page exclusion through `SetOpenAdBlockExcludedDomains`,
-      review r1 finding 15) passes.
-- [ ] Round-trip: revert P-5 in the tree, `engine-apply`, diff matches
-      the captured patch (fork-infra §8 step 5).
+- [x] Engine build and built-artifact engine-status PASS; generated C API has all six
+  functions and the framework exports their C symbols.
+- [x] Headless real-CEF control flow (21 PASS): defaults/status schema, enable/off/on,
+  exclusions, same-path no-op, generation reload, failed load, unload during
+  a pending load, OTR settings isolation/sharing and closed-context refusal.
+- [x] Real App request/control integration after the recorded distribution:
+  §12.1 and Step 8. F's accepted allocation capture replaces the historical
+  whole-process AD3 predicate; merged rerun/full-gate acceptance remains below.
 
-PR: P-5 + `expected-symbols.txt`. One PR.
+Step 4, Step 6 and Step 8 ship as one engine milestone under the lead's
+integration gate. Smoke switches remain non-official only.
 
 ### Step 7 — Bundled lists, catalog, resources (§9.1, §9.3, §9.4)
 
@@ -3327,56 +3274,154 @@ PR: tools + `Engine/fork/adblock/**` + `open/adblock/rust/src/lib.rs`
 (if this step landed the deserialize row; otherwise the PR states that
 it verified the #98 form) + the Swift manifest change. One PR.
 
-### Step 8 — OpenEngine ObjC API + Swift contract (§12)
+### Step 8 — OpenEngine ObjC API + Swift adapter (revised 2026-11-08)
 
-Work: `Engine/OpenEngine/Sources/OpenEngine/{include/OpenEngineAdBlock.h,
-OpenEngineAdBlock.mm}`. Swift `AdBlockStore` lands either here (if the
-`OpenFeatures` target exists) or as the contract in §12.3 that the M6 UI
-PR implements — decide by whether the target exists at Step 8 start and
-state it. Do not create the whole `OpenFeatures` library from this plan.
+`OEAdBlock.h`/`OEAdBlock.mm` implement the §12.1 categories. Before CEF
+initialization they retain the latest values and queue one weak ready
+callback; closed contexts ignore mutations and report defaults. The Swift
+`AdBlockEngineAdapter` binds only when native `adBlockSupported` is YES,
+opens loaded/new Profiles after first paint, and configures late regular
+and OTR contexts. Store events drive configure, enabled, exclusions,
+reload and closed transitions. Profile retirement remains the #241 path.
+The automation support override is for placeholder binding coverage only;
+the real-engine flow omits it and requires native support.
 
-Acceptance:
+This milestone combines Steps 4/6/8, per API-DESIGN (2026-11-07). It is
+network blocking before Step 5 cosmetics. Acceptance through the real M5
+App and its production API:
 
-- [ ] OpenEngine builds against `Vendor/cef/` (after
-      `tools/fetch-engine.sh`) with the app/host target that exists at
-      the time; if no host target exists yet, compile-check the `.mm`
-      against the CEF headers in the distrib include dir and record
-      that as the evidence level (do not claim an app run).
-- [ ] End-to-end through the real app when it exists (else through
-      `cefsimple` + a 20-line ObjC test host in `/tmp`): enable →
-      load test page → `blockedResourceCount` > 0 → exclude site →
-      reload → count 0 and ads visible → re-include → blocked again.
-- [ ] Per-Profile isolation: two request contexts, different list
-      dirs/exclusions, counts and blocking independent (test host or
-      app).
-- [ ] **Two contexts, cosmetics (review r1 finding 1).** Two request
-      contexts with different cache paths, the same lists, and
-      different exclusions (context A excludes `127.0.0.1`, context B
-      does not). One tab per context on `index.html`: in A, `.ad-slot`
-      is visible and nothing is blocked; in B, `.ad-slot` is hidden and
-      N-1 holds. The two tabs run in different renderer processes (CDP
-      `SystemInfo.getProcessInfo`, or the PIDs that the CEF layer logs
-      at `--v=1`). This proves the §8.2 one-pipe-per-process reasoning end
-      to end.
-- [ ] **Two Profiles, memory (moved from Step 4, review r1 finding 9;
-      window from review r2 N-8).** Create both request contexts first,
-      with the same lists configured but the second not yet loaded, and
-      sample the browser's `phys_footprint` (baseline). Then run the
-      second context's `LoadFromDirectory` and sample again when its
-      status shows `engine_shared=1`. Pass: that delta is at most 2 MiB
-      (§6.6). The cost of creating a context is outside the window.
-- [ ] **Cross-Profile cosmetic wait (review r2 N-1; measured again from
-      Step 5).** Context A has blocking on and runs the Step 5 contended
-      load (three looping `corpus.html?sample=0..2` targets); context B
-      has blocking off and loads `index.html` 100 times at the same
-      time. B's sync calls wait behind A's real checks on the shared
-      matcher sequence (or the lane, if Step 5 built it). Pass: B's
-      p50 ≤ 0.3 ms (C-G2), first call per renderer process reported
-      apart. The PR compares the number with Step 5's injected-load
-      C-G2. If it fails, the §8.2 rules 3–5 apply as at Step 5.
-- [ ] No CEF type crosses into Swift (grep the Swift surface).
+- [x] Debug App builds against the recorded integrated distribution.
+- [x] Enable -> page: native blocked count >0, CDP ERR_BLOCKED_BY_CLIENT,
+      ad absent at the fixture server; an allowed control script runs.
+- [x] Exclude -> reload: count 0 and ad loads; re-include blocks again.
+- [x] Global off/on works without relaunch. Re-including/enabling also
+      blocks the next request from a document created while unproxied.
+- [x] Two Profiles keep exclusions/lists independent; identical lists
+      produce engine_shared=true in the second context.
+- [x] AD3 requires matching verified input hashes and engine_shared=true;
+      median of n=5 attachment-only PA allocated deltas <=2 MiB, and median
+      non-PA malloc in-use delta <=2 MiB. Both contexts/stores exist before
+      baseline, with store IO idle. Different-list control must show
+      sharing=false and PA allocated delta >=8 MiB, else AD3 is INVALID.
+      Record PA committed deltas and whole-process on/off paired median/spread.
+      F's accepted capture and E3's strict 79/79 scope pass (below).
+- [x] OTR shares its parent's engine and follows later parent exclusions.
+- [x] Settings list toggle publishes a generation, advances load_generation
+      and changes blocking. All lists off verifies a no-engine generation, with no loaded resources or error.
+- [x] Deleting a Profile during held real HTTP with its native engine
+      loaded retires the context; no crash; folder absent after relaunch.
+- [x] Debug copy has the 11-key native schema and no path, page URL or site.
+- [x] Real opposite request states reject the corresponding new gates;
+      Cancel deletion retains the native context and folder.
+- [x] Forced failure with a delete sheet open proves finally cleanup:
+      `s15-adblock-delete-cleanup-r1`, exact expected failure, zero
+      owned processes/windows after finally.
+- [x] Existing page/features/extensions-ui/settings-preview scopes complete
+      with the explicit existing qualifiers below; all runnable rows pass.
+      Full verification passes 25/25 on the final merged source.
 
-PR: `Engine/OpenEngine/**` (+ Swift target files if applicable). One PR.
+**Step 8 acceptance errata (lead ruling, 2026-11-08).** This AD3 predicate
+supersedes the API-DESIGN-derived single `phys_footprint` delta. Five real
+App on/off pairs had a net median of +1,064,936 B, with a range from
+−10,584,088 to +10,862,616 B (20.45 MiB spread). That process noise cannot
+decide a 2 MiB allocation budget. Keep five whole-process empty→reset pairs
+as record-only rows. Measure five native attachments separately, after
+stores and verified inputs exist and update timers have been cancelled.
+Use fixed 6 s settles before five own-process counter samples per phase;
+this wait does not prove an idle purge. Record purge occurrence from the
+native log. Background memory-infra dumps provide PA allocated/committed
+direct-root totals without counting parent/child totals twice. Documented
+malloc-zone counters provide non-PA in-use/allocated bytes. PA serves Swift
+as well as native code, so non-PA counters alone are not Swift attribution.
+Missing dumps/counters, changed inputs, active store IO, or a weak negative
+control make the capture INVALID, never PASS or SKIP. These errata change
+only the two-Profile AD3 gate; Step 4 single-engine budgets stay as written.
+
+No CEF type crosses the Swift surface. Section 12 owns the existing Site
+Control tile: .on when enabled/not excluded, .off when excluded and
+.unavailable when globally off or the binding/Profile is unavailable.
+The conditional tile proof runs only once its App source is on main;
+E3 must not create a second tile.
+
+**Historical whole-process predicate, real App (2026-11-08).** `s15-adblock-r5` records 61 PASS
+and one FAIL, AD3 footprint owned by F. All nine direct App launches quit
+cleanly, with no foreground interruption or surviving process/window.
+The run uses main `40c2ab94` and the recorded `8e8a461c…` distribution.
+Its wrapper takes 146.963 s, at endpoint loads 20.40/94.13/91.93 ->
+16.06/63.92/79.97. The raw harness exits 1; continuation of the exact
+owned AD3 row does not convert it to PASS.
+
+| Real App acceptance | Result and witness |
+|---|---|
+| Enable, exclude, re-include, global off/on | PASS: native counts, CDP blocked-by-client errors, script completion and server request log agree; same-document next requests also change without navigation. |
+| Profile independence and sharing | PASS: independent exclusions/lists, shared holder for identical inputs; a different-list control creates a separate engine and exceeds 2 MiB. |
+| AD3 incremental footprint | **FAIL, owned by F:** 5.734 MiB net, `engine_shared=true`, against 2 MiB, at load 18.54/71.19/83.19. |
+| OTR | PASS: shared parent engine; later parent exclusions and re-inclusion change real requests. |
+| Settings list generation | PASS: native generations 1 -> 3 -> 4 and opposite allowed/blocked requests. An unchanged scheduled download publishes disk generation 2 while correctly retaining native generation 1. |
+| Resources and verified DAT | PASS: 47 pinned resources, real text stub, verified DAT relaunch and reapplied stub. |
+| Zero lists and one-list restore | PASS: generation 4 has count 0, no engine/resources/error and allowed requests; generation 5 has exactly one list and resumes blocking/stubs. |
+| Delete during load | PASS: native engine loaded, real held HTTP request, Cancel control retains folder/context; deletion retires them and folder stays absent after relaunch. |
+| Debug copy | PASS: exact 11-key schema, no path, URL or site name. |
+| Warning and adapter scopes | PASS: AD1 11 rows and AD2 9 rows, with no native support override. |
+| Forced delete-sheet cleanup | PASS: expected failure in the specific real sheet, then zero owned processes/windows. |
+| Section 12 App tile | N/A: its App adapter is absent from this main. |
+
+The forced-sheet control takes 1,377.209 s including its screen queue,
+at endpoint loads 16.06/63.92/79.97 -> 6.00/10.09/26.08.
+Its raw expected failure and the separate AD3 failure are retained.
+Page passes 81 rows with no FAIL or foreground interruption. Five known
+BLOCKED rows, the hosted-tab activation SKIP and the user smart-zoom
+DEFERRED row remain explicit. The later Features, Chrome Extensions UI,
+Settings preview and final full-gate results are recorded below.
+
+**AD3 accepted capture, 20:53 lead ruling.** F's `d5e44abe` records 79/79
+PASS on its full adblock scope, including 11 record-only whole-process
+rows. Attachment-only PA allocated median is −26,464 bytes; non-PA malloc
+in-use delta is zero. The different-list control allocates 25,461,840 bytes
+with `engine_shared=false`. E3 merges that harness and the list-change
+wait fix in `11dd8b60`, keeping its live-page and disk-publication waits.
+The Debug rebuild passes in 50.600 s, including 20 s in the heavy queue,
+at endpoint loads 12.19/11.36/11.12 -> 12.57/11.61/11.22.
+No native engine or production adapter change is needed. The merged E3
+scopes below use the strict harness without the historical AD3 bypass.
+The earlier failed receipts keep their original predicate and result.
+
+**Merged E3 strict scope.** `s15-adblock-r7` passes 79/79, including 11
+record-only whole-process rows, with no foreground interruption. All nine
+owned App launches close without force and leave zero processes/windows.
+The accepted AD3 n=5 PA allocated median is −4,016 bytes (range −307,488
+through +24,976; spread 332,464; MAD 21,920); PA committed median is zero,
+and non-PA malloc in-use delta is zero. The different-list control has
+`engine_shared=false` and PA allocated +25,117,360 bytes. Verified input
+hashes and all requested background dumps pass. Endpoint loads are
+9.12/9.73/10.34 -> 10.84/12.65/11.92; wrapper time is 1,031.002 s including
+the screen queue. Real held-HTTP deletion, Cancel control and relaunch pass.
+
+The preceding strict attempt passed AD3 but stopped during deletion setup:
+its load helper read a newly created Profile before its asynchronous native
+context existed. The readiness poll now waits for that context within the
+same 40 s. The successful run records `sawMissingContext=true`, then a loaded
+engine for that exact Profile, and passes both deletion controls. No engine
+or App production change is involved; the prior failed receipt is retained.
+
+**Final default-Chrome acceptance and gate.** `s15-adblock-r10` passes
+79/79 with nine clean launches. AD3 n=5 PA allocated median is −46,144 B,
+non-PA malloc in-use delta zero; different-list control +25,129,024 B with
+sharing=false. Resources-only generation4 -> one-list generation5 and
+held-load Cancel/deletion/relaunch pass. Full Chrome Extensions UI has
+71 PASS and one existing BLOCKED picker row. Features has27PASS; Page
+has81PASS with five existing BLOCKED, one SKIP and one DEFERRED qualifier.
+Settings preview passes47functional checks plus native pane renders.
+Main e8d4acd4 is merged with no further Engine/fork change; its Debug
+rebuild and full verification gate pass (25/25, noFAIL/SKIP). Exact final
+commands, load averages and the complete gate table are in E3's
+VALIDATION.md and PR-BODY.md. Step4-as-built below records provenance.
+
+Later Step 5/9 acceptance remains open: two renderer processes with
+independent cosmetic selectors/exclusions, and cross-Profile C-G2 wait
+under real matcher contention (p50 <=0.3 ms, first call reported apart).
+The earlier Step 8 cosmetic rows move to that later integration gate;
+network-only completion does not claim them.
 
 ### Step 9 — Perf, soak, and rebase notes
 
@@ -3407,76 +3452,51 @@ capturing; P-1 regeneration is fork-infra §12 step 5.
 CEF types never cross into Swift (architecture rule). OpenEngine is the
 only layer that includes CEF headers.
 
-### 12.1 ObjC++ API (new files, exact)
+### 12.1 ObjC++ API (categories, revised 2026-11-07)
 
-`Engine/OpenEngine/Sources/OpenEngine/include/OpenEngineAdBlock.h`:
+Public header `Engine/OpenEngine/include/OpenEngine/OEAdBlock.h`, imported
+by `OpenEngine.h`; implementation `Engine/OpenEngine/src/OEAdBlock.mm`.
+No CEF type or opaque handle crosses into Swift. Main thread only.
 
 ```objc
-#import <Foundation/Foundation.h>
-
-NS_ASSUME_NONNULL_BEGIN
-
-/// Per-Profile ad-block control. One instance per CEF request context.
-/// All methods are callable from any queue; they marshal to the CEF UI
-/// thread internally. No CEF types appear in this header.
-@interface OEAdBlockController : NSObject
-
-/// Designated initializer. |requestContext| is the opaque handle the
-/// existing OpenEngine browser layer already wraps (the same object
-/// its other per-context APIs take). If OpenEngine has no such wrapper
-/// yet, this initializer takes the CefRequestContext* as void* inside
-/// the .mm only — the header must still expose no CEF type.
-- (instancetype)initWithRequestContextHandle:(void *)requestContext NS_DESIGNATED_INITIALIZER;
-- (instancetype)init NS_UNAVAILABLE;
-
-/// Master toggle (Arc key nativeAdBlockEnabled at the Swift layer).
-@property (nonatomic) BOOL enabled;
-
-/// Point at <profile>/AdBlock/lists and load (async). Call once at
-/// Profile open (seed the directory from bundled lists first, §9.2),
-/// then rely on -reloadLists after updates.
-- (void)setListDirectory:(NSString *)path;
-- (void)reloadLists;
-
-/// Replace per-site exclusions (registrable domains, e.g. @"example.com").
-- (void)setExcludedDomains:(NSArray<NSString *> *)domains;
-- (NSArray<NSString *> *)excludedDomains;
-- (BOOL)isExcludedForHost:(NSString *)host;   // registrable-domain match, Swift-side mirror for instant UI
-
-/// Per-tab blocked count (blocked + redirected, current load). The
-/// |browserHandle| is OpenEngine's existing per-browser opaque handle.
-/// Returns 0 when no count exists yet. Poll on panel open and on load
-/// end; there is no change callback in v1 (D-10).
-- (NSInteger)blockedResourceCountForBrowser:(void *)browserHandle;
-- (void)resetBlockedResourceCountForBrowser:(void *)browserHandle;
-
-/// "Copy AdBlock debug info" payload (AD-8): the §11 Step 6 status
-/// dictionary rendered as sorted "key: value" lines, plus list IDs and
-/// ETags from the Swift store appended by the caller. No page URLs.
-- (NSDictionary<NSString *, id> *)statusDictionary;
-
+@interface OEBrowserContext (OEAdBlock)
+@property(class, nonatomic, readonly) BOOL adBlockSupported;
+@property(nonatomic, getter=isAdBlockEnabled) BOOL adBlockEnabled;
+@property(nonatomic, copy, nullable) NSURL* adBlockListDirectory;
+- (void)reloadAdBlockLists;
+@property(nonatomic, copy) NSArray<NSString*>* adBlockExcludedDomains;
+@property(nonatomic, readonly, copy) NSDictionary<NSString*, id>* adBlockStatus;
 @end
 
-NS_ASSUME_NONNULL_END
+@interface OEWebContent (OEAdBlock)
+@property(nonatomic, readonly) NSInteger adBlockBlockedCount;
+@end
 ```
 
-`OpenEngineAdBlock.mm` implementation: each method forwards to the
-corresponding `CefRequestContext` / `CefBrowserHost` method from §11
-Step 6 (`SetOpenAdBlockEnabled`, `SetOpenAdBlockListDirectory`, …).
-String conversion uses the existing OpenEngine `CefString` helpers; if
-none exist, convert via `std::string([s UTF8String])`. Thread marshaling
-uses the existing OpenEngine CEF-thread helper; if none exists, use
-`CefPostTask(TID_UI, ...)` in the `.mm` only. The count getter resolves
-the browser handle to `CefBrowserHost` the same way sibling OpenEngine
-APIs do.
+`adBlockSupported` is YES only with the native implementation. The App binds
+its store events only when it is supported. Before context initialization,
+the category remembers values and queues one weak callback through
+`oe_whenReady`. It applies exclusions, directory and enabled in that order
+using the final remembered values. A pending reload follows configuration.
+A closing/closed context ignores setters and returns defaults. Status maps
+the CEF snapshot's scalar values to NSNumber/NSString; count comes directly
+from `CefGetOpenAdBlockBlockedCount`.
+
+The App adapter (`App/AdBlock/AdBlockEngineAdapter.swift`) configures every
+regular context and its OTR children, and reapplies the parent's config to
+contexts created later. Profile opening/list updates run after first paint.
+Profile retirement drains the store and closes native state before deleting
+its folder. Section 12 owns the existing Site Control tile. The tile is
+unavailable unless the adapter is bound, that Profile is open and global
+blocking is enabled. No blocked count appears in the UI.
 
 ### 12.2 What the Site Control Center and Settings read (contract)
 
 - Panel toggle state: `enabled && !isExcludedForHost(currentHost)`.
-- Panel count: `blockedResourceCountForBrowser` at panel open + on the
-  engine's existing load-end event. No live ticking in v1.
+- No blocked count in the panel (Section 13 lead decision 4). The engine
+  count is for tests and debug only.
 - Toggle action: Swift updates its exclusion set (§12.3), calls
-  `setExcludedDomains`, then offers the reload follow-up (SC-6) — the
+  `adBlockExcludedDomains` on the context, then offers the reload follow-up (SC-6) — the
   engine itself needs no reload for the toggle to be correct on the
   *next* navigation (§1.1), the reload is for the *current* page.
 - Scope dialog ("this site" = registrable domain, default;
@@ -3484,16 +3504,17 @@ APIs do.
   registrable domains only. "This page only" is implemented Swift-side
   as a session exclusion that Swift adds on toggle and removes when the
   tab navigates to a different host. Do not extend the CEF API for it.
-- Debug info (AD-8): `statusDictionary` lines + Swift's list/ETag lines,
+- Debug info (AD-8): sorted `adBlockStatus` lines + Swift's list/ETag lines,
   joined, copied to the pasteboard by the UI. Contents are §6.4-safe.
 - Help text and support answers follow the user-facing behavior notes in
   §8.4 (added 2026-10-26), including lead ruling 1: Open's blocker runs
   before extensions, and an extension cannot see or unblock what Open
   blocks.
 
-### 12.3 Swift store contract (`OpenFeatures.AdBlockStore`, M6 UI PR)
+### 12.3 Swift store contract (`OpenAdBlock.AdBlockStore`, as built)
 
-State this contract in the Step 8 PR even if the Swift file lands later:
+The existing store owns persistence, downloads and retirement. The App adapter
+consumes its events; no CEF types enter this package:
 
 ```swift
 @MainActor final class AdBlockStore {
@@ -3502,10 +3523,10 @@ State this contract in the Step 8 PR even if the Swift file lands later:
   // blockListsPerProfile, plus Open's catalog-state.json per Profile.
   var isEnabled: Bool                       // master, default true (design choice; factory default unproven, AD-6)
   func enabledListIDs(for profile: ProfileID) -> [String]  // default ["EasyList", "EasyPrivacy"]
-  func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID)  // publishes a complete generation + reload trigger
+  func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID) async throws  // publishes a complete generation + reload trigger
   func excludedDomains(for profile: ProfileID) -> [String]
-  func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID)  // persists exclusions.json + OEAdBlockController call
-  func updateListsNow(profile: ProfileID) async  // §9.5 flow: conditional GETs, atomic writes, one reload trigger
+  func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID) throws  // persists exclusions.json + adapter event
+  func updateListsNow(profile: ProfileID) async throws  // §9.5 flow: conditional GETs, atomic writes, one reload trigger
   func debugInfo(profile: ProfileID) -> String
 }
 ```
@@ -3514,11 +3535,12 @@ Rules: downloads use `URLSession` with `If-None-Match`; multi-URL lists
 concatenate in catalog order (§9.4); publish all enabled files through the
 §9.2 generation transaction; a failed batch keeps the old pointer; the
 24 h timer is per Profile and starts 60 s after Profile open (§9.5);
-incognito Profiles get an in-memory store seeded from bundled lists
-with no disk writes (design §"Per-Profile isolation") — the CEF side
-still needs a list directory for incognito, so Swift seeds a
-`NSTemporaryDirectory()` dir per incognito session and deletes it at
-session end. Record that choice in the Step 8 PR.
+OTR contexts use their parent Profile's existing list directory and receive
+its current enabled state and exclusions. They have separate native service
+state and share the immutable engine. No second OTR store, temporary seed
+folder or private-site persistence is created. Weakly tracked OTR wrappers
+receive later parent events without extending their lifetime. Native close
+shuts the service down before the shell tears down the wrapper.
 
 Acceptance for Step 8: §11 Step 8 list.
 
@@ -3580,31 +3602,32 @@ Behavior when `--open-adblock-dir` is present (in
 one context; per-Profile isolation is a Step 8 app-level check, not a
 cefsimple check):
 
-```cpp
-auto context = CefRequestContext::GetGlobalContext();
-context->SetOpenAdBlockEnabled(true);
-context->SetOpenAdBlockListDirectory(dir);
-if (!excludes.empty()) context->SetOpenAdBlockExcludedDomains(excludes);
-```
+The non-official initialization switches configure the owned service during
+`CefBrowserContext::Initialize()`, before a usable CEF request context exists.
+This remains diagnostic-only code. The separate headless
+`--open-adblock-api-proof` flow waits for a real context's initialized callback
+and drives all configuration through the six production CEF free functions.
+The App uses only the OpenEngine categories and this production CEF path.
 
-At `CefLoadHandler::OnLoadEnd` for the main frame, log to stderr
-(visible with `--enable-logging=stderr`):
-`OpenAdBlockSmoke: blocked_count=<n> url_host=<host>` (host only, never
-the full URL — §6.4). At `OnLoadStart`, nothing. The harness must call
-**only** the §11 Step 6 CEF API at Step 6 and later; at Steps 3–4
-(before the API exists) it calls the service directly through
-`CefBrowserContext` — and the Step 6 PR rewrites those call sites to
-the API and deletes the direct includes. That rewrite is part of P-6's
-Step 6 diff, stated here so nobody treats the early form as permanent.
+Native smoke readings include `blocked_count`, committed `document_id` and
+`phase=commit|load|count|same-document`, with host only (no full URL). Navigation
+resets the count; pushState/replaceState reads it without resetting. The strict
+closed-document predicate is recorded in "Step 4 as built".
 
 ### 13.2 Local test site (overlay `open/adblock/testdata/`)
 
-Serve with: `python3 -m http.server 8931 --bind 127.0.0.1 -d
-Engine/fork/src/open/adblock/testdata` (run from the repo; the overlay
-files are also in the tree after `engine-apply` — either copy serves).
-Third-party cases need a second origin: run a second server on
-`127.0.0.2` port 8932 serving the same directory (macOS loopback aliases
-work without configuration). The page must not reference the network.
+Serve with the throwaway server below, from the repo copy (the overlay
+files are also in the tree after `engine-apply`; either copy serves).
+**As built (Step 4):** the pages use port-free URLs (`http://127.0.0.1/…`,
+`http://127.0.0.2/…`), and `cefsimple` gets
+`--host-resolver-rules="MAP 127.0.0.1 127.0.0.1:<first>, MAP 127.0.0.2 127.0.0.1:<third>"`
+for the server's two ephemeral ports. Two reasons: macOS has no
+`127.0.0.2` without an interface alias (`bind` fails with `EADDRNOTAVAIL`),
+and the crate's `||host/path` rules need the path right after the host,
+so `||127.0.0.2/frame-ad.html` never matches `127.0.0.2:8932/frame-ad.html`
+(`check_pattern_hostname_left_anchor_filter`, `get_url_after_hostname`).
+Rules and party still see the real hosts. The page must not reference
+the network.
 
 `generations/1/testlist.txt` (include it with its size/hash in a fixture
 `manifest.json` and bind that manifest through `current.json`, §9.2; exact rules; ABP syntax; `127.0.0.1` is the
@@ -3643,7 +3666,7 @@ tests its suppression.
   replacement script runs — the resources payload for the test is a
   `resources.json` beside `testlist.txt` defining `noop.js` as a script
   containing `window.__redirLoaded = true;`),
-  `<img src="http://127.0.0.2:8932/track/pixel.gif">` (third-party
+  `<img src="http://127.0.0.2/track/pixel.gif">` (third-party
   block), `<img src="/track/pixel.gif">` (first-party allow),
 - a `fetch('/api/data.json?utm_source=x&keep=1')` whose final URL the
   page stores on `window.__lastFetchURL` via a same-origin echo
@@ -3695,11 +3718,17 @@ in the fixture manifest as `_resources`.
 ||127.0.0.1/blocked-main.html$document
 ||127.0.0.1/csp-frame.html$csp=script-src 'none'
 127.0.0.1##.style-target:style(outline: 3px solid red)
-127.0.0.1##.style-evil:style(background: url(http://127.0.0.2:8932/beacon.gif))
+127.0.0.1##.style-evil:style(background: url(http://127.0.0.2/beacon.gif))
 127.0.0.1##.proc-ad:has-text(Sponsored)
-127.0.0.1##x{} .exfil{background:url(http://127.0.0.2:8932/exfil.gif)} y
+127.0.0.1##x{} .exfil{background:url(http://127.0.0.2/exfil.gif)} y
 127.0.0.1##.remove-me:remove()
+||127.0.0.2/wt-blocked
 ```
+
+As built, the list also has `/ads/allowed-banner.js` above the
+`@@||127.0.0.1/ads/allowed-banner.js` exception. Without it the exception
+excepts nothing (`/ads/banner.js` is not a substring of
+`/ads/allowed-banner.js`), so N-1's "exception-allowed" proved nothing.
 
 `testlist.txt` is lossy (`$removeparam`), so it always builds from text.
 Its `##+js(...)`, `:style()`, `:remove()` and `:has-text()` lines are
@@ -3715,7 +3744,7 @@ New test files:
   registers `sw.js` (a service worker that fetches `/ads/sw-ad.js` on
   `install` and stores the outcome in Cache Storage). `127.0.0.1` is a
   secure context, so the service worker can register over HTTP.
-- `frames.html`: iframes `http://127.0.0.2:8932/frame-ad.html` (blocked)
+- `frames.html`: iframes `http://127.0.0.2/frame-ad.html` (blocked)
   and `/csp-frame.html` (allowed; its inline script sets
   `window.__cspInlineRan = 1`, which the list CSP must stop). It also has
   `<div class="style-target">`, `<div class="style-evil">`,
@@ -3724,11 +3753,13 @@ New test files:
   hostname rules include both `.ad-slot` and `.proc-ad:has-text(...)`.
 - `fetch.html`: `fetch('/api/xhr-only.json')` (blocked: XHR type) and
   `<script src="/api/xhr-only.json">` (allowed: script type);
-  `fetch('http://127.0.0.2:8932/ads/banner.js', {headers: {'X-Open-Test': '1'}})`
-  (a request that would need a preflight); `new WebSocket('ws://127.0.0.2:8932/ws')`
-  (blocked) and `new WebSocket('ws://127.0.0.1:8931/ws')` (allowed; fails
+  `fetch('http://127.0.0.2/ads/banner.js', {headers: {'X-Open-Test': '1'}})`
+  (a request that would need a preflight); `new WebSocket('ws://127.0.0.2/ws')`
+  (blocked) and `new WebSocket('ws://127.0.0.1/ws')` (allowed; fails
   at the server); `fetch('/api/data.json?' + 'a'.repeat(2 * 1024 * 1024))`
-  (long URL); `<script src="/redirect?to=http://127.0.0.2:8932/ads/redirect-target.js">`.
+  (long URL; as built `2 * 1024 * 1024 - 64` characters, because a URL
+  over `url::kMaxURLChars` (2 MiB) never leaves the renderer);
+  `<script src="/redirect?to=http://127.0.0.2/ads/redirect-target.js">`.
 - `blocked-main.html`: a plain page; the `$document` rule must not block it.
 - `early-hints.html` (N-21): `<script src="/ads/banner.js">`; the throwaway
   server sends it with a `103 Early Hints` response first (Python's
@@ -3752,7 +3783,7 @@ Extension fixture (N-15), throwaway under `/tmp/open-adblock-ext/`, loaded
 with `--load-extension`: an MV3 extension with `webRequest` (it records
 every `onBeforeRequest` URL in `chrome.storage.session`) and one
 declarativeNetRequest rule that redirects `/ext-redirect.js` to
-`http://127.0.0.2:8932/ads/redirect-target.js`.
+`http://127.0.0.2/ads/redirect-target.js`.
 
 ### 13.3 CDP check cases (driver in `/tmp`, never committed)
 
@@ -3787,9 +3818,9 @@ Network cases (Steps 4+; N-9…N-21 added 2026-10-26):
 | N-15 | extension fixture loaded | `/ads/banner.js` is blocked and absent from the extension's `onBeforeRequest` record (Open is outermost, §7.9); `/ext-redirect.js` is redirected by the extension and the redirect target is blocked by Open; an allowed request appears in the record |
 | N-16 | `--use-alloy-style` | N-1 and C-1 pass in an Alloy-style browser (F-36) |
 | N-17 | `fetch.html` sockets and long URL | the 127.0.0.2 WebSocket logs one block at `--v=1` and adds 1 to the count; the 127.0.0.1 one logs no block; the 2 MiB fetch adds 1 to `checks_truncated`, and no check took > 1 ms (G-3) |
-| N-18 | WebTransport | **Hook reachability only; error-object correctness unverified** (review r1 finding 15), unless the PR stands up a local HTTP/3 endpoint (then also assert the page's `WebTransport.ready` rejects and the endpoint saw no session). Default check: `new WebTransport('https://127.0.0.2:8933/x')` on a test rule `\|\|127.0.0.2:8933^` logs one block at `--v=1`. The PR template carries the bold label |
+| N-18 | WebTransport | **Hook reachability only; error-object correctness unverified** (review r1 finding 15), unless the PR stands up a local HTTP/3 endpoint (then also assert the page's `WebTransport.ready` rejects and the endpoint saw no session). Default check: `new WebTransport('https://127.0.0.2/wt-blocked')` on a test rule `\|\|127.0.0.2/wt-blocked` logs one block at `--v=1` (as built; a port-anchored rule never matches in the crate, §13.2). The PR template carries the bold label |
 | N-19 | Step 7+: `redirect-list.txt` generation, second run (DAT load) | status `engine_from_dat=1 resources_loaded ≥ 1`; `redir.js` completes from the `noop.js` stub and `window.__redirLoaded == true` (resources re-applied after deserialize, review 98-4) |
-| N-20 | Step 6+: mid-page exclusion through the CEF API (review r1 finding 15) | (1) Load `index.html`, not excluded: `fetch('/ads/banner.js')` from the page is blocked. (2) Add `127.0.0.1` with `SetOpenAdBlockExcludedDomains`; fetch again from the same page: it loads (the proxied factory re-checks per request, §7.4 rule 1). (3) Remove the exclusion; fetch again from the same page: blocked (same proxied factory). (4) Add the exclusion, navigate to `excluded-start.html` (its factory is made while excluded, so it is not proxied, §7.2 rule 2), remove the exclusion, call `window.__fetchBanner()`: it loads, because that factory stays unproxied until the next navigation. (5) Reload: blocked |
+| N-20 | Step 6+: mid-page exclusion through the CEF API (review r1 finding 15) | (1) Load `index.html`, not excluded: `fetch('/ads/banner.js')` from the page is blocked. (2) Add `127.0.0.1` with `SetOpenAdBlockExcludedDomains`; fetch again from the same page: it loads (the proxied factory re-checks per request, §7.4 rule 1). (3) Remove the exclusion; fetch again from the same page: blocked (same proxied factory). (4) Add the exclusion, navigate to `excluded-start.html` (initially unproxied, §7.2 rule 2), remove the exclusion, call `window.__fetchBanner()`: blocked, because the API resets loaded storage-partition factories. (5) Reload: blocked |
 | N-21 | `early-hints.html` after a page on the excluded `127.0.0.2` (`--open-adblock-exclude=127.0.0.2`, `--enable-features=EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`) | The server answers `early-hints.html` with `103` and `Link: </ads/banner.js>; rel=preload; as=script`, then `200`. The page's own `<script src="/ads/banner.js">` fails with `net::ERR_BLOCKED_BY_CLIENT` (its factory's top site is the new page, not the excluded previous one, §7.2). The PR records whether the server log shows the preload `GET /ads/banner.js` (expected: yes; known gap R-14, preloads never reach the hook). **Validity (review r2 N-4):** the CDP log must show `Network.responseReceivedEarlyHints` for `early-hints.html` with the `/ads/banner.js` preload (the same check as the §7.8 capture control). Without that event N-21 is **invalid**, not passed, because the `103` path never ran |
 
 Cosmetic cases (Step 5+; revised 2026-10-26):
@@ -3815,6 +3846,15 @@ sum). Reload via CDP: count resets and re-accumulates to the same
 value. `history.pushState` + a manual fetch of `banner.js`: count
 increments, no reset.
 
+The closed-document row uses a real top-level pagehide handler and native
+document IDs. Matched keepalive URLs must add three to the old count and
+reach the server zero times; unmatched control URLs must leave that count
+unchanged and complete three server GETs. The new count stays zero at
+commit, load and the late reading. The allowed and wrong-document negative
+controls must fail the positive predicate. See "COUNT-closed-document
+erratum" in "Step 4 as built" for the exact witnesses and the unusable
+outgoing unload CDP predicate.
+
 Real-lists case (Step 7+): point `--open-adblock-dir` at a dir holding
 the staged `easylist.txt` + `easyprivacy.txt` renamed per §9.2
 (`EasyList.txt`/`EasyPrivacy.txt` — file names only need the `.txt`
@@ -3833,7 +3873,7 @@ median reported. Machine: record `sysctl -n machdep.cpu.brand_string`.
 |---|---|---|
 | DAT load (warm start) | second launch with `engine.dat` present; time from process start to `OpenAdBlockSmoke` first-load line, minus the same measure with ad blocking off | ≤ 250 ms added (F-15 says ~47 ms deserialize; the rest is harness noise — investigate above 250) |
 | Text build (cold) | delete `engine.dat`; same measure | ≤ 1500 ms added, and the first page still paints during it (§10 rule 1 — assert the page's `load` event fires before the status shows `engine_loaded` if the build is slow; if it does not, that is a finding, not a failure) |
-| Page overhead | Revised 2026-10-26: gate G-5 (§7.8) on `corpus.html?sample=0`, exactly 200 real corpus URLs (review r1 finding 4), replacing the short-path `many.html` | ≤ 5 ms added per load; matcher busy ≤ 3 ms per load |
+| Page overhead | Revised 2026-10-26: gate G-5 (§7.8) on `corpus.html?sample=0`, exactly 200 real corpus URLs (review r1 finding 4), replacing the short-path `many.html` | blocking on faster than off; busy thread CPU ≤ 9 ms per 200-request load, off the UI thread; quiet load1 ≤ 12 (§13.5.1 item 2a) |
 | Request checks | gates G-1…G-4, G-6, G-7 (§7.8) | as stated there |
 | Cosmetic query | time 100 cosmetic queries on the matcher sequence in the selftest on the real lists and print the mean; plus the renderer-side sync call (C-G1, C-G2) | ≤ 100 µs/page query (as built: 77–79 µs; hide selectors are always sorted in the shim, and that sort is inside the measured cost); C-G1/C-G2 as in §11 Step 5 |
 | Memory | §6.6 budgets: one engine, a second Profile with the same lists, text-build transient | as in §6.6 |
@@ -3853,6 +3893,56 @@ A step is verified when: its §11 checkboxes have real output in the PR,
 check was narrowed to pass (no case deleted, no budget raised). If a
 case cannot run (for example CDP WebSocket unavailable), the PR says so
 and states what ran instead. Never substitute a unit test.
+
+#### 13.5.1 Lead rulings on the Step 4 FAIL rows (2026-11-07 15:10)
+
+Made by the lead on the user's go-ahead ("go with recommended steps").
+Nobody raised a budget before these rulings; each one names the new
+budget and what must be tried first. They replace the matching rows of
+§6.6, §7.8 and §13.4.
+
+1. **G-2 max.** The slowest check took 178–370 µs of thread CPU time;
+   the 1.1–1.2 ms maxima were wall time spent waiting for a core at
+   load 12–24. The G-2 max gate now counts **thread CPU time, ≤ 500 µs
+   per check**. Every run still records the wall max, and the Step 9
+   quiet run must show a wall max **≤ 2 ms at load1 ≤ 4**.
+2. **G-5 busy** (9 ms thread CPU per 200-request load against 3 ms).
+   Optimize first: cut the client-callback and `GURL`-rebuild costs
+   (4.9 + 1.4 ms of the profile; batch or avoid copies) and keep the
+   crate check. New budget: **≤ 5 ms thread CPU per 200-request load**,
+   measured off the UI thread. If 5 ms is not reachable after a real
+   attempt, the breakdown goes to the lead; the section does not raise
+   the budget itself. G-5 wall already passes.
+
+2a. **G-5 ruling (2026-11-07 20:58, lead):** accepted for v1 at
+≤ 9 ms busy thread CPU per 200-request load, off the UI thread; G-5 wall
+(blocking on faster than off) is a hard gate. The final number comes from
+a quiet run (load1 ≤ 12); the remaining cost is the proxy's Mojo decode and
+re-issue (~3.3 ms), client callbacks (~2.5 ms) and the crate check (~2.3 ms);
+a throttle-based interception for allowed subresources is post-v1.
+
+3. **G-6** (first-use regex compiles up to 15 ms). Compile or warm every
+   regex filter in the background engine build, before the new engine is
+   swapped in, so that no compile runs on the request path. The gate
+   stays as written.
+4. **Footprint** (+62–70 MiB against 40 MiB). Optimize first: one engine
+   shared by all Profiles (lead ruling 8), no resident copy of list text
+   or resources after the build, the 97-2 domain resolver (drops about
+   825 KiB of crate data), and DAT against text measured both ways. New
+   budget: **≤ 50 MiB**, stretch 40 MiB. If still above, the breakdown
+   (vmmap tag 14, PartitionAlloc) goes to the lead.
+
+4a. **Footprint ruling (2026-11-07 20:40, lead):** accepted for v1 at
+≤ 57 MiB steady state (text and DAT, median of 5) and ≤ 60 MiB after the
+full-corpus check plus one idle purge; the 50 MiB budget is replaced; the
+remaining cost is the crate's own rule data and indexes (~37 MiB allocated),
+whose restructuring is post-v1.
+
+The purge is idle-triggered and rate-limited, on the matcher sequence;
+it never runs per request or on the request path. One idle period causes
+one purge, with no timer loop after it. Record the allocated breakdown,
+prove G-2/G-4 unchanged, and observe 60 seconds without activity to show
+zero extra purges after the first.
 
 ---
 
@@ -3908,17 +3998,21 @@ Engine/fork/scripts/engine-build --target open/adblock/rust:open_adblock_rust
 tools/fetch-adblock-lists.sh
 tools/fetch-adblock-lists.sh --update-pins   # reviewed pin updates only
 
-# Serve the test site (two origins)
-python3 -m http.server 8931 --bind 127.0.0.1 -d Engine/fork/src/open/adblock/testdata
-python3 -m http.server 8932 --bind 127.0.0.2 -d Engine/fork/src/open/adblock/testdata
+# Serve the test site (two origins; as built at Step 4: one throwaway
+# stdlib server on two ephemeral ports, §13.2), then map the hosts to them
+python3 /tmp/open-adblock/server.py Engine/fork/src/open/adblock/testdata /tmp/server.log
+#   prints {"ports": [<first>, <third>]}
 
-# Smoke run (after Step 6; OUT = fork-infra dev out dir)
+# Smoke run (OUT = fork-infra dev out dir); copy the fixture root first,
+# because a run writes engine.dat into it
 OUT=~/Developer/open-engine/chromium_git/chromium/src/out/Release_GN_arm64
-"$OUT/cefsimple" --user-data-dir=/tmp/open-adblock-smoke \
-  --open-adblock-dir=/tmp/open-adblock-lists \
-  --remote-debugging-port=9222 --enable-logging=stderr \
-  --url=http://127.0.0.1:8931/index.html
-python3 /tmp/open-adblock-check.py   # §13.3 driver (throwaway, in /tmp)
+cp -R Engine/fork/src/open/adblock/testdata/adblock-root /tmp/open-adblock-root
+"$OUT/cefsimple.app/Contents/MacOS/cefsimple" --use-mock-keychain \
+  --user-data-dir=/tmp/open-adblock-smoke --open-adblock-dir=/tmp/open-adblock-root \
+  --host-resolver-rules="MAP 127.0.0.1 127.0.0.1:<first>, MAP 127.0.0.2 127.0.0.1:<third>" \
+  --remote-debugging-port=0 --enable-logging=stderr --vmodule='open_adblock*=1' \
+  --url=http://127.0.0.1/index.html
+python3 /tmp/open-adblock/check.py   # §13.3 driver (throwaway, in /tmp)
 ```
 
 ## Appendix B. Evidence map (spot-check before implementing)
@@ -4302,3 +4396,564 @@ cefsimple (`--open-adblock-selftest`, in #100) and a throwaway Cargo driver.
   the same-user threat model, review 100-9).
 - **Follow-ups** (`docs/followups.md`): 100-7, 100-8, the rest of 100-9, the
   0301 build-hook patch.
+### Step 4 status (2026-10-26, checkpoint; no PR yet)
+
+Paused at the user's order (22:25): no new PRs. Branch `m6/adblock-step4`
+(main 4c40ebd merged). All numbers below are from `cefsimple` dev builds
+on an Apple M5 Pro (18 cores) with load averages of 12–24 from other jobs.
+The CDP driver, server, capture and gate scripts are throwaway files in
+`/tmp/open-adblock/` (§13.3); raw output is in `.re/adblock-corpus/`.
+
+**Built.** The proxy (`open_adblock_url_loader_factory`), the matcher
+sequence and engine registry, the factory and socket hooks, the tab counts
+(`open_adblock_tab_helper`), CEF patch 0311 (P-3, +98/−0), 0310's smoke
+switches and load line, the test site and two fixture roots
+(`testdata/adblock-root`, lossy; `testdata/adblock-root-dat`, lossless with
+`noop.js`), the bench switches, and `Engine/fork/adblock/bench/corpus-manifest.json`.
+The §5.5 shim rows owned by Step 4 had already landed in #98; Step 4 only
+verifies them (N-4, N-17, N-19).
+
+**Deviations from the plan** (each also corrected in the section named):
+
+- §7.4 rule 1 tested `is_outermost_main_frame`, which is true for every
+  request the main frame makes; the first N-1 run passed every page
+  subresource through. Now `destination == kDocument`.
+- §13.2: port-free test URLs plus `--host-resolver-rules`, because macOS has
+  no `127.0.0.2` and the crate's `||host/path` needs the path right after
+  the host. `/ads/allowed-banner.js` is added to the list (the exception
+  excepted nothing); the N-18 rule is `||127.0.0.2/wt-blocked`; the long
+  fetch is just under `url::kMaxURLChars`.
+- The service comes from `CefBrowserContext` inside the P-3 hunks, not from
+  the `BrowserContext`: the context's `Initialize()` runs before its Profile
+  exists. The top site is the full host (exclusion matching walks its labels
+  down to the registrable domain). The smoke count is printed by the libcef
+  tab helper, which the factory hook creates for every frame of an enabled
+  Profile, so a page with no stop still prints 0. `--open-adblock-exclude`
+  takes a comma list.
+- Review-checklist fixes found while testing: `ServeStub()` no longer
+  consumes the client when it refuses a stub (a refused stub now ends with
+  `ERR_BLOCKED_BY_CLIENT`, not a closed pipe); list CSP values over 8 KiB or
+  not valid as a header value are dropped, never cut; the `$removeparam`
+  redirect ignores a client-supplied `new_url`.
+
+**N-cases.** The last full run (before two counter-only changes: the
+thread-CPU busy counter and the bench's CPU column) passed every case except
+COUNT-closed-document, which then passed twice on its own once it had a
+control run. Passing: N-1…N-17,
+N-19 (DAT load with resources re-applied), N-21 (valid: the
+`responseReceivedEarlyHints` event was seen; the page's script was blocked;
+the server log shows the preload GET, the known R-14 gap), N-15
+(extension: Open is outermost; the DNR redirect target is blocked by the
+redirect re-check), N-16 (Alloy). N-18: **hook reachability only;
+error-object correctness unverified.** N-20 belongs to Step 6. Added cases,
+all PASS: COUNT-load/reload/pushState, COUNT-closed-document (three
+keepalive fetches from `pagehide` are checked and blocked, and the next
+page's count stays 0), CAP-stub (a 1 MiB stub is served, 1 MiB + 1 is
+blocked), CAP-csp (an 8,192-byte list CSP applies, 8,193 is dropped),
+LIFE-1 (five page exits with 40 loads in flight, then a quit with loads in
+flight: exit 0 in 0.3 s), NO-LEFTOVER. The early spike (Work 1) passed:
+the blocked subframe commits an error page with `unreachableUrl`, the list
+CSP stops the inline script, and its control run (site excluded) runs it.
+
+**Corpus.** 25 front pages, 20,311 URLs (`corpus_sha256` d758ee66…). The
+positive control passed in every process; no page sent a `103`
+(`early_hints_seen: false`, `http11_hints_dropped: 0`), so the R-14 trigger
+did not fire on this corpus.
+
+**Gates** (five runs, medians; caps 8 KiB and 16 KiB):
+
+| Gate | Result | Numbers |
+|---|---|---|
+| G-1 | PASS | Matcher thread `ThreadPoolForegroundWorker`; no CHECK in any N-case run, bench run or gate run |
+| G-2 | mean, p99 PASS; max **FAIL** on wall time | 8 KiB: mean 4.73 µs, p99 25.9 µs, max 1,134 µs. 16 KiB: 4.62, 26.4, 1,208 µs. Thread CPU time of the slowest check is 178–370 µs in all ten runs, nearly always the same 3,256-byte URL; the wall-time maxima of 1–29 ms fall on 85–153-byte URLs, which is time spent waiting for a core |
+| G-3 | PASS | Every long-URL max ≤ 281 µs at both caps (2 MiB: 145–245 µs) |
+| G-4 | PASS | p50 ≤ 32 µs, p99 ≤ 256 µs over 1,005 requests (5 loads) |
+| G-5 wall | PASS | On 54–61 ms, off 117–144 ms (blocked requests never reach the network) |
+| G-5 busy | **FAIL** | 9.9 ms wall, 9.0 ms thread CPU per 200-request load (budget 3 ms). Profile per load: the crate's check 3.0 ms, Mojo decoding of incoming requests 3.8 ms, client callbacks 4.9 ms, `GURL` building 1.4 ms. The plan's 5 µs per-request proxy guess is several times too low |
+| G-6 | **FAIL** | 2–4 checks over 1 ms per 1,075 (max 14.6–15.4 ms), all in load 1: first-use regex compiles (F-35), under load |
+| G-7 | PASS (within spread) | Blocking off with P-3: medians 117.4 and 144.0 ms; without P-3: 124.8 and 127.8 ms |
+| §6.6 footprint | **FAIL** | Browser `phys_footprint` +70 MiB with a DAT-loaded engine, +62 MiB after a text build (budget 40 MiB). All of it is PartitionAlloc (vmmap tag 14, +69.8 MiB dirty), unchanged at 30 s and after a simulated critical memory-pressure signal |
+
+The cap that ships stays 16 KiB: both caps give the same verdicts on the
+corpus (14,467 matched; 14 URLs cut at 8 KiB) and the same costs.
+
+**Left before a PR:**
+
+1. Lead rulings on the four FAIL rows (G-2 max on wall time, G-5 busy, G-6,
+   footprint). Nobody raised a budget. **Ruled 2026-11-07 15:10**
+   (§13.5.1): G-2 max counts thread CPU ≤ 500 µs (wall max ≤ 2 ms at
+   load1 ≤ 4 in the Step 9 quiet run); G-5 busy ≤ 5 ms thread CPU per
+   200-request load after cutting the callback and `GURL` costs; G-6
+   stays, and regexes compile in the background build; footprint
+   ≤ 50 MiB (stretch 40) after the shared engine, no resident list text,
+   the 97-2 domain resolver, and DAT against text measured both ways.
+2. Break-and-revert proof (checklist §4): run the N-cases on a build without
+   P-3 and record the FAIL lines (two attempts were killed by T3 restarts).
+3. Docs: an engine-patches row for P-3, a `docs/followups.md` entry for N-18
+   (HTTP/3 endpoint), and the "Step 4 as built" section.
+4. Re-record the engine distribution with Step 4 when the lead asks, then
+   `tools/verify-all.sh` and the review-checklist table.
+
+**Shared tree at the checkpoint:** exactly main 4c40ebd + #93 (338c920,
+the same engine files as 65c6a780), the source state of the recorded
+distribution (stamp 5602914f…). Step 4 is not applied there. To put it
+back: copy `Engine/fork/src/open/adblock/` from this branch into the tree,
+then replace 0310 and apply 0311 from this branch's `patches/cef/`.
+
+### Section 13 lead decisions (2026-11-07)
+
+1. **Order.** Step 4 (with the §13.5.1 rulings) first. Then the control
+   API (Step 6 and Step 8 together) and the App adapter, so that the App
+   blocks requests before cosmetic filtering lands. Then Step 5
+   (cosmetics), Step 7 (resources, lists), Step 9. Reason: the App
+   integration is the long pole, and Step 5 does not change the API.
+2. **CEF API shape (revises Step 6).** The control API is a fork overlay
+   header `cef/include/cef_open_adblock.h` with free functions that take
+   a `CefRequestContext` (and a `CefBrowser` for the tab count), the same
+   pattern as `cef_open_page.h` (0505) and `cef_open_omnibox.h`. It does
+   not add virtual methods to `cef_request_context.h`. The translator
+   still generates the C API for it.
+3. **OpenEngine shape (revises §12.1).** The API is a category on the
+   existing `OEBrowserContext` (enable, list directory, reload,
+   exclusions, status dictionary) and a read-only blocked count on
+   `OEWebContent`, not a new `OEAdBlockController` with `void*` handles.
+4. **No blocked count in the UI.** Arc 1.170 shows none. Its Site
+   Control tile is "Block Ads & Trackers" with three tooltip states:
+   "The built-in ad blocker is turned on for this site.", "The built-in
+   ad blocker is disabled for this site.", and "The built-in ad blocker
+   is off. You can change this in Settings." (`strings -a` of the main
+   binary, `.re/features-advanced/strings-main.txt` lines 113200–113207).
+   The engine count stays for tests and debug info.
+5. **Other blockers.** Arc lists 19 Chrome Web Store IDs beside its
+   `AdBlockerExtensionID` cases (`strings-main.txt`, the block that
+   starts with `bcjindcccaagfpapjjmafapmmgkkhgoa`). Open warns in
+   Settings when native blocking is on and the Profile has an enabled
+   extension from that set.
+
+### Section 13 engine bring-up (2026-11-07, work in progress)
+
+Branch `s13/step4-engine` starts at `6839eba9`. Its assigned root is
+`~/Developer/open-engine-s10`; no other engine root is used. The recorded
+starting state has 564 Chromium status lines, 39 CEF status lines, and
+23 applied patch records (main through #223).
+
+To insert Step 4 in series order, reverse main's 0505 and 0310, then run
+`engine-apply --all`. This applies Step 4's 0310, then 0311, then 0505.
+The shared files in 0311 and 0505 apply without a context refresh; 0701
+has separate manifest paths. Status is 8 PASS, 0 FAIL, 0 WARN: 24 patches,
+94 overlays, and 117/117 CEF patches. The dev `cefsimple cefclient` build
+passes in 112 s with 10 jobs and nice. Root apply and build run under
+`/tmp/open-engine-build.lock`, in detached sessions. This is build proof;
+break-and-revert, the four rulings, final N-cases, gates, OTR lifetime,
+App checks, and the new distribution remain pending.
+
+Raw receipts are in `.re/s13/e1/` in the project root. The corpus remains
+20,311 URLs with the committed SHA-256 `d758ee6639488dab875b54b729feead7251e482c3671b9f44bc990edf240d5b0`.
+The new measurements use the official immutable seed snapshot from
+`s13/app-a` commit `60deca0c` (EasyList SHA-256 `756ddc9a…`, EasyPrivacy
+`c1d09df3…`), checked before staging; these differ from the historical
+October measurements. The same staged bytes will be used before and
+after each optimization.
+
+**Working measurement support (E1, 2026-11-07).** The non-official
+`--open-adblock-selftest --open-adblock-diagnostic` path loads the real
+service once, without the synthetic selftest engines. It prints in-process
+`task_info` physical footprint and PartitionAlloc allocated, active,
+resident, committed, decommittable and discardable bytes before the load
+and after a settling interval. `--open-adblock-text` forces a text build;
+the next run can load its verified DAT. `--open-adblock-measure-only`
+omits the corpus. `--open-adblock-settle-seconds` accepts 0–60 seconds;
+pass the bench switch as well to use the existing 300-second deadline.
+G-3 now prints thread CPU beside wall time. The opt-in
+`--open-adblock-verdict-dump=<private path>` writes every result field for
+each corpus row, in order, on the build runner. No URL is added to a log.
+
+The first working measurement (load1 14, no quiet lock, P-3 temporarily
+removed for the negative proof) has identical text/DAT verdict files:
+20,311 rows each, SHA-256 `10c74cb4…` at 16 KiB and `ba80db77…` at 8 KiB.
+One-engine physical-footprint deltas are 56.6–58.0 MiB after a text build
+and 67.2 MiB after DAT load. These are baselines before the four rulings'
+optimizations, not final acceptance. Receipts are in the E1 directory.
+
+**Regex and DAT working checkpoint (E1, 2026-11-07).** Compile all network
+regex programs on the build runner, without a warm match. Disable the crate's
+program-discard cleanup: it discards programs, so enabling it would compile
+again on requests. Bound eager DFA and one-pass accelerators to zero and the
+lazy DFA cache to 8 KiB per program. A preferred 64 KiB NFA ceiling retries
+at the upstream 10 MiB ceiling on `CompiledTooBig`; the real matcher correctly
+blocks a synthetic URL with a 623,832-byte program that takes that fallback.
+The full corpus adds zero regex compiles after publication.
+
+Only generated ABP patterns use explicit ASCII separator and wildcard classes.
+`url/gurl.h:25-26,109` guarantees ASCII percent-escaped canonical specs.
+User-written `/regex/` syntax is unchanged: the pinned source lists contain
+25 such lines (19 EasyList, 6 EasyPrivacy), optimized to 16 compiled objects
+using 4,358,248 program bytes. Text program bytes drop from 32,376,108 to
+7,254,660. Both caps and text/DAT retain byte-identical 20,311-row full-result
+verdict dumps. Sixteen separator, IDN, Unicode-path and fallback inputs also
+have identical results in all eight before/after, text/DAT, cap combinations.
+
+DAT serializes Arc values independently. Re-sharing rules by all eleven
+immutable fields restores 262 duplicate references, reducing DAT regex objects
+from 1,195 to 1,000 and program bytes from 8,524,772 to 7,251,132. All four
+full-corpus dumps remain identical. Working load1 27-50 receipts still exceed
+the 50 MiB footprint budget (about 62 MiB DAT, 68-72 MiB text); the resolver,
+earlier buffer release and final quiet receipts remain pending. These values
+are measurements for optimization, not final gate acceptance.
+
+
+### Step 4 as built (2026-11-08, integrated engine)
+
+Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
+Source now includes main `50028c98`, including the final Section 15 App
+and imported-secrets integration,
+the final App adapter `fcd1ef25`, and Step 7 resources. Engine inputs are
+unchanged since main `d26300e6` (Section 15's Chromium 0801–0810). Every main patch
+is retained. The engine applies Chromium's 08xx before the CEF series,
+including ad-block 0310/0311/0314; 0601/0602 precede 0701 within CEF.
+There are no Section 15 08xx entries in the CEF series.
+
+The merged dev build of `cefsimple cefclient` passed built-artifact
+engine-status: 8 PASS, 0 FAIL, 0 WARN, with 38 patches, 123 overlays and
+49 required exports. The production API passed 21 rows and native lifetime
+passed 14 rows on this build. The resources-only generation API flow
+passed 26 rows, including no-engine status, the same-context unload
+control and exactly one restored list at generation 3. The zero-file
+fixture and official pinned-list/resources flow also passed 26 rows each.
+The root's clone hold ended at 14:00; M5 screen clearance arrived at
+16:30. Headless corpus/footprint/G-2/G-6 passed. The merged N run passes
+32/32, production COUNT and its allowed control pass, and quiet page
+G-4/G-5/G-6 pass. Both COUNT negative controls and the merged URL
+edge rerun also pass.
+The same-context explicit-unload control for zero-list memory passed
+offscreen. The dev distribution and Debug App build also passed offscreen;
+the App's normalized engine code matches the recorded framework. Its bundle
+contains the 47 pinned redirect resources. Real App acceptance records
+79 PASS and zero FAIL, including 11 record-only whole-process rows. The forced delete-sheet
+cleanup control passes. Remaining regression suites and the full gate
+remain in progress.
+Before distribution and again before the done report,
+fetch main and check `Engine/fork` changes since the last merged main.
+Any new engine change requires merge, rebuild and engine reproof first.
+The distribution receipt identifies main `d26300e6` and framework SHA-256
+`8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
+Distribution took 73.991 s at endpoint loads 13.48/15.48/18.08 ->
+13.86/15.23/17.78. The Debug App build took 108.305 s at
+13.59/15.12/17.71 -> 12.66/14.95/17.37. The existing no-window
+CEF command also passes 47 load/matcher/safety checks, including decoded
+limits, trailing-data refusal and bounded fuzz input. These native checks
+do not replace browser N rows or document COUNT witnesses. The current
+browser driver creates windows for every N/COUNT case.
+
+After the final Section 15 App merge, the Debug rebuild also passed:
+37.755 s, endpoint loads 15.56/13.40/13.27 -> 18.65/14.68/13.76.
+App acceptance and regression receipts use this merged build. The queued
+earlier App attempt was canceled before launch; it is not test evidence.
+
+Main `dd240186` was then merged in `eb88d72a`. The fresh `Engine/fork`
+log since `40c2ab94` is empty, so the recorded distribution is unchanged.
+The Debug rebuild passes in 47.107 s at endpoint loads
+10.99/10.55/11.78 -> 7.92/9.82/11.44. Before the queued suites launch,
+updater PR #253 reaches main `25b9c950`. This overlapping main update is
+merged in `e864ca1d`; its Engine/fork log is also empty. The next Debug
+build passes in 49.824 s at loads 6.86/8.69/10.73 -> 10.13/9.40/10.88.
+Features and extensions-ui reruns use that build. Both earlier Features
+waiters were canceled before launch and provide no test result.
+
+**Request path and lifetime.** Open's outermost factory proxy checks
+subresources and redirects on one matcher sequence. Main documents pass
+through. WebSocket and WebTransport use the same service. Parsed GURLs
+and factory initiators are reused, and ordinary requests avoid a
+ResourceRequest copy. Response/client pipes remain proxied through
+completion. The attempted post-response pipe fusion violated Mojo's
+unwritten-endpoint precondition (`mojo/public/c/system/message_pipe.h:330-338`)
+and broke N-9 worker completion; `dc98292e` removed it. Removing P-3 from
+the real binary made 24 blocking rows FAIL while 6 controls passed.
+
+Matcher state is ref-counted on its sequence. The engine registry shares
+immutable engines by list contents, independently of directory paths;
+enabled state and exclusions remain per context. Native OTR close shuts
+the service down before shell notification. The real native parent/OTR
+lifetime flow passes 14 rows, including pending-load cancellation,
+retained-wrapper refusal, repeated shutdown and ordered parent deletion.
+The latest-load id is checked before parsing and before cache writes,
+including after serialization (100-7).
+
+**Regexes, rule storage and memory.** Every network regex compiles on the
+build runner before publication, without a warm match. Upstream regex
+builder defaults are restored; the bounded-cache/accelerator candidate
+raised CPU maxima and was removed. Program-discard cleanup stays disabled
+because it would force request-path compilation. User `/regex/` semantics
+are unchanged. Only crate-generated ABP separators, wildcards and generated
+word/digit classes use ASCII forms: canonical GURL specs are ASCII and
+percent-escaped (`url/gurl.h:25-26,109`). The pinned lists contain 25 user
+regex lines, optimized into 16 programs. The final default builder has
+1,000 program objects, 7,278,276 total bytes and 4,385,392 user-program bytes.
+
+DAT re-sharing compares all eleven immutable NetworkFilter fields and
+restores 262 duplicate references; an id-only comparison is insufficient.
+A lossless text build serves the engine decoded from its already-serialized
+DAT bytes, then drops the original. Resources are reapplied. Lossy rules
+(such as removeparam) and failed decoding retain the valid text engine.
+List text, resources JSON, conversion buffers and DAT input buffers are
+released before compilation. Chromium's registry-controlled-domain resolver,
+including private registries, replaces the embedded PSL/addr closure (97-2).
+Shim version 4 invalidates old receipts.
+
+After temporary build buffers are freed, the build runner calls PA
+`MemoryReclaimer::ReclaimAll()`. Request activity arms one matcher-sequence
+idle task: reclaim after five seconds without activity, at most once per
+minute. No task remains after it runs until new activity. It retains no
+Profile or engine, and no purge runs on a request path. The same-binary
+purge-off/on control at corpus +6 s measured 65.19/62.48 MiB without purge
+and 57.19/53.33 MiB with purge (16 KiB text/DAT, median five, load1
+9.23-22.73). All 80 initial/resumed verdict dumps match baseline.
+Three 60-second windows per input retain exactly one purge and zero extra
+runs. Browser CPU medians are 86.103/88.604 ms text/DAT versus 113.418 ms
+without an engine; these loaded whole-browser samples do not establish a
+precise causal CPU delta. Raw control receipts remain in `.re/s13/e1/`.
+
+**Integrated headless proof.** The final main `d26300e6` build passed five
+runs per cap/input, each followed by another full corpus. Its framework
+SHA-256 is `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`;
+the recorded dev distribution has the same bytes. All 20 native
+processes exited cleanly. The 40 dumps each have 20,311 rows and match
+the pre-integration baseline byte for byte.
+SHA-256: 16 KiB `10c74cb476adccafc4f750bbc2ae6c1a85363b9945a6fe1470507e9dc845fe02`;
+8 KiB `ba80db77c8651ce7ec35b71bfeade9e04624d4f564ada4cf8fde16c229f475b6`.
+Every initial and resumed burst adds zero regex compiles, and every run
+observes exactly one production idle purge. These are medians of per-run
+statistics under the quiet lock; endpoint load1 spans 9.87-24.34. They
+support the CPU/footprint rulings and are not Step 9's load1 <=4 wall proof.
+
+| Cap / input | CPU mean / p99 / warm max, µs | First CPU max, µs | Warm wall max, µs | Steady / post-corpus+purge, MiB |
+|---|---:|---:|---:|---:|
+| 16 KiB text | 3.488 / 15.125 / 132.333 | 142.791 | 132.167 | 55.157 / 57.094 |
+| 16 KiB DAT | 3.505 / 15.542 / 135.333 | 147.125 | 135.209 | 52.110 / 54.188 |
+| 8 KiB text | 3.444 / 15.209 / 134.500 | 193.750 | 143.917 | 56.407 / 58.266 |
+| 8 KiB DAT | 3.399 / 14.875 / 135.333 | 154.459 | 136.750 | 52.844 / 54.860 |
+
+The following-burst warm CPU max medians are 134.625/130.791 µs
+for 16 KiB text/DAT and 128.834/134.458 µs for 8 KiB. All four
+groups meet the 500 µs CPU limit. No native check exceeds 1 ms;
+the largest is 360 µs.
+
+| PA component, median 16 KiB, all roots | Text MiB | DAT MiB |
+|---|---:|---:|
+| Rules/index/build residual allocated delta | 36.785 | 36.484 |
+| Immutable regex programs (exact crate counter) | 6.941 | 6.941 |
+| Regex caches/metadata/rounding residual | 6.505 | 6.575 |
+| Other to settled | -0.191 | -0.202 |
+| Settled allocated delta | 50.066 | 49.793 |
+| Settled resident delta | 52.266 | 49.750 |
+| Post-idle allocated delta | 50.970 | 50.754 |
+
+PA phase deltas include concurrent browser allocations and rounding; the
+residuals are not exact ownership tags. Physical footprint is a separate
+`task_info` measure. Median text service load is 427 ms, including parse
+140.510, serialize 81.694, decode/replace/free 147.161, regex compile 42.695
+and build reclaim 2.538 ms. DAT load is 182 ms, including decode 132.503,
+compile 43.574 and reclaim 0.963 ms. Separate medians need not sum.
+Receipts: `.re/s13/e3/s15-headless-r3-accepted-gates.json`,
+`s15-headless-r3-summary.json` and `s15-headless-r3-pa-phases.json`.
+
+The first merged attempt completed its measured bursts, then exited 1
+when Chromium's 10-second macOS teardown watchdog expired. That failed
+receipt remains in `s15-headless-r1.log`. The unchanged retry r2 and
+the final-artifact refresh r3 each had 20 clean exits. The cause of
+the first shutdown failure is unproven;
+no watchdog or assertion was disabled for the retry.
+
+**Valid empty generation.** All lists off publishes a valid zero-file
+manifest in the Swift store. The first fix loaded a zero-rule engine
+instead of retaining old blocking rules; its API flow passed 21 rows and
+eight additional full-corpus dumps remained identical. Step 7 now includes
+`_resources` even when no list is enabled. That resources-only generation
+failed the old loader through the real API (async load deadline).
+
+The lead's 2026-11-08 12:29 ruling replaces the zero-rule engine with a
+verified no-engine generation. Both zero-file and resources-only manifests
+are verified normally. With zero lists the service skips registry lookup,
+DAT work and engine/resource construction, clears the matcher and reclaims
+freed pages after its old holder is destroyed. Status advances
+`load_generation`, with `list_count=0`, `engine_loaded=false`,
+`resources_loaded=0` and empty `last_error`. The valid generation is a
+successful API load. Nonempty generations retain the normal build path.
+
+The rebuilt native API flow passes 26 rows for zero-file, resources-only
+and official pinned EasyList/EasyPrivacy/resources inputs. Each restores
+exactly one list at generation 3. The official-input run observes the
+native no-build marker and no empty-generation DAT or cache receipt.
+Its resources-only phase exceeds an explicit unload in the same warmed
+context by 49,152 physical bytes and 14,368 PA allocated bytes; resident
+and committed bytes are equal. These are raw process-wide differences,
+including other browser allocations, with no new memory tolerance.
+The initial pre-build baseline has a separate 3,211,576-byte physical
+delta and does not isolate engine retention. Endpoint load1 is
+22.07 -> 21.55. Evidence:
+`.re/s13/e3/s15-empty-resources-warm-control-evidence.json` and
+`s15-zero-list-official-r2.log`. App zero-list/restore request proofs also pass in the strict 79-row scope;
+the distribution and Debug App build are ready.
+Historical receipts: `.re/s13/e3/empty-generation-before.log`,
+`empty-generation-after.log` and `empty-corpus-identity.json`; Step 7
+reproduction: `empty-resources-before.log`.
+
+**COUNT-closed-document erratum.** The original pagehide stimulus observed
+no requests. Its replacement waited for three blocked fetches and then
+navigated; its predicate incorrectly rejected an old-document reading of
+8 before the new commit. The 21:12-21:14 run is diagnostic only because it
+may overlap another section's crash dialog. It does not count as a full N run.
+
+The subsequent CDP predicate required three outgoing request events,
+three terminal events and three `ERR_BLOCKED_BY_CLIENT` errors. It is
+**not usable at unload (DevTools rebinds to the incoming RFH at
+ReadyToCommitNavigation)**. Chromium's
+`content/browser/devtools/render_frame_devtools_agent_host.cc:531-558`
+calls `UpdateFrameHost(request->GetRenderFrameHost())`; lines 1015-1053
+bind the renderer channel to that host. In E3's r2/r3 runs, real top-level
+pagehide fired and the allowed server received three GETs, but the Network
+domain reported zero outgoing starts and terminals. The old predicate and
+its failed receipts remain in `.re/s13/e3/count-proof-cdp-unload-unusable.py`
+and `count-identity-r3-focused-results.json`.
+
+The lead replaced that observer requirement on 2026-11-08 at 10:45.
+The row uses a real top-level pagehide handler, a localStorage sentinel
+and three keepalive GETs. The blocked variant sends matched URLs: the
+server must receive zero, and the outgoing document's native count must
+rise by exactly three from its pre-unload value. The allowed control uses
+the same page with unmatched URLs: the server must finish exactly three
+GETs, and the outgoing native count must remain unchanged. A native
+`before-commit` reading records the outgoing count before reset. Every
+reading carries its committed document id. The new id must have count zero
+at commit, at load and at least two seconds after the native/server
+witnesses; `replaceState` obtains the late reading without resetting it.
+The allowed variant must fail the positive blocking predicate. A temporary
+wrong-document variant must fail because its new-document count is nonzero.
+Neither control changes the shipping policy. The production positive and
+allowed control passed on 2026-11-08: blocked old id 2 counted 5 -> 8
+with zero server GETs; allowed old id 2 stayed at 5 with three completed
+GETs. New id 4 stayed at zero at commit, load and the late readings
+(4.014/4.012 seconds after the witnesses). Receipt:
+`.re/s13/e3/count-native-positive-focused-results.json`. The temporary
+wrong-document control also failed as required: its old count stayed at 5,
+its new id rose to 3 after load, and the server received zero GETs. Its
+allowed control still completed three GETs with unchanged old count and
+new count zero. Receipt: `count-native-wrong-focused-results.json`.
+Production was restored and strict engine status passed before running
+that saved private artifact. The counted full integrated N run passed
+all 32 rows (`integrated-N-r2.results.json`), including the native/server
+count predicate, limits, workers, sockets, extension ordering, DAT reload
+and in-flight close/driver-failure cleanup.
+
+The post-Section-15 rerun also passes 32/32 (`s15-N-r1.results.json`).
+The production-default focused COUNT rerun (`s15-count-positive-r2`)
+records blocked old id 2 at 5 -> 8, new id 4 at zero at commit, load
+and 4.013 s after the witness, with zero server GETs. Its allowed control
+completes exactly three GETs, keeps the old count at 5 and the new count
+at zero through the same late reading. Outgoing unload CDP events remain
+zero in both variants and are not part of the predicate.
+
+The post-Section-15 wrong-document control also passes (`s15-count-wrong-r2`).
+Its blocked URLs never reach the server, while the old id stays at 5 and
+new id 4 rises to 3 after load and remains 3 at the late reading. The
+predicate fails specifically for the incorrect document attribution. Its
+allowed control completes three GETs, with unchanged old count and new
+count zero. Production remains byte-identical to the recorded distribution.
+
+**Unicode/IDN page edges.** All 16 cases pass against both the saved
+pre-ASCII build and the integrated build (32 rows). CDP observes the
+actual canonical ASCII specs, and allow/block verdicts remain identical
+for IDN hosts, escaped UTF-8 paths, separators, end anchors and user regex
+ASCII classes. Receipt: `.re/s13/e3/ascii-edge-page-results.json`.
+
+The post-Section-15 browser rerun passes 32 fresh rows: the same 16
+Unicode/IDN inputs through current text and verified DAT loads. Every
+actual canonical ASCII spec and verdict matches the retained pre-ASCII
+browser witness. The original `/tmp/open-adblock` fixture and saved
+pre-ASCII app were missing; the first attempt stopped before browser
+launch. E3 restored the exact original inputs and rules in its canonical
+private evidence directory. The baseline rows remain historical. Receipts:
+`.re/s13/e3/s15-edges-r1.log` and `s15-edges-r2-results.json`.
+
+**Page timing after idle.** The integrated page run observed exactly one
+idle purge before measured load 2. All 15 loads had 200 requests and 200
+terminal events. G-4 passed (p50 <=32 us, p99 <=256 us). G-5 wall passed:
+blocking-on median 118.2 ms versus off 144.7 ms. G-5 busy CPU failed at
+12.756 ms against 9 ms, at measured load1 48.09–49.93. The preceding
+20-minute load1 <=12 opportunity expired without launching a browser.
+Receipt: `.re/s13/e3/integrated-page-loaded-r1-page-scopes.json`. These
+loaded numbers do not establish the quiet gate or a cause for the miss.
+
+The lead's 17:43 priority instruction enabled a post-Section-15 quiet
+run after the App build. It passes G-4, G-5 CPU/wall and G-6, with
+all sampled load1 values 8.13–9.07 (limit 12). Loads 2–5 have on-load
+wall times 58.9/61.4/68.4/70.7 ms, median **64.900 ms**; off median is
+113.200 ms. Median busy thread CPU is **8.500 ms**, within 9 ms.
+The production idle purge occurs before measured load 2. G-4 includes
+all five loads: 1,000 requests, p50 <=32 µs, p99 <=256 µs, max <=512 µs.
+G-6 records zero added compiles, 0/1,070 checks over 1 ms and maximum
+262 µs. Receipt: `.re/s13/e3/s15-page-quiet-r2-page-scopes.json`.
+The 64.900 ms value is Step 5's C-G2 input T for this engine.
+
+An earlier App source merge includes main `50028c98` (imported-secrets
+App and harness changes), with no further Engine/fork change. The Debug
+rebuild passes in 38.887 s at endpoint loads 11.76/10.84/10.80 ->
+12.27/11.08/10.89. Its strict App rerun (`s15-adblock-r9`) passes 79/79,
+with zero interruptions and nine clean launches. AD3 PA allocated median
+is +26,704 bytes, non-PA malloc in-use delta zero, and different-list
+control +25,074,288 bytes with sharing=false. Resources-only generation 4
+has no engine/resources/error; one-list generation 5 blocks and redirects
+again. The earlier r8 run lost foreground at its first row and is
+INTERRUPTED, with cleanup PASS; it is not acceptance evidence.
+
+**Default App hosting and regression.** Default-Chrome acceptance
+(`s15-adblock-r10`) passes 79/79, including resources/DAT, zero-list restore,
+independent Profiles/OTR and held-load deletion/relaunch. All nine launches
+clean up with no interruption. AD3 PA allocated median is −46,144 bytes;
+non-PA malloc in-use delta zero; different-list control +25,129,024 bytes
+with sharing=false. F's harness/ruling is merged from `d5e44abe` and
+recorded in the Step 8 erratum. Forced-sheet cleanup also passes.
+
+The page regression has 81 PASS, five existing BLOCKED, one SKIP and one
+DEFERRED row. Features has 27 PASS. Full default-Chrome Extensions UI has
+71 PASS and the existing X13 picker BLOCKED because the App Site Control
+presenter is absent. Settings preview passes 47 functional checks plus
+native pane renders. Raw receipts retain all qualifiers.
+
+The private runner initially omitted `--style`, selecting legacy Alloy.
+Its full and focused P10 runs fail the exact Work popup assertion. Changing
+only to `--style chrome` passes all 16 P10 rows and the runnable full
+Extensions UI scope. The App defaults to Chrome (`App/LaunchOptions.swift`),
+and the prior P10 receipt also used Chrome. No product code, assertion,
+threshold or baseline changed. Both Alloy failures remain retained; this
+work does not claim that Alloy's popup is fixed.
+
+The final source merge is main `e8d4acd4` in `bd006cc3`, after a fresh
+Engine/fork log found no changes since the recorded distribution's base
+`d26300e6`. The Debug rebuild passes in 37.101 s at endpoint loads
+8.88/8.99/9.14 -> 8.17/8.81/9.07. It adds opt-in launch diagnostics and the
+Welcome hover fix, with no ad-block policy, adapter or fixture logic change.
+The Chrome App receipts above bind the main50028c98 build separately.
+Full verification passes **25/25**, with no FAIL or SKIP, on that merged
+source. The wrapper takes 969.011 s including lock waits, at endpoint loads
+8.44/8.71/9.01 -> 6.80/7.03/8.00. Exact commands and the complete summary
+are in `.re/s13/e3/VALIDATION.md` and `s15-full-gate-r1-logs/summary.txt`.
+The final fresh fetch still resolves main to `e8d4acd4`; its Engine/fork
+log since the last merge is empty. The review checklist is complete and
+the final audit finds no owned process or screen-priority flag. The child
+hands the branch and PR body draft to the lead; it opens no PR.
+
+Historical whole-process AD3 FAILs remain unchanged: E3 5.734/6.078 MiB
+and E4 11.11 MiB. Whole-process on/off pairs are now record-only under the
+explicit lead ruling. The earlier private continuation is retired; the
+current scope uses the strict harness with no AD3 bypass. F also observes
+browser PA growth of about 32 MB over 25 s with both engines unloaded;
+the owner is unknown and the allocation-stack follow-up remains open.
+The optional Section 12 App tile adapter is absent from this main, so its
+acceptance is N/A; E3 does not create a second tile.
+The no-engine generation, distribution, Debug build and quiet G-5 gates
+pass. Retain the earlier loaded CPU receipts (12.756 ms at load1 48–50
+and 8.576 ms at 40–42) as historical attempts.
+N-18 currently proves hook reachability only: no HTTP/3
+endpoint establishes ready rejection. N-21 retains the accepted early-hints
+network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.

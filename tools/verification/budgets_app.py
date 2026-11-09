@@ -11,6 +11,7 @@ from pathlib import Path
 import statistics
 import signal
 import time
+from urllib.parse import unquote
 
 
 PAGES = ['https://example.com/', 'https://example.org/',
@@ -75,8 +76,9 @@ def run(kind, h, app_bundle, scratch, data_root):
 
     if kind == 'first-run':
         # firstrun.py F12 and docs/first-run/steps-ef-verification.md:
-        # five fresh Welcome roots, then selected imported-tab paint relative
-        # to firstRunLandingStarted. Reuse its synthetic import schema.
+        # Five fresh roots: the first confirmed first-run frame is now Intro,
+        # not the later Name/Welcome step (first-run plan's 2026-11-08 errata).
+        # Keep kernel start -> sidebarDrawn, and landing -> imported-page FCP.
         import firstrun
         source = data_root / 'fixtures'
         firstrun.fixture(source)
@@ -95,34 +97,65 @@ def run(kind, h, app_bundle, scratch, data_root):
         local_pages(sidebar)
         sidebar_file.write_text(json.dumps(sidebar))
         samples = []
-        for root in profiles:
+        for index, root in enumerate(profiles):
             root.mkdir()
+            before = list(os.getloadavg())
             app = owned_open('Release', 'chrome', str(root),
-                         ['--use-mock-keychain', '--arc-dir=' + str(source)],
+                         ['--use-mock-keychain', '--intro-sound=silent', '--arc-dir=' + str(source)],
                          str(scratch / 'app.log'), urls=(), first_run=True,
                          extra_env={'OPEN_E2E_APP_BUNDLE': str(app_bundle)})
             try:
-                state = app.call('first-run')
-                if not state['active'] or state['step'] != 'welcome':
-                    raise RuntimeError('first-run Welcome fixture missing')
+                # Capture the launch mark before skipping anything. The real
+                # e2e factory uses these same two onboarding actions; neither
+                # resets the process-start clock or creates a timing mark.
                 timing = app.call('timing')
-                if not timing.get('kernelProcessStart') or 'sidebarDrawn' not in timing:
+                if (not timing.get('kernelProcessStart') or not timing.get('firstFrameConfirmed')
+                        or 'sidebarDrawn' not in timing):
                     raise RuntimeError('first-run kernel/frame timing missing')
+                intro = app.call('onboarding')
+                if not intro.get('active') or intro.get('screen') != 'intro':
+                    raise RuntimeError('fresh first-run Intro fixture missing')
+                app.call('onboarding', action='skip-intro')
+                app.call('onboarding', action='get-started')
+                if not h.wait_until(lambda: app.call('first-run').get('active'), timeout=10, step=.05):
+                    raise RuntimeError('first-run Welcome handoff missing')
+                state = app.call('first-run')
+                if not state['active'] or state['step'] != 'welcome' or state.get('screen') != 'name':
+                    raise RuntimeError('first-run Welcome fixture missing')
                 if not h.wait_until(lambda: app.call('first-run').get('probeReady'), timeout=10, step=.05):
                     raise RuntimeError('synthetic import probe not ready')
                 app.call('first-run', action='import')
                 app.call('first-run', action='continue')
                 if not h.wait_until(lambda: app.call('first-run')['step'] == 'report', timeout=30, step=.05):
                     raise RuntimeError('synthetic first-run import did not finish')
-                app.call('first-run', action='continue')
-                app.call('first-run', action='finish')
+                # Final setup inserts/selects native open://welcome, which has
+                # no renderer FCP. Sample the imported selected page at its
+                # landing checkpoint, before that selection can be replaced.
+                imported = next(t for t in app.call('tabs') if t['selected'])
+                if unquote(imported['url']) != FIXTURE:
+                    raise RuntimeError('selected imported local page missing')
                 if not h.wait_until(lambda: 'firstContentfulPaint' in app.call('timing'), timeout=15, step=.1):
                     raise RuntimeError('imported first paint missing')
                 landed = app.call('timing')
-                samples.append(dict(welcome=timing, landing=landed,
-                                    imported_paint_ms=landed['firstContentfulPaint'] - landed['firstRunLandingStarted']))
+                if ('firstRunLandingStarted' not in landed or landed['sidebarDrawn'] != timing['sidebarDrawn']
+                        or next(t for t in app.call('tabs') if t['selected'])['id'] != imported['id']):
+                    raise RuntimeError('first-run launch/landing timing identity changed')
+                app.call('first-run', action='continue')
+                app.call('first-run', action='finish')
+                if not h.wait_until(lambda: not app.call('onboarding').get('active'), timeout=10, step=.05):
+                    raise RuntimeError('first-run final handoff did not finish')
+                finished = app.call('first-run')
+                welcome = app.call('welcome')
+                if not finished.get('completed') or not welcome.get('visible'):
+                    raise RuntimeError('first-run completion/native Welcome missing')
+                sample = dict(index=index, first_content=timing, first_content_surface='intro',
+                              intro=intro, welcome_state=state, landing=landed, imported_tab=imported,
+                              completed=finished, native_welcome=welcome, load_start=before,
+                              imported_paint_ms=landed['firstContentfulPaint'] - landed['firstRunLandingStarted'])
             finally:
                 close(app)
+            sample['load_end'] = list(os.getloadavg())
+            samples.append(sample)
         return dict(samples=samples, cleanup=cleanups)
 
     if kind == 'launch':

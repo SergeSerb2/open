@@ -44,7 +44,6 @@ review and the U-8 public source location also remain open.
 | uBlock Origin resources / scriptlets | 3762a26fd65df422080c116e6a70d13bc8d57d62 | GPL-3.0 | Ships: redirect stubs only (47 resources; no scriptlet templates), plus original redirect-source text and copyright/license notices under AdBlock/Source. | `Engine/fork/adblock/resources-pins.txt`; exact complete corresponding upstream source: https://codeload.github.com/gorhill/uBlock/tar.gz/3762a26fd65df422080c116e6a70d13bc8d57d62 ; source paths `src/web_accessible_resources/`, `src/js/redirect-resources.js`; output SHA-256 `6d4a87b8f0e44e0ffad66c5b66694c4a1da27383eaa11acae218030a29d9575e`; licenses/GPL-3.0.txt. Public distribution review remains U-6 / fork-infra Q-2. |
 | json-rust string escaping excerpt | Embedded in adblock 0.8.11; original upstream revision not recorded | MIT | Ships: adblock resource argument string escaping, adapted from json-rust. | `adblock-v0_8/src/resources/resource_storage.rs:23` explicitly attributes json-rust; https://github.com/maciejhirsz/json-rust ; licenses/MIT-json-rust.txt. The license copy pin is provenance for the text, not a claim about the excerpt revision; review this with U-6. |
 | rust-url parser excerpt | Embedded in adblock 0.8.11; original source header 2013–2016 | Apache-2.0 | Ships: parser code retained by adblock from rust-url. | `adblock-v0_8/src/url_parser/parser.rs` copyright/license header; licenses/rust-url-parser-NOTICE.txt, licenses/Apache-2.0.txt (Apache choice). This is separate from the url 2.5.8 crate row. |
-| Rust: addr | 0.14.0 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/addr/v0_14/README.chromium`, `third_party/rust/chromium_crates_io/vendor/addr-v0_14/`; https://crates.io/crates/addr/0.14.0 ; licenses/Apache-2.0.txt. |
 | Rust: base64 | 0.13.1 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/base64/v0_13/README.chromium`, `third_party/rust/chromium_crates_io/vendor/base64-v0_13/`; https://crates.io/crates/base64/0.13.1 ; licenses/Apache-2.0.txt. |
 | Rust: bitflags | 1.3.2 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/bitflags/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/bitflags-v1/`; https://crates.io/crates/bitflags/1.3.2 ; licenses/Apache-2.0.txt. |
 | Rust: byteorder | 1.5.0 | MIT | Ships: browser-process adblock dependency. | `third_party/rust/byteorder/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/byteorder-v1/`; https://crates.io/crates/byteorder/1.5.0 ; licenses/byteorder-v1-LICENSE-MIT.txt. |
@@ -75,8 +74,6 @@ review and the U-8 public source location also remain open.
 | Rust: percent-encoding | 2.3.2 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/percent_encoding/v2/README.chromium`, `third_party/rust/chromium_crates_io/vendor/percent-encoding-v2/`; https://crates.io/crates/percent-encoding/2.3.2 ; licenses/Apache-2.0.txt. |
 | Rust: potential_utf | 0.1.6 | Unicode-3.0 | Ships: browser-process adblock dependency. | `third_party/rust/potential_utf/v0_1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/potential_utf-v0_1/`; https://crates.io/crates/potential_utf/0.1.6 ; licenses/Unicode-ICU4X.txt. |
 | Rust: proc-macro2 | 1.0.107 | Apache-2.0 | Build only: host proc macro or its dependency; host executable is not bundled. Generated code notices are retained. | `third_party/rust/proc_macro2/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/proc-macro2-v1/`; https://crates.io/crates/proc-macro2/1.0.107 ; licenses/itoa-v1-LICENSE-APACHE.txt. |
-| Rust: psl | 2.1.245 | MIT OR Apache-2.0; embedded PSL data MPL-2.0 | Ships: browser-process adblock dependency. Compiled src/list.rs contains a third PSL snapshot; exact upstream list commit is not recorded by this crate. | `third_party/rust/psl/v2/README.chromium`, `third_party/rust/chromium_crates_io/vendor/psl-v2/`; https://crates.io/crates/psl/2.1.245 ; licenses/psl-v2-LICENSE.txt (upstream MIT LICENSE), licenses/Apache-2.0.txt (Cargo.toml declares MIT/Apache-2.0; README.chromium selects Apache), licenses/MPL-2.0.txt. Public generated PSL source location UNSET (U-8). |
-| Rust: psl-types | 2.0.11 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/psl_types/v2/README.chromium`, `third_party/rust/chromium_crates_io/vendor/psl-types-v2/`; https://crates.io/crates/psl-types/2.0.11 ; licenses/Apache-2.0.txt. |
 | Rust: quote | 1.0.47 | Apache-2.0 | Build only: host proc macro or its dependency; host executable is not bundled. Generated code notices are retained. | `third_party/rust/quote/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/quote-v1/`; https://crates.io/crates/quote/1.0.47 ; licenses/itoa-v1-LICENSE-APACHE.txt. |
 | Rust: regex | 1.13.1 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/regex/v1/README.chromium`, `third_party/rust/chromium_crates_io/vendor/regex-v1/`; https://crates.io/crates/regex/1.13.1 ; licenses/Apache-2.0.txt. |
 | Rust: regex-automata | 0.4.18 | Apache-2.0 | Ships: browser-process adblock dependency. | `third_party/rust/regex_automata/v0_4/README.chromium`, `third_party/rust/chromium_crates_io/vendor/regex-automata-v0_4/`; https://crates.io/crates/regex-automata/0.4.18 ; licenses/Apache-2.0.txt. |
@@ -297,6 +294,26 @@ rows identify each crate's own source file through `README.chromium`.
 | licenses/unicode-bidi-v0_3-COPYRIGHT.txt | `third_party/rust/chromium_crates_io/vendor/unicode-bidi-v0_3/COPYRIGHT` | `edb20b474f6cbd4f4db066b54a9e0f687d0009d309412a63431189b59b8e2a07` |
 | licenses/unicode-ident-v1-LICENSE-UNICODE.txt | `third_party/rust/chromium_crates_io/vendor/unicode-ident-v1/LICENSE-UNICODE` | `f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1` |
 | licenses/unicode-normalization-v0_1-COPYRIGHT.txt | `third_party/rust/chromium_crates_io/vendor/unicode-normalization-v0_1/COPYRIGHT` | `23860c2a7b5d96b21569afedf033469bab9fe14a1b24a35068b8641c578ce24d` |
+
+Chromium's own BSD license and the other Chromium/codec licenses belong in
+the matching distribution's complete `CREDITS.html`. The current dev
+distribution instead contains the 401-byte upstream sample credits page
+(`This is sample credits page`, `generate_about_credits=true`). It is not
+complete credits. `--require-cef-credits` rejects that sample; a release must
+provide real generated credits and copy the HTML twin beside its artifacts.
+The default generator can preview the prepared inventory without that input,
+but prints an explicit warning and includes the missing-credits status in
+both outputs. Such a preview is not release-license acceptance.
+
+MPL source changes must remain available as source at the public location
+chosen under U-8; a commit in the current private repository is not enough.
+The inventory and artifacts do not close the release plan's license/patent
+review gate. Public distribution waits for the user's §10 confirmation.
+
+The Section 13 Step 4 engine branch removes adblock's embedded PSL and its
+`addr`, `psl` and `psl-types` crates. Its CXX resolver uses Chromium's existing
+registry data, including private registries. Swift's separate PSL remains.
+The final distribution must carry this source and license inventory together.
 
 Full audit and build receipts: [license audit](license-audit.md). Public
 release acceptance requires the generated Chromium inventory/texts,

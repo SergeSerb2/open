@@ -101,6 +101,8 @@ def run(factory, results, tmp, h):
             occupied = Path(app.user_data)/'Profiles/Profile 1'; occupied.mkdir(parents=True, exist_ok=True)
             marker = occupied/'unrelated-data'; marker.write_text('synthetic unrelated Profile data')
             existing = live_default = None
+            imported_selections = None
+            undo_completion = None
             if mode != 'settings':
                 app.call('first-run', action='import')
                 if os.environ.get('OPEN_E2E_IMPORT_EARLY_FAILURE') == '1':
@@ -108,9 +110,15 @@ def run(factory, results, tmp, h):
                 app.call('first-run', action='select', history=True)
                 app.call('first-run', action='continue'); wait_for('step','report')
                 first = state()['outcome']
+                # The importer checkpoint precedes Welcome's intentional
+                # selection at the final setup hand-off.
+                checkpoint = json.loads((Path(app.user_data)/'State/browser.json').read_text())
+                imported_selections = checkpoint['windows'][0]['selectedNodeBySpace']
                 app.call('first-run', action='continue'); app.call('first-run', action='finish')
             else:
                 app.call('first-run', action='fresh')
+            assert h.wait_until(lambda: app.call('welcome')['visible'], timeout=10, step=.02), 'Welcome did not appear after setup'
+            if mode == 'settings':
                 app.call('profiles-shell', action='create', name='Example Work')
                 before = snapshot(); existing = next(p for p in before['profiles'] if p['name'] == 'Example Work')
                 live_default = next(p for p in before['profiles'] if p['dataDirectoryName'] == 'Default')
@@ -153,9 +161,15 @@ def run(factory, results, tmp, h):
                 assert h.wait_until(lambda: app.call('profiles-shell')['noticeShown'] > 0, timeout=10, step=.05)
                 app.call('profiles-shell', action='notice-ok')
             selections = data['windows'][0]['selectedNodeBySpace']
+            welcome_selection = app.call('welcome') if mode != 'settings' else None
             app.call('space', space=ids['beta'])
             selected = {tab['id'] for tab in app.call('tabs') if tab['selected']}
-            checks['session'] = selections.get(ids['alpha']) == ids['t0'] and selections.get(ids['beta']) == ids['work-favorite'] and selected == {ids['work-favorite']}
+            import_session = imported_selections if imported_selections is not None else selections
+            checks['session'] = import_session.get(ids['alpha']) == ids['t0'] and import_session.get(ids['beta']) == ids['work-favorite'] and selected == {ids['work-favorite']}
+            if welcome_selection is not None:
+                checks['session'] &= welcome_selection['visible'] and selections.get(ids['alpha']) == welcome_selection['tab']
+            session_detail = dict(checkpoint=import_session, final=selections, selected=sorted(selected),
+                welcome=None if welcome_selection is None else {k: welcome_selection[k] for k in ('visible','tab')})
             repairs = app.call('profiles-shell')['noticeShown']
             checks['noRepairs'] = repairs == 0 and all(s['profileID'] in by_id for s in data['spaces'])
             if negative:
@@ -172,9 +186,33 @@ def run(factory, results, tmp, h):
                 if negative: app.call('profiles-shell', action='create', name='Example Intervening Command')
                 app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
                 app.call('sidebar-key', key='z', modifiers=['command'])
+                pending = state()['importUndoInProgress']
+                assert h.wait_until(lambda: not state()['importUndoInProgress'], timeout=30, step=.02), 'import Undo did not finish'
+                undo_completion = dict(wasPending=pending, error=state()['importUndoError'])
                 undone = snapshot()
-                checks['undoModel'] = undone['profiles'] == before['profiles'] and undone['spaces'] == before['spaces'] and undone['routingRules'] == before['routingRules']
-            details[mode] = dict(checks=checks, profileCount=len(profiles), stores=stores, repairs=repairs, first=first, repeat=repeat, load=os.getloadavg())
+                # Undo restores Welcome's selection, which updates that live
+                # tab's activity time. Check that update separately; compare
+                # every other persisted field exactly as before.
+                expected = json.loads(json.dumps(before))
+                def welcome_tabs(value):
+                    if isinstance(value, dict):
+                        if value.get('url') == 'open://welcome': yield value
+                        for child in value.values(): yield from welcome_tabs(child)
+                    elif isinstance(value, list):
+                        for child in value: yield from welcome_tabs(child)
+                actual_welcome = {tab['id']: tab for tab in welcome_tabs(undone['spaces'])}
+                activity_ok = True
+                for tab in welcome_tabs(expected['spaces']):
+                    actual = actual_welcome.get(tab['id'])
+                    activity_ok &= actual is not None and actual['lastActiveAt'] >= tab['lastActiveAt']
+                    if actual is not None: tab['lastActiveAt'] = actual['lastActiveAt']
+                undo_completion['welcomeActivityValid'] = activity_ok
+                checks['undoModel'] = not undo_completion['error'] and activity_ok and undone['profiles'] == expected['profiles'] and undone['spaces'] == expected['spaces'] and undone['routingRules'] == expected['routingRules']
+                if not checks['undoModel']:
+                    evidence = Path(h.ROOT)/'.re/handoff/sections/s17/c3'
+                    (evidence/'multiprofile-before-undo.json').write_text(json.dumps(before, indent=2))
+                    (evidence/'multiprofile-after-undo.json').write_text(json.dumps(undone, indent=2))
+            details[mode] = dict(checks=checks, profileCount=len(profiles), stores=stores, repairs=repairs, first=first, repeat=repeat, session=session_detail, undoCompletion=undo_completion, load=os.getloadavg())
             app.quit(); app = None
         for name in ('profiles','defaultRole','spaceProfiles','favorites','archive','history','routing','collision','session','noRepairs','reimport','undoModel'):
             results['MP_'+name] = dict(ok=all(d['checks'].get(name,True) for d in details.values()), modes=details, negative=negative, load=os.getloadavg())

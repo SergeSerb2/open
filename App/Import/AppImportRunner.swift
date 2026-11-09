@@ -9,10 +9,16 @@ import OpenBoosts
 /// The sole App import implementation. Settings merges; first run installs.
 /// History streams through the existing Profile stores after the landing gate.
 @MainActor
-final class AppImportRunner {
+final class AppImportRunner: ProfileDataOwner {
   unowned let app: AppDelegate
   private(set) var lastOutcome: ImportOutcome?
   private var running = false
+  var secretsFixtureInProgress = false
+  var retiredSecretsProfiles = Set<ProfileID>()
+  var retiredSecretsDirectories = Set<String>()
+  var secretsSinks: [ProfileID: AppSecretsImportSink] = [:]
+  var secretsTask: Task<ArcSecretsImportReport, any Error>?
+  var secretsTaskProfiles = Set<ProfileID>()
   private(set) var undoReceipt: AppImportUndo?
   var undoTask: Task<Void, Never>?
   var undoOperations = 0
@@ -39,10 +45,18 @@ final class AppImportRunner {
   #if OPEN_AUTOMATION
   let watchdog = ImportMainThreadWatchdog()
   #endif
-  init(app: AppDelegate) { self.app = app }
+  let unfinishedSecretsImportAtLaunch: Bool
+  var secretsConsentAdapterCalls = 0
+  var secretsKeychainProbeCalls = 0
+  var secretsKeychainReadCalls = 0
+  init(app: AppDelegate) {
+    self.app = app
+    unfinishedSecretsImportAtLaunch = (try? SecretsImportLedger(dataRoot: app.directories.root).unfinished) != nil
+    app.profileTeardown.register(self)
+  }
 
   func run(plan: ImportPlan, firstRun: Bool) async -> ImportOutcome {
-    guard !running, !installingExtension else { return ImportOutcome(errorText: "An import is already running.") }
+    guard !running, !secretsFixtureInProgress, !installingExtension else { return ImportOutcome(errorText: "An import is already running.") }
     running = true
     await undoTask?.value
     let undo = AppImportUndo(app: app)
@@ -94,11 +108,12 @@ final class AppImportRunner {
     #endif
     var counts: [String: Int] = [:]
     var failures: [String: String] = [:]
+    var secretsReportLines: [String] = []
     var extensions: [ImportExtensionCandidate] = []
     var extensionProfileCount = 0
     func result(_ message: String? = nil) -> ImportOutcome {
       let outcome = ImportOutcome(counts: counts, errorText: message, failures: failures,
-        extensions: extensions, extensionProfileCount: extensionProfileCount)
+        extensions: extensions, extensionProfileCount: extensionProfileCount, secretsReportLines: secretsReportLines)
       lastOutcome = outcome; return outcome
     }
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
@@ -193,7 +208,7 @@ final class AppImportRunner {
     }
     // Even an empty sidebar can have extensions for an existing destination.
     mapExtensions()
-    if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history || plan.boosts) {
+    if firstRun && !(plan.spaces && hasSidebarData) && (plan.archive || plan.history || plan.boosts || (plan.secretsConsented && canImportPasswordsAndCookies)) {
       do {
         _ = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: false, tabs: false, favorites: false, folders: false, searchSettings: false,
@@ -202,7 +217,7 @@ final class AppImportRunner {
           }) }
       } catch { return result("Open could not create the imported Profiles.") }
     }
-    // Phase 4 remains capability OFF. No consent token or secret API is called.
+    // The live destination Profiles must land before any secrets are imported.
     guard !app.terminationRequested, !Task.isCancelled else { return result("Import stopped because Open is quitting.") }
     if firstRun {
       if plan.spaces {
@@ -218,8 +233,7 @@ final class AppImportRunner {
       }
       // An empty/all-failed selection has not landed data. Keep D3 intact;
       // Continue/Start Fresh owns the first save of the default model.
-      guard ImportOutcome(counts: counts).didImportAnything || plan.history || (plan.archive && report.archiveImported > 0)
-        || (plan.boosts && report.boosts.imported > 0) else {
+      guard ImportOutcome(counts: counts).didImportAnything || plan.history || (plan.archive && report.archiveImported > 0) || (plan.boosts && report.boosts.imported > 0) || (plan.secretsConsented && canImportPasswordsAndCookies) else {
         return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
       }
       if plan.spaces && hasSidebarData {
@@ -239,8 +253,8 @@ final class AppImportRunner {
       app.showFirstRunBrowser()
       do {
         try app.snapshotStore.saveNow(model: app.model)
-        app.firstRunSaved = true
-        UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
+        // This is a landing checkpoint. Final setup still owns D3 completion.
+        // Keep ordinary snapshot writes guarded until Get Started succeeds.
       } catch {
         return result(FirstRunViewModel.importedSaveError)
       }
@@ -261,7 +275,9 @@ final class AppImportRunner {
         let beforeProfiles = app.model.profiles.count, beforeRules = app.model.routingRules.count
         let merged = try undo.captureModel(app.model) { try app.model.mergeImportedSidebar(imported.model, profileMapping: profileMapping,
           spaces: plan.spaces, tabs: plan.tabs, favorites: plan.favorites, folders: plan.folders,
-          searchSettings: plan.searchSettings, profiles: plan.archive || plan.history || plan.boosts, archivedIDsByProfile: archivedIDs,
+          searchSettings: plan.searchSettings,
+          profiles: plan.archive || plan.history || plan.boosts || (plan.secretsConsented && canImportPasswordsAndCookies),
+          archivedIDsByProfile: archivedIDs,
           importedAt: Date(), saving: {
             for profile in app.model.profiles { try app.directories.ensureProfileDirectories(for: profile) }
             try app.snapshotStore.saveNow(model: app.model)
@@ -439,9 +455,16 @@ final class AppImportRunner {
       counts["History failed"] = failedVisits
       counts[ImportOutcomeKeys.history] = counts["History", default: 0]
       flow?.progress = 1; wizard.progress = 1
-      if failures["History"] != nil {
-        return result("Your Spaces and tabs are in. \(failedVisits.formatted()) history visits could not be read. You can import history later from Settings.")
-      }
+    }
+    if plan.secretsConsented && canImportPasswordsAndCookies {
+      progress("Importing your passwords and cookies…", landed: true)
+      let secrets = await importSecrets(plan: plan, imported: imported, profileMapping: profileMapping)
+      counts.merge(secrets.counts) { _, new in new }
+      failures.merge(secrets.failures) { _, new in new }
+      secretsReportLines = secrets.secretsReportLines
+    }
+    if failures["History"] != nil {
+      return result("Your Spaces and tabs are in. \(counts["History failed", default: 0].formatted()) history visits could not be read. You can import history later from Settings.")
     }
     return result(failures.isEmpty ? nil : "Some selected data could not be imported. You can try again later from Settings.")
   }

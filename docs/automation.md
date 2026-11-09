@@ -99,6 +99,83 @@ requires branch median `sidebarDrawn` ≤ main median. Every sample records load
 
 ## Enable automation
 
+### Synthetic secrets import (Section 15)
+
+`import-secrets-fixture` takes an optional `map`, defaulting to
+`{"Default":"Default","Profile 1":"Work"}`. Create the Work Profile first
+with `space-create {profile:"Work"}`. Each source must map to a distinct existing
+Open Profile. The command runs `ArcSecretsImporter.runSyntheticFixture` through
+the App's real `AppSecretsImportSink` and Profile context factory. Its source
+is generated inside OpenImport. It accepts no source path, key, ciphertext,
+records, or consent argument. It requires Debug or the process switch
+`--open-e2e` in a build that includes automation.
+The engine must be ready and use the mock Keychain.
+
+The reply contains `stage`, `report.profiles`, and `report.total`. Each record
+kind (`logins`, `addresses`, `cards`, `cookies`) contains only counts: `added`,
+`existing`, `failed`, `skippedFederated`, `skippedExpired`, and `unmapped`.
+Login import counts include blocked entries; `credentials` separates `logins`
+and `blockedSites`. Neither command returns secret values or source records.
+The App reloads each destination Profile's live tabs once after its complete
+cookie step is durable. Non-default engine contexts are requested lazily
+through the existing factory.
+
+`import-secrets-state` reads the fixture stage and count report. It also returns
+`consentAdapterCalls`, `keychainProbeCalls`, `keychainReadCalls`,
+`canImportPasswordsAndCookies`, `unfinishedAtLaunch`, and `unfinished`.
+The three call counters are process-lifetime counters of the real consent
+adapter, metadata-probe invocation, and secret-read invocation. Synthetic import
+never increments them. The wizard's capability remains
+`supportsSecretsImport && !usesMockKeychain`, including in fixture runs.
+
+For recovery or in-progress deletion, `import-secrets-fixture {pause:"after-logins"}`
+starts the same importer in a task and returns immediately. Poll
+`import-secrets-state` for `stage:"paused-after-logins"`: the Default Profile's
+login ledger step is durable and done. `pause:"during-cookies"` splits the real
+cookie sink call into two durable engine batches and pauses after the first;
+the whole cookie step remains pending in the ledger. Poll for
+`paused-during-cookies`, then SIGKILL only the owned App PID and relaunch that
+root on the M1 only. On the M5 use the held batch for normal Profile deletion;
+never kill the App there. A pause expires after 60 seconds. Both forms use
+`<data root>/State/secrets-import.json`; a normal rerun starts a new run ID and
+replays all steps against the stores' duplicate checks.
+
+`first-run` also accepts `settings-passwords` (show the actual capability-OFF
+Passwords copy reference), `settings-allow-passwords` (invoke the real guarded
+button action), `settings-skip-passwords`, `settings-cancel-passwords`, and
+`settings-inspect` (read the real wizard's state). The reply includes
+`secretsTitle`, `secretsBody`, `secretsButtons`, `secretsAllowVisible`,
+`secretsAllowEnabled`, `secretsConsented`, and `secretsUnfinishedMessage`.
+These do not override capability or grant consent.
+The reference step does not read any Arc secret file or Keychain item.
+
+Run the real App suite, after the lead clears any screen hold:
+
+```sh
+OPEN_E2E_NO_CRASH_PROBES=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only secrets-import
+```
+
+The suite starts the existing passwords fixture server on loopback with a
+temporary TLS certificate. Only its owned App maps `*.example.com` there.
+It checks I-1…I-9, actual fill gestures, the WebUI credential update service,
+wizard state, Profile deletion, and cookie request isolation after relaunch.
+I-5/I-6 SIGKILL recovery runs only on the M1, without `OPEN_E2E_NO_CRASH_PROBES`;
+the M5 command above marks them "M1-only by rule; not run". It also proves
+`OEErrorMockKeychain` (code 10) and zero writes without
+`--open-allow-mock-keychain-secrets`. Result rows contain counts and booleans
+only. It preserves shared defaults in `finally`.
+I-2 and I-4 use the native dropdown helpers from `tools/e2e/passwords.py`
+(copied from `s15/prompt-wiring` at `e9618bfd`). I-2 checks both local
+suggestions and rejects foreign Profile suggestions through accessibility;
+no field text enters the result. I-8 reads the shared wizard model's text and
+button state through `first-run settings-inspect`; it does not use OCR.
+I-9 deletes Work through the Settings confirmation after a completed import
+and while its batch is held after logins. The fixture command's optional
+`pauseProfile` names the source directory (`Default` by default or `Profile 1`).
+`import-secrets-state` also returns `activeBatch`, `cachedSinks`, and
+`retiredProfiles`. Each deletion row checks folder absence before quit and
+after relaunch, unchanged Default counts, and an unchanged counts ledger.
+
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
@@ -152,17 +229,42 @@ opening Settings, a store, or a native context. `profiles` contains the store's
 `storeReady` (`AdBlockStore.isProfileOpen`), enabled state and excluded domains,
 plus each existing regular and OTR context's
 `adBlockEnabled`, `listDirectorySet`, `listDirectoryMatchesProfile`,
-`excludedDomains`, and `adBlockStatus`. Directory checks are booleans; this query
+`excludedDomains`, `adBlockStatus`, and existing pages' native `blockedCount`
+and `identifier`. Directory checks are booleans; this query
 never returns paths or page URLs. Excluded domains are available only through
 automation; copyable debug info contains their count instead.
 
 `settings-adblock` uses the real Settings actions. It accepts `enabled`, or
-`host` with `excluded`, and `copyDebug: true` exercises Copy Debug Info while
-restoring the clipboard before returning `copiedDebugInfo`. The OpenEngine
-ad-block API is currently a placeholder: `adBlockStatus.engine` is `pending`
-and no requests are blocked until the Section 13 E2 engine binding lands.
-`OEBrowserContext.adBlockSupported` is false, so the store's engine callback stays
-nil and launch opens no Profile in the store or starts its update schedule.
+`host` with `excluded`. `list` with `listEnabled` awaits the real Settings list
+action; `resetLists: true` awaits Reset. The response includes list IDs and
+enabled states. `copyDebug: true` exercises Copy Debug Info while restoring
+the clipboard before returning `copiedDebugInfo`. With native support, these
+actions configure the production engine through the App adapter. The real
+request flow uses no support override.
+
+Debug automation also exposes `adblock-memory`. `snapshot` (the default)
+returns this process's task footprint, malloc zone counters, and store
+readiness/update state. The fixture-only actions `pause-updates`, `unload`,
+and `resume` require an existing Profile ID. They cancel its store update
+timer through close/reopen, detach its native list directory, or attach it
+through the production adapter. They do not change persisted preferences.
+The AD3 suite uses these actions outside/inside the defined attachment
+window, with background CDP memory-infra dumps for PartitionAlloc (PA).
+PA's malloc-zone counters return zero; they are not allocation totals.
+Other malloc zones are counted separately. Raw captures use
+`OPEN_E2E_RAW_DIR` (default `.re/`). The accepted allocator predicate and
+record-only whole-process pairs are in the plan's Step 8 acceptance errata.
+
+The real ad-block flow also checks the bundled resource pin and the active
+generation's `_resources` entry. It serves a synthetic redirect rule through
+the real downloader, verifies its stub with server and native-count witnesses,
+then relaunches from DAT and repeats the request. With all lists off, the
+verified generation has no engine or loaded resources and requests reach the
+server. Enabling one list advances the generation and restores blocking.
+
+For a placeholder engine, `OEBrowserContext.adBlockSupported` is false, so the
+store's engine callback stays nil and launch opens no Profile in the store or
+starts its update schedule. No requests are blocked in that build.
 Command-service Settings initialization also leaves the store unattached when
 the engine is unsupported; showing Settings attaches it on demand.
 Opening Settings → Advanced still opens the selected Profile (`ready: true`).
@@ -343,6 +445,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `peek-open`, `peek-expand`, `peek-close`, `peek-state` | `tab`, `url` for open | Production Peek entry, promotion, dismissal and host identity |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `credentials` | optional `profile`: UUID, name, or data directory | Counts only: `logins`, `blockedSites`, local `cards` and `addresses`, `cookies`, saving preferences, `canEnable*`, `supportsSecretsImport`, and `usesMockKeychain`. Uses the existing lazy profile-context factory; no credential values. |
+| `credentials-prefs` | optional `profile`: UUID, name, or data directory; optional strict Boolean `passwordSaving`, `cardsSaving`, `addressesSaving`, `cardReauthentication` | Reads or changes that profile's real `OEBrowserContext` preferences. Returns all four preferences and the engine's `canEnablePasswordSaving`, `canEnableCreditCardsSaving` (also named `canEnableCardsSaving`). The engine exposes no separate address capability. Rejects unknown arguments or profiles. No Open Settings switches are added; users change these preferences on Chromium's pages. |
 | `spaces` | — | Spaces with focus and counts |
 | `space` | `space` | Focus a Space |
 | `space-create` | `title`, `profile` | New Space; a new `profile` name creates an Open profile (`BrowserModel.createProfile`) with its own engine context in `Engine/<dir>` |
@@ -374,7 +477,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |
 | `ext-move` | `extension`, `index`, optional `engine` | Move only a currently pinned action. Negative automation indices return an error. Clamp to the normalized pinned list and skip a no-op, as a native drag does. `engine=true` directly probes the engine's invalid-index refusal instead. |
 | `ext-prompt` | `answer` (`accept`/`cancel`), `hold`, `handler`, `clear`, `twice` | Pending consent: type, extension/name, Open title/buttons (§3.11), `chromiumTitle`/`chromiumButtons`, permissions/details/lines, retained files/devices and weak page/browser ids. Holds by default; `hold=false` releases without answering. `handler=false` preserves Chromium's dialogs. `clear` cancels the queue; `twice` checks duplicate-answer safety. Also returns registry events. |
-| `save-prompt` | One of `mock: {kind, host}`, `answer: save\|never\|dismiss`, `state: true`, `withdraw: true` | Automation builds only. `mock` enqueues synthetic metadata for the focused page in the front browser window. Kinds: `password`, `passwordUpdate` (alias `update`), `card`, `address`, `addressUpdate`. State and events use the canonical names. Host limit: 4096 UTF-8 bytes, no control characters; unknown fields/kinds are refused. `answer` clicks the visible sheet's real NSButton; `withdraw` releases it unanswered. State: `visible`, `kind`, `title`, `body`, left-to-right `buttons`, `defaultButton`, `cancelButton`, native sheet `window`, `queueLength` (waiting requests, excludes visible sheet). The `key` command accepts this window number and `.` for Cmd-.. `events` drains `savePrompt` events `{kind, displayHost, answer}` with answer `save`, `never`, `dismiss`, or `ignored` on unanswered release, even after the final window closes. No credentials or storage are involved. |
+| `save-prompt` | One of `mock: {kind, host}`, `answer: save\|never\|dismiss`, `state: true`, `withdraw: true` | Automation builds only. `mock` enqueues synthetic metadata for the focused page in the key browser or Little Open window. Kinds: `password`, `passwordUpdate` (alias `update`), `card`, `address`, `addressUpdate`. State and events use the canonical names. Host limit: 4096 UTF-8 bytes, no control characters; unknown fields/kinds are refused. `answer` clicks the visible real or synthetic sheet's NSButton, including a Little Open sheet; `withdraw` releases it unanswered. State: `visible`, `kind`, `title`, `body`, left-to-right `buttons`, `defaultButton`, `cancelButton`, native sheet `window`, `queueLength` (waiting requests, excludes visible sheet). The `key` command accepts this window number and `.` for Cmd-.. `events` drains `savePrompt` events `{kind, displayHost, answer, window, content}` only for the requested owning window (or the front browser window by default). Completion metadata remains available after the final window closes. Real prompts first report `pending`, then `save`, `never`, `dismiss`, or `ignored` on unanswered release. Real-prompt events accept only example.com, its subdomains, localhost or 127.0.0.1; they never contain a username or field value. Synthetic prompts keep their existing answer-only events. `events` also reports dropdown-footer `autofillPage` events `{page: passwords\|paymentMethods\|addresses}`. |
 | `ext-manage` | `extension`, `action` (`enable`, `disable`, `uninstall`, `reload`, `install-webstore`, `install-crx`), `path` | Live per-profile management. Remove always prompts. Web Store completion is recorded in `ext-prompt.events`, leaving the socket free to answer consent. Local CRX is guarded by `--open-automation` and uses the real installer/prompt. |
 | `ext-commands` | optional `surface: little` | `{ready, context, commands}`. Each command has extension, name, summary, Cocoa key equivalent/modifier flags, global and action-command flags, normalized shortcut, `dropped` and conflicting `openCommandID`. Uppercase letters encode Shift in Cocoa's pair. |
 | `ext-shortcuts` | `action`: `state` (default), `menu` (+ optional `select` title), `record` (+ `id`, one ASCII `key`, `modifiers`), `reset` (+ `id`), `reset-all`, `close` | X-27 real Settings pane. First show `settings-pane pane=shortcuts`. Finds the visible native More shortcut actions menu and performs its actual enabled item; records/resets through `ShortcutsViewModel` → `KeyBindingStore` save → App callback. Returns rendered native `notices`, menu, status, binding count, real command title and window number. `close` closes that window. Suite must restore the binding file and shared defaults in `finally`. |
@@ -392,7 +495,7 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `ext-menu` | `extension`, `source` (`toolbar` default, `menu`), `select`, `keep`, `stale` | The action's context menu items (title, command, enabled, checked, separator, submenu); with `select`, run the item with that title and return `items` and `ran`. `keep` keeps this menu open (not cancelled); `select` with `stale` then runs the item on that kept menu and cancels the new one |
 | `ext-popup` | — | The open popup: `open`, its page, its extension, its source (`user`, `command`, `api`), and `staysOpenOnBlur` |
 | `activate` | — | Activate Open and make the focused window key (Chrome's "active window"), even with a popup panel in front; returns `key` |
-| `windows` | — | Open's windows: number, class, frame, key, first responder |
+| `windows` | `accessibilityRoles?:true` | Open's windows: number, class, frame, key, first responder, parent and level. With `accessibilityRoles`, also returns unique native accessibility roles, without labels or values. |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
 | `window-interrupt` | `kind`: `key`, `sheet`, `end-sheet` | Own window only: order out the browser for native key loss, begin a small native sheet, or end that sheet. Used after tagged down/drag events without mouse-up to exercise resize cancellation. No system input. |
@@ -413,13 +516,14 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `archive` | — | Recent real archive rows for the focused profile |
 | `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
-| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen |
+| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen`, `savePrompt` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus, and `openItems`, the titles of the menu Open would show, its own items included) or run one command (`run:<id>`, after the right click returns) or one of Open's own items by title (`run-open:<title>`), keep the window size on page fullscreen. `savePrompt=record\|save\|never\|dismiss\|hold` controls real engine sheets: `record` records and presses the cancel button; `hold` (default) waits; other values press the matching real NSButton after presentation. `never` leaves a sheet held if that kind has no Never button. Synthetic `mock` sheets keep their manual behavior. |
 | `dialog` | `accept`, `text` | Complete a held dialog; when visible, click its real OK/Cancel button |
 | `dialog-state` | — | Pending count, real sheet title/body/buttons, prompt text, suppression visibility, held/queued flags, and sheet window number |
 | `dialog-button` | `accept`, `text`, `suppress` | Click the visible sheet's real OK/Cancel button, optionally edit its prompt and suppression checkbox |
+| `child-dialog-button` | Optional `window` number, optional exact `label` | Inspect button labels in Open's frontmost visible native child window (not a sheet), or activate one uniquely matching button through its real accessibility press action. A supplied window number must match that frontmost child. Refuses missing, ambiguous, disabled, or non-actionable buttons. Used for HTTPS-First Continue after Chromium's input guard. Return has no default action on macOS and leaves the warning open; Escape selects Go back through `key`. Touches only this process's own windows. |
 | `permission-prompt` | optional `answer`: `allow`/`notnow` | State: visible, question, kinds, buttons, anchor frame in screen points, window, pending and completion counts. `presentation` is `popover` or `card`; `frame` gives the card rectangle in window coordinates. Pass a Little Open window number in `window` to inspect or answer its prompt. With an answer, call `performClick` on the real button |
 | `permission-decisions` | — | Profile data hook: index `ready` and persisted non-ask origin/kind/state rows |
-| `events` | optional Little Open `window` number | Drain that Little Open window's page log, or the front browser window's log otherwise: `change`, `load`, `loadError`, `open`, `dialog`, `dialogAnswer`, `permission`, `permissionAnswer`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no). Also drain the shared `savePrompt` completion log, which remains available after the final browser window closes. |
+| `events` | optional browser or Little Open `window` number | Drain that owning window's page log, or the front browser window's log otherwise: `change`, `load`, `loadError`, `open`, `dialog`, `dialogAnswer`, `permission`, `permissionAnswer`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no). Also drain that window's `savePrompt` and `autofillPage` metadata. A different or unknown window cannot consume it. Final close completions remain readable without a window argument after the last browser closes; an explicit window number also scopes closed-window completions. |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames`, `world` (`page` default or `open`) | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
@@ -449,7 +553,7 @@ before the queued creation. It returns `opened` and `after` state. Text is limit
 to 8,192 UTF-8 bytes; 8,193 bytes fail. Submit requires nonempty text. The submit
 hook waits for the real navigation intent before resuming creation. The close
 hook continues through the production cancellation guard. Normal creation uses
-neither hook. See [the deferred Browser report](little-open/deferred-browser.md).
+neither hook. `little-open-action {id:"…", action:"hide"}` orders out that owned window; `focus` resurfaces it. The save-sheet stress flow uses these native lifecycle actions without system input. See [the deferred Browser report](little-open/deferred-browser.md).
 
 ## Window pixels
 
@@ -470,7 +574,7 @@ neither hook. See [the deferred Browser report](little-open/deferred-browser.md)
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
-/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only passwords --style chrome    # M-* save sheets (mock metadata only)
+/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only passwords --style chrome    # M/MP/P/C and preference/crash rows
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions-p3 --style chrome --config Release # local signed CRX3, no network dependency
@@ -1341,5 +1445,100 @@ PR-7 stays blocked pending an approved engine-fix distribution hash. After the
 lead clears a prior crash dialog, resume remaining rows with
 `--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
 write a separate receipt so the primary crash evidence survives.
+
+## Passwords acceptance
+
+`--only passwords --style chrome` runs M rows (synthetic sheets), MP rows
+(manage pages), P-1 through P-24, C-1 through C-3, PW-SW1 through PW-SW3
+(saving preferences), the real-sheet policy rows, PW-HF1…PW-HF7 (HTTPS-First decisions and lifetime) and
+PW-KC1 (Keychain failure). The harness starts the fixture server, maps
+`*.example.com` to its loopback port, and passes `--use-mock-keychain` plus
+`--open-allow-mock-keychain-secrets`. P-22 relaunches without the latter switch.
+Each row records its load averages and checks App liveness and new Open crash
+reports. App death stops the suite. Strict runs (`--stop-on-app-death`) also stop on the first row failure or foreground interruption, with no retry.
+The harness restores all shared defaults it changes in `finally`.
+`--passwords-m-only` runs only the M rows and writes `results-passwords-m-debug.json` for Debug; it cannot be combined with `--passwords-rows`. It does not replace full engine/storage acceptance.
+
+PW-HF1 checks the engine's runtime `supportsSecretsImport` capability before
+it exercises the 08xx HTTPS-First fix. The distribution SHA-256 stays in the
+receipt as evidence. A rebuild does not require a hash allowlist. PW-KC1 stays
+BLOCKED by lead decision and becomes a user hand check; no synthetic failure
+hook is added, and this suite never accesses the real Keychain. P-24 checks
+that `/login` → 302 `/welcome` → immediate JavaScript `/dashboard` navigation
+keeps the real save sheet visible until answered. The final 0808 engine must pass virtual WebAuthn create/get and native Escape cancellation with its parent alive. A blocked row is never reported as PASS.
+
+Pass `--stop-on-app-death` to a regression suite to stop all remaining flows
+on the first failed row, unexpected App exit, new Open crash report, or lost
+foreground. Strict runs launch Open as a direct child and verify its OS parent
+PID. They do not retry. `--row-timeout` defaults to 120 seconds (maximum 120);
+`--suite-timeout` defaults to 600 seconds. A separate supervisor stops the
+owned worker process group at that cap, with at most 15 further seconds for
+forced cleanup. Row alarms bypass per-flow exception recovery. Optional
+`OPEN_E2E_TRACE_COMMANDS=1` logs command names and durations without arguments
+or replies. Historical F3 hang evidence remains in `.re/s15/f3/passwords-initial.log` in the F3 checkout. Current acceptance is in `docs/engine-spike/results-passwords.json`; the App PR pins its source and engine hash.
+The old HTTPS-First failure is `Open-2026-11-06-203144.ips` (2026-11-06 20:31:44
+-0700): SIGABRT in `tabs::TabDialogManager::CreateTabScopedDialog` through
+`AskBeforeHttpDialogController::ShowDialog`; see the Step 0 crash receipt.
+
+Other fixture suites can load `tools/e2e/passwords.py` with `runpy.run_path`.
+`show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5)`
+clicks a real field and finds the owning native child listbox, including a reused popup. It preserves Chromium's 500 ms acceptance guard before input.
+`fill_from_dropdown(app, tab, wait_until, selector='#username', down=1)` selects
+a suggestion with real App Down/Return keys. The caller compares field values
+in the page and reports only equality, never the values.
+PR #264 repairs the HTTPS-First host and teardown failures with 0806/0809/0810. The old crashing distributions are never replayed. `--engine-sha256 HASH` checks the Vendor framework and embedded engine code before launch. Export `OPEN_E2E_NO_CRASH_PROBES=1` on M5; C-2 and feature crash recovery remain M1-only by rule. The loopback card fixture uses per-run TLS/SPKI, never a system trust change. PW-REAUTH-default/request verify mandatory reauthentication stays on for users; only the disposable fill row disables and restores it. Selected probe runs keep separate receipts so historical crash evidence survives.
+
+
+### Custom update UI
+
+`updater-state` includes `sessionInProgress` and a `ui` object. It reports the real driver phase,
+window numbers, progress, byte counts, notes text, banner kind, and last toast.
+`updater-menu` validates the real menu item and returns its title, badge,
+enabled state, and `canCheck` in the same main-actor turn.
+`updater-images` returns the current process's dyld image list. It does not
+attach a debugger. Sparkle's eager WebKit link can appear in that list.
+`updater-view-tree` walks the App's real window/view trees. It reports WebKit
+view counts and the actual notes view class. A9 requires zero WebKit views and
+an NSTextView while the updater shows notes. `bannerStyles` reads each visible
+update banner's title, subtitle, and subtitle sRGB color as 8-bit RGBA values.
+The loopback suite checks these colors after each light/dark snapshot.
+
+`updater-banner-width width=164...400` changes the real model sidebar width.
+It lets the loopback suite check both normal and narrow banner copy and layout.
+
+`updater-background-check` asks the real Sparkle updater to check its feed in
+the background. It is available only in automation builds. It does not inject
+appcast items or driver callbacks.
+
+`updater-act action=primary|cancel-download|later|close|banner|dismiss-banner|notes-link|alert-first|alert-second`
+uses the current update UI's actions. `action=cleanup` closes update surfaces.
+`action=settings-help|settings-check` invokes General's actual view-model actions.
+`updater-modal-alert action=arm button=0|1` observes the next native update alert
+and presses its actual button from the modal run loop. Before answering, it
+records the bounded AX text, both buttons, modal/activation state, browser count,
+and real Sparkle cycle state. `action=state` reads that observation; `action=disarm`
+removes the observer. It creates no alert and injects no updater callback.
+The updater suite's `--windowless-only` mode checks real failing loopback menu
+checks after every browser window closes. It checks OK acknowledgement, the
+manual-download new-window path, and ready-update restart cancellation.
+The loopback suite owns its app copies, signing fixtures, preferences, and port.
+It restores the shared defaults domain in `finally` and checks process/window
+cleanup even when a check fails.
+
+### Setup steps (`onboarding`)
+
+`onboarding action=state` includes `screen` (`intro`, `name`, `import`, `favorites`, `theme`, `blocker`, `defaultBrowser`, `ready`, `handoff`, `done`), the name, Favorite indexes, theme, blocker, default choice/outcome, card pattern, Reduce Motion, confetti, native control labels and dim state. Invalid stages and unknown arguments fail.
+
+The `card` object reports its relative luminance, text-color choice and converted frame, plus the native circle-button frames and labels. `confettiBehindCard` and `confettiLifetime` record the emitter's actual layer order and cell lifetime when created. The setup suite checks saved yellow/blue card text pixels through the real Save panel and uses the opposite-color export as each negative proof. It removes any older export before saving. Reduce Motion captures use separate names, so they do not replace the ordinary Ready light/dark pair.
+
+In automation builds, `--reduce-motion` and `OPEN_E2E_REDUCE_MOTION=1` apply to the intro, setup and Welcome page. The onboarding suite follows `--reduce-motion` through all three surfaces and checks that Welcome has no animation or pending playlist completion. Normal builds use the system preference.
+
+Actions: `next`, `back`, `skip`, `set-name name=…` (at most 40 characters), `toggle-favorite index=0…11`, `set-theme preset=…`, `set-blocker on=true|false`, `choose-default yes=true|false`, `shuffle-card`, and `get-started` on Ready. Intro actions remain `skip-intro`, `get-started` (Continue), and `replay-intro`.
+
+With an automation socket, default-browser requests use `OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed` (default `declined`) and never open the system prompt. `OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS` delays that stub's completion by at most 5000 ms, so the suite can prove that setup waits for a result before its 1.2-second outcome display.
+
+Automation-only screenshot/export hooks: `set-appearance appearance=light|dark` changes only the onboarding window; `save-card` opens its real save panel, `card-cancel` cancels it, and `card-save path=/absolute/file.png` supplies the native panel service response to the production completion. No desktop input is used. Tests use temporary roots, synthetic `--arc-dir`, and `--intro-sound=silent|off`.
+
+The `first-run` API remains the importer verification seam. Its compatibility actions walk setup's real navigation; the `screen` field names the new screen while `step` names Section 7's import state. No legacy first-run window is shown.
 
 Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.

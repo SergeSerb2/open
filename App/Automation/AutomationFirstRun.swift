@@ -42,6 +42,20 @@ extension AutomationController {
             wizard.plan.folders = false; wizard.plan.archive = false; wizard.plan.searchSettings = false
           }
           if let on = args["history"] as? Bool { wizard.plan.history = on }
+        case "settings-passwords":
+          // Copy reference on a capability-OFF build. It uses the real view
+          // and real button guards and cannot grant consent or enable import.
+          guard !wizard.busy, !wizard.canImportPasswordsAndCookies else { throw Failure(message: "Passwords copy reference requires capability OFF") }
+          wizard.step = .consent
+        case "settings-allow-passwords":
+          guard !wizard.canImportPasswordsAndCookies else { throw Failure(message: "automation cannot grant real secrets consent") }
+          await wizard.allowAndImportSecrets()
+        case "settings-skip-passwords":
+          await wizard.skipSecrets()
+        case "settings-cancel-passwords":
+          guard !wizard.busy else { throw Failure(message: "wizard is busy") }
+          wizard.finish()
+        case "settings-inspect": break
         case "settings-run":
           guard firstRunActionTask == nil, wizard.step == .review else { throw Failure(message: "wizard is not ready") }
           firstRunActionTask = Task { @MainActor [weak self] in
@@ -67,21 +81,22 @@ extension AutomationController {
           if let on = args["history"] as? Bool { flow.includeHistory = on }
           if let on = args["secrets"] as? Bool { flow.includeSecrets = on }
         case "import":
-          guard flow.step == .welcome else { throw Failure(message: "not on Welcome") }; flow.showImport()
+          guard let steps = app.onboardingWindowController?.steps, steps.step == .name else { throw Failure(message: "not on Name") }
+          if flow.probe == nil { await flow.refreshProbe() }; steps.next()
         case "fresh":
-          guard [.welcome, .importChoices, .failed].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; flow.startFresh()
+          guard [.welcome, .importChoices, .failed, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Start Fresh is unavailable") }; if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() }
         case "back":
           guard [.importChoices, .failed].contains(flow.step) else { throw Failure(message: "Back is unavailable") }
-          flow.step = flow.step == .importChoices ? .welcome : .importChoices
+          if let steps = app.onboardingWindowController?.steps { steps.back() }
         case "notnow":
           guard [.importChoices, .defaultBrowser].contains(flow.step) else { throw Failure(message: "Not Now is unavailable") }
-          if flow.step == .importChoices { flow.skipImport() } else { flow.finish() }
-        case "finish": guard flow.step == .defaultBrowser else { throw Failure(message: "not on default-browser step") }; flow.finish()
+          if let steps = app.onboardingWindowController?.steps { if steps.step == .importData { await steps.skipToDefault() } else { steps.finishFromDefault() } }
+        case "finish": guard flow.step == .defaultBrowser else { throw Failure(message: "not on default-browser step") }; app.onboardingWindowController?.steps?.finishFromDefault()
         case "continue", "retry":
           if flow.step == .report {
-            if flow.errorText == FirstRunViewModel.importedSaveError { app.finishFirstRun(imported: true) }
+            if flow.errorText == FirstRunViewModel.importedSaveError { if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault(); steps.finishFromDefault() } }
             else if action == "retry", flow.errorText != nil, !flow.wizard.hasImportedData { flow.showImport() }
-            else { flow.enterDefaultBrowser() }
+            else if let steps = app.onboardingWindowController?.steps { await steps.skipToDefault() }
           } else {
             guard firstRunActionTask == nil, [.importChoices, .failed].contains(flow.step) else { throw Failure(message: "import is not ready") }
             firstRunActionTask = Task { @MainActor [weak self] in
@@ -98,6 +113,7 @@ extension AutomationController {
     let current = app.firstRunWindowController?.model
     var state: [String: Any] = ["active": app.firstRunWindowController?.window?.isVisible == true,
       "step": current?.step.rawValue ?? app.lastFirstRunStep,
+      "screen": app.onboardingWindowController?.steps?.step.rawValue ?? "done",
       "importInProgress": app.importInProgress,
       "historyInProgress": app.importRunner.historyInProgress,
       "historyProcessed": app.importRunner.historyProcessed,
@@ -149,6 +165,17 @@ extension AutomationController {
         state["settingsStep"] = wizard.step.rawValue
         state["settingsOutcome"] = wizard.outcome?.counts ?? [:]
         state["settingsError"] = wizard.outcome?.errorText ?? ""
+        state["secretsEnabled"] = wizard.canImportPasswordsAndCookies
+        let copy = wizard.passwordsCopy
+        state["secretsTitle"] = copy.title
+        state["secretsBody"] = copy.body
+        state["secretsButtons"] = wizard.step == .consent
+          ? (wizard.canImportPasswordsAndCookies ? [PasswordsImportCopy.skipButton, PasswordsImportCopy.allowButton, "Cancel"] : [PasswordsImportCopy.skipButton, "Cancel"]) : []
+        state["secretsAllowVisible"] = wizard.step == .consent && wizard.canImportPasswordsAndCookies
+        state["secretsAllowEnabled"] = wizard.step == .consent && wizard.canImportPasswordsAndCookies && !wizard.consentWasDecided && !wizard.busy
+        state["secretsConsented"] = wizard.plan.secretsConsented
+        state["secretsReportLines"] = wizard.secretsReportLines
+        state["secretsUnfinishedMessage"] = wizard.unfinishedSecretsImportMessage ?? ""
         state["settingsFailures"] = wizard.outcome?.failures ?? [:]
         state["settingsReportValues"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.reportCategories.map { ($0, wizard.reportValue($0)) })
       }

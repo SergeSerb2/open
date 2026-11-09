@@ -1,15 +1,48 @@
 import OpenSettings
+import Foundation
 
 @MainActor
 final class AppFirstRunActions: FirstRunActions {
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
-  var canImportPasswordsAndCookies: Bool { false }
+  var canImportPasswordsAndCookies: Bool { app.importRunner.canImportPasswordsAndCookies }
+  var hasUnfinishedSecretsImport: Bool { app.importRunner.hasUnfinishedSecretsImport }
   func runImport(plan: ImportPlan) async -> ImportOutcome { await app.importRunner.run(plan: plan, firstRun: true) }
   func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult {
     await app.importRunner.installExtension(candidate, window: app.firstRunWindowController?.window)
   }
-  func setAsDefaultBrowser() -> String? { app.settingsPresenter.setAsDefaultBrowser() }
-  func isDefaultBrowser() -> Bool { app.settingsPresenter.isDefaultBrowser() }
+  #if OPEN_AUTOMATION
+  private var stubDefault = false
+  private var usesAutomationDefaultBrowser: Bool {
+    app.options.automationSocket != nil || ProcessInfo.processInfo.environment["OPEN_E2E_OWNER_PID"] != nil
+  }
+  #endif
+  func setAsDefaultBrowser() -> String? {
+    #if OPEN_AUTOMATION
+    if usesAutomationDefaultBrowser {
+      let result = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] ?? "declined"
+      stubDefault = result == "success" || result == "already"
+      return result == "failed" ? "Automation default-browser failure" : nil
+    }
+    #endif
+    return app.settingsPresenter.setAsDefaultBrowser()
+  }
+  func waitForDefaultBrowserRequest() async {
+    #if OPEN_AUTOMATION
+    if usesAutomationDefaultBrowser {
+      let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER_DELAY_MS"] ?? "0"
+      let delay = min(5_000, max(0, Int(raw) ?? 0))
+      try? await Task.sleep(for: .milliseconds(delay))
+      return
+    }
+    #endif
+    await app.settingsPresenter.defaultBrowserRequest?.value
+  }
+  func isDefaultBrowser() -> Bool {
+    #if OPEN_AUTOMATION
+    if usesAutomationDefaultBrowser { return stubDefault || ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DEFAULT_BROWSER"] == "already" }
+    #endif
+    return app.settingsPresenter.isDefaultBrowser()
+  }
   func finishFirstRun(imported: Bool) { app.finishFirstRun(imported: imported) }
 }
