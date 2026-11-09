@@ -30,13 +30,13 @@ extension AppDelegate {
       guard onboardingStartObserver == nil else { return }
       let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { [weak self] _, _ in
         MainActor.assumeIsolated {
-          guard let self, !terminationRequested else { return }
-          onboardingStartObserver = nil; onboardingEngineSettled = true
+          guard let self, !self.terminationRequested else { return }
+          self.onboardingStartObserver = nil; self.onboardingEngineSettled = true
           #if OPEN_AUTOMATION
-          onboardingStartup["engineSettledHostTime"] = CACurrentMediaTime()
-          onboardingStartup["windowsBeforeEngineSettled"] = NSApp.windows.filter { $0.isVisible }.count
+          self.onboardingStartup["engineSettledHostTime"] = CACurrentMediaTime()
+          self.onboardingStartup["windowsBeforeEngineSettled"] = NSApp.windows.filter { $0.isVisible }.count
           #endif
-          showOnboarding(replay: replay)
+          self.showOnboarding(replay: replay)
         }
       }
       onboardingStartObserver = observer
