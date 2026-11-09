@@ -270,6 +270,10 @@ class Open:
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
+        self.world_audit_dir = env.get("OPEN_E2E_WORLD_AUDIT_DIR")
+        if self.world_audit_dir:
+            extra_args = list(extra_args) + ["--verbose", "--v=0",
+                "--vmodule=isolated_world_manager=1,script_injection=1,open_adblock_renderer_agent=1"]
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
@@ -530,6 +534,17 @@ class Open:
                 self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
             self.log.close()
             self.closed = True
+            if self.world_audit_dir:
+                # Save every launch before a fresh factory clears its data root.
+                audit = Path(self.world_audit_dir)
+                audit.mkdir(parents=True, exist_ok=True)
+                engine_log = Path(self.user_data) / "State" / "engine.log"
+                if engine_log.is_file():
+                    target = audit / ("engine-%s-%s.log" % (self.pid, time.time_ns()))
+                    shutil.copyfile(engine_log, target)
+                    self.quit_report["world_audit_log"] = str(target)
+                else:
+                    self.quit_report.update(ok=False, world_audit_error="engine.log is missing")
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
@@ -719,6 +734,9 @@ def extension_checks(app, style, results):
     results["content_scripts"] = {"ok": bool(dr["mode"]) and len(worlds) >= 2, "isolated_worlds": worlds,
                                   "darkreader": dr}
     results["content_scripts"]["screenshot"] = shot(app, "%s-content-script-darkreader.png" % style)
+    if os.environ.get('OPEN_E2E_WORLD_AUDIT_DIR'):
+        import extension_worlds
+        extension_worlds.run(app, results, wait_until, new_tab, _static_server, EXT['darkreader'])
 
     # declarativeNetRequest (uBlock Origin Lite). Control: the features run
     # disables native blocking and loads the same URLs without extensions.

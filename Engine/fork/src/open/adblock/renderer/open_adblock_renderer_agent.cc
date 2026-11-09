@@ -209,6 +209,11 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
 void OpenAdBlockRendererAgent::DidCreateScriptContext(
     v8::Local<v8::Context> context,
     int32_t world_id) {
+#if !defined(OFFICIAL_BUILD)
+  VLOG(1) << "OpenScriptWorld: context-created world=" << world_id
+          << " frame="
+          << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString();
+#endif
   if (world_id == kOpenAdBlockIsolatedWorldId) {
     InstallBinding(context, "callback");
   }

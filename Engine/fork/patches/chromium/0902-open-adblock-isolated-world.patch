@@ -17,3 +17,53 @@ diff --git a/chrome/common/chrome_isolated_world_ids.h b/chrome/common/chrome_is
  };
  // LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/common/ChromeIsolatedWorldIds.java)
  #endif  // CHROME_COMMON_CHROME_ISOLATED_WORLD_IDS_H_
+diff --git a/extensions/renderer/isolated_world_manager.cc b/extensions/renderer/isolated_world_manager.cc
+--- a/extensions/renderer/isolated_world_manager.cc
++++ b/extensions/renderer/isolated_world_manager.cc
+@@ -9,6 +9,7 @@
+ #include <string>
+
+ #include "base/check.h"
++#include "base/logging.h"
+ #include "base/no_destructor.h"
+ #include "extensions/common/mojom/execution_world.mojom.h"
+ #include "extensions/renderer/extensions_renderer_client.h"
+@@ -160,6 +161,11 @@
+     world_info->name = injection_host.name();
+     world_info->world_id = world_id;
+     world_info->blink_world_id = blink_world_id;
++#if !defined(OFFICIAL_BUILD)
++    VLOG(1) << "OpenScriptWorld: world-created world=" << blink_world_id
++            << " execution=" << static_cast<int>(execution_world)
++            << " host_type=" << static_cast<int>(injection_host.id().type);
++#endif
+   }
+
+   // Initialize CSP and messaging for the new world. First, check if we have a
+diff --git a/extensions/renderer/script_injection.cc b/extensions/renderer/script_injection.cc
+--- a/extensions/renderer/script_injection.cc
++++ b/extensions/renderer/script_injection.cc
+@@ -12,6 +12,7 @@
+ #include "base/feature_list.h"
+ #include "base/functional/bind.h"
+ #include "base/lazy_instance.h"
++#include "base/logging.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/time/time.h"
+@@ -360,6 +361,15 @@
+                       ChromeTrackEvent::kChromeExtensionScriptInjection,
+                       ScriptInjectionForTracing(execution_world, world_id));
+
++#if !defined(OFFICIAL_BUILD)
++  VLOG(1) << "OpenScriptWorld: script-injection world=" << blink_world_id
++          << " execution=" << static_cast<int>(execution_world)
++          << " host_type=" << static_cast<int>(injection_host_->id().type)
++          << " frame="
++          << render_frame_->GetWebFrame()->GetLocalFrameToken().ToString()
++          << " sources=" << sources.size();
++#endif
++
+   render_frame_->GetWebFrame()->RequestExecuteScript(
+       blink_world_id, sources, injector_->IsUserGesture(), execution_option,
+       blink::mojom::LoadEventBlockingOption::kBlock,

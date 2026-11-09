@@ -458,3 +458,5 @@ live Open Default; named Profiles still match stable import IDs only.
   UTF-8 bytes. A page beyond those limits can miss generic hiding. Review
   these work bounds against real-page traces without raising the 64-sheet
   cap or bypassing sanitizer rules.
+
+- Section 13 E5 merged candidate — `s13/step5-pr` combines Step 5 and the full-size parser switches with main #271. Rebuild and merged runtime acceptance remain pending after 2026-11-09 01:15 local. Extension boundary 8 requires all Section 6 extension suites, real CWS install, page/iframe injection, and numeric world logs proving no extension allocation or injection uses private world 7. Main's strict AD3 attachment gate is retained; earlier E4 whole-process misses remain historical, not a bypass for the new run. Evidence: `.re/s13/e5/PR-BODY.md`, plan "Step 5 as built".

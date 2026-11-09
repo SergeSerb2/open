@@ -5106,6 +5106,42 @@ network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
 
 ### Step 5 as built (2026-11-08, build and headless checkpoint)
 
+**Merged PR candidate: `s13/step5-pr` (PR: pending lead creation).** E5
+merged the complete cosmetics and parser-corpus stack (`cf16a133`) with
+main `518471aa` in `ac15c11a`. Main's strict AD3 attachment-allocation
+measurement and record-only whole-process pairs remain in the harness.
+The merged candidate's build and runtime checks are pending until the
+01:15 local machine gate on 2026-11-09. Earlier receipts below remain
+bound to their stated source and binary; they do not verify this merge.
+
+Patch 0902 also adds non-official verbose numeric traces at extension
+world allocation and the actual `ScriptInjection::InjectJs` execution
+request. The renderer agent records context creation. These traces log
+world, execution kind, frame token and source count, with no page URL,
+script text or extension identifier. `OPEN_E2E_WORLD_AUDIT_DIR` enables
+those verbose scopes in the App harness and saves each launch's engine
+log before its data root can be replaced. The `extensions` run then
+exercises real Dark Reader content scripts in a local page and iframe,
+checks native cosmetic hiding in both, and checks that extension contexts
+have no ad-block binding and the ad-block contexts have no extension API.
+All created extension world IDs and injection targets must differ from
+private world 7; isolated extension worlds must start at 8 or above.
+
+The merged acceptance scope is CEF 20/20 (including both 30,000-element
+cases), install-before-execute, headless load/empty-root, complete App
+`adblock` with AD3 and cosmetics, `extensions`, `actions`, `extensions-p3`,
+`extensions-e2`, full `extensions-ui`, `features`, `page`, settings preview,
+the full M5 gate, and one C-G1/C-G2 run each. The `extensions` scope includes
+the real Chrome Web Store install; `extensions-p3` also checks local signed
+CRX installation and refusal. Foreground interruptions remain infrastructure
+and can retry at most three times per suite. Results and exact commands
+belong in `.re/s13/e5/PR-BODY.md` and `CHECKPOINT.md`.
+
+The parser self-test and Rust shim are byte-identical to `cf16a133`, so
+its accepted full-size parser-corpus receipts remain applicable to that
+source. E5 changes no parser policy, corpus size, license or dependency.
+
+
 Branch `s13/step5-cosmetics` started at Step 4 `dc7b985a` and merged
 Step 4 `f06011e7` before its first build. The lead assigned
 `~/Developer/open-engine-s13b` at 14:00. Engine apply and GN generation

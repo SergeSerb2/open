@@ -61,4 +61,4 @@ paths: chrome/browser/ui/tabs/tab_strip_model.cc
 paths: chrome/common/chrome_isolated_world_ids.h
 
 # 0902-open-adblock-isolated-world.patch
-paths: chrome/common/chrome_isolated_world_ids.h
+paths: chrome/common/chrome_isolated_world_ids.h extensions/renderer/isolated_world_manager.cc extensions/renderer/script_injection.cc
