@@ -271,6 +271,8 @@ class Open:
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
         self.world_audit_dir = env.get("OPEN_E2E_WORLD_AUDIT_DIR")
+        self.world_audit_stderr = next((arg.split("=", 1)[1] for arg in reversed(extra_args)
+                                       if arg.startswith("--enable-logging=")), None) == "stderr"
         if self.world_audit_dir:
             modules = [arg.split("=", 1)[1] for arg in extra_args if arg.startswith("--vmodule=")]
             modules.append("isolated_world_manager=1,script_injection=1,open_adblock_renderer_agent=1")
@@ -546,7 +548,7 @@ class Open:
                 engine_log = Path(self.user_data) / "State" / "engine.log"
                 # Some real suites select --enable-logging=stderr. Preserve
                 # that launch's output rather than the shared aggregate log.
-                if not engine_log.is_file():
+                if self.world_audit_stderr or not engine_log.is_file():
                     engine_log = Path(self.launch_log_path)
                 if engine_log.is_file():
                     target = audit / ("engine-%s-%s.log" % (self.pid, time.time_ns()))
