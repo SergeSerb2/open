@@ -163,6 +163,10 @@ extension AutomationController {
       if action?.hasPrefix("settings-") == true || app.importInProgress || app.importRunner.historyInProgress || app.importRunner.lastOutcome != nil {
         let wizard = app.settingsPresenter.settings.importWizard
         state["settingsStep"] = wizard.step.rawValue
+        state["settingsBusy"] = wizard.busy
+        state["settingsReadable"] = wizard.readable
+        state["settingsCanContinue"] = wizard.canContinue
+        state["settingsCounts"] = wizard.counts
         state["settingsOutcome"] = wizard.outcome?.counts ?? [:]
         state["settingsError"] = wizard.outcome?.errorText ?? ""
         state["secretsEnabled"] = wizard.canImportPasswordsAndCookies

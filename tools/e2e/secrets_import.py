@@ -15,6 +15,7 @@ import signal
 import ssl
 import subprocess
 import threading
+import time
 
 
 @contextlib.contextmanager
@@ -62,8 +63,18 @@ def run(factory, results, tmp, h):
             'password manager unavailable', 'fixture checkpoint not reached',
             'Change Profile warning missing', 'Profile reassignment did not finish',
             'Profile deletion sheet missing',
+            'fixture import wizard not ready',
+            'fixture import wizard counts differ',
+            'fixture import wizard Next did not advance',
+            'fixture import wizard sheet missing',
+        }
+        safe_runtime_errors = {
+            'first-run: Passwords copy reference requires capability OFF': 'wizard copy reference not ready',
+            'first-run: wizard is busy': 'wizard still busy',
         }
         detail = ': ' + str(error) if isinstance(error, AssertionError) and str(error) in safe_assertions else ''
+        if isinstance(error, RuntimeError) and str(error) in safe_runtime_errors:
+            detail = ': ' + safe_runtime_errors[str(error)]
         raise RuntimeError('synthetic secrets suite stopped: ' + type(error).__name__ + detail) from None
 
 
@@ -339,9 +350,57 @@ def _run(factory, results, tmp, h):
 
             # On mock-key builds the real consent button is absent. Even a
             # direct adapter action cannot mint a token or reach the Keychain.
+            wizard_counts = {
+                'Spaces': 2, 'Pinned and Today tabs': 6, 'Favorites': 1, 'Folders': 1,
+                'Skipped easels': 1, 'Skipped notes': 0, 'Skipped unknown': 0,
+                'Welcome items': 1, 'Profiles': 1, 'Search settings': 1,
+                'Routing rules': 1, 'Boosts': 0, 'Archive': 2, 'History': 3,
+                'Passwords and cookies': 3,
+            }
             for allow in (False, True):
                 launch(fresh=True, allow=allow)
-                app.call('first-run', action='settings-import', directory=str(source))
+                # One fixed bound includes choose() itself and every state
+                # request; the receipt measures start-of-choose through idle.
+                ready_started = time.monotonic()
+                ready_deadline = ready_started + 10
+                chosen = app.call('first-run', action='settings-import', directory=str(source), timeout=10)
+                choose_returned = time.monotonic()
+                # Presenting the sheet also starts its SwiftUI count task.
+                # It can supersede choose()'s request, so that await can return
+                # while the newer count is still active. Follow the real Next
+                # button's readable/idle gate before entering the copy reference.
+                def wizard_ready():
+                    remaining = ready_deadline - time.monotonic()
+                    if remaining <= 0:
+                        return None
+                    state = app.call('first-run', action='settings-inspect', timeout=remaining)
+                    return state if state['settingsReadable'] and not state['settingsBusy'] else None
+                remaining = ready_deadline - time.monotonic()
+                assert remaining > 0, 'fixture import wizard not ready'
+                ready = h.wait_until(wizard_ready, timeout=remaining, step=.05)
+                idle_observed = time.monotonic()
+                ready_elapsed = idle_observed - ready_started
+                assert ready and ready_elapsed <= 10, 'fixture import wizard not ready'
+                assert ready['settingsCounts'] == wizard_counts, 'fixture import wizard counts differ'
+                # Prove a user can continue once counting settles, through the
+                # real App key path and SwiftUI's default Next button.
+                # sendKey defaults to the browser window. Identify the actual
+                # Import sheet after its SwiftUI layout before sending Return.
+                sheets = app.call('windows', accessibility=True)
+                sheet = next((w for w in sheets if w.get('visible') and w.get('sheet')
+                              and 'Import from Arc' in w.get('text', [])), None)
+                assert sheet, 'fixture import wizard sheet missing'
+                app.call('key', key='return', route='app', window=sheet['number'])
+                advanced = bool(h.wait_until(lambda: app.call('first-run', action='settings-inspect')['settingsStep'] == 'Review',
+                                            timeout=5, step=.05))
+                assert advanced, 'fixture import wizard Next did not advance'
+                row('I-8-readiness-' + ('allow-switch' if allow else 'no-switch'),
+                    ready['settingsCanContinue'] and advanced,
+                    busyAfterChoose=chosen['settingsBusy'], readableAfterChoose=chosen['settingsReadable'],
+                    readinessUpperBoundSeconds=10, chooseToIdleSeconds=round(ready_elapsed, 3),
+                    chooseCallSeconds=round(choose_returned - ready_started, 3),
+                    waitAfterChooseSeconds=round(idle_observed - choose_returned, 3),
+                    counts=ready['settingsCounts'], nextThroughAppKey=True)
                 app.call('first-run', action='settings-passwords')
                 app.call('first-run', action='settings-inspect')
                 app.call('first-run', action='settings-allow-passwords')
@@ -360,7 +419,9 @@ def _run(factory, results, tmp, h):
                     and not state['secretsConsented'] and skipped_without_consent and zero_consent(),
                     consentCalls=app.call('import-secrets-state')['consentAdapterCalls'],
                     keychainProbeCalls=app.call('import-secrets-state')['keychainProbeCalls'],
-                    keychainCalls=app.call('import-secrets-state')['keychainReadCalls'])
+                    keychainCalls=app.call('import-secrets-state')['keychainReadCalls'],
+                    busyAfterChoose=chosen['settingsBusy'], readableAfterChoose=chosen['settingsReadable'],
+                    readyBeforeReference=True)
                 app.quit()
         finally:
             if app is not None:
