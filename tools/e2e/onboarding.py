@@ -90,8 +90,6 @@ def run(factory, results, tmp, h):
         running = dict(scene=measured.get('currentSceneLayers', {}),
             dim=measured.get('currentDimLayers', {}), musicStarted=measured.get('sound', {}).get('decision')=='played')
         gate('static_before_t0', static_pred, static, running)
-        results['static_room_duration'] = dict(ok=isinstance(measured.get('animationDelayMS'), (int,float))
-            and 0 <= measured['animationDelayMS'] <= 400, ms=measured.get('animationDelayMS'), load=os.getloadavg())
         sound = measured.get('sound', {})
         sync = abs(sound.get('audioStartHostTime', 0)-measured['animationStartHostTime'])*1000
         results['animated_start_audio_sync'] = dict(ok=sound.get('decision')=='played' and sync <= 20,
@@ -102,6 +100,8 @@ def run(factory, results, tmp, h):
             and timing['prepareStart'] <= timing['workerReady'] <= timing['decision'] <= timing['t0']
             and timing['workerReady'] <= timing['startRequest']+.3
             and timing['t0'] == measured['animationStartHostTime'], timestamps=timing, load=os.getloadavg())
+        results['static_room_duration'] = dict(ok=isinstance(measured.get('animationDelayMS'), (int,float))
+            and 0 <= measured['animationDelayMS'] <= 400, ms=measured.get('animationDelayMS'), load=os.getloadavg())
         if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
         # Run every existing functional predicate on a separate unmeasured
         # launch. Its early keys, phase polling and PNGs cannot perturb frames.
