@@ -84,7 +84,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func stop() { if !closed { content.stopLoading() } }
   func goBack() { if !closed { content.goBack() } }
   func goForward() { if !closed { content.goForward() } }
-  func focus() { if !closed { content.focusPage() } }
+  func focus() { if !closed { content.focusPage(); owner?.savePromptFocusChanged() } }
   func rebind(tabID: ItemID, spaceID: SpaceID?) {
     generation += 1; self.tabID = tabID; self.spaceID = spaceID
     refreshPageBackground(); observeMute()

@@ -35,13 +35,18 @@
     var importExtensionTask: Task<Void, Never>?
     var profileIndicatorMenuTitles: [String] = []
     var savePromptEvents: [[String: Any]] = []
+    static weak var savePromptOwner: AutomationController?
+    var savePromptPolicy = "hold"
+    var realSavePromptAnswers = NSMapTable<OESavePrompt, NSString>.weakToStrongObjects()
+    var realSavePromptFactories = NSMapTable<OESavePrompt, EngineWebContentHostFactory>.weakToWeakObjects()
+    var realSavePromptPages = NSMapTable<OESavePrompt, OEWebContent>.weakToWeakObjects()
     // troubleshooting-setup recorder (page-platform Troubleshooting checks).
     private var revealedURLs: [URL] = []
     var profileProofWindows: [String: ProfileEngineProofWindow] = [:]
     var profileProofContexts: [String: OEBrowserContext] = [:]
     var recordedOpenWorldCallbacks: [[String: Any]] = []
 
-    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts() }
+    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -97,17 +102,26 @@
       extensionAutomation.registerContexts()
       // App lifecycle commands remain available after the final window closes.
       switch cmd {
+      case "child-dialog-button": return try await childDialogButton(a)
       case "updater-state": return app.updater?.automationState ?? ["created": false, "started": false]
       case "profile-engine": return try await runProfileEngineCommand(a)
       case "save-prompt": return try await savePrompt(a)
       case "events":
-        // Little Open owns its own page events, even while a main window exists.
-        let owner = (a["window"] as? Int).flatMap { number in
-          app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
-        } ?? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
-        let pageEvents = owner?.drainEvents() ?? []
-        let events = savePromptEvents; savePromptEvents.removeAll()
-        return pageEvents + events
+        // Keep Section 11's Little Open routing. Every event, including password
+        // offers and Manage links, is recorded by the factory that owns its page.
+        let owner: EngineWebContentHostFactory?
+        if let number = a["window"] as? Int {
+          owner = app.hostFactories.values.first { $0.window?.windowNumber == number }
+            ?? app.littleOpenHosts.values.first { $0.view.window?.windowNumber == number }?.owner
+        } else {
+          owner = app.frontWindowController.flatMap { app.hostFactories[$0.windowID] }
+        }
+        let number = a["window"] as? Int ?? owner?.window?.windowNumber
+        let completions = savePromptEvents.filter { number == nil || $0["window"] as? Int == number }
+        savePromptEvents.removeAll { number == nil || $0["window"] as? Int == number }
+        return (owner?.drainEvents() ?? []) + completions
+      case "credentials": return try await credentialCounts(a)
+      case "credentials-prefs": return try credentialPreferences(a)
       case "engine-contexts":
         guard app.engineReady else { return [] as [String] }
         return Set((OEEngine.shared.contexts + [OEEngine.shared.defaultContext]).map(\.identifier)).sorted()
@@ -134,6 +148,7 @@
         return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
           return row
         }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
@@ -956,6 +971,7 @@
         return NSApp.windows.filter { $0.identifier?.rawValue != "onboarding-dim" }.map { nativeWindow in
           var row = describe(nativeWindow)
           if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          if a["accessibilityRoles"] as? Bool == true { row["roles"] = windowAccessibilityRoles(nativeWindow) }
           return row
         }
       case "panel-close":
@@ -1209,6 +1225,13 @@
 
       // Dialogs, permissions, scripts, filters, downloads.
       case "policy":
+        if let value = a["savePrompt"] {
+          guard let policy = value as? String, ["record", "save", "never", "dismiss", "hold"].contains(policy) else {
+            throw Failure(message: "invalid savePrompt policy")
+          }
+          savePromptPolicy = policy
+          if let sheet = w.savePrompts?.active { savePromptDidPresent(sheet) }
+        }
         if let v = a["contextMenu"] { w.contextMenuPolicy = v as? String }
         if let v = a["fullscreen"] { w.fullscreenPolicy = v as? String }
         if let v = a["dialogs"] { w.dialogPolicy = v as? String }
@@ -1623,6 +1646,26 @@
       walk(window, depth: 0)
       if let content = window.contentView { walk(content, depth: 0) }
       return text.sorted()
+    }
+
+    /// Roles only: inspect native Chromium popup accessibility without values.
+    private func windowAccessibilityRoles(_ window: NSWindow) -> [String] {
+      var seen: Set<ObjectIdentifier> = [], roles: Set<String> = []
+      func walk(_ object: NSObject, depth: Int) {
+        guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
+        let role = NSSelectorFromString("accessibilityRole")
+        if object.responds(to: role), let value = object.perform(role)?.takeUnretainedValue() as? String {
+          roles.insert(value)
+        }
+        let children = NSSelectorFromString("accessibilityChildren")
+        if object.responds(to: children), let nodes = object.perform(children)?.takeUnretainedValue() as? [NSObject] {
+          for child in nodes.prefix(512) { walk(child, depth: depth + 1) }
+        }
+        if let view = object as? NSView { for child in view.subviews.prefix(512) { walk(child, depth: depth + 1) } }
+      }
+      walk(window, depth: 0)
+      if let content = window.contentView { walk(content, depth: 0) }
+      return roles.sorted()
     }
 
     // MARK: Helpers
