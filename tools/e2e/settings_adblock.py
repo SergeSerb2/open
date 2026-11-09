@@ -515,6 +515,7 @@ def real_engine(factory, results, wait):
         print('AD3_' + name, evidence.get('status', 'PASS' if ok else 'FAIL'), flush=True)
         results['AD3_' + name] = dict(ok=bool(ok), **evidence)
     observations = {}
+    tab_windows = {}
     def request_verdict(evidence, blocked):
         state = evidence['scriptState']
         return (state['control'] and state['ad'] == (not blocked)
@@ -522,6 +523,10 @@ def real_engine(factory, results, wait):
                 and ('net::ERR_BLOCKED_BY_CLIENT' in evidence['networkErrors']) == blocked
                 and evidence['adReachedServer'] == (not blocked))
     def visit(tab, name, blocked):
+        if tab in tab_windows:
+            # Tab automation resolves against the front window's model; private
+            # windows use a separate model from their normal parent window.
+            app.call('window-focus', id=tab_windows[tab], activate=True)
         initial_page = app.call('tab-state', tab=tab)['page']
         # open() returns a tab before CEF's asynchronous OnAfterCreated.
         # Observe its real live/load state before installing Network observers.
@@ -676,6 +681,7 @@ def real_engine(factory, results, wait):
         # Give this regular two-Profile fixture its own real Space and tab.
         app.call('space-create', title='Engine Independent', profile=other['name'])
         other_tab = app.call('open', url='about:blank')['id']
+        tab_windows[other_tab] = app.call('window-state')['id']
         assert app.call('tab-state', tab=other_tab)['profile'] == other['id']
         assert loaded(other['id'])
         initial_update(other)
@@ -740,12 +746,14 @@ def real_engine(factory, results, wait):
         assert loaded(original['id']) and loaded(other['id'])
         measure(app, other_tab, [original, other], status, wait, row)
         app.call('ext-shortcuts', action='close')
+        app.call('window-focus', id=tab_windows[other_tab], activate=True)
         app.call('select', tab=other_tab)
         app.call('menu-perform', id='new-incognito-window')
         private = wait(lambda: next((w for w in app.call('incognito-state')['windows'] if w['private']), None), timeout=15)
         assert private
         app.call('window-focus', id=private['id'], activate=True)
         private_tab = app.call('open', url='about:blank')['id']
+        tab_windows[private_tab] = private['id']
         assert loaded(other['id'], True)
         row('otr_shares_parent_engine', status(other['id'], True)['engine_shared'])
         visit(private_tab, 'otr_parent_enabled_blocks', True)
@@ -800,12 +808,14 @@ def real_engine(factory, results, wait):
         row('otr_closed_context_detached', bool(wait(lambda:
             not app.call('settings-adblock-profile', profile=other['id'], privateSession=private_id)['privateSessionOpen']
             and not any(c['offTheRecord'] for c in profile_state(other['id'])['contexts']), timeout=15)), state=closed_session)
+        app.call('window-focus', id=tab_windows[other_tab], activate=True)
         app.call('select', tab=other_tab)
         app.call('menu-perform', id='new-incognito-window')
         reopened = wait(lambda: next((w for w in app.call('incognito-state')['windows'] if w['private']), None), timeout=15)
         assert reopened
         app.call('window-focus', id=reopened['id'], activate=True)
         reopened_tab = app.call('open', url='about:blank')['id']
+        tab_windows[reopened_tab] = reopened['id']
         assert loaded(other['id'], True)
         visit(reopened_tab, 'otr_new_session_blocks_again', True)
         reopened_choice = app.call('settings-adblock-site', tab=reopened_tab)
