@@ -321,6 +321,8 @@
           "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
+          "boostsPresentation": adapter.library?.boostsPresentation.rawValue ?? "",
+          "boostsProfile": adapter.library?.historyProfileID.description ?? "",
           "historyRows": adapter.library?.historyRows.count ?? 0,
           "archive": (adapter.library?.archiveRows ?? []).map { ["id": $0.id.description, "url": $0.url.absoluteString] },
           "sharedArchives": adapter.library?.archives.allSatisfy { $0.value === app.archiveSink.store(for: $0.key) } ?? false,

@@ -361,7 +361,10 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 - Color uses the plan's interim root filters. Paint-time color remap remains the
   engine lane's Step 4R; filters can affect images/video/canvas.
 - Code mode is integrated from #203, including live CSS and document-bound JS
-  reload state. Gallery stays disabled; P7 still blocks selector picking.
+  reload state. The local Gallery shares the Library's Boost owner and actions;
+  build, BG1–BG3, private/global-off negatives and regression checks are pending
+  the Section 12 screen/disk holds. See [Gallery acceptance](boost-gallery.md).
+  P7 still blocks selector picking.
 - Private windows refuse Boosts. The App skips registration, script installation and live plans for OTR contexts; editor commands and Customize Page refuse. The same-parent Profile row and deliberate script-leak negative proof cover this boundary.
 - Profile deletion retires the registered Boost owner before folder removal. The store discards dirty state, cancels and drains writes, and stays closed for the process lifetime. B27 covers Settings delete → debounce → quit → relaunch with a deliberate disabled-retirement negative proof.
 
