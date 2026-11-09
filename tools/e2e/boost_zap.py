@@ -185,8 +185,10 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 assert wait(lambda: flow.state()["mode"] == "code", timeout=5, step=.02)
                 original = "/* before */\n/* after */"
                 app.call("boost-editor", action="type", text=original)
-                app.call("boost-editor", action="key", key="left", modifiers=["cmd"])
+                assert wait(lambda: flow.state()["boost"]["css"] == original, timeout=5, step=.02)
+                app.call("boost-editor", action="key", key="left")
                 caret = flow.state()["codeSelection"][0]
+                assert 0 < caret < len(original), "selector proof needs a caret inside the CSS text"
                 js = flow.state()["boost"]["js"]
                 flow.enter(select=True)
                 flow.pick("header", ".select")
