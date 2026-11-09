@@ -176,7 +176,7 @@ public final class TooltipController {
     }
 
     private func makePanel() -> NSPanel {
-        let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        let p = TooltipPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = false
@@ -186,3 +186,5 @@ public final class TooltipController {
         return p
     }
 }
+
+@MainActor private final class TooltipPanel: NSPanel {}
