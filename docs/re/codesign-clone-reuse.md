@@ -1317,3 +1317,94 @@ The M1 audit and `m1-dlv/cleanup.json` confirm zero owned processes/windows,
 restored test preferences, copied receipts and removal of the detached
 worktree. Original normal-App inputs remain on M5. No row-g timing run or
 priority flag was used. No system setting changed and no PR merge ran.
+
+### Lead GO and final main merge, 2026-11-09
+
+The S16 lead's 11:18 ruling, forwarded at 11:20, allows #266 to proceed
+without waiting for row g. It accepts the retained full verify-all result
+**24 PASS / 1 commandbar-render timing FAIL**, specifically **+0.309 ms
+against +0.300 ms**, under TANDEM 4l. This is the OpenKit CLI check, and
+#266 adds no OpenKit changes relative to merged main. The check remains a
+recorded FAIL; no threshold or result was changed. Its original source is
+`8cac5c6f`, with check load1 8.7 and wrapper load1 9.71→10.07. The complete
+25-row table and both isolated failed attempts remain unchanged.
+No new full verifier or timing attempt ran under this scoped final ruling.
+
+Main `280016348f096643f07f21cdd22d46f121b99bcc` (#284, including #283) merged cleanly as
+`8afd3cc1a4736c36dacdc460781285e6daa36c1f`. Both sides were retained. A diff from the earlier merged main
+`bc5678d1` to this main contains no Engine file change. The branch's engine
+patches, overlays, pins and exact series order remain unchanged. Read-only
+engine-status before and after the App builds reports **7 PASS / 0 FAIL /
+1 WARN**, the required 0106-after-08xx numeric-order warning. All 39 active
+patches, 125 overlays and 49 symbols match. No engine rebuild, apply,
+distribution or refresh ran. Only open-engine-s16 was read; neither
+open-engine-s8-main nor the M1 engine copy was touched.
+
+Receipts for this final scope are in `go-1120-20261109/`. The normal Debug
+and Release Apps were rebuilt one at a time through S16-heavy, with
+OPEN_ENGINE_ROOT pointing to open-engine-s16. Release keeps automation
+compiled in. The local CEF wrapper was rebuilt by the App dependency script;
+Chromium was not rebuilt. Deep strict signatures and both engine fingerprints
+pass. The harness helpers were already current. An unstarted own heavy-slot
+wait for their check was cancelled; the read-only artifact check then passed
+without compilation. Both the cancelled wait and completed check receipts
+are retained.
+
+| Final check | Actual result | Seconds | Load1 start→end |
+|---|---|---:|---|
+| engine-status before build | 7 PASS / 0 FAIL / 1 order WARN | 8.27 | 30.71→28.65 |
+| Debug App build | PASS | 96.76 | 24.31→16.68 |
+| Release automation App build | PASS | 154.45 | 16.68→13.95 |
+| engine-status after build | 7 PASS / 0 FAIL / 1 order WARN | 8.68 | 13.95→13.87 |
+| Read-only signatures and fingerprints | PASS | 10.73 | 17.80→16.53 |
+| updater, after screen acquisition | 97 PASS rows; suite exit 1, known #283 | 118.44 | 8.75→10.32 |
+| shell, after screen acquisition | 7 PASS rows; suite exit 0 | 23.13 | 9.28→11.10 |
+
+Each suite took its own screen-lock invocation, updater first and shell
+second. There was no priority flag, quiet lock, functional load gate or
+owned build during either suite. All four before/after dlg.js checks are
+zero. Read-only report checks found no new real or marker-matched expected
+Open report. One intentional-crash marker snapshot was observed and saved;
+no new report matched it.
+
+Updater's unchanged suite passes R1, then loses the automation socket in
+its `termination-retry` variant before R2 can finish, reporting
+`[Errno 2] No such file or directory`. The final App (PID 76018) logs normal
+sleep capture and OpenEngine shutdown; cleanup is unforced with no remaining
+process or window. This is recorded as **known, #283**, following the lead's
+10:05 ruling: install-and-relaunch now skips quit prompts, while the old R2
+case expects a cancelled quit. R2 and later rows are **NOT COMPLETED** in
+this run, not PASS. `updater-known-283.json`, the result JSON, App log and
+cleanup receipts preserve this classification and its limits. All 97 emitted
+`ok` rows pass, including preference restoration and all 27 App cleanups.
+The prior 103-PASS updater cohort at `8cac5c6f` remains separate.
+
+| Final App artifact | SHA-256 |
+|---|---|
+| Debug executable | `f819dc043ac924801b301345b254d37f83a8232ee7c31e712d04719d241003be` |
+| Release executable | `1f2d7b908d72f004a79cbc6d90223342db61bb289a026a7d5ba2da0ce2ceb127` |
+| Embedded signed framework, both Apps | `63c7e9aef11ec54c31360530c397a16fd9c8f5aef27cea2a7a2b1cb6e2336f7d` |
+| S16 #271 +0106 distribution | `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd` |
+
+| Row | Final status and proof source |
+|---|---|
+| a | PASS at `8cac5c6f`; unchanged engine. Three full reuse runs after priming retain ctime/link count |
+| b | OPEN cause; historical FAIL retained. First-after-gap scans occurred in 3/7 daytime and 1/7 functional launches. Later rebuilt-engine sets are 7/7 scan-free; they do not explain those scans |
+| c | PASS at `8cac5c6f`; same-inode copy invalidates and recreates the clone |
+| d | PASS at `8cac5c6f`; separate install slots |
+| e | PASS at the recorded prior heads: ad-hoc both directions, M1 hardened DLV main(#271) → +0106 and both +0106 → +0106 directions. Exact identities remain in the M1 table; not rerun in this scoped final update |
+| f | PASS at `8cac5c6f`; safe functional per-run fallback with unwritable clone directory |
+| g | PENDING next quiet window on the rebuilt engine; explicitly not a merge blocker under the lead GO. No launch-gain claim until it passes |
+| h | Shell 7 PASS on `8afd3cc1`; updater 97 emitted rows PASS then known #283 exception, later rows incomplete. Features 27 PASS at `8cac5c6f` remains separate |
+
+`final-audit.json` confirms no owned job, App process or window remains;
+all audited test caches are removed and updater test preferences are restored.
+Both current Apps still match their artifact hashes. All 11 frozen pre-#271
+file hashes and inodes remain unchanged. The earlier M1 DLV receipts remain
+on M5 and its owned worktree remains removed. No system setting changed,
+prohibited experiment ran or timing input changed. No row-g launch ran.
+
+**Ready under the lead's explicit GO**, with the accepted timing FAIL,
+known #283 updater case and open scan item preserved. Row g stays pending;
+no current-engine launch gain is claimed. The lead owns the merge and engine
+refresh. This agent has not merged the PR or changed another engine copy.

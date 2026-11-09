@@ -71,8 +71,16 @@ no engine build ran. DLV signing and launches ran only on M1, with separate
 screen-lock calls, clear before/after dialog checks and no new crash report.
 Receipts are on M5 and the owned M1 worktree is removed. The M5 branch,
 Vendor engine and exact +0106 App were restored after the control build.
-Row g on the rebuilt engine remains pending the next quiet window. The PR
-is not ready to merge; no current-engine launch gain is claimed.
+The final merge of main `28001634` is `8afd3cc1`. It adds no engine
+input. Both normal Apps rebuilt and engine-status remains 7 PASS / 0 FAIL /
+1 order WARN. Shell passes 7 rows. Updater emits 97 PASS rows, then stops
+in the cancelled-termination retry case: known #283, with later rows incomplete.
+All cleanup and before/after dialog checks pass. The lead's 11:18 GO accepts
+the retained 24/1 full gate and +0.309 ms command-bar timing FAIL under TANDEM
+4l; #266 changes no OpenKit code relative to merged main. The PR is ready
+under that ruling. First-after-gap scans (3/7 daytime, 1/7 functional) stay
+OPEN. Row g remains pending the next quiet window, with no launch-gain claim.
+No engine rebuild or refresh ran; the lead owns the merge and engine refresh.
 
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
