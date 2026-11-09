@@ -99,6 +99,83 @@ requires branch median `sidebarDrawn` ≤ main median. Every sample records load
 
 ## Enable automation
 
+### Synthetic secrets import (Section 15)
+
+`import-secrets-fixture` takes an optional `map`, defaulting to
+`{"Default":"Default","Profile 1":"Work"}`. Create the Work Profile first
+with `space-create {profile:"Work"}`. Each source must map to a distinct existing
+Open Profile. The command runs `ArcSecretsImporter.runSyntheticFixture` through
+the App's real `AppSecretsImportSink` and Profile context factory. Its source
+is generated inside OpenImport. It accepts no source path, key, ciphertext,
+records, or consent argument. It requires Debug or the process switch
+`--open-e2e` in a build that includes automation.
+The engine must be ready and use the mock Keychain.
+
+The reply contains `stage`, `report.profiles`, and `report.total`. Each record
+kind (`logins`, `addresses`, `cards`, `cookies`) contains only counts: `added`,
+`existing`, `failed`, `skippedFederated`, `skippedExpired`, and `unmapped`.
+Login import counts include blocked entries; `credentials` separates `logins`
+and `blockedSites`. Neither command returns secret values or source records.
+The App reloads each destination Profile's live tabs once after its complete
+cookie step is durable. Non-default engine contexts are requested lazily
+through the existing factory.
+
+`import-secrets-state` reads the fixture stage and count report. It also returns
+`consentAdapterCalls`, `keychainProbeCalls`, `keychainReadCalls`,
+`canImportPasswordsAndCookies`, `unfinishedAtLaunch`, and `unfinished`.
+The three call counters are process-lifetime counters of the real consent
+adapter, metadata-probe invocation, and secret-read invocation. Synthetic import
+never increments them. The wizard's capability remains
+`supportsSecretsImport && !usesMockKeychain`, including in fixture runs.
+
+For recovery or in-progress deletion, `import-secrets-fixture {pause:"after-logins"}`
+starts the same importer in a task and returns immediately. Poll
+`import-secrets-state` for `stage:"paused-after-logins"`: the Default Profile's
+login ledger step is durable and done. `pause:"during-cookies"` splits the real
+cookie sink call into two durable engine batches and pauses after the first;
+the whole cookie step remains pending in the ledger. Poll for
+`paused-during-cookies`, then SIGKILL only the owned App PID and relaunch that
+root on the M1 only. On the M5 use the held batch for normal Profile deletion;
+never kill the App there. A pause expires after 60 seconds. Both forms use
+`<data root>/State/secrets-import.json`; a normal rerun starts a new run ID and
+replays all steps against the stores' duplicate checks.
+
+`first-run` also accepts `settings-passwords` (show the actual capability-OFF
+Passwords copy reference), `settings-allow-passwords` (invoke the real guarded
+button action), `settings-skip-passwords`, `settings-cancel-passwords`, and
+`settings-inspect` (read the real wizard's state). The reply includes
+`secretsTitle`, `secretsBody`, `secretsButtons`, `secretsAllowVisible`,
+`secretsAllowEnabled`, `secretsConsented`, and `secretsUnfinishedMessage`.
+These do not override capability or grant consent.
+The reference step does not read any Arc secret file or Keychain item.
+
+Run the real App suite, after the lead clears any screen hold:
+
+```sh
+OPEN_E2E_NO_CRASH_PROBES=1 /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only secrets-import
+```
+
+The suite starts the existing passwords fixture server on loopback with a
+temporary TLS certificate. Only its owned App maps `*.example.com` there.
+It checks I-1…I-9, actual fill gestures, the WebUI credential update service,
+wizard state, Profile deletion, and cookie request isolation after relaunch.
+I-5/I-6 SIGKILL recovery runs only on the M1, without `OPEN_E2E_NO_CRASH_PROBES`;
+the M5 command above marks them "M1-only by rule; not run". It also proves
+`OEErrorMockKeychain` (code 10) and zero writes without
+`--open-allow-mock-keychain-secrets`. Result rows contain counts and booleans
+only. It preserves shared defaults in `finally`.
+I-2 and I-4 use the native dropdown helpers from `tools/e2e/passwords.py`
+(copied from `s15/prompt-wiring` at `e9618bfd`). I-2 checks both local
+suggestions and rejects foreign Profile suggestions through accessibility;
+no field text enters the result. I-8 reads the shared wizard model's text and
+button state through `first-run settings-inspect`; it does not use OCR.
+I-9 deletes Work through the Settings confirmation after a completed import
+and while its batch is held after logins. The fixture command's optional
+`pauseProfile` names the source directory (`Default` by default or `Profile 1`).
+`import-secrets-state` also returns `activeBatch`, `cachedSinks`, and
+`retiredProfiles`. Each deletion row checks folder absence before quit and
+after relaunch, unchanged Default counts, and an unchanged counts ledger.
+
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
@@ -1363,6 +1440,11 @@ mock Keychain. It records selected PR-1 through PR-9 rows as observations, with
 per-row App liveness and new-crash-report checks. It saves no screenshots or secret values.
 The reusable fixture server and URL/switch dictionary are documented in
 [the fixtures README](../tools/e2e/fixtures/passwords/README.md).
+
+PR-7 stays blocked pending an approved engine-fix distribution hash. After the
+lead clears a prior crash dialog, resume remaining rows with
+`--passwords-probe-rows PR-8,PR-9`; do not replay the crashed row. Selected runs
+write a separate receipt so the primary crash evidence survives.
 
 ## Passwords acceptance
 
