@@ -1,0 +1,31 @@
+[Adblock Plus 2.0]
+! Open ad-block test list. Deterministic rules for docs/plans/adblock-fork.md §13.
+/ads/banner.js
+||127.0.0.2/track/pixel.gif
+/ads/allowed-banner.js
+@@||127.0.0.1/ads/allowed-banner.js
+||127.0.0.1/ads/important.js$important
+@@||127.0.0.1/ads/important.js
+||127.0.0.1/ads/redir.js$redirect=noop.js
+||127.0.0.1/api/data.json$removeparam=utm_source
+||127.0.0.1/generichide.html$generichide
+127.0.0.1##.ad-slot
+127.0.0.1##.late-ad
+127.0.0.1##.ad-slot-allowed
+127.0.0.1#@#.ad-slot-allowed
+##.generic-ad
+127.0.0.1##+js(open-test-scriptlet)
+||127.0.0.2^$websocket
+||127.0.0.1/ads/worker-ad.js
+||127.0.0.1/ads/sw-ad.js
+||127.0.0.2/frame-ad.html$subdocument
+||127.0.0.2/ads/redirect-target.js
+||127.0.0.1/api/xhr-only.json$xmlhttprequest
+||127.0.0.1/blocked-main.html$document
+||127.0.0.1/csp-frame.html$csp=script-src 'none'
+127.0.0.1##.style-target:style(outline: 3px solid red)
+127.0.0.1##.style-evil:style(background: url(http://127.0.0.2/beacon.gif))
+127.0.0.1##.proc-ad:has-text(Sponsored)
+127.0.0.1##x{} .exfil{background:url(http://127.0.0.2/exfil.gif)} y
+127.0.0.1##.remove-me:remove()
+||127.0.0.2/wt-blocked

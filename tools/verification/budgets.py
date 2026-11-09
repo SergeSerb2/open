@@ -34,7 +34,8 @@ KEYS = ('open.advanced.showFullURLWithToolbar', 'open.advanced.tabSleepMode',
         'open.advanced.enablePictureInPictureOnLeave', 'open.pip.autoDisabledHosts',
         'open.pip.keepOnTop', 'open.settings.lastPane', 'open.links.littleOpenHotkeyEnabled',
         'open.links.externalInLittleOpen', 'open.general.searchSuggestNoticeDismissed',
-        'open.firstRun.completed', 'open.import.lastArcDir')
+        'open.firstRun.completed', 'open.import.lastArcDir',
+        'open.onboarding.name', 'open.onboarding.introSoundEnabled')
 
 
 def atomic_json(path, value):
@@ -297,7 +298,8 @@ def rows_from(receipt, fail_demo=False):
     elif group == 'first-run':
         # docs/status.md F12; docs/first-run/steps-ef-verification.md Release timing.
         for label, values, limit in (
-            ('first-run first content', [s['welcome']['sidebarDrawn'] for s in data.get('samples', [])], 250),
+            ('first-run first content', [s.get('first_content', s.get('welcome', {}))['sidebarDrawn']
+                                         for s in data.get('samples', [])], 250),
             ('first-run imported paint', [s['imported_paint_ms'] for s in data.get('samples', [])], 700)):
             add(label, limit, statistics.median(values) if len(values) == 5 else None,
                 metric='median', samples=len(values), ok=all(v >= 0 for v in values),

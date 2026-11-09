@@ -6,7 +6,7 @@
 [dependencies.adblock]
 version = "=0.8.11"
 default-features = false
-features = ["embedded-domain-resolver", "full-regex-handling", "resource-assembler"]
+features = ["full-regex-handling", "resource-assembler"]
 
 # Direct pin only to hold rmp-serde 0.15's dependency at the tested version
 # (adblock-fork §4.2): without it gnrt resolves rmp 0.8.15.

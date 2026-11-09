@@ -53,8 +53,23 @@ struct AdBlockStatus {
   int64_t last_build_ms = -1;
   // The last failure: an operation and a file name, never page data.
   std::string last_error;
-  // Cosmetic output v1 does not apply, summed over every CosmeticResources()
-  // and HiddenSelectors() call since the service started (adblock-fork §5.2,
+  // The engine is shared with another Profile that has the same lists
+  // (adblock-fork §6.6).
+  bool engine_shared = false;
+  // "dat" when the lists can be cached as engine.dat, else "text-only"
+  // ($removeparam or :remove*() rules, which a DAT drops).
+  std::string dat_policy;
+  std::vector<std::string> lossy_kinds;
+  // Resources ($redirect stubs) in the engine, and the first 12 hex digits
+  // of their SHA-256 ("" when none).
+  uint32_t resources_loaded = 0;
+  std::string resources_version;
+  // §7.7: the match cap, and the checks whose URL was longer.
+  uint32_t match_cap_bytes = 0;
+  uint64_t checks = 0;
+  uint64_t checks_truncated = 0;
+  // Cosmetic output v1 does not apply, summed over every cosmetic and
+  // generic-selector query since the service started (adblock-fork §5.2,
   // lead ruling 6, review R3-4).
   uint64_t cosmetic_dropped_procedural = 0;
   uint64_t cosmetic_dropped_unsafe = 0;

@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Open ad-block test</title></head>
+<body>
+<h1>Open ad-block test page</h1>
+<script src="/ads/banner.js"></script>
+<script src="/ads/allowed-banner.js"></script>
+<script src="/ads/important.js"></script>
+<script src="/ads/redir.js"></script>
+<img src="http://127.0.0.2/track/pixel.gif" alt="third-party pixel">
+<img src="/track/pixel.gif" alt="first-party pixel">
+<div class="ad-slot">ad slot</div>
+<div class="ad-slot-allowed">allowed ad slot</div>
+<div class="generic-ad">generic ad</div>
+<script>
+  fetch('/api/data.json?utm_source=x&keep=1').then(r => { window.__lastFetchURL = r.url; });
+  setTimeout(() => {
+    const late = document.createElement('div');
+    late.className = 'late-ad generic-ad';
+    late.textContent = 'late ad';
+    document.body.appendChild(late);
+  }, 500);
+</script>
+</body></html>

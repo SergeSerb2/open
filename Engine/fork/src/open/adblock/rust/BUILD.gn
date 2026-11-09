@@ -13,6 +13,7 @@ rust_static_library("open_adblock_rust") {
   sources = [ "src/lib.rs" ]
   cxx_bindings = [ "src/lib.rs" ]
   deps = [
+    ":domain_resolver",
     "//third_party/rust/adblock/v0_8:lib",
     "//third_party/rust/serde_json/v1:lib",
   ]
@@ -20,4 +21,11 @@ rust_static_library("open_adblock_rust") {
     "//open:*",
     "//open/adblock:*",
   ]
+}
+
+# This leaf has no dependency on the Rust shim, so the CXX callback does not
+# create a circular GN dependency.
+source_set("domain_resolver") {
+  sources = [ "domain_resolver.cc", "domain_resolver.h" ]
+  deps = [ "//build/rust:cxx_cppdeps", "//net" ]
 }

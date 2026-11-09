@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "captured": "2026-10-26",
+  "cefsimple_build": "Chromium 156.0.8078.48 + CEF 156.0.14+g4fa4ab5 (Open fork, dev config), ad blocking off, --enable-features=EnableEarlyHintsOnHttp11, 1280x800, fresh user data per page, load + 10 s",
+  "pages": [
+    "https://www.cnn.com/",
+    "https://www.theguardian.com/international",
+    "https://www.dailymail.co.uk/home/index.html",
+    "https://www.forbes.com/",
+    "https://weather.com/",
+    "https://www.foxnews.com/",
+    "https://www.buzzfeed.com/",
+    "https://www.independent.co.uk/",
+    "https://www.msn.com/",
+    "https://www.yahoo.com/",
+    "https://www.accuweather.com/",
+    "https://www.huffpost.com/",
+    "https://www.wired.com/",
+    "https://www.cbc.ca/news",
+    "https://www.nytimes.com/",
+    "https://www.washingtonpost.com/",
+    "https://www.usatoday.com/",
+    "https://www.nbcnews.com/",
+    "https://www.cbsnews.com/",
+    "https://www.latimes.com/",
+    "https://www.theverge.com/",
+    "https://www.businessinsider.com/",
+    "https://www.bbc.com/news",
+    "https://nypost.com/",
+    "https://www.gamedev.net/"
+  ],
+  "url_count": 20311,
+  "length_bytes": {
+    "p50": 119,
+    "p90": 320,
+    "p99": 2717,
+    "max": 11875
+  },
+  "third_party_share": 0.659,
+  "third_party_rule": "registrable domains of request and source differ (Chromium's PSL copy); source = the request's document origin; 13,394 of 20,311 (self-test bench line 'third_party=')",
+  "corpus_sha256": "d758ee6639488dab875b54b729feead7251e482c3671b9f44bc990edf240d5b0",
+  "sample_rule": "sample k = the 200 URLs with the smallest SHA-256(\"<k>\\n\" + url); sha256 below is of the 200 lines joined by \\n",
+  "samples": {
+    "0": "d31f688192756cb733ddadf999e113843a2ea31708cf0350c2c5656a1403eb7b",
+    "1": "3cb3b9b4b622ef08ce1540affc5f985813fcbfc4ef7d8bc21a54581c56b9f33b",
+    "2": "6c4c24cfbb8c53fa94908e975051dc2a687b8fd572ff5497717f0b84e220a2d9"
+  },
+  "early_hints": {
+    "early_hints_control_seen": true,
+    "early_hints_seen": false,
+    "pages_with_103": 0,
+    "http11_hints_dropped": 0,
+    "preload_urls": 0,
+    "blocked_preload_urls": 0,
+    "pages_with_blocked_preload": 0,
+    "pages_with_blocked_preload_share": 0.0
+  }
+}
