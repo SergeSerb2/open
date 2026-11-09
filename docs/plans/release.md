@@ -840,8 +840,9 @@ the full engine series, then 0106, and repeated normal-App rows a/c/d/f with
 PASS results on distribution `34619927…`. Timing on that rebuilt engine is
 PENDING the next quiet window. Hardened DLV proof is still PENDING M1
 clearance. The post-#271 full verifier stopped on a new real Open crash report
-after 15 PASS; its remaining checks are not complete. Crash ownership and
-cause are unassigned. See [the current receipts and limits](../re/codesign-clone-reuse.md).
+after 15 PASS; its remaining checks are not complete. The lead later attributed
+the crash to the S11/window-border build. The screen hold still blocks a rerun.
+See [the current receipts and limits](../re/codesign-clone-reuse.md).
 
 ### 6.1 Dependency (one new dependency, with reason)
 

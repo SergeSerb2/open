@@ -817,3 +817,26 @@ executable, framework, script and input hashes match the pre-resume audit,
 including the saved executable/framework inodes. Frozen Apps, profiles and
 approved timing inputs remain in place. No priority flag was set or shared
 lock file removed. The one new real report is retained as the STOP event.
+
+### Windowless checkpoint after the disk freeze
+
+After the lead lifted the disk/DMG freeze on 2026-11-09, a fresh fetch/merge
+again found main `3fb0645c` already included. `df` showed 18 GiB available
+before and after the checks. No data or artifact was deleted.
+
+`resume-0621-preflight.json` found no stale s8 path in the S16 state or live
+configuration. `engine-status-0621.json` records exit zero, load1 3.64→3.75;
+the status remains 7 PASS, 0 FAIL and the expected 0106-after-08xx WARN.
+`engine-build-0621.json` records the locked S16-heavy incremental build with
+`--jobs 10` and the script's `nice -n 10`: PASS in 9.79 seconds, load1
+4.97→6.25. Ninja reports **no work to do, zero steps**. The earlier #271
+rebuild and distribution were already complete; no new distribution was
+needed. `resume-0621-final.json` confirms the recorded framework still has
+SHA-256 `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+
+The lead's `/tmp/open-screen-hold-m5` now attributes the 02:35 crash to the
+S11/window-border build and its `SpaceThemeWindow.preserveAppearance` KVO
+cast. This is the lead's later attribution; the original STOP receipt remains
+unchanged. The M5 and M1 screen holds still stand. No App, probe, timing run
+or verifier was launched for this checkpoint. The interrupted full gate and
+other pending acceptance rows remain open; all checkpoint jobs finished.

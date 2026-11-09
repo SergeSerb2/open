@@ -46,7 +46,8 @@ again on this engine. See the report's post-#271 cohort for suite and full-gate
 results. No launch-gain claim follows from these functional rows.
 The post-#271 full gate was interrupted by the real-crash STOP rule after
 15 PASS; its active Settings check was cancelled and nine checks did not run.
-No full-gate PASS is claimed. Ownership and cause of the crash remain open.
+No full-gate PASS is claimed. The lead later attributed the crash to the
+S11/window-border build; the screen hold still blocks the full-gate rerun.
 
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
