@@ -338,6 +338,8 @@
         if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
+      case "pasteboard-preserve": return AutomationPasteboard.preserve()
+      case "pasteboard-restore": return AutomationPasteboard.restore()
       case "pasteboard":
         // `text`: replace the contents first (checks that must see a fresh copy).
         if let text = a["text"] as? String { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
@@ -354,8 +356,19 @@
         app.saveState()
         return app.snapshotStore.fileURL.path
       case "quit":
+        app.quitWarning.harnessQuit = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
         return true
+      case "quit-warning":
+        if let button = a["button"] as? String {
+          guard ["quit", "cancel"].contains(button) else { throw Failure(message: "expected quit or cancel") }
+          app.quitWarning.buttonForAutomation = button
+        }
+        if a["request"] as? Bool == true {
+          app.quitWarning.harnessQuit = false
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.app.performCommand("quit-open") }
+        }
+        return app.quitWarning.alerts
       case "library-open":
         let section: LibrarySection?
         if let value = a["section"] {

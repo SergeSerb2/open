@@ -62,6 +62,7 @@ final class DownloadsCenter: DownloadsProvider {
   private(set) var fallbackCount = 0
   private(set) var lastFileError = ""
   @ObservationIgnored private var quitApproved = false
+  @ObservationIgnored private(set) var presentingQuitAlert = false
   #if OPEN_AUTOMATION
   var recordFileActions = false
   var fileOpenerForAutomation: URL?
@@ -282,7 +283,8 @@ final class DownloadsCenter: DownloadsProvider {
   /// This runs before sleep capture or any page-beforeunload handling.
   /// The traced Arc path does not prove a Warn-before-quitting preference gate;
   /// keep this download-specific warning for both values (downloads-s11.md).
-  func shouldKeepBrowsing() -> Bool {
+  func shouldKeepBrowsing(withoutPrompts: Bool = false) -> Bool {
+    if withoutPrompts { approveQuit(); return false }
     #if OPEN_AUTOMATION
     if AutomationOwnerWatch.quittingWithoutPrompts {
       approveQuit()
@@ -290,6 +292,10 @@ final class DownloadsCenter: DownloadsProvider {
     }
     #endif
     guard !quitApproved, hasRunning else { return false }
+    presentingQuitAlert = true
+    defer { presentingQuitAlert = false }
+    // Quit from the Dock or a script can arrive while Open is in the background.
+    NSApp.activate()
     let alert = NSAlert()
     alert.messageText = "Downloads in progress"
     alert.informativeText = "There are downloads in progress. Closing the application will cancel them."
@@ -319,6 +325,8 @@ final class DownloadsCenter: DownloadsProvider {
     approveQuit()
     return false
   }
+  /// A new quit attempt asks again (AppDelegate calls this at each fresh attempt).
+  func resetQuitApproval() { quitApproved = false }
   private func approveQuit() {
     quitApproved = true
     for entry in entries.values where entry.snapshot.state == .inProgress || entry.snapshot.state == .paused { entry.download.cancel() }
