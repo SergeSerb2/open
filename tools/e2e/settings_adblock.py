@@ -513,8 +513,12 @@ def real_engine(factory, results, wait):
 
         app.call('profiles-shell', action='create', name='Engine Independent')
         other = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Engine Independent')
-        app.call('profiles-shell', profile=other['id'], action='open-url', url='about:blank')
-        other_tab = next(t['id'] for t in app.call('tabs') if t['profile'] == other['id'])
+        # A Profile without a Space opens Settings links in a transient page,
+        # which is intentionally absent from the sidebar tab enumeration.
+        # Give this regular two-Profile fixture its own real Space and tab.
+        app.call('space-create', title='Engine Independent', profile=other['name'])
+        other_tab = app.call('open', url='about:blank')['id']
+        assert app.call('tab-state', tab=other_tab)['profile'] == other['id']
         assert loaded(other['id'])
         initial_update(other)
         shared = status(other['id'])
