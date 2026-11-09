@@ -406,13 +406,14 @@ def run_favorite_icons(factory, results, tmp, h):
     def until(predicate, timeout=20):
         assert h.wait_until(predicate, timeout=timeout, step=.025), state()
     def action(verb, **args): return app.call('onboarding', action=verb, **args)
-    def launch(blocked=False, reduced=False):
+    def launch(blocked=False, reduced=False, curated_failure=False):
         nonlocal app
         if app and not app.closed: app.quit()
         h._restore_defaults(None, {key: None for key in keys})
         flags = ['--arc-dir='+str(source), '--intro-sound=off']
         if blocked: flags.append('--favicon-network=blocked')
         if reduced: flags.append('--reduce-motion')
+        if curated_failure: flags.append('--favicon-curated=fail')
         app = factory(urls=(), fresh=True, extra_args=flags, extra_env={'OPEN_FAVICON_DIAGNOSTICS':'1'})
         first = state()
         database = Path(app.user_data)/'State/favicons.sqlite3'
@@ -458,7 +459,7 @@ def run_favorite_icons(factory, results, tmp, h):
         tiles = s.get('favoriteTiles',[])
         icons = [t for t in tiles if t.get('iconState')=='icon']
         return len(tiles)==len(icons)==12 and all(min(t['pixelSize'])>=32
-            and t['elapsedMS']<=12000 and t['sourceKind'] in ('apple-touch','manifest','link','favicon.ico') for t in icons) \
+            and t['elapsedMS']<=12000 and t['sourceKind'] in ('apple-touch','manifest','link','favicon.ico','curated') for t in icons) \
             and all(t['renderedKind']=='monogram' for t in tiles if t['iconState']!='icon')
     def monograms(s):
         tiles = s.get('favoriteTiles',[])
@@ -494,6 +495,12 @@ def run_favorite_icons(factory, results, tmp, h):
                     changedFraction=changed,ok=mean>=6 and changed>=.25))
         return dict(ok=len(observed)==24 and all(t['ok'] for t in observed),
             meanDeltaE00Minimum=6, changedPixelDeltaE00=8, changedFractionMinimum=.25, tiles=observed)
+    def gmail_curated(s):
+        tile = s['favoriteTiles'][0]
+        return tile['name']=='Gmail' and tile['iconState']=='icon' and tile['sourceKind']=='curated' \
+            and min(tile['pixelSize'])>=64 and not tile['storeHit'] \
+            and tile['iconSourceURL']=='https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico' \
+            and all(t['iconSourceURL'] is None for t in s['favoriteTiles'][1:])
     try:
         name, initial = launch()
         row('fresh_launch', fresh(initial['firstLaunchProof']), observed=initial['firstLaunchProof'])
@@ -601,6 +608,7 @@ def run_favorite_icons(factory, results, tmp, h):
         database = Path(app.user_data)/'State/favicons.sqlite3'
         with sqlite3.connect('file:'+str(database)+'?mode=ro', uri=True) as db:
             before_store = list(db.execute('SELECT origin,png64,fetched_at FROM favicons WHERE status=0 ORDER BY origin'))
+            gmail_url = db.execute("SELECT icon_url FROM favicons WHERE origin='https://mail.google.com' AND status=0").fetchone()
         # Product pages can redirect to a sign-in page with no icon declaration.
         # Distinct product artwork must be >=64 px; otherwise record the real
         # discovery reason instead of calling a generic login icon a product icon.
@@ -612,17 +620,20 @@ def run_favorite_icons(factory, results, tmp, h):
             declarations = [entry for entry in events if entry['event'].startswith('declared:')]
             google.append(dict(name=tile['name'], pixelSize=tile['pixelSize'], sourceKind=tile['sourceKind'],
                 declarations=declarations, discovery=discovery,
-                reason='no icon declared in bounded final page head' if discovery and not declarations else 'declared icon available'))
+                reason='curated source before page discovery' if tile['sourceKind']=='curated' else
+                    'no icon declared in bounded final page head' if discovery and not declarations else 'declared icon available'))
         stored_images = [data for origin,data,_ in before_store if origin in ('https://mail.google.com','https://maps.google.com')]
         distinct_products = len(stored_images)==2 and stored_images[0]!=stored_images[1]
         gmail, maps = google
-        gmail_reason = gmail['discovery'] and all(entry['event'].startswith('discovered:0:') for entry in gmail['discovery']) \
-            and not gmail['declarations']
+        curated_trace = [entry for entry in trace_rows if entry['event'].startswith('accepted:curated:')]
+        row('gmail_curated', gmail_curated(network) and gmail_url==(network['favoriteTiles'][0]['iconSourceURL'],)
+            and any(entry['url']==gmail_url[0] for entry in curated_trace), state=network['favoriteTiles'][0],
+            storedURL=gmail_url, trace=curated_trace)
         maps_declared = maps['declarations'] and maps['sourceKind'] in ('apple-touch','manifest','link') and min(maps['pixelSize'])>=64
-        row('google_product_discovery', distinct_products and gmail_reason and maps_declared, sites=google,
-            distinctImages=distinct_products, reason='Gmail sign-in page declares none; Maps has distinct declared artwork')
-        row('google_product_discovery_negative', not maps_declared or min(gmail['pixelSize'])<64,
-            expected='FAIL', observed='Gmail fallback cannot satisfy the Maps declared-artwork predicate')
+        row('google_product_discovery', distinct_products and gmail_curated(network) and maps_declared, sites=google,
+            distinctImages=distinct_products, reason='Gmail curated artwork; Maps distinct declared artwork')
+        row('google_product_discovery_negative', not (gmail['declarations'] and gmail['sourceKind'] in ('apple-touch','manifest','link')),
+            expected='FAIL', observed='Curated Gmail cannot satisfy the Maps page-declared-artwork predicate')
         while state()['screen']!='ready':
             s=state()['screen']
             if s=='defaultBrowser': action('choose-default', yes=False); action('next')
@@ -667,8 +678,40 @@ def run_favorite_icons(factory, results, tmp, h):
         row('network_repeat', quality(repeated) and all(not t['storeHit'] for t in repeated['favoriteTiles']),
             state=repeated, missing=[t['name'] for t in repeated['favoriteTiles'] if t['iconState']!='icon'])
         row('network_repeat_pixels', repeat_pixels['ok'], observed=repeat_pixels)
+        row('gmail_curated_repeat', gmail_curated(repeated), state=repeated['favoriteTiles'][0])
         receipts['networkRepeat'] = dict(initial=repeat_initial, final=repeated, captures=repeat_shots, pixels=repeat_pixels)
         receipts['network']['pixels'] = detected
+        # Force a real HTTP 404 on the curated URL, leaving system networking
+        # and ordinary discovery unchanged. This fresh run fetches Google's
+        # generic G through the original chain for the perceptual negative.
+        _, fallback_initial = launch(curated_failure=True)
+        until(lambda: state()['faviconFetch']['finished'], timeout=17)
+        fallback = state(); action('toggle-favorite', index=0); action('toggle-favorite', index=6)
+        fallback_shots = capture('curated-fallback')
+        fallback_trace = Path(app.user_data)/'favicon-trace.jsonl'
+        fallback_events = [json.loads(line) for line in fallback_trace.read_text().splitlines()]
+        shutil.copyfile(fallback_trace, evidence/'curated-fallback-trace.jsonl')
+        gmail_events = [entry for entry in fallback_events if entry['origin']=='https://mail.google.com']
+        generic = fallback['favoriteTiles'][0]
+        refused = [entry for entry in gmail_events if entry['event'].startswith('rejected:curated:')]
+        row('gmail_curated_fallback', fresh(fallback_initial['firstLaunchProof']) and quality(fallback)
+            and generic['sourceKind']=='favicon.ico' and not generic['storeHit'] and bool(refused)
+            and any(entry['event']=='http:404' and 'open-onboarding-forced-missing' in entry['url'] for entry in gmail_events),
+            state=generic, rejected=refused)
+        discovery = [entry for entry in gmail_events if entry['event'].startswith('discovered:')]
+        declarations = [entry for entry in gmail_events if entry['event'].startswith('declared:')]
+        row('gmail_public_page_no_declaration', bool(discovery) and not declarations
+            and all(entry['event'].startswith('discovered:0:') for entry in discovery), discovery=discovery, declarations=declarations)
+        distinct = []
+        for run_name, s, captures in [('first',network,shots),('second',repeated,repeat_shots)]:
+            measured = pixel_icons(s, captures, fallback, fallback_shots)
+            distinct.extend(dict(run=run_name, **tile) for tile in measured['tiles'] if tile['name']=='Gmail')
+        row('gmail_distinct_from_generic', len(distinct)==4 and all(tile['ok'] for tile in distinct),
+            meanDeltaE00Minimum=6, changedPixelDeltaE00=8, changedFractionMinimum=.25, observed=distinct)
+        same = pixel_icons(fallback, fallback_shots, fallback, fallback_shots)
+        row('gmail_distinct_from_generic_negative', all(not tile['ok'] for tile in same['tiles'] if tile['name']=='Gmail'),
+            expected='FAIL', observed=[tile for tile in same['tiles'] if tile['name']=='Gmail'])
+        receipts['curatedFallback'] = dict(initial=fallback_initial, final=fallback, captures=fallback_shots, gmailDifference=distinct)
         # Same window and real downloaded images with Reduce Motion: no fade.
         _, reduced_initial = launch(reduced=True)
         until(lambda: state()['faviconFetch']['finished'], timeout=17)

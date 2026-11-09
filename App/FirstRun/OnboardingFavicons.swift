@@ -38,6 +38,13 @@ private struct OnboardingFaviconSiteResolver: FaviconSiteResolver {
     }
     for index in tiles.indices { tiles[index].state = "loading" }
     let urls = OnboardingStepsController.sites.map(\.url)
+    let sources = Dictionary(uniqueKeysWithValues: OnboardingStepsController.sites.compactMap { site -> (URL, URL)? in
+      guard var source = site.iconSourceURL else { return nil }
+      #if OPEN_AUTOMATION
+      if app.options.faviconCuratedFailure { source.appendPathComponent("open-onboarding-forced-missing") }
+      #endif
+      return (site.url, source)
+    })
     let cache = app.stores.sidebarFavicons
     worker = Task.detached(priority: .utility) { [weak self] in
       let fetcher = FaviconFetcher(store: store, maxConcurrent: 6, timeout: 6, originTimeout: 6, minimumDimension: 64, fallbackMinimumDimension: 32,
@@ -50,7 +57,7 @@ private struct OnboardingFaviconSiteResolver: FaviconSiteResolver {
         }
       }
       #endif
-      let report = await fetcher.prefetch(urls, overallTimeout: 12) { [weak self] result in
+      let report = await fetcher.prefetch(urls, iconSourceURLs: sources, overallTimeout: 12) { [weak self] result in
         let index = result.index-1
         // Prefetch writes an origin fallback. A later engine favicon event goes
         // through StoredFaviconCache.report and its exact-page record wins.
