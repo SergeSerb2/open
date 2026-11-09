@@ -1381,6 +1381,43 @@ a suggestion with real App Down/Return keys. The caller compares field values
 in the page and reports only equality, never the values.
 PR #264 repairs the HTTPS-First host and teardown failures with 0806/0809/0810. The old crashing distributions are never replayed. `--engine-sha256 HASH` checks the Vendor framework and embedded engine code before launch. Export `OPEN_E2E_NO_CRASH_PROBES=1` on M5; C-2 and feature crash recovery remain M1-only by rule. The loopback card fixture uses per-run TLS/SPKI, never a system trust change. PW-REAUTH-default/request verify mandatory reauthentication stays on for users; only the disposable fill row disables and restores it. Selected probe runs keep separate receipts so historical crash evidence survives.
 
+
+### Custom update UI
+
+`updater-state` includes `sessionInProgress` and a `ui` object. It reports the real driver phase,
+window numbers, progress, byte counts, notes text, banner kind, and last toast.
+`updater-menu` validates the real menu item and returns its title, badge,
+enabled state, and `canCheck` in the same main-actor turn.
+`updater-images` returns the current process's dyld image list. It does not
+attach a debugger. Sparkle's eager WebKit link can appear in that list.
+`updater-view-tree` walks the App's real window/view trees. It reports WebKit
+view counts and the actual notes view class. A9 requires zero WebKit views and
+an NSTextView while the updater shows notes. `bannerStyles` reads each visible
+update banner's title, subtitle, and subtitle sRGB color as 8-bit RGBA values.
+The loopback suite checks these colors after each light/dark snapshot.
+
+`updater-banner-width width=164...400` changes the real model sidebar width.
+It lets the loopback suite check both normal and narrow banner copy and layout.
+
+`updater-background-check` asks the real Sparkle updater to check its feed in
+the background. It is available only in automation builds. It does not inject
+appcast items or driver callbacks.
+
+`updater-act action=primary|cancel-download|later|close|banner|dismiss-banner|notes-link|alert-first|alert-second`
+uses the current update UI's actions. `action=cleanup` closes update surfaces.
+`action=settings-help|settings-check` invokes General's actual view-model actions.
+`updater-modal-alert action=arm button=0|1` observes the next native update alert
+and presses its actual button from the modal run loop. Before answering, it
+records the bounded AX text, both buttons, modal/activation state, browser count,
+and real Sparkle cycle state. `action=state` reads that observation; `action=disarm`
+removes the observer. It creates no alert and injects no updater callback.
+The updater suite's `--windowless-only` mode checks real failing loopback menu
+checks after every browser window closes. It checks OK acknowledgement, the
+manual-download new-window path, and ready-update restart cancellation.
+The loopback suite owns its app copies, signing fixtures, preferences, and port.
+It restores the shared defaults domain in `finally` and checks process/window
+cleanup even when a check fails.
+
 ### Setup steps (`onboarding`)
 
 `onboarding action=state` includes `screen` (`intro`, `name`, `import`, `favorites`, `theme`, `blocker`, `defaultBrowser`, `ready`, `handoff`, `done`), the name, Favorite indexes, theme, blocker, default choice/outcome, card pattern, Reduce Motion, confetti, native control labels and dim state. Invalid stages and unknown arguments fail.
@@ -1396,4 +1433,5 @@ With an automation socket, default-browser requests use `OPEN_AUTOMATION_DEFAULT
 Automation-only screenshot/export hooks: `set-appearance appearance=light|dark` changes only the onboarding window; `save-card` opens its real save panel, `card-cancel` cancels it, and `card-save path=/absolute/file.png` supplies the native panel service response to the production completion. No desktop input is used. Tests use temporary roots, synthetic `--arc-dir`, and `--intro-sound=silent|off`.
 
 The `first-run` API remains the importer verification seam. Its compatibility actions walk setup's real navigation; the `screen` field names the new screen while `step` names Section 7's import state. No legacy first-run window is shown.
+
 Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.
