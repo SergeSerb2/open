@@ -21,6 +21,8 @@ rsync_args=(-a --delete)
 if [[ -n "${OPEN_KEEP_LOCALES:-}" ]]; then
   for l in $OPEN_KEEP_LOCALES; do rsync_args+=(--include "Resources/$l.lproj/***"); done
   rsync_args+=(--exclude "Resources/*.lproj")
+  # Excluded paths survive --delete; remove locales an earlier untrimmed build left.
+  rsync_args+=(--delete-excluded)
 fi
 
 # rsync -i prints one line per changed file; re-sign only when something changed.
