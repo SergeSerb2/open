@@ -419,7 +419,8 @@ def run_favorite_icons(factory, results, tmp, h):
                     existing_rows = db.execute('SELECT count(*) FROM favicons').fetchone()[0]
         proof = dict(factoryFresh=True, pid=app.pid, initialScreen=first['screen'],
             firstRunCompleted=app.call('first-run')['completed'], faviconRowsBeforePrefetch=existing_rows,
-            prefetchStarted=first['faviconFetch']['started'],
+            introElapsed=first['elapsed'], prefetchNotScheduledBefore=3.3,
+            prefetchStarted=first.get('faviconFetch',{}).get('started'),
             snapshotExists=(Path(app.user_data)/'State/browser.json').exists())
         action('skip-intro'); action('get-started')
         until(lambda: state()['screen']=='name')
@@ -467,7 +468,8 @@ def run_favorite_icons(factory, results, tmp, h):
         results['favorite_icons_'+name] = dict(ok=bool(ok), load=os.getloadavg(), **data)
     def fresh(proof):
         return proof['factoryFresh'] and proof['initialScreen']=='intro' and not proof['firstRunCompleted'] \
-            and proof['faviconRowsBeforePrefetch']==0 and not proof['prefetchStarted'] and not proof['snapshotExists']
+            and proof['faviconRowsBeforePrefetch']==0 and proof['introElapsed']<proof['prefetchNotScheduledBefore'] \
+            and proof['prefetchStarted'] is not True and not proof['snapshotExists']
     def pixel_icons(s, captures, fallback, fallback_captures):
         # The negative reference is this tile's actual monogram in a fresh,
         # blocked-network window, in the same appearance and selection state.
