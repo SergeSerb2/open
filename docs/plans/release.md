@@ -87,6 +87,32 @@ checks without a build or notary submission. See the user-step guide for setup.
 `OPEN_RELEASE_HEAVY_WRAPPER` may select a section scheduler instead of the
 default `heavy.sh`; Section 16 uses its mandatory two-token wrapper.
 
+**2026-11-08 clone/update erratum.** The executable-ctime candidate is blocked
+by its live-swap safety gate (§6.0). The normal Sparkle install waits for host
+termination, but the ad-hoc test with the clone disabled failed after replacement.
+New navigation timed out and Chromium reported invalid process signature
+validation (`-67065`); the enabled-clone control passed. Work stopped for lead
+review. See [the evidence report](../re/codesign-clone-off.md).
+
+**2026-11-08 follow-up decision.** The unconditional disable is rejected.
+Engine patch 0106 reuses a valid hard-link clone,
+with Chromium's per-run clone as the failure fallback. The live-replacement
+gate must pass with an already reused clone, for ad-hoc and temporary hardened
+DLV copies. The historical failed candidate below remains evidence, not a
+proposed release setting. See [the reuse report](../re/codesign-clone-reuse.md)
+for the design and verification status. Normal-App reuse, invalidation,
+separate installs, fallback and the requested ad-hoc live swap passed.
+The scan gate remains FAIL against the 7/7 target: residual first-after-gap
+scans, cause open, with unchanged executable metadata (functional set 6/7).
+Quiet-window timing is pending. The full gate recorded 24 PASS
+and one `commandbar-render` FAIL on two timing rows at load1 29.1.
+The 16:31 lead ruling supersedes the earlier M5 exception: hardened-runtime
+DLV copies are crash-capable and may launch only on the M1 after `M1 clear`,
+under its screen lock. Each exact temporary copy must pass one plain launch
+and quit before its live-swap run. Stop on an abort; never relaunch a failed
+load. Neither hardened copy has launched. No system or CrashReporter setting
+may change. Signed and notarized release acceptance remains separate.
+
 The §9 dry-run errata are explicit: the main dev engine may be packaged while
 A-1 records mode-SKIP; its measured size may exceed the production hard limit
 while A-7 records mode-SKIP; sample credits remain an incomplete local preview
@@ -739,6 +765,84 @@ and rollback for a browser — too much security surface) and Mac App Store
 updates (Open is Developer ID only; Chromium does not fit the sandbox).
 Arc ships Sparkle 2.9.4 the same way (bundle-anatomy §3, fact); Open uses
 its own feed, key, and hosting. Never copy Arc's feed URL or public key.
+
+### 6.0 Executable ctime and live-update safety
+
+Chromium's `MacAppCodeSignClone` keeps a hard link to the running executable
+inside a valid cloned bundle. This preserves static/dynamic code-signature
+validation when an update replaces the installed bundle while the browser
+still runs and launches helpers. Creating/removing the link advances the
+original executable's ctime; on the measured ad-hoc builds this invalidates
+the next LaunchServices launch's `syspolicyd` change-time assessment.
+
+The rejected App-side candidate merged `MacAppCodeSignClone` into
+`--disable-features` for every process and preserved existing entries. It relied
+on the supported updater
+waiting for host termination before replacing the bundle. Sparkle 2.10.1's
+`Autoupdate/AppInstaller.m:401–417` listens for termination; lines 739–743
+check `_targetTerminated`, and `finishInstallationAfterHostTermination`
+asserts it before final installation (lines 764–800). Downloads, extraction
+and initial preparation may happen while Open runs; bundle replacement does
+not occur in that stage.
+
+The actual replacement is a whole-directory operation, not a file copy over
+the running bundle. `SUPlainInstaller.m:235–245` tries an atomic swap;
+`Sparkle/SUFileManager.m:360–362` implements it with
+`renamex_np(..., RENAME_SWAP)`. The fallback renames the old bundle away and
+the new one into place (`SUPlainInstaller.m:279–311`). Old temporary bundles
+are removed by `performCleanup`. Both replacement paths belong to final
+installation after host termination. Open uses Sparkle's standard updater
+and does not implement a separate live-bundle installer.
+
+**Merge gate:** test main/branch with both ad-hoc and hardened-runtime,
+temporary disable-library-validation copies. First plain-launch and quit
+each hardened copy; never launch the exact release artifact. The stress
+case swaps a copied bundle while its old browser remains alive, removes
+the old staging bundle, then requires fresh renderer, GPU and utility
+processes to launch and render new sites. Preserve App/tab/process state,
+AMFI/signing logs and the crash-report baseline. Any helper failure with
+the clone disabled stops this fix for lead review. No alternative fix is
+selected automatically. This stress case is deliberately stronger than
+Sparkle's normal host-termination order; it also exposes the trade-off for
+manual or external updates while Open is running.
+
+**2026-11-08 result: STOP, do not merge this candidate.** On the M5, the
+enabled-clone ad-hoc control passed the swap, removal of the old bundle, and
+three new sites with fresh renderer, GPU and utility PIDs. The disabled-clone
+build passed its plain functional run with unchanged executable ctime and link
+count, but failed the first new site's load after the same swap. Chromium logged
+`base/mac/process_requirement.cc:159`: "Signature validation of current process
+failed", OSStatus `-67065`, at 11:06:19, immediately after replacement. No new
+crash report or helper code-signing kill was found; this was a load/validation
+failure, not an observed SIGKILL. Both runs cleaned up all owned processes and
+windows. The hardened-runtime cases, seven-launch scan/timing proof, remaining
+functional suites and full gate were not run after the stop. The source ordering
+of Sparkle's normal install does not establish safety for live replacement.
+No alternate fix was selected. Full receipts, loads and limits are in
+[the evidence report](../re/codesign-clone-off.md).
+
+**0106 follow-up, 16:35:** normal-App reuse, same-inode invalidation and
+separate-install checks passed on the rebuilt `0801–0810`, then `0106` engine.
+The ad-hoc plain controls passed, including an already reused branch clone.
+The matched-main live-swap control then failed: its first new page stayed
+blank after the harness restarted GPU and network helpers. Fresh helpers
+were alive; no new `.ips` or helper code-signing kill was identified. The
+cause is unassigned. The matrix stopped before the branch swap. The live-swap
+gate was unproved at that checkpoint. The later requested-path matrix passed
+on both matched main and the reused-clone branch: three new sites rendered
+with fresh renderers and a fresh silent audio utility. It did not terminate
+GPU or network services; the existing GPU stayed alive. The forced-restart
+control remains a separate FAIL with no assigned cause. The functional scan
+gate is FAIL at 6/7 despite stable executable metadata; no launch gain is
+claimed. The pre-#271 quiet-window runner later completed seven pairs; both
+variants still failed the cold/warm budgets. After merging #271, S16 rebuilt
+the full engine series, then 0106, and repeated normal-App rows a/c/d/f with
+PASS results on distribution `34619927…`. Timing on that rebuilt engine is
+PENDING the next quiet window. Hardened DLV proof is still PENDING M1
+clearance. The post-#271 full verifier stopped on a new real Open crash report
+after 15 PASS; its remaining checks are not complete. The lead later attributed
+the crash to the S11/window-border build. The screen hold still blocks a rerun.
+See [the current receipts and limits](../re/codesign-clone-reuse.md).
 
 ### 6.1 Dependency (one new dependency, with reason)
 
