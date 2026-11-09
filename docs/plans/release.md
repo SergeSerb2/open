@@ -101,12 +101,12 @@ gate must pass with an already reused clone, for ad-hoc and temporary hardened
 DLV copies. The historical failed candidate below remains evidence, not a
 proposed release setting. See [the reuse report](../re/codesign-clone-reuse.md)
 for the design and verification status.
-For this one lead-authorized test, temporary hardened-runtime copies with
-DLV may run on the M5 only after their plain launch-and-quit succeeds under
-the screen lock. This does not change `release.sh`'s M1-only smoke guard and
-does not authorize launching an exact release artifact. Neither hardened copy
-was launched: the earlier failure triggered the required stop. Signed and
-notarized release acceptance remains separate.
+The 16:31 lead ruling supersedes the earlier M5 exception: hardened-runtime
+DLV copies are crash-capable and may launch only on the M1 after `M1 clear`,
+under its screen lock. Each exact temporary copy must pass one plain launch
+and quit before its live-swap run. Stop on an abort; never relaunch a failed
+load. Neither hardened copy has launched. No system or CrashReporter setting
+may change. Signed and notarized release acceptance remains separate.
 
 The §9 dry-run errata are explicit: the main dev engine may be packaged while
 A-1 records mode-SKIP; its measured size may exceed the production hard limit
@@ -815,6 +815,15 @@ functional suites and full gate were not run after the stop. The source ordering
 of Sparkle's normal install does not establish safety for live replacement.
 No alternate fix was selected. Full receipts, loads and limits are in
 [the evidence report](../re/codesign-clone-off.md).
+
+**0106 follow-up, 16:35:** normal-App reuse, same-inode invalidation and
+separate-install checks passed on the rebuilt `0801–0810`, then `0106` engine.
+The ad-hoc plain controls passed, including an already reused branch clone.
+The matched-main live-swap control then failed: its first new page stayed
+blank after the harness restarted GPU and network helpers. Fresh helpers
+were alive; no new `.ips` or helper code-signing kill was identified. The
+cause is unassigned. The matrix stopped before the branch swap. The live-swap
+gate remains unproved; see [the current receipts and limits](../re/codesign-clone-reuse.md).
 
 ### 6.1 Dependency (one new dependency, with reason)
 

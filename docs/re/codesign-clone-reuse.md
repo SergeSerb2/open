@@ -86,7 +86,8 @@ remains in state, `.gclient`, `args.gn` or `build.ninja`. `engine-status`
 reported 7 PASS, 0 FAIL and the existing CEF series-order warning. That status
 still refers to the previous distribution; it does not prove the new binary.
 
-Normal-App runtime verification remains pending. Required rows are stable
+At the initial build checkpoint, normal-App runtime verification was pending.
+Required rows are stable
 ctime/link count across three full runs after priming; seven simple relaunches
 without ChangetimeScan; same-inode copy invalidation; two install paths;
 live replacement with a reused clone for ad-hoc and temporary hardened DLV
@@ -101,8 +102,8 @@ Main `d26300e6` (PR #264) is merged into this branch. Its Chromium patches
 engine build is allowed to finish, but its engine predates #264 and cannot
 qualify the final proof. The matched main control must include #264 without
 `0106`; the branch engine must include #264 followed by `0106`. Both are
-built in S16. All runtime rows and engine-status remain pending on that
-rebuilt engine, followed by the full gate on the merged head.
+built in S16. Final runtime rows and engine-status use that rebuilt engine,
+followed by the full gate on the merged head.
 
 The earlier full build passed in 1h39m (`engine-build-resume.json`). Next,
 `engine-main-264.log` records `0801` through `0810` applying in order with
@@ -122,7 +123,7 @@ this differs from the distribution hash because embedding re-signs the code.
 
 The 14:08 M5 screen hold began before any runtime proof in this series.
 No 0106 on-screen row overlapped 14:02. Live replacement, launch timing and
-e2e remain pending screen clearance. The branch rebuild follows the main
+e2e were pending screen clearance at that checkpoint. The branch rebuild follows the main
 control build; no gain or runtime safety PASS is claimed from build results.
 The final live-swap matrix replaces main with the matched branch build and
 branch with matched main. Both include #264 and share its public engine API;
@@ -138,14 +139,14 @@ no launch gain or live-update safety result.
 
 | Row | Required proof | Current state |
 |---|---|---|
-| a | Executable ctime and link count stay unchanged for three full runs after the first clone | Normal App not run; supplemental windowless result below |
+| a | Executable ctime and link count stay unchanged for three full runs after the first clone | PASS, normal App; `stability/receipt.json` |
 | b | Seven simple relaunches have no attributable ChangetimeScan | Not run; retain the initial clone and assessment warm-up logs separately |
-| c | An in-place executable copy keeps the inode but recreates the clone | Supplemental windowless PASS; normal App pending |
-| d | Two install paths use distinct clones with no cross-reuse | Supplemental windowless PASS; normal App pending |
-| e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Ad-hoc pending on cleared M5; hardened DLV pending M1 clear; plain-launch each hardened copy first, stop on any abort |
-| f | An unwritable cache falls back to a per-run clone and still works | Supplemental windowless PASS; rendering/live-swap fallback pending |
+| c | An in-place executable copy keeps the inode but recreates the clone | PASS, normal App; `stability/receipt.json` |
+| d | Two install paths use distinct clones with no cross-reuse | PASS, normal App; `stability/receipt.json` |
+| e | Live replacement passes with a reused clone in both ad-hoc and temporary hardened DLV builds | Main ad-hoc control FAIL: first new page stayed blank; branch swap not run. Both plain controls PASS, branch clone reused. DLV PENDING M1 clear |
+| f | An unwritable cache falls back to a per-run clone and still works | PASS, normal App; full render and helper types; `adhoc-branch-plain-unwritable/receipt.json`. Fallback live swap not run |
 | g | Seven interleaved main/branch pairs at load1 ≤ 12, plus window warm-profile rows | Pending on cleared M5; wait for load outside all locks |
-| h | Shell, features, updater and engine-status pass | Engine-status: 7 PASS, 0 FAIL, 1 order WARN; App suites pending on cleared M5 |
+| h | Shell, features, updater and engine-status pass | Shell PASS (7 rows); features PASS with intentional crash row DEFERRED to M1; engine-status: 7 PASS, 0 FAIL, 1 order WARN; updater pending |
 
 The rebuilt branch engine passed. The incremental build took 48 seconds;
 its distribution SHA-256 is
@@ -260,7 +261,7 @@ Receipt paths are relative to `.re/s16/` in the project checkout.
 
 The setting calls and their obsolete receipt fields were removed from
 `guard.py`, `offscreen.py`, `stability.py`, both swap harnesses, and all other
-matching harness source. The reuse guard, stability and swap harnesses have
+matching harness source. At the cleanup checkpoint, the reuse guard, stability and swap harnesses had
 no execution receipt in this series. The cleanup did not execute a harness
 or read or change a system setting. The lead independently confirmed the
 setting key was absent, as before, in the 16:30 instruction.
@@ -270,7 +271,7 @@ allowed. Launch only unmodified, already-passing builds. Never relaunch a
 build that failed to load. Stop at the first new real Open crash report;
 the read-only `.ips` baseline/diff check remains in the harness sources.
 The windowless modified caller is not a permitted substitute for the pending
-normal-App rows. No harness was rerun after the cleanup.
+normal-App rows. No harness was rerun before the subsequent M5 clearance.
 
 The 16:31 instruction cleared the M5 for normal-App rows a, b, c, d, f, g, h
 and the ad-hoc part of e. The hardened DLV part of e waits for `M1 clear`. In row b,
@@ -278,3 +279,55 @@ retain stat snapshots around install/copy/xattr/codesign setup separately
 from launch. If the pre-engine ctime change recurs, attribute it before any
 gain claim. Check the harness's own setup and read-only Spotlight/mds logs;
 do not change system settings to investigate it.
+
+### Normal-App results after M5 clearance
+
+`normal-stability.json` and `stability/receipt.json` record a full-App PASS
+for rows a, c and d. Three full reuse runs retained executable ctime and
+link count two. A copy over the same inode changed mtime and recreated the
+clone. Two install paths had separate caches; returning to the first path
+reused its own clone. Malformed and special-file identity controls recreated
+the clone and rendered the fixture. Copy and signature-verification stat
+snapshots are separate; `codesign --verify --deep --strict` did not change
+ctime. The earlier pre-engine ctime anomaly did not recur in this set.
+
+Load1 was 32.67–30.71. This is functional evidence, not timing evidence.
+The separate stat process requested a 1 ms interval, but its largest observed
+gap under load was 14.15 ms. This set does not prove a maximum 5 ms poll gap.
+No new real Open crash report, owned process or owned window remained.
+
+`adhoc-main-plain/receipt.json` and `adhoc-branch-plain/receipt.json` passed.
+The branch plain control primed and reused the persistent clone, retained
+ctime, rendered the fixture, and had renderer, GPU and utility processes.
+
+`adhoc-main-swap/receipt.json` failed. The unchanged-main control used the
+original per-run clone. The whole-App swap ran at 16:34:39.853–39.942 local
+time on 2026-11-08. It used Sparkle's directory exchange and removed the old
+staging App. The harness then sent SIGTERM to the original GPU and network
+processes to require fresh helpers. The first new page stayed blank and
+`wait` timed out. Fresh renderer 52951, GPU 52950 and network utility 52952
+were alive in the failure capture. `app.log` records the requested exits and
+GPU reinitialization; `unified.ndjson` records sandbox application to the
+fresh helpers. There was no new real Open `.ips` and no identified
+CODESIGNING or Killed: 9 event. The ad-hoc/unknown-chain AMFI message alone
+does not establish a signing kill. The cause remains unassigned; service
+restart and initial navigation overlapped.
+
+The matrix stopped at this main control. The branch live-swap proof has not
+run. This failure does not establish either a PASS or a failure of persistent
+clone reuse after replacement. The saved extracts are
+`adhoc-main-swap/failure-app-events.json` and
+`adhoc-main-swap/failure-signing-events.json`. No failed control was retried.
+The independent normal-App rows may continue. Hardened DLV rows remain
+PENDING until M1 clearance. No system settings were read or changed by these
+corrected runs.
+
+`normal-fallback.json` and `adhoc-branch-plain-unwritable/receipt.json`
+record row f PASS. The inactive persistent clone was retired under its
+exclusive lease, then the owned cache was set to mode 0500. The full App
+used the logged per-run fallback, rendered the fixture and launched all
+three helper types. The source executable link count was 1 before launch,
+2 while running and 1 after cleanup; ctime changed. The persistent clone
+stayed absent, and the App did not repair the cache permissions. This was
+a plain functional run, not another live-swap attempt. It left no owned
+process, window or new real Open crash report.

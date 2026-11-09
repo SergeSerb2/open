@@ -102,9 +102,13 @@ The disabled case's `Killed: 9` lines 6649–6650 belong to launchd cleanup of
 (lines 6651–6652). The passing control also has such Apple service cleanup
 (`com.apple.MTLCompilerService`, lines 2717–2718). Neither identifies a killed
 Open helper.
-Both cases ended with no owned processes or windows; crash-dialog settings were
-restored. Unused pipeline temporary copies were removed (`STOP.json`). No screen
-work continued after the failed case.
+Both cases ended with no owned processes or windows. These four historical
+ad-hoc runs changed a CrashReporter preference, which breached the standing
+system-setting rule. The incident times and raw-receipt hashes are recorded
+in the [reuse report](codesign-clone-reuse.md#harness-rule-breach-and-affected-receipts).
+The lead later confirmed the key was absent, as before. This is not evidence
+of crash-dialog suppression. Unused pipeline temporary copies were removed
+(`STOP.json`). No screen work continued after the failed case.
 
 ## Pending lead decision
 
