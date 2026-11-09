@@ -49,15 +49,25 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var pendingLittleOpenExtensionTabs: [Int: OEWebContent] = [:]
   var window: NSWindow? { controller?.window ?? standaloneSurface?.surfaceWindow ?? littleOpenController?.window }
   private(set) var savePrompts: SavePromptPresenter?
-  private func attachSavePrompts() {
+  var autofillToastCenter: ToastCenter?
+  func attachSavePrompts() {
     guard savePrompts == nil, let window else { return }
     savePrompts = SavePromptPresenter(window: window) { [weak self] page in
-      guard let self, let content = self.selectedContent else { return false }
+      // This is the focused pane of this presenter's own window, including
+      // Little Open. Sheet presentation changes key windows synchronously.
+      guard let self, let content = self.standaloneSurface?.surfacePage ?? self.selectedContent else { return false }
       return page == AnyHashable(content.identifier)
     }
+    #if OPEN_AUTOMATION
+    savePrompts?.onPresent = { sheet in AutomationController.savePromptOwner?.savePromptDidPresent(sheet) }
+    savePrompts?.onDiscard = { request in
+      guard let prompt = request as? OESavePrompt else { return }
+      AutomationController.savePromptOwner?.recordRealSavePrompt(prompt, answer: "ignored")
+    }
+    #endif
   }
-  private func savePromptFocusChanged() {
-    savePrompts?.pageDidBecomeFocused(AnyHashable(selectedContent?.identifier ?? 0))
+  func savePromptFocusChanged() {
+    savePrompts?.pageDidBecomeFocused(AnyHashable((standaloneSurface?.surfacePage ?? selectedContent)?.identifier ?? 0))
   }
   let model: BrowserModel
   let incognitoSession: IncognitoSession?
@@ -181,6 +191,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       browser.window = standaloneSurface?.surfaceWindow
     }
     pageChrome.visibilityChanged()
+    attachSavePrompts(); savePromptFocusChanged()
   }
 
   lazy var pageChrome = PageChromeCoordinator(owner: self)
@@ -681,6 +692,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
     findController?.sync()
+    savePromptFocusChanged()
     // Auto-PiP runs in the same turn as the selection change, after the new tab is attached (§4.5.3).
     app.media.windowChanged(self)
   }
