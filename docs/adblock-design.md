@@ -271,14 +271,26 @@ returns, configuration uses the existing store's in-memory values where
 available, otherwise the product default (on, no exclusions). The App does not
 wait for this task or perform settings IO on the main thread before paint.
 
-`AdBlockStore.openProfile`, bundled-list seeding, generation verification, and
-update scheduling still start after first paint. If the early native load finds
-no `current.json`, it fails open and keeps the directory configured. The store's
-later configure event explicitly reloads that same directory after seeding;
-setting the same path alone would not retry it. Requests before an engine is
-ready remain fail-open in this App-only change. A separate native change adds a
-bounded first-load hold; fresh-profile, saved-off/excluded, and launch-time
-acceptance are pending real-App proof.
+The startup task also performs one `lstat` of `lists/current.json` per Profile;
+only `ENOENT` identifies a fresh Profile. There is no main-thread stat. For a
+fresh Profile with a live context, `AdBlockStore.openProfile` starts from context
+creation, or as soon as that background result returns. Store metadata, settings,
+and lease preparation run on a worker; main-actor installation only assigns and
+binds the prepared values. Seed/verify and exclusion-file IO run in
+`ListRepository`. Concurrent fresh contexts share store preparation and the
+existing per-Profile opening task. Warm Profiles keep their after-paint opening.
+
+The store configure event explicitly reloads an already configured directory
+after seeding; setting the same path alone would not retry it. In the companion
+native branch, a missing pointer keeps the initial load in `awaiting_generation`
+with a 1,500 ms deadline per eligible request and a process-wide 128-request
+limit. Bad manifests/SHA or other real load errors end that wait and fail open;
+a valid zero-list generation completes it. Main-frame navigation stays direct.
+This App-only branch still fails open before an engine is ready. Fresh
+post-onboarding first-request blocking with its logged hold time, saved-off/
+excluded behavior, and launch impact remain pending real-App proof. Fresh and
+warm first-paint comparisons each require at least five interleaved main/branch
+pairs after the lead releases the build and screen holds.
 
 ### Site Control Center and Settings UI
 

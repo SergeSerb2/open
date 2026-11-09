@@ -4507,11 +4507,20 @@ and enabled state when a context is created, including Default at engine
 readiness. It does not construct the IO-backed store before paint. A separate
 read-only background task prefetches saved settings/exclusions; until it
 returns, the existing store's in-memory values win, otherwise defaults are
-on/no exclusions. List preparation and update schedules remain after paint.
+on/no exclusions. **Lead fresh-profile ruling (2026-11-09 04:30):** one
+background `lstat` of `lists/current.json` identifies `ENOENT`. A live fresh
+context starts `openProfile` immediately after detection, without waiting for
+paint; existing generations retain after-paint opening. Store metadata/lease
+preparation and repository seed/verify/exclusion IO stay off the main thread.
 The first store configure explicitly reloads an already configured directory,
 because the early load may have failed before seeding created `current.json`.
-This App change alone does not replace §10's fail-open matcher rule. Native
-bounded holding, first-request probes, and launch timing remain unverified.
+The companion native change keeps an unpublished pointer in
+`awaiting_generation` under the same 1,500 ms per-request / 128 process-wide
+limits. Real manifest/SHA/read errors end pending; an engine or valid zero-list
+generation completes the initial load. This App-only branch still fails open
+before an engine arrives. Fresh post-onboarding first-request blocking with
+logged hold time, five fresh and five warm first-paint pairs, and native
+boundary/negative proofs remain unverified.
 
 ### Section 13 lead decisions (2026-11-07)
 

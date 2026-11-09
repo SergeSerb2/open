@@ -3,7 +3,8 @@ import OpenAdBlock
 import OpenEngine
 import OpenModel
 
-/// Cheap context configuration precedes requests; list preparation stays after paint.
+/// Context configuration precedes requests. Fresh Profiles seed immediately;
+/// existing generations keep their store opening after paint.
 @MainActor
 final class AdBlockEngineAdapter {
   unowned let app: AppDelegate
@@ -15,6 +16,7 @@ final class AdBlockEngineAdapter {
   private var startupReads: [ProfileID: Task<Void, Never>] = [:]
   private var startupConfigurations: [ProfileID: AdBlockStartupConfiguration] = [:]
   private var startupDirectoryNames: [ProfileID: String] = [:]
+  private var startupGenerationMissing: [ProfileID: Bool] = [:]
   private(set) var started = false
 
   init(app: AppDelegate) { self.app = app }
@@ -31,6 +33,7 @@ final class AdBlockEngineAdapter {
     self.store = store
     guard isSupported else { store.onEngineEvent = nil; return }
     store.onEngineEvent = { [weak self] event in self?.apply(event) }
+    if started { for profile in app.model.profiles { openAfterPaint(profile) } }
   }
 
   /// Compose with the sleep policy, which owns onProfileCreated. The task runs
@@ -53,22 +56,29 @@ final class AdBlockEngineAdapter {
     let name = profile.dataDirectoryName
     startupReads.removeValue(forKey: id)?.cancel()
     startupConfigurations[id] = nil
+    startupGenerationMissing[id] = nil
     startupDirectoryNames[id] = name
     let root = app.directories.root
     let directory = app.directories.adBlockDirectory(dataDirectoryName: name)
     let read = Task.detached(priority: .userInitiated) {
-      try? AdBlockStore.startupConfiguration(root: root, directory: directory)
+      let fresh = AdBlockStore.hasNoGeneration(directory: directory)
+      let configuration = try? AdBlockStore.startupConfiguration(root: root, directory: directory)
+      return (fresh, configuration)
     }
     startupReads[id] = Task { [weak self] in
-      let configuration = await read.value
+      let (fresh, configuration) = await read.value
       guard let self else { return }
       guard !Task.isCancelled, self.startupDirectoryNames[id] == name else { return }
       self.startupReads[id] = nil
       guard !self.app.shutdownPrepared,
         self.app.model.profile(id: id)?.dataDirectoryName == name,
-        self.store?.isRetired(id) != true, let configuration else { return }
-      self.startupConfigurations[id] = configuration
+        self.store?.isRetired(id) != true else { return }
+      self.startupGenerationMissing[id] = fresh
+      if let configuration { self.startupConfigurations[id] = configuration }
       for context in self.contexts(for: id) { self.configureBeforeRequests(context, profileID: id) }
+      if fresh, !self.contexts(for: id).isEmpty, let profile = self.app.model.profile(id: id) {
+        self.openProfile(profile, beforePaint: true)
+      }
     }
   }
 
@@ -86,14 +96,25 @@ final class AdBlockEngineAdapter {
   }
 
   private func openAfterPaint(_ profile: Profile) {
+    guard started else { return }
+    openProfile(profile, beforePaint: false)
+  }
+
+  private func openProfile(_ profile: Profile, beforePaint: Bool) {
     // Without engine support, launch opens nothing (no list update schedule);
     // Settings still opens the Profile it shows, as before.
-    guard isSupported, started, !app.shutdownPrepared, let store, !store.isRetired(profile.id),
-      openings[profile.id] == nil, !store.isProfileOpen(profile.id) else { return }
+    guard isSupported, !app.shutdownPrepared, store?.isRetired(profile.id) != true,
+      openings[profile.id] == nil, store?.isProfileOpen(profile.id) != true else { return }
     openings[profile.id] = Task { [weak self] in
       guard let self else { return }
       defer { self.openings[profile.id] = nil }
       guard !Task.isCancelled, self.app.model.profile(id: profile.id) != nil else { return }
+      let openedStore: AdBlockStore?
+      if beforePaint { openedStore = await self.app.stores.adBlockForFreshProfile() }
+      else { openedStore = self.store }
+      guard !Task.isCancelled, !self.app.shutdownPrepared,
+        self.app.model.profile(id: profile.id)?.dataDirectoryName == profile.dataDirectoryName,
+        let store = openedStore, !store.isRetired(profile.id) else { return }
       do {
         try await store.openProfile(profile.id,
           directory: self.app.directories.adBlockDirectory(dataDirectoryName: profile.dataDirectoryName))
@@ -111,6 +132,7 @@ final class AdBlockEngineAdapter {
     guard let profile = app.model.profile(id: profileID) else { return }
     configureBeforeRequests(context, profileID: profileID)
     readStartupConfiguration(profile)
+    if startupGenerationMissing[profileID] == true { openProfile(profile, beforePaint: true) }
     openAfterPaint(profile)
   }
 
@@ -167,6 +189,7 @@ final class AdBlockEngineAdapter {
       startupReads.removeValue(forKey: profile)?.cancel()
       startupConfigurations[profile] = nil
       startupDirectoryNames[profile] = nil
+      startupGenerationMissing[profile] = nil
       for context in contexts(for: profile) {
         context.isAdBlockEnabled = false
         context.adBlockListDirectory = nil
