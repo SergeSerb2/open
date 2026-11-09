@@ -3348,7 +3348,10 @@ owned AD3 row does not convert it to PASS.
 The forced-sheet control takes 1,377.209 s including its screen queue,
 at endpoint loads 16.06/63.92/79.97 -> 6.00/10.09/26.08.
 Its raw expected failure and the separate AD3 failure are retained.
-Page/features/extensions-ui/settings-preview and the full gate follow.
+Page passes 81 rows with no FAIL or foreground interruption. Five known
+BLOCKED rows, the hosted-tab activation SKIP and the user smart-zoom
+DEFERRED row remain explicit. Features, extensions-ui, settings-preview
+and the full gate follow on the later merged App build.
 
 Later Step 5/9 acceptance remains open: two renderer processes with
 independent cosmetic selectors/exclusions, and cross-Profile C-G2 wait
@@ -4538,7 +4541,7 @@ are measurements for optimization, not final gate acceptance.
 ### Step 4 as built (2026-11-08, integrated engine)
 
 Branch `s13/step4-engine` uses only `~/Developer/open-engine-s10`.
-Source now includes main `dd240186`, including the final Section 15 App,
+Source now includes main `25b9c950`, including the final Section 15 App,
 the final App adapter `fcd1ef25`, and Step 7 resources. Engine inputs are
 unchanged since main `d26300e6` (Section 15's Chromium 0801–0810). Every main patch
 is retained. The engine applies Chromium's 08xx before the CEF series,
@@ -4585,9 +4588,12 @@ earlier App attempt was canceled before launch; it is not test evidence.
 Main `dd240186` was then merged in `eb88d72a`. The fresh `Engine/fork`
 log since `40c2ab94` is empty, so the recorded distribution is unchanged.
 The Debug rebuild passes in 47.107 s at endpoint loads
-10.99/10.55/11.78 -> 7.92/9.82/11.44. Features and extensions-ui reruns
-use this build. The earlier Features waiter was canceled before launch;
-it does not provide a test result.
+10.99/10.55/11.78 -> 7.92/9.82/11.44. Before the queued suites launch,
+updater PR #253 reaches main `25b9c950`. This overlapping main update is
+merged in `e864ca1d`; its Engine/fork log is also empty. The next Debug
+build passes in 49.824 s at loads 6.86/8.69/10.73 -> 10.13/9.40/10.88.
+Features and extensions-ui reruns use that build. Both earlier Features
+waiters were canceled before launch and provide no test result.
 
 **Request path and lifetime.** Open's outermost factory proxy checks
 subresources and redirects on one matcher sequence. Main documents pass
