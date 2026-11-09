@@ -1,5 +1,6 @@
 # Follow-ups
 
+- Cold first-launch engine.start ≈ 2.2 s (first launch after build/install) → static intro room ≈ 2.4 s; owner: launch budget (Section 8 item 13 / Section 16).
 - Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
   `onboarding` measures main-thread display-link intervals, not render-server
   frames. The intro's animations run on the render server; the main thread is
