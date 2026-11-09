@@ -275,8 +275,9 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   var canImportPasswordsAndCookies: Bool { app.importRunner.canImportPasswordsAndCookies }
   var hasUnfinishedSecretsImport: Bool { app.importRunner.hasUnfinishedSecretsImport }
   func isDefaultBrowser() -> Bool { app.defaultBrowserService.isDefaultBrowser }
+  @ObservationIgnored private(set) var defaultBrowserRequest: Task<Void, Never>?
   func setAsDefaultBrowser() -> String? {
-    Task { @MainActor in
+    defaultBrowserRequest = Task { @MainActor in
       let state = await app.defaultBrowserService.makeDefault()
       settings.general.refresh()
       settings.links.isDefaultBrowser = state.values.allSatisfy { $0 }

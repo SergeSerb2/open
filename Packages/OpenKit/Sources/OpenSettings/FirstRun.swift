@@ -23,8 +23,12 @@ public struct PasswordsImportCopy: Sendable {
 
 @MainActor public protocol FirstRunActions: ImportActions {
     func setAsDefaultBrowser() -> String?
+    func waitForDefaultBrowserRequest() async
     func isDefaultBrowser() -> Bool
     func finishFirstRun(imported:Bool)
+}
+public extension FirstRunActions {
+    func waitForDefaultBrowserRequest() async {}
 }
 
 public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
@@ -70,6 +74,10 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
     public func enterDefaultBrowser() {step = .defaultBrowser;errorText=nil;defaultWasAttempted=false;isDefaultBrowser=actions.isDefaultBrowser()}
     /// The App's default-browser service completes asynchronously after its click.
     public func refreshDefaultBrowserStatus() {isDefaultBrowser=actions.isDefaultBrowser()}
+    public func waitForDefaultBrowserRequest() async {
+        await actions.waitForDefaultBrowserRequest()
+        refreshDefaultBrowserStatus()
+    }
     public func makeDefault() {
         guard step == .defaultBrowser,!isDefaultBrowser else {return}
         defaultWasAttempted=true
@@ -159,17 +167,18 @@ public struct FirstRunView:View {
     @Bindable var model:FirstRunViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let startsProbe:Bool
-    public init(model:FirstRunViewModel,startsProbe:Bool=true) {self.model=model;self.startsProbe=startsProbe}
+    private let embeddedImport:Bool
+    public init(model:FirstRunViewModel,startsProbe:Bool=true,embeddedImport:Bool=false) {self.model=model;self.startsProbe=startsProbe;self.embeddedImport=embeddedImport}
     private var secondary:Color {Color(nsColor:SettingsTokens.secondary.nsColor)}
     private var section:Font {Font(SettingsTokens.section.font)}
     public var body:some View {
-        Group {if model.step == .welcome {welcome} else {stepContent}}
-            .padding(.horizontal,SettingsTokens.firstRunHorizontalInset)
-            .padding(.top,model.step == .welcome ? SettingsTokens.firstRunVerticalInset:SettingsTokens.firstRunStepTopInset)
-            .padding(.bottom,SettingsTokens.firstRunVerticalInset)
-            .frame(width:FirstRunWindow.size.width,height:FirstRunWindow.size.height)
+        Group {if embeddedImport {stepContent} else if model.step == .welcome {welcome} else {stepContent}}
+            .padding(.horizontal,embeddedImport ? 0:SettingsTokens.firstRunHorizontalInset)
+            .padding(.top,embeddedImport ? 0:model.step == .welcome ? SettingsTokens.firstRunVerticalInset:SettingsTokens.firstRunStepTopInset)
+            .padding(.bottom,embeddedImport ? 0:SettingsTokens.firstRunVerticalInset)
+            .frame(width:embeddedImport ? nil:FirstRunWindow.size.width,height:embeddedImport ? nil:FirstRunWindow.size.height)
             .font(Font(SettingsTokens.label.font)).controlSize(.regular).buttonStyle(SettingsButtonStyle())
-            .background(Color(nsColor:SettingsTokens.content.nsColor)).ignoresSafeArea()
+            .background(embeddedImport ? Color.clear:Color(nsColor:SettingsTokens.content.nsColor)).ignoresSafeArea()
             .animation(reduceMotion ? nil:.easeInOut(duration:Motion.selectionFade),value:model.step)
             .task {if startsProbe && model.probe == nil {await model.refreshProbe()}}
     }
@@ -200,8 +209,8 @@ public struct FirstRunView:View {
         }
     }
     private var importChoices:some View {VStack(alignment:.leading,spacing:10) {
-        Text("Import from Arc").font(.title2)
-        Text("Choose what to bring into Open. You can import again later from Settings. Nothing here changes your Arc data.").fixedSize(horizontal:false,vertical:true)
+        if !embeddedImport {Text("Import from Arc").font(.title2)
+        Text("Choose what to bring into Open. You can import again later from Settings. Nothing here changes your Arc data.").fixedSize(horizontal:false,vertical:true)}
         ScrollView {VStack(alignment:.leading,spacing:10) {
             if model.probe?.sidebarFound == false {
                 Text("No Arc data found at \(model.wizard.directoryDisplayPath).").font(.headline).fixedSize(horizontal:false,vertical:true)
@@ -217,13 +226,13 @@ public struct FirstRunView:View {
                 if model.probe?.sidebarFound == true && model.probe?.spaces == nil {Text("Open found the sidebar file, but could not count it. You can try the import or choose a different folder.").font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             }
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
-        HStack {
+        if !embeddedImport {HStack {
             Button("Back"){model.step = .welcome}
             if model.probe?.sidebarFound == true && model.probe?.spaces == nil {chooseFolder}
             Spacer(minLength:0)
             if model.probe?.sidebarFound == false {chooseFolder;primary("Start Fresh"){model.startFresh()}}
             else {Button("Not Now"){model.skipImport()};primary("Continue"){Task {await model.continueImport()}}.disabled(!model.hasSelection)}
-        }.fixedSize(horizontal:false,vertical:true)
+        }.fixedSize(horizontal:false,vertical:true)}
     }}
     private func choice(_ title:String,help:String,found:String,value:Binding<Bool>,height:CGFloat,last:Bool=false,enabled:Bool=true)->some View {
         SettingsRow(divider:!last,minimumHeight:height) {HStack(alignment:.top,spacing:8) {
@@ -243,10 +252,10 @@ public struct FirstRunView:View {
                 Text(PasswordsImportCopy.later).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)
             }
         }
-        HStack {Button("Cancel"){model.cancelPasswords()};Spacer(minLength:0)
+        if !embeddedImport {HStack {Button("Cancel"){model.cancelPasswords()};Spacer(minLength:0)
             if model.wizard.canImportPasswordsAndCookies {Button(PasswordsImportCopy.skipButton){Task {await model.skipPasswords()}};primary(PasswordsImportCopy.allowButton){Task {await model.allowPasswords()}}}
             else {primary(PasswordsImportCopy.skipButton){Task {await model.skipPasswords()}}}
-        }
+        }}
     }}
     private var progress:some View {sparse {VStack(spacing:0) {
         brand.padding(.bottom,16)
@@ -255,7 +264,7 @@ public struct FirstRunView:View {
         if model.browserHasLanded && model.phaseText == "Importing your history…" {Text("Your browser is ready. History is still importing in the background.").frame(width:SettingsTokens.firstRunSparseTextWidth).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.top,12)}
     }}}
     private var report:some View {VStack(alignment:.leading,spacing:10) {
-        Text("Import complete").font(.title2)
+        if !embeddedImport {Text("Import complete").font(.title2)}
         ScrollView {VStack(alignment:.leading,spacing:10) {
             Text(model.reportSummary).fixedSize(horizontal:false,vertical:true)
             SettingsGroup {ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
@@ -267,11 +276,12 @@ public struct FirstRunView:View {
             ForEach(model.wizard.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
             if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(secondary) }
             if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).foregroundStyle(secondary) }
+            if embeddedImport, model.outcome?.errorText != nil, !model.wizard.hasImportedData {Button("Try Again") {model.showImport()}}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
             if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
-        HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)
+        if !embeddedImport {HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)}
     }}
     private var defaultBrowser:some View {VStack(spacing:16) {
         sparse {VStack(spacing:8) {
@@ -295,6 +305,6 @@ public struct FirstRunView:View {
             Text("Spaces: "+model.reportValue("Spaces")).font(section).foregroundStyle(secondary)
             Text("The import stopped before it changed anything in Open. You can try again, or start fresh.").fixedSize(horizontal:false,vertical:true)
         }}
-        HStack {Button("Back"){model.showImport()};Button("Start Fresh Instead"){model.startFresh()};Spacer();primary("Try Again"){Task {await model.continueImport()}}}
+        if !embeddedImport {HStack {Button("Back"){model.showImport()};Button("Start Fresh Instead"){model.startFresh()};Spacer();primary("Try Again"){Task {await model.continueImport()}}}}
     }}
 }

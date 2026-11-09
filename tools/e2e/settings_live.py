@@ -61,11 +61,17 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         s = app.call('settings-state')
         results['settings_general_action_error'] = {'ok': s['pane'] == 'general'
             and s['generalError'] == 'Updates are not set up in this build.', 'error': s['generalError']}
+        before_boosts = app.call('settings-state')
         app.call('menu-perform', id='view-boosts')
         s = app.call('settings-state')
-        results['settings_advanced_action_error'] = {'ok': s['pane'] == 'advanced'
-            and s['advancedStatus'] == 'Boost editing is not available in this build.',
-            'status': s['advancedStatus']}
+        boosts_window = next((window for window in app.call('windows') if window['number'] == s['library']), None)
+        # Boosts now has a real Library destination on main, rather than the
+        # retired Advanced-pane unavailable message.
+        results['settings_boosts_library'] = {'ok': s['librarySection'] == 'boosts'
+            and bool(boosts_window and boosts_window['visible'] and boosts_window['key'])
+            and not (before_boosts['library'] > 0 and before_boosts['librarySection'] == 'boosts'),
+            'section': s['librarySection'], 'window': boosts_window, 'negativeProof': before_boosts['library'] == 0}
+        app.call('key', key='w', modifiers=['cmd'], window=s['library'], route='app')
 
         # The picker action writes the actual preference and replaces NSApp's actual image.
         app.call('settings-pane', pane='appIcon')

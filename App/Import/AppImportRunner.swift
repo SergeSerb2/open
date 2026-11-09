@@ -253,8 +253,8 @@ final class AppImportRunner: ProfileDataOwner {
       app.showFirstRunBrowser()
       do {
         try app.snapshotStore.saveNow(model: app.model)
-        app.firstRunSaved = true
-        UserDefaults.standard.set(true, forKey: "open.firstRun.completed")
+        // This is a landing checkpoint. Final setup still owns D3 completion.
+        // Keep ordinary snapshot writes guarded until Get Started succeeds.
       } catch {
         return result(FirstRunViewModel.importedSaveError)
       }
