@@ -2174,9 +2174,17 @@ before that callback (`core/loader/frame_loader.cc:1856`), and
 `V8ScriptRunner` refuses script execution in that scope
 (`bindings/core/v8/v8_script_runner.cc:529`). The first real CEF run therefore
 hid domain-specific elements but sent no generic reports (C-4: 0/10).
-Start the isolated observer in the frame's next AgentGroupScheduler task,
-guarded by a WeakPtr and document epoch. Enter that scheduler's isolate,
-install the native binding, then execute the observer. Before observing
+**2026-11-09 timing correction:** keep the hostname-specific sheet at
+`DidCreateDocumentElement`, but start generic filtering after
+`DOMContentLoaded`. Pinned `FrameLoader::FinishedParsing` also wraps its
+DCL callback in `ScriptForbiddenScope` (`frame_loader.cc:479`), so that
+callback queues `WebLocalFrame::PostIdleTask`, the first main-thread idle
+task after the event. If the document query follows DCL, it queues the same
+idle path. A pending flag, WeakPtr and document epoch prevent duplicate or
+stale startup. Enter the frame scheduler's isolate, create or reuse world 7,
+install the native binding, then execute the observer. A context callback
+only logs creation; it does not install a binding before generic startup.
+Blink may itself recreate a previously used world during navigation. Before observing
 mutations, scan the existing document once, including elements created by
 parser or top-of-body inline scripts. **Review correction (19:08):** after
 65,536 node/token inspection steps, work yields with `setTimeout(0)` and
@@ -2186,7 +2194,8 @@ starts before the first yielded task so changes during an unfinished initial
 scan are queued. Only the 65,536 distinct-token / 4,194,304 UTF-16-unit
 lifetime caps, or a negative native report result, disconnect. Queued generic
 reports still send at most 500 tokens per flush. The new C-4 inline variant
-requires hiding and initial-scan evidence in 10/10 navigations. The rebuilt
+requires eventual hiding after DCL/idle startup and initial-scan evidence in
+10/10 navigations; generic rules do not promise document-start hiding. The rebuilt
 pre-review `335e9f8d` binary passes both C-4 variants 10/10; the inline variant also
 records its generic class in the initial scan 10/10. The real CEF suite
 passes all 18 executable rows, including binding-before-observer ordering
@@ -5269,10 +5278,11 @@ and final build pass. No failed build output was launched.
   script interpolation or main-world global is created.
 - The fixed class/ID observer runs in private cosmetics world 7
   (`kOpenAdBlockIsolatedWorldId`, Chromium 0902) after native binding installation.
-  It starts in the frame's next task, after Blink's script prohibition
-  ends. It begins scanning existing tokens and starts mutation observation
+  It starts on the first main-thread idle task after DOMContentLoaded.
+  The hostname-specific sheet stays at document start; generic rules may
+  hide later. It scans existing tokens and starts mutation observation
   before yielding, so parser and early inline-script nodes are included.
-  An early context callback installs the binding idempotently; its
+  Binding installation happens at idle startup, not the context callback; its
   `v8::Global<Context>` follows release. Weak callbacks read the current
   payload lazily. Generic replies carry a document epoch and old replies
   are discarded. `generichide` prevents the observer and all reports.

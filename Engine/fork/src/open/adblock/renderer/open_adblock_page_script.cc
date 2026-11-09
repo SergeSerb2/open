@@ -166,7 +166,7 @@ std::string_view AdBlockClassIdObserverScript() {
     tail = batch;
     if (!workTimer) workTimer = setTimeout(drain, 0);
   });
-  // The native entry runs one task after document-element creation. Read
+  // Native startup runs on the first idle task after DOMContentLoaded. Read
   // existing parser/inline-script elements once before watching mutations.
   active = scan(root, true, true);
   drain();

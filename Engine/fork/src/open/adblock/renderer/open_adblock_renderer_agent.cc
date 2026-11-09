@@ -15,7 +15,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -151,6 +150,8 @@ void OpenAdBlockRendererAgent::DidCreateNewDocument() {
   generic_pending_ = 0;
   generic_limit_logged_ = false;
   document_queried_ = false;
+  dom_content_loaded_ = false;
+  observer_pending_ = false;
   observer_started_ = false;
 #if !defined(OFFICIAL_BUILD)
   footprint_before_insert_ = 0;
@@ -198,18 +199,38 @@ void OpenAdBlockRendererAgent::DidCreateDocumentElement() {
   if (cosmetics_->generichide) {
     return;
   }
-  // Blink calls DidCreateDocumentElement inside ScriptForbiddenScope.
-  // Keep the query/style insertion here, but start the class/ID observer
-  // in this frame's next task, after that scope unwinds. WeakPtr and the
-  // epoch reject detached frames and a newer document before touching V8.
-  frame->GetAgentGroupScheduler()->DefaultTaskRunner()->PostTask(
+  // Specific CSS stays at document start. Generic filtering waits for DCL,
+  // including world creation, native binding and the existing-token scan.
+  QueueObserverAfterDOMContentLoaded();
+}
+
+void OpenAdBlockRendererAgent::DidDispatchDOMContentLoadedEvent() {
+  dom_content_loaded_ = true;
+  QueueObserverAfterDOMContentLoaded();
+}
+
+void OpenAdBlockRendererAgent::QueueObserverAfterDOMContentLoaded() {
+  if (!dom_content_loaded_ || observer_pending_ || observer_started_ ||
+      !cosmetics_ || cosmetics_->generichide) {
+    return;
+  }
+  observer_pending_ = true;
+  // Blink also dispatches its DCL callback inside ScriptForbiddenScope.
+  // Use the first main-thread idle task after the event, rather than delaying
+  // parsing or load handlers. WeakPtr/epoch reject detachment or navigation.
+  render_frame()->GetWebFrame()->PostIdleTask(
       FROM_HERE,
       base::BindOnce(&OpenAdBlockRendererAgent::StartObserver,
                      weak_ptr_factory_.GetWeakPtr(), document_epoch_));
 }
 
-void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
-  if (document_epoch != document_epoch_ || observer_started_ || !cosmetics_ ||
+void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch,
+                                           base::TimeTicks /*deadline*/) {
+  if (document_epoch != document_epoch_) {
+    return;
+  }
+  observer_pending_ = false;
+  if (!dom_content_loaded_ || observer_started_ || !cosmetics_ ||
       cosmetics_->generichide) {
     return;
   }
@@ -226,7 +247,7 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
         isolate, kOpenAdBlockIsolatedWorldId);
     if (context.IsEmpty()) {
       // The Blink getter can return an empty context. Enter the normal world
-      // creation path; our context callback installs the binding synchronously.
+      // creation path. Install the binding below before running the observer.
       frame->ExecuteScriptInIsolatedWorld(
           kOpenAdBlockIsolatedWorldId,
           blink::WebScriptSource(blink::WebString::FromUtf8("void 0")),
@@ -241,7 +262,7 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
   if (context.IsEmpty()) {
     return;
   }
-  InstallBinding(context, "existing");
+  InstallBinding(context, "idle");
   if (!binding_installed_) {
     return;
   }
@@ -259,16 +280,15 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
 }
 
 void OpenAdBlockRendererAgent::DidCreateScriptContext(
-    v8::Local<v8::Context> context,
+    v8::Local<v8::Context> /*context*/,
     int32_t world_id) {
 #if !defined(OFFICIAL_BUILD)
   VLOG(1) << "OpenScriptWorld: context-created world=" << world_id
           << " frame="
           << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString();
 #endif
-  if (world_id == kOpenAdBlockIsolatedWorldId) {
-    InstallBinding(context, "callback");
-  }
+  // Blink can recreate a previously used isolated world during navigation.
+  // Do not install the binding until this document's DCL/idle startup.
 }
 
 void OpenAdBlockRendererAgent::WillReleaseScriptContext(
