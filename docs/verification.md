@@ -1305,6 +1305,18 @@ main. Final full verification rebuilds and runs the restored source.
 
 ## Quiet-machine budgets
 
+Window 2 record (Section 16, 2026-11-09): 2026-11-08 23:45–2026-11-09
+00:11, **main e8d4acd4, engine 619324d3, pre-#271**, load1 4.3–7.1.
+Two misses remain without an owner fix: Site Control cold-open CPU p95
+8.07 ms against <8 ms, and adblock profile-integrity scan p95 11.24 ms
+against <10 ms (forwarded to Section 13). Source:
+`.re/s16/window2/budgets.out`. Find first-open p95 25.2 ms was one outlier;
+the 00:25 rerun on `518471aa` passed at p95 5.67 ms
+(`.re/s16/window3/find.out`). The post-#271 static ten-page idle A/B had
+median total CPU 0.21 % before and 0.42 % after, five runs per revision
+(window 2 plus `.re/s16/window3/` receipts). These records do not clear the
+remaining budget misses.
+
 `tools/budgets.sh --out <receipt.json>` runs the existing performance
 measurements against an already-built Release App and release OpenKit CLIs.
 It prints one table: row, unchanged budget, measured value, samples, PASS/FAIL,
