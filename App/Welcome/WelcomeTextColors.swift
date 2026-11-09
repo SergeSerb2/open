@@ -29,6 +29,11 @@ enum WelcomeTextColors {
     composite(color, over: composite(surface, over: RGB(r: 1, g: 1, b: 1))).color
   }
 
+  static func text(_ seed: NSColor, on surface: NSColor) -> NSColor {
+    let base = composite(surface, over: RGB(r: 1, g: 1, b: 1))
+    return readable(composite(seed, over: base), on: base, minimum: 4.5).color
+  }
+
   static func pair(primary: NSColor, secondary: NSColor, surface: NSColor) -> Pair {
     let base = composite(surface, over: RGB(r: 1, g: 1, b: 1))
     var detail = readable(composite(secondary, over: base), on: base, minimum: 4.5)

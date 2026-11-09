@@ -120,3 +120,7 @@ all eight PNGs. Run just this matrix with
 `OPEN_E2E_WELCOME_CONTRAST_ONLY=1 tools/e2e/engine_e2e.py --only welcome` under the
 same screen lock and priority rules. The temporary old-palette build patch and
 negative receipt also stay in `.re/`; no mutation switch ships in the App.
+
+Footer links keep their system link-color seed and use the same lightness-only
+correction against the page surface. They also have 4.5:1 pixel assertions, so a
+Dark app appearance cannot leave bright, low-contrast link text on a light Space.

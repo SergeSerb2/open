@@ -138,6 +138,9 @@ extension AutomationController {
       "gridTop": Double(page.cards[0].frame.minY), "columnWidth": Double(page.cards[0].bounds.width * 2 + 20),
       "footer": rect(page.footerFrame), "footerGap": Double(page.footerFrame.minY - (page.cards.map { $0.frame.maxY }.max() ?? 0)),
       "background": components(page.backgroundColor),
+      "linkPixels": page.footerLinks.map { button in
+        ["label": button.title, "frame": inWindow(button.cell?.titleRect(forBounds: button.bounds) ?? button.bounds, of: button)] as [String: Any]
+      },
       "textPixels": ["heading": text(page.heading), "subheading": text(page.subheading)], "cards": cards]
   }
 }

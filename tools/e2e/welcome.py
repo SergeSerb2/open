@@ -455,6 +455,8 @@ def pixel_contrast(path, state, window, api):
 
     layout = state['layout']
     samples = {name: sample(label, 3) for name, label in layout['textPixels'].items()}
+    for link in layout.get('linkPixels', []):
+        samples['link_' + link['label']] = sample(link, 4.5)
     for index, card in enumerate(layout['cards']):
         for role, label in card['textPixels'].items():
             samples['card%d_%s' % (index+1, role)] = sample(label, 4.5)

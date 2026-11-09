@@ -34,6 +34,9 @@ final class WelcomePageView: NSScrollView {
   private let shortcuts = NSButton(title: "Learn Essential Shortcuts", target: nil, action: nil)
   private let settings = NSButton(title: "Settings", target: nil, action: nil)
   var footerFrame: NSRect { shortcuts.frame.union(settings.frame) }
+  #if OPEN_AUTOMATION
+  var footerLinks: [NSButton] { [shortcuts, settings] }
+  #endif
   private var observers: [NSObjectProtocol] = []
   private var appearanceObservation: NSKeyValueObservation?
   private struct ColorInputs: Equatable {
@@ -162,6 +165,8 @@ final class WelcomePageView: NSScrollView {
     let secondary = palette?.foregroundSecondary.nsColor ?? primary.withAlphaComponent(0.6)
     let header = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: backgroundColor)
     heading.textColor = header.primary; subheading.textColor = header.secondary
+    let link = WelcomeTextColors.text(.linkColor, on: backgroundColor)
+    shortcuts.contentTintColor = link; settings.contentTintColor = link
     let fill = WelcomeColors.surface(backgroundColor, dark: dark)
     let cardText = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: fill)
     let tint: NSColor
