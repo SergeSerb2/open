@@ -38,6 +38,10 @@ enum MainMenu {
       troubleshooting.addItem(archive)
     }
     #endif
+    if let item = menu.items.first?.submenu?.items.first(where: { $0.identifier?.rawValue == "check-for-updates" }) {
+      item.target = UpdaterMenuTarget.shared; item.action = #selector(UpdaterMenuTarget.check(_:))
+      _ = UpdaterMenuTarget.shared.validateMenuItem(item)
+    }
     #if DEBUG
     if let help = menu.items.first(where: { $0.title == "Help" })?.submenu {
       let replay = ClosureMenuItem(title: "Replay Intro") { [weak app] in app?.showOnboarding(replay: true) }
@@ -141,7 +145,7 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
-    if id == "check-for-updates" { return app.updater?.canCheckForUpdates ?? true }
+    if id == "check-for-updates" { return true }
     if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
@@ -398,5 +402,19 @@ extension EngineWebContentHostFactory {
       guard let self, let panel, self.pendingSavePanel === panel else { return }
       self.pendingSaveChoice?(response == .OK ? panel.url : nil)
     }
+  }
+}
+
+/// App-only dynamic update menu state; Sparkle never enters OpenCommands.
+@MainActor
+private final class UpdaterMenuTarget: NSObject, NSMenuItemValidation {
+  static let shared = UpdaterMenuTarget()
+  @objc func check(_ sender: Any?) { (NSApp.delegate as? AppDelegate)?.settingsPresenter.checkForUpdates() }
+  func validateMenuItem(_ item: NSMenuItem) -> Bool {
+    let updater = (NSApp.delegate as? AppDelegate)?.updater
+    let available = updater?.started == true && (updater?.foundVersion != nil || updater?.userDriver.available == true)
+    item.title = available ? "Update Available…" : (updater?.canCheckForUpdates ?? true) ? "Check for Updates…" : "Updating…"
+    item.badge = available ? .updates(count: 1) : nil
+    return true
   }
 }

@@ -16,6 +16,7 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
 
   private unowned let app: AppDelegate
   private var updater: SPUUpdater?
+  private(set) var userDriver: OpenUpdateUserDriver!
   private var checkObservation: NSKeyValueObservation?
   private var defaultsObserver: (any NSObjectProtocol)?
   private(set) var offReason: String?
@@ -43,6 +44,7 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   init(app: AppDelegate) {
     self.app = app
     super.init()
+    userDriver = Self.makeUserDriver(app: app)
     LaunchTiming.shared.mark("updaterCreated")
     // Check before constructing SPUUpdater: even its scheduler must not exist
     // in an unconfigured or unsigned build. Canonical base64 is exactly 44 bytes.
@@ -56,7 +58,7 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
       disable(reason: "missing-team-identifier"); return
     }
     let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main,
-      userDriver: Self.makeUserDriver(), delegate: self)
+      userDriver: userDriver, delegate: self)
     self.updater = updater
     applyAutomaticPreference()
     do { try updater.start(); started = true }
@@ -76,9 +78,8 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
     }
   }
 
-  /// The later banner/user-driver change replaces this factory alone.
-  private static func makeUserDriver() -> any SPUUserDriver {
-    SPUStandardUserDriver(hostBundle: .main, delegate: nil)
+  private static func makeUserDriver(app: AppDelegate) -> OpenUpdateUserDriver {
+    OpenUpdateUserDriver(app: app)
   }
 
   private func disable(reason: String) {
@@ -96,9 +97,18 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
 
   func checkForUpdates() {
     guard let updater, started else { app.settingsPresenter.showUpdatesUnavailable(); return }
+    if updater.sessionInProgress { userDriver.showUpdateInFocus(); return }
     guard canCheckForUpdates else { return }
+    userDriver.beginUserCheck()
     foundVersion = nil; lastErrorCode = nil
     updater.checkForUpdates()
+  }
+
+  func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) { userDriver.backgroundDownloading() }
+  func updater(_ updater: SPUUpdater, willExtractUpdate item: SUAppcastItem) { userDriver.backgroundPreparing() }
+  func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) { userDriver.backgroundError(error) }
+  func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock: @escaping () -> Void) -> Bool {
+    userDriver.readyOnQuit(immediateInstallationBlock); return true
   }
 
   func allowedChannels(for updater: SPUUpdater) -> Set<String> { channel == "beta" ? ["beta"] : [] }
@@ -121,18 +131,24 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
     completedChecks += 1
     lastErrorCode = (error as NSError?)?.code
+    userDriver.didFinishUpdateCycle()
   }
 
   #if OPEN_AUTOMATION
+  func checkInBackgroundForAutomation() {
+    guard let updater, !updater.sessionInProgress else { return }
+    userDriver.beginBackgroundCheck(); updater.checkForUpdatesInBackground()
+  }
   /// Read-only: observing this state never creates or starts an updater.
   var automationState: [String: Any] {
     ["created": true, "offReason": offReason ?? NSNull(), "started": started,
+      "sessionInProgress": updater?.sessionInProgress ?? false,
       "canCheck": canCheckForUpdates, "lastCheck": updater?.lastUpdateCheckDate?.timeIntervalSince1970 ?? NSNull(),
       "automaticallyChecks": updater?.automaticallyChecksForUpdates ?? false,
       "automaticallyDownloads": updater?.automaticallyDownloadsUpdates ?? false,
       "automaticPreference": automaticallyChecksAndDownloads, "channel": channel,
       "foundVersion": foundVersion ?? NSNull(), "completedChecks": completedChecks,
-      "lastErrorCode": lastErrorCode ?? NSNull()]
+      "lastErrorCode": lastErrorCode ?? NSNull(), "ui": userDriver.automationState]
   }
   #endif
 }
