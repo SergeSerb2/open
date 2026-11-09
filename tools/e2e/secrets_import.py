@@ -62,6 +62,7 @@ def run(factory, results, tmp, h):
             'password manager unavailable', 'fixture checkpoint not reached',
             'Change Profile warning missing', 'Profile reassignment did not finish',
             'Profile deletion sheet missing',
+            'fixture import wizard not ready',
         }
         safe_runtime_errors = {
             'first-run: Passwords copy reference requires capability OFF': 'wizard copy reference not ready',
@@ -347,7 +348,15 @@ def _run(factory, results, tmp, h):
             # direct adapter action cannot mint a token or reach the Keychain.
             for allow in (False, True):
                 launch(fresh=True, allow=allow)
-                app.call('first-run', action='settings-import', directory=str(source))
+                chosen = app.call('first-run', action='settings-import', directory=str(source))
+                # Presenting the sheet also starts its SwiftUI count task.
+                # It can supersede choose()'s request, so that await can return
+                # while the newer count is still active. Follow the real Next
+                # button's readable/idle gate before entering the copy reference.
+                def wizard_ready():
+                    state = app.call('first-run', action='settings-inspect')
+                    return state['settingsReadable'] and not state['settingsBusy']
+                assert h.wait_until(wizard_ready, timeout=10, step=.05), 'fixture import wizard not ready'
                 app.call('first-run', action='settings-passwords')
                 app.call('first-run', action='settings-inspect')
                 app.call('first-run', action='settings-allow-passwords')
@@ -366,7 +375,9 @@ def _run(factory, results, tmp, h):
                     and not state['secretsConsented'] and skipped_without_consent and zero_consent(),
                     consentCalls=app.call('import-secrets-state')['consentAdapterCalls'],
                     keychainProbeCalls=app.call('import-secrets-state')['keychainProbeCalls'],
-                    keychainCalls=app.call('import-secrets-state')['keychainReadCalls'])
+                    keychainCalls=app.call('import-secrets-state')['keychainReadCalls'],
+                    busyAfterChoose=chosen['settingsBusy'], readableAfterChoose=chosen['settingsReadable'],
+                    readyBeforeReference=True)
                 app.quit()
         finally:
             if app is not None:
