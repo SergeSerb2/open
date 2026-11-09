@@ -1497,8 +1497,8 @@ report `blocked: EP-n`, never pass):
 | X6 | Undo after translate → original text |
 | A1 | `command appearance-dark` → `scheme.html` `matchMedia` dark in Alloy and hosted tabs, no reload (`events` has no load) |
 | A2 | `appearance-automatic` + `app-appearance value=dark` then `value=light` → `scheme.html` follows each time |
-| K1 | `cookies.html` on two hosts → `clear-cookies-and-refresh` on host 1 → host 1 cookie gone, host 2 cookie kept (E2), page reloaded |
-| K2 | `clear-cache-and-refresh` disabled before E2 (`menu-state`) |
+| K1 | Two fixture origins seed host/parent-domain cookies and HTTP cache → View ▸ Clear Cache and Refresh on A → A refetches, B stays cached, both cookie sets stay, page reloads |
+| K2 | View ▸ Clear Cookies and Refresh on A → A host and parent-domain cookies disappear (also on a sibling), B cookies and both caches stay, page reloads; private clears preserve the parent Profile; internal/file pages disable both commands and internal pages omit both command-bar actions |
 | D1 | `javascript-console` opens DevTools on the Console panel (DevTools page URL has `panel=console` or its first view is Console via `pages`) |
 | D2 | `network-inspector` → Network panel (EP-4b) |
 | D3 | `toggle-developer-mode` → `menu-state` title flips; URL field shows the full URL |
@@ -1534,7 +1534,7 @@ tagged `[APP]` need app-shell Steps B and C on `main` (real window, menus,
 | 3 | [APP] + [OpenEngine only] | Copy URL family (interim quote), zoom toast, EP-5 | 1, 2, app-shell C | T-E1, T-E2, Q1, Q3, Q4, Z1–Z4 pass; Q2 blocked |
 | 4 | [OpenEngine only] | EP-4a, EP-9a, EP-10a(+b), EP-11, EP-12 | — | `docs/engine-api.md` updated; `--only features` still passes; Step 5's D1, A1, H1, H2, H4 pass once Step 5 lands |
 | 5 | [APP] | Website appearance, Developer panels, Allow JS from Apple Events, Troubleshooting, Cast hidden | 2, 4 | A1, A2, D1, D4, H1–H4 pass; D2 blocked until EP-4b |
-| 6 | [APP] | Clear Cache / Clear Cookies and Refresh (interim cookie path) | 2; Site Control E2 for the cache row | K1 (interim: host-1 cookie gone), K2 |
+| 6 | [APP] | Clear Cache / Clear Cookies and Refresh through Site Control E2 | 2; Site Control E2 | K1/K2, private context, internal/file guards, command-bar availability |
 | 7 | [APP] | Notifications: plists, authorization, Site Control tile line, P1 activation rules | app-shell D, P1 | N1, N2, N3, N6 pass (U-N1 done once) |
 | 8 | [OpenKit] | Sleep `.notifications` gate | — (keep-alive gate is on `main`) | `sleep-demo` new rows; N5 |
 | 9 | [OpenKit] | `OpenTranslate` target, runtime JS, detector, backend; `URLStatusButton`; popover | 1 | `openkit lang-detect`; `features-render` R-X1; `sidebar-render` S-US1 |
@@ -1561,7 +1561,7 @@ Paths below are relative to `Packages/OpenKit/Sources/` unless they start with `
 | 3 | [#163](https://github.com/SergeSerb2/open/pull/163); `page` T-E1/T-E2, Q1/Q3/Q4, Z1/Z2/Z4 | `App/Page/PageCommands.swift`. EP-5 needs no engine change: resetZoom already resets pinch scale. |
 | 4 | [#164](https://github.com/SergeSerb2/open/pull/164); `page` D1/D2, A1/A2, H2/H4 | `Engine/OpenEngine/src/{OEWebContent,OEBrowserContext,OEEngine}.mm`; EP-4a/9a/10/11/12. H1 needs a live Chrome-style page; Alloy H1 is BLOCKED. |
 | 5 | [#164](https://github.com/SergeSerb2/open/pull/164); A1/A2, D1/D4, H2–H4 | `App/Page/{WebsiteAppearance,PageToolsCommands,TroubleshootingActions}.swift`. D4 setting/checkmark pass; osascript execute is BLOCKED until App OpenScripting integration. Cast stays hidden. |
-| 6 | [#164](https://github.com/SergeSerb2/open/pull/164); K1/K2 | `App/Page/PageToolsCommands.swift`. Host cookies only; Clear Cache stays disabled until Site Control E2. |
+| 6 | [#164](https://github.com/SergeSerb2/open/pull/164), extended by `s12/clear-site-data`; K1/K2 | `App/Page/PageSiteDataCommands.swift`. Exact-origin HTTP cache and host/parent-domain cookies through Site Control E2, then refresh in the focused page's context. |
 | 7 | [#160](https://github.com/SergeSerb2/open/pull/160); N1 engine display/list, N2 helper/list, N3 activation/click, N6 engine display | `App/Page/NotificationAuthorization.swift`, `Helper/Info-Alerts.plist`. N1 macOS delivery (U-N1) and N6 clients.openWindow (P1) are BLOCKED. |
 | 8 | [#156](https://github.com/SergeSerb2/open/pull/156); `sleep-demo` 172/172; `sleep_n5_notifications` | `OpenSleep/SleepPolicy.swift`, `App/Sleep/AppSleepCoordinator.swift`. Permission gate follows commits and permission changes. |
 | 9 | [#152](https://github.com/SergeSerb2/open/pull/152); `lang-detect` 17/17, R-X1, S-US1 | `OpenTranslate/`, `OpenFeatures/Translate/`, `OpenSidebar/URLStatusButton.swift`, `OpenDesign/TranslateTokens.swift`. Tokens/layout differ from planned file names. |

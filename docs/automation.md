@@ -1140,6 +1140,12 @@ two preferences it writes (`open.web.colorScheme`,
 `open.developer.allowJavaScriptFromAppleEvents`), because the preferences
 domain is shared between runs.
 
+`--only page --page-site-data-only` runs the View menu K1/K2 rows and their
+private-context, internal/file-page, and command-bar guards. The local server in
+`tools/e2e/page_site_data.py` uses two mapped `.test` hosts, host and parent-domain
+cookies, and server counts for immutable HTTP resources. The fixture restores
+`open.general.searchSuggestNoticeDismissed` in `finally`.
+
 | Command | Args | Does |
 |---|---|---|
 | `menu-state` | — | Each row also reports `checked` (`state == .on`) and `hidden`. |
