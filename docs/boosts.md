@@ -331,6 +331,9 @@ the observation. Idle lifecycle notifications send no exit command or picker
 redraw; close still sends one unconditional exit. The required host query
 `zapAvailability(tabID:)` returns false for unavailable, private, or internal pages. The
 button reads it on each refresh and shows "Zap isn't available yet." when false.
+Availability and entry use the same stored-Zap caps: 1,024 entries, 4,096 UTF-8
+bytes per selector, and 1,024 UTF-8 bytes per label. An imported Boost above a
+cap keeps its saved CSS but disables picker entry with that existing tooltip.
 A transient failed entry leaves Zap off and enabled while the host is available,
 so the user can retry.
 
@@ -361,3 +364,53 @@ cover all 20 Zap/selector rows, including the round 1 lifecycle and retry fixes.
 Raw receipts remain in the shared `.re/` handoff directory. The new Zap-on scene
 has 1x/2x render receipts; existing
 baseline images, comparators, thresholds, and allowlists remain unchanged.
+
+## App Zap transport and PR #277 round-1 proofs
+
+The App sends stored selectors and labels as bounded `zap:list` messages, each
+under the engine's 64 KiB type-plus-payload limit. Each snapshot has a native
+`listID`; `reset` starts accumulation and an empty `complete` message ends it.
+The page renders the completed snapshot and sends bounded `zap:list-result`
+chunks with the same `listID`, followed by an empty `complete` marker. Native
+rejects stale requests, duplicate selectors, unknown fields and selectors outside
+the requested stored set. It publishes counts only when every requested entry
+has arrived. A missing, malformed or failed counts exchange never ends Zap.
+The package harness keeps its existing single-message request format.
+
+Rebinding a host exits its old tab's picker before changing the tab ID. The shell
+sleep adapter exits before discard, which has no engine change bit. App tab and
+split-pane selection callbacks end the old session before it can remain armed
+in a hidden page. The private-world `isObserving()` observation lets the real-App
+harness check that the picker disconnected its MutationObserver as well as
+hiding the overlay.
+
+The native automation receipt has `pickerAccepted`, recorded **after** the
+picker handler returns. Z7 clears old receipts, waits for the exact posted
+payload's receipt, then reads the store. A page-world `window.postMessage` is not
+claimed as native validation evidence; Z1 checks that world has no native bridge.
+
+These round-1 rows and their negative builds have **not run** during the screen
+and disk holds. After both holds end, use the existing screen-locked
+`tools/e2e/engine_e2e.py --style chrome --only boosteditor` caller. Set
+`OPEN_E2E_BOOST_ZAP_ONLY=1` for Z1–Z8, or
+`OPEN_E2E_BOOST_ZAP_REVIEW_ONLY=1` for Z9–Z13; unset both for the full editor.
+Every row retains its normal real-App cleanup. No unit test or mocked host is
+substituted. Record the final head, counts, cleanup and load for each run.
+
+| Finding | Proof row and real-flow control | Break-and-restore negative still to run |
+|---|---|---|
+| F1 | Z9: 24 stored 4,096-byte selectors with 1,024-byte labels; two DOM matches each; request and reply exceed one 64 KiB message; all chips/counts arrive and Zap stays active. Picker is inactive before entry and after Done. | First disable native request splitting: require Z9 to fail at missing complete counts. Separately collapse page replies into one oversized message: require Z9 to fail. Restore both before positive runs. Neither failure may close the native session. |
+| F8 | Z10: 1,024 stored entries enter successfully; 1,025 entries, a 4,097-byte selector and a 1,025-byte label each disable Zap, expose the existing unavailable tooltip, and refuse a tap without arming the page. Z9 covers the exact selector/label boundaries. | Remove only the stored-cap check from `isAvailable`, keeping entry guards: Z10 must fail on the enabled dead button. Restore the guard. |
+| F2 | Z11: enter, adopt through the real container/factory boundary, verify the same content has no active picker or observer **before selecting** the new tab, then verify a page click. | Omit the `rebind` old-ID exit call: Z11 must fail before selection. Restore it. |
+| F3 | Z12: enter, hide only the engine page (no shell selection change), discard through the production sleep adapter; native flag clears before wake, then the woken page has no picker and accepts a click. | Omit the sleep adapter exit call: Z12 must fail on the pre-wake flag. Restore it. |
+| F5 | Z13: enter, switch tabs, check the hidden page's picker and MutationObserver are stopped, return and click normally. Active-before-switch is the negative control. | Suppress selection teardown in the App callbacks and the existing editor-close-on-selection fallback for this negative build: Z13 must fail on the hidden picker/observer. Restore all paths. |
+| F4 | Z3 now arms Zap before cross-site departure and asserts native `zap == false` as well as page inactivity after Back. Existing loading/commit teardown remains; change it only if the real row fails. | Temporarily suppress native navigation teardown and ignore the page exit event: Z3 must fail its native-flag assertion. Restore both. |
+| F7 | Z7 waits for an unknown-selector removal receipt with `pickerAccepted == false`; stored-selector removal on the same bridge is accepted. Store reads follow native handling. | Remove only `selectors.contains(selector)` from the `zapRemoved` validator: the unknown-removal receipt must become accepted and Z7 must fail. Restore it. |
+| F9 | Z7 awaits each malformed/nonce/expired message receipt before asserting rejection and an unchanged store. A valid exact-boundary commit on the same path is accepted. | Allow an unknown field in the commit validator: Z7 must fail **after** receiving the native handler receipt. Restore the field allowlist. |
+| F10 | Editor B4 verifies native flag off, page picker and observer off, and one ordinary page click after toggle-off. Its earlier commit/reveal is the positive control. | Omit the page exit evaluation while retaining native `.exited`: B4 must fail on page teardown or the swallowed click. Restore it. |
+
+Negative source edits are temporary and apply only after the holds end. Never
+commit or push a negative build. Keep each failed receipt, restore the final
+source, rebuild, then record its passing row. Product edits require a fresh full
+gate on the final head. F6's quote-aware selector hardening is recorded in
+`followups.md`; it is not claimed as fixed here.

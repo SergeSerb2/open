@@ -64,6 +64,24 @@ extension AutomationController {
     case "zap-available":
       guard let raw = args["tab"] as? String, let uuid = UUID(uuidString: raw) else { throw Failure(message: "invalid tab ID") }
       return boosts.editorHost.zapAvailability(tabID: ItemID(rawValue: uuid))
+    case "adopt-bound-page":
+      // Exercise the production container/factory adoption boundary, without
+      // changing picker state from automation. The suite owns both model tabs.
+      guard let session = controller.boostEditor?.session,
+        let raw = args["destination"] as? String, let uuid = UUID(uuidString: raw),
+        let destination = app.model.tab(id: ItemID(rawValue: uuid)),
+        destination.id != session.context.tabID,
+        let owner = boosts.factory(for: session.context.tabID), owner === factory,
+        owner.profile(for: destination.id)?.id == session.context.profileID,
+        let host = controller.container.takeHost(for: session.context.tabID) else { throw Failure(message: "no same-Profile bound page to adopt") }
+      controller.container.adopt(host, for: destination.id)
+      return owner.hosts[destination.id] === host
+    case "discard-bound-page":
+      // The SleepEngine caller path, not the lower-level engine-only test hook.
+      guard let session = controller.boostEditor?.session else { throw Failure(message: "no bound editor") }
+      _ = app.tabSleep.prepare()
+      guard let adapter = app.tabSleep.adapter else { throw Failure(message: "sleep unavailable") }
+      return await adapter.discard(tabID: session.context.tabID)
     case "state": break
     case "drag":
       guard let editor = controller.boostEditor, let panel = editor.panel, let view = editor.view, let points = args["points"] as? [[Double]],
@@ -150,7 +168,7 @@ extension AutomationController {
       "frame": [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height],
       "pad": [rect.minX, rect.minY, rect.width, rect.height],
       "alert": editor.activeAlert.map { ["title": $0.messageText, "message": $0.informativeText, "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? [:],
-      "controls": (view.controls + (view.codeView?.controls ?? [])).map { ["id": $0.controlID, "enabled": $0.isEnabled, "visible": !$0.isHiddenOrHasHiddenAncestor] },
+      "controls": (view.controls + (view.codeView?.controls ?? [])).map { ["id": $0.controlID, "enabled": $0.isEnabled, "visible": !$0.isHiddenOrHasHiddenAncestor, "tooltip": $0.tooltipTitle ?? ""] },
       "refreshMs": runtime.lastRefreshMilliseconds, "refreshPages": runtime.lastRefreshPageCount,
       "refreshSkippedPages": runtime.lastRefreshSkippedPageCount, "deliveryCount": runtime.javaScriptDeliveryCount,
       "applyFailures": runtime.applyFailureCount,

@@ -9,7 +9,10 @@ enum AppBoostPickerMessage {
   static func validSelector(_ value: String) -> Bool {
     !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.utf8.count <= 4_096 && !value.contains("\0")
   }
-  private static func validLabel(_ value: String) -> Bool { value.utf8.count <= 1_024 && !value.contains("\0") }
+  static func validLabel(_ value: String) -> Bool { value.utf8.count <= 1_024 && !value.contains("\0") }
+  static func supports(_ boost: Boost) -> Bool {
+    boost.zaps.count <= maxEntries && boost.zaps.allSatisfy { validSelector($0.selector) && validLabel($0.label) }
+  }
   static func decode(type: String, payloadJSON: String, session: PickerSession, selectors: [String]) -> PickerInbound? {
     guard type.utf8.count <= 64, payloadJSON.utf8.count + type.utf8.count <= 65_536,
       let data = payloadJSON.data(using: .utf8),
@@ -23,7 +26,7 @@ enum AppBoostPickerMessage {
     case "zap:removed": fields = ["selector", "via"]
     case "zap:revealRequested": fields = ["selector"]
     case "picker:selected": fields = ["selector", "matches"]
-    case "zap:list-result": fields = ["entries"]
+    case "zap:list-result": fields = ["entries", "listID", "complete"]
     case "picker:ready": fields = []
     case "picker:exited": fields = ["reason"]
     case "picker:error": fields = ["kind", "selector"]
@@ -43,7 +46,7 @@ enum AppBoostPickerMessage {
       guard validSelector(old), validSelector(new), selectors.contains(old), validLabel(label),
         (1...Int(Int32.max)).contains(matches) else { return nil }
     case let .zapRemoved(_, selector, via):
-      guard validSelector(selector), ["undo", "native"].contains(via) else { return nil }
+      guard validSelector(selector), selectors.contains(selector), ["undo", "native"].contains(via) else { return nil }
     case let .revealRequested(_, selector): guard validSelector(selector), selectors.contains(selector) else { return nil }
     case let .pickerSelected(_, selector, matches):
       guard validSelector(selector), (1...Int(Int32.max)).contains(matches) else { return nil }

@@ -312,6 +312,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
+      self.app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
       if let id = self.iconPickerSpaceID, self.focusedSpace?.id != id { self.iconPicker?.close() }
       if self.app.engineReady { self.markVisibleTabsLive(); self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
@@ -661,6 +662,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
+    app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")

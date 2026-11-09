@@ -36,6 +36,11 @@ final class AppBoostEditorHost: BoostEditorHost {
     picker.enter(boostID: boostID, tabID: tabID, mode: .select)
   }
   func exitZap(tabID: ItemID) { pickerStorage?.exit(tabID: tabID) }
+  func selectionChanged(in factory: EngineWebContentHostFactory) {
+    guard let session = factory.controller?.boostEditor?.session,
+      session.context.tabID != factory.selectedTab?.id else { return }
+    session.endPickerSession()
+  }
   func pickerAvailabilityChanged(tabID: ItemID) {
     guard let editor = boosts.factory(for: tabID)?.controller?.boostEditor,
       editor.session?.context.tabID == tabID else { return }
@@ -45,8 +50,9 @@ final class AppBoostEditorHost: BoostEditorHost {
   }
   func removeZapFromSession(_ selector: String, tabID: ItemID) { pickerStorage?.remove(selector, tabID: tabID) }
   func requestZapCounts(tabID: ItemID) { pickerStorage?.requestCounts(tabID: tabID) }
-  func receivePickerMessage(_ page: OEWebContent, type: String, payloadJSON: String, documentID: String) {
-    pickerStorage?.receive(page, type: type, payloadJSON: payloadJSON, documentID: documentID)
+  @discardableResult
+  func receivePickerMessage(_ page: OEWebContent, type: String, payloadJSON: String, documentID: String) -> Bool {
+    pickerStorage?.receive(page, type: type, payloadJSON: payloadJSON, documentID: documentID) ?? false
   }
   func stopPicker() { pickerStorage?.stop() }
   func publishPickerEvent(_ event: BoostPickerEvent, tabID: ItemID) {

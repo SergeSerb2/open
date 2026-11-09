@@ -23,6 +23,21 @@ class PickerFlow:
     def active(self):
         return self.evaluate("window.__openZap?.isActive() === true")
 
+    def stopped(self):
+        return self.evaluate("window.__openZap?.isActive() !== true && window.__openZap?.isObserving() !== true")
+
+    def post(self, kind, payload):
+        """A receipt is appended only after the native picker handler returns."""
+        wire = json.dumps(payload)
+        self.app.call("open-world-messages", tab=self.tab, clear=True)
+        self.evaluate("__openNative.postMessage(%s,%s);true" % (json.dumps(kind), json.dumps(wire)))
+        def delivered():
+            rows = self.app.call("open-world-messages", tab=self.tab)["messages"]
+            return next((r for r in rows if r["type"] == kind and r["payloadJSON"] == wire), None)
+        receipt = self.wait_until(delivered, timeout=5, step=.02)
+        assert receipt is not None, "missing native handler receipt"
+        return receipt
+
     def enter(self, select=False):
         control = "editor.code.pick" if select else "editor.tool.zap"
         enabled = self.wait_until(lambda: any(c["id"] == control and c["enabled"]
@@ -157,6 +172,8 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 first = app.eval(tab, "window.zapFirstScript")
                 assert first["style"] and first["picker"] == "undefined", first
                 assert all(z["selector"] in first["css"] for z in flow.state()["boost"]["zaps"]), first
+                flow.enter()
+                assert flow.state()["zap"] and flow.active(), "negative control: Zap must be active before leaving"
                 app.call("navigate", tab=tab, url=origin.replace("127.0.0.1","localhost")+"/zap.html")
                 app.call("wait", tab=tab)
                 assert not flow.hidden("#promo-banner") and not flow.active()
@@ -164,8 +181,9 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
                 replacement_count = len(renderers()-before_renderers)
                 app.call("back", tab=tab);app.call("wait", tab=tab)
                 assert flow.hidden("#promo-banner") and flow.hidden("article") and not flow.active()
+                assert not flow.state()["zap"], "Back restored a stale native Zap flag"
                 assert flow.state()["boost"]["id"] == boost_id
-                return {"firstScript": first, "stableContent":old_content == next(t["page"]["identifier"] for t in app.call("tabs") if t["id"] == tab), "replacementRenderers":replacement_count, "crossSiteAndBack":True}
+                return {"firstScript": first, "stableContent":old_content == next(t["page"]["identifier"] for t in app.call("tabs") if t["id"] == tab), "replacementRenderers":replacement_count, "crossSiteAndBack":True, "activeBeforeDeparture":True, "nativeZapAfterBack":False}
             row("Z3_reload_renderer_navigation", z3)
 
             def z4():
@@ -222,34 +240,42 @@ window.pageShadowCalls=0;const attach=Element.prototype.attachShadow;Element.pro
             row("Z6_exit_cleanup", z6)
 
             def authority():
+                app.call("open-world-messages", tab=tab, clear=True)
                 flow.enter()
                 assert wait(lambda: bool(flow.messages("picker:ready")), timeout=5, step=.02)
                 capability = flow.messages("picker:ready")[-1]
                 before = app.call("boosts", action="get", boost=boost_id)
-                # A page-world forgery has neither the binding nor its capability.
-                app.eval(tab, "window.postMessage({v:1,type:'zap:committed',payload:{boostID:%s,sessionNonce:'invented-nonce',selector:'#promo-banner',matches:1}},'*')" % json.dumps(boost_id))
+                # Page-world bridge absence is proved by Z1. A DOM postMessage
+                # never reaches native and is not a native-validation proof.
                 base = dict(capability, selector="#promo-banner", matches=1)
                 bad = [dict(base, sessionNonce="invented-nonce"), dict(base, selector="x"*4097),
                        dict(base, label="x"*1025), dict(base, matches=True), dict(base, matches=-1),
                        dict(base, extra=True)]
                 for payload in bad:
-                    flow.evaluate("__openNative.postMessage('zap:committed',%s);true" % json.dumps(json.dumps(payload)))
+                    assert flow.post("zap:committed", payload)["pickerAccepted"] is False
+                    assert app.call("boosts", action="get", boost=boost_id) == before
+                # A no-op store removal is insufficient evidence of rejection.
+                # The handler receipt distinguishes refusal from accepted no-op.
+                unknown = dict(capability, selector="#not-stored", via="undo")
+                assert flow.post("zap:removed", unknown)["pickerAccepted"] is False
                 assert app.call("boosts", action="get", boost=boost_id) == before
                 # Native transport and coordinator accept the exact selector and
                 # label limits, then the real reveal control removes that entry.
                 boundary = dict(base, selector="#"+"a"*4095, label="L"*1024)
-                flow.evaluate("__openNative.postMessage('zap:committed',%s);true" % json.dumps(json.dumps(boundary)))
+                assert flow.post("zap:committed", boundary)["pickerAccepted"] is True
                 assert wait(lambda: flow.state()["zapCount"] == 1, timeout=5, step=.02)
+                # Positive control for stored-selector removal on the same IPC path.
+                assert flow.post("zap:removed", dict(capability, selector=boundary["selector"], via="native"))["pickerAccepted"] is True
                 flow.overlay_click(".reveal")
                 assert wait(lambda: flow.state()["zapCount"] == 0, timeout=5, step=.02)
                 app.call("command", id="reload");app.call("wait", tab=tab)
                 # The old capability is refused even through a new Open world.
                 flow.enter()
-                assert wait(lambda: flow.messages("picker:ready")[-1]["sessionNonce"] != capability["sessionNonce"], timeout=5, step=.02)
-                flow.evaluate("__openNative.postMessage('zap:committed',%s);true" % json.dumps(json.dumps(base)))
+                assert wait(lambda: bool(flow.messages("picker:ready")) and flow.messages("picker:ready")[-1]["sessionNonce"] != capability["sessionNonce"], timeout=5, step=.02)
+                assert flow.post("zap:committed", base)["pickerAccepted"] is False
                 assert flow.state()["zapCount"] == 0 and flow.active()
                 flow.overlay_click(".done")
-                return {"pageForgeryRefused":True,"malformedRefused":len(bad),"selectorBytesAccepted":4096,"labelBytesAccepted":1024,"expiredRefused":True}
+                return {"nativeReceiptsAwaited":True,"malformedRefused":len(bad),"unknownRemovalRefused":True,"storedRemovalAccepted":True,"selectorBytesAccepted":4096,"labelBytesAccepted":1024,"expiredRefused":True}
             row("Z7_native_authority_limits", authority)
 
             def unavailable():

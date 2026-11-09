@@ -86,6 +86,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func goForward() { if !closed { content.goForward() } }
   func focus() { if !closed { content.focusPage(); owner?.savePromptFocusChanged() } }
   func rebind(tabID: ItemID, spaceID: SpaceID?) {
+    if tabID != self.tabID { owner?.app.stores.boosts.existingEditorHost?.exitZap(tabID: self.tabID) }
     generation += 1; self.tabID = tabID; self.spaceID = spaceID
     refreshPageBackground(); observeMute()
   }

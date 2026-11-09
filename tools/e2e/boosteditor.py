@@ -13,6 +13,10 @@ from sitecontrol_fixtures import fixture_server
 
 
 def run(factory, results, tmp, env):
+    if os.environ.get("OPEN_E2E_BOOST_ZAP_REVIEW_ONLY") == "1":
+        import boost_zap_review
+        boost_zap_review.run(factory, results, tmp, env)
+        return
     if os.environ.get("OPEN_E2E_BOOST_ZAP_ONLY") == "1":
         import boost_zap
         boost_zap.run(factory, results, tmp, env)
@@ -109,7 +113,12 @@ def run(factory, results, tmp, env):
                 picker.overlay_click(".reveal")
                 assert wait_until(lambda: call()["zapCount"] == 0 and not picker.hidden("#promo-banner"), timeout=5, step=.02)
                 tap("zap")
-                return dict(positive=True, negative=not call()["zap"], countAfterReveal=call()["zapCount"])
+                stopped = wait_until(lambda: not call()["zap"] and picker.stopped(), timeout=5, step=.02)
+                assert stopped, "toggle-off left a live page picker or observer"
+                app.eval(tab, "window.s12B4Clicks=0;document.querySelector('h1').addEventListener('click',()=>window.s12B4Clicks++)")
+                app.call("click", tab=tab, selector="h1")
+                assert app.eval(tab, "window.s12B4Clicks") == 1, "picker still swallows page clicks"
+                return dict(positive=True, negative=bool(stopped), pagePickerInactive=True, pageClicks=1, countAfterReveal=call()["zapCount"])
             row("B4_zap", b4)
             def b5():
                 originalCSS=call()["boost"]["css"]
