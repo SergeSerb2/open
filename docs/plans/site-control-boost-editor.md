@@ -1487,7 +1487,26 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-08; PR pending): App source
+Step 3 verification (child A, 2026-11-09; draft, screen hold): App source
+`64e62f34` contains #271 and uses framework SHA-256
+`8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
+Branch and unchanged-main Debug/Release, 45-key uniqueness and engine
+fingerprints pass. Both fresh smokes, the compiled omitted-provider runtime
+negative, F25 11/11, exact source/positive-binary restoration and the forced
+Advanced Settings cleanup/defaults canary completed before 02:35.
+
+**Gate incomplete (screen hold 02:35):** the later main loader is void;
+main features, all eleven App suites, saved-Boost/private S4/S10 positives
+and negatives, S2, X13, paired startup and the full high gate remain pending.
+No on-screen work resumes before the lead's explicit M5 clear. The earlier
+engine6193 results below are history only. The real tile showed On in the
+compiled-negative App; S1's old unavailable assertion stays unchanged until
+the lead reviews the fresh suite result. S2 must report its real #271 result.
+Gap item 1(c) is PARTIAL: host-cookie Clear Cookies uses the legacy bridge;
+Clear Cache is absent/refused. S12-G owns both … menu clearSiteData bindings
+after A and G merge. E1–E3 remain deferred in A.
+
+Historical pre-#271 verification (child A, 2026-11-08): App source
 `d534c708` includes main `d26300e6`, #249's sole `AppBoosts` owner, #202,
 #205, repaired #252, #261 and #264. The factory
 binds SCC through `app.stores.boosts`; no second store exists. The context
@@ -1530,8 +1549,9 @@ separator ΔE 14, rings ΔE 3–5.6; arrow position error 9 pt. Arrows, rims and
 separator are probably wrong tokens, not only material. Both exact tables
 stay in the PR. No comparator, threshold or baseline changed.
 
-S1 retains the lead-approved unavailable ad-block row and its one Settings
-call/zero toggle calls. S2 requires Section 13's real engine adapter.
+On engine6193, S1 retained the lead-approved unavailable ad-block row and its
+one Settings call/zero toggle calls. Those receipts do not qualify #271;
+fresh S1/S2 results on the native adapter remain pending under the screen hold.
 #205 now supplies E1–E3 APIs, but SCC binding stays a listed follow-up under
 the lead's 22:38 scope ruling. Existing permission rows, origin Clear
 Cookies, scheme security and absent scoped Clear Cache stay in this PR.

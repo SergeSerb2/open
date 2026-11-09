@@ -355,26 +355,34 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-On `s12/scc-app`, the App source `d534c708` includes main `d26300e6`
-and #249, #202, #205, repaired #252, #261 and #264. SCC forwards to the sole
-`app.stores.boosts` owner. Private matching rows use the session parent
-Profile, and `factory.isIncognito` guards actions. Fresh Debug/Release and
-compiled omitted-provider builds pass on engine619324d3, with exact
-source/binary restoration. Fresh merged-head real S4/S10 flows pass.
-The M5 regressions pass: commandbar/app-actions 77 each, extensions 72,
-toolbar 10, features 27, page 85, split 40, space-editor 167 and incognito 31.
-The completed incognito run includes `no_snapshot_history_change` PASS;
-two earlier T3-window focus interruptions are retained separately.
-Window has 83 PASS plus two startup budget misses, which require the paired
-main/branch comparison. Final loads and full gate results belong to the PR.
-The engine619324d3 `sitecontrol` receipt
-has 28 PASS, S2 BLOCKED, and S11/S12 **FAIL, known: material and element
-colors, follow-up S12-V (lead 22:20)**, not parity. S2 awaits Section13's
-engine support; #247's App adapter remains behind its capability gate. E1–E3 APIs are available; SCC binding is deferred under lead22:38.
-The renamed Settings row checks that View Boosts opens the Library on Boosts
-and rejects the old unavailable-error assertion. `commandbar` and
-`app-actions` each pass 77/77, with defaults read-back. Final regression counts,
-loads, negative proofs and full gate results belong to the PR receipt.
+On `s12/scc-app`, App acceptance source `64e62f34` contains main `195ab60d`
+and #249, #202, #205, repaired #252, #261, #264 and #271. SCC forwards to
+the sole `app.stores.boosts` owner. Private matching rows use the session
+parent Profile, and `factory.isIncognito` guards actions. Fresh branch and
+unchanged-main Debug/Release builds, 45-key uniqueness checks and engine
+fingerprints pass on framework `8e8a461c`.
+
+The draft is **Gate incomplete (screen hold 02:35)**. Before the hold, both
+fresh smokes, the compiled omitted-provider runtime negative, native F25
+11/11 and the Advanced Settings cleanup/defaults canary passed. Source and
+positive Debug binary restoration are exact. The main loader at 02:42:57
+is void under the hold; main features never acquired the screen lock.
+The eleven App suites, real saved-Boost/private S4/S10 proofs, S2, X13,
+paired startup groups and the full high gate remain pending on this engine.
+Earlier `619324d3` receipts are history and do not qualify the new head.
+`no_snapshot_history_change` must PASS when incognito resumes (#261).
+
+The native ad-block tile showed On in the compiled-negative App; full S2
+is not yet measured. The existing S1 unavailable-state assertion is unchanged
+pending the lead's review of the fresh results. S11/S12 remain **FAIL, known:
+material and element colors, follow-up S12-V (lead 22:20)**, not parity.
+E1–E3 remain deferred under lead 22:38. Gap item 1(c) is PARTIAL: host-cookie
+Clear Cookies uses the legacy bridge, and Clear Cache is absent/refused.
+S12-G moves both Site Control … menu operations onto `clearSiteData` after
+A and G merge (lead 2026-11-09 02:35). The renamed Settings row checks the
+Library Boosts section and rejects the obsolete unavailable-error assertion;
+fresh `commandbar` and `app-actions` runs remain pending. Exact receipt
+counts, loads, hold invalidation and the review checklist belong to the draft PR.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
