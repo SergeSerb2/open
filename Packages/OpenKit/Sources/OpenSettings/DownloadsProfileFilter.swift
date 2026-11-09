@@ -15,6 +15,11 @@ struct DownloadsProfileFilter: NSViewRepresentable {
         return button
     }
     func updateNSView(_ button: NSPopUpButton, context: Context) {
+        let signature = Coordinator.Signature(profiles: model.model.profiles.map {
+            Coordinator.ProfileSignature(id: $0.id, name: $0.name)
+        }, selection: model.downloadProfileFilter)
+        guard context.coordinator.signature != signature else { return }
+        context.coordinator.signature = signature
         button.removeAllItems(); button.addItem(withTitle: "All Profiles")
         for profile in model.model.profiles {
             // NSMenu.addItem keeps duplicate Profile names as separate items.
@@ -25,6 +30,9 @@ struct DownloadsProfileFilter: NSViewRepresentable {
         button.selectItem(at: index)
     }
     @MainActor final class Coordinator: NSObject {
+        struct ProfileSignature: Equatable, Sendable { let id: ProfileID; let name: String }
+        struct Signature: Equatable, Sendable { let profiles: [ProfileSignature]; let selection: ProfileID? }
+        var signature: Signature?
         let model: LibraryViewModel
         init(_ model: LibraryViewModel) { self.model = model }
         @objc func selectProfile(_ button: NSPopUpButton) {

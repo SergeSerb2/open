@@ -40,6 +40,17 @@ actor DownloadFiles {
     throw CocoaError(.fileWriteFileExists)
   }
   func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
+  struct FileCheck: Sendable { let id: String; let path: String? }
+  struct Availability: Sendable { let check: FileCheck; let exists: Bool }
+  func availability(for checks: [FileCheck]) throws -> [Availability] {
+    var results: [Availability] = []
+    for check in checks {
+      try Task.checkCancellation()
+      let exists = check.path.map { FileManager.default.fileExists(atPath: $0) } ?? false
+      results.append(Availability(check: check, exists: exists))
+    }
+    return results
+  }
   func trash(_ url: URL) throws { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
   func release(_ url: URL) { claims.remove(url) }
 }
@@ -67,7 +78,14 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   @ObservationIgnored private var historyWriteRevision = 0
   @ObservationIgnored private var flushedHistoryRevision = 0
   @ObservationIgnored private var historyMutations: [UUID: Task<Void, Never>] = [:]
-  @ObservationIgnored private var removingHistory: Set<String> = []
+  @ObservationIgnored private var removedHistory: Set<String> = []
+  @ObservationIgnored private var inFlightHistoryClears: [UUID: HistoryClearRange] = [:]
+  // Only needed until the current lazy load settles. These ranges reject rows
+  // from an older read even after its two allowed retries have been used.
+  @ObservationIgnored private var clearedHistoryDuringLoad: [HistoryClearRange] = []
+  @ObservationIgnored private var fileRefreshTask: Task<Void, Never>?
+  @ObservationIgnored private var fileRefreshQueued = false
+  @ObservationIgnored private var fileRefreshGeneration = 0
   private(set) var downloadHistoryError = ""
   private(set) var downloads: [DownloadItemSnapshot] = []
   private(set) var publishCount = 0
@@ -97,6 +115,15 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     let download: OEDownload
     var snapshot: DownloadItemSnapshot
     var hidden = false
+  }
+  private struct HistoryClearRange {
+    let profileID: ProfileID
+    let start: Date?
+    let end: Date
+    func contains(profileID: ProfileID, startedAt: Date) -> Bool {
+      self.profileID == profileID && startedAt <= end && (start.map { startedAt >= $0 } ?? true)
+    }
+    func contains(_ item: DownloadItemSnapshot) -> Bool { contains(profileID: item.profileID, startedAt: item.startedAt) }
   }
   init(app: AppDelegate) {
     self.app = app
@@ -178,11 +205,11 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     snapshot.endedAt = terminal ? (state == previous?.snapshot.state ? previous?.snapshot.endedAt ?? Date() : Date()) : nil
     snapshot.fileExists = state == .completed && previous?.snapshot.state != .completed
       ? download.destinationURL != nil : previous?.snapshot.fileExists ?? false
-    entries[key] = Entry(download: download, snapshot: snapshot, hidden: previous?.hidden ?? false)
+    entries[key] = Entry(download: download, snapshot: snapshot, hidden: previous?.hidden ?? removedHistory.contains(key))
     if previous == nil { order.insert(key, at: 0) }
-    if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date(); refreshFile(key) }
+    if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date(); refreshFiles() }
     if state == .completed || state == .failed || state == .cancelled {
-      if state != previous?.snapshot.state, !(previous?.hidden ?? false), !removingHistory.contains(key) { persist(snapshot, profile: profile) }
+      if state != previous?.snapshot.state, !(previous?.hidden ?? false) { persist(snapshot, profile: profile) }
       suggestedNames[key] = nil
       if let url = reserved.removeValue(forKey: key) { Task { await files.release(url) } }
     }
@@ -198,8 +225,8 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       publishQueued = false; publishCount += 1
-      let live = order.compactMap { entries[$0].flatMap { $0.hidden ? nil : $0.snapshot } }
-      let historical = history.values.filter { entries[$0.id] == nil && app.model.profile(id: $0.profileID) != nil }
+      let live = order.compactMap { key in entries[key].flatMap { $0.hidden || removedHistory.contains(key) ? nil : $0.snapshot } }
+      let historical = history.values.filter { entries[$0.id] == nil && !removedHistory.contains($0.id) && app.model.profile(id: $0.profileID) != nil }
         .sorted { $0.endedAt == $1.endedAt ? $0.id < $1.id : ($0.endedAt ?? $0.startedAt) > ($1.endedAt ?? $1.startedAt) }
       downloads = live + historical
       updateBadges()
@@ -225,22 +252,38 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     return badge.running > 0 || badge.completedAt.map { Date().timeIntervalSince($0) < 60 } == true
   }
   func refreshFiles() {
-    for key in order where entries[key]?.snapshot.state == .completed { refreshFile(key) }
-    for item in history.values where item.state == .completed { refreshFile(item.id) }
-  }
-  private func refreshFile(_ key: String) {
-    guard let path = (entries[key]?.snapshot ?? history[key])?.filePath else { return }
-    Task { [weak self] in
+    fileRefreshTask?.cancel()
+    fileRefreshGeneration += 1
+    guard !fileRefreshQueued else { return }
+    fileRefreshQueued = true
+    DispatchQueue.main.async { [weak self] in
       guard let self else { return }
-      let exists = await files.exists(URL(fileURLWithPath: path))
-      if entries[key] != nil {
-        guard entries[key]?.snapshot.fileExists != exists else { return }
-        entries[key]?.snapshot.fileExists = exists
-      } else if history[key] != nil {
-        guard history[key]?.fileExists != exists else { return }
-        history[key]?.fileExists = exists
-      } else { return }
-      schedulePublish()
+      fileRefreshQueued = false
+      let generation = fileRefreshGeneration
+      let live = order.compactMap { visibleItem($0) }
+      let stored = history.values.filter { entries[$0.id] == nil && !removedHistory.contains($0.id) }
+      let checks = (live + stored).compactMap { item -> DownloadFiles.FileCheck? in
+        guard item.state == .completed else { return nil }
+        return DownloadFiles.FileCheck(id: item.id, path: item.filePath)
+      }
+      guard !checks.isEmpty else { fileRefreshTask = nil; return }
+      let files = self.files
+      fileRefreshTask = Task { [weak self] in
+        let results = try? await files.availability(for: checks)
+        guard let self, generation == fileRefreshGeneration else { return }
+        defer { fileRefreshTask = nil }
+        guard !Task.isCancelled, let results else { return }
+        var changed = false
+        for result in results {
+          let key = result.check.id
+          guard let item = visibleItem(key), item.state == .completed, item.filePath == result.check.path,
+            item.fileExists != result.exists else { continue }
+          if entries[key] != nil { entries[key]?.snapshot.fileExists = result.exists }
+          if history[key] != nil { history[key]?.fileExists = result.exists }
+          changed = true
+        }
+        if changed { schedulePublish() }
+      }
     }
   }
   func cancel(_ key: String) {
@@ -256,35 +299,55 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     entries[key]?.download.resume(); entries[key]?.snapshot.state = .inProgress; schedulePublish()
   }
   func remove(_ key: String) {
-    guard !removingHistory.contains(key), let item = entries[key]?.snapshot ?? history[key], let store = historyStore(for: item.profileID) else { return }
+    guard let item = visibleItem(key) else { return }
+    // Hiding must work even when the store cannot open or delete. Keep the ID
+    // as a tombstone so an in-flight read or delayed callback cannot undo it.
+    removedHistory.insert(key)
+    entries[key]?.hidden = true; history[key] = nil
+    historyRevisions[item.profileID, default: 0] += 1
+    schedulePublish()
+    guard let store = historyStore(for: item.profileID) else { return }
     let mutation = UUID()
-    removingHistory.insert(key)
     historyMutations[mutation] = Task { [weak self] in
-      defer { self?.historyMutations[mutation] = nil; self?.removingHistory.remove(key) }
-      do {
-        try await store.remove(id: key)
-        guard let self else { return }
-        historyRevisions[item.profileID, default: 0] += 1
-        entries[key]?.hidden = true; history[key] = nil; schedulePublish()
-      } catch { self?.downloadHistoryError = error.localizedDescription }
+      defer { self?.historyMutations[mutation] = nil }
+      do { try await store.remove(id: key) }
+      catch { self?.downloadHistoryError = error.localizedDescription }
     }
   }
   /// Match Settings' start-time range. Keep files and live engine transfers intact.
   func clearHistory(profileID: ProfileID, since start: Date?, through end: Date) async throws {
     guard let store = historyStore(for: profileID) else { return }
-    try await store.clear(since: start, through: end)
+    let range = HistoryClearRange(profileID: profileID, start: start, end: end), token = UUID()
+    // Register before yielding: terminal callbacks during the SQL clear must
+    // not enqueue a write behind that clear and resurrect the removed history.
+    inFlightHistoryClears[token] = range
+    historyRevisions[profileID, default: 0] += 1
+    do { try await store.clear(since: start, through: end) }
+    catch {
+      inFlightHistoryClears[token] = nil
+      // The clear failed. Replay terminal callbacks suppressed while it waited;
+      // another overlapping clear still has its own persistence guard.
+      if let profile = app.model.profile(id: profileID) {
+        for entry in Array(entries.values) where range.contains(entry.snapshot) && !entry.hidden {
+          persist(entry.snapshot, profile: profile)
+        }
+      }
+      throw error
+    }
+    inFlightHistoryClears[token] = nil
+    if historyLoadTask != nil { clearedHistoryDuringLoad.append(range) }
     historyRevisions[profileID, default: 0] += 1
     let removed = Set(entries.compactMap { key, entry -> String? in
       let item = entry.snapshot
-      guard item.profileID == profileID, item.state != .inProgress, item.state != .paused,
-        item.startedAt <= end, start.map({ item.startedAt >= $0 }) ?? true else { return nil }
+      guard range.contains(item), item.state != .inProgress, item.state != .paused else { return nil }
       return key
     })
     // Keep hidden engine entries as tombstones: a delayed terminal callback
     // must not reinsert history that the user just cleared.
-    for key in removed { entries[key]?.hidden = true }
+    for key in removed { removedHistory.insert(key); entries[key]?.hidden = true }
     history = history.filter { _, item in
-      !(item.profileID == profileID && item.startedAt <= end && (start.map { item.startedAt >= $0 } ?? true))
+      if range.contains(item) { removedHistory.insert(item.id); return false }
+      return true
     }
     schedulePublish()
   }
@@ -293,6 +356,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     app.settingsPresenter.openURL(source, profileID: item.profileID)
   }
   private func visibleItem(_ key: String) -> DownloadItemSnapshot? {
+    guard !removedHistory.contains(key) else { return nil }
     if let entry = entries[key] { return entry.hidden ? nil : entry.snapshot }
     return history[key]
   }
@@ -301,7 +365,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     let url = URL(fileURLWithPath: path)
     Task { [weak self] in
       guard let self else { return }
-      guard await files.exists(url) else { refreshFile(key); return }
+      guard await files.exists(url) else { refreshFiles(); return }
       #if OPEN_AUTOMATION
       if recordFileActions {
         if fileActions.count >= 256 { fileActions.removeFirst() }
@@ -350,7 +414,8 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   }
   private func persist(_ item: DownloadItemSnapshot, profile: Profile) {
     guard let state = DownloadHistoryRecord.State(rawValue: item.state.rawValue), let source = item.sourceURL,
-      let endedAt = item.endedAt, !removingHistory.contains(item.id), entries[item.id]?.hidden != true,
+      let endedAt = item.endedAt, !removedHistory.contains(item.id), entries[item.id]?.hidden != true,
+      !inFlightHistoryClears.values.contains(where: { $0.contains(item) }),
       let store = historyStore(for: profile.id) else { return }
     historyRevisions[profile.id, default: 0] += 1
     historyWriteRevision += 1
@@ -375,22 +440,25 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       downloadHistoryError = ""
       for profile in app.model.profiles {
         guard let store = historyStore(for: profile.id) else { continue }
+        var retries = 0
         while !loadedHistory.contains(profile.id), !retiredProfiles.contains(profile.id) {
           let revision = historyRevisions[profile.id, default: 0]
           do {
             let records = try await store.load()
             guard app.model.profile(id: profile.id) != nil, !retiredProfiles.contains(profile.id) else { break }
-            // A remove/clear/terminal update may complete while this read is in
-            // flight. Read again after that mutation rather than resurrect rows.
-            if revision != historyRevisions[profile.id, default: 0] { continue }
+            // Bound retries under continuous callbacks. Tombstones and clear
+            // ranges make the final read safe even if its revision is stale.
+            if revision != historyRevisions[profile.id, default: 0], retries < 2 { retries += 1; continue }
             for record in records {
+              guard !removedHistory.contains(record.id), entries[record.id] == nil, history[record.id] == nil,
+                !clearedHistoryDuringLoad.contains(where: { $0.contains(profileID: record.profileID, startedAt: record.startedAt) }) else { continue }
               var item = DownloadItemSnapshot(id: record.id, fileName: record.fileName, sourceHost: record.sourceHost,
                 receivedBytes: record.receivedBytes, totalBytes: record.totalBytes,
                 state: DownloadState(rawValue: record.state.rawValue) ?? .failed, filePath: record.filePath,
                 startedAt: record.startedAt, profileID: record.profileID)
               item.sourceURL = record.sourceURL; item.endedAt = record.endedAt; item.isHistorical = true
               // Existence checks also stay on the file actor; no main-thread stat.
-              item.fileExists = false
+              item.fileExists = nil
               history[item.id] = item
             }
             loadedHistory.insert(profile.id)
@@ -402,7 +470,9 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     historyLoadTask = task
     await task.value
     historyLoadTask = nil
+    clearedHistoryDuringLoad.removeAll()
   }
+  var historyLoaded: Bool { app.model.profiles.allSatisfy { loadedHistory.contains($0.id) } }
   func flushHistory() async {
     for task in Array(historyMutations.values) { await task.value }
     let revision = historyWriteRevision

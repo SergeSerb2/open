@@ -72,7 +72,7 @@ public final class DownloadHistoryStore {
         }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
-        let opened = try SQLiteDB(path: fileURL.path, maximumValueBytes: Int32(Self.maximumPayloadBytes + 4096))
+        let opened = try SQLiteDB(path: fileURL.path, maximumValueBytes: Int32(Self.maximumPayloadBytes + 4096), newFilePermissions: 0o600)
         guard opened.exec("PRAGMA synchronous=FULL"), let pageSize = opened.prepare("PRAGMA page_size") else { throw failure() }
         let pageBytes = sqlite3_step(pageSize) == SQLITE_ROW ? opened.columnInt(pageSize, 0) : 0
         sqlite3_finalize(pageSize)
@@ -97,15 +97,15 @@ public final class DownloadHistoryStore {
         return opened
     }
     nonisolated private func recordsOnQueue(_ db: SQLiteDB) throws -> [DownloadHistoryRecord] {
-        guard let statement = db.prepare("SELECT id,payload FROM downloads ORDER BY ended_at DESC,id LIMIT 1001") else { throw failure() }
+        guard let statement = db.prepare("SELECT id,payload FROM downloads ORDER BY ended_at DESC,id LIMIT \(Self.maximumCount)") else { throw failure() }
         defer { sqlite3_finalize(statement) }
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .secondsSince1970
         var rows: [DownloadHistoryRecord] = []
         while true {
             let status = sqlite3_step(statement)
             if status == SQLITE_DONE { break }
-            guard status == SQLITE_ROW, rows.count < Self.maximumCount,
-                  sqlite3_column_bytes(statement, 1) <= Self.maximumPayloadBytes,
+            guard status == SQLITE_ROW,
+                  Int(sqlite3_column_bytes(statement, 1)) <= Self.maximumPayloadBytes,
                   let payload = db.columnText(statement, 1), let key = db.columnText(statement, 0) else { throw failure() }
             let row = try decoder.decode(DownloadHistoryRecord.self, from: Data(payload.utf8))
             guard row.valid, row.profileID == profileID, row.id == key else { throw failure() }
@@ -131,19 +131,22 @@ public final class DownloadHistoryStore {
             do {
                 guard row.valid, row.profileID == profileID else { throw failure() }
                 let db = try openOnQueue()
-                // Validate an existing file before changing it; never overwrite corrupt data.
-                _ = try recordsOnQueue(db)
-                let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .secondsSince1970; encoder.outputFormatting = [.sortedKeys]
-                let payload = try encoder.encode(row)
-                guard payload.count <= Self.maximumPayloadBytes, db.exec("BEGIN IMMEDIATE") else { throw failure() }
+                guard db.exec("BEGIN IMMEDIATE") else { throw failure() }
                 var committed = false
                 defer { if !committed { db.exec("ROLLBACK") } }
+                // Recover over-count files before the insert needs free pages.
+                // No existing payload is read or decoded on the write path.
+                let prune = "DELETE FROM downloads WHERE id NOT IN (SELECT id FROM downloads ORDER BY ended_at DESC,id LIMIT \(Self.maximumCount))"
+                guard db.exec(prune) else { throw failure() }
+                let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .secondsSince1970; encoder.outputFormatting = [.sortedKeys]
+                let payload = try encoder.encode(row)
+                guard payload.count <= Self.maximumPayloadBytes else { throw failure() }
                 guard let statement = db.prepare("INSERT OR REPLACE INTO downloads VALUES(?,?,?,?)") else { throw failure() }
                 defer { sqlite3_finalize(statement) }
                 db.bindText(statement, 1, row.id); db.bindDouble(statement, 2, row.startedAt.timeIntervalSince1970)
                 db.bindDouble(statement, 3, row.endedAt.timeIntervalSince1970); db.bindText(statement, 4, String(decoding: payload, as: UTF8.self))
                 guard sqlite3_step(statement) == SQLITE_DONE,
-                      db.exec("DELETE FROM downloads WHERE id NOT IN (SELECT id FROM downloads ORDER BY ended_at DESC,id LIMIT 1000)"),
+                      db.exec(prune),
                       db.exec("COMMIT") else { throw failure() }
                 committed = true
                 db.exec("PRAGMA wal_checkpoint(TRUNCATE)")

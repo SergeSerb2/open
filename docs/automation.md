@@ -1255,7 +1255,7 @@ warning. Run with the on-screen lock, one suite per invocation.
 
 | Command | Arguments / behavior |
 |---|---|
-| `downloads-state` | Live and lazily loaded historical items (source URL, end time, historical flag), actual native row subtitles/buttons, filtered item IDs, Profile menu titles/selection, history errors, real Home badge layers, queued publications, pending save sheets, file actions and quit-alert strings. Does not trigger a history read. |
+| `downloads-state` | Live and lazily loaded historical items (source URL, end time, historical flag, nullable file availability), actual native row subtitles/buttons, filtered item IDs, Profile menu titles/selection, history errors, `historyLoaded` (all current Profiles loaded), real Home badge layers, queued publications, pending save sheets, file actions and quit-alert strings. Does not trigger a history read. |
 | `download-profile-filter` | `profile=<Profile UUID>|all`; selects the visible native Downloads Profile menu item and sends its control action. Fails when fewer than two Profiles make the filter unavailable. |
 | `download-history-flush` | Waits for accepted history writes and remove actions. Does not load historical rows. |
 | `download-settings` | `profile`, optional `directory`, `ask`; changes the real Profiles settings model in the disposable data root. |
@@ -1280,6 +1280,9 @@ two Profiles, relaunch, native Profile filter, private exclusion, missing files,
 file actions/retry, remove/ranged clear, Profile deletion, count bounds and corrupt
 or oversized files. All use the real App and existing loopback download fixture.
 The damaged-file fixtures change only the disposable root while Open is stopped.
+Relaunch waits for expected historical IDs and load/publication completion,
+including an explicitly expected empty result. The `quit` case verifies the
+approved-quit cancellation survives relaunch without `download-history-flush`.
 These rows and their negative proofs await the lead's disk and screen clearance.
 
 The `extensions-e2` suite also checks three-action pin/move/unpin sequences through `ext-pin`, `ext-move`, and `actions`. It checks raw engine ids and pinned indices, plus `extensions.duplicatesDropped == 0` when the App guard is present. `OPEN_E2E_E2_SCOPE=pins` selects this reproduction alone.

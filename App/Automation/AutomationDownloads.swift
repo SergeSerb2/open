@@ -72,11 +72,11 @@ extension AutomationController {
          "profile": item.profileID.description, "startedAt": item.startedAt.timeIntervalSince1970,
          "endedAt": item.endedAt?.timeIntervalSince1970 as Any? ?? NSNull(),
          "source": item.sourceURL?.absoluteString ?? "", "historical": item.isHistorical,
-         "fileExists": item.fileExists ?? false] as [String: Any]
+         "fileExists": item.fileExists as Any? ?? NSNull()] as [String: Any]
       }, "rows": downloadRows().map { ["id": $0.item.id, "subtitle": $0.subtitle.stringValue, "buttons": $0.buttons.map { $0.identifier?.rawValue ?? "" }] },
        "badge": app.frontWindowController?.sidebar.downloadBadgeEvidence ?? [:], "running": center.hasRunning,
        "queued": center.queued, "updates": center.updateCount, "publishes": center.publishCount,
-       "openerPID": center.fileOpenerPID, "historyError": center.downloadHistoryError,
+       "openerPID": center.fileOpenerPID, "historyError": center.downloadHistoryError, "historyLoaded": center.historyLoaded,
        "profileFilter": downloadProfileControl().map { ["visible": !$0.isHidden, "titles": $0.itemTitles,
          "selected": ($0.selectedItem?.representedObject as? String) ?? "all"] as [String: Any] } ?? [:],
        "visibleItems": app.settingsPresenter.library?.downloadItems.map(\.id) ?? [],

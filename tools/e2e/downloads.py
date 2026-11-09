@@ -339,10 +339,9 @@ def checks(factory, results, tmp, config, harness):
               and all(r['endedAt'] >= r['startedAt'] and r['sourceURL'] and r['profileID'] for r in disk), rows=disk)
         check('history_private_absent_store', not any('private-history' in json.dumps(v) or 'history=private' in json.dumps(v) for v in disk))
 
-        def restart():
+        def restart(expected_ids):
             nonlocal app, tab
             dismiss_library()
-            app.call('download-history-flush')
             app.call('download-policy', quit='close')
             app.activation_trace = app.call('activation-events')
             app.call('quit')
@@ -354,10 +353,19 @@ def checks(factory, results, tmp, config, harness):
             # No launch history read: the first Library opening hydrates it.
             check('history_lazy_before_library_' + str(len([k for k in results if k.startswith('history_lazy_before_library_')])),
                   not state()['items'], items=state()['items'])
-            library()
-            wait(lambda: all(v.get('historical') for v in state()['items']))
+            app.call('command', id='view-downloads')
+            def restored_expected():
+                snapshot = state()
+                rows = {v['id']: v for v in snapshot['items']}
+                # Even an expected empty list must wait for the real lazy load
+                # and its publication, never accept all([]) as restoration.
+                return (snapshot['historyLoaded'] and not snapshot['queued']
+                        and expected_ids <= rows.keys()
+                        and all(rows[key]['historical'] for key in expected_ids))
+            if not wait(restored_expected):
+                raise RuntimeError('history relaunch did not restore expected IDs: ' + ', '.join(sorted(expected_ids)))
 
-        restart()
+        restart(required)
         restored = {v['id']: v for v in state()['items']}
         check('history_relaunch_two_profiles', required <= set(restored)
               and len(restored) == len(state()['items']) and all(restored[k]['historical'] for k in required)
@@ -422,11 +430,11 @@ def checks(factory, results, tmp, config, harness):
         wait(lambda: all(not item(k) for k in (failed, cancelled)))
         check('history_clear_range', response['status'] == 'Done' and bool(item(old))
               and bool(retried and item(retried['id'])), response=response)
-        restart()
+        restart({old, retried['id']})
         check('history_remove_clear_persist', not any(item(k) for k in (completed, failed, cancelled, other))
               and bool(item(old)) and bool(retried and item(retried['id'])), items=state()['items'])
         response = app.call('settings-clear-data', profile=profile, kinds=8, range='All time')
-        restart()
+        restart({retried['id']})
         check('history_clear_all_persist', response['status'] == 'Done'
               and not any(v['profile'] == profile for v in state()['items'])
               and bool(retried and item(retried['id'])), items=state()['items'])
@@ -451,7 +459,7 @@ def checks(factory, results, tmp, config, harness):
             settings_window = app.call('profiles-shell')['settings']
             if settings_window:
                 E._try(lambda: app.call('key', window=settings_window, key='w', modifiers=['cmd'], route='app'))
-        restart()
+        restart(set())
         check('history_profile_deletion_persists', not profile_dir.exists()
               and not any(v['profile'] == profile2 for v in state()['items']))
         dismiss_library(); app.call('space', space=home_space)
@@ -483,6 +491,7 @@ def checks(factory, results, tmp, config, harness):
                   count=len(owned), error=state()['historyError'])
 
         stop()
+        check('history_store_private_permissions', path.stat().st_mode & 0o777 == 0o600)
         with contextlib.closing(sqlite3.connect(path)) as db, db:
             template = json.loads(db.execute('SELECT payload FROM downloads WHERE id=?', (seed_download,)).fetchone()[0])
 
@@ -506,7 +515,17 @@ def checks(factory, results, tmp, config, harness):
                 ids = {r[0] for r in db.execute('SELECT id FROM downloads')}
             check('history_newest_1000_pruned', len(ids) == 1000 and newest in ids and 'history-boundary-0999' not in ids, count=len(ids))
             stop()
-            seed(1001); launch_and_check('history_count_over_limit_refused'); stop()
+            seed(1001); launch_and_check('history_count_over_limit_loads_newest', count=1000)
+            check('history_over_count_oldest_omitted', not item('history-boundary-1000')
+                  and bool(item('history-boundary-0000')) and bool(item('history-boundary-0999')))
+            dismiss_library(); tab = E.new_tab(app, base + '/')
+            recovered = start('/fast?history=over-count-recovery'); wait(lambda: item(recovered).get('fileExists'))
+            app.call('download-history-flush')
+            with contextlib.closing(sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True)) as db:
+                ids = {r[0] for r in db.execute('SELECT id FROM downloads')}
+            check('history_over_count_write_recovers', len(ids) == 1000 and recovered in ids
+                  and 'history-boundary-0999' not in ids and 'history-boundary-1000' not in ids, count=len(ids))
+            stop()
             seed(1)
             with contextlib.closing(sqlite3.connect(path)) as db, db: db.execute('UPDATE downloads SET payload=?', ('{"invalid":true}',))
             launch_and_check('history_corrupt_record_refused'); stop()
@@ -527,24 +546,47 @@ def checks(factory, results, tmp, config, harness):
 
     def quit_flow():
         nonlocal app, tab
+        # Earlier history cases relaunch without preference arguments. Start
+        # this case explicitly with YES, then restore with NO for the second pass.
+        dismiss_library(); app.call('download-policy', quit='close')
+        app.activation_trace = app.call('activation-events'); app.call('quit')
+        if not wait(lambda: not app.process_path(app.pid), 15): raise RuntimeError('quit fixture setup did not finish')
+        app.quit()
+        app = factory(urls=(), fresh=False, extra_env=launch_env,
+                      extra_args=['-open.general.warnBeforeQuitting', 'YES'])
+        app.preferences_domain = domain
+        tab = E.new_tab(app, base + '/')
         for warn in (True, False):
-            if not warn:
-                app = factory(urls=(), fresh=False, extra_env=launch_env,
-                              extra_args=['-open.general.warnBeforeQuitting', 'NO'])
-                app.preferences_domain = domain
-                tab = E.new_tab(app, base + '/')
             running = start('/slow'); wait(lambda: item(running).get('received', 0) > 0)
             app.call('download-policy', quit='keep')
             before_quit = item(running)['received']; count = len(state()['quitAlerts'])
             app.call('quit')
             alerts = wait(lambda: state()['quitAlerts'] if item(running).get('received', 0) > before_quit and len(state()['quitAlerts']) > count else None)
             check('quit_keep_warn_%s' % str(warn).lower(), alerts and alerts[-1] == {'title': 'Downloads in progress', 'body': 'There are downloads in progress. Closing the application will cancel them.', 'buttons': ['Close Open', 'Keep browsing']} and item(running)['state'] == 'inProgress', alerts=alerts)
+            before_close = item(running)
             app.call('download-policy', quit='close')
             app.activation_trace = app.call('activation-events')
+            # No download-history-flush: only AppDelegate's approved-quit path
+            # can save this in-progress transfer as a persisted cancellation.
             app.call('quit')
             exited = wait(lambda: not app.process_path(app.pid), 15)
             app.quit()
             check('quit_close_warn_%s' % str(warn).lower(), exited)
+            app = factory(urls=(), fresh=False, extra_env=launch_env,
+                          extra_args=['-open.general.warnBeforeQuitting', 'NO'])
+            app.preferences_domain = domain
+            app.call('download-policy', quit='keep')
+            app.call('command', id='view-downloads')
+            restored = wait(lambda: item(running) if item(running).get('historical') else None)
+            check('quit_cancel_persisted_warn_%s' % str(warn).lower(), restored
+                  and restored['state'] == 'cancelled' and restored['profile'] == before_close['profile']
+                  and restored['source'] == before_close['source'], item=restored)
+            dismiss_library()
+            if warn: tab = E.new_tab(app, base + '/')
+        # The restoration check leaves a live App with no active transfer.
+        app.activation_trace = app.call('activation-events'); app.call('quit')
+        if not wait(lambda: not app.process_path(app.pid), 15): raise RuntimeError('quit restoration cleanup did not finish')
+        app.quit()
         app = factory(urls=(), fresh=True, extra_env=launch_env)
         app.preferences_domain = domain
         app.call('download-policy', quit='record')

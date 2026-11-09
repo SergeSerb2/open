@@ -27,7 +27,9 @@ public struct DownloadsSection: View {
     public static func subtitle(_ item: DownloadItemSnapshot, model: LibraryViewModel) -> String {
         switch item.state {
         case .failed: return "Failed to Download"
-        case .completed: return model.fileAvailable(item) ? "Completed · \(model.downloadLocation(item))" : "File moved or deleted."
+        case .completed:
+            if item.isHistorical && item.fileExists == nil { return "Completed · \(model.downloadLocation(item))" }
+            return model.fileAvailable(item) ? "Completed · \(model.downloadLocation(item))" : "File moved or deleted."
         case .cancelled: return "Cancelled"
         case .paused: return "Paused"
         case .inProgress:
