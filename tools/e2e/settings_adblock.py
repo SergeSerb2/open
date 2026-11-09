@@ -311,7 +311,11 @@ def real_engine(factory, results, wait):
                 name = Path(urllib.parse.urlsplit(self.path).path).name
                 body = (b'[Adblock Plus 2.0]\n||demand.supply/ad.js$script\n'
                         b'||demand.supply/resource.js$script,redirect=noopjs\n'
-                        if synthetic_lists.is_set() else pinned[name])
+                        # A byte-identical 200 response correctly skips reload.
+                        # Change only a comment so the refresh assertion observes
+                        # a new generation with the same official blocking rules.
+                        if synthetic_lists.is_set() else
+                        pinned[name] + b'\n! Open local refresh fixture\n')
                 mime = 'text/plain'
             elif self.path.startswith('/resource.js'):
                 body, mime = b'window.__resourceNetwork=true;', 'application/javascript'
@@ -505,7 +509,7 @@ def real_engine(factory, results, wait):
         next_request(tab, 'global_off_next_request_same_document', False)
         app.call('settings-adblock', enabled=True)
 
-        assert wait(lambda: status(original['id'])['load_generation'] > 1, timeout=40)
+        assert wait(lambda: status(original['id'])['load_generation'] > 1, timeout=40), status(original['id'])
         before = status(original['id'])['load_generation']
         app.call('settings-adblock', list='EasyList', listEnabled=False)
         assert wait(lambda: status(original['id'])['load_generation'] > before, timeout=40)
