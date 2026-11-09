@@ -4336,6 +4336,70 @@ cefsimple (`--open-adblock-selftest`, in #100) and a throwaway Cargo driver.
   the same-user threat model, review 100-9).
 - **Follow-ups** (`docs/followups.md`): 100-7, 100-8, the rest of 100-9, the
   0301 build-hook patch.
+
+### Full-size parser corpus as built (2026-11-08)
+
+The non-official cefsimple self-test adds `--open-adblock-fuzz-full`.
+Use it with `--open-adblock-selftest`, `--open-adblock-dir=<seeds>` and
+`--open-adblock-fuzz-output=<private output directory>`. The seed directory
+contains `easylist.txt`, `easyprivacy.txt`, `resources.json` and `corpus.txt`.
+The caller verifies their recorded SHA-256 pins. Each seed read is capped at
+8 MiB. This mode creates no window and has no watchdog or caller time limit.
+The ordinary 10 s self-test and 300 s bench watchdogs stay in place.
+
+The seed is `0x9e3779b97f4a7c15`. The real shim receives 150,000 mutated list
+lines through `FilterSet::add_filter_list`, 100,000 mutated corpus URLs
+through `Check`, 3,000 mutations of a real DAT made from the pinned EasyList
+and EasyPrivacy, and 3,000 mutations of the pinned resources JSON through
+the typed resources parser. The corpus also includes the exact four-byte
+DAT, three review CSS-injection lines and two safe selector controls. Each
+parser call saves and closes its active bytes and replay metadata first.
+A crash or panic stops the caller without a retry.
+
+Counts have separate meanings: list acceptance is shim build admission
+(the crate does not expose per-rule parse failures); URL acceptance is the
+crate's actual `Request::new` result inside `Check`; DAT acceptance is the
+deserialize result; resources acceptance requires nonempty typed JSON;
+CSS acceptance is sanitized selector output. The added internal
+`request_valid` result field does not change a match or allow verdict.
+The summary records every kind's counts, kernel peak browser-process
+`phys_footprint`, duration and the slowest shim build among 153,002 builds.
+
+The caller runs with `nice -n 19` under heavy lock a. Work uses a `MayBlock`,
+`BEST_EFFORT` ThreadPool task without the shared matcher sequence.
+Chromium's startup fence can delay a windowless run by about 180 s before
+its startup failsafe permits that task; parser duration excludes this wait.
+There is no App change or App distribution build for this mode.
+
+The single full-size run passed on the M5 at 20:21:59 local, 2026-11-08,
+built source `e749dc21`, root `open-engine-s13b`. No crash, abort or panic
+occurred. All owned processes ended and heavy lock a was released.
+
+| Kind | Accepted | Rejected | Total | Load1 at count |
+|---|---:|---:|---:|---:|
+| Mutated list lines (shim admission) | 150,000 | 0 | 150,000 | 13.22 |
+| Mutated URLs (Request parse) | 69,783 | 30,217 | 100,000 | 13.83 |
+| Real-DAT mutations | 310 | 2,690 | 3,000 | 7.96 |
+| Mutated resources JSON | 810 | 2,190 | 3,000 | 7.85 |
+| Four-byte DAT | 0 | 1 | 1 | 13.83 |
+| Review CSS lines and safe controls | 2 | 3 | 5 | 7.85 |
+
+The real DAT was 7,020,990 bytes. Parser work took 216.933 s; process wall
+time was 397.534 s, including the startup fence. Load1 ranged 7.64–14.82.
+Kernel peak browser-process `phys_footprint` was 211,929,056 bytes
+(202.11 MiB); final footprint was 138,397,664 bytes (131.99 MiB).
+The slowest of 153,002 shim builds was the pinned two-list build, index 0,
+at 279.599 ms. These are low-priority run measurements, not a parse deadline.
+The missing-output guard also passed with its expected exit 1.
+
+Exact commands, pins, loads and raw results:
+`.re/s13/e4/FUZZ.md`, `apply-build-8.results.json`,
+`fuzz-full-1.results.json` and `fuzz-full-1-audit.json` in the main checkout.
+The source build passed own objects/targets, checkdeps, scoped GN includes,
+full CEF framework and strict engine status (8 PASS / 0 FAIL / 0 WARN).
+Per-rule parse counts, R2-8's build-generated feature receipt and parse
+time-limit enforcement remain open.
+
 ### Step 4 status (2026-10-26, checkpoint; no PR yet)
 
 Paused at the user's order (22:25): no new PRs. Branch `m6/adblock-step4`
