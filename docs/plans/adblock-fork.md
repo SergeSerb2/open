@@ -4500,6 +4500,19 @@ distribution (stamp 5602914f…). Step 4 is not applied there. To put it
 back: copy `Engine/fork/src/open/adblock/` from this branch into the tree,
 then replace 0310 and apply 0311 from this branch's `patches/cef/`.
 
+### Cold-start App erratum (2026-11-09, code checkpoint)
+
+The adapter now posts exclusions, the deterministic Profile list directory,
+and enabled state when a context is created, including Default at engine
+readiness. It does not construct the IO-backed store before paint. A separate
+read-only background task prefetches saved settings/exclusions; until it
+returns, the existing store's in-memory values win, otherwise defaults are
+on/no exclusions. List preparation and update schedules remain after paint.
+The first store configure explicitly reloads an already configured directory,
+because the early load may have failed before seeding created `current.json`.
+This App change alone does not replace §10's fail-open matcher rule. Native
+bounded holding, first-request probes, and launch timing remain unverified.
+
 ### Section 13 lead decisions (2026-11-07)
 
 1. **Order.** Step 4 (with the §13.5.1 rulings) first. Then the control

@@ -15,6 +15,13 @@ private struct GlobalSettings: Codable {
     var nativeAdBlockEnabled = true
 }
 
+/// Read-only launch values. Reading these does not open a Profile, seed lists,
+/// acquire its directory lease, or start an update schedule.
+public struct AdBlockStartupConfiguration: Sendable {
+    public let isEnabled: Bool
+    public let excludedDomains: [String]
+}
+
 private final class DirectoryLease {
     let descriptor: Int32
     init(root: URL) throws {
@@ -42,10 +49,20 @@ private final class TemporaryRoot {
 }
 
 /// Main-actor configuration store for a browser session. Files and downloads are handled by an IO
-/// actor. Call openProfile before creating its engine context, then bind onEngineEvent to OpenEngine.
+/// actor. Bind onEngineEvent before openProfile. The App can configure a context's
+/// deterministic list path before openProfile; it must reload once seeding finishes.
 /// Mutations throw so the UI cannot claim a change that failed to persist.
 @MainActor
 public final class AdBlockStore {
+    /// Call on an IO task, never the main actor. The normal store remains lazy.
+    public nonisolated static func startupConfiguration(root: URL, directory: URL) throws -> AdBlockStartupConfiguration {
+        let enabled = try readJSON(GlobalSettings.self, at: root.appendingPathComponent("adblock-settings.json"),
+                                   fallback: GlobalSettings()).nativeAdBlockEnabled
+        let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
+        let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
+        return AdBlockStartupConfiguration(isEnabled: enabled, excludedDomains: normalized.sorted())
+    }
+
     public let root: URL
     public let catalog: AdBlockCatalog
     public var onScheduledUpdate: (@MainActor (_ outcome: String, _ nextDelay: TimeInterval) -> Void)?

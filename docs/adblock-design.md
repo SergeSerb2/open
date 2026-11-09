@@ -260,6 +260,26 @@ Swift side (`OpenFeatures`): `AdBlockStore` holds the catalog, per-Profile enabl
 - **Storage.** Under `~/Library/Application Support/Open/Profiles/<profile>/AdBlock/`: `catalog-state.json` (enabled IDs, ETags, last-check times, catalog version), `lists/<id>.txt` (last good text per list), `engine.dat` (serialized engine for fast startup), and `exclusions.json` (excluded domains per Profile). Load `engine.dat` at Profile open (about 47 ms for two lists). Fall back to text parse if the DAT version mismatches the crate version.
 - **Per-Profile isolation.** Engines, enabled sets, and exclusions are per Profile, as in Arc (`blockListsPerProfile`). Incognito Profiles get a memory-only engine cloned from the default lists with no disk writes.
 
+### Cold-start configuration (Section 13, 2026-11-09)
+
+The App configures Default at engine readiness and every regular or private
+context at creation, before handing it to a page. It sets exclusions, the
+deterministic `Profiles/<dataDirectoryName>/AdBlock/lists` path, and the master
+switch through OpenEngine. A read-only task prefetches saved settings and
+exclusions off the main thread during model installation. Until that task
+returns, configuration uses the existing store's in-memory values where
+available, otherwise the product default (on, no exclusions). The App does not
+wait for this task or perform settings IO on the main thread before paint.
+
+`AdBlockStore.openProfile`, bundled-list seeding, generation verification, and
+update scheduling still start after first paint. If the early native load finds
+no `current.json`, it fails open and keeps the directory configured. The store's
+later configure event explicitly reloads that same directory after seeding;
+setting the same path alone would not retry it. Requests before an engine is
+ready remain fail-open in this App-only change. A separate native change adds a
+bounded first-load hold; fresh-profile, saved-off/excluded, and launch-time
+acceptance are pending real-App proof.
+
 ### Site Control Center and Settings UI
 
 - The panel toggle shows three facts: the master state, whether this site is excluded, and the blocked count for the current page load (from `blockedResourceCount`). Toggling writes the exclusion for the registrable domain, updates the panel without closing it, and shows the reload affordance (`AdBlockReloadFollowUpAction` in Arc). The scope dialog offers “this site” (registrable domain, default) and “this page only” (exact URL, session-scoped). Do not offer “everywhere” in the per-site dialog; that is the master toggle in Settings.

@@ -3,7 +3,7 @@ import OpenAdBlock
 import OpenEngine
 import OpenModel
 
-/// Store events are the only mutation path. Native contexts remain lazy.
+/// Cheap context configuration precedes requests; list preparation stays after paint.
 @MainActor
 final class AdBlockEngineAdapter {
   unowned let app: AppDelegate
@@ -12,6 +12,9 @@ final class AdBlockEngineAdapter {
   // OEEngine.contexts exposes regular contexts only. Do not retain OTR sessions.
   private let otrContexts = NSHashTable<OEBrowserContext>.weakObjects()
   private var openings: [ProfileID: Task<Void, Never>] = [:]
+  private var startupReads: [ProfileID: Task<Void, Never>] = [:]
+  private var startupConfigurations: [ProfileID: AdBlockStartupConfiguration] = [:]
+  private var startupDirectoryNames: [ProfileID: String] = [:]
   private(set) var started = false
 
   init(app: AppDelegate) { self.app = app }
@@ -36,9 +39,43 @@ final class AdBlockEngineAdapter {
     let previous = app.model.onProfileCreated
     app.model.onProfileCreated = { [weak self] profile in
       previous?(profile)
+      self?.readStartupConfiguration(profile)
       self?.openAfterPaint(profile)
     }
+    for profile in app.model.profiles { readStartupConfiguration(profile) }
     if started { for profile in app.model.profiles { openAfterPaint(profile) } }
+  }
+
+  private func readStartupConfiguration(_ profile: Profile) {
+    guard isSupported, !app.shutdownPrepared,
+      startupDirectoryNames[profile.id] != profile.dataDirectoryName else { return }
+    let id = profile.id
+    let name = profile.dataDirectoryName
+    startupReads.removeValue(forKey: id)?.cancel()
+    startupConfigurations[id] = nil
+    startupDirectoryNames[id] = name
+    let root = app.directories.root
+    let directory = app.directories.adBlockDirectory(dataDirectoryName: name)
+    let read = Task.detached(priority: .userInitiated) {
+      try? AdBlockStore.startupConfiguration(root: root, directory: directory)
+    }
+    startupReads[id] = Task { [weak self] in
+      let configuration = await read.value
+      guard let self else { return }
+      guard !Task.isCancelled, self.startupDirectoryNames[id] == name else { return }
+      self.startupReads[id] = nil
+      guard !self.app.shutdownPrepared,
+        self.app.model.profile(id: id)?.dataDirectoryName == name,
+        self.store?.isRetired(id) != true, let configuration else { return }
+      self.startupConfigurations[id] = configuration
+      for context in self.contexts(for: id) { self.configureBeforeRequests(context, profileID: id) }
+    }
+  }
+
+  /// Also configure Default when launch has no selected page yet. No context is created here.
+  func engineDidInitialize() {
+    guard let profile = app.model.defaultProfile, let context = OEEngine.shared.defaultContext else { return }
+    contextCreated(context, profileID: profile.id)
   }
 
   func startAfterPaint() {
@@ -72,9 +109,24 @@ final class AdBlockEngineAdapter {
   func contextCreated(_ context: OEBrowserContext, profileID: ProfileID) {
     if context.originalContext != nil { otrContexts.add(context) }
     guard let profile = app.model.profile(id: profileID) else { return }
+    configureBeforeRequests(context, profileID: profileID)
+    readStartupConfiguration(profile)
     openAfterPaint(profile)
-    guard isSupported, let store, !store.isRetired(profileID), let directory = try? store.listDirectory(for: profileID) else { return }
-    configure(context, directory: directory, enabled: store.isEnabled, excluded: store.excludedDomains(for: profileID))
+  }
+
+  private func configureBeforeRequests(_ context: OEBrowserContext, profileID: ProfileID) {
+    guard isSupported, store?.isRetired(profileID) != true,
+      let profile = app.model.profile(id: profileID) else { return }
+    let startup = startupConfigurations[profileID]
+    // Do not construct the IO-backed store before paint. Until the async read
+    // arrives, use the existing in-memory setting, or the product default (on).
+    let enabled = store?.isEnabled ?? startup?.isEnabled ?? true
+    let excluded: [String]
+    if let store, store.isProfileOpen(profileID) { excluded = store.excludedDomains(for: profileID) }
+    else { excluded = startup?.excludedDomains ?? [] }
+    let directory = (try? store?.listDirectory(for: profileID))
+      ?? app.directories.adBlockListsDirectory(dataDirectoryName: profile.dataDirectoryName)
+    configure(context, directory: directory, enabled: enabled, excluded: excluded)
   }
 
   func contexts(for profile: ProfileID) -> [OEBrowserContext] {
@@ -96,7 +148,13 @@ final class AdBlockEngineAdapter {
     case let .configure(profile, directory, enabled, excluded):
       guard let model = app.model.profile(id: profile) else { return }
       directories[profile] = model.dataDirectoryName
-      for context in contexts(for: profile) { configure(context, directory: directory, enabled: enabled, excluded: excluded) }
+      for context in contexts(for: profile) {
+        let alreadySet = context.adBlockListDirectory == directory
+        configure(context, directory: directory, enabled: enabled, excluded: excluded)
+        // Early loading may have found no current.json. Setting the same path
+        // is a native no-op, so explicitly retry after the store has seeded it.
+        if alreadySet { context.reloadAdBlockLists() }
+      }
     case let .enabled(enabled):
       for profile in app.model.profiles where store?.isRetired(profile.id) == false {
         for context in contexts(for: profile.id) { context.isAdBlockEnabled = enabled }
@@ -106,6 +164,9 @@ final class AdBlockEngineAdapter {
     case let .reload(profile, _):
       for context in contexts(for: profile) { context.reloadAdBlockLists() }
     case let .closed(profile):
+      startupReads.removeValue(forKey: profile)?.cancel()
+      startupConfigurations[profile] = nil
+      startupDirectoryNames[profile] = nil
       for context in contexts(for: profile) {
         context.isAdBlockEnabled = false
         context.adBlockListDirectory = nil
@@ -115,6 +176,8 @@ final class AdBlockEngineAdapter {
   }
 
   func stop() {
+    for task in startupReads.values { task.cancel() }
+    startupReads.removeAll()
     for task in openings.values { task.cancel() }
     openings.removeAll()
   }
