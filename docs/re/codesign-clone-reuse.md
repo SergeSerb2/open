@@ -62,6 +62,10 @@ fallback, rather than a reason to change its owner's permissions.
 
 ## Verification record
 
+Current results are in [the resumed merged-head record](#resumed-after-lead-attribution-2026-11-09)
+and [the completed M1 DLV record](#m1-hardened-dlv-row-e-completed-after-clearance).
+The current full gate is 24 PASS / 1 command-bar timing FAIL. Row g remains pending.
+
 Evidence is in the project checkout's `.re/s16/codesign-clone-reuse/`.
 `root-path-audit.json` records the S16-only state/configuration audit.
 `baseline-apply.json` records the baseline apply. `roundtrip.json` compares
@@ -1033,3 +1037,283 @@ completion of Features, updater and the full verifier. DLV still needs M1
 clearance; rebuilt-engine timing still needs the next quiet window. The morning
 clone/scan/swap results and all historical failures retain their exact heads.
 No performance or merge-readiness claim follows from build/static success.
+
+### Resumed after lead attribution, 2026-11-09
+
+The lead's 09:45 ruling identifies the 09:15 renderer report as Section 13's
+passing intentional `popup_renderer_crash` case, parent PID 32710, in
+DevToolsSession. It was not from this work. This is the lead's attribution;
+the original STOP and report receipts above remain unchanged. The lead
+allowed resumed screen work and required a read-only dlg.js check before
+and after each suite. New crash reports are accepted only when their actual
+PID exactly matches a Section marker; any unmatched real Open report stops work.
+`lead-clearance.json` records the ruling. No system setting changed.
+
+The resumed proof source is `8cac5c6fc131f5ffdac8fa482b86897bfa2aec8d`. It merges main
+`bc5678d1030c90a6343e24af7e700ca1c6598377` (#281), which includes #280
+and main ≥701bcab0. Engine inputs are unchanged by these App merges. Both
+Apps were rebuilt serially through S16-heavy with OPEN_ENGINE_ROOT pointing
+only at open-engine-s16. Debug PASS in 21.36 s, load1 4.76→5.53; Release
+with automation PASS in 116.01 s, load1 5.53→17.10. Deep strict signatures
+and engine fingerprints pass. Current exact identities (`artifacts.json`):
+
+| Artifact | SHA-256 |
+|---|---|
+| S16 #271 +0106 distribution | `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd` |
+| Debug executable | `eaf364c11a73d49c58f93bc9ea2d56953491689ddf0f77350652e66d38cd6bad` |
+| Release executable | `873d5fb431b1964ed815d785779ceb89c8811e2d2064b87185c6041e0489e8c3` |
+| Embedded signed framework, both Apps | `63c7e9aef11ec54c31360530c397a16fd9c8f5aef27cea2a7a2b1cb6e2336f7d` |
+| Normalized framework code | `983ddb7a61e82970c8315db8f980881bd2495fe996148436d016b17c5610a1ba` |
+
+Main #271 remains framework 8e8a461c; native ad blocking stays ON by default.
+The exact series remains:
+
+```text
+chromium: 0301 0302 0303 0304 0305 0306 0401 0402 0403 0501 0504 0506 0601 0801 0802 0803 0804 0805 0806 0807 0808 0809 0810 0106
+cef: 0101 0104 0105 0302 0303 0304 0305 0310 0311 0314 0505 0601 0602 0701
+rust: 0001
+```
+
+**WARN only:** 0106 follows 0801–0810 as required by the series. Fresh
+`engine-status.json` reports 7 PASS, 0 FAIL and this single numeric-order
+WARN; exit zero, 8.63 s, load1
+6.75→6.69. No patch, overlay, manifest or
+engine source changed during this resumption, so no new authoring round trip
+was needed. The completed #271 rebuild/distribution and original round trip
+remain above.
+
+Receipts below are relative to `resume-0945-20261109/` in the project evidence
+directory. Prior cohorts remain historical and unchanged.
+
+| Row | Current rebuilt-engine result | Evidence or remaining limit |
+|---|---|---|
+| a | PASS | Three normal full reuse runs after priming keep identical executable stat, link count two, saved identity and clone bundle inode |
+| b | 7/7 scan-free in this cohort; historical FAIL retained | Matching RunningBoard starts, zero ChangetimeScan pairs, unchanged primed metadata. No pre-engine ctime recurrence. Historical residual first-after-gap scans remain unexplained; no gain claim |
+| c | PASS | In-place cp retains device/inode 16777229/1160243975, changes nanosecond mtime and recreates the clone/identity |
+| d | PASS | Two install paths create distinct private cache slots and executable inodes; returning to the first reuses its own slot |
+| e | PASS: ad-hoc both directions; M1 DLV all three requested directions | Release→Debug and Debug→Release each reuse a clone before atomic whole-App replacement and removal of the old staging App. Three local sites, fresh renderers and silent audio utility pass; GPU retained. Both Apps contain #271 +0106; this is not a new main control. M1 adds main(#271) → +0106 and both +0106 → +0106 directions after three single plain launches. Historical forced GPU/network restart FAIL retained |
+| f | PASS | Two normal runs at cache mode 0500 render with renderer/GPU/utility helpers. No persistent clone appears; link count 1→2→1 and changed ctime prove Chromium's safe per-run fallback |
+| g | PENDING next quiet window | No rebuilt-engine timing. Frozen pre-#271 A/B remains a separate historical cohort |
+| h | PASS for requested M5 functional scope: shell 7 PASS, features 27 PASS including non-fatal chrome://kill recovery, updater 103 PASS | Fresh engine-status 7 PASS / 0 FAIL / 1 numeric-order WARN |
+
+
+The row-b poller requested 1 ms and observed a worst gap of 11.80325 ms at
+functional daytime load. All recorded stat values equal the primed value;
+this is not continuous ≤5 ms sampling proof. The scan proof is
+`measurements/scan-proof.json`; nine full functional runs are recorded in
+`functional/receipt.json`. No launch gain follows from these functional rows.
+The old b FAIL, pre-engine ctime anomaly and assessment-cache guess remain open.
+
+Both `requested-adhoc-*-swap/receipt.json` files retain the real whole-directory
+RENAME_SWAP and cleanup receipts. `swap-log-review.json` finds no captured
+signing-failure candidate tied to the observed App/helper PIDs or clone paths.
+That statement is limited to the saved log intervals. The M5 batches ran no
+forced service restart or hardened/DLV launch. M1 proof follows below.
+
+| Batch | Result | Seconds after screen acquisition | Load1 start→end |
+|---|---|---:|---|
+| a/c/d/f, nine full runs | PASS | 31.98 | 12.54→13.71 |
+| b, two primes and seven relaunches | PASS | 21.59 | 12.81→18.27 |
+| e, Release→Debug | PASS | 18.32 | 14.71→13.86 |
+| e, Debug→Release | PASS | 20.36 | 14.64→20.65 |
+| shell | PASS | 21.93 | 7.26→9.09 |
+| features | PASS | 100.12 | 11.27→8.62 |
+| updater | PASS | 137.52 | 7.56→11.03 |
+
+Features recovery uses chrome://kill, retains the same App PID and a live sibling,
+then reloads successfully; it does not generate a crash report. This proof
+head uses pre-#283 updater termination behavior; the lead's known #283
+retry-row issue applies to later merged heads. Shell has seven
+PASS rows, Features 27 PASS and updater 103 PASS.
+
+One batch/suite ran per screen-lock invocation. No functional quiet lock,
+load gate or priority flag was used. No owned build overlapped an App run.
+`suites/*/suite-receipt.json` records preference restoration and process/window
+cleanup. All current screen receipts record dlg.js =0 before and after.
+Exact-PID marker snapshots and any accepted expected reports are saved under
+`intentional-markers/` and `intentional/`; the final audit records their count.
+
+### Full verifier on the resumed merged head
+
+The original full tools/verify-all.sh ran through S16-heavy on `8cac5c6fc131f5ffdac8fa482b86897bfa2aec8d`.
+Result: **1 FAIL, 24 PASS**. Wrapper elapsed 2085.02 s, load1 9.71→10.07;
+after the slot wait the guard began at load1 9.71
+and ended at 10.07. Optional private Arc-data import was
+not selected. The gate used no quiet lock or priority flag.
+
+Private instrumentation executed the current production check.py with its
+original source/resource paths, assertions, thresholds, CLI commands and screen
+locks. It added dlg.js receipts only after each native screen lock acquisition
+and after cleanup before release. `verify-instrumentation.json` records both
+source hashes. No production verifier file changed.
+
+| Check | Result | Seconds, including queue wait |
+|---|---|---:|
+| build | PASS | 97 |
+| commands-demo | PASS | 5 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 2 |
+| space-editor | PASS | 443 |
+| space-pad-compare | PASS | 2 |
+| suggest-check | PASS | 26 |
+| commands-dump | PASS | 0 |
+| route | PASS | 12 |
+| favicons | PASS | 9 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 4 |
+| profiles | PASS | 4 |
+| settings-preview | PASS | 679 |
+| sidebar-render | PASS | 113 |
+| sidebar-compare | PASS | 122 |
+| commandbar-render | FAIL | 34 |
+| features-render | PASS | 89 |
+| extensions-render | PASS | 7 |
+| sitecontrol-render | PASS | 399 |
+| onboarding-render | PASS | 24 |
+| boosts | PASS | 4 |
+| verify-secrets-fixture | PASS | 5 |
+
+`full-verify.json`, `verify-crash-guard.json`, `verify-all/results.tsv`,
+`verify-all/summary.txt` and the per-check logs retain the actual gate.
+The earlier 24 PASS / 1 timing FAIL at load1 29.1 and interrupted 15-PASS
+gate remain separate. No assertion, baseline, comparator or threshold changed.
+
+The frozen comparison remains **pre-#271 main versus pre-#271 +0106**. Its
+seven pairs and failed cold/warm budgets do not validate this rebuilt engine.
+No timing script or frozen input was run or modified during this update.
+The M1 DLV results below close that requested functional row; new-engine
+g remains pending the next quiet window. The historical b cause remains open.
+This PR is not ready to merge and has not been merged.
+
+### Isolated command-bar timing attempts
+
+The current full gate's sole FAIL is row 151: inline-completion overhead
++0.309 ms against +0.300 ms at load1 8.7. Row 150 passes at 4.35 ms CPU p95
+against 8 ms. Two isolated attempts used quiet lock → S16-heavy on the
+already-built CLI, with no App launch or screen lock. They changed no source,
+baseline or threshold. The exact command is tools/verify-all.sh --only
+commandbar-render. Both attempts remain FAIL; they are not aggregated into PASS.
+No unchanged-main CLI comparison ran.
+
+| Attempt | Row 150 CPU p95 / 8 ms | Row 151 overhead / 0.300 ms | Measured load1 | Check result |
+|---|---|---|---:|---|
+| Full gate | PASS, 4.35 ms | FAIL, +0.309 ms | 8.7 | FAIL |
+| Quiet 1 | FAIL, 9.40 ms | PASS, +0.246 ms | 9.0 | FAIL |
+| Quiet 2 | FAIL, 9.86 ms | PASS, +0.035 ms | 22.8 | FAIL; not qualified as quiet acceptance |
+
+Quiet 1's wrapper load1 is 8.47→9.04 over 48.50 seconds. Quiet 2 started
+at 8.32 and ended at 22.76 over 52.49 seconds in its inner guard. Its wrapper
+checked load at start only and did not stop when it rose above 12. That
+attempt therefore cannot qualify as quiet proof. Its timing FAIL stays in
+the record; no further timing run followed. The original incomplete outer
+receipt after a turn interruption remains unchanged. The completed inner
+guard, summary and `quiet2-wrapper-recovery.json` record the outcome without
+inventing a missing outer exit or end time.
+
+`quiet-verify/`, `quiet2-verify/`, their separate crash guards and the raw
+full gate retain every result. These tests did not run row g. No current-engine
+launch gain or full-green gate is claimed. The command-bar timing failure
+remains an acceptance gap for the lead; #266 changes no code in that CLI path.
+
+### M1 hardened DLV row e: completed after clearance
+
+The lead cleared M1 and requested two kinds of update: the exact M5
+Release↔Debug pair, labelled **+0106 → +0106**, and one first-update
+**main(#271) → +0106** direction. All requested directions PASS. No engine
+build ran on M1. DLV re-signing and every DLV launch ran only on M1.
+
+The exact M5 pair was copied before the control build; both original normal
+App hashes match `artifacts.json`. For the main control, this existing M5
+worktree was temporarily detached at merge-base main
+`bc5678d1030c90a6343e24af7e700ca1c6598377`. The App built against the read-only s8-main
+recorded #271 distribution `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
+The normal Release automation build PASS took
+53.24 s through S16-heavy, load1
+6.41→8.37.
+Its deep strict signature and engine fingerprint passed before copying.
+No engine was built or changed. The branch checkout, S16 Vendor distribution
+and exact original Release App were restored. The s8-main distribution hash
+remained unchanged. `m1-dlv/control-build.json` and `control-main.log` record
+this authorised read-only control use and restoration.
+
+The M1 worktree was detached at `8cac5c6fc131f5ffdac8fa482b86897bfa2aec8d`.
+Only supporting harness helpers were compiled there. Three copied Apps were
+ad-hoc signed with hardened runtime in release.sh's nested-code order. The
+main/helper entitlement dictionaries exactly equal the committed dictionaries
+plus disable-library-validation. No certificate or Keychain identity was used.
+Deep strict verification passes for each App. Normalized framework code hashes
+match before and after re-signing. `m1-dlv/results/signing-receipt.json` retains
+all input, signed-executable and framework hashes.
+
+| M1 DLV input | App source head | Engine distribution SHA-256 | DLV executable SHA-256 |
+|---|---|---|---|
+| Main271 | `bc5678d1030c90a6343e24af7e700ca1c6598377` | `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1` | `ee585574670ab67e47955bbb5a2dabd035a113e15498668500503c8616da72fb` |
+| Release | `8cac5c6fc131f5ffdac8fa482b86897bfa2aec8d` | `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd` | `5ab12ef8ca95be91fc19021ad1f6969f7f1e078a8da6fa24708de22587e7fae5` |
+| Debug | `8cac5c6fc131f5ffdac8fa482b86897bfa2aec8d` | `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd` | `c6cc0c622fddb8418170bbc85a0e7e94a02b36c0f55d81d009628de90f70f9c4` |
+
+The matrix ran on 2026-11-09 at 11:02:19–11:03:53, host GMT−07. Each input got
+exactly one initial plain launch, with no priming launch in that phase. All
+three passed before any live-swap run. Main's plain run observes its original
+per-run link lifecycle, 1→2→1; the +0106 inputs retain their first persistent
+clone at link count two after quit. No build failed to load, no abort occurred,
+and no failed build was relaunched.
+
+| M1 case | Result | Seconds after screen acquisition | Load1 start→end |
+|---|---|---:|---|
+| Main271 single plain launch | PASS | 11.38 | 3.46→4.96 |
+| Release single plain launch | PASS | 10.83 | 4.96→5.16 |
+| Debug single plain launch | PASS | 11.63 | 5.16→5.76 |
+| main(#271) → +0106 Release | PASS | 17.93 | 5.76→5.24 |
+| +0106 Release → +0106 Debug | PASS | 21.06 | 5.24→8.83 |
+| +0106 Debug → +0106 Release | PASS | 20.06 | 8.83→8.78 |
+
+For **main(#271) → +0106**, the running old main App uses Chromium's existing
+per-run clone. For each **+0106 → +0106** direction, the harness first primes
+and quits, then proves unchanged executable stat and saved clone identity on
+the actual reuse launch. Each real atomic whole-App RENAME_SWAP removes the
+old staging bundle before creating three new local-site renderers and a fresh
+silent audio utility. The existing GPU remains. DOM render assertions, helper
+PID changes, snapshot and clean shutdown all pass. No forced GPU/network
+restart control was repeated.
+
+All six cases took separate M1 screen-lock invocations. The 12 dlg.js checks
+record zero before and after. Read-only report checks found zero new real Open
+reports; zero expected marker-matched reports and zero marker snapshots were
+observed. `swap-log-review.json` finds no captured signing-failure candidate
+tied to the observed App/helper PIDs or clone paths; that finding is limited
+to the captured intervals. No system setting changed.
+
+Every case restored its startup preferences and left zero owned processes or
+windows. All six test cache directories, runtime install copies and profiles
+were removed. Receipts and raw logs were copied to M5 under
+`m1-dlv/results/`, then the owned detached M1 worktree and its signed input
+copies were removed. M5 original normal-App inputs are retained for the next
+quiet-window handoff. The prior frozen pre-#271 cohort and timing files remain
+unchanged. These temporary DLV checks do not constitute production signing or
+notarization acceptance.
+
+Row e is now PASS for the requested ad-hoc and hardened DLV functional scope.
+The historical extra forced-service stress FAIL is retained. Remaining:
+new-engine row g needs the next quiet window; the current command-bar timing
+check remains FAIL; historical row b's first-after-gap scan cause stays open.
+The PR remains not ready to merge, with no current-engine launch-gain claim.
+
+### Final evidence and cleanup audit
+
+The final fetch found main `28001634` (#284). Since the tested merge-base
+`bc5678d1`, main changed no engine input or file changed by #266. The proof
+source remains `8cac5c6f`; this final update changes only the two evidence
+docs. It does not claim validation of later main changes, including #283's
+new updater termination behavior.
+
+The read-only M5 audit at 11:10:19 GMT−07 confirms all 11 frozen hashes and
+inodes unchanged, both current Apps matching `artifacts.json`, all audited
+test caches removed and no owned jobs or Apps left. All 24 recorded M5
+dialog checks are clear. It finds no new real or expected marker-matched
+report and no marker snapshot. `final-audit.json` records the checks.
+The M1 audit and `m1-dlv/cleanup.json` confirm zero owned processes/windows,
+restored test preferences, copied receipts and removal of the detached
+worktree. Original normal-App inputs remain on M5. No row-g timing run or
+priority flag was used. No system setting changed and no PR merge ran.

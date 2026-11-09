@@ -33,8 +33,9 @@ The historical scan gate remains FAIL against the 7/7 target: residual
 first-after-gap scans, cause open, despite stable executable metadata
 (functional set 6/7). The rebuilt-engine morning set is separately 7/7
 scan-free with unchanged metadata. It does not explain the earlier scans.
-Hardened DLV remains pending M1 clearance. The pre-#271 quiet-window runner
-completed seven pairs, but both variants failed the cold/warm budgets.
+Hardened DLV now passes the three requested M1 update directions. The
+pre-#271 quiet-window runner completed seven pairs, but both variants failed
+the cold/warm budgets.
 Timing on the rebuilt post-#271 engine remains pending the next quiet window.
 The earlier full gate recorded 24 PASS and 1 FAIL (`commandbar-render`, two
 timing rows at load1 29.1); the report keeps that historical failure.
@@ -46,17 +47,32 @@ normal App builds passed. Distribution SHA-256 is
 Engine-status is 7 PASS, 0 FAIL, 1 order WARN. Normal-App rows a/c/d/f pass
 again on this engine. See the report's post-#271 cohort for suite and full-gate
 results. No launch-gain claim follows from these functional rows.
-The post-#271 full gate was interrupted by the real-crash STOP rule after
-15 PASS; its active Settings check was cancelled and nine checks did not run.
-No full-gate PASS is claimed. The lead later attributed the crash to the
-S11/window-border build. After renewed M5 clearance, a/c/d/f, seven scan-free
-relaunches, both ad-hoc swap directions and the shell suite passed again.
-A new real renderer crash report stopped the queue before Features launched
-at 09:15 on 2026-11-09. Ownership is unassigned. Updater and the new full gate
-did not start. Main #275 and then `701bcab0` (#280, window-border) are now
-merged. Engine inputs are unchanged. The morning runtime rows retain their
-earlier App/source identity; the #280 Apps need fresh runtime verification.
-Further screen work awaits renewed clearance.
+The earlier post-#271 gate stopped after 15 PASS when a real crash appeared;
+the lead later attributed it to S11/window-border. The later 09:15 renderer
+STOP was Section 13's intentional passing popup-renderer crash control, per
+the lead's attribution. Both original STOP receipts remain in the report.
+
+After main #280 and #281 were merged as `8cac5c6f`, both Apps were rebuilt.
+Current normal-App a/c/d/f pass; b is separately 7/7 scan-free with unchanged
+metadata. The historical b FAIL and its first-after-gap cause remain open.
+Both ad-hoc swap directions pass. Shell passes 7 rows, Features 27 (including
+non-fatal chrome://kill recovery), updater 103, and engine-status remains
+7 PASS / 0 FAIL / 1 order WARN. The current full gate is **24 PASS / 1 FAIL**:
+command-bar timing row 151 is +0.309 ms against +0.300 ms at load1 8.7.
+Two isolated attempts remain FAIL; the second exceeded the quiet load gate.
+They are not combined into PASS. The exact table, loads and limits are in
+the report. No code in the command-bar CLI path changed.
+
+The M1 DLV matrix now passes both **+0106 → +0106** Release↔Debug directions
+and the first-update **main(#271) → +0106** direction. Each of the three
+inputs passed one initial plain launch. The main control was App-only built
+from merge-base main `bc5678d1` against s8-main's recorded #271 distribution;
+no engine build ran. DLV signing and launches ran only on M1, with separate
+screen-lock calls, clear before/after dialog checks and no new crash report.
+Receipts are on M5 and the owned M1 worktree is removed. The M5 branch,
+Vendor engine and exact +0106 App were restored after the control build.
+Row g on the rebuilt engine remains pending the next quiet window. The PR
+is not ready to merge; no current-engine launch gain is claimed.
 
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
