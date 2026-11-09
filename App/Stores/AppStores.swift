@@ -14,9 +14,10 @@ final class AppStores: ProfileDataOwner {
   private var currentSuggest: SuggestEngine?
   lazy var boosts = AppBoosts(app: app)
   private var adBlockStorage: AdBlockStore?
+  private var attemptedAdBlock = false
+  private var adBlockPreparation: Task<AdBlockStore?, Never>?
   /// A read of existing settings must not open the store or load its PSL.
   var existingAdBlock: AdBlockStore? { adBlockStorage }
-  private var attemptedAdBlock = false
   var adBlock: AdBlockStore? {
     if !attemptedAdBlock {
       attemptedAdBlock = true
@@ -26,6 +27,33 @@ final class AppStores: ProfileDataOwner {
       if let adBlockStorage { app.adBlockEngineAdapter.bind(adBlockStorage) }
     }
     return adBlockStorage
+  }
+  /// Fresh Profiles need a store before paint. Prepare its files on a worker,
+  /// then install/bind on the main actor. Concurrent fresh contexts share it.
+  func adBlockForFreshProfile() async -> AdBlockStore? {
+    if let adBlockStorage { return adBlockStorage }
+    if let adBlockPreparation { return await adBlockPreparation.value }
+    guard !attemptedAdBlock, !app.shutdownPrepared else { return nil }
+    attemptedAdBlock = true
+    let root = app.directories.root
+    let bundle = Bundle.main.resourceURL?.appendingPathComponent("AdBlock")
+    let prepare = Task.detached(priority: .userInitiated) {
+      let existingBundle = bundle.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+      return try? AdBlockStore.prepare(root: root, bundledDefaultsDirectory: existingBundle)
+    }
+    let task = Task<AdBlockStore?, Never> { [weak self] in
+      let preparation = await prepare.value
+      guard let self else { return nil }
+      defer { self.adBlockPreparation = nil }
+      guard !self.app.shutdownPrepared, let preparation else { return nil }
+      let store = AdBlockStore(preparation: preparation)
+      self.adBlockStorage = store
+      self.app.adBlockEngineAdapter.bind(store)
+      self.app.settingsPresenter.adBlockStoreDidOpen(store)
+      return store
+    }
+    adBlockPreparation = task
+    return await task.value
   }
   lazy var favicons = try? FaviconStore(databaseURL: app.directories.root.appendingPathComponent("State/favicons.sqlite3"))
   lazy var sidebarFavicons = favicons.map { StoredFaviconCache(store: $0) }

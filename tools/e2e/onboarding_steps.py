@@ -43,6 +43,8 @@ def run(factory, results, tmp, h):
         if app and not app.closed: app.quit()
         if fresh: h._restore_defaults(None, {keys[0]: None, keys[1]: None})
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(directory), '--intro-sound=off', *flags], extra_env=env)
+        # Answer the native quit confirmation on this suite's unsaved close path.
+        app.call('quit-warning', button='quit')
         last_intro = state()
         if state().get('active') and state()['screen']=='intro':
             app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started'); screen('name')
@@ -295,7 +297,9 @@ def run(factory, results, tmp, h):
         app.call('save')
         baseline = persisted()
         replay_before = snapshot().read_bytes()
-        action('replay-intro'); action('skip-intro'); action('get-started'); screen('name')
+        action('replay-intro')
+        until(lambda: state().get('active'))
+        action('skip-intro'); action('get-started'); screen('name')
         action('set-name', name='Replay only'); action('next'); screen('favorites')
         action('toggle-favorite', index=1); action('next'); screen('theme')
         action('set-theme', preset=9); action('next'); screen('blocker')

@@ -1,3 +1,6 @@
+#if OPEN_AUTOMATION
+import OpenOnboarding
+#endif
 import AppKit
 import OpenEngine
 import OpenExtensionsUI
@@ -52,6 +55,10 @@ final class ExtensionPromptPresenter: NSObject, OEExtensionManagerDelegate {
   init(app: AppDelegate) { self.app = app }
   func registerContexts() { for context in OEEngine.shared.contexts { register(context.extensions) } }
   func register(_ manager: OEExtensionManager) {
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("extensions.register")
+    defer { pacingRegion?.end() }
+    #endif
     #if OPEN_AUTOMATION
     guard handlesPrompts else { if manager.delegate === self { manager.delegate = nil }; return }
     #endif
