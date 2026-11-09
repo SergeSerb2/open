@@ -1108,15 +1108,14 @@ it never destroys an engine under a lock.
 | Text lifetime | List texts are freed right after `open_adblock_build` returns, before serialize and the cache write; the DAT is written from the Rust `Vec<u8>` through a `base::span`, with no `std::string` copy | 100-5 |
 | Resources JSON | 4 MiB read cap (bundled file; Step 7: 142,493 bytes, 47 redirect resources) | Headroom above the pinned payload; source and output hashes are recorded in §9.3 |
 
-**Budgets (measured as `phys_footprint` of the browser process,
-`footprint` tool or `vmmap --summary`; the step that gates each row is
-named):**
+**Budgets (browser-process `phys_footprint`, except the Step 8 AD3
+allocator predicate below; the step that gates each row is named):**
 
 | Measure | Budget | Basis | Gated at |
 |---|---|---|---|
 | One EasyList + EasyPrivacy engine, steady state, with the D-12 regex features | ≤ 57 MiB, text and DAT, median of 5 | Lead footprint ruling §13.5.1 item 4a (2026-11-07 20:40); record PA allocated breakdown | Step 4 (single context, `cefsimple`) |
 | After the full-corpus check plus one idle purge | ≤ 60 MiB, text and DAT, median of 5 | Same ruling 4a; one idle-triggered, rate-limited purge, no request-path purge or idle timer loop; G-2/G-4 unchanged | Step 4 (single context, `cefsimple`) |
-| Second Profile with the same lists | ≤ +2 MiB over the window below, and the second Profile's status shows `engine_shared=1` | Shared engine; only matcher state (exclusions, toggle) is per Profile. **Window (review r2 N-8):** create both request contexts first and take the baseline; the measure is the delta from the second context's `LoadFromDirectory` to its `engine_shared=1` status. The cost of creating a context itself is not in this budget | Step 8 (two request contexts need the app or the test host; `cefsimple` has one context, §13.1; review r1 finding 9) |
+| Second Profile with the same verified inputs | `engine_shared=true`; median of 5 attachment-only PA allocated deltas ≤ +2 MiB; median non-PA malloc in-use delta ≤ +2 MiB | Both contexts and stores exist before baseline; store IO stays idle. Different-list control must show `engine_shared=false` and PA allocated delta ≥8 MiB, else AD3 is INVALID (insensitive). Record PA committed deltas and whole-process paired median/spread; whole-process deltas do not gate AD3. See Step 8 acceptance errata (2026-11-08) | Step 8 (two request contexts need the App; `cefsimple` has one context) |
 | Text build transient | ≤ +100 MiB above steady state, back to steady state ≤ 5 s after the swap | 80 MiB measured | Step 9 |
 | All 5 generic + privacy lists enabled | Record only (no gate in v1) | R-7; decides whether any non-default list becomes a default | Step 9 |
 | Renderer, worst-case cosmetic payload: the initial sheet at the 256 KiB cap plus 64 generic sheets of 500 rules (about 163,000 user-origin rules at most: the cap bounds bytes, so the shortest selectors give the largest count — 256 KiB / 2 B ≈ 131k, plus 64 × 500 generic; review r2 N-7) | Record only in v1: renderer `phys_footprint` delta and style-recalc time with that payload | Review r1 finding 14: the rule count has no other bound | Step 5 |
@@ -3299,9 +3298,13 @@ App and its production API:
       blocks the next request from a document created while unproxied.
 - [x] Two Profiles keep exclusions/lists independent; identical lists
       produce engine_shared=true in the second context.
-- [ ] AD3 incremental engine footprint <=2 MiB with the second context
-      already present. FAIL 5.734 MiB in the full App run; owned by F
-      (`s13/ad3-footprint`), per lead 18:22. No budget waiver.
+- [ ] AD3 requires matching verified input hashes and engine_shared=true;
+      median of n=5 attachment-only PA allocated deltas <=2 MiB, and median
+      non-PA malloc in-use delta <=2 MiB. Both contexts/stores exist before
+      baseline, with store IO idle. Different-list control must show
+      sharing=false and PA allocated delta >=8 MiB, else AD3 is INVALID.
+      Record PA committed deltas and whole-process on/off paired median/spread.
+      F's accepted 79/79 receipt passes; E3 reruns the merged harness below.
 - [x] OTR shares its parent's engine and follows later parent exclusions.
 - [x] Settings list toggle publishes a generation, advances load_generation
       and changes blocking. All lists off verifies a no-engine generation, with no loaded resources or error.
@@ -3315,6 +3318,23 @@ App and its production API:
       owned processes/windows after finally.
 - [ ] Existing page/features/extensions-ui/settings-preview scopes and the
       full verification gate pass on this integrated engine.
+
+**Step 8 acceptance errata (lead ruling, 2026-11-08).** This AD3 predicate
+supersedes the API-DESIGN-derived single `phys_footprint` delta. Five real
+App on/off pairs had a net median of +1,064,936 B, with a range from
+−10,584,088 to +10,862,616 B (20.45 MiB spread). That process noise cannot
+decide a 2 MiB allocation budget. Keep five whole-process empty→reset pairs
+as record-only rows. Measure five native attachments separately, after
+stores and verified inputs exist and update timers have been cancelled.
+Use fixed 6 s settles before five own-process counter samples per phase;
+this wait does not prove an idle purge. Record purge occurrence from the
+native log. Background memory-infra dumps provide PA allocated/committed
+direct-root totals without counting parent/child totals twice. Documented
+malloc-zone counters provide non-PA in-use/allocated bytes. PA serves Swift
+as well as native code, so non-PA counters alone are not Swift attribution.
+Missing dumps/counters, changed inputs, active store IO, or a weak negative
+control make the capture INVALID, never PASS or SKIP. These errata change
+only the two-Profile AD3 gate; Step 4 single-engine budgets stay as written.
 
 No CEF type crosses the Swift surface. Section 12 owns the existing Site
 Control tile: .on when enabled/not excluded, .off when excluded and

@@ -165,6 +165,19 @@ the clipboard before returning `copiedDebugInfo`. With native support, these
 actions configure the production engine through the App adapter. The real
 request flow uses no support override.
 
+Debug automation also exposes `adblock-memory`. `snapshot` (the default)
+returns this process's task footprint, malloc zone counters, and store
+readiness/update state. The fixture-only actions `pause-updates`, `unload`,
+and `resume` require an existing Profile ID. They cancel its store update
+timer through close/reopen, detach its native list directory, or attach it
+through the production adapter. They do not change persisted preferences.
+The AD3 suite uses these actions outside/inside the defined attachment
+window, with background CDP memory-infra dumps for PartitionAlloc (PA).
+PA's malloc-zone counters return zero; they are not allocation totals.
+Other malloc zones are counted separately. Raw captures use
+`OPEN_E2E_RAW_DIR` (default `.re/`). The accepted allocator predicate and
+record-only whole-process pairs are in the plan's Step 8 acceptance errata.
+
 The real ad-block flow also checks the bundled resource pin and the active
 generation's `_resources` entry. It serves a synthetic redirect rule through
 the real downloader, verifies its stub with server and native-count witnesses,
