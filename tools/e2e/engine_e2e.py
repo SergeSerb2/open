@@ -260,7 +260,10 @@ class Open:
             if key.startswith("OPEN_") or key in (extra_env or {}):
                 launch += ["--env", key + "=" + value]
         launch += ["--args"] + args[1:]
-        self.direct_child = _ROW_TIMEOUT is not None
+        # Cold external-URL fixtures require LaunchServices to send the real
+        # open-URL Apple event during startup. Keep their unique data root,
+        # owner-exit watcher and verified-PID cleanup under strict supervision.
+        self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls
         self.proc = subprocess.Popen(args if self.direct_child else launch,
                                      env=env if self.direct_child else None,
                                      stdout=self.log, stderr=subprocess.STDOUT)
@@ -7753,7 +7756,12 @@ def littleopen_checks(factory, results, tmp):
         app.call('save-prompt', mock={'kind': 'password', 'host': 'login.example.com'})
         save_sheet = wait_until(lambda: (s if (s := app.call('save-prompt', state=True)).get('visible') else None), timeout=5, step=.05)
         if not save_sheet: raise RuntimeError('Little Open save sheet did not appear')
-        sheet_parent = next(w.get('parent') for w in app.call('windows') if w['number'] == save_sheet['window'])
+        sheet_windows = app.call('windows')
+        sheet_window = next(w for w in sheet_windows if w['number'] == save_sheet['window'])
+        owner_window = next(w for w in sheet_windows if w['number'] == loaded['window'])
+        # AppKit sheet ownership is attachedSheet/sheetParent, separate from
+        # the generic child-window parent relation used by Chromium dialogs.
+        sheet_owned = sheet_window.get('sheet') is True and owner_window.get('attachedSheet') == save_sheet['window']
         try:
             app.call('key', window=save_sheet['window'], key='escape', route='app')
             dismissed = wait_until(lambda: not app.call('save-prompt', state=True).get('visible'), timeout=5, step=.05)
@@ -7767,10 +7775,16 @@ def littleopen_checks(factory, results, tmp):
                    and len(completions) == 1 and completions[0].get('answer') == 'dismiss'
                    and completions[0].get('window') == loaded['window']
                    and completions[0].get('content') == loaded['content']
-                   and sheet_parent == loaded['window'] and alive
+                   and sheet_owned and alive
                    and any(e.get('type') == 'load' and e.get('content') == loaded['content'] for e in little_events),
                    mainSaveEvents=sum(e.get('type') == 'savePrompt' for e in main_events),
-                   littleSaveEvents=len(completions), pageLogOwned=True, appAlive=alive, answers=len(completions))
+                   littleSaveEvents=len(completions),
+                   sheetOwned=sheet_owned, childParentMatches=sheet_window.get('parent') == loaded['window'],
+                   answerDismissed=len(completions) == 1 and completions[0].get('answer') == 'dismiss',
+                   answerWindowOwned=len(completions) == 1 and completions[0].get('window') == loaded['window'],
+                   answerPageOwned=len(completions) == 1 and completions[0].get('content') == loaded['content'],
+                   pageLogOwned=any(e.get('type') == 'load' and e.get('content') == loaded['content'] for e in little_events),
+                   appAlive=alive, answers=len(completions))
         finally:
             app.call('save-prompt', withdraw=True)
 
@@ -8117,7 +8131,8 @@ def littleopen_checks(factory, results, tmp):
         restored = snapshot_model()['windows']
         expected_ids = {w['id'] for w in saved_seed['windows']}
         restored_ids = {w['id'] for w in restored}
-        little_key = sessions()[0]['key'] and app.call('native-focus-state')['keyWindow'] == sessions()[0]['window']
+        cold_session = next((r for r in sessions() if r['url'] == cold_url), {})
+        little_key = bool(cold_session.get('key')) and app.call('native-focus-state')['keyWindow'] == cold_session.get('window')
         record('B6_cold_saved_windows_stay', cold_reached and restored_ids == expected_ids
                and state()['mainWindows'] == 2 and little_key and not state()['autoCreatedLaunchWindow'],
                state=state(), restored=restored, expected=saved_seed['windows'])

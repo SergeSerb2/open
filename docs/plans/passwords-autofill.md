@@ -531,7 +531,7 @@ public enum SavePromptAnswer: Sendable { case save, neverForSite, dismiss }
 }
 ```
 
-`App/EngineBridge.swift` makes `OESavePrompt` conform. The secrets sink for the import is a protocol in `OpenImport` (§8.1), not in OpenWeb, so `OpenImport` keeps depending on `OpenModel` only.
+`App/Autofill/SavePromptBridge.swift` makes `OESavePrompt` conform. The secrets sink for the import is a protocol in `OpenImport` (§8.1), not in OpenWeb, so `OpenImport` keeps depending on `OpenModel` only.
 
 ## 6. UI
 
@@ -849,8 +849,8 @@ the engine and navigates from localhost to a separate fixture origin.
 | # | Flow | Pass when |
 |---|---|---|
 | PW-HF1 | Enable HTTPS-First in the disposable profile, navigate to the HTTP login fixture, activate the native warning's named Continue button with `child-dialog-button` | The real dialog press succeeds, the warning closes, and the exact `http://` fixture URL and form finish loading |
-| PW-HF2-return | Open the same native warning on a new fixture origin, press Return | The warning closes and the previous localhost page finishes loading; Open stays alive with no new crash report |
-| PW-HF2-escape | Repeat on another fixture origin, press Esc | Same Go back result and crash checks as Return |
+| PW-HF2-return | Open the same native warning on a new fixture origin, press Return, then Escape | Return makes no decision, as Chromium configures on macOS. Escape takes Go back, closes the warning and loads the previous localhost page; Open stays alive with no new crash report |
+| PW-HF2-escape | Repeat on another fixture origin, press Esc | Go back closes the warning and loads the previous localhost page; Open stays alive with no new crash report |
 | PW-HF3-tab-close | Close the owned tab while its native HTTPS warning is still open | The warning and tab close, the parent window stays visible, Open answers ping, and no new crash report appears |
 | PW-HF4-window-close | Close the warning's parent window while the warning is open | The window and warning close; Open still answers ping with no new crash report |
 | PW-HF5-navigate | Navigate the warning's tab back to the localhost fixture | The requested form loads, the warning closes, and Open stays alive with no new crash report |
