@@ -52,6 +52,15 @@ def run(cli, snapshot, site, origin, env, invoke, require):
         with sqlite3.connect(database) as db:
             info=json.loads(db.execute('SELECT image_info FROM favicons WHERE status=0').fetchone()[0])
         require(info['sourceKind']==kind,'manifest entry boundary failed')
+    manifest['icons'] = [dict(src='/manifest.png',sizes='512x512')]
+    encoded = json.dumps(manifest).encode()
+    for count,kind in [(64*1024,'manifest'),(64*1024+1,'link')]:
+        (site/'icons.webmanifest').write_bytes(encoded+b' '*(count-len(encoded)))
+        database='manifest-bytes-'+str(count)+'.sqlite3'
+        invoke(cli,'favicons','fetch','--snapshot',snapshot,'--db',database,'--treat-as-public','127.0.0.1',env=env)
+        with sqlite3.connect(database) as db:
+            info=json.loads(db.execute('SELECT image_info FROM favicons WHERE status=0').fetchone()[0])
+        require(info['sourceKind']==kind,'manifest byte boundary failed')
     for size,expected in [(1024,0),(1025,1)]:
         Path('dimension.png').write_bytes(image(size))
         invoke(cli,'favicons','ingest','https://dimensions.invalid/','--db','dimensions.sqlite3',
@@ -61,6 +70,11 @@ def run(cli, snapshot, site, origin, env, invoke, require):
             + '<rect width="128" height="128" fill="#3e8ec1"/>'*(elements-1) + '</svg>')
         invoke(cli,'favicons','ingest','https://vector.invalid/','--db','vectors.sqlite3',
             '--file','static.svg',expected=expected,env=env)
+    for depth,expected in [(32,0),(33,1)]:
+        Path('depth.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128">'
+            + '<g>'*(depth-2) + '<rect width="128" height="128" fill="#3e8ec1"/>' + '</g>'*(depth-2) + '</svg>')
+        invoke(cli,'favicons','ingest','https://vector.invalid/depth','--db','vectors.sqlite3',
+            '--file','depth.svg',expected=expected,env=env)
     Path('external.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128">'
         '<use href="https://example.invalid/external.svg#icon"/></svg>')
     invoke(cli,'favicons','ingest','https://vector.invalid/external','--db','vectors.sqlite3',

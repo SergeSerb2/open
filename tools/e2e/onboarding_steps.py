@@ -484,13 +484,23 @@ def run_favorite_icons(factory, results, tmp, h):
         app.call('key', key='tab')
         unfocused = capture('network-unfocused')
         focus_checks = []
+        focus_deltas = []
         for appearance in shots:
             _,height,a = h.read_image(shots[appearance]['path'],srgb=True)
             _,_,b = h.read_image(unfocused[appearance]['path'],srgb=True)
             points = [(round((x+dx)*scale),round(height-(y+dy)*scale))
                 for dx in range(10,int(w)-10) for dy in range(10,int(hgt)-10)]
-            focus_checks.append(all(a(px,py)==b(px,py) for px,py in points))
-        row('focus_border', all(focus_checks) and not state()['favoriteTiles'][0]['focused'], observed=focus_checks)
+            # Core Animation can round antialiased label edges by one sRGB
+            # code value when appearance changes. A focus band differs by far
+            # more; retain the measured maximum instead of exact byte identity.
+            delta = max(max(abs(aa-bb) for aa,bb in zip(a(px,py),b(px,py))) for px,py in points)
+            focus_deltas.append(delta); focus_checks.append(delta<=1)
+        row('focus_border', all(focus_checks) and not state()['favoriteTiles'][0]['focused'],
+            observed=focus_deltas, maximumChannelDifference=1)
+        _,height,light = h.read_image(shots['light']['path'],srgb=True)
+        _,_,dark = h.read_image(shots['dark']['path'],srgb=True)
+        contrast_delta = max(max(abs(aa-bb) for aa,bb in zip(light(px,py),dark(px,py))) for px,py in points)
+        row('focus_border_negative', contrast_delta>1, expected='FAIL', observed=contrast_delta)
         handoff_selection = {t['index'] for t in network['favoriteTiles'] if t['iconState']=='icon'}
         handoff_selection = set(sorted(handoff_selection)[:2])
         assert len(handoff_selection)==2, network
