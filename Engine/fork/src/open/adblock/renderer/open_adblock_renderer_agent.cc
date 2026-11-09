@@ -40,6 +40,46 @@ namespace {
 constexpr uint32_t kMaxGenericSheets = 64;
 constexpr uint32_t kMaxTokens = 500;
 
+// Verbose, non-official attribution only. Capture frame identity before any
+// script can detach the agent; teardown never dereferences the frame.
+class RendererCostTimer {
+ public:
+  RendererCostTimer(const char* stage, uint64_t document,
+                    blink::WebLocalFrame* frame) {
+#if !defined(OFFICIAL_BUILD)
+    if (VLOG_IS_ON(1)) {
+      stage_ = stage;
+      document_ = document;
+      frame_ = frame->GetLocalFrameToken().ToString();
+      wall_.emplace();
+      cpu_.emplace();
+    }
+#endif
+  }
+  ~RendererCostTimer() {
+#if !defined(OFFICIAL_BUILD)
+    if (wall_) {
+      const auto wall = wall_->Elapsed();
+      const auto cpu = cpu_->Elapsed();
+      VLOG(1) << "OpenAdBlock: renderer cost stage=" << stage_
+              << " document=" << document_ << " frame=" << frame_
+              << " wall_us=" << wall.InMicrosecondsF()
+              << " cpu_us=" << cpu.InMicrosecondsF()
+              << " cpu_supported=" << cpu_->is_supported();
+    }
+#endif
+  }
+
+ private:
+#if !defined(OFFICIAL_BUILD)
+  const char* stage_ = nullptr;
+  uint64_t document_ = 0;
+  std::string frame_;
+  std::optional<base::ElapsedTimer> wall_;
+  std::optional<base::ElapsedThreadTimer> cpu_;
+#endif
+};
+
 #if !defined(OFFICIAL_BUILD)
 uint64_t RendererFootprintBytes() {
   task_vm_info_data_t info = {};
@@ -114,6 +154,8 @@ void OpenAdBlockRendererAgent::DidCreateNewDocument() {
   observer_started_ = false;
 #if !defined(OFFICIAL_BUILD)
   footprint_before_insert_ = 0;
+  initial_scan_wall_.reset();
+  initial_scan_cpu_.reset();
 #endif
   // Do not reset binding_context_: it follows WillReleaseScriptContext.
 }
@@ -132,9 +174,12 @@ void OpenAdBlockRendererAgent::DidCreateDocumentElement() {
   auto& pipe = Pipe();
   const bool first = std::exchange(pipe.first_query, false);
   const base::ElapsedTimer query_timer;
-  const bool ok =
-      !pipe.failed && pipe.remote.is_connected() &&
-      pipe.remote->GetDocumentCosmetics(document_url, top_origin_, &cosmetics_);
+  const bool ok = [&] {
+    RendererCostTimer cost("sync_query", document_epoch_, frame);
+    return !pipe.failed && pipe.remote.is_connected() &&
+           pipe.remote->GetDocumentCosmetics(document_url, top_origin_,
+                                              &cosmetics_);
+  }();
   const auto query_time = query_timer.Elapsed();
   VLOG(1) << "OpenAdBlock: cosmetics query document=" << document_epoch_
           << " frame=" << frame->GetLocalFrameToken().ToString()
@@ -173,20 +218,25 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
   v8::Isolate::Scope isolate_scope(isolate);
   v8::HandleScope scope(isolate);
   const auto alive = weak_ptr_factory_.GetWeakPtr();
-  auto context = frame->GetScriptContextFromWorldId(
-      isolate, kOpenAdBlockIsolatedWorldId);
-  if (context.IsEmpty()) {
-    // The Blink getter can return an empty context. Enter the normal world
-    // creation path; our context callback installs the binding synchronously.
-    frame->ExecuteScriptInIsolatedWorld(
-        kOpenAdBlockIsolatedWorldId,
-        blink::WebScriptSource(blink::WebString::FromUtf8("void 0")),
-        blink::BackForwardCacheAware::kAllow);
-    if (!alive || document_epoch != document_epoch_) {
-      return;
-    }
+  v8::Local<v8::Context> context;
+  {
+    RendererCostTimer cost("world_context_including_binding", document_epoch_,
+                           frame);
     context = frame->GetScriptContextFromWorldId(
         isolate, kOpenAdBlockIsolatedWorldId);
+    if (context.IsEmpty()) {
+      // The Blink getter can return an empty context. Enter the normal world
+      // creation path; our context callback installs the binding synchronously.
+      frame->ExecuteScriptInIsolatedWorld(
+          kOpenAdBlockIsolatedWorldId,
+          blink::WebScriptSource(blink::WebString::FromUtf8("void 0")),
+          blink::BackForwardCacheAware::kAllow);
+      if (!alive || document_epoch != document_epoch_) {
+        return;
+      }
+      context = frame->GetScriptContextFromWorldId(
+          isolate, kOpenAdBlockIsolatedWorldId);
+    }
   }
   if (context.IsEmpty()) {
     return;
@@ -199,6 +249,8 @@ void OpenAdBlockRendererAgent::StartObserver(uint64_t document_epoch) {
   VLOG(1) << "OpenAdBlock: observer started document=" << document_epoch_
           << " frame=" << frame->GetLocalFrameToken().ToString()
           << " world=" << frame->GetScriptContextWorldId(context);
+  RendererCostTimer cost("observer_execute_including_initial_scan",
+                         document_epoch_, frame);
   frame->ExecuteScriptInIsolatedWorld(
       kOpenAdBlockIsolatedWorldId,
       blink::WebScriptSource(
@@ -234,6 +286,8 @@ void OpenAdBlockRendererAgent::InstallBinding(v8::Local<v8::Context> context,
   if (binding_installed_ || context.IsEmpty()) {
     return;
   }
+  RendererCostTimer cost("binding_install", document_epoch_,
+                         render_frame()->GetWebFrame());
   auto* isolate = v8::Isolate::GetCurrent();
   v8::Context::Scope scope(context);
   auto binding = v8::Object::New(isolate);
@@ -312,6 +366,21 @@ void OpenAdBlockRendererAgent::InstallBinding(v8::Local<v8::Context> context,
 }
 
 void OpenAdBlockRendererAgent::TraceObserver(int stage, uint32_t count) {
+#if !defined(OFFICIAL_BUILD)
+  if (stage == 8 && initial_scan_wall_) {
+    const auto wall = initial_scan_wall_->Elapsed();
+    const auto cpu = initial_scan_cpu_->Elapsed();
+    VLOG(1) << "OpenAdBlock: renderer cost stage=initial_scan_slice"
+            << " document=" << document_epoch_ << " frame="
+            << render_frame()->GetWebFrame()->GetLocalFrameToken().ToString()
+            << " wall_us=" << wall.InMicrosecondsF()
+            << " cpu_us=" << cpu.InMicrosecondsF()
+            << " cpu_supported=" << initial_scan_cpu_->is_supported()
+            << " complete=" << count;
+    initial_scan_wall_.reset();
+    initial_scan_cpu_.reset();
+  }
+#endif
   VLOG(1) << "OpenAdBlock: observer trace stage=" << stage << " count=" << count
           << " document=" << document_epoch_ << " world="
           << render_frame()->GetWebFrame()->GetScriptContextWorldId(
@@ -319,6 +388,12 @@ void OpenAdBlockRendererAgent::TraceObserver(int stage, uint32_t count) {
           << " bound=" << Pipe().remote.is_bound()
           << " connected=" << Pipe().remote.is_connected()
           << " failed=" << Pipe().failed;
+#if !defined(OFFICIAL_BUILD)
+  if (stage == 7) {
+    initial_scan_wall_.emplace();
+    initial_scan_cpu_.emplace();
+  }
+#endif
 }
 
 void OpenAdBlockRendererAgent::Exceptions(gin::Arguments* args) {
@@ -450,9 +525,13 @@ void OpenAdBlockRendererAgent::InsertSelectors(
     css.append(kHideDeclaration);
   }
   const base::ElapsedTimer timer;
-  render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
-      blink::WebString::FromUtf8(css), nullptr, blink::WebCssOrigin::kUser,
-      blink::BackForwardCacheAware::kAllow);
+  {
+    RendererCostTimer cost(initial ? "insert_style_initial" : "insert_style_generic",
+                           document_epoch_, render_frame()->GetWebFrame());
+    render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
+        blink::WebString::FromUtf8(css), nullptr, blink::WebCssOrigin::kUser,
+        blink::BackForwardCacheAware::kAllow);
+  }
   const auto insertion_time = timer.Elapsed();
   VLOG(1) << "OpenAdBlock: InsertStyleSheet document=" << document_epoch_
           << " frame="
