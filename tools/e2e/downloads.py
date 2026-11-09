@@ -462,6 +462,8 @@ def checks(factory, results, tmp, config, harness):
                 except RuntimeError:
                     return None
             if not wait(press_delete, 5):
+                shell = app.call('profiles-shell')
+                print('history_profile_deletion diagnostic:', json.dumps({k: shell.get(k) for k in ('settings', 'sheet', 'sheetText', 'selected', 'profiles')})[:1500], flush=True)
                 raise RuntimeError('Delete Profile control did not appear')
             wait(lambda: app.call('profiles-shell')['sheet'] > 0)
             app.call('profiles-shell', action='type-delete', text='History Second')
