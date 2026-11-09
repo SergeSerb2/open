@@ -215,6 +215,12 @@ final class WelcomeCardView: NSControl {
   let detail: NSTextField
   var replay: (() -> Void)?
   private var tracking: NSTrackingArea?
+  /// Automation: the hover area this card installed, matched by identity.
+  /// AppKit may add its own tooltip area to the same view.
+  var ownTrackingAreaCount: Int {
+    guard let tracking else { return 0 }
+    return trackingAreas.filter { area in area === tracking }.count
+  }
   private(set) var isHovered = false
   init(index: Int, title: String, detail: String) {
     self.index = index; illustration = WelcomeIllustrationView(kind: index)

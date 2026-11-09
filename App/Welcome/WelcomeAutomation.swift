@@ -83,7 +83,7 @@ extension AutomationController {
       "cards": page?.cards.map { ["label": $0.accessibilityLabel() ?? "", "role": $0.accessibilityRole()?.rawValue ?? "",
         "hovered": $0.isHovered,
         // AppKit adds its own tooltip tracking area lazily; count only the card's own.
-        "trackingAreas": $0.trackingAreas.filter { [card = $0] area in area.owner === card }.count,
+        "trackingAreas": $0.ownTrackingAreaCount,
         "allTrackingAreas": $0.trackingAreas.count,
         "actions": $0.accessibilityCustomActions()?.map(\.name) ?? []] as [String: Any] } ?? [],
       "engineInternalPages": OEEngine.shared.allWebContents.filter { $0.url.map(WelcomeTab.isInternal) == true }.count,
