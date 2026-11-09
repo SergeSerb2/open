@@ -5017,6 +5017,24 @@ quit-load rows above are pre-review evidence. AD3 still reproduces on the
 Step 4 App and is owned by F; this scoped App rerun does not accept AD3.
 
 
+**20:27 extension-boundary follow-up (2026-11-08).** The unchanged s13b
+App passed the engine fingerprint check before each of three separate
+screen-lock calls. Full `extensions-ui` ran once: 71 PASS, no FAIL, one
+known BLOCKED row (`X13_picker`), 116.324 s, load1 11.18→10.03. Existing
+`extensions` ran once: 8 PASS, including `content_scripts`, in 34.351 s,
+load1 12.90→12.22. Dark Reader set mode `dynamic` and added eight style
+nodes; isolated contexts were reported for Dark Reader, Bitwarden and
+1Password. These real extension flows show no regression from boundary 8.
+
+`features` ran once and remains INTERRUPTED: 17 rows passed, then T3 Pretty
+Internal (Nightly) took the foreground during Widevine (active=false,
+keyWindow=0). Exit 2 in 77.355 s, load1 7.89→10.10. No retry or full-suite
+PASS is claimed. Each call closed all owned windows and processes and
+kept the accepted framework unchanged. Exact argv, raw focus evidence,
+loads and cleanup are in `.re/s13/e4/REVIEW-VALIDATION.md` and
+`review-world-{extensions-ui,features,extensions}.results.json`.
+
+
 ### Step 5 root and shared-sequence bounds (2026-11-08 14:00)
 
 The lead assigned `~/Developer/open-engine-s13b` to E4 and authorized
