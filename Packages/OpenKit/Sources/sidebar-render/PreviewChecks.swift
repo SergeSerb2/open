@@ -122,8 +122,12 @@ enum PreviewChecks {
         let folderDelivered = Checks.waitFor(settle: scene) { context.hoverPreviews.request?.kind == .folder(folder.id) }
         check(folderDelay == 0.5 && folderDelivered && recorder.events.contains { if case .hoverPreview(.some) = $0.0 { true } else { false } },
               "HP1 folder row emits its request at the configured deadline")
-        model.setExpanded(folderID: folder.id, expanded: true); pump()
-        check(context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed,
+        model.setExpanded(folderID: folder.id, expanded: true)
+        // Expansion invalidation runs on the next main-actor turn.
+        let folderInvalidated = Checks.waitFor(timeout: 1, settle: scene) {
+            context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed
+        }
+        check(folderInvalidated,
               "FP expanded folder invalidates an already shown/armed hover card")
         hover(folder.id)
         check(context.hoverPreviews.request == nil && !context.hoverPreviews.isArmed,
