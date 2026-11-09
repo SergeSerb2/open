@@ -514,7 +514,9 @@ def run_favorite_icons(factory, results, tmp, h):
         preview = focus['favoritePreview']
         empty_preview = initial['favoritePreview']
         preview_shape = lambda p: p['size']==[200,440] and p['radius']==16 and p['headerHeight']==28 \
-            and p['columns']==4 and p['tileSize']==[40,40] and p['gap']==8 and p['ghostRows']==3
+            and p['columns']==4 and p['tileSize']==[40,40] and p['gap']==8 and p['ghostRows']==6 \
+            and p['favoritesArea']==[8,52,184,88] and p['dividerFrame']==[12,152,176,1] \
+            and p['ghostStartY']==165 and p['ghostGap']==8
         row('preview', preview_shape(preview) and preview['selectedCount']==2 and preview['emptySlots']==0
             and all(item['frame'][2:]==[40,40] for item in preview['items']), state=preview)
         row('preview_empty', preview_shape(empty_preview) and empty_preview['emptySlots']==8 and empty_preview['selectedCount']==0,
@@ -525,6 +527,12 @@ def run_favorite_icons(factory, results, tmp, h):
             and t['style']['badgeDiameter']==18 and t['style']['badgeOffset']==4
             and t['style']['pressedScale']==.97 and t['style']['hoverDuration']==.12 for t in focus['favoriteTiles']), state=focus)
         row('selection_counter', initial['favoriteCountLabel']=='None selected' and focus['favoriteCountLabel']=='2 selected')
+        for index in sorted(set(range(12)) - set(focus['favorites'])): action('toggle-favorite',index=index)
+        full_preview = state()['favoritePreview']
+        row('preview_bounded', full_preview['selectedCount']==12 and full_preview['visibleCount']==8
+            and len(full_preview['items'])==8 and all(item['frame'][1]+item['frame'][3]<=140 for item in full_preview['items']),
+            state=full_preview)
+        for index in sorted(set(range(12)) - set(focus['favorites'])): action('toggle-favorite',index=index)
         x,y,w,hgt = focus['favoriteTiles'][0]['windowFrame']
         scale = focus['backingScale']
         for appearance, shot in shots.items():

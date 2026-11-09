@@ -210,6 +210,7 @@ import ImageIO
 /// A bounded miniature sidebar; the choice grid and this preview share images.
 @MainActor private final class OnboardingFavoriteSidebar: NSView {
   private var names: [String] = []
+  private var selectedCount = 0
   private var items: [String: OnboardingFavoritePreviewTile] = [:]
   private var reduced = false
   override var isFlipped: Bool { true }
@@ -222,9 +223,11 @@ import ImageIO
   }
   required init?(coder: NSCoder) { nil }
   func update(_ favorites: [(String, OnboardingFavicons.Tile)], reduceMotion: Bool) {
-    let previous = Set(names); names = favorites.map(\.0); reduced = reduceMotion
+    let previous = Set(names); selectedCount = favorites.count
+    // Keep the miniature's Favorites area at two rows, even for all 12 choices.
+    let visible = Array(favorites.prefix(8)); names = visible.map(\.0); reduced = reduceMotion
     for (name, item) in items { item.isHidden = !names.contains(name) }
-    for (name, tile) in favorites {
+    for (name, tile) in visible {
       let item = items[name] ?? OnboardingFavoritePreviewTile(frame: .zero)
       if item.superview == nil { addSubview(item); items[name] = item }
       item.isHidden = false; item.icon.apply(name: name, tile: tile, animated: previous.contains(name), reduceMotion: reduceMotion)
@@ -243,12 +246,13 @@ import ImageIO
   override func layout() {
     super.layout()
     for (index, name) in names.enumerated() {
-      items[name]?.frame = NSRect(x: 8+(index%4)*48, y: 60+(index/4)*48, width: 40, height: 40)
+      items[name]?.frame = NSRect(x: 8+(index%4)*48, y: 52+(index/4)*48, width: 40, height: 40)
     }
   }
   var state: [String: Any] {
     ["size": [200,440], "radius": 16, "headerHeight": 28, "columns": 4, "tileSize": [40,40], "gap": 8,
-     "selectedCount": names.count, "emptySlots": names.isEmpty ? 8:0, "ghostRows": 3,
+     "selectedCount": selectedCount, "visibleCount": names.count, "emptySlots": names.isEmpty ? 8:0, "ghostRows": 6,
+     "favoritesArea": [8,52,184,88], "dividerFrame": [12,152,176,1], "ghostStartY": 165, "ghostGap": 8,
      "arrivalDuration": 0.26, "arrivalScales": !reduced,
      "items": names.compactMap { name -> [String: Any]? in
        guard let item = items[name] else { return nil }
@@ -260,16 +264,18 @@ import ImageIO
     NSBezierPath(roundedRect: NSRect(x: 12,y: 12,width: 176,height: 28), xRadius: 6,yRadius: 6).fill()
     if names.isEmpty {
       for index in 0..<8 {
-        let rect = NSRect(x: 8+(index%4)*48,y: 60+(index/4)*48,width: 40,height: 40).insetBy(dx: 0.5,dy: 0.5)
+        let rect = NSRect(x: 8+(index%4)*48,y: 52+(index/4)*48,width: 40,height: 40).insetBy(dx: 0.5,dy: 0.5)
         let path = NSBezierPath(roundedRect: rect,xRadius: 8,yRadius: 8)
         NSColor.white.withAlphaComponent(0.08).setFill(); path.fill()
         NSColor.white.withAlphaComponent(0.20).setStroke(); path.lineWidth = 1
         path.setLineDash([3,3], count: 2, phase: 0); path.stroke()
       }
     }
+    NSColor.white.withAlphaComponent(0.14).setFill()
+    NSRect(x: 12,y: 152,width: 176,height: 1).fill()
     NSColor.white.withAlphaComponent(0.10).setFill()
-    for index in 0..<3 {
-      NSBezierPath(roundedRect: NSRect(x: 12,y: 228+index*40,width: 176,height: 28),xRadius: 6,yRadius: 6).fill()
+    for index in 0..<6 {
+      NSBezierPath(roundedRect: NSRect(x: 12,y: 165+index*36,width: 176,height: 28),xRadius: 6,yRadius: 6).fill()
     }
   }
 }
