@@ -537,6 +537,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     return;
   }
   CefString url = initialURL;
+  if (OEIsChromeNewTabURL(OEURL(url))) url = OECef(@"about:blank");
   CefRefPtr<CefRequestContext> context = self.context.oe_requestContext;
   if (_configuration.runtimeStyle == OERuntimeStyleChrome &&
       [self oe_createHostedTab:url]) {
@@ -552,6 +553,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     // A Views-window Chrome page navigates at creation: no restore there.
     [self oe_restoreFailed];
     url = OECef(_pendingURL.absoluteString ?: @"about:blank");
+    if (OEIsChromeNewTabURL(OEURL(url))) url = OECef(@"about:blank");
     // The fallback URL is consumed by this creation call itself.
     _browserCreationURL = OEString(url);
     _hasNavigationAfterCreationSnapshot = NO;
@@ -568,7 +570,6 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   info.SetAsChild((__bridge CefWindowHandle)_view,
                   CefRect(0, 0, (int)b.size.width, (int)b.size.height));
   info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
-  if (OEIsChromeNewTabURL(OEURL(url))) url = OECef(@"about:blank");
   _creatingSelf = self;
   CefBrowserHost::CreateBrowser(info, _client.get(), url,
                                 [self oe_browserSettings],
@@ -972,7 +973,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 #pragma mark Navigation
 
 - (void)loadURL:(NSURL*)URL {
-  if (self.runtimeStyle == OERuntimeStyleAlloy && OEIsChromeNewTabURL(URL)) {
+  if (OEIsChromeNewTabURL(URL)) {
     URL = [NSURL URLWithString:@"about:blank"];
   }
   // An action popup shows only its own extension's pages (Chrome blocks the

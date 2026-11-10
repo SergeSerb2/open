@@ -625,7 +625,6 @@ bool OEClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
   // loadURL filtering does not see these. Leave the current document intact:
   // starting a replacement here (even deferred) could override a newer load.
   if (page && frame->IsMain() && OEIsPageBrowser(page, browser) &&
-      browser->GetHost()->GetRuntimeStyle() == CEF_RUNTIME_STYLE_ALLOY &&
       OEIsChromeNewTabURL(OEURL(request->GetURL()))) {
     return true;
   }

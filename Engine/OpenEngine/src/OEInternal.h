@@ -51,8 +51,8 @@ inline NSURL* _Nullable OEURL(const CefString& s) {
 }
 
 // Chromium's native NTP requires a full Chrome Browser/BrowserView (including
-// NewTabFooterController). An Alloy page, including Peek and adopted requests,
-// cannot supply that owner. Open's empty page is about:blank in these hosts.
+// NewTabFooterController). Neither our Alloy pages nor CEF's embedded Chrome
+// hosts supply that controller. Open's empty page is about:blank in both styles.
 inline bool OEIsChromeNewTabURL(NSURL* _Nullable url) {
   NSString* scheme = url.scheme.lowercaseString;
   NSString* name = [scheme isEqualToString:@"about"]

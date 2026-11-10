@@ -22,7 +22,7 @@ def run(factory, results, api, style):
             # itself, before OnBeforeBrowse, by showing about:blank#blocked.
             # Our callback otherwise cancels it and preserves the document.
             allowed = ({renderer_source, 'about:blank#blocked'} if renderer_source is not None
-                       else {'about:blank'} if style == 'alloy' else set(aliases))
+                       else {'about:blank'})
             expected = sorted(allowed)
             correct = bool(state) and state['url'] in allowed
             results[name] = {'ok': correct and state.get('style') == style
@@ -33,15 +33,14 @@ def run(factory, results, api, style):
         for index, address in enumerate(aliases):
             app.call('navigate', tab=tab, url=address)
             loaded('navigate_alias_' + str(index), address)
-        if style == 'alloy':
-            # A renderer navigation bypasses OEWebContent.loadURL. The page's
-            # own script and a real DOM link must also stay out of NTP WebUI.
-            for index, address in enumerate(aliases):
-                source = app.page(tab)['url']
-                app.eval(tab, 'document.body.innerHTML = \'<a id="ntp">New tab</a>\';'
-                         'document.querySelector("a").href=' + json.dumps(address))
-                app.call('click', tab=tab, selector='#ntp')
-                loaded('link_alias_' + str(index), address, renderer_source=source)
+        # A renderer navigation bypasses OEWebContent.loadURL. The page's
+        # own script and a real DOM link must also stay out of NTP WebUI.
+        for index, address in enumerate(aliases):
+            source = app.page(tab)['url']
+            app.eval(tab, 'document.body.innerHTML = \'<a id="ntp">New tab</a>\';'
+                     'document.querySelector("a").href=' + json.dumps(address))
+            app.call('click', tab=tab, selector='#ntp')
+            loaded('link_alias_' + str(index), address, renderer_source=source)
         # The refusal must not disable ordinary engine navigation.
         app.call('navigate', tab=tab, url='data:text/html,<title>NTP control</title>')
         app.call('wait', tab=tab)
