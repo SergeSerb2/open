@@ -375,7 +375,7 @@ class Open:
         foreground_input = cmd in ("key", "focus", "little-open-link-click", "editor-act") or (cmd == "window-focus" and args.get("activate"))
         if cmd == "boost-editor" and args.get("action") in ("key", "type", "tap", "drag"): foreground_input = True
         if cmd == "boost-gallery-ui" and args.get("action") != "state": foreground_input = True
-        if cmd in ("space-manager-drag", "sidebar-click", "sidebar-key", "hover"): foreground_input = True
+        if cmd in ("space-manager-drag", "sidebar-click", "favorite-click", "sidebar-key", "hover"): foreground_input = True
         if cmd == "first-run" and args.get("action") == "focus": foreground_input = True
         if cmd == "profiles-shell" and args.get("action") in ("press", "type-delete", "icon-symbol", "indicator-menu"):
             foreground_input = True
@@ -4647,6 +4647,18 @@ def sidebar_checks(factory, results, tmp):
             and check_page(app, cache_tabs[0], "Cache 0") and app.page(cache_tabs[0])["identifier"] != first_page
             and app.call("host-counts")["retained"] <= 9, "retained_before_wake": retained}
         results["window_png"] = {"ok": True, "file": shot(app, "sidebar-window.png")}
+        # Favorites tiles take a real NSEvent click through window hit testing (2026-11-10 user
+        # report: clicking a Favorite did nothing; NSCollectionView found no item under a tile
+        # whose hitTest returned nil). Click another tile, then the selected one.
+        f1 = new_tab(app, fixture("Favorite One")); f2 = new_tab(app, fixture("Favorite Two"))
+        app.call("favorite", tab=f1); app.call("favorite", tab=f2)
+        app.call("select", tab=cache_tabs[0])
+        clicks = [app.call("favorite-click", favorite=f2), app.call("favorite-click", favorite=f1),
+                  app.call("favorite-click", favorite=f1)]
+        results["favorite_native_click"] = {
+            "ok": [c["selected"] for c in clicks] == [f2, f1, f1] and check_page(app, f1, "Favorite One")
+                  and all(c["hitChain"][:2] == ["FavoriteTileView", "FavoritesCollectionView"] for c in clicks),
+            "clicks": clicks, "favorites": [f1, f2]}
     finally:
         _restore_defaults(app, saved)
         app.quit()
