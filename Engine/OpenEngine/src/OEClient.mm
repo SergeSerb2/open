@@ -591,7 +591,7 @@ void OEClient::OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefDownloadItem> download_item,
                                  CefRefPtr<CefDownloadItemCallback> callback) {
   OEBrowserContext* context = view_.context ?: OEEngine.shared.defaultContext;
-  [context oe_handleDownloadUpdated:download_item callback:callback];
+  [context oe_handleDownloadUpdated:download_item webContent:view_ callback:callback];
 }
 
 #pragma mark Find

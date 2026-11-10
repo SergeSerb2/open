@@ -19,6 +19,11 @@ private final class LittleOpenNativeWindow: SpaceThemeWindow {
     var redirectPageFocus: ((NSResponder?) -> NSResponder?)?
     var onLayoutPass: (() -> Void)?
     var onCloseRequest: (() -> Void)?
+    var onDownloadsKey: ((NSEvent) -> Bool)?
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, onDownloadsKey?(event) == true { return }
+        super.sendEvent(event)
+    }
     override func performClose(_ sender: Any?) { onCloseRequest?(); super.performClose(sender) }
     override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
         super.makeFirstResponder(redirectPageFocus?(responder) ?? responder)
@@ -31,6 +36,8 @@ private final class LittleOpenNativeWindow: SpaceThemeWindow {
 public final class LittleOpenWindowController: NSWindowController, NSWindowDelegate, CommandBarDelegate {
     public var contentView: NSView { root }
     public var onCloseRequested: (() -> Void)?
+    public var onCloseDownloads: (() -> Void)?
+    public var onDownloadsKey: ((NSEvent) -> Bool)?
     public let session: LittleOpenSession
     public private(set) var state: LittleOpenWindowState = .bar
     public private(set) var container: WebContentContainer
@@ -81,6 +88,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true; window.animationBehavior = .none
         super.init(window: window)
+        window.onDownloadsKey = { [weak self] in self?.onDownloadsKey?($0) ?? false }
         root.appearance = NSApp.effectiveAppearance
         window.contentView = root; window.delegate = self; window.title = "Little Open"
         systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
@@ -314,6 +322,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         return menu
     }
     func prepareToClose() {
+        onCloseDownloads?(); onCloseDownloads = nil; onDownloadsKey = nil
         // Tear down this controller's appearance observation once during close preparation.
         systemAppearanceObservation = nil
         closed = true; extensionsMenu?.cancelTrackingWithoutAnimation(); extensionsMenu = nil

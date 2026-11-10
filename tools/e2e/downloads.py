@@ -57,6 +57,11 @@ def server():
 
 def checks(factory, results, tmp, config, harness):
     E = harness
+    if os.environ.get('OPEN_DOWNLOADS_CASE', '') in ('', 'littleopen'):
+        import littleopen_downloads
+        littleopen_downloads.checks(factory, results, tmp, E, server)
+        if os.environ.get('OPEN_DOWNLOADS_CASE') == 'littleopen':
+            return
     root = Path(tempfile.mkdtemp(prefix="downloads-attempt-", dir=tmp))
     probe = root / 'idle-probe.dylib'
     subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',

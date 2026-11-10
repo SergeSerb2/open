@@ -30,7 +30,7 @@ public enum TabSleepMode: String, CaseIterable, Sendable {
 }
 
 public enum DownloadState: String, CaseIterable, Sendable { case inProgress, paused, completed, failed, cancelled }
-public struct DownloadItemSnapshot: Identifiable, Sendable {
+public struct DownloadItemSnapshot: Identifiable, Sendable, Equatable {
     public var id: String
     public var fileName: String
     public var sourceHost: String
