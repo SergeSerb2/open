@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import QuartzCore
 
 /// Read only window numbers for the supplied owned PIDs. Never read titles,
 /// pixels, or another process's UI. This is the suite's final cleanup receipt.
@@ -15,7 +16,7 @@ struct OwnedWindowCount {
                   let number = window[kCGWindowNumber as String] as? Int else { return nil }
             return ["pid": Int(pid), "number": number]
         }
-        let data = try JSONSerialization.data(withJSONObject: ["count": owned.count, "windows": owned], options: [.sortedKeys])
+        let data = try JSONSerialization.data(withJSONObject: ["count": owned.count, "windows": owned, "hostTime": CACurrentMediaTime()], options: [.sortedKeys])
         print(String(decoding: data, as: UTF8.self))
     }
 }

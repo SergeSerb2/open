@@ -43,7 +43,6 @@ def run(factory, results, tmp, h):
                 if sample.returncode:
                     raise RuntimeError(sample.stderr)
                 observed.update(json.loads(sample.stdout))
-                observed['hostTime'] = time.monotonic()
                 observed['beforeAutomationReady'] = not done.is_set()
                 return
         except Exception as error:
