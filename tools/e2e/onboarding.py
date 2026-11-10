@@ -33,6 +33,10 @@ def run(factory, results, tmp, h):
         nonlocal app
         if app and not app.closed: app.quit()
         app = factory(urls=(), fresh=fresh, extra_args=['--arc-dir='+str(source), '--intro-sound=silent', *args])
+        # Answer main's native quit confirmation for this suite's setup close.
+        # Keep the product-only frame launch free of automation calls.
+        if '--measure-intro-frames' not in args:
+            app.call('quit-warning', button='quit')
         return app
 
     def state(): return app.call('onboarding', action='state')
@@ -46,9 +50,77 @@ def run(factory, results, tmp, h):
         negatives[name] = dict(ok=rejected, expected='FAIL', observed=broken)
         results[name+'_negative'] = dict(ok=rejected, expected='FAIL', load=os.getloadavg())
 
+    def frames(measured):
+        stats = measured['frameStats']; load = os.getloadavg()
+        print('intro frames p50=%.3f p95=%.3f max=%.3f drops=%d count=%d load1=%.2f nominal=%.3f' %
+              (stats['p50MS'], stats['p95MS'], stats['maxMS'], stats['drops'], stats['count'], load[0], stats['nominalMS']), flush=True)
+        for stall in measured.get('stalls', []):
+            if stall['ms'] > 16:
+                print('intro stall %.6f..%.6f %.3f ms %s' %
+                      (stall['start'], stall['end'], stall['ms'], ', '.join(stall['regions'])), flush=True)
+        print('intro startup '+json.dumps(measured.get('startup', {}), sort_keys=True), flush=True)
+        measured['firstLaunchAfterBuild'] = app.first_launch_after_build
+        print('intro audio timing '+json.dumps(measured.get('sound', {}).get('timing', {}), sort_keys=True), flush=True)
+        stalls = measured.get('stalls')
+        (evidence/'intro-frames.json').write_text(json.dumps(measured, indent=2))
+        results['stall_trace'] = dict(ok=isinstance(stalls, list) and len(stalls)==stats['drops']
+            and all(s['end'] > s['start'] and s['ms'] > 1.5*stats['nominalMS'] and s['regions'] for s in stalls)
+            and not measured.get('traceOverflow', True), state=measured, load=load)
+        if 'Apple M5' in h.subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True) and load[0] <= 12 and stats['nominalMS'] <= 8.34:
+            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), timing=True, stats=stats, load=load)
+        else:
+            results['strict_120hz'] = dict(status='INFO', reason='requires M5 120 Hz and load1 <= 12', stats=stats, load=load)
+
     try:
         h._restore_defaults(None, {key: None for key in keys})
         launch('--measure-intro-frames')
+        # Measure a real launch with product work only. No state polls, input
+        # or PNG capture run during the eight-second animated frame window.
+        deadline = time.monotonic()+8.5
+        if os.environ.get('OPEN_E2E_ONBOARDING_SNAPSHOT_CONTROL') == '1':
+            # Diagnostic A/B control only; final proof never sets this switch.
+            time.sleep(1.7)
+            app.call('snapshot', path=str(evidence/'intro-native-control.png'))
+        time.sleep(max(0, deadline-time.monotonic()))
+        measured = state()
+        frames(measured)
+        results['frame_window_completed'] = dict(ok=measured['frameStats']['count'] >= 30
+            and not measured['frameStats']['running'], load=os.getloadavg())
+        static = measured.get('preAnimationStatic') or {}
+        static_pred = lambda s: s.get('windowVisible') is False and s.get('dimVisible') is False \
+            and all(s.get(k, {}).get('layerCount', 0) > 0 and not s[k].get('animationKeys') \
+                    and s[k].get('presentationDifferences') == 0 for k in ('scene', 'dim')) \
+            and s.get('musicStarted') is False and abs(s.get('scheduledPlayhead', 1)) <= .002 \
+            and s.get('scheduledDeviceLeadMS', 0) > 0
+        # The negative is the actual running scene, read after measurement.
+        running = dict(scene=measured.get('currentSceneLayers', {}),
+            dim=measured.get('currentDimLayers', {}), musicStarted=measured.get('sound', {}).get('decision')=='played')
+        gate('static_before_t0', static_pred, static, running)
+        sound = measured.get('sound', {})
+        sync = abs(sound.get('audioStartHostTime', 0)-measured['animationStartHostTime'])*1000
+        results['animated_start_audio_sync'] = dict(ok=sound.get('decision')=='played' and sync <= 20,
+            ms=sync, load=os.getloadavg())
+        timing = sound.get('timing', {})
+        clocks = [timing.get(k) for k in ('prepareStart', 'workerReady', 'startRequest', 'decision', 't0')]
+        results['audio_readiness_clock'] = dict(ok=all(isinstance(t, (int, float)) for t in clocks)
+            and timing['prepareStart'] <= timing['workerReady'] <= timing['decision'] <= timing['t0']
+            and timing['workerReady'] <= timing['startRequest']+.3
+            and timing['t0'] == measured['animationStartHostTime'], timestamps=timing, load=os.getloadavg())
+        startup = measured.get('startup', {})
+        order = [startup.get(k) for k in ('launchHostTime', 'engineStartBeginHostTime',
+            'engineStartEndHostTime', 'engineSettledHostTime', 'windowCreationHostTime', 'firstOnboardingFrameHostTime')]
+        results['engine_before_first_run_window'] = dict(ok=all(isinstance(t, (int, float)) for t in order)
+            and order == sorted(order) and startup.get('windowsBeforeEngineSettled') == 0,
+            timestamps=startup, load=os.getloadavg())
+        results['launch_to_first_onboarding_frame'] = dict(status='INFO', startup=startup,
+            firstLaunchAfterBuild=app.first_launch_after_build,
+            firstFrameAfterAnimationMS=(measured['firstFrameHostTime']-measured['animationStartHostTime'])*1000,
+            reason='first onboarding frame waits for synchronous engine.start and its first native message-loop burst',
+            load=os.getloadavg())
+        if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
+        # Run every existing functional predicate on a separate unmeasured
+        # launch. Its early keys, phase polling and PNGs cannot perturb frames.
+        launch()
         before = state()
         intro = elapsed(.3)
         # Native Return/Space reach OEApplication, and cannot advance early.
@@ -75,16 +147,8 @@ def run(factory, results, tmp, h):
             except RuntimeError: invalid.append(True)
             else: invalid.append(False)
         gate('unknown_automation_input_refused', lambda s: all(s), invalid, [bool(phase1.get('error'))])
-        measured = phase2
         # At 3 s, task_info must report an actual resident delta.
         gate('resident_3_seconds', lambda s: isinstance(s.get('residentDelta3Seconds'), int), phase1, intro)
-        stats = measured['frameStats']; load = os.getloadavg()
-        print('intro frames p50=%.3f p95=%.3f max=%.3f drops=%d count=%d load1=%.2f nominal=%.3f' %
-              (stats['p50MS'], stats['p95MS'], stats['maxMS'], stats['drops'], stats['count'], load[0], stats['nominalMS']), flush=True)
-        if 'Apple M5' in h.subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True) and load[0] <= 12 and stats['nominalMS'] <= 8.34:
-            results['strict_120hz'] = dict(ok=stats['p95MS'] <= 1.5*stats['nominalMS'] and stats['drops'] <= max(1, stats['count']*.01), timing=True, stats=stats, load=load)
-        else:
-            results['strict_120hz'] = dict(status='INFO', reason='requires M5 120 Hz and load1 <= 12', stats=stats, load=load)
         paused = elapsed(23.7)
         gate('idle_pauses', lambda s: s.get('ambientPaused') is True, paused, phase1)
         app.call('onboarding', action='get-started')
@@ -108,6 +172,12 @@ def run(factory, results, tmp, h):
         gate('first_launch_shows_intro', lambda s: s.get('active') and s.get('screen')=='intro' and s.get('moduleActive'), intro, returning)
         inactive = lambda s: not s.get('active') and not s.get('moduleActive') and s.get('phase')=='inactive'
         gate('returning_inactive', inactive, returning, intro)
+        def returning_order(s):
+            timing = s.get('launchTiming', {})
+            return inactive(s) and s.get('audioPreparationPending') is False \
+                and all(k in timing for k in ('sidebarDrawn', 'engineStart', 'engineStarted')) \
+                and timing['sidebarDrawn'] <= timing['engineStart'] <= timing['engineStarted']
+        gate('returning_window_before_engine', returning_order, returning, intro)
         dim_pred = lambda s: s.get('dim', {}).get('exists') and abs(s['dim']['alpha']-.85)<.001 and s['dim']['ignoresMouseEvents'] and s['dim']['child']
         gate('dim_overlay', dim_pred, dim, returning)
         launch('--skip-first-run')
@@ -182,6 +252,8 @@ def run(factory, results, tmp, h):
         snapshot = Path(app.user_data)/'State/browser.json'
         prior = snapshot.read_bytes()
         app.call('onboarding', action='replay-intro')
+        # Replay prepares audio before showing its first animated frame too.
+        assert until(lambda: state().get('active')), state()
         replay = state()
         gate('replay_over_browser', lambda s: s.get('active') and s.get('replay'), replay, returning)
         app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
@@ -202,6 +274,7 @@ def run(factory, results, tmp, h):
         denied = h.subprocess.run([app.executable, '--replay-onboarding', '--intro-sound=off'], capture_output=True, text=True, timeout=15)
         denied_state = dict(exit=denied.returncode, refused='requires --user-data-dir' in denied.stderr)
         app.call('onboarding', action='replay-intro')
+        assert until(lambda: state().get('active')), state()
         interrupted_intro = state()
         gate('quit_during_animation_fixture', lambda s: s.get('active') and s.get('dim', {}).get('exists'), interrupted_intro, returning)
         before_quit = app.call('windows')

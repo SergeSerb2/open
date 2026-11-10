@@ -5,16 +5,55 @@
 #include "cef/include/cef_open_adblock.h"
 
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "cef/libcef/browser/browser_context.h"
 #include "cef/libcef/browser/browser_host_base.h"
 #include "cef/libcef/browser/request_context_impl.h"
 #include "cef/libcef/browser/thread_util.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "open/adblock/open_adblock_cache.h"
 #include "open/adblock/open_adblock_service.h"
 #include "open/adblock/open_adblock_tab_helper.h"
 
 namespace {
+
+int ClearRendererCachesOnNavigation(CefBrowserContext::Getter context_getter) {
+  CEF_REQUIRE_UIT_RETURN(0);
+  auto* context = context_getter.Run();
+  auto* owner = context ? context->AsBrowserContext() : nullptr;
+  if (!owner || owner->ShutdownStarted()) {
+    return 0;
+  }
+  auto* profile = context->AsProfile();
+  auto* cache = web_cache::WebCacheManager::GetInstance();
+  int requested = 0;
+  for (auto hosts = content::RenderProcessHost::AllHostsIterator();
+       !hosts.IsAtEnd(); hosts.Advance()) {
+    auto* process = hosts.GetCurrentValue();
+    auto* candidate = process->GetBrowserContext();
+    if (!candidate || candidate->ShutdownStarted()) {
+      continue;
+    }
+    bool matches = candidate == owner;
+    if (!matches && profile && !profile->IsOffTheRecord()) {
+      // Parent control/list changes also affect its OTR children, but never
+      // another normal Profile or the parent's normal context from an OTR.
+      auto* child = CefBrowserContext::FromBrowserContext(candidate);
+      auto* child_profile = child ? child->AsProfile() : nullptr;
+      matches = child_profile && child_profile->IsOffTheRecord() &&
+                child_profile->GetOriginalProfile() == profile;
+    }
+    if (matches && cache->ClearCacheForProcessOnNavigation(process->GetID())) {
+      ++requested;
+    }
+  }
+  return requested;
+}
 
 open_engine::OpenAdBlockService* ServiceFor(
     CefRefPtr<CefRequestContext> request_context) {
@@ -25,8 +64,10 @@ open_engine::OpenAdBlockService* ServiceFor(
   // The initialized accessor also rejects a retained, detached OTR wrapper.
   auto* context = static_cast<CefRequestContextImpl*>(request_context.get())
                       ->GetInitializedBrowserContext();
-  return context && !context->AsBrowserContext()->ShutdownStarted()
-      ? context->open_adblock_service() : nullptr;
+  if (!context || context->AsBrowserContext()->ShutdownStarted()) {
+    return nullptr;
+  }
+  return context->open_adblock_service();
 }
 
 void RefreshFactoriesFor(CefRefPtr<CefRequestContext> request_context) {
@@ -44,6 +85,17 @@ void RefreshFactoriesFor(CefRefPtr<CefRequestContext> request_context) {
 }
 
 }  // namespace
+
+namespace open_engine {
+
+void ConfigureAdBlockRendererCache(CefBrowserContext* context,
+                                  OpenAdBlockService* service) {
+  CEF_REQUIRE_UIT();
+  service->SetRendererCacheInvalidator(base::BindRepeating(
+      &ClearRendererCachesOnNavigation, context->getter()));
+}
+
+}  // namespace open_engine
 
 bool CefSetOpenAdBlockEnabled(CefRefPtr<CefRequestContext> request_context,
                                bool enabled) {
@@ -101,6 +153,7 @@ CefRefPtr<CefDictionaryValue> CefGetOpenAdBlockStatus(
   auto value = CefDictionaryValue::Create();
   value->SetBool("enabled", status.enabled);
   value->SetBool("engine_loaded", status.engine_loaded);
+  value->SetBool("awaiting_generation", status.awaiting_generation);
   value->SetBool("engine_from_dat", status.engine_from_dat);
   value->SetBool("engine_shared", status.engine_shared);
   value->SetString("dat_policy", status.dat_policy);
@@ -114,6 +167,8 @@ CefRefPtr<CefDictionaryValue> CefGetOpenAdBlockStatus(
   value->SetInt("excluded_count", status.excluded_domains.size());
   // Generation IDs are int64, beyond CefDictionaryValue's 32-bit integer.
   value->SetDouble("load_generation", status.generation);
+  value->SetDouble("cold_holds", status.cold_holds);
+  value->SetDouble("cold_hold_max_ms", status.cold_hold_max_ms);
   return value;
 }
 

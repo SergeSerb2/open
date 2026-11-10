@@ -1,0 +1,30 @@
+// Copyright 2026 The Open Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module open_engine.mojom;
+
+import "url/mojom/origin.mojom";
+import "url/mojom/url.mojom";
+
+struct AdBlockDocumentCosmetics {
+  array<string> hide_selectors;
+  array<string> exceptions;
+  bool generichide;
+};
+
+// One process pipe per Profile. The receiver runs on the matcher sequence;
+// no request posts to the UI thread, reads files or waits for a list build.
+interface AdBlockCosmetics {
+  [Sync]
+  GetDocumentCosmetics(url.mojom.Url document_url,
+                       url.mojom.Origin top_origin)
+      => (AdBlockDocumentCosmetics? cosmetics);
+
+  // Carry the site on each call: several documents can share this pipe,
+  // and an exclusion can change after the initial document query.
+  GetGenericSelectors(url.mojom.Origin top_origin,
+                      array<string> classes, array<string> ids,
+                      array<string> exceptions)
+      => (array<string> selectors);
+};

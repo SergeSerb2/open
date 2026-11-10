@@ -42,6 +42,15 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func modelWasInstalled() { settingsStorage = nil }
   // Registry callbacks never instantiate Settings or open another Profile.
   func refreshAdBlockWarning() { settingsStorage?.adBlock?.refreshOtherBlocker() }
+  // Async fresh-context store preparation may finish after Settings already
+  // exists. Attach only that model; never instantiate Settings in this callback.
+  func adBlockStoreDidOpen(_ store: AdBlockStore) {
+    guard let settingsStorage, settingsStorage.adBlock == nil else { return }
+    settingsStorage.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) })
+    if settingsStorage.advanced.statusText == "Ad blocking settings could not be opened." {
+      settingsStorage.advanced.statusText = ""
+    }
+  }
   func hasEnabledBlockerExtension(profileID: ProfileID) -> Bool {
     guard app.engineReady, let profile = app.model.profile(id: profileID),
       let context = OEEngine.shared.contexts.first(where: { $0.identifier == profile.dataDirectoryName }) else { return false }
@@ -260,6 +269,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     library?.refreshSpaceManagerView()
   }
   var downloads: [DownloadItemSnapshot] { app.downloadsCenter.downloads }
+  var downloadHistoryError: String { app.downloadsCenter.downloadHistoryError }
+  func refreshDownloads() async { await app.downloadsCenter.refreshDownloads() }
   private func status(_ message: String, pane: PaneID? = nil) {
     switch pane ?? settings.selectedPane {
     case .general: settings.general.errorText = message
@@ -342,7 +353,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       }
       if let error { return error }
     }
-    if kinds.contains(.downloads) { app.downloadsCenter.clearHistory(profileID: profileID, since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
+    if kinds.contains(.downloads) {
+      do { try await app.downloadsCenter.clearHistory(profileID: profileID, since: seconds.map { now.addingTimeInterval(-$0) }, through: end) }
+      catch { return error.localizedDescription }
+    }
     return nil
   }
   func openProfileSubpage(profileID: ProfileID, page: ProfilePage) {

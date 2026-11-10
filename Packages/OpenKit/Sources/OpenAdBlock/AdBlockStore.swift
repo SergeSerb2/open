@@ -7,6 +7,7 @@ public enum AdBlockEngineEvent: Sendable {
     case configure(profile: ProfileID, listDirectory: URL, enabled: Bool, excludedDomains: [String])
     case enabled(Bool)
     case exclusions(profile: ProfileID, domains: [String])
+    case privateExclusions(profile: ProfileID, session: String, domains: [String])
     case reload(profile: ProfileID, listDirectory: URL)
     case closed(profile: ProfileID)
 }
@@ -15,7 +16,16 @@ private struct GlobalSettings: Codable {
     var nativeAdBlockEnabled = true
 }
 
-private final class DirectoryLease {
+/// Read-only launch values. Reading these does not open a Profile, seed lists,
+/// acquire its directory lease, or start an update schedule.
+public struct AdBlockStartupConfiguration: Sendable {
+    public let isEnabled: Bool
+    public let excludedDomains: [String]
+}
+
+// Immutable descriptor ownership can transfer from preparation IO to the main
+// actor; no operation mutates it and flock remains held until deinit.
+fileprivate final class DirectoryLease: @unchecked Sendable {
     let descriptor: Int32
     init(root: URL) throws {
         if !FileManager.default.fileExists(atPath: root.path) {
@@ -32,6 +42,15 @@ private final class DirectoryLease {
     deinit { Darwin.close(descriptor) }
 }
 
+/// Prepared off the main actor; installing this value performs no file IO.
+public struct AdBlockStorePreparation: Sendable {
+    fileprivate let root: URL
+    fileprivate let catalog: AdBlockCatalog
+    fileprivate let repository: ListRepository
+    fileprivate let lease: DirectoryLease
+    fileprivate let isEnabled: Bool
+}
+
 private final class TemporaryRoot {
     let url: URL
     init() throws {
@@ -42,18 +61,57 @@ private final class TemporaryRoot {
 }
 
 /// Main-actor configuration store for a browser session. Files and downloads are handled by an IO
-/// actor. Call openProfile before creating its engine context, then bind onEngineEvent to OpenEngine.
+/// actor. Bind onEngineEvent before openProfile. The App can configure a context's
+/// deterministic list path before openProfile; it must reload once seeding finishes.
 /// Mutations throw so the UI cannot claim a change that failed to persist.
 @MainActor
 public final class AdBlockStore {
+    public static let didChange = Notification.Name("OpenAdBlockStoreDidChange")
+    /// One background lstat per Profile at launch/context preparation. Only
+    /// ENOENT means fresh; inaccessible or malformed existing pointers are warm
+    /// here and are diagnosed by the normal generation verifier.
+    public nonisolated static func hasNoGeneration(directory: URL) -> Bool {
+        var info = stat()
+        return lstat(directory.appendingPathComponent("lists/current.json").path, &info) != 0 && errno == ENOENT
+    }
+
+    /// Fresh-context setup must not move catalog/settings/lease IO before paint
+    /// on the main actor. The repository's later seed IO stays on its own actor.
+    public nonisolated static func prepare(root: URL, bundledDefaultsDirectory: URL?) throws -> AdBlockStorePreparation {
+        let lease = try DirectoryLease(root: root)
+        let catalog = try AdBlockCatalog.load()
+        let repository = try ListRepository(policy: .init(), proxy: nil, bundle: bundledDefaultsDirectory, ephemeral: false)
+        let enabled = try readJSON(GlobalSettings.self, at: root.appendingPathComponent("adblock-settings.json"),
+                                   fallback: GlobalSettings()).nativeAdBlockEnabled
+        _ = AdBlockSites.shared
+        return AdBlockStorePreparation(root: root, catalog: catalog, repository: repository, lease: lease, isEnabled: enabled)
+    }
+
+    /// Call on an IO task, never the main actor. The normal store remains lazy.
+    public nonisolated static func startupConfiguration(root: URL, directory: URL) throws -> AdBlockStartupConfiguration {
+        let enabled = try readJSON(GlobalSettings.self, at: root.appendingPathComponent("adblock-settings.json"),
+                                   fallback: GlobalSettings()).nativeAdBlockEnabled
+        let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
+        let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
+        return AdBlockStartupConfiguration(isEnabled: enabled, excludedDomains: normalized.sorted())
+    }
+
     public let root: URL
     public let catalog: AdBlockCatalog
     public var onScheduledUpdate: (@MainActor (_ outcome: String, _ nextDelay: TimeInterval) -> Void)?
-    public var onEngineEvent: (@MainActor (AdBlockEngineEvent) -> Void)?
+    public var onEngineEvent: (@MainActor (AdBlockEngineEvent) -> Void)? {
+        didSet { NotificationCenter.default.post(name: Self.didChange, object: self) }
+    }
     public private(set) var isEnabled: Bool
     public private(set) var lastUpdateResults: [ProfileID: [AdBlockUpdateResult]] = [:]
     private var states: [ProfileID: AdBlockProfileState] = [:]
     private var exclusions: [ProfileID: Set<String>] = [:]
+    private struct PrivateSession {
+        let profile: ProfileID
+        var exclusions: Set<String> = []
+    }
+    // IDs come from live OTR contexts. Never serialize private browsing choices.
+    private var privateSessions: [String: PrivateSession] = [:]
     private var busy = Set<ProfileID>()
     private var directories: [ProfileID: URL] = [:]
     private var retired = Set<ProfileID>()
@@ -65,6 +123,15 @@ public final class AdBlockStore {
     private let temporaryRoot: TemporaryRoot?
 
     deinit { for task in schedules.values { task.cancel() } }
+
+    public init(preparation: AdBlockStorePreparation) {
+        self.root = preparation.root
+        self.catalog = preparation.catalog
+        self.repository = preparation.repository
+        self.lease = preparation.lease
+        self.isEnabled = preparation.isEnabled
+        self.temporaryRoot = nil
+    }
 
     /// root is the Open application-data directory, NOT a list directory. Incognito substitutes a
     /// unique temporary root, never reads persisted settings, and removes it at close/session end.
@@ -120,12 +187,14 @@ public final class AdBlockStore {
             let state = try await self.repository.open(directory: lists, catalog: self.catalog)
             try self.checkActive(profile)
             // Preserve the legacy AdBlock/exclusions.json read, including an exclusions-only Profile.
-            let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
-            let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
+            let normalized = try await self.repository.excludedDomains(directory: directory)
+            try self.checkActive(profile)
             self.directories[profile] = directory
             self.states[profile] = state; self.exclusions[profile] = normalized
             self.onEngineEvent?(.configure(profile: profile, listDirectory: lists,
                                           enabled: self.isEnabled, excludedDomains: normalized.sorted()))
+            // Includes the fresh-context path that opens before first paint.
+            NotificationCenter.default.post(name: Self.didChange, object: self)
         }
         try checkActive(profile)
         if scheduleUpdates {
@@ -162,8 +231,10 @@ public final class AdBlockStore {
         let directory = directories.removeValue(forKey: profile)
         schedules.removeValue(forKey: profile)?.cancel()
         states.removeValue(forKey: profile); exclusions.removeValue(forKey: profile)
+        privateSessions = privateSessions.filter { $0.value.profile != profile }
         lastUpdateResults.removeValue(forKey: profile)
         onEngineEvent?(.closed(profile: profile))
+        NotificationCenter.default.post(name: Self.didChange, object: self)
         if temporaryRoot != nil, let directory {
             let path = directory.deletingLastPathComponent()
             if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
@@ -175,6 +246,9 @@ public final class AdBlockStore {
     public func retireProfile(_ profile: ProfileID) async {
         if let task = retirements[profile] { await task.value; return }
         guard retired.insert(profile).inserted else { return }
+        privateSessions = privateSessions.filter { $0.value.profile != profile }
+        // isProfileOpen becomes false at this barrier, before any IO drain.
+        NotificationCenter.default.post(name: Self.didChange, object: self)
         schedules.removeValue(forKey: profile)?.cancel()
         let operation = operations[profile]
         operation?.cancel()
@@ -185,6 +259,7 @@ public final class AdBlockStore {
             self.directories.removeValue(forKey: profile)
             self.lastUpdateResults.removeValue(forKey: profile)
             self.onEngineEvent?(.closed(profile: profile))
+            NotificationCenter.default.post(name: Self.didChange, object: self)
         }
         retirements[profile] = task
         await task.value
@@ -197,6 +272,7 @@ public final class AdBlockStore {
         }
         isEnabled = enabled
         onEngineEvent?(.enabled(enabled))
+        NotificationCenter.default.post(name: Self.didChange, object: self)
     }
 
     public func enabledListIDs(for profile: ProfileID) -> [String] {
@@ -205,16 +281,68 @@ public final class AdBlockStore {
 
     public func listReceipt(_ id: String, profile: ProfileID) -> AdBlockListReceipt? { states[profile]?.lists[id] }
 
-    public func excludedDomains(for profile: ProfileID) -> [String] { exclusions[profile, default: []].sorted() }
-
-    public func siteSnapshot(for profile: ProfileID) -> AdBlockSiteSnapshot {
-        AdBlockSiteSnapshot(isEnabled: isEnabled, excludedDomains: exclusions[profile, default: []])
+    public func isPrivateSessionOpen(_ id: String, profile: ProfileID) -> Bool {
+        privateSessions[id]?.profile == profile && isProfileOpen(profile)
     }
 
-    public func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID) throws {
+    /// Register the engine's live OTR identifier after the parent has opened.
+    /// A closed identifier cannot be used by setExcluded until registered again.
+    public func openPrivateSession(_ id: String, profile: ProfileID) throws {
+        try checkActive(profile)
+        guard isProfileOpen(profile) else { throw AdBlockError("profile is not open") }
+        guard !id.isEmpty, id.utf8.count <= 128 else { throw AdBlockError("invalid private session") }
+        if let session = privateSessions[id] {
+            guard session.profile == profile else { throw AdBlockError("private session belongs to another Profile") }
+            return
+        }
+        guard privateSessions.count < 128 else { throw AdBlockError("too many private sessions") }
+        privateSessions[id] = PrivateSession(profile: profile)
+    }
+
+    public func closePrivateSession(_ id: String) {
+        guard privateSessions.removeValue(forKey: id) != nil else { return }
+        NotificationCenter.default.post(name: Self.didChange, object: self)
+    }
+
+    public func excludedDomains(for profile: ProfileID, privateSession: String? = nil) -> [String] {
+        (effectiveExclusions(for: profile, privateSession: privateSession) ?? []).sorted()
+    }
+
+    private func effectiveExclusions(for profile: ProfileID, privateSession: String?) -> Set<String>? {
+        var domains = exclusions[profile, default: []]
+        if let id = privateSession {
+            guard let session = privateSessions[id], session.profile == profile else { return nil }
+            domains.formUnion(session.exclusions)
+        }
+        return domains
+    }
+
+    public func siteSnapshot(for profile: ProfileID, privateSession: String? = nil) -> AdBlockSiteSnapshot {
+        guard let domains = effectiveExclusions(for: profile, privateSession: privateSession) else {
+            return AdBlockSiteSnapshot(isEnabled: false, excludedDomains: [])
+        }
+        return AdBlockSiteSnapshot(isEnabled: isEnabled && isProfileOpen(profile), excludedDomains: domains)
+    }
+
+    public func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID, privateSession: String? = nil) throws {
         try checkActive(profile)
         guard states[profile] != nil else { throw AdBlockError("profile is not open") }
         let site = try AdBlockSites.shared.registrableDomain(domain)
+        if let id = privateSession {
+            guard var session = privateSessions[id], session.profile == profile else { throw AdBlockError("private session is not open") }
+            if excluded {
+                // Bound retained site choices independently of private navigation count.
+                guard session.exclusions.contains(site) || session.exclusions.count < 4096 else {
+                    throw AdBlockError("too many private site exclusions")
+                }
+                session.exclusions.insert(site)
+            } else { session.exclusions.remove(site) }
+            privateSessions[id] = session
+            onEngineEvent?(.privateExclusions(profile: profile, session: id,
+                domains: excludedDomains(for: profile, privateSession: id)))
+            NotificationCenter.default.post(name: Self.didChange, object: self)
+            return
+        }
         var domains = exclusions[profile, default: []]
         if excluded { domains.insert(site) } else { domains.remove(site) }
         if temporaryRoot == nil {
@@ -222,6 +350,7 @@ public final class AdBlockStore {
         }
         exclusions[profile] = domains
         onEngineEvent?(.exclusions(profile: profile, domains: domains.sorted()))
+        NotificationCenter.default.post(name: Self.didChange, object: self)
     }
 
     public func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID) async throws {

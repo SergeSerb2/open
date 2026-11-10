@@ -20,21 +20,20 @@ enum IncognitoContextProvider {
         userInfo: [NSLocalizedDescriptionKey: "The parent Profile is unavailable."]))
       return
     }
-    OEEngine.shared.makeIncognitoContext(for: original) { [weak app] context, error in
-      if let context, let app { app.adBlockEngineAdapter.contextCreated(context, profileID: parent.id) }
-      completion(context, error)
-    }
+    OEEngine.shared.makeIncognitoContext(for: original, completion: completion)
   }
 }
 
 @MainActor
 final class IncognitoSession {
   let parent: Profile
+  private weak var app: AppDelegate?
   private(set) var context: OEBrowserContext?
   private var ended = false
   var windows = 0
   init(parent: Profile, app: AppDelegate) {
     self.parent = parent
+    self.app = app
     IncognitoContextProvider.makeContext(parent: parent, app: app) { [weak self, weak app] context, error in
       guard let self, !self.ended else {
         if let context { OEEngine.shared.releaseContext(context, completion: nil) }
@@ -50,6 +49,7 @@ final class IncognitoSession {
       }
       self.context = context
       if let app {
+        app.adBlockEngineAdapter.contextCreated(context, profileID: parent.id)
         for factory in app.hostFactories.values where factory.incognitoSession === self {
           factory.engineDidBecomeReady()
         }
@@ -60,7 +60,10 @@ final class IncognitoSession {
     guard !ended else { return }
     ended = true
     context?.delegate = nil
-    if let context { OEEngine.shared.releaseContext(context, completion: nil) }
+    if let context {
+      app?.adBlockEngineAdapter.contextClosed(context)
+      OEEngine.shared.releaseContext(context, completion: nil)
+    }
     context = nil
   }
 }
