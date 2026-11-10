@@ -187,10 +187,15 @@ final class LittleOpenWebContent: NSObject, LittleOpenWebContentProviding, WebCo
     host?.historyRecorder.flushBeforeClose()
     factory.standaloneSurface = nil
     factory.standaloneSurfaceVisibilityChanged()
+    app.littleOpenHosts[tabID] = nil
+    host?.view.removeFromSuperview()
+    if let page = host?.content, app.downloadsCenter.retainDetachedPage(page, close: { self.finishClose() }) { return }
+    finishClose()
+  }
+  private func finishClose() {
     factory.closeAll()
     browser?.close(); browser = nil
     factory.standaloneBrowser = nil
-    app.littleOpenHosts[tabID] = nil
     host = nil
   }
 }
