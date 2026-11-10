@@ -621,6 +621,20 @@ bool OEClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                               bool user_gesture,
                               bool is_redirect) {
   OEWebContent* page = view_;
+  // Also cover renderer navigation, redirects and popup creation. Shell-only
+  // loadURL filtering does not see these. Do not replace a page in its callback.
+  if (page && frame->IsMain() && OEIsPageBrowser(page, browser) &&
+      browser->GetHost()->GetRuntimeStyle() == CEF_RUNTIME_STYLE_ALLOY &&
+      OEIsChromeNewTabURL(OEURL(request->GetURL()))) {
+    __weak OEWebContent* weakPage = page;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      OEWebContent* current = weakPage;
+      if (current && OEIsPageBrowser(current, browser)) {
+        [current loadURL:[NSURL URLWithString:@"about:blank"]];
+      }
+    });
+    return true;
+  }
   if (!page || !frame->IsMain() || !user_gesture || is_redirect ||
       !OEIsPageBrowser(page, browser)) {
     return false;

@@ -50,6 +50,22 @@ inline NSURL* _Nullable OEURL(const CefString& s) {
   return str.length ? [NSURL URLWithString:str] : nil;
 }
 
+// Chromium's native NTP requires a full Chrome Browser/BrowserView (including
+// NewTabFooterController). An Alloy page, including Peek and adopted requests,
+// cannot supply that owner. Open's empty page is about:blank in these hosts.
+inline bool OEIsChromeNewTabURL(NSURL* _Nullable url) {
+  NSString* scheme = url.scheme.lowercaseString;
+  NSString* name = [scheme isEqualToString:@"about"]
+      ? url.resourceSpecifier.lowercaseString : url.host.lowercaseString;
+  if (![scheme isEqualToString:@"chrome"] &&
+      ![scheme isEqualToString:@"about"]) return false;
+  name = [[name componentsSeparatedByCharactersInSet:
+      [NSCharacterSet characterSetWithCharactersInString:@"/?#"]] firstObject];
+  return [name isEqualToString:@"newtab"] ||
+      [name isEqualToString:@"new-tab-page"] ||
+      [name isEqualToString:@"new-tab-page-third-party"];
+}
+
 /// Glob match for Chrome-style match patterns, shared by browser and renderer.
 bool OEMatchesPattern(const std::string& pattern, const std::string& url);
 

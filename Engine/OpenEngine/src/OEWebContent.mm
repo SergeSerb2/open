@@ -568,6 +568,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   info.SetAsChild((__bridge CefWindowHandle)_view,
                   CefRect(0, 0, (int)b.size.width, (int)b.size.height));
   info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
+  if (OEIsChromeNewTabURL(OEURL(url))) url = OECef(@"about:blank");
   _creatingSelf = self;
   CefBrowserHost::CreateBrowser(info, _client.get(), url,
                                 [self oe_browserSettings],
@@ -971,6 +972,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
 #pragma mark Navigation
 
 - (void)loadURL:(NSURL*)URL {
+  if (self.runtimeStyle == OERuntimeStyleAlloy && OEIsChromeNewTabURL(URL)) {
+    URL = [NSURL URLWithString:@"about:blank"];
+  }
   // An action popup shows only its own extension's pages (Chrome blocks the
   // page's own cross-site navigations; this blocks ours).
   NSString* extension = _oe_popupOwner ? _oe_popupExtension : nil;

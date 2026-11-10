@@ -255,6 +255,9 @@ class Open:
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
+        # Only disposable, uniquely owned bundle clones permit path-wide helper
+        # discovery. Ordinary App bundles can serve several owned instances.
+        self.exclusive_bundle = False
         # Screen launches are serialized. Keep a private receipt of the real
         # executable identity so first-after-build/install costs stay visible
         # without treating them as same-binary repeat-launch budgets.
@@ -493,6 +496,10 @@ class Open:
                 break
             owned.update(found)
         bundle = os.path.realpath(self.bundle) + os.sep
+        if self.exclusive_bundle:
+            # Helpers can be reparented before quit, or start after the initial
+            # descendant snapshot. Keep the clone until all of them exit.
+            owned.update(pid for pid, _ in rows if self.process_path(pid).startswith(bundle))
         for pid in owned:
             path = self.process_path(pid)
             if path == root_path or path.startswith(bundle):
@@ -538,6 +545,8 @@ class Open:
                 self.quit_report["error"] = str(error)
         finally:
             def living():
+                if self.exclusive_bundle:
+                    self.discover_owned_processes()
                 return [pid for pid, path in self.owned_processes.items() if path and self.process_path(pid) == path]
             deadline = time.monotonic() + 10
             while living() and time.monotonic() < deadline:
@@ -2350,7 +2359,17 @@ def context_menu_commands(app, results, *, run_all_commands=True):
         subprocess.run(["pbcopy"], input=clipboard)
         shutil.rmtree(root, ignore_errors=True)
         if app.proc.poll() is None:
-            app.call("policy", contextMenu="record")
+            try:
+                # A tested command may close the last browser window. The
+                # per-window menu policy then has no owner to restore. Always
+                # retain the real command report instead of masking it here.
+                if app.call("shell-windows"):
+                    app.call("policy", contextMenu="record")
+                    report["policyRestore"] = "restored"
+                else:
+                    report["policyRestore"] = "no browser window"
+            except Exception as error:
+                report["failures"].append("policy cleanup: %s" % error)
     report["crashed"] = crashed
     report["video"] = video
     report["scope"] = "all_commands" if run_all_commands else "models_and_refusals"
@@ -12309,7 +12328,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -12588,7 +12607,11 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "sitecontrol":
+        if opts.only == "ntp":
+            import ntp
+            results['ntp'] = CheckedResults(tracker)
+            ntp.run(factory, results['ntp'], sys.modules[__name__], opts.style)
+        elif opts.only == "sitecontrol":
             results["sitecontrol"] = CheckedResults(tracker)
             if opts.sitecontrol_final_only:
                 import sitecontrol_final

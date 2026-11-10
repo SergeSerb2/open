@@ -88,6 +88,7 @@ def checks(factory, results, tmp, config, harness):
     opened_file = root / 'opened-file.json'
     launch_env = {'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_IDLE_DOWNLOADS': '1', 'OPEN_E2E_APP_BUNDLE': str(bundle), 'OPEN_DOWNLOADS_DEFAULT_DIRECTORY': str(root / 'DefaultDownloads')}
     app = factory(urls=(), extra_env=launch_env, extra_args=['-open.general.warnBeforeQuitting', 'YES'])
+    app.exclusive_bundle = True  # This suite alone owns the disposable clone.
     app.preferences_domain = domain
     def state(): return app.call('downloads-state')
     def item(key): return next((v for v in state()['items'] if v['id'] == key), {})
