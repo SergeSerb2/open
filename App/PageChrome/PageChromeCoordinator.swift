@@ -78,6 +78,9 @@ final class PageChromeCoordinator {
   /// mutation occur only after its close delegate callback, on the next turn.
   @discardableResult
   func requestClose(_ page: OEWebContent, completion: @escaping (Bool) -> Void) -> Bool {
+    // Every close path shares this preflight. A terminated or unresponsive page
+    // must not hold closing behind a DevTools beforeunload round trip.
+    guard page.crashState == .none else { return false }
     let key = ObjectIdentifier(page)
     guard closeRequests[key] == nil else { return true }
     guard page.hasUnloadHandlers, !dialogs.hasPending(page) else { return false }

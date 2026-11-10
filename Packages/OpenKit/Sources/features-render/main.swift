@@ -34,6 +34,9 @@ enum FeatureCLI {
         if cmd == "render", let scene = RenderCLI.value(args, "--scene"), scene.hasPrefix("little-") {
             try await LittleOpenScenes.render(scene, args: args); return
         }
+        if cmd == "render", RenderCLI.value(args, "--scene") == "sad-tab" {
+            try SadTabScene.render(args); return
+        }
         if args == ["check", "--only", "little-open"] {
             var passed = 0, failed = 0
             try await LittleOpenChecks.run { ok, label in
