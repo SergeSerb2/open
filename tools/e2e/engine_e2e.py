@@ -7648,7 +7648,10 @@ def capture_checks(factory, results, tmp):
         normal_window = app.call('window-state')['id']
         before_windows = {w['id'] for w in app.call('incognito-state')['windows']}
         before_rows = rows()
-        capture_directory = Path(app.call('captures')['directory'])
+        capture_index = app.call('captures')
+        capture_directory = Path(capture_index['directory'])
+        index_path = Path(capture_index['index'])
+        index_before = index_path.read_bytes()
         before_files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                         for p in capture_directory.iterdir() if p.is_file()}
         app.call('menu-perform', id='new-incognito-window')
@@ -7668,9 +7671,10 @@ def capture_checks(factory, results, tmp):
                 and private_state.get('ephemeral') is True and captured.get('bytes', 0) > 0
                 and captured.get('kind') == 'area' and captured.get('saved') == ''
                 and 'library' not in private_capture.get('card', {}).get('actions', [])
-                and rows() == before_rows and before_files == after_files,
+                and rows() == before_rows and before_files == after_files and index_path.read_bytes() == index_before,
                 'private': private_state.get('private'), 'ephemeral': private_state.get('ephemeral'),
-                'capture': captured, 'libraryUnchanged': rows() == before_rows and before_files == after_files}
+                'capture': captured, 'libraryUnchanged': rows() == before_rows and before_files == after_files
+                    and index_path.read_bytes() == index_before}
             close_card()
         finally:
             app.call('window-focus', id=private_window['id'], activate=True)
