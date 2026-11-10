@@ -81,6 +81,7 @@ def run(factory, results, tmp, h):
         print(name, 'PASS' if ok else 'FAIL', flush=True)
         if ok and isinstance(detail.get('panel'), dict) and detail['panel'].get('presented'):
             capture = Path(h.ROOT) / '.re/s12-t-final' / (name + '.png')
+            capture.parent.mkdir(parents=True, exist_ok=True)
             app.call('snapshot', path=str(capture))
             results[name]['snapshot'] = str(capture)
     if group == 'clear':
