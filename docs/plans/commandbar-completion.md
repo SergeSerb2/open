@@ -704,7 +704,7 @@ One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste 
 
 ## 9. Screenshots needed from the user
 
-Agents must not launch or drive Arc (AGENTS.md rules 4–5). These need the user, with the recorder running (`docs/re/runtime-observations.md` §7). One frame after each step is enough.
+The user or a lead-assigned capture agent may record these under AGENTS.md rules 4–5, with the recorder running (`docs/re/runtime-observations.md` §7). One frame after each step is enough.
 
 1. Toolbar: View ▸ Show Toolbar (Cmd+Shift+D) on a normal tab, then the same with Settings ▸ Advanced ▸ "Show full URL when Toolbar is enabled" on. Shows the bar, the sidebar top, and where Favorites sit.
 2. Right-click on the sidebar URL field, and right-click on the toolbar URL (menu items and order).

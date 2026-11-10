@@ -936,8 +936,8 @@ controls (button/input/select/checkbox), selected text, a same-origin iframe, an
 (both with the grey ramp), the seam pair `#FF0008` / `#FF0800` beside pure `#FF0000`, and a fine
 hue strip (120 swatches, 3° apart, S 1, L 0.5) so a hue split shows wherever a knob puts it
 (review r2 N1). The fixture also runs a small CSS animation, so frames keep coming for the
-§5.4 paint reports. The user opens this exact file in Arc (agents never launch Arc, rule 4)
-and screenshots it at:
+§5.4 paint reports. The user or a lead-assigned capture agent opens this exact file in Arc under
+AGENTS.md rules 4–5 and captures it at:
 
 | # | Capture | Settles |
 |---|---|---|

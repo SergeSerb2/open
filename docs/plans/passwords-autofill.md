@@ -950,9 +950,9 @@ Steps 0–2 queue behind P1 in the shared Chromium tree (engine-patches lead dec
 | Q-6 | Keep the Credential Management account chooser off (Arc parity) even though some sites use `navigator.credentials.get`? | Yes. Sites fall back to their form; the dropdown still fills. |
 | Q-7 | Show the username in the save sheet? | No (Arc shows only the host). Revisit after S-1. |
 
-## 13. Screenshots needed from the user (Arc, their own Mac)
+## 13. Arc screenshots needed
 
-Agents may not launch Arc (AGENTS.md rule 4). Use a throwaway test account on a site you trust; do not capture real passwords.
+The user or a lead-assigned capture agent may record these under AGENTS.md rules 4–5. Use a throwaway test account on a site you trust; do not capture real passwords.
 
 | # | Capture | Answers |
 |---|---|---|
