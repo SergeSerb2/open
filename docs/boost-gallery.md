@@ -59,7 +59,7 @@ outside the command bar's text, drawing and keystroke code, but the lead's requi
 ## Final validation, 2026-11-09
 
 Main `d279ae85e0b1edad3cd060e5eb0ed083eb10b0f7` merged cleanly in `53803fd3`.
-Validation code/docs head: `3a3e1730600e8592592e1c66d9d00aaba4f32456`. The final engine view is main
+Full-gate code/docs head: `3a3e1730600e8592592e1c66d9d00aaba4f32456`. The final engine view is main
 `627745e0`, framework SHA-256 `891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67`. The built App's embedded code hash and
 UUID match that distribution. Active fingerprint checks use the new SHA;
 no product gate hard-codes the old fingerprints. No engine file changed here.
@@ -126,6 +126,35 @@ Full receipts, logs, engine manifests and synthetic Gallery captures are in
 errors and zero warnings in the new Gallery files. Existing engine, package and
 shared-automation warnings remain in the saved App build logs; the full gate's
 OpenKit Release build is warning/error free. Elapsed receipts include lock wait.
+
+## Overlap integration after the full gate
+
+The final fetch found main `a5987e0212315736ff1c7bc5f8dd7b3b75f3e5d5` (#297/#298).
+It shares AppDelegate, AutomationController, SettingsTypes and engine_e2e with
+this PR. The clean merge is `6403522b8009bbe68b8b5cea292654c2d6f0bb37`.
+Under TANDEM §4.5a, Debug and the overlapping suites were rerun on that head;
+the 25/25 full gate and Release result at `3a3e1730` stand. No second full gate
+ran. The framework remains `891c2353…`; both App suites verify the full pin and
+matching embedded code before launch. No BG product code changed after review.
+
+| Post-merge check | Result | Receipt / 1-, 5-, 15-minute load |
+|---|---|---|
+| Debug | PASS | 92.988 s; 19.79/30.19/29.46 → 18.61/27.59/28.56 |
+| Shared keys | PASS, 20 distinct keys; zero duplicates | 0.097 s; 18.61/27.59/28.56 → 18.61/27.59/28.56 |
+| Gallery | PASS 14/14 | 336.513 s; 22.11/27.55/28.51 → 16.73/20.87/24.94 |
+| Command bar + live Settings | PASS 77/77, including 16 settings_ rows | 197.601 s; 16.73/20.87/24.94 → 19.80/21.80/24.57 |
+| Settings Preview verifier | PASS 2/2 selected rows; 47 checks, 240 renders and dump-keys | 345.568 s; 19.80/21.80/24.57 → 10.48/16.85/21.60 |
+
+Both App suites have zero focus interruptions and pass owned cleanup without
+forced termination. Generated JSONs/PNGs were copied to the retained evidence
+and removed/restored in the checkout. The final `pgrep` audit found zero owned
+Open processes; other sections' Apps were left alone. No owned check is running.
+
+The full gate's Site Control result is 1551/1551 plus 2 INFO. Its editor CPU
+p95 diagnostic is 12.667 ms versus 12 ms at load1 23.27. The CLI reports this
+as INFO and leaves quiet-machine acceptance to the lead. All instruction and
+functional gates passed. The command-bar strict timing rows passed
+within their budgets, so no quiet or paired rerun was needed.
 
 ## Earlier targeted validation
 

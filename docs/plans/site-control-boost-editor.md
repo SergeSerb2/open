@@ -1230,7 +1230,9 @@ Boosts (F3, lead ruling). Factory-level Library readiness is a shared follow-up
 Gallery flows and eight deliberate source regressions pass.
 Debug/Release, the complete Gallery run (14/14) and final full gate (25/25)
 pass on engine 891c2353 after merging main d279ae85. Lead source review is
-approved. Shared readiness and pending-Edit policy remain follow-ups, tracked in
+approved. Later main a5987e02 merged cleanly; Debug/key audit, Gallery 14/14,
+command bar/live Settings 77/77 and Settings Preview pass under rule 5a. Shared
+readiness and pending-Edit policy remain follow-ups, tracked in
 [Gallery acceptance](../boost-gallery.md).
 
 ---

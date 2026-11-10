@@ -375,7 +375,9 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   Settings and Chrome-style incognito suites pass. Restored Debug/Release and
   the complete Gallery run passed on engine 34619927. The final main d279ae85
   merge, Debug/Release, Gallery 14/14 and full gate 25/25 pass on engine
-  891c2353; lead source review is approved. Native incognito 2x capture remains
+  891c2353; lead source review is approved. After the clean main a5987e02
+  overlap merge, Debug/key audit, Gallery 14/14, command bar/live Settings 77/77
+  and Settings Preview pass under rule 5a. Native incognito 2x capture remains
   a display follow-up. See
   [Gallery acceptance](boost-gallery.md).
   P7 still blocks selector picking.
