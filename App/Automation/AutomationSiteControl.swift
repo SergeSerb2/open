@@ -59,10 +59,13 @@ extension AutomationController {
     case "adblock-state":
       guard let context = scc.view.panel.snapshot?.context else { throw Failure(message: "no site snapshot") }
       let store = app.stores.existingAdBlock
+      let profile = factory.incognitoSession?.parent.id ?? context.profileID
+      let session = factory.isIncognito ? factory.incognitoSession?.context?.identifier : nil
       return ["bindingInstalled": store?.onEngineEvent != nil,
-        "profileOpen": store?.isProfileOpen(context.profileID) ?? false,
+        "profileOpen": store?.isProfileOpen(profile) ?? false,
+        "privateSessionReady": !factory.isIncognito || session.map { store?.isPrivateSessionOpen($0, profile: profile) == true } == true,
         "enabled": store?.isEnabled ?? false,
-        "shouldBlock": (try? store?.siteSnapshot(for: context.profileID).shouldBlock(host: context.url.host() ?? "")) == true]
+        "shouldBlock": (try? store?.siteSnapshot(for: profile, privateSession: session).shouldBlock(host: context.url.host() ?? "")) == true]
     case "capture-content-blocking":
       guard scc.isPresented, let snapshot = scc.view.panel.snapshot,
             let tile = snapshot.tiles.first(where: { $0.kind == .contentBlocking }), tile.state != .unavailable else {
@@ -128,7 +131,7 @@ extension AutomationController {
     let rows = (snapshot?.tiles ?? []).map { tile -> [String: Any] in
       ["id": "row." + tile.id, "title": tile.title, "subtitle": tile.subtitle,
        "state": tile.state == .on ? "on" : tile.state == .off ? "off" : "unavailable",
-       "visible": scc.isPresented, "inUse": tile.inUse]
+       "visible": scc.isPresented, "inUse": tile.inUse, "help": tile.help ?? ""]
     }
     let menu = scc.isPresented ? scc.makeMenu().items.map { ["title": $0.title, "enabled": $0.isEnabled, "separator": $0.isSeparatorItem] as [String: Any] } : []
     let tip = scc.view.visibleArrowTip

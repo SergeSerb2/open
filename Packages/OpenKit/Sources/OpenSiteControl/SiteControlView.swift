@@ -170,7 +170,7 @@ public final class SiteControlPanelView: NSView {
                 b.isEnabled = snapshot.commandsEnabled[command] ?? (b.controlID == "action.share")
             }
         }
-        let scheme = snapshot.context.url.scheme?.lowercased(), secure = scheme == "https"
+        let scheme = snapshot.context.url.scheme?.lowercased(), secure = snapshot.context.security == .secure
         security.isHidden = scheme != "https" && scheme != "http"
         security.title = secure ? "Secure" : "Insecure"; security.symbol = secure ? "lock.fill" : "lock.open.fill"
         security.tint = secure ? SiteControlColors.label : CommandBarColors.lockInsecure

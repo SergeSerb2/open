@@ -4668,6 +4668,16 @@ def sidebar_checks(factory, results, tmp):
             "ok": [c["selected"] for c in clicks] == [f2, f1, f1] and check_page(app, f1, "Favorite One")
                   and all(c["hitChain"][:2] == ["FavoriteTileView", "FavoritesCollectionView"] for c in clicks),
             "clicks": clicks, "favorites": [f1, f2]}
+        # BrowserRootView owns the panel overlay. A dismissed overlay must
+        # continue to pass native hit testing to the Favorites collection.
+        app.call("site-controls", action="open")
+        app.call("site-controls", action="close")
+        clicks_after_panel = [app.call("favorite-click", favorite=f2), app.call("favorite-click", favorite=f1)]
+        results["favorite_native_click_after_site_controls"] = {
+            "ok": [c["selected"] for c in clicks_after_panel] == [f2, f1]
+                  and check_page(app, f1, "Favorite One")
+                  and all(c["hitChain"][:2] == ["FavoriteTileView", "FavoritesCollectionView"] for c in clicks_after_panel),
+            "clicks": clicks_after_panel}
     finally:
         _restore_defaults(app, saved)
         app.quit()
@@ -12302,6 +12312,7 @@ def main():
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
+    ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
                     help='features: prove ignored save offers with main App code and no password delegate')
@@ -12326,6 +12337,8 @@ def main():
     opts = ap.parse_args()
     if opts.page_site_data_only and opts.only != "page":
         ap.error("--page-site-data-only requires --only page")
+    if opts.sitecontrol_final_only and opts.only != "sitecontrol":
+        ap.error("--sitecontrol-final-only requires --only sitecontrol")
     _CONTINUE_ON_TIMING_FAILURE = opts.continue_on_timing_failure
     if opts.stop_on_app_death:
         _SUITE_CRASH_BASELINE = _open_crash_reports()
@@ -12572,8 +12585,12 @@ def main():
     def execute():
         if opts.only == "sitecontrol":
             results["sitecontrol"] = CheckedResults(tracker)
-            import sitecontrol
-            sitecontrol.run(factory, results["sitecontrol"], tmp, globals(), functional_only=opts.functional_only)
+            if opts.sitecontrol_final_only:
+                import sitecontrol_final
+                sitecontrol_final.run(factory, results["sitecontrol"], tmp, sys.modules[__name__])
+            else:
+                import sitecontrol
+                sitecontrol.run(factory, results["sitecontrol"], tmp, globals(), functional_only=opts.functional_only)
         elif opts.only == "import-robust":
             results["import-robust"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "import_robust.py"))["run"](
