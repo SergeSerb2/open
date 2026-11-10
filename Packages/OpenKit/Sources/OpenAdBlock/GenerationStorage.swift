@@ -95,7 +95,10 @@ struct GenerationStorage: Sendable {
         try Task.checkCancellation()
         try files.createDirectory(at: generations, withIntermediateDirectories: true)
         let numbers = try files.contentsOfDirectory(atPath: generations.path).compactMap(Int.init)
-        let latest = max(numbers.max() ?? 0, previous?.generation ?? 0)
+        // Quarantined generations stay retired, including after verified fallback/reseed.
+        let retired = ((try? files.contentsOfDirectory(atPath: directory.appendingPathComponent("quarantine").path)) ?? [])
+            .compactMap { Int($0.split(separator: "-").first.map(String.init) ?? "") }
+        let latest = max(numbers.max() ?? 0, previous?.generation ?? 0, retired.max() ?? 0)
         guard latest < Int.max else { throw AdBlockError("generation number exhausted") }
         let number = latest + 1
         let generation = generations.appendingPathComponent(String(number), isDirectory: true)

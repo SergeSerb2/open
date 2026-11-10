@@ -49,7 +49,7 @@ private struct LibraryToolbar:View {
             Picker("Origin",selection:$model.archiveOriginFilter){Text("All Origins").tag(OriginFilter.all);Text("Spaces").tag(OriginFilter.spaces);Text("Little Open").tag(OriginFilter.littleOpen)}.labelsHidden()
         case .downloads:
             Picker("Status",selection:$model.downloadStateFilter){Text("All Downloads").tag(Optional<DownloadState>.none);Text("In Progress").tag(Optional(DownloadState.inProgress));Text("Completed").tag(Optional(DownloadState.completed));Text("Failed").tag(Optional(DownloadState.failed))}.labelsHidden()
-            Picker("Profile",selection:$model.downloadProfileFilter){Text("All Profiles").tag(Optional<ProfileID>.none);ForEach(model.model.profiles,id:\.id){Text($0.name).tag(Optional($0.id))}}.labelsHidden()
+            if model.model.profiles.count > 1 { DownloadsProfileFilter(model: model).frame(maxWidth: 180) }
         case .captures,.media:
             if model.section == .media {Picker("Kind",selection:$model.mediaKind){Text("All Media").tag("All");Text("Captures").tag("Captures");Text("Screenshots").tag("Screenshots")}.labelsHidden()}
             Picker("Sort",selection:$model.captureSort){ForEach(["Newest","Oldest","Name"],id:\.self){Text($0).tag($0)}}.labelsHidden()

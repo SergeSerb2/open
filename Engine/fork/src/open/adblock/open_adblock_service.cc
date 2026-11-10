@@ -10,6 +10,7 @@
 #include <string_view>
 #include <utility>
 
+#include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "open/adblock/open_adblock_engine_registry.h"
 #include "open/adblock/open_adblock_url_loader_factory.h"
@@ -25,6 +26,7 @@
 #include "base/task/thread_pool.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
+#include "content/public/browser/browser_thread.h"
 #include "crypto/hash.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "partition_alloc/memory_reclaimer.h"
@@ -103,7 +105,26 @@ struct Generation {
 // checked for size and SHA-256. Never enumerates the directory. One entry
 // may be the resources file (listID "_resources", file "resources.json").
 std::optional<Generation> ReadGeneration(const base::FilePath& root,
-                                         std::string* error) {
+                                         std::string* error,
+                                         bool* awaiting_generation) {
+  *awaiting_generation = false;
+  // Classify absence using the file-open error, not PathExists(): permission,
+  // symlink, malformed-pointer and manifest/SHA errors must fail open rather
+  // than leave a context waiting for an unpublished generation.
+  const auto pointer_path = root.Append("current.json");
+  if (base::IsLink(pointer_path)) {
+    *error = "read current.json: symbolic link refused";
+    return std::nullopt;
+  }
+  base::File pointer_file(pointer_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+  if (!pointer_file.IsValid()) {
+    *awaiting_generation =
+        pointer_file.error_details() == base::File::FILE_ERROR_NOT_FOUND;
+    if (!*awaiting_generation) {
+      *error = "read current.json: open failed";
+    }
+    return std::nullopt;
+  }
   auto pointer_text = ReadBounded(root.Append("current.json"), kMaxPointerBytes);
   if (!pointer_text) {
     *error = "read current.json: missing or too large";
@@ -321,7 +342,8 @@ OpenAdBlockService::BuildResult BuildOnBackground(
     return true;
   };
   std::string error;
-  std::optional<Generation> generation = ReadGeneration(root, &error);
+  std::optional<Generation> generation =
+      ReadGeneration(root, &error, &result.awaiting_generation);
   if (!generation) {
     result.error = error;
     result.build_ms = timer.Elapsed().InMilliseconds();
@@ -554,6 +576,8 @@ void OpenAdBlockService::Shutdown() {
     return;
   }
   shut_down_ = true;
+  initial_load_pending_ = false;
+  status_.awaiting_generation = false;
   latest_load_id_->fetch_add(1, std::memory_order_acq_rel);
   weak_ptr_factory_.InvalidateWeakPtrs();
   // G-3 and G-6 (§7.8): the matcher counters, read on this thread.
@@ -562,7 +586,9 @@ void OpenAdBlockService::Shutdown() {
   VLOG(1) << "OpenAdBlock: shutdown checks=" << counters.checks.load(kRelaxed)
           << " checks_truncated=" << counters.checks_truncated.load(kRelaxed)
           << " checks_over_1ms=" << counters.checks_over_1ms.load(kRelaxed)
-          << " max_check_us=" << counters.max_check_us.load(kRelaxed);
+          << " max_check_us=" << counters.max_check_us.load(kRelaxed)
+          << " cold_holds=" << counters.cold_holds.load(kRelaxed)
+          << " cold_hold_max_ms=" << counters.cold_hold_max_ms.load(kRelaxed);
   // The matcher answers "off" from now on; its engine reference drops on
   // the matcher sequence and the deleter frees the engine on the build
   // runner (§6.6). Never a free under a lock or on this thread.
@@ -570,10 +596,12 @@ void OpenAdBlockService::Shutdown() {
       FROM_HERE, base::BindOnce(
                      [](scoped_refptr<OpenAdBlockMatcher> matcher) {
 #if !defined(OFFICIAL_BUILD)
+                       PrintOpenAdBlockBenchLoadCount();
                        VLOG(1) << "OpenAdBlock: "
                                << matcher->RegexCompileCountsText();
 #endif
                        matcher->SetEnabled(false);
+                       matcher->SetFirstLoadPending(false);
                        matcher->SetEngine(nullptr);
                      },
                      matcher_));
@@ -601,18 +629,51 @@ void OpenAdBlockService::SetEnabled(bool enabled) {
   if (shut_down_) {
     return;
   }
+  const bool turns_blocking_on =
+      enabled && !enabled_ && may_have_unblocked_content_;
+  if (!enabled && (status_.engine_loaded || has_document_)) {
+    may_have_unblocked_content_ = true;
+  }
   enabled_ = enabled;
   status_.enabled = enabled;
+  if (!enabled) {
+    initial_load_pending_ = false;
+    status_.awaiting_generation = false;
+  }
   PostToMatcher(base::BindOnce(
       [](bool enabled, OpenAdBlockMatcher* matcher) {
         matcher->SetEnabled(enabled);
+        if (!enabled) {
+          matcher->SetFirstLoadPending(false);
+        }
       },
       enabled));
+  // Turning blocking back on restarts an unfinished initial load. A verified
+  // zero-list generation is complete (generation > 0), so it never holds.
+  if (enabled && !initial_load_pending_ && !status_.engine_loaded &&
+      status_.generation == 0 && !adblock_root_.empty()) {
+    LoadFromDirectory(adblock_root_, /*prefer_dat=*/true);
+  }
+  if (turns_blocking_on) {
+    InvalidateRendererCaches("enabled_after_unblocked_state");
+    may_have_unblocked_content_ = false;
+  }
   NotifyStatus();
 }
 
 bool OpenAdBlockService::IsEnabled() const {
   return enabled_ && !shut_down_;
+}
+
+void OpenAdBlockService::OnDocumentFactoryCreated() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (shut_down_) {
+    return;
+  }
+  has_document_ = true;
+  if (!enabled_ || (!status_.engine_loaded && status_.generation > 0)) {
+    may_have_unblocked_content_ = true;
+  }
 }
 
 void OpenAdBlockService::SetExcludedDomains(
@@ -628,7 +689,12 @@ void OpenAdBlockService::SetExcludedDomains(
       LOG(WARNING) << "OpenAdBlock: skipped an invalid excluded domain";
     }
   }
-  excluded_domains_ = base::flat_set<std::string>(std::move(domains));
+  base::flat_set<std::string> next_domains(std::move(domains));
+  const bool turns_blocking_on = enabled_ && std::ranges::any_of(
+      excluded_domains_, [&next_domains](const std::string& domain) {
+        return !HostIsExcluded(next_domains, domain);
+      });
+  excluded_domains_ = std::move(next_domains);
   status_.excluded_domains.assign(excluded_domains_.begin(),
                                   excluded_domains_.end());
   PostToMatcher(base::BindOnce(
@@ -636,6 +702,9 @@ void OpenAdBlockService::SetExcludedDomains(
         matcher->SetExclusions(std::move(domains));
       },
       excluded_domains_));
+  if (turns_blocking_on) {
+    InvalidateRendererCaches("exclusion_removed");
+  }
   NotifyStatus();
 }
 
@@ -654,8 +723,15 @@ void OpenAdBlockService::LoadFromDirectory(
     return;
   }
   adblock_root_ = adblock_root;
+  initial_load_pending_ = !adblock_root.empty() && !status_.engine_loaded &&
+                          status_.generation == 0;
   const uint64_t load_id =
       latest_load_id_->fetch_add(1, std::memory_order_acq_rel) + 1;
+  PostToMatcher(base::BindOnce(
+      [](bool pending, OpenAdBlockMatcher* matcher) {
+        matcher->SetFirstLoadPending(pending);
+      },
+      initial_load_pending_));
   AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&BuildOnBackground, std::move(adblock_root), prefer_dat,
@@ -692,6 +768,8 @@ void OpenAdBlockService::SetListDirectory(base::FilePath adblock_root) {
     return;
   }
   adblock_root_.clear();
+  initial_load_pending_ = false;
+  may_have_unblocked_content_ |= has_document_;
   latest_load_id_->fetch_add(1, std::memory_order_acq_rel);
   status_ = AdBlockStatus();
   status_.match_cap_bytes = kOpenAdBlockMatchCapBytes;
@@ -699,6 +777,7 @@ void OpenAdBlockService::SetListDirectory(base::FilePath adblock_root) {
                                   excluded_domains_.end());
   PostToMatcher(base::BindOnce([](OpenAdBlockMatcher* matcher) {
     matcher->SetEngine(nullptr);
+    matcher->SetFirstLoadPending(false);
   }));
   NotifyStatus();
 }
@@ -725,9 +804,17 @@ void OpenAdBlockService::OnBuilt(
     return;
   }
   const bool success = !!result.engine || result.empty_generation;
+  // Missing current.json is still the initial load: the App will publish and
+  // explicitly reload. Real parse/manifest/SHA errors finish it and fail open.
+  initial_load_pending_ = initial_load_pending_ && result.awaiting_generation &&
+                          enabled_ && !adblock_root_.empty();
+  status_.awaiting_generation = initial_load_pending_;
   status_.last_build_ms = result.build_ms;
   status_.last_error = result.error;
   if (success) {
+    const bool replaces_engine = status_.engine_loaded;
+    const bool needs_cache_clear =
+        replaces_engine || may_have_unblocked_content_;
     status_.engine_loaded = !!result.engine;
     status_.engine_from_dat = result.from_dat;
     status_.engine_shared = result.shared;
@@ -742,6 +829,7 @@ void OpenAdBlockService::OnBuilt(
         [](bool empty_generation, std::shared_ptr<const EngineHolder> engine,
            OpenAdBlockMatcher* matcher) {
           matcher->SetEngine(std::move(engine));
+          matcher->SetFirstLoadPending(false, /*completed=*/true);
           if (empty_generation) {
             // SetEngine releases its old holder on the build runner. Reclaim
             // after that queued destruction, so all-lists-off retains the
@@ -752,6 +840,24 @@ void OpenAdBlockService::OnBuilt(
           }
         },
         result.empty_generation, std::move(result.engine)));
+    if (enabled_ && status_.engine_loaded && needs_cache_clear) {
+      InvalidateRendererCaches(replaces_engine
+                                  ? "generation_replaced"
+                                  : "generation_after_unblocked_document");
+      may_have_unblocked_content_ = false;
+    } else if ((!enabled_ && status_.engine_loaded) ||
+               (result.empty_generation && has_document_)) {
+      may_have_unblocked_content_ = true;
+    }
+  } else {
+    PostToMatcher(base::BindOnce(
+        [](bool pending, OpenAdBlockMatcher* matcher) {
+          matcher->SetFirstLoadPending(pending);
+        },
+        initial_load_pending_));
+  }
+  if (status_.awaiting_generation) {
+    VLOG(1) << "OpenAdBlock: awaiting initial generation";
   }
   VLOG(1) << "OpenAdBlock: loaded " << result.list_count << " lists, "
           << (result.empty_generation ? "empty" : result.shared ? "shared" : result.from_dat ? "dat" : "text")
@@ -760,7 +866,9 @@ void OpenAdBlockService::OnBuilt(
   NotifyStatus();
   if (done) {
     std::move(done).Run(success ? AdBlockLoadResult::kLoaded
-                              : AdBlockLoadResult::kFailed);
+                       : result.awaiting_generation
+                           ? AdBlockLoadResult::kAwaitingGeneration
+                           : AdBlockLoadResult::kFailed);
   }
 }
 
@@ -771,6 +879,8 @@ AdBlockStatus OpenAdBlockService::GetStatus() const {
   constexpr auto kRelaxed = std::memory_order_relaxed;
   status.checks = counters.checks.load(kRelaxed);
   status.checks_truncated = counters.checks_truncated.load(kRelaxed);
+  status.cold_holds = counters.cold_holds.load(kRelaxed);
+  status.cold_hold_max_ms = counters.cold_hold_max_ms.load(kRelaxed);
   status.cosmetic_dropped_procedural =
       counters.cosmetic_dropped_procedural.load(kRelaxed);
   status.cosmetic_dropped_unsafe = counters.cosmetic_dropped_unsafe.load(kRelaxed);
@@ -781,6 +891,24 @@ AdBlockStatus OpenAdBlockService::GetStatus() const {
   status.cosmetic_dropped_over_cap =
       counters.cosmetic_dropped_over_cap.load(kRelaxed);
   return status;
+}
+
+void OpenAdBlockService::SetRendererCacheInvalidator(
+    base::RepeatingCallback<int()> callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!shut_down_ && !renderer_cache_invalidator_) {
+    renderer_cache_invalidator_ = std::move(callback);
+  }
+}
+
+void OpenAdBlockService::InvalidateRendererCaches(const char* reason) {
+  if (!renderer_cache_invalidator_) {
+    return;
+  }
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  const int requested = renderer_cache_invalidator_.Run();
+  VLOG(1) << "OpenAdBlock: renderer memory-cache next-navigation reason="
+          << reason << " requested_processes=" << requested;
 }
 
 void OpenAdBlockService::SetStatusCallback(

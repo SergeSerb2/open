@@ -1,15 +1,64 @@
 import AppKit
+import QuartzCore
+import OpenOnboarding
 
 extension AppDelegate {
+  /// First-run only. No scene or window exists while engine.start blocks.
+  /// Returning launches never enter this preparation path.
+  func prepareOnboardingSound() {
+    guard preparedOnboardingSound == nil else { return }
+    #if OPEN_AUTOMATION
+    if options.measureIntroFrames, IntroPacingTrace.current == nil { IntroPacingTrace.current = IntroPacingTrace() }
+    if onboardingStartup["launchHostTime"] == nil {
+      onboardingStartup["launchHostTime"] = CACurrentMediaTime()-LaunchTiming.shared.elapsedMilliseconds/1000
+    }
+    #endif
+    let sound = IntroSound(mode: IntroSound.Mode(rawValue: options.introSound) ?? .normal)
+    sound.prepare(); preparedOnboardingSound = sound
+  }
+
   /// This is the only production entrance into OpenOnboarding. Returning and
   /// skip-first-run launches do not initialize a scene, resource or player.
   func showOnboarding(replay: Bool) {
-    if let controller = onboardingWindowController, controller.window?.isVisible == true {
-      controller.showWindow(nil); return
+    if let controller = onboardingWindowController, !controller.isFinishing || controller.window?.isVisible == true {
+      // Launch and engine-ready callbacks can both reach this while playback
+      // is scheduled and the window is still unshown. Keep that one start.
+      if controller.window?.isVisible == true { controller.showWindow(nil) }
+      return
     }
     guard replay || !onboardingHandedOff else { return }
+    prepareOnboardingSound()
+    guard engineReady else { return }
+    if isFirstRun && !firstRunSaved && !onboardingEngineSettled {
+      guard onboardingStartObserver == nil else { return }
+      let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { [weak self] _, _ in
+        MainActor.assumeIsolated {
+          guard let self, !self.terminationRequested else { return }
+          self.onboardingStartObserver = nil; self.onboardingEngineSettled = true
+          #if OPEN_AUTOMATION
+          self.onboardingStartup["engineSettledHostTime"] = CACurrentMediaTime()
+          self.onboardingStartup["windowsBeforeEngineSettled"] = NSApp.windows.filter { $0.isVisible }.count
+          #endif
+          self.showOnboarding(replay: replay)
+        }
+      }
+      onboardingStartObserver = observer
+      if let observer { CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes) }
+      return
+    }
     onboardingWindowController?.stop()
-    let controller = OnboardingWindowController(options: options, replay: replay)
+    #if OPEN_AUTOMATION
+    let pacingRegion = IntroPacingTrace.begin("onboarding.controller.create")
+    defer { pacingRegion?.end() }
+    onboardingStartup["windowCreationHostTime"] = CACurrentMediaTime()
+    #endif
+    guard let sound = preparedOnboardingSound else { return }
+    preparedOnboardingSound = nil
+    let controller = OnboardingWindowController(options: options, replay: replay, preparedSound: sound)
+    #if OPEN_AUTOMATION
+    controller.onFirstFrame = { [weak self] in self?.startAutomationIfNeeded() }
+    #endif
+    controller.favoriteIcons = OnboardingFavicons(app: self)
     onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
     controller.onHandoff = { [weak self] in
       guard let self else { return }
@@ -37,7 +86,7 @@ extension AppDelegate {
     let model = OpenSettings.FirstRunViewModel(settings: settingsPresenter.settings, actions: actions, directory: options.arcDirectory)
     let holder = FirstRunWindowController(model: model, hostedIn: window)
     if !replay { firstRunWindowController = holder; lastFirstRunStep = "welcome" }
-    let steps = OnboardingStepsController(app: self, firstRun: model, replay: replay, reduceMotion: onboarding.intro.reduceMotion)
+    let steps = OnboardingStepsController(app: self, firstRun: model, replay: replay, reduceMotion: onboarding.intro.reduceMotion, icons: onboarding.favoriteIcons ?? OnboardingFavicons(app: self))
     onboarding.steps = steps
     onboarding.show(content: steps)
     window.displayIfNeeded()

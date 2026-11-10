@@ -26,6 +26,10 @@ void RunOpenAdBlockSelftest(OpenAdBlockService* service,
 // In-process allocation receipts, enabled only by the diagnostic switch.
 void RecordOpenAdBlockMemoryPhase(const char* phase);
 
+// Matcher-sequence shutdown receipt, after queued synthetic checks drain.
+// Prints nothing when the non-official bench-load switch was not used.
+void PrintOpenAdBlockBenchLoadCount();
+
 // One line of |status| for harness logs: names, numbers and the error, never
 // page data.
 std::string AdBlockStatusText(const AdBlockStatus& status);

@@ -97,6 +97,7 @@ import OpenStore
             if histories[profile.id] == nil { histories[profile.id] = historyResolver?(profile.id) ?? HistoryStore(fileURL: directories.historyFileURL(for: profile)) }
         }
         if !ids.contains(historyProfileID), let first = model.profiles.first { historyProfileID = first.id }
+        if let downloadProfileFilter, !ids.contains(downloadProfileFilter) { self.downloadProfileFilter = nil }
     }
     public var filterIdentity: String { "\(section.rawValue)|\(query)|\(archiveSpaceFilter?.description ?? "")|\(archiveReasonFilter?.rawValue ?? "")|\(archiveOriginFilter.rawValue)|\(historyProfileID)" }
     public func refreshExternalState() async {
@@ -104,7 +105,7 @@ import OpenStore
         try? (captures as? FileCapturesProvider)?.reload()
         await reload()
     }
-    public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
+    public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() }; if section == .downloads { await downloads.refreshDownloads() } }
     public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archivedDisplayTitles = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
     public func loadNextArchivePage() async {
         guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation, load = UUID();activeArchiveLoad=load
@@ -213,17 +214,25 @@ import OpenStore
             "\(model.profile(id: owner)?.name ?? "Retired Profile"): \(result)"
         }.joined(separator: " · ")
     }
-    public var downloadItems: [DownloadItemSnapshot] { downloads.downloads.filter { item in
-        (downloadStateFilter == nil || item.state == downloadStateFilter || (downloadStateFilter == .inProgress && item.state == .paused)) && (downloadProfileFilter == nil || item.profileID == downloadProfileFilter) && (query.isEmpty || item.fileName.localizedCaseInsensitiveContains(query) || item.sourceHost.localizedCaseInsensitiveContains(query))
+    public var downloadItems: [DownloadItemSnapshot] {
+        let profile = downloadProfileFilter.flatMap { model.profile(id: $0)?.id }
+        return downloads.downloads.filter { item in
+        (downloadStateFilter == nil || item.state == downloadStateFilter || (downloadStateFilter == .inProgress && item.state == .paused)) && (profile == nil || item.profileID == profile) && (query.isEmpty || item.fileName.localizedCaseInsensitiveContains(query) || item.sourceHost.localizedCaseInsensitiveContains(query))
     } }
     public func downloadLocation(_ item: DownloadItemSnapshot) -> String {
         guard let path = item.filePath else { return "" }
         if path.hasPrefix(snapshot.root.path + "/") { return "Open Data/" + String(path.dropFirst(snapshot.root.path.count + 1)) }
         return (path as NSString).abbreviatingWithTildeInPath
     }
-    public func fileAvailable(_ item: DownloadItemSnapshot) -> Bool { item.fileExists ?? (item.filePath.map { FileManager.default.fileExists(atPath: $0) } ?? false) }
+    public func fileAvailable(_ item: DownloadItemSnapshot) -> Bool {
+        if let exists = item.fileExists { return exists }
+        // Historical nil means the asynchronous file check has not completed.
+        // Keep the legacy-provider fallback out of that path.
+        if item.isHistorical { return false }
+        return item.filePath.map { FileManager.default.fileExists(atPath: $0) } ?? false
+    }
     public func revealDownload(_ item: DownloadItemSnapshot) { guard fileAvailable(item) else { statusText = "File moved or deleted."; return }; actions.revealDownload(id: item.id) }
-    public func retryDownload(_ item: DownloadItemSnapshot) { guard item.state == .failed else { return }; actions.retryDownload(id: item.id) }
+    public func retryDownload(_ item: DownloadItemSnapshot) { guard item.state == .failed || item.isHistorical else { return }; actions.retryDownload(id: item.id) }
     public var captureItems: [CaptureItemSnapshot] {
         let filtered = captures.captures.filter { item in
             (section != .captures || item.kind != .screenshot) && (section != .media || mediaKind == "All" || (mediaKind == "Screenshots" ? item.kind == .screenshot : item.kind != .screenshot)) && (query.isEmpty || item.fileName.localizedCaseInsensitiveContains(query) || item.sourceHost.localizedCaseInsensitiveContains(query))
