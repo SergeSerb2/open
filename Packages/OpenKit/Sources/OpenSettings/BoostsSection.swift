@@ -3,6 +3,8 @@ import SwiftUI
 import OpenDesign
 import OpenModel
 
+public enum BoostsPresentation: String, Sendable { case list, gallery }
+
 public struct BoostItemSnapshot: Identifiable, Sendable {
     public let id: String
     public let name: String
@@ -20,16 +22,25 @@ public struct BoostItemSnapshot: Identifiable, Sendable {
 /// Value snapshots keep OpenSettings independent of OpenBoosts and OpenEngine.
 public struct BoostsSection: View {
     @Bindable var model: LibraryViewModel
-    @AppStorage("open.advanced.enableBoosts") private var globallyEnabled = true
-    @State private var rename: BoostItemSnapshot?
+    @AppStorage(BoostPreferences.globallyEnabledKey) private var globallyEnabled = true
+    @State private var rename: (item: BoostItemSnapshot, profileID: ProfileID)?
     @State private var renameText = ""
-    @State private var deleting: BoostItemSnapshot?
+    @State private var deleting: (item: BoostItemSnapshot, profileID: ProfileID)?
     public init(model: LibraryViewModel) {
         self.model = model
-        _globallyEnabled = AppStorage(wrappedValue: true, "open.advanced.enableBoosts", store: model.defaults)
+        _globallyEnabled = AppStorage(wrappedValue: true, BoostPreferences.globallyEnabledKey, store: model.defaults)
     }
     public var body: some View {
         VStack(spacing: 12) {
+            HStack {
+                Spacer()
+                Picker("Boosts layout", selection: $model.boostsPresentation) {
+                    Text("List").tag(BoostsPresentation.list)
+                    Text("Gallery").tag(BoostsPresentation.gallery)
+                }.labelsHidden().pickerStyle(.segmented).controlSize(.small).fixedSize()
+                    .font(Font(SettingsTokens.label.font))
+                    .accessibilityIdentifier("boosts.layout")
+            }
             if !globallyEnabled {
                 HStack {
                     Text("Boosts are off. Turn them on in Settings.").font(.system(size: 13)).foregroundStyle(.secondary)
@@ -39,6 +50,15 @@ public struct BoostsSection: View {
             }
             if model.boostItems.isEmpty {
                 LibraryEmptyState(title: "Nothing Boosted Yet!", message: "Open a site and choose New Boost in Site Controls.", symbol: "paintbrush.pointed.fill")
+            } else if model.boostsPresentation == .gallery {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 18)], spacing: 22) {
+                        ForEach(model.boostItems) { item in
+                            BoostGalleryCard(item: item, enabled: enabled(item), edit: edit(item), delete: { requestDelete(item) })
+                                .contextMenu { actions(item) }
+                        }
+                    }
+                }.accessibilityIdentifier("boosts.gallery")
             } else {
                 List {
                     ForEach(model.boostItems) { item in
@@ -49,29 +69,41 @@ public struct BoostsSection: View {
                                 Text("Made for \(item.domain)\(item.pathPrefix ?? "")").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                             }
                             Spacer()
-                            Toggle("Enable \(item.name.isEmpty ? item.domain : item.name)", isOn: Binding(get: { item.isEnabled }, set: {
-                                model.actions.setBoostEnabled(id: item.id, enabled: $0, profileID: model.historyProfileID)
-                            })).labelsHidden().toggleStyle(.switch).controlSize(.small)
-                            Menu {
-                                Button("Edit…") { model.actions.editBoost(id: item.id, profileID: model.historyProfileID) }
-                                Button("Rename…") { renameText = item.name; rename = item }
-                                Button("Delete…", role: .destructive) { deleting = item }
-                            } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 24).accessibilityLabel("Boost actions")
+                            Toggle("Enable \(item.name.isEmpty ? item.domain : item.name)", isOn: enabled(item))
+                                .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                            Menu { actions(item) } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 24).accessibilityLabel("Boost actions")
                         }.frame(height: 52)
                         .listRowInsets(.init(top: 0, leading: 8, bottom: 0, trailing: 8))
                     }
-                }.listStyle(.plain)
+                }.listStyle(.plain).accessibilityIdentifier("boosts.list")
             }
         }
         .alert("Rename this Boost", isPresented: Binding(get: { rename != nil }, set: { if !$0 { rename = nil } })) {
             TextField("Boost name", text: $renameText)
-            Button("Done") { if let item = rename { model.actions.renameBoost(id: item.id, to: renameText, profileID: model.historyProfileID) }; rename = nil }
+            Button("Done") { if let target = rename { model.actions.renameBoost(id: target.item.id, to: renameText, profileID: target.profileID) }; rename = nil }
             Button("Cancel", role: .cancel) { rename = nil }
         }
         .alert("Delete this Boost?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
-            Button("Delete", role: .destructive) { if let item = deleting { model.actions.deleteBoost(id: item.id, profileID: model.historyProfileID) }; deleting = nil }
+            Button("Delete", role: .destructive) { if let target = deleting { model.actions.deleteBoost(id: target.item.id, profileID: target.profileID) }; deleting = nil }
             Button("Cancel", role: .cancel) { deleting = nil }
         }
+        .onChange(of: model.historyProfileID) { _, _ in rename = nil; deleting = nil }
+    }
+    private func enabled(_ item: BoostItemSnapshot) -> Binding<Bool> {
+        let profileID = model.historyProfileID
+        let actions = model.actions
+        return Binding(get: { item.isEnabled }, set: { actions.setBoostEnabled(id: item.id, enabled: $0, profileID: profileID) })
+    }
+    private func edit(_ item: BoostItemSnapshot) -> () -> Void {
+        let profileID = model.historyProfileID
+        let actions = model.actions
+        return { actions.editBoost(id: item.id, profileID: profileID) }
+    }
+    private func requestDelete(_ item: BoostItemSnapshot) { deleting = (item, model.historyProfileID) }
+    @ViewBuilder private func actions(_ item: BoostItemSnapshot) -> some View {
+        Button("Edit…", action: edit(item))
+        Button("Rename…") { renameText = item.name; rename = (item, model.historyProfileID) }
+        Button("Delete…", role: .destructive) { requestDelete(item) }
     }
 }
 private struct BoostFavicon: View {
