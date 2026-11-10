@@ -382,6 +382,13 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   first-run/engine-ready policy for these routes, with real-App first-window
   and onboarding checks after the holds. Do not treat this as a new Gallery
   acceptance PASS or enable Boost services during menu validation.
+- Pending Library Edit after navigation (BG post-proof review, Section 12 lead,
+  2026-11-09; non-blocking): the committed-URL race fix retains a pending Edit
+  through a non-editable commit until the tab closes. A later HTTP(S) commit can
+  therefore open the editor. Consider dropping the request after the first
+  non-editable top-level commit other than `about:blank`. Keep the existing
+  private-context, Profile and liveness checks; verify both navigation paths
+  through the real Library Edit flow before changing this policy.
 - Private windows refuse Boosts. The App skips registration, script installation and live plans for OTR contexts; editor commands and Customize Page refuse. The same-parent Profile row and deliberate script-leak negative proof cover this boundary.
 - Profile deletion retires the registered Boost owner before folder removal. The store discards dirty state, cancels and drains writes, and stays closed for the process lifetime. B27 covers Settings delete → debounce → quit → relaunch with a deliberate disabled-retirement negative proof.
 
