@@ -110,6 +110,10 @@ public final class PeekController {
                 else { NSAnimationContext.runAnimationGroup { c in c.duration = self.duration(0.12); host.view.animator().alphaValue = 1 } }
             }
         }
+        host.onLiveStateChange = { [weak self, weak host] state in
+            guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return }
+            if state.isCrashed != (self.overlay.sadTabView != nil) { self.refresh(); self.onPageChange?() }
+        }
         host.shouldNavigate = { [weak self, weak host] target, flags in
             guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return false }
             if FeatureSite.shouldPeek(source: host.currentURL, target: target, pinned: true, flags: flags, defaults: self.defaults) && self.stack.count < 5 {
@@ -153,11 +157,17 @@ public final class PeekController {
         // Factories create transient pages hidden. Only the shown top page is
         // visible; a refresh must not hide/show a page that stays on screen.
         for candidate in stack {
-            let hidden = !sourceIsVisible || candidate.id != item.id
+            let hidden = !sourceIsVisible || candidate.id != item.id || candidate.host?.liveState.isCrashed == true
             if candidate.host?.view.isHidden != hidden { candidate.host?.view.isHidden = hidden }
         }
         guard sourceIsVisible else { overlay.isHidden = true; return }
-        overlay.isHidden = false; if let host = item.host { overlay.showHost(host) }; overlay.needsLayout = true
+        overlay.isHidden = false
+        if let host = item.host {
+            overlay.showHost(host) { [weak self] in
+                guard self?.stack.last?.id == item.id else { return }; self?.dismissTop()
+            }
+        }
+        overlay.needsLayout = true
     }
     /// The sidebar row a Peek belongs to, read now: the split that holds the source tab,
     /// else the tab. A split made from the source tab, or dissolved, moves it.
