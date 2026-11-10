@@ -104,3 +104,18 @@ and fix-removal break-and-revert were not run: the brief's no-reproduction path
 requires no production change. The relevant full Profiles shell suite verifies
 the new guard's integration. A full merge gate and PR are outside this
 push-only handoff.
+
+## Fix (2026-11-10)
+
+The lead asked for the defensive fix even though the natural race did not reproduce. `OEWebContent` now remembers the URL that browser creation started with. When `loadURL:` lands after that snapshot and before the browser exists, `oe_browserCreated:` loads it once, if it differs from the creation URL. A failed history restore loads the newer navigation instead of the saved fallback, exactly once. Popups and adopted browser views are unchanged.
+
+Proof uses a test-only switch: `OPEN_AUTOMATION_BROWSER_CREATION_DELAY_MS` (1–5000 ms). It holds back the real creation call after the URL snapshot. It exists only under `#if DEBUG` and the `--open-automation` engine switch; Release ignores it.
+
+| Run | Result |
+|---|---|
+| `shell_pending_navigation_during_creation`, Debug, 1500 ms, the replay removed | 2/2 FAIL (M5) |
+| Same, with the fix | 5/5 PASS (M5) |
+| `shell_fresh_profile_first_navigation` (natural, no delay) | 3/3 PASS (M5) |
+| `shell_pending_navigation_delay_ignored_release`, automation Release build | PASS (M1) |
+| Profiles shell full / `--only shell` | 0 FAIL / 0 FAIL (M5) |
+| `--only littleopen` / `--only features` (no crash probes) | 0 FAIL / 0 FAIL (M1) |
