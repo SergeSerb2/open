@@ -1,20 +1,21 @@
 diff --git a/cef/libcef/browser/browser_context.cc b/cef/libcef/browser/browser_context.cc
-index 456c6c2d4..fedb18e8b 100644
+index 456c6c2..aa98d5c 100644
 --- a/cef/libcef/browser/browser_context.cc
 +++ b/cef/libcef/browser/browser_context.cc
 @@ -8,6 +8,7 @@
  #include <memory>
  #include <utility>
- 
+
 +#include "base/command_line.h"
  #include "base/files/file_util.h"
  #include "base/lazy_instance.h"
  #include "base/logging.h"
-@@ -25,6 +26,16 @@
+@@ -25,6 +26,17 @@
  #include "content/public/browser/browser_task_traits.h"
  #include "content/public/browser/browser_thread.h"
  #include "content/public/browser/storage_partition.h"
 +#include "cef/include/cef_app.h"
++#include "open/adblock/open_adblock_cache.h"
 +#include "open/adblock/open_adblock_service.h"
 +
 +#if !defined(OFFICIAL_BUILD)
@@ -24,11 +25,11 @@ index 456c6c2d4..fedb18e8b 100644
 +#include "base/task/single_thread_task_runner.h"
 +#include "open/adblock/open_adblock_selftest.h"
 +#endif
- 
+
  using content::BrowserThread;
- 
-@@ -208,11 +219,73 @@ void CefBrowserContext::Initialize() {
- 
+
+@@ -208,11 +220,73 @@ void CefBrowserContext::Initialize() {
+
    iothread_state_ = base::MakeRefCounted<CefIOThreadState>();
    cookieable_schemes_ = MakeSupportedSchemes(settings_);
 +
@@ -92,19 +93,19 @@ index 456c6c2d4..fedb18e8b 100644
 +  }
 +#endif  // !defined(OFFICIAL_BUILD)
  }
- 
+
  void CefBrowserContext::Shutdown() {
    CEF_REQUIRE_UIT();
- 
+
 +  ShutdownOpenAdBlockService();
 +
  #if DCHECK_IS_ON()
    is_shutdown_ = true;
  #endif
-@@ -230,6 +303,29 @@ void CefBrowserContext::Shutdown() {
+@@ -230,6 +304,30 @@ void CefBrowserContext::Shutdown() {
    weak_ptr_factory_.InvalidateWeakPtrs();
  }
- 
+
 +void CefBrowserContext::ShutdownOpenAdBlockService() {
 +  CEF_REQUIRE_UIT();
 +  // Open: stop ad blocking first; pending builds are dropped, and the
@@ -124,6 +125,7 @@ index 456c6c2d4..fedb18e8b 100644
 +  if (!open_adblock_service_) {
 +    open_adblock_service_ =
 +        std::make_unique<open_engine::OpenAdBlockService>(cache_path_);
++    open_engine::ConfigureAdBlockRendererCache(this, open_adblock_service_.get());
 +  }
 +  return open_adblock_service_.get();
 +}
@@ -132,13 +134,13 @@ index 456c6c2d4..fedb18e8b 100644
    CEF_REQUIRE_UIT();
    request_context_set_.insert(context);
 diff --git a/cef/libcef/browser/browser_context.h b/cef/libcef/browser/browser_context.h
-index 4565128ee..e7cbb0037 100644
+index 4565128..e7cbb00 100644
 --- a/cef/libcef/browser/browser_context.h
 +++ b/cef/libcef/browser/browser_context.h
 @@ -22,6 +22,10 @@
  #include "ui/base/page_transition_types.h"
  #include "url/origin.h"
- 
+
 +namespace open_engine {
 +class OpenAdBlockService;
 +}
@@ -147,9 +149,9 @@ index 4565128ee..e7cbb0037 100644
  // Classes used in request processing (network, storage, service, etc.):
  //
 @@ -164,6 +168,12 @@ class CefBrowserContext {
- 
+
    CefMediaRouterManager* GetMediaRouterManager();
- 
+
 +  // Open: this context's ad-block service (docs/plans/adblock-fork.md §6).
 +  // Created on first use; nullptr after Shutdown(). UI thread only.
 +  open_engine::OpenAdBlockService* open_adblock_service();
@@ -165,6 +167,6 @@ index 4565128ee..e7cbb0037 100644
    std::unique_ptr<CefMediaRouterManager> media_router_manager_;
 +  std::unique_ptr<open_engine::OpenAdBlockService> open_adblock_service_;
 +  bool open_adblock_shut_down_ = false;
- 
+
    // CefRequestContextImpl objects referencing this object.
    std::set<raw_ptr<CefRequestContextImpl>> request_context_set_;
