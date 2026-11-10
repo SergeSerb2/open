@@ -7268,6 +7268,7 @@ def page_checks(factory, results, tmp, style="alloy"):
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)
+    page_tools_clear_checks(factory, results, tmp, style)
     capture_checks(factory, results, tmp)
     page_commands_checks(factory, results, tmp)
     page_engine_checks(factory, results, tmp)
@@ -11434,33 +11435,10 @@ def page_tools_appearance_checks(app, results, port, style):
     app.call("close", tab=tab)
 
 
-def page_tools_clear_checks(app, results, port, style):
-    """K1, K2: Clear Cookies and Refresh (interim before Site Control E2); Clear Cache disabled."""
-    hosts = ["127.0.0.1", "localhost"]
-    tabs = []
-    for index, host in enumerate(hosts):
-        tab = app.call("open", url="http://%s:%d/cookies.html" % (host, port))["id"]
-        app.call("wait", tab=tab)
-        app.eval(tab, "window.setFixtureCookie('k%d')" % (index + 1))
-        tabs.append(tab)
-    before = [app.eval(t, "document.cookie") for t in tabs]
-    load_id = app.eval(tabs[0], "window.cookieLoadId")
-    app.call("select", tab=tabs[0])
-    wait_until(lambda: app.call("window-state")["selected"] == tabs[0], timeout=5, step=.1)
-    enabled = (_menu_row(app, "clear-cookies-and-refresh") or {}).get("enabled")
-    app.call("command", id="clear-cookies-and-refresh")
-    reloaded = wait_until(lambda: (lambda v: v if v and v != load_id else None)(
-        app.eval(tabs[0], "window.cookieLoadId")), timeout=10, step=.2)
-    after = [app.eval(t, "document.cookie") for t in tabs]
-    results["K1_clear_cookies_and_refresh_" + style] = {
-        "ok": enabled is True and before == ["k1=127.0.0.1", "k2=localhost"] and bool(reloaded)
-        and after == ["", "k2=localhost"],
-        "enabled": enabled, "before": before, "after": after, "reloaded": bool(reloaded),
-        "interim": "host cookies of the page's host via clearBrowsingData(origin:); Site Control E2 pending"}
-    cache = _menu_row(app, "clear-cache-and-refresh") or {}
-    results["K2_clear_cache_disabled_before_E2_" + style] = {"ok": cache.get("enabled") is False, "row": cache}
-    for tab in tabs:
-        app.call("close", tab=tab)
+def page_tools_clear_checks(factory, results, tmp, style):
+    """K1/K2: origin cache and full cookie clear through View's real menu."""
+    runpy.run_path(os.path.join(ROOT, 'tools/e2e/page_site_data.py'))['run'](
+        factory, results, tmp, style, sys.modules[__name__])
 
 
 # Ids of the selected tabs of the DevTools front end (every tabbed pane, shadow roots included).
@@ -11704,7 +11682,6 @@ def page_tools_checks(factory, results, tmp, style):
         app.call("wait", tab=app.call("tabs")[0]["id"])
         page_tools_apple_events_checks(app, results)
         page_tools_appearance_checks(app, results, port, style)
-        page_tools_clear_checks(app, results, port, style)
         page_tools_devtools_checks(app, results, port, style)
         page_tools_developer_mode_checks(app, results, port)
         page_tools_troubleshooting_checks(app, results, tmp, port, style)
@@ -12312,6 +12289,7 @@ def main():
     ap.add_argument("--only", choices=["onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import"])
+    ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument('--features-passwords-engine-safety', action='store_true',
                     help='features: prove ignored save offers with main App code and no password delegate')
@@ -12334,6 +12312,8 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.page_site_data_only and opts.only != "page":
+        ap.error("--page-site-data-only requires --only page")
     _CONTINUE_ON_TIMING_FAILURE = opts.continue_on_timing_failure
     if opts.stop_on_app_death:
         _SUITE_CRASH_BASELINE = _open_crash_reports()
@@ -12686,7 +12666,7 @@ def main():
             module.run(factory, results[opts.only], tmp, globals())
         elif opts.only == "page":
             results["page"] = CheckedResults(tracker)
-            page_checks(factory, results["page"], tmp, opts.style)
+            (page_tools_clear_checks if opts.page_site_data_only else page_checks)(factory, results["page"], tmp, opts.style)
         elif opts.only in ("toolbar", "numbering"):
             results[opts.only] = CheckedResults(tracker)
             (toolbar_checks if opts.only == "toolbar" else numbering_checks)(factory, results[opts.only], tmp)

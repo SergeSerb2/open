@@ -911,11 +911,19 @@ Section 8 decisions, where this section left a choice open:
 | Command | With Site Control E2 | Before E2 |
 |---|---|---|
 | `clear-cookies-and-refresh` | `clearSiteData(origin:kinds:[.cookies])` for the focused page's origin, then `reload()` | `clearBrowsingData(origin:)`, then `reload()` (shipped in Section 8: it clears the host cookies of the page's host only; `Domain=` cookies stay and the HTTP cache is untouched, OEBrowserContext.mm `DeleteCookies(url, "")`; the earlier note that it drops every site's cache was wrong) |
-| `clear-cache-and-refresh` | `clearSiteData(origin:kinds:[.cache])`, then `reloadIgnoringCache()` | disabled (enabled key `siteDataClearAvailable`), like the Site Control panel's Clear Cache |
+| `clear-cache-and-refresh` | `clearSiteData(origin:kinds:[.cache])`, then `reloadIgnoringCache()` | disabled, like the Site Control panel's Clear Cache |
 
-Scope follows Chromium's Clear-Site-Data rules for the origin's site
-(PG-9: per site; guess). No toast: the reload is the feedback (guess).
-Peek: the top Peek page.
+Cache scope is the exact origin (scheme, host and port). Cookies match the host
+and parent Domain cookies across schemes and ports. Parent Domain cookies are
+shared with siblings; sibling and parent host-only cookies stay. This relies on
+Chromium refusing public-suffix Domain cookies (see `OESiteControl.h`).
+The focused page's own context includes private windows and the top Peek page.
+Successful completion refreshes if the page is still live in the same origin;
+hash and pushState changes do not suppress it. Closed pages or changed origins
+do not refresh. A second clear for the same page while one runs does nothing.
+Success has no toast; failure shows "Site data could not be cleared." with no
+URL or engine error text. The task is not canceled on close; the closed/delegate
+and origin guards refuse a stale refresh after completion.
 
 ### 4.10 Developer menu
 
@@ -1334,8 +1342,9 @@ the enabled answer. `commands-dump` must still pass (it reads registry
 titles, not runtime titles).
 
 New `EnabledKey` values: `hasWebPage` (live http(s), file, or data page in
-the focused host), `siteDataClearAvailable` (E2 landed and the page is
-http(s)), `isTracing`, `notTracing`.
+the focused host), `isTracing`, `notTracing`. Both site-clear commands register
+`hasCurrentTab`; the factory's `isPageToolEnabled` adds the shared live HTTP(S) guard
+for menus, command-bar filtering and dispatch.
 
 | Command id | Handler | Enabled key | Menu state |
 |---|---|---|---|
@@ -1343,8 +1352,8 @@ http(s)), `isTracing`, `notTracing`.
 | `zoom-in`, `zoom-out`, `zoom-actual-size` | existing host calls + §4.3 toast | `hasCurrentTab` | — |
 | `capture-page`, `capture-full-page`, `capture-portrait` | `CaptureController` (§4.6) | `hasWebPage` | — |
 | `appearance-automatic`, `-light`, `-dark` | §4.8 | always | checkmark on the current value |
-| `clear-cache-and-refresh` | §4.9 | `siteDataClearAvailable` | — |
-| `clear-cookies-and-refresh` | §4.9 | `hasWebPage` | — |
+| `clear-cache-and-refresh` | §4.9 | `hasCurrentTab` + live HTTP(S) guard | — |
+| `clear-cookies-and-refresh` | §4.9 | `hasCurrentTab` + live HTTP(S) guard | — |
 | `javascript-console`, `inspect-elements`, `network-inspector` | §4.10.1 | `hasCurrentTab` | — |
 | `toggle-developer-mode` | §4.10.3 | always | title "Turn on/off Developer Mode for this site"; hidden without an http(s) or file page |
 | `allow-js-apple-events` | §4.10.2 | always | checkmark |
@@ -1497,8 +1506,10 @@ report `blocked: EP-n`, never pass):
 | X6 | Undo after translate → original text |
 | A1 | `command appearance-dark` → `scheme.html` `matchMedia` dark in Alloy and hosted tabs, no reload (`events` has no load) |
 | A2 | `appearance-automatic` + `app-appearance value=dark` then `value=light` → `scheme.html` follows each time |
-| K1 | `cookies.html` on two hosts → `clear-cookies-and-refresh` on host 1 → host 1 cookie gone, host 2 cookie kept (E2), page reloaded |
-| K2 | `clear-cache-and-refresh` disabled before E2 (`menu-state`) |
+| K1 | A, unrelated B, A's sibling subdomain and A's host on a second port seed HTTP cache → View ▸ Clear Cache and Refresh on A → only A refetches; the other three stay cached; all cookie sets stay, page reloads |
+| K2 | View ▸ Clear Cookies and Refresh on A → A host and parent-domain cookies disappear; the shared Domain cookie also leaves sibling/parent, whose own host-only cookies stay; B cookies and all four caches stay, page reloads; private clears preserve the parent Profile |
+| K_same_origin_hash_refresh / K_inflight_clear_deduplicated | Automation-only bounded completion barrier holds the real clear before refresh → hash changes and a second menu invocation → one engine clear and one real document reload; no backend is substituted |
+| K_internal_commands_disabled / K_internal_commandbar_unavailable | Both menu actions disabled/refused and both command-bar entries absent on each of about:blank, file: and open://welcome |
 | D1 | `javascript-console` opens DevTools on the Console panel (DevTools page URL has `panel=console` or its first view is Console via `pages`) |
 | D2 | `network-inspector` → Network panel (EP-4b) |
 | D3 | `toggle-developer-mode` → `menu-state` title flips; URL field shows the full URL |
@@ -1534,7 +1545,7 @@ tagged `[APP]` need app-shell Steps B and C on `main` (real window, menus,
 | 3 | [APP] + [OpenEngine only] | Copy URL family (interim quote), zoom toast, EP-5 | 1, 2, app-shell C | T-E1, T-E2, Q1, Q3, Q4, Z1–Z4 pass; Q2 blocked |
 | 4 | [OpenEngine only] | EP-4a, EP-9a, EP-10a(+b), EP-11, EP-12 | — | `docs/engine-api.md` updated; `--only features` still passes; Step 5's D1, A1, H1, H2, H4 pass once Step 5 lands |
 | 5 | [APP] | Website appearance, Developer panels, Allow JS from Apple Events, Troubleshooting, Cast hidden | 2, 4 | A1, A2, D1, D4, H1–H4 pass; D2 blocked until EP-4b |
-| 6 | [APP] | Clear Cache / Clear Cookies and Refresh (interim cookie path) | 2; Site Control E2 for the cache row | K1 (interim: host-1 cookie gone), K2 |
+| 6 | [APP] | Clear Cache / Clear Cookies and Refresh through Site Control E2 | 2; Site Control E2 | K1/K2, private context, internal/file guards, command-bar availability |
 | 7 | [APP] | Notifications: plists, authorization, Site Control tile line, P1 activation rules | app-shell D, P1 | N1, N2, N3, N6 pass (U-N1 done once) |
 | 8 | [OpenKit] | Sleep `.notifications` gate | — (keep-alive gate is on `main`) | `sleep-demo` new rows; N5 |
 | 9 | [OpenKit] | `OpenTranslate` target, runtime JS, detector, backend; `URLStatusButton`; popover | 1 | `openkit lang-detect`; `features-render` R-X1; `sidebar-render` S-US1 |
@@ -1561,7 +1572,7 @@ Paths below are relative to `Packages/OpenKit/Sources/` unless they start with `
 | 3 | [#163](https://github.com/SergeSerb2/open/pull/163); `page` T-E1/T-E2, Q1/Q3/Q4, Z1/Z2/Z4 | `App/Page/PageCommands.swift`. EP-5 needs no engine change: resetZoom already resets pinch scale. |
 | 4 | [#164](https://github.com/SergeSerb2/open/pull/164); `page` D1/D2, A1/A2, H2/H4 | `Engine/OpenEngine/src/{OEWebContent,OEBrowserContext,OEEngine}.mm`; EP-4a/9a/10/11/12. H1 needs a live Chrome-style page; Alloy H1 is BLOCKED. |
 | 5 | [#164](https://github.com/SergeSerb2/open/pull/164); A1/A2, D1/D4, H2–H4 | `App/Page/{WebsiteAppearance,PageToolsCommands,TroubleshootingActions}.swift`. D4 setting/checkmark pass; osascript execute is BLOCKED until App OpenScripting integration. Cast stays hidden. |
-| 6 | [#164](https://github.com/SergeSerb2/open/pull/164); K1/K2 | `App/Page/PageToolsCommands.swift`. Host cookies only; Clear Cache stays disabled until Site Control E2. |
+| 6 | [#164](https://github.com/SergeSerb2/open/pull/164), extended by `s12/clear-site-data`; K1/K2 | `App/Page/PageSiteDataCommands.swift`. Exact-origin HTTP cache and host/parent-domain cookies through Site Control E2, then refresh in the focused page's context. |
 | 7 | [#160](https://github.com/SergeSerb2/open/pull/160); N1 engine display/list, N2 helper/list, N3 activation/click, N6 engine display | `App/Page/NotificationAuthorization.swift`, `Helper/Info-Alerts.plist`. N1 macOS delivery (U-N1) and N6 clients.openWindow (P1) are BLOCKED. |
 | 8 | [#156](https://github.com/SergeSerb2/open/pull/156); `sleep-demo` 172/172; `sleep_n5_notifications` | `OpenSleep/SleepPolicy.swift`, `App/Sleep/AppSleepCoordinator.swift`. Permission gate follows commits and permission changes. |
 | 9 | [#152](https://github.com/SergeSerb2/open/pull/152); `lang-detect` 17/17, R-X1, S-US1 | `OpenTranslate/`, `OpenFeatures/Translate/`, `OpenSidebar/URLStatusButton.swift`, `OpenDesign/TranslateTokens.swift`. Tokens/layout differ from planned file names. |

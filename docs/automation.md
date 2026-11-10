@@ -1212,6 +1212,25 @@ two preferences it writes (`open.web.colorScheme`,
 `open.developer.allowJavaScriptFromAppleEvents`), because the preferences
 domain is shared between runs.
 
+`--only page --page-site-data-only` runs the View menu K1/K2 rows and their
+private-context, internal/file-page, and command-bar guards. The local servers in
+`tools/e2e/page_site_data.py` use mapped `.test` hosts on two ephemeral ports,
+host and parent-domain cookies, and server counts for immutable HTTP resources.
+The cache boundary includes a sibling subdomain and the same host on another
+port. Cookie rows keep the sibling's and parent's own host-only cookies while
+removing the shared Domain cookie. All three guard URLs check command-bar absence.
+The fixture restores
+`open.general.searchSuggestNoticeDismissed` in `finally`.
+
+`page-site-data-probe action=hold tab=ID` observes one page's clear and holds
+delivery of its real success before the App refresh guard. It does not replace
+the engine clear. `action=state` returns `held`, `waiting`, `starts`, `completions`
+and `refreshes`; `action=release` resumes it. One continuation is allowed and a
+ten-second automatic release bounds failures. These Debug automation-only hooks
+prove a hash change during the operation still refreshes and a second menu
+invocation does nothing. The fixture releases in `finally`. Engine failure and
+private-context destruction still need separate real-backend proofs.
+
 | Command | Args | Does |
 |---|---|---|
 | `menu-state` | — | Each row also reports `checked` (`state == .on`) and `hidden`. |
