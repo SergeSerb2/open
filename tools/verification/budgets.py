@@ -298,7 +298,8 @@ def rows_from(receipt, fail_demo=False):
     elif group == 'first-run':
         # docs/status.md F12; docs/first-run/steps-ef-verification.md Release timing.
         for label, values, limit in (
-            ('first-run first content', [s.get('first_content', s.get('welcome', {}))['sidebarDrawn']
+            ('first-run first content', [s.get('first_content', s.get('welcome', {})).get('firstWindowDrawn',
+                                            s.get('first_content', s.get('welcome', {})).get('sidebarDrawn'))
                                          for s in data.get('samples', [])], 250),
             ('first-run imported paint', [s['imported_paint_ms'] for s in data.get('samples', [])], 700)):
             add(label, limit, statistics.median(values) if len(values) == 5 else None,

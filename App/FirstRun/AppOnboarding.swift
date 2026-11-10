@@ -3,7 +3,8 @@ import QuartzCore
 import OpenOnboarding
 
 extension AppDelegate {
-  /// First-run only. No scene or window exists while engine.start blocks.
+  /// First-run only. Audio preparation runs off main while the static room
+  /// is presented and engine.start blocks.
   /// Returning launches never enter this preparation path.
   func prepareOnboardingSound() {
     guard preparedOnboardingSound == nil else { return }
@@ -20,14 +21,47 @@ extension AppDelegate {
   /// This is the only production entrance into OpenOnboarding. Returning and
   /// skip-first-run launches do not initialize a scene, resource or player.
   func showOnboarding(replay: Bool) {
-    if let controller = onboardingWindowController, !controller.isFinishing || controller.window?.isVisible == true {
-      // Launch and engine-ready callbacks can both reach this while playback
-      // is scheduled and the window is still unshown. Keep that one start.
-      if controller.window?.isVisible == true { controller.showWindow(nil) }
-      return
+    guard !terminationRequested else { return }
+    if let controller = onboardingWindowController, controller.isFinishing {
+      if controller.window?.isVisible == true { controller.showWindow(nil); return }
+      controller.stop(); onboardingWindowController = nil
     }
     guard replay || !onboardingHandedOff else { return }
-    prepareOnboardingSound()
+    if onboardingWindowController == nil {
+      prepareOnboardingSound()
+      #if OPEN_AUTOMATION
+      let pacingRegion = IntroPacingTrace.begin("onboarding.controller.create")
+      defer { pacingRegion?.end() }
+      onboardingStartup["windowCreationHostTime"] = CACurrentMediaTime()
+      #endif
+      guard let sound = preparedOnboardingSound else { return }
+      preparedOnboardingSound = nil
+      let controller = OnboardingWindowController(options: options, replay: replay, preparedSound: sound)
+      #if OPEN_AUTOMATION
+      controller.onFirstFrame = { [weak self] in self?.startAutomationIfNeeded() }
+      #endif
+      controller.favoriteIcons = OnboardingFavicons(app: self)
+      onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
+      controller.onHandoff = { [weak self] in
+        guard let self else { return }
+        onboardingHandedOff = true
+        showFirstRunSteps(replay: replay)
+      }
+      controller.onRelease = { [weak self, weak controller] receipt, baseline in
+        guard let self, let controller, onboardingWindowController === controller else { return }
+        onboardingReceipt = receipt
+        onboardingWindowController?.stop(); onboardingWindowController = nil
+        // Drop the window, bitmap backing and scene before the post-hand-off
+        // resident read. Retain only a small value receipt for automation.
+        Task { @MainActor [weak self] in
+          try? await Task.sleep(for: .milliseconds(100))
+          var final = receipt
+          final["residentDeltaAfterHandoff"] = Int64(OnboardingWindowController.residentBytes())-Int64(baseline)
+          self?.onboardingReceipt = final
+        }
+      }
+      controller.showPlaceholder()
+    }
     guard engineReady else { return }
     if isFirstRun && !firstRunSaved && !onboardingEngineSettled {
       guard onboardingStartObserver == nil else { return }
@@ -46,39 +80,7 @@ extension AppDelegate {
       if let observer { CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes) }
       return
     }
-    onboardingWindowController?.stop()
-    #if OPEN_AUTOMATION
-    let pacingRegion = IntroPacingTrace.begin("onboarding.controller.create")
-    defer { pacingRegion?.end() }
-    onboardingStartup["windowCreationHostTime"] = CACurrentMediaTime()
-    #endif
-    guard let sound = preparedOnboardingSound else { return }
-    preparedOnboardingSound = nil
-    let controller = OnboardingWindowController(options: options, replay: replay, preparedSound: sound)
-    #if OPEN_AUTOMATION
-    controller.onFirstFrame = { [weak self] in self?.startAutomationIfNeeded() }
-    #endif
-    controller.favoriteIcons = OnboardingFavicons(app: self)
-    onboardingWindowController = controller; onboardingActivated = true; onboardingReceipt = nil
-    controller.onHandoff = { [weak self] in
-      guard let self else { return }
-      onboardingHandedOff = true
-      showFirstRunSteps(replay: replay)
-    }
-    controller.onRelease = { [weak self, weak controller] receipt, baseline in
-      guard let self, let controller, onboardingWindowController === controller else { return }
-      onboardingReceipt = receipt
-      onboardingWindowController?.stop(); onboardingWindowController = nil
-      // Drop the window, bitmap backing and scene before the post-hand-off
-      // resident read. Retain only a small value receipt for automation.
-      Task { @MainActor [weak self] in
-        try? await Task.sleep(for: .milliseconds(100))
-        var final = receipt
-        final["residentDeltaAfterHandoff"] = Int64(OnboardingWindowController.residentBytes())-Int64(baseline)
-        self?.onboardingReceipt = final
-      }
-    }
-    controller.showIntro(measureFrames: options.measureIntroFrames)
+    onboardingWindowController?.showIntro(measureFrames: options.measureIntroFrames)
   }
   func showFirstRunSteps(replay: Bool = false) {
     guard let onboarding = onboardingWindowController, let window = onboarding.window else { return }

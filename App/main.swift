@@ -57,11 +57,11 @@ app.setActivationPolicy(.regular)
 LaunchTiming.shared.phase("finishLaunchingBegin")
 app.finishLaunching()
 LaunchTiming.shared.phase("finishLaunchingEnd")
-// First run has no window until the engine and its first native loop burst
-// return. Returning launches keep this snapshot-before-engine path unchanged.
-if !appDelegate.isFirstRun {
+// Draw either the native first-run room or the restored browser before the
+// synchronous engine start. Intro animation/audio keep their own later clock.
 appDelegate.drawWindowsBeforeEngine()
-LaunchTiming.shared.phase("sidebarSubmitted")
+LaunchTiming.shared.phase("firstWindowSubmitted")
+if !appDelegate.isFirstRun { LaunchTiming.shared.phase("sidebarSubmitted") }
 
 // Wait for a display callback whose last refresh is later than the flushed
 // window transaction. Chromium's observers must first run in its own loop,
@@ -90,12 +90,18 @@ if appDelegate.terminationRequested {
 }
 LaunchTiming.shared.recordFirstFrame(confirmed: firstFrame.presented)
 if firstFrame.presented {
+  LaunchTiming.shared.mark("firstWindowDrawn")
+  #if OPEN_AUTOMATION
+  if appDelegate.isFirstRun { appDelegate.onboardingStartup["firstWindowFrameHostTime"] = CACurrentMediaTime() }
+  #endif
+  if !appDelegate.isFirstRun {
   LaunchTiming.shared.mark("sidebarDrawn")
   #if OPEN_AUTOMATION
   LaunchTiming.shared.recordSidebarImages()
   appDelegate.recordFirstFrameMenuProbe()
   LaunchTiming.shared.postKeyReadinessProbe(to: appDelegate.frontWindowController?.window)
   #endif
+  }
 } else {
   // An off-screen/asleep display may never tick. Presentation confirmation
   // is measurement evidence, not a requirement for starting the browser.
@@ -104,7 +110,6 @@ if firstFrame.presented {
 }
 
 appDelegate.firstRunWindowController?.startProbeAfterDisplay()
-}
 
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.
@@ -159,6 +164,14 @@ do {
   #if OPEN_AUTOMATION
   let pacingRegion = IntroPacingTrace.begin("engine.start")
   defer { pacingRegion?.end() }
+  #endif
+  #if OPEN_AUTOMATION
+  // Bounded real-start latency fixture. The submitted native frame must stay
+  // visible while the main thread is blocked, just as with slow CefInitialize.
+  if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_ENGINE_START_DELAY_MS"],
+     let delay = Int(raw), (1...5000).contains(delay) {
+    Thread.sleep(forTimeInterval: Double(delay)/1000)
+  }
   #endif
   try OEEngine.shared.start(configuration: configuration)
 } catch {
@@ -217,7 +230,7 @@ enum CodeSignature {
 
 
 /// A display tick reports the last screen refresh. A refresh after submission
-/// confirms that the window server has had the flushed sidebar transaction.
+/// confirms that the window server has had the flushed native window transaction.
 @MainActor
 final class FirstWindowFrameObserver: NSObject {
   private weak var view: NSView?

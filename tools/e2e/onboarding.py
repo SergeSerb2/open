@@ -15,6 +15,8 @@ import time
 
 
 def run(factory, results, tmp, h):
+    if os.environ.get('OPEN_E2E_FIRST_WINDOW_ONLY') == '1':
+        return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/first_window.py'))['run'](factory, results, tmp, h)
     if os.environ.get('OPEN_E2E_ONBOARDING_STEPS_ONLY') == '1':
         return runpy.run_path(str(Path(h.ROOT)/'tools/e2e/onboarding_steps.py'))['run'](factory, results, tmp, h)
     source = Path(tmp)/'intro-arc-synthetic'
@@ -87,7 +89,7 @@ def run(factory, results, tmp, h):
         results['frame_window_completed'] = dict(ok=measured['frameStats']['count'] >= 30
             and not measured['frameStats']['running'], load=os.getloadavg())
         static = measured.get('preAnimationStatic') or {}
-        static_pred = lambda s: s.get('windowVisible') is False and s.get('dimVisible') is False \
+        static_pred = lambda s: s.get('windowVisible') is True and s.get('dimVisible') is False \
             and all(s.get(k, {}).get('layerCount', 0) > 0 and not s[k].get('animationKeys') \
                     and s[k].get('presentationDifferences') == 0 for k in ('scene', 'dim')) \
             and s.get('musicStarted') is False and abs(s.get('scheduledPlayhead', 1)) <= .002 \
@@ -107,17 +109,18 @@ def run(factory, results, tmp, h):
             and timing['workerReady'] <= timing['startRequest']+.3
             and timing['t0'] == measured['animationStartHostTime'], timestamps=timing, load=os.getloadavg())
         startup = measured.get('startup', {})
-        order = [startup.get(k) for k in ('launchHostTime', 'engineStartBeginHostTime',
-            'engineStartEndHostTime', 'engineSettledHostTime', 'windowCreationHostTime', 'firstOnboardingFrameHostTime')]
-        results['engine_before_first_run_window'] = dict(ok=all(isinstance(t, (int, float)) for t in order)
-            and order == sorted(order) and startup.get('windowsBeforeEngineSettled') == 0,
+        order = [startup.get(k) for k in ('launchHostTime', 'windowCreationHostTime', 'firstWindowFrameHostTime', 'engineStartBeginHostTime',
+            'engineStartEndHostTime', 'engineSettledHostTime', 'firstOnboardingFrameHostTime')]
+        results['first_run_window_before_engine'] = dict(ok=all(isinstance(t, (int, float)) for t in order)
+            and order == sorted(order) and startup.get('windowsBeforeEngineSettled') == 1,
             timestamps=startup, load=os.getloadavg())
         results['launch_to_first_onboarding_frame'] = dict(status='INFO', startup=startup,
             firstLaunchAfterBuild=app.first_launch_after_build,
             firstFrameAfterAnimationMS=(measured['firstFrameHostTime']-measured['animationStartHostTime'])*1000,
-            reason='first onboarding frame waits for synchronous engine.start and its first native message-loop burst',
+            reason='static firstWindowDrawn precedes engine.start; this later mark measures the first animated intro frame',
             load=os.getloadavg())
         if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
+        runpy.run_path(str(Path(h.ROOT)/'tools/e2e/first_window.py'))['run'](factory, results, tmp, h)
         # Run every existing functional predicate on a separate unmeasured
         # launch. Its early keys, phase polling and PNGs cannot perturb frames.
         launch()

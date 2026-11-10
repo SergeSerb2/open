@@ -78,7 +78,7 @@ def run(kind, h, app_bundle, scratch, data_root):
         # firstrun.py F12 and docs/first-run/steps-ef-verification.md:
         # Five fresh roots: the first confirmed first-run frame is now Intro,
         # not the later Name/Welcome step (first-run plan's 2026-11-08 errata).
-        # Keep kernel start -> sidebarDrawn, and landing -> imported-page FCP.
+        # Keep kernel start -> firstWindowDrawn, and landing -> imported-page FCP.
         import firstrun
         source = data_root / 'fixtures'
         firstrun.fixture(source)
@@ -110,7 +110,7 @@ def run(kind, h, app_bundle, scratch, data_root):
                 # resets the process-start clock or creates a timing mark.
                 timing = app.call('timing')
                 if (not timing.get('kernelProcessStart') or not timing.get('firstFrameConfirmed')
-                        or 'sidebarDrawn' not in timing):
+                        or 'firstWindowDrawn' not in timing):
                     raise RuntimeError('first-run kernel/frame timing missing')
                 intro = app.call('onboarding')
                 if not intro.get('active') or intro.get('screen') != 'intro':
@@ -137,7 +137,7 @@ def run(kind, h, app_bundle, scratch, data_root):
                 if not h.wait_until(lambda: 'firstContentfulPaint' in app.call('timing'), timeout=15, step=.1):
                     raise RuntimeError('imported first paint missing')
                 landed = app.call('timing')
-                if ('firstRunLandingStarted' not in landed or landed['sidebarDrawn'] != timing['sidebarDrawn']
+                if ('firstRunLandingStarted' not in landed or landed['firstWindowDrawn'] != timing['firstWindowDrawn']
                         or next(t for t in app.call('tabs') if t['selected'])['id'] != imported['id']):
                     raise RuntimeError('first-run launch/landing timing identity changed')
                 app.call('first-run', action='continue')

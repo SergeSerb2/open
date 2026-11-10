@@ -66,21 +66,29 @@ expired main-actor task from synchronous engine startup cannot discard a ready
 player. The receipt includes `prepareStart`, `workerReady`, `startRequest`,
 `decision` and actual animated `t0` host timestamps.
 
-First run prepares audio off main while the engine starts, without creating an
-onboarding window or dim overlay. After `engine.start` and the first native
-message-loop burst return, it creates and rasterizes the scene while unshown.
-Playback uses the common 80 ms lead. At t=0 it submits the window, every scene
-track and the dim fade together; the first visible intro frame is animated.
-The pre-start guard checks that both windows are unshown, all scene/dim
-animation keys are empty, and music has not started. Missing presentation layers
-are reported as such while unshown, never replaced by model layers.
+First run prepares audio off main and shows the existing native intro window
+with its static room before `engine.start`. The native frame-confirmation path
+records `firstWindowDrawn` before starting Chromium. There is no separate splash
+screen, dim overlay, animation or music during engine startup. Continue, Esc
+and scene clicks cannot advance the intro before its timeline starts. Close
+and Quit remain available through the native launch loop.
 
-Launch-to-first-onboarding-frame is INFO for cold and repeat launches. Engine
-startup varied from 110 ms to 2,421 ms on the same executable, so there is no
-visible static-room budget or cold-only exception. Dyld/signature checks are a
-hypothesis, not an attributed cause. Audio/animation starts stay within 20 ms.
-Returning launches keep the snapshot-backed browser's confirmed frame before
-engine startup and create no onboarding scene or audio worker.
+After `engine.start` and the first native message-loop burst return, the same
+controller starts playback with the common 80 ms lead. At t=0 it submits the
+scene tracks and dim fade together. The pre-start guard checks that the intro
+window is visible, the dim window is unshown, all scene/dim animation keys are
+empty, and music has not started.
+
+`firstWindowDrawn` measures process birth to the confirmed static native frame.
+`firstOnboardingFrameHostTime` still means the first animated intro frame; its
+latency includes engine startup. These marks must not be confused with
+`sidebarDrawn`, which belongs only to the returning browser. Engine startup
+varied from 110 ms to 2,421 ms on the same executable. Dyld/signature checks
+remain a hypothesis. Audio/animation starts stay within 20 ms. Returning
+launches keep their existing snapshot path and create no onboarding scene or
+audio worker. Arc's recovered native onboarding window and initially empty
+Welcome foreground are documented in `docs/re/onboarding.md` §1–2; that static
+research does not establish an exact launch-to-window deadline.
 
 Automation measures display-link intervals over t=0–8 s from the first animated
 frame. `onboarding action=state` reports launch, engine start begin/end, native

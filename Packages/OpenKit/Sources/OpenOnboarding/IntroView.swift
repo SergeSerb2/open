@@ -404,7 +404,8 @@ public final class IntroView: NSView {
         NSAccessibility.post(element: button, notification: .layoutChanged)
     }
     public func skip() {
-        guard !handingOff else { return }
+        // The static first-launch room can be visible before the engine is ready.
+        guard animationStartHostTime > 0, !handingOff else { return }
         skipped = true
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for track in tracks { track.layer.removeAllAnimations() }

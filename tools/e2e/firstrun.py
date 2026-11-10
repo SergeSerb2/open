@@ -446,19 +446,19 @@ def run(factory, results, tmp, h):
             startup = app.call('onboarding').get('startup', {})
             timings.append(dict(marks=t, startup=startup, load=os.getloadavg()))
             app.quit()
-        # First run now creates its window after engine startup. sidebarDrawn
-        # still belongs to returning launches; do not invent that mark here.
+        # First run confirms the static native room before engine startup.
+        # sidebarDrawn still belongs only to returning browser windows.
         def first_frame_receipt(sample):
             startup = sample['startup']
-            order = [startup.get(key) for key in ('launchHostTime', 'engineStartBeginHostTime',
-                'engineStartEndHostTime', 'engineSettledHostTime', 'windowCreationHostTime', 'firstOnboardingFrameHostTime')]
+            order = [startup.get(key) for key in ('launchHostTime', 'windowCreationHostTime', 'firstWindowFrameHostTime', 'engineStartBeginHostTime',
+                'engineStartEndHostTime', 'engineSettledHostTime', 'firstOnboardingFrameHostTime')]
             return sample['marks'].get('kernelProcessStart') and all(isinstance(t, (int, float)) for t in order) \
-                and order == sorted(order) and startup.get('windowsBeforeEngineSettled') == 0 \
+                and order == sorted(order) and startup.get('windowsBeforeEngineSettled') == 1 \
                 and startup.get('launchToFirstOnboardingFrameMS', 0) > 0
-        row('F12_engine_before_first_frame', all(first_frame_receipt(t) for t in timings), samples=timings)
-        med = statistics.median(t['startup']['launchToFirstOnboardingFrameMS'] for t in timings)
+        row('F12_window_before_engine', all(first_frame_receipt(t) for t in timings), samples=timings)
+        med = statistics.median(t['marks']['firstWindowDrawn'] for t in timings)
         results['F12_first_content'] = dict(status='INFO', medianMs=med,
-            reason='first-run first content moved from about 0.37 s (old static room/window) to 3.2–3.4 s in the quiet proof by design: engine-first order; these five measured launches report their actual values',
+            reason='kernel process start to confirmed static intro frame; animated intro starts after engine readiness',
             samples=timings, load=os.getloadavg())
         binary_strings = subprocess.check_output(['strings', app.executable], text=True, errors='replace')
         import re

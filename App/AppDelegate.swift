@@ -400,6 +400,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       "pagesBeforeEngine": OEEngine.shared.allWebContents.count,
       "contextsBeforeEngine": OEEngine.shared.contexts.count,
       "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
+      "visibleOnboardingWindows": onboardingWindowController?.window?.isVisible == true ? 1 : 0,
+      "onboardingWindowNumber": onboardingWindowController?.window?.windowNumber ?? 0,
     ]
   }
 

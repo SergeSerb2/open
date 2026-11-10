@@ -101,7 +101,6 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     dim.identifier = .init("onboarding-dim"); dim.setAccessibilityElement(false)
     super.init(window: window)
     window.delegate = self; window.center()
-    window.addChildWindow(dim, ordered: .below)
     #if OPEN_AUTOMATION
     dimRegion?.end()
     screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -146,8 +145,16 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     #endif
   }
 
+  /// This is the same native window used by the intro and setup. No animation,
+  /// dim overlay or playback starts while the synchronous engine start blocks.
+  func showPlaceholder() {
+    guard let window, !window.isVisible, !closingForHandoff else { return }
+    showWindow(nil); window.makeKeyAndOrderFront(nil); window.makeFirstResponder(intro)
+    LaunchTiming.shared.mark("windowShown")
+  }
+
   /// The engine is already ready and has returned from its first source burst.
-  /// Keep both windows unshown until the common audio/animation start.
+  /// Start animation, dim fade and audio together over the visible static room.
   func showIntro(measureFrames: Bool) {
     guard let window, !started else { return }; started = true
     self.measureFrames = measureFrames
@@ -172,8 +179,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         lifecycle.append(Task { [weak self] in
           try? await Task.sleep(for: .seconds(max(0, hostTime-CACurrentMediaTime())), tolerance: .zero)
           guard !Task.isCancelled, let self, !closingForHandoff else { return }
-          // No window or animation is visible before this transition. Submit
-          // the window, scene and dim fade together at scheduled playback.
+          // Keep the existing window. Submit the animated scene and dim fade
+          // together at scheduled playback, after engine startup has settled.
           let start = CACurrentMediaTime()
           #if OPEN_AUTOMATION
           sound.animationWillStart(at: start)
@@ -184,6 +191,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
           #if OPEN_AUTOMATION
           let showRegion = IntroPacingTrace.begin("onboarding.window.show")
           #endif
+          window.addChildWindow(dim, ordered: .below)
           dim.orderFront(nil); showWindow(nil); window.makeKeyAndOrderFront(nil); window.makeFirstResponder(intro)
           #if OPEN_AUTOMATION
           showRegion?.end()
