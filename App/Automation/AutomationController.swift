@@ -446,6 +446,7 @@
         await Task.yield()
         return result
       case "sidebar-click": return try await sidebarClick(a)
+      case "favorite-click": return try await favoriteClick(a)
       case "sidebar-key": return try await sidebarKey(a)
       case "hover": return try await sidebarHover(a)
       case "selection": return try sidebarController(a).context.selection.ids.map(\.description)
@@ -1921,6 +1922,24 @@
         let outline = controller.sidebar.focusedOutline, favorite || !outline.visibleRect.isEmpty else { throw Failure(message: "no visible sidebar target") }
       let root = controller.contentView.convert(frame, from: controller.sidebar)
       return NSPoint(x: root.midX, y: root.midY)
+    }
+
+    /// A real NSEvent click on a Favorites tile (through NSApp.sendEvent and hit testing),
+    /// with the view chain that hit testing returns at that point.
+    private func favoriteClick(_ args: [String: Any]) async throws -> Any {
+      let controller = try sidebarController(args)
+      let point = try sidebarPoint(args, controller: controller, favorite: true)
+      guard let target = controller.window, let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no browser window") }
+      try await activateForInput(target)
+      let windowPoint = controller.contentView.convert(point, to: nil)
+      var chain: [String] = []
+      var view = target.contentView?.superview?.hitTest(windowPoint) ?? target.contentView?.hitTest(windowPoint)
+      while let current = view, chain.count < 16 { chain.append(String(describing: type(of: current))); view = current.superview }
+      _ = try await mouse(["action": "click", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y),
+        "queued": args["queued"] as? Bool ?? true], factory)
+      try await Task.sleep(nanoseconds: 300_000_000)
+      return ["point": [point.x, point.y], "hitChain": chain, "selected": factory.selectedNodeID?.description ?? "",
+        "selectedTab": factory.selectedTab?.id.description ?? ""] as [String: Any]
     }
 
     private func sidebarClick(_ args: [String: Any]) async throws -> Any {
