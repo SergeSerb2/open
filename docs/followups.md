@@ -377,6 +377,13 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 12 Boost App runtime limits
 
+- PR #277 review F6: harden `AppBoostPickerMessage.validSelector` with a
+  quote/escape-aware scan that rejects CSS structure characters (`{`, `}`, `;`),
+  comment starts (`/*`) and newlines outside quoted attribute strings. Preserve
+  legitimate quoted values. Both current CSS consumers call `querySelector`
+  before constructing rules, so the review found no CSS breakout. Imported or
+  hand-edited selectors can still swallow later rules or leave dead entries.
+  Owner: Section 12 follow-up; this PR keeps its existing selector validation.
 - B5 is **BLOCKED: engine defect, targeted by #202 patch 0602** (lead, 2026-11-07). CEF gives replacement renderers the script list captured at browser creation; the current-list update arrives after the main-world context. Main engine `af4b3cc3…`: reload has Boost version `null`, run count `0`, and no plain control; a fresh tab has version `one`, run count `1`, and the control. Zero focus interruptions; load 14.92/25.27/19.04 → 15.09/25.14/19.03. Evidence: `.re/handoff/sections/s12/B-evidence/M5-nov7-script-reload/`. Engine child E owns the fix and B5 validation. Keep the page-execution assertions; do not substitute postload evaluation.
 - B28 on engine `7a90e70e…` proves that JS save changes future script IDs without live JS/CSS delivery; omitting only the hook fails at unchanged IDs. Its strict reload check still sees old JS at the first inline script, the same B5 replacement-renderer defect (#202 patch 0602). Raw FAIL retained. Evidence: `.re/handoff/sections/s12/B-evidence/private222/script-hook-{negative,positive}-focused.json`; positive hook/live checks pass, zero interruptions.
 - Managed Boost scripts run in the main world until P7 adds isolated-world

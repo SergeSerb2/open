@@ -4,7 +4,7 @@ Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileUR
 
 `OpenBoosts` is a Swift 6, macOS 26+ library in OpenKit. It depends only on
 `OpenModel` for `ProfileID`. It provides the data, persistence, matching, injection
-plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing, imports and Zap transport remain future work.
+plans, picker bridge, and page runtimes. The App runtime and simple editor host live in `App/Boosts/`; native editor controls live in `OpenSiteControl`. Sharing remains future work. Zap and Pick Selector use the App host and P7 Open-world transport.
 
 ## API
 
@@ -51,8 +51,8 @@ True overlay secrecy requires the engine adapter to inject the picker in an
 captured functions alone do not protect a main-world picker from page code that
 ran before injection. Inject the managed applier in that world too, so its state
 and Boost IDs remain private. User-authored Boost JS still runs in the main world
-through its script element. This is a required engine integration gate, not an
-implemented App/engine adapter in this milestone.
+through a separate page-world document-start script. `BoostEngineAdapter` installs
+the managed applier in `.open` and uses `.open` for live stylesheet refresh.
 
 The engine must deliver native commands directly into that isolated world and
 accept its native binding there. Do not forward capabilities through page-visible
@@ -142,26 +142,40 @@ Undo/Redo preserve the current enabled flag and current Library name, except
 that the editor's own Rename step restores its recorded name. Library Delete
 closes matching editors before deleting the stored Boost.
 
-**Limits:** managed scripts currently run in the main world. Overlay secrecy is
-not proven. P7 isolated-world/native message support blocks Zap; `enterZap`
-returns false. Code mode uses the native CSS/JS text views from #203. CSS saves
-refresh live pages; JS saves replace future document-start scripts without live
-execution. The runtime retains the installed JS snapshot for each current
-document, independently of store changes and same-document navigation. Real
-document commits update that snapshot and notify the editor. Main currently
-loses updated script registrations when a renderer is replaced, so prompt
-removal alone does not prove execution. B5 remains **BLOCKED: engine defect,
-targeted by #202 patch 0602** (lead, 2026-11-07). The strict B5/B28 reload
-checks still fail on main engine `7a90e70e…`; engine child E owns the fix and
-its page-execution proof. Color uses the documented interim
-filter math until the paint-time remap lands. The existing isolated-world harness
-receipts below do not prove the App's current world isolation.
+**Zap App transport:** `AppBoostEditorHost` delegates to `AppBoostPicker`. Entry is
+available only for a live, loaded, regular HTTP(S) tab in an editable session.
+A native challenge first obtains the engine's main-frame document token. The
+picker is then injected on demand in `.open`; a private-world marker prevents a
+queued request from entering another document. `__open.postMessage` sends typed
+JSON through `__openNative.postMessage`. The coordinator uses the engine token,
+Boost ID, and native nonce before any store mutation or editor event.
+
+The native adapter refuses unknown types/fields, wrong document tokens/nonces,
+invalid counts, duplicate list entries, and payloads over 64 KiB. Selectors cap
+at 4,096 UTF-8 bytes, labels at 1,024 bytes, and a picker session at 1,024 Zaps.
+Stored selectors are the authority for list replies. Accepted commits and reveal
+requests use the existing Profile store and refresh path. Native removal echoes
+clear preview state without a second store mutation. Counts and persisted labels
+refresh the in-page reveal chips; the editor shows the stored Zap count.
+
+Exit expires native authority before page teardown. Navigation, reload, tab/editor
+close, renderer loss, and the global switch all end the session. `pagehide` also
+removes page listeners and hides the overlay before a page enters Back/Forward
+cache. Selector mode inserts at the native CSS editor caret and cannot mutate
+Zaps. User Boost JavaScript remains a separate page-world document-start script;
+CSS saves and Zap edits refresh only the managed Open-world stylesheet.
+
+Code mode retains the installed JS snapshot for each document. Real document
+commits update that snapshot and notify the editor. P7 and patch 0602 are on main;
+the former B5/B28 replacement-renderer blocker is no longer an API limitation.
+Color still uses the documented interim filter math until paint-time remapping
+lands. The older package harness receipts below are separate from real-App proof.
 
 The PR records redacted real-App counts, timings and load averages. The e2e
 runner writes local receipts under `docs/engine-spike/`; do not commit their
 process identifiers or temporary paths.
 Run `python3 tools/e2e/engine_e2e.py --style chrome --only boosteditor` under the
-on-screen lock. B4 reports BLOCKED. B5 checks live CSS, deferred JS and Refresh to Run against
+on-screen lock. B4 exercises Zap and live reveal. B5 checks live CSS, deferred JS and Refresh to Run against
 the bound document, including a second edit and same-document navigation.
 
 ## Verification (2026-10-25, America/Vancouver)
@@ -326,8 +340,11 @@ one full-Boost undo step per commit/reveal. `endPickerSession()` is the App hook
 tab switch, same-URL reload, frame destruction, and transport loss. Close removes
 the observation. Idle lifecycle notifications send no exit command or picker
 redraw; close still sends one unconditional exit. The required host query
-`zapAvailability(tabID:)` returns false before P7 or without an Open world. The
+`zapAvailability(tabID:)` returns false for unavailable, private, or internal pages. The
 button reads it on each refresh and shows "Zap isn't available yet." when false.
+Availability and entry use the same stored-Zap caps: 1,024 entries, 4,096 UTF-8
+bytes per selector, and 1,024 UTF-8 bytes per label. An imported Boost above a
+cap keeps its saved CSS but disables picker entry with that existing tooltip.
 A transient failed entry leaves Zap off and enabled while the host is available,
 so the user can retry.
 
@@ -338,7 +355,8 @@ writes in this mode. The App host must implement
 `BoostEditorHost.enterSelectorPicker(boostID:tabID:) -> Bool`; there is no default
 implementation. Code mode binds `session.insertSelectorAtCaret` to its
 CSS NSTextView and calls `session.pickSelector()`; selection inserts and exits.
-No App or engine wiring is supplied by this package change (B4 remains external).
+The App host now supplies the P7 wiring; the original package-only receipts below
+do not by themselves prove that App flow.
 The coordinator owns `BoostPickerEvent`; OpenSiteControl exposes a public alias.
 App adapters fan out `lastEvent` only after coordinator validation. They must handle
 the added `labels` argument when matching `.listZaps`: selectors remain on the wire,
@@ -357,3 +375,54 @@ cover all 20 Zap/selector rows, including the round 1 lifecycle and retry fixes.
 Raw receipts remain in the shared `.re/` handoff directory. The new Zap-on scene
 has 1x/2x render receipts; existing
 baseline images, comparators, thresholds, and allowlists remain unchanged.
+
+## App Zap transport and PR #277 round-1 proofs
+
+The App sends stored selectors and labels as bounded `zap:list` messages, each
+under the engine's 64 KiB type-plus-payload limit. Each snapshot has a native
+`listID`; `reset` starts accumulation and an empty `complete` message ends it.
+The page renders the completed snapshot and sends bounded `zap:list-result`
+chunks with the same `listID`, followed by an empty `complete` marker. Native
+rejects stale requests, duplicate selectors, unknown fields and selectors outside
+the requested stored set. It publishes counts only when every requested entry
+has arrived. A missing, malformed or failed counts exchange never ends Zap.
+The package harness keeps its existing single-message request format.
+
+Rebinding a host exits its old tab's picker before changing the tab ID. The shell
+sleep adapter exits before discard, which has no engine change bit. App tab and
+split-pane selection callbacks end the old session before it can remain armed
+in a hidden page. The private-world `isObserving()` observation lets the real-App
+harness check that the picker disconnected its MutationObserver as well as
+hiding the overlay.
+
+The native automation receipt has `pickerAccepted`, recorded **after** the
+picker handler returns. Z7 clears old receipts, waits for the exact posted
+payload's receipt, then reads the store. A page-world `window.postMessage` is not
+claimed as native validation evidence; Z1 checks that world has no native bridge.
+
+Run these round-1 rows and their negative builds only when builds and screen
+work are permitted. Use the existing screen-locked
+`tools/e2e/engine_e2e.py --style chrome --only boosteditor` caller. Set
+`OPEN_E2E_BOOST_ZAP_ONLY=1` for Z1–Z8, or
+`OPEN_E2E_BOOST_ZAP_REVIEW_ONLY=1` for Z9–Z13; unset both for the full editor.
+Every row retains its normal real-App cleanup. No unit test or mocked host is
+substituted. Record the final head, counts, cleanup and load for each run.
+
+| Finding | Proof row and real-flow control | Required break-and-restore negative |
+|---|---|---|
+| F1 | Z9: 24 stored 4,096-byte selectors with 1,024-byte labels; two DOM matches each; request and reply exceed one 64 KiB message; all chips/counts arrive and Zap stays active. Picker is inactive before entry and after Done. | First disable native request splitting: require Z9 to fail at missing complete counts. Separately collapse page replies into one oversized message: require Z9 to fail. Restore both before positive runs. Neither failure may close the native session. |
+| F8 | Z10: 1,024 stored entries enter successfully; 1,025 entries, a 4,097-byte selector and a 1,025-byte label each disable Zap, expose the existing unavailable tooltip, and refuse a tap without arming the page. Z9 covers the exact selector/label boundaries. | Remove only the stored-cap check from `isAvailable`, keeping entry guards: Z10 must fail on the enabled dead button. Restore the guard. |
+| F2 | Z11: enter, adopt through the real container/factory boundary, verify the same content has no active picker or observer **before selecting** the new tab, then verify a page click. | Omit the `rebind` old-ID exit call and the container's post-adoption placeholder refresh. That refresh recreates the selected source page; its loading event would independently exit the old-ID picker and mask the missing rebind hook. Z11 must fail before selection. Restore both paths. |
+| F3 | Z12: enter, hide only the engine page (no shell selection change), discard through the production sleep adapter; native flag clears before wake, then the woken page has no picker and accepts a click. | Omit the sleep adapter exit call: Z12 must fail on the pre-wake flag. Restore it. |
+| F5 | Z13: enter, switch tabs, check the hidden page's picker and MutationObserver are stopped, return and click normally. Active-before-switch is the negative control. | Suppress selection teardown in the App callbacks and the existing editor-close-on-selection fallback for this negative build: Z13 must fail on the hidden picker/observer. Restore all paths. |
+| F4 | Z3 arms Zap before cross-site departure and asserts native `zap == false` as well as page inactivity after Back. Existing loading/commit teardown remains. | Temporarily suppress native navigation teardown and ignore the page exit event. End the initial Z1/Z2 picker before the first reload, so the negative reaches the strengthened after-Back assertion. Z3 must fail there with a stale native Zap flag. Restore every source edit. |
+| F7 | Z7 waits for an unknown-selector removal receipt with `pickerAccepted == false`; stored-selector removal on the same bridge is accepted. Store reads follow native handling. | Remove only `selectors.contains(selector)` from the `zapRemoved` validator: the unknown-removal receipt must become accepted and Z7 must fail. Restore it. |
+| F9 | Z7 awaits each malformed/nonce/expired message receipt before asserting rejection and an unchanged store. A valid exact-boundary commit on the same path is accepted. | Allow an unknown field in the commit validator: Z7 must fail **after** receiving the native handler receipt. Restore the field allowlist. |
+| F10 | Editor B4 verifies native flag off, page picker and observer off, and one ordinary page click after toggle-off. Its earlier commit/reveal is the positive control. | Omit the page exit evaluation while retaining native `.exited`: B4 must fail on page teardown or the swallowed click. Restore it. |
+
+Negative source edits are temporary and apply only when builds and screen work
+are permitted. Never
+commit or push a negative build. Keep each failed receipt, restore the final
+source, rebuild, then record its passing row. Product edits require a fresh full
+gate on the final head. F6's quote-aware selector hardening is recorded in
+`followups.md`; it is not claimed as fixed here.

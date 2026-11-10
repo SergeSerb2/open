@@ -15,6 +15,7 @@
   const Map = captureCollection(window.Map), Set = captureCollection(window.Set), WeakMap = captureCollection(window.WeakMap);
   const MutationObserver = captureCollection(window.MutationObserver);
   const JSON = { parse: window.JSON.parse, stringify: window.JSON.stringify };
+  const utf8 = new TextEncoder();
   const arrayFrom = Array.from.bind(Array), arrayIsArray = Array.isArray;
   const arrayMap = uncurry(Array.prototype.map), arrayFilter = uncurry(Array.prototype.filter);
   const arraySome = uncurry(Array.prototype.some), arrayEvery = uncurry(Array.prototype.every);
@@ -62,6 +63,7 @@
   const rect = e => { const r = bounds(e); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
   let active = false, boostID = null, sessionNonce = null, host = null, overlay = null, highlight, chip, bar, relatedButton, popup, band;
   let hovered = null, lastMove = null, frame = 0, flashTimer = 0, graceTimer = 0;
+  let pendingList = null;
   // Spec values explicitly marked as guesses live in one named constant each.
   const IDLE_INSTRUCTION_COLOR = "#777777";
   const HOVER_TINT = "rgba(255,214,10,0.35)";
@@ -428,13 +430,66 @@
     if (e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); exitWithReason("esc"); }
     else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); e.stopImmediatePropagation(); undo(); }
   }
+  function pagehide() { exitWithReason("navigation"); }
+  function postListResults(selectors, listID) {
+    const type = "zap:list-result";
+    let entries = [];
+    const payload = complete => ({ entries, ...(listID ? { listID, complete } : {}), boostID, sessionNonce });
+    const fits = () => utf8.encode(type).length + utf8.encode(JSON.stringify(payload(false))).length <= 65536;
+    for (const [selector, label] of selectors) {
+      const count = nodesForSelector(selector).length;
+      const entry = { selector, label, matchCount: count, truncated: count > 100 };
+      arrayPush(entries, entry);
+      if (!fits()) {
+        arrayPop(entries);
+        if (entries.length) post(type, payload(false));
+        entries = [entry];
+        // Native's selector/label limits make a single entry fit. A malformed
+        // legacy caller may omit counts, but never ends an active picker.
+        if (!fits()) entries = [];
+      }
+    }
+    if (entries.length) post(type, payload(false));
+    entries = [];
+    // Native publishes a snapshot only after this end marker and a complete
+    // set of stored selectors. No prefix of a counts reply becomes authoritative.
+    if (listID || !selectors.size) post(type, payload(true));
+  }
+  function listZaps(p) {
+    let selectors;
+    if (typeof p.listID === "string") {
+      if (p.listID.length > 64 || typeof p.reset !== "boolean" || typeof p.complete !== "boolean" || !arrayIsArray(p.selectors)) return;
+      if (p.reset) pendingList = { id: p.listID, selectors: new Map() };
+      if (pendingList?.id !== p.listID) return;
+      selectors = pendingList.selectors;
+      for (const s of p.selectors) {
+        if (typeof s !== "string" || (selectors.size >= 1024 && !selectors.has(s))) { pendingList = null; return; }
+        selectors.set(s, typeof p.labels?.[s] === "string" ? p.labels[s] : "");
+      }
+      if (!p.complete) return;
+      pendingList = null;
+      // The completed native snapshot is the authority, including deletions.
+      session = arrayFilter(session, z => selectors.has(z.selector));
+      for (const [key, entry] of knownZaps) if (!selectors.has(entry.selector)) knownZaps.delete(key);
+    } else {
+      // Keep the package harness's single-message transport compatible.
+      selectors = new Map(arrayMap(arrayFilter([...knownZaps.values()], z => z.boostID === p.boostID), z => [z.selector, z.label]));
+      for (const s of p.selectors || []) if (typeof s === "string" && !selectors.has(s)) selectors.set(s, typeof p.labels?.[s] === "string" ? p.labels[s] : "");
+    }
+    invalidateRoots();
+    if (mode === "zap") for (const [selector, label] of selectors) {
+      const entry = knownZaps.get(boostID + "\0" + selector) || { boostID, selector };
+      entry.label = label; knownZaps.set(boostID + "\0" + selector, entry);
+    }
+    renderReveals(); postListResults(selectors, p.listID);
+  }
   function enter(options) {
     if (active) { if (options?.boostID !== boostID) post("picker:error", { kind: "already-active" }); return; }
     // Only a native-issued capability can yield messages accepted by native.
     // Main-world callers can invent a nonce, but the coordinator rejects it.
     if (typeof options?.boostID !== "string" || typeof options.sessionNonce !== "string" || options.sessionNonce.length < 16) return;
     if (options.mode !== undefined && options.mode !== "zap" && options.mode !== "select") return;
-    removePreview(); session = []; knownZaps.clear(); lastPick = null;
+    removePreview(); session = []; knownZaps.clear(); lastPick = null; pendingList = null;
     boostID = options.boostID; sessionNonce = options.sessionNonce; mode = options.mode === "select" ? "select" : "zap"; revealing = null; active = true;
     invalidateRoots(); rootObserver = new MutationObserver(invalidateRoots);
     rootObserver.observe(document, { childList: true, subtree: true });
@@ -442,19 +497,21 @@
     query(overlay, ".undo").hidden = mode === "select";
     document.addEventListener("mousemove", move, true); document.addEventListener("click", click, true); document.addEventListener("keydown", keydown, true);
     window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition);
+    window.addEventListener("pagehide", pagehide);
     post("picker:ready", { boostID });
   }
   function exitWithReason(reason) {
     if (!active) return;
-    active = false; rootObserver?.disconnect(); rootObserver = null; invalidateRoots();
+    active = false; rootObserver?.disconnect(); rootObserver = null; invalidateRoots(); pendingList = null;
     document.removeEventListener("mousemove", move, true); document.removeEventListener("click", click, true); document.removeEventListener("keydown", keydown, true);
     window.removeEventListener("scroll", reposition, true); window.removeEventListener("resize", reposition);
+    window.removeEventListener("pagehide", pagehide);
     cancelAnimationFrame(frame); frame = 0; clearTimeout(flashTimer); clearMulti(); hovered = null; lastMove = null; host.hidden = true;
     if (previewStyles.size) { window.addEventListener("open-boosts-applied", removePreview, { once: true }); graceTimer = setTimeout(removePreview, 500); }
     post("picker:exited", { boostID, reason });
     sessionNonce = null; boostID = null;
   }
-  window.__openZap = { version: 1, enter, exit: () => exitWithReason("done"), isActive: () => active, undo, candidatesAt, rectsForSelector, hoveredAt };
+  window.__openZap = { version: 1, enter, exit: () => exitWithReason("done"), isActive: () => active, isObserving: () => rootObserver !== null, undo, candidatesAt, rectsForSelector, hoveredAt };
   arrayPush(bridge._handlers, msg => {
     if (msg?.v !== 1) { console.warn("[open-zap]", "unsupported bridge version"); return; }
     try {
@@ -467,14 +524,7 @@
         revealing = null;
         session = arrayFilter(session, z => z.boostID !== p.boostID || z.selector !== p.selector); knownZaps.delete(p.boostID + "\0" + p.selector); refreshPreview();
         post("zap:removed", { boostID: p.boostID, selector: p.selector, via: "native" });
-      } else if (msg.type === "zap:list") {
-        invalidateRoots();
-        const selectors = new Map(arrayMap(arrayFilter([...knownZaps.values()], z => z.boostID === p.boostID), z => [z.selector, z.label]));
-        for (const s of p.selectors || []) if (typeof s === "string" && !selectors.has(s)) selectors.set(s, typeof p.labels?.[s] === "string" ? p.labels[s] : "");
-        if (mode === "zap") for (const [selector, label] of selectors) if (!knownZaps.has(boostID + "\0" + selector)) knownZaps.set(boostID + "\0" + selector, { boostID, selector, label });
-        renderReveals();
-        post("zap:list-result", { boostID: p.boostID, entries: arrayMap([...selectors], ([selector, label]) => { const count = nodesForSelector(selector).length; return { selector, label, matchCount: count, truncated: count > 100 }; }) });
-      }
+      } else if (msg.type === "zap:list") listZaps(p);
     } catch (e) { console.warn("[open-zap]", e); }
   });
 })();
