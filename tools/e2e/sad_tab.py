@@ -69,15 +69,15 @@ def run(app, results, new_tab, wait_until, sibling, run_row):
 
     @contextmanager
     def split_pair():
-        with tab() as c:
-            app.call("split")
-            pane = next(p["id"] for p in app.call("split", op="state")["panes"] if p["id"] != c)
-            try:
-                app.call("navigate", tab=pane, url="https://example.org/")
-                app.call("wait", tab=pane)
-                yield c, pane
-            finally:
-                dispose(pane)
+        # Pair two fixture tabs explicitly. Add Split View pairs the selected tab with
+        # the first other unpinned tab, which can be the suite's shared sibling tab.
+        with tab("https://example.org/", background=True) as pane, tab() as c:
+            app.call("select", tab=c)
+            app.call("sidebar-menu", node=pane, item="Open in Split View")
+            assert wait_until(lambda: {p["id"] for p in app.call("split", op="state")["panes"]} == {c, pane},
+                              timeout=5, step=.05), "split did not pair the fixture tabs"
+            app.call("wait", tab=pane)
+            yield c, pane
 
     @contextmanager
     def peek(source, url="https://example.org/"):
