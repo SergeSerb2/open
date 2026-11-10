@@ -12533,7 +12533,7 @@ def main():
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
                "load": os.getloadavg()}
-    source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Packages/OpenKit/Sources", "tools/e2e"], cwd=ROOT)
+    source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Engine", "Packages/OpenKit/Sources", "tools"], cwd=ROOT)
     results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                          "clean": not source_diff, "diffSHA256": hashlib.sha256(source_diff).hexdigest()}
     def framework_uuid(path):
