@@ -5585,3 +5585,64 @@ matcher sequence's Rust query:
 
 These limits apply per request; the matcher remains per context, including
 OTR. All build and runtime acceptance rows still require real receipts.
+
+
+### Renderer memory-cache control errata (2026-11-09)
+
+A normal reload can reuse a fresh script from Blink's renderer MemoryCache.
+That path makes no URLLoader request, so resetting request factories alone
+cannot make newly enabled blocking apply to that script. The native exclusion
+status can already be correct while the cached script still executes.
+
+The service owner now registers a weak context callback at creation, before
+startup or API list loads. On the UI thread, blocking that resumes after an
+unblocked state, an exclusion removal, or a replacement engine generation
+arms a renderer cache clear beside the API's factory refresh. Document factory
+creation records possible unblocked content while disabled or on zero lists.
+Enabling after an engine existed while disabled also arms the clear. First
+enable and first engine installation at startup do not clear: #293 holds
+requests until the first engine, with the accepted 1.5-second fail-open cap.
+A zero-list → lists transition before any document likewise does not clear.
+The new Chromium 0903 entry sends `ClearCache(true)` only to live, ready
+renderers of that BrowserContext. A normal parent includes its OTR children;
+an OTR change does not select its parent or another normal Profile. Null,
+detached and shutting-down contexts are refused.
+
+Chromium's existing navigation/IPC state handles navigation arriving first
+and coalesces repeated requests while one clear is pending. No hard quota
+can drop a user action or list update. Off-only changes do not request a clear.
+VLOG(1) records requested, queued, coalesced and cleared process counts, with
+no host or URL. Immediate and browser-wide cache APIs retain their behavior;
+this path does not flush the HTTP cache.
+
+Settings readiness is a separate harness precondition. The native Add/Remove
+action correctly rejects `ready=false`, matching the disabled Settings controls
+until the selected Profile opens. A native excluded-count barrier cannot fix
+a renderer MemoryCache bypass.
+
+An initial version cleared at startup and failed eight loaded page pairs:
+median per-pair +5.950 ms (+13.416%), medians 54.600/68.800 ms. Those raw
+results remain retained. After the lead narrowed the triggers above, all
+16 alternating pairs passed the revised limit (median per-pair delta at most
++0.5 ms or +1.5%). The delta was −1.500 ms (−1.987%); control and fixed
+medians were 76.800 and 75.150 ms. Load1 ranged from 23.399 to 27.360, so
+this is a loaded paired comparison. All 32 launches logged zero cache-clear
+triggers. The proxy busy-CPU medians were 9,323.5 and 9,041 microseconds;
+these counters do not measure renderer or whole-App CPU.
+
+The unchanged cold-start parent reproduces 8 bypasses in 20 re-enabled normal
+reloads with the strict witness fixture. The final narrow-trigger App passes 20 exclusion
+Off/On cycles and 20 global Off/On cycles: 40/40 actions in each, zero bypasses,
+a script server hit on every allowed load and a native blocked count on every
+blocked load. Each pair uses one cacheable script URL, with a new query key
+for the next pair; no cache is disabled in either build. This avoids permitted
+HTTP disk-cache reuse confusing the server witness. A retained CDP diagnostic
+identifies `fromDiskCache=true` on those allowed constant-URL loads.
+
+The earlier unchanged-main controls also remain evidence: the native exclusion
+count barrier still bypassed 16/20 times, while script `no-store` and hard reload
+each passed 40/40. Exact source identities, per-action timestamps, server events,
+VLOG counts, interruption receipts, durations and loads are retained in
+`.re/s13/e5/PR-BODY-memcache.md`, `memcache-v2-toggle-summary.json`, and
+`memcache-page-pairs-2/results.json`. The fresh CEF functional set (20 rows
+and both 30k cases) and all 104 App adblock rows also pass on this version.
