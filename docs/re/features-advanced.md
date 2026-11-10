@@ -915,7 +915,7 @@ Notes on semantics Open must match:
 ### 10.4 Evidence and open questions (AppleScript)
 
 - Evidence: `Arc.sdef` quoted and summarized above; `plutil -p Contents/Info.plist` for `OSAScriptingDefinition` and `NSAppleScriptEnabled`.
-- Open questions: (1) Does `execute` return the JS completion value stringified, and what happens on a JS error? (2) Does `make` support creating `space` objects, or only windows and tabs? (The sdef does not restrict `new` by class.) (3) What does setting `tab.location` to each value do to ordering within the section? All three need a script run against Arc by the user (forbidden for agents to launch Arc).
+- Open questions: (1) Does `execute` return the JS completion value stringified, and what happens on a JS error? (2) Does `make` support creating `space` objects, or only windows and tabs? (The sdef does not restrict `new` by class.) (3) What does setting `tab.location` to each value do to ordering within the section? All three need a script run against Arc by the user or a lead-assigned capture agent under AGENTS.md rules 4–5.
 
 ---
 
@@ -960,7 +960,7 @@ Date: 2026-10-25. Arc 1.170.0 arm64 slice (`.re/bin/Arc-arm64`). No capture show
 
 ### 11.6 Open questions (extensions UI)
 
-Each needs a screenshot from the user (agents may not launch Arc). The list of exact captures is in `docs/plans/extensions-ui.md` §12.
+Each needs a screenshot from the user or a lead-assigned capture session under AGENTS.md rules 4–5. The list of exact captures is in `docs/plans/extensions-ui.md` §12.
 
 1. Do pinned actions show only on hover (EX-1), and is there a more button in the URL field when they do not fit?
 2. Popup look: corner radius, shadow, gap and alignment to the button, and where a popup anchors when it opens from the Site Control Center or Cmd+E.
