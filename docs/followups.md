@@ -305,6 +305,8 @@ The gate "inline completion adds ≤ 0.3 ms p95" read +0.301 ms in one full `ver
 
 ## Section 11 leftovers
 
+- Sad Tab (`s11/sad-tab`): the per-pane and Peek replacement, Reload, Close Tab, and light/dark render scene are implemented. Builds and offscreen checks pass; all real-App rows and the healthy-page negative proof are pending under the 2026-11-09 02:43 SCREEN HOLD on both machines. Renderer-termination acceptance and its negative proofs remain DEFERRED behind the kill-probe gate. Exact Arc art, copy, and actions remain unverified; Open uses its own. Little Open has a separate standalone surface and is outside this shared-container change. See `verification/sad-tab.md`.
+
 Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static page-chrome facts), [#172](https://github.com/SergeSerb2/open/pull/172) (`history`), [#174](https://github.com/SergeSerb2/open/pull/174) (`applescript`, `page` D4), [#178](https://github.com/SergeSerb2/open/pull/178) (`context-menus`), [#180](https://github.com/SergeSerb2/open/pull/180) (`page-chrome`), [#181](https://github.com/SergeSerb2/open/pull/181) (`downloads`), [#182](https://github.com/SergeSerb2/open/pull/182) (owner-death guard and persistent `lockf -k`), and [#187](https://github.com/SergeSerb2/open/pull/187) (`find`). These are saved PR receipts. Little Open history is closed by [#183](https://github.com/SergeSerb2/open/pull/183): the `history` row passes in `littleopen` 34/34 ×3.
 
 - **Closed — Oversized JS dialogs.** `PageChromeLimits.dialogText` bounds both message and prompt default to 10,240 UTF-8 bytes, including a trailing `…` when Open cuts the received text, on a valid UTF-8 boundary. Size never refuses the dialog; the queue of eight and all other page-chrome limits remain. Real-App evidence: `page-chrome` rows `dialog_message_limit` (alert/confirm/prompt) and `dialog_prompt_limit`: at-bound, over-bound and multibyte inputs, native sheets and replies reaching the page. Receipt and old-refusal negative proofs: `docs/engine-spike/pagechrome-leftovers.md`.
@@ -314,7 +316,7 @@ Merged evidence: [#170](https://github.com/SergeSerb2/open/pull/170) (static pag
 - **Find menu fallbacks.** #187 implements Find and Replace by opening Find, with no replacement controls. Jump to Selection centers the DOM selection’s start element through the existing page-world JavaScript API; no selection means no action. Page scripts can affect it; no isolated-world API was added. `find` covers the merged menu/key flow; these are fallbacks, not proved Arc parity. See [the Find report](engine-spike/find/README.md#scope-and-source-review). Owner: Section 11 follow-up / lead.
 - **Generic Warn-before-quitting UI (Open design guess).** Implemented on `s11/warn-before-quit`: “Quit Open?”, open window/tab counts, Quit (Return) and Cancel (Esc), before history/sleep capture and page-beforeunload. Downloads keep sole-alert precedence. No Arc warning window was proved; the [static RE](re/downloads-s11.md#quit-warning-setting-consumer-audit-2026-11-07) still establishes only preference/action names and an inconclusive download gate. The copy and count presentation are Open-authored guesses. Real-App quit acceptance passes 10/10 with six negative proofs; owner-death passes 4/4. [Receipt](engine-spike/s11-warn-before-quit.md) records an unresolved full-Downloads second-Profile callback failure and the updater R2 test adaptation. Owner: Section 11.
 - **Quit prompts on system logout/restart/shutdown: source-verified only.** `QuitWarningCoordinator.beginAttempt` reads `kAEQuitReason` from the current Apple event and skips every quit prompt for log out, restart and shut down; the reason is kept across Open's own quit retries and cleared on the next fresh quit. No live logout run proves that `currentAppleEvent` is still set when the delegate runs under `OEApplication`'s CEF pump; if it is not, a logout would show the generic alert. Separately, a system quit that needs the history/sleep step returns `.terminateCancel` (OEApplication has no `terminateLater`), which aborts the logout although Open then quits: a pre-existing limit. Needs one user-present logout check on a signed build. Owner: Section 11 / user.
-- **Little Open Downloads tray.** Deferred by [routing §0.2](plans/routing-little-open.md#02-out-of-scope-do-not-build); #181 does not add it. Owner: Section 9 / lead.
+- **Little Open Downloads tray.** Implemented on `s11/littleopen-downloads-tray`: session-attributed snapshots from `DownloadsCenter`, title-bar progress button, compact native popover and shared Library actions. Round 1 adds early attribution, close/move transfer lifetime, focus/key and AX fixes, file icons/Retry, a 100-row render bound and the Space picker surface. M5 acceptance: 31/31 and early-capture break-and-revert. Exact appearance is an Open design guess; FA LA-10 proves the tray and shared data. [Scope and verification](engine-spike/s11-littleopen-downloads-tray.md). Owner: Section 11 / lead.
 - **Closed — AppleScript Little Open creation.** Application `make new tab` now returns a working transient reference. URL, title, loading and page verbs resolve through the Little Open provider; no model tab is created. Unsupported containment/location/select returns 1009; closed references return 1000. M5 real Apple-event acceptance is 208 PASS / 2 external-consent BLOCKED in `applescript` (warm/cold `A15_*`); see [the scripting guide](scripting.md#little-open-tab-references-2026-11-07). External sender consent remains below. — Section 11, 2026-11-07.
 - **External AppleScript/JXA.** External osascript/JXA and Script Editor remain BLOCKED by macOS Automation consent (-1744). Self-scripting PASS in #174 does not close that gate. The user’s numbered Script Editor hand checks are in [the scripting guide](scripting.md#script-editor-and-external-sender-hand-checks). Owner: user hand check / lead.
 - **Join Meeting.** Disabled post-v1; it needs calendar live data (lead decision S2). #178 `context-menus` checks disabled dispatch. Owner: post-v1 / lead.
@@ -384,7 +386,33 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 - Color uses the plan's interim root filters. Paint-time color remap remains the
   engine lane's Step 4R; filters can affect images/video/canvas.
 - Code mode is integrated from #203, including live CSS and document-bound JS
-  reload state. Gallery stays disabled; P7 still blocks selector picking.
+  reload state. The local Gallery shares the Library's Boost owner and actions;
+  BG1–BG3, Profile/layout and private/global-off flows pass in the real App on
+  2026-11-09; targeted Settings and Site Control render checks pass. Eight
+  deliberate source regressions are confirmed; Boost editor, command bar,
+  Settings and Chrome-style incognito suites pass. Restored Debug/Release and
+  the complete Gallery run passed on engine 34619927. The final main d279ae85
+  merge, Debug/Release, Gallery 14/14 and full gate 25/25 pass on engine
+  891c2353; lead source review is approved. After the clean main a5987e02
+  overlap merge, Debug/key audit, Gallery 14/14, command bar/live Settings 77/77
+  and Settings Preview pass under rule 5a. Native incognito 2x capture remains
+  a display follow-up. See
+  [Gallery acceptance](boost-gallery.md).
+  P7 still blocks selector picking.
+- Library command readiness (BG review F5, Section 12 lead, 2026-11-09):
+  factory-level `view-library`, `view-boosts` and `boost-gallery` routes do not
+  share the AppDelegate's first-run gate or the editor commands' `engineReady`
+  check. The Gallery fix keeps existing Library parity. Follow up on a shared
+  first-run/engine-ready policy for these routes, with real-App first-window
+  and onboarding checks after the holds. Do not treat this as a new Gallery
+  acceptance PASS or enable Boost services during menu validation.
+- Pending Library Edit after navigation (BG post-proof review, Section 12 lead,
+  2026-11-09; non-blocking): the committed-URL race fix retains a pending Edit
+  through a non-editable commit until the tab closes. A later HTTP(S) commit can
+  therefore open the editor. Consider dropping the request after the first
+  non-editable top-level commit other than `about:blank`. Keep the existing
+  private-context, Profile and liveness checks; verify both navigation paths
+  through the real Library Edit flow before changing this policy.
 - Private windows refuse Boosts. The App skips registration, script installation and live plans for OTR contexts; editor commands and Customize Page refuse. The same-parent Profile row and deliberate script-leak negative proof cover this boundary.
 - Profile deletion retires the registered Boost owner before folder removal. The store discards dirty state, cancels and drains writes, and stays closed for the process lifetime. B27 covers Settings delete → debounce → quit → relaunch with a deliberate disabled-retirement negative proof.
 

@@ -30,7 +30,7 @@ public enum TabSleepMode: String, CaseIterable, Sendable {
 }
 
 public enum DownloadState: String, CaseIterable, Sendable { case inProgress, paused, completed, failed, cancelled }
-public struct DownloadItemSnapshot: Identifiable, Sendable {
+public struct DownloadItemSnapshot: Identifiable, Sendable, Equatable {
     public var id: String
     public var fileName: String
     public var sourceHost: String
@@ -84,7 +84,7 @@ public extension AutoArchiveInterval {
         "open.links.openPeekShiftClick": true, "open.advanced.restoreWindowsOnLaunch": true,
         "open.pip.autoDisabledHosts": [String](), "open.pip.keepOnTop": true,
         "open.advanced.enablePictureInPictureOnLeave": true, "open.advanced.allowWindowDraggingFromWebTop": false,
-        "open.advanced.showFullURLWithToolbar": false, "open.advanced.enableBoosts": true,
+        "open.advanced.showFullURLWithToolbar": false, BoostPreferences.globallyEnabledKey: true,
         "open.boosts.hasDismissedInterstitial": false, "open.boosts.hasDismissedJSNotice": false,
         "open.boosts.codeEditorSize": "480x588",
         "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,

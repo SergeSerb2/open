@@ -77,6 +77,7 @@
         if cmd == "profiles-shell", ["press", "type-delete", "icon-symbol", "indicator-menu"].contains(args["action"] as? String ?? "") { inputCommand = true }
         if ["space-manager-drag", "sidebar-click", "sidebar-key", "hover"].contains(cmd) { inputCommand = true }
         if cmd == "boost-editor", ["key", "type", "tap", "drag"].contains(args["action"] as? String ?? "") { inputCommand = true }
+        if cmd == "boost-gallery-ui", args["action"] as? String != "state" { inputCommand = true }
         if cmd == "first-run", args["action"] as? String == "focus" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
@@ -323,6 +324,8 @@
           "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
           "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
+          "boostsPresentation": adapter.library?.boostsPresentation.rawValue ?? "",
+          "boostsProfile": adapter.library?.historyProfileID.description ?? "",
           "historyRows": adapter.library?.historyRows.count ?? 0,
           "archive": (adapter.library?.archiveRows ?? []).map { ["id": $0.id.description, "url": $0.url.absoluteString] },
           "sharedArchives": adapter.library?.archives.allSatisfy { $0.value === app.archiveSink.store(for: $0.key) } ?? false,
@@ -702,8 +705,11 @@
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
       case "boost-editor", "boosts", "boost-library":
         return try await runBoostCommand(cmd, a)
+      case "boost-gallery-ui": return try await boostGalleryUI(a)
       case "peek-ui", "peek-button", "peek-move-arm", "peek-move-state":
         return try runPeekAppCommand(cmd, a)
+      case "sad-tab-state", "sad-tab-action":
+        return try runSadTabCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)
         guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
@@ -2305,6 +2311,11 @@
       var keyTime: Double?
       var capturedAfterKey: Double?
       let toggle = a["toggleSidebar"] as? Bool == true
+      let overlays = try (a["overlayWindows"] as? [Int] ?? []).map { number in
+        guard let window = NSApp.windows.first(where: { $0.windowNumber == number && $0.isVisible })
+        else { throw Failure(message: "overlay window is not owned and visible") }
+        return window
+      }
       let method = try await WindowSnapshot.capture(target, to: url, afterPreparation: toggle ? {
         let time = ProcessInfo.processInfo.systemUptime
         if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: time,
@@ -2312,7 +2323,7 @@
           keyTime = CACurrentMediaTime()
           NSApp.sendEvent(event)
         }
-      } : nil, atCapture: { capturedAfterKey = keyTime.map { CACurrentMediaTime() - $0 } })
+      } : nil, atCapture: { capturedAfterKey = keyTime.map { CACurrentMediaTime() - $0 } }, overlayWindows: overlays)
       return ["path": path, "method": method, "capturedAfterKey": capturedAfterKey ?? NSNull()] as [String: Any]
     }
 

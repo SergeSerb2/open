@@ -103,6 +103,7 @@ void OERemoveAutofillHandler();
                      webContent:(nullable OEWebContent*)webContent
                        callback:(CefRefPtr<CefBeforeDownloadCallback>)callback;
 - (void)oe_handleDownloadUpdated:(CefRefPtr<CefDownloadItem>)item
+                      webContent:(nullable OEWebContent*)webContent
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback;
 @end
 

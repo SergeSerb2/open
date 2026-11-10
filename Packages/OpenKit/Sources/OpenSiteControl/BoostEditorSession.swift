@@ -114,7 +114,7 @@ public final class BoostEditorSession {
     }
     isolated deinit { previewWork?.cancel(); sampleTask?.cancel();codeWork.values.forEach { $0.cancel() } }
     public var isEditable: Bool { !context.isIncognito && !isClosed }
-    public var globallyEnabled: Bool { defaults.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true }
+    public var globallyEnabled: Bool { defaults.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true }
     public var showsInterstitial: Bool { !defaults.bool(forKey: "open.boosts.hasDismissedInterstitial") }
     public var showsLegacyColors: Bool { boost.colorWheel == nil && boost.colorAdjustment?.isIdentity == false }
     public var pageURL: URL { currentPageURL ?? context.url }

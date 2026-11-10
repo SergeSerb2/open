@@ -16,6 +16,8 @@ public final class LittleOpenTitleBarView: NSView {
     public let hostButton: NSButton
     public let copyButton: NSButton
     public let extensionsButton: NSButton
+    public let downloadsButton = LittleOpenDownloadsButton(frame: .zero)
+    public var onDownloads: (() -> Void)?
     public var showsExtensions = false { didSet { if showsExtensions != oldValue { extensionsButton.isHidden = !showsExtensions; needsLayout = true } } }
     public let pillButton: NSButton
     public let chevronButton: NSButton
@@ -60,6 +62,8 @@ public final class LittleOpenTitleBarView: NSView {
         }
         chevronButton.toolTip = "More Spaces"
         extensionsButton.toolTip = "Extensions"; extensionsButton.isHidden = true
+        downloadsButton.target = self; downloadsButton.action = #selector(press(_:)); downloadsButton.tag = 6
+        downloadsButton.isHidden = true; addSubview(downloadsButton)
         keycap.font = .systemFont(ofSize: LittleOpenMetrics.fontSize); keycap.textColor = LittleOpenMetrics.text.nsColor
         keycap.alignment = .center; keycap.wantsLayer = true
         keycap.layer?.backgroundColor = LittleOpenMetrics.capsuleFill.cgColor
@@ -76,6 +80,7 @@ public final class LittleOpenTitleBarView: NSView {
         case 3: onOpenInSpace?()
         case 4: onMoreSpaces?()
         case 5: onExtensions?()
+        case 6: onDownloads?()
         default: break
         }
     }
@@ -117,12 +122,13 @@ public final class LittleOpenTitleBarView: NSView {
         copyButton.frame = m.copy(width: w); chevronButton.frame = m.chevron(width: w)
         // guess (lead), capture S-7. Copy's 16 pt frame is also its native hit area.
         extensionsButton.frame = m.extensions(width: w)
+        downloadsButton.frame = extensionsButton.frame.offsetBy(dx: showsExtensions ? -24 : 0, dy: 0)
         let label = m.pillButton(width: w)
         pillButton.frame = CGRect(x: label.minX, y: label.minY, width: label.width - m.keycapWidth, height: label.height)
         keycap.frame = CGRect(x: label.maxX - m.keycapWidth, y: label.minY, width: m.keycapWidth, height: label.height)
         let chipX = m.profileIcon.minX
         // On a minimum-size page the chip hides before it can cover the host/copy control (guess).
-        let accessoryLeft = showsExtensions ? extensionsButton.frame.minX : copyButton.frame.minX
+        let accessoryLeft = !downloadsButton.isHidden ? downloadsButton.frame.minX : showsExtensions ? extensionsButton.frame.minX : copyButton.frame.minX
         let available = max(0, accessoryLeft - m.hostGap - chipX)
         let chipWidth = min(profileWidth, max(0, available - m.minimumHostWidth))
         profileButton.isHidden = profileWidth == 0 || chipWidth == 0
@@ -140,6 +146,34 @@ public final class LittleOpenTitleBarView: NSView {
          "copy": copyButton.frame, "pill": pill.frame, "open": LittleOpenMetrics.pillButton(width: bounds.width),
          "chevron": chevronButton.frame, "divider": divider.frame]
         if showsExtensions { frames["extensions"] = extensionsButton.frame }
+        if !downloadsButton.isHidden { frames["downloads"] = downloadsButton.frame }
         return frames
+    }
+}
+
+/// Guess: a quiet title-bar arrow with callback-driven aggregate progress.
+@MainActor public final class LittleOpenDownloadsButton: NSButton {
+    public var progress: Double? { didSet { needsDisplay = true } }
+    public var running = false { didSet { needsDisplay = true } }
+    public override init(frame: NSRect) {
+        super.init(frame: frame)
+        isBordered = false; imagePosition = .imageOnly; imageScaling = .scaleProportionallyDown
+        image = NSImage(systemSymbolName: "arrow.down", accessibilityDescription: nil)
+        contentTintColor = LittleOpenMetrics.text.nsColor
+        toolTip = "Downloads"; setAccessibilityLabel("Downloads")
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    public override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard running else { return }
+        let rect = bounds.insetBy(dx: 0.75, dy: 0.75)
+        LittleOpenMetrics.text.nsColor.withAlphaComponent(0.25).setStroke()
+        let track = NSBezierPath(ovalIn: rect); track.lineWidth = 1.5; track.stroke()
+        guard let progress else { return }
+        LittleOpenMetrics.text.nsColor.setStroke()
+        let path = NSBezierPath(); path.lineWidth = 1.5
+        path.appendArc(withCenter: CGPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2,
+                       startAngle: 90, endAngle: 90 - 360 * CGFloat(progress), clockwise: true)
+        path.stroke()
     }
 }
