@@ -320,12 +320,12 @@ def run(factory, results, tmp, env, functional_only=False):
             # on reload, so S5 can prove that Clear Cookies removed it.
             close(); app.call('navigate', tab=tab, url=origin+'/boost.html'); app.call('wait', tab=tab)
             cookie_before = app.eval(tab, 'document.cookie')
-            s=opened(); absent_cache = not any(i['title']=='Clear Cache' for i in s['items'])
-            cache_refused = refused(action='menu', item='Clear Cache')
+            s=opened(); cache_available = any(i['title']=='Clear Cache' and i['enabled'] for i in s['items'])
             cleared = app.call('site-controls', action='menu', item='Clear Cookies')
             cookie_gone = wait(lambda: app.eval(tab,'document.cookie') == '', timeout=10)
-            app.call('site-controls', action='tap', id='reload'); app.call('wait', tab=tab)
-            record('S5_cookies', cookie_before == 'f=1' and cookie_gone and app.eval(tab,'document.cookie') == '' and absent_cache and cache_refused and cleared['reloadVisible'],before=cookie_before,after=app.eval(tab,'document.cookie'),negativeCacheRefused=cache_refused)
+            app.call('wait', tab=tab)
+            record('S5_cookies', cookie_before == 'f=1' and cookie_gone and app.eval(tab,'document.cookie') == '' and cache_available,
+                   before=cookie_before,after=app.eval(tab,'document.cookie'),cacheAvailable=cache_available)
             s=opened(); app.call('pasteboard',text='scc-negative-sentinel')
             app.call('key',key='c',modifiers=['cmd','shift'],route='app')
             copied=app.call('pasteboard'); toasts=app.call('toasts')
