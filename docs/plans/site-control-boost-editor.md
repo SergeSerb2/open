@@ -1501,73 +1501,70 @@ exports an alias. These package hooks do not wait for the B/C branches to merge.
 ---
 
 
-Step 3 verification (child A, 2026-11-09): App proof source
-`15e4b89e` merges main `aeebabd9` (#291), including #266. Framework SHA-256:
-`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
-Branch and unchanged-main Debug/Release builds, engine fingerprints, 45/45
-unique automation keys and smokes PASS. Branch normal features passes
-27 rows. Uninstrumented main features has a retained js_dialogs AppDied-check
-FAIL (26 PASS); an assertion-preserving read-only identity diagnostic passes
-27/27, with cause unestablished. Widevine PASS on both; no Widevine
-known-failure label applies.
+Step 3 verification (child A, 2026-11-09): current App proof source
+`daf5daa1` merges main `31576213` (#279, #297 and #298). Framework SHA-256:
+`891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67`.
+Branch and unchanged-main Debug/Release builds, all four fingerprints,
+45/45 unique automation keys on both Debug builds, and smokes PASS.
+The merge keeps both sitecontrol and boost-gallery in the e2e suite lists.
+An initial merged Debug failed because Gallery's added committedURL
+parameter did not satisfy SiteControlBoostProvider. The narrow adapter in
+`AppBoostsSiteControlProvider.swift` forwards committedURL:nil; corrected
+Debug and Release builds pass. Gallery retains its explicit URL path.
 
-Fresh M5 suites on this source: commandbar 77, app-actions
-77, extensions-ui 72 (including real-App
-`X13_picker`), toolbar 10, features 27, page
-105, split 40, space-editor 167
-and incognito 31 PASS. Incognito's
-`no_snapshot_history_change` PASS includes #261. Page retains four BLOCKED
-rows and one DEFERRED row; incognito's native 2x capture remains DEFERRED.
-Site Control has 32 PASS, with only the lead-accepted
-S11/S12 visual FAILs (S12-V). Window has 83 PASS plus known
-startup budget FAILs: cold sidebar/paint 275/503 ms, warm 283/514 ms, within
-the TANDEM §4a 400/700 known-main bars. Paired startup is PENDING, 0/4
-groups: one queued attempt exited 77 before launch when load rose. Work
-stopped after the pre-final fetch found #292 changes under Engine/fork.
-No final preflight or full high gate ran. Main moved to `3b45f509` (#292)
-with Engine/fork changes while the read-only engine view still reports
-`34619927`; no merge or new build was started after this discovery. #276
-remains DRAFT, awaiting the S12 lead's engine ruling.
-The PR retains all raw medians, loads, first failures and interruptions.
+S2 fully PASSes on #295: branch and unchanged main each complete five
+Off/On cycles and all ten native exclusion barriers, with Settings ready,
+defaults restored and no leftover process. The first supplemental branch
+control stopped after its first Off reload with no visible URL anchor;
+initial blocking and that exclusion barrier passed, but no full cycle
+completed. Its rerun uses the full suite's explicit window frame/focus
+setup. The original FAIL remains in the PR. Every S2 assertion and threshold
+is unchanged. The pinned local request is `http://demand.supply/ad.js`,
+EasyList `||demand.supply^$script`, resolved to the ephemeral fixture server
+without real ad-domain traffic, per S12 lead 12:40. The old same-origin
+`/ad.js` loads with blocking On on branch and unchanged main; the earlier
+old-fixture negative remains recorded. The Settings-ready and native
+excluded_count waits follow the 14:52/14:58 rulings; the 17:22 ruling
+requires full PASS on #295, with no former S13 cache-bug waiver.
 
-S2 initially FAILED with the old same-origin `/ad.js` fixture on branch;
-unchanged main also loads that script with blocking On, while its loaded
-native filter blocks shipped EasyList rule `||demand.supply^$script`.
-The S12 lead's 12:40 ruling classifies this as a fixture defect. The ad
-request now uses that pinned domain, resolved to the ephemeral local server
-for every suite launch, including performance launches. The EasyList pin
-and rule text are verified before launch. Every original S2 assertion and
-threshold is unchanged. Initial On blocks, Off/site exclusion plus reload
-loads, and On again plus reload blocks: PASS. Restoring only the old
-same-origin request makes S2 and its initial-On proof FAIL as required.
+Current merged-head M5 results: commandbar 77 PASS, app-actions 77 PASS
+(on fresh attempt 2; the first native-key-focus FAIL is retained),
+extensions-ui 72 PASS including real-App `X13_picker`, toolbar 10 PASS,
+and branch/unchanged-main features 30 PASS each. Each features run has
+18 DEFERRED crash rows through the existing `OPEN_E2E_NO_CRASH_PROBES=1`
+gate; the new Sad Tab healthy controls run, but M1-only termination rows
+are not accepted from this M5 run. No M1 work was done.
 
-The saved real Boost, live off/on glyph/CSS, edit, host-boundary negative
-and same-parent private S4/S10 rows PASS. Compiling without the sole provider
-binding rejects the saved row/glyph proof. F3's stale-tile proof PASSes in
-both directions and rejects the old callback; F5's content/mtime proof
-rejects both old read and unconditional initialization writes; F9 rejects
-the old unavailable assertion; F4 rejects enabled private Manage Boosts.
-The F4 mutation also has an extra S2 FAIL: the script loads after toggling
-On and reloading. A restored-positive suite passes all 29 functional rows.
-An unchanged-main real Settings toggle/reload control shows the same
-On/reload failure in cycle 3 of 5 (and an Off/reload failure in cycle 1).
-This is a retained native-path failure, not a claim that F4 caused it; no
-S2 row or assertion was changed. All six mutation cases and the provider
-variant restore exact source and signed positive payload bytes, then the
-restored real-App rows PASS.
-Native F25 and the Advanced Settings early-failure cleanup/defaults canary
-PASS. The final preflight, full-gate summary and checklist belong to #276.
+Site Control completed 31 PASS and three raw FAILs: P1 first-draw p95
+10.435 ms against the unchanged 8 ms limit at load1/5/15
+18.589/16.543/17.113, plus the lead-accepted S11/S12 visual FAILs (S12-V).
+S1 open/toggle, S8 pane anchor, S2 initial-On/toggle/stale-tile, S4/S10
+saved Boost/private rows and F3/F5/F9/F4 positive rows PASS. P1's quiet
+retry was stopped before launch to finish functional suites first; it
+remains pending. Forced draw is automation-only, not shipping first-draw
+acceptance. No visual parity is claimed.
 
-Per D-10 and §Incognito, parent-Profile Boost metadata is read-only in
-private windows, with no application, writes or enabled actions. F2's
-close/retire notices are resolved by main #291. F4-rest/F6/F7/F8 remain in
-`docs/followups.md`; the private-session tile API switch remains a separate
-PR after #276, per lead item32. E1–E3 remain deferred. Gap item1(c) is
-PARTIAL: host-cookie Clear Cookies uses the legacy bridge; Clear Cache is
-absent/refused. S12-G moves both … menu operations onto `clearSiteData`
-after A and G merge. P1's forced-draw path is automation-only and does not
-establish shipping first-draw acceptance. No visual parity is claimed.
-No engine root was edited or built; no M1 work was done.
+At 20:59 the page suite lost focus to Zen on all three fresh attempts
+(partial PASS counts 25, 13 and 3). Each is INTERRUPTED and excluded from
+acceptance; cleanup/defaults audits pass and no new crash report appears.
+The lead's two-retry limit is reached. A's on-screen sequence is stopped;
+there is no global crash hold. Current-head page, split, space-editor,
+incognito and window completion, quiet P1, fresh compiled-provider and
+review-negative runs, F25/canary, four paired startup groups, final
+preflight and the full high gate remain pending. No final gate has started
+and #276 remains DRAFT. Earlier engine891c j receipts (all 11 suites,
+six mutations, provider omission, F25/canary and exact restoration) remain
+historical; they are not presented as current merged-head reruns.
+
+Per D-10 and plan §Incognito, private windows display parent-Profile
+matching Boost metadata read-only, with no application, writes or enabled
+actions. Main #291 resolves F2 close/retire notifications; no assertion was
+changed for Profile closure. The private tile API switch stays separate
+under item32. F4-rest/F6/F7/F8, E1–E3 and S12-V remain in
+`docs/followups.md`. Gap item 1(c) is PARTIAL: Clear Cookies uses the legacy
+host-cookie bridge; Clear Cache is absent/refused. S12-G: the Site Control
+… menu moves Clear Cache and Clear Cookies onto the clearSiteData bridge
+after A and G merge. No Clear Cache wiring was added.
 
 Historical pre-#271 verification (child A, 2026-11-08): App source
 `d534c708` includes main `d26300e6`, #249's sole `AppBoosts` owner, #202,
