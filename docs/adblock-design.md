@@ -260,6 +260,115 @@ Swift side (`OpenFeatures`): `AdBlockStore` holds the catalog, per-Profile enabl
 - **Storage.** Under `~/Library/Application Support/Open/Profiles/<profile>/AdBlock/`: `catalog-state.json` (enabled IDs, ETags, last-check times, catalog version), `lists/<id>.txt` (last good text per list), `engine.dat` (serialized engine for fast startup), and `exclusions.json` (excluded domains per Profile). Load `engine.dat` at Profile open (about 47 ms for two lists). Fall back to text parse if the DAT version mismatches the crate version.
 - **Per-Profile isolation.** Engines, enabled sets, and exclusions are per Profile, as in Arc (`blockListsPerProfile`). Incognito Profiles get a memory-only engine cloned from the default lists with no disk writes.
 
+### Cold-start configuration (Section 13, 2026-11-09)
+
+The App configures Default at engine readiness and every regular or private
+context at creation, before handing it to a page. It sets exclusions, the
+deterministic `Profiles/<dataDirectoryName>/AdBlock/lists` path, and the master
+switch through OpenEngine. A read-only task prefetches saved settings and
+exclusions off the main thread during model installation. Until that task
+returns, configuration uses the existing store's in-memory values where
+available, otherwise the product default (on, no exclusions). The App does not
+wait for this task or perform settings IO on the main thread before paint.
+
+The startup task also performs one `lstat` of `lists/current.json` per Profile;
+only `ENOENT` identifies a fresh Profile. There is no main-thread stat. For a
+fresh Profile with a live context, `AdBlockStore.openProfile` starts from context
+creation, or as soon as that background result returns. Store metadata, settings,
+and lease preparation run on a worker; main-actor installation only assigns and
+binds the prepared values. Seed/verify and exclusion-file IO run in
+`ListRepository`. Concurrent fresh contexts share store preparation and the
+existing per-Profile opening task. Warm Profiles keep their after-paint opening.
+
+The store configure event explicitly reloads an already configured directory
+after seeding; setting the same path alone would not retry it. A missing
+pointer keeps the initial load in `awaiting_generation`
+with a 1,500 ms deadline per eligible request and a process-wide 128-request
+limit. Bad manifests/SHA or other real load errors end that wait and fail open;
+a valid zero-list generation completes it. Main-frame navigation stays direct.
+Before the native wait was added, the App-only branch failed open before
+an engine was ready. The M5 App-only probe on 2026-11-09 blocked the first
+post-onboarding script and loaded
+its allowed control while the after-paint adapter was still unstarted. The fresh
+generation was already published before onboarding finished. On warm relaunch,
+the first script loaded before the DAT engine arrived; saved-off and excluded
+controls also loaded. The main engine has no cold-hold counters, so the probe's
+browser resource durations are not native hold measurements. Receipts are in
+`.re/s13/i/resume-0952/probe-branch/`; the Chrome-style App ad-block suite passed
+81 rows. These are historical App-only results; the combined native first-request
+proof is recorded with the native change.
+Five interleaved Release pairs per mode used the same recorded main engine,
+with the quiet lock outside the screen lock and load1 7.82–9.35. Fresh first
+paint medians were main 797 ms / App branch 719 ms (paired median difference
+−92 ms); warm medians were 755 / 655 ms (−100 ms). All 20 launches had a
+confirmed first frame, active App, and clean process/window teardown. The
+first fresh pair's 4,792 / 4,465 ms samples remain in the result; no outlier
+was removed. These compare startup with main `1a37e49a`; they do not establish
+the absolute launch budget. Raw pairs and binary hashes are beside the probe.
+
+### Bounded first-load wait (Section 13, 2026-11-09)
+
+An enabled context with a nonempty list directory can hold eligible
+subresources and subframe navigations while its first engine load is in
+flight, including the time before `current.json` is first published.
+Main-frame navigations are never held. The matcher sequence owns
+the queue and one deadline timer; it does not block a thread. Each request's
+deadline is its entry time plus 1,500 ms. At the deadline it fails open, even
+if an engine becomes available before the continuation runs. Scheduling can
+make the observed duration longer; the configured deadline never moves.
+
+The queue holds at most 128 requests across the whole browser process,
+including WebSocket and WebTransport checks. Excess requests fail open.
+Held request data is released on completion; a disconnected factory is kept
+alive only until its bounded continuations drain. The existing socket UI
+reply still checks that the requesting frame exists. Holding adds no UI work
+per request. `--v=1` logs each completed hold without a URL or site;
+`cold_holds` and `cold_hold_max_ms` are included in context status and smoke
+diagnostics. A full queue or an already elapsed deadline logs a skipped hold.
+
+Disabling blocking, excluding the site, clearing the directory, shutting
+down the service, or completing a real load error/empty first load releases
+eligible waiters. A missing `current.json` leaves the service in
+`awaiting_generation`, with no polling; requests keep their individual
+1,500 ms deadlines. A malformed pointer, bad manifest/SHA, refused symlink,
+or other read error ends the pending state, fails open, and sets `last_error`.
+The App explicitly reloads after seeding. A context that has installed an
+engine or verified a zero-list generation never enters this queue again,
+including during a reload. Turning blocking off ends the pending state;
+turning it back on retries an unfinished initial load. Off,
+excluded and already-loaded requests have zero intentional hold. A warm
+Profile relaunched in a new process can hold its first eligible request
+while its DAT engine loads; once installed, requests and later reloads
+use the normal path without a cold hold.
+
+The merged App configures contexts before page use and starts seeding a
+fresh Profile at context creation after a background stat. Warm Profiles
+open their store after paint. Early configuration, fresh seeding and the
+awaiting-generation state cover the initial missing-pointer window. The
+per-request cap and queue bound intentionally fail open if the first engine
+is unavailable in time; this is a startup wait, not a promise to block
+requests after a timeout or a real load error. Runtime receipts for the
+combined implementation are recorded separately from the earlier App-only
+checkpoint above. On M5, the combined fresh post-onboarding probe blocked the
+first ad script, loaded its allowed control, and recorded zero holds: seeding
+had completed during onboarding. A separate first-navigation probe reached
+the missing-pointer state and held its first two scripts for 263.945 and
+264.007 ms, then blocked the ad script. Its warm DAT relaunch held the first
+two scripts for 116.566 and 116.594 ms and blocked the ad script. Already-loaded,
+saved-off and excluded controls had no holds. The same first-navigation
+assertion failed on main `3b45f509` with Step 5's accepted engine: the server
+received the ad script. A Release repeat also blocked the first ad script,
+with 67.964–68.017 ms holds; that warm relaunch needed zero holds.
+
+Real `cefsimple` requests against an unpublished generation reached 128 held
+requests; request 129 passed through immediately. All 128 used the configured
+1,500 ms deadline and failed open when it expired (observed scheduling lateness
+0.06–4.06 ms). Requests started one second apart kept separate deadlines
+(3.61–4.43 ms late). Main-frame navigation, off, excluded, valid zero-list,
+bad-SHA and symlink-pointer controls passed without holds, and cancellation
+closed all seven browsers cleanly. Raw App/server/native logs, source and
+engine hashes, and boundary receipts are in `.re/s13/i/native-1418/`.
+
 ### Site Control Center and Settings UI
 
 - The panel toggle shows three facts: the master state, whether this site is excluded, and the blocked count for the current page load (from `blockedResourceCount`). Toggling writes the exclusion for the registrable domain, updates the panel without closing it, and shows the reload affordance (`AdBlockReloadFollowUpAction` in Arc). The scope dialog offers “this site” (registrable domain, default) and “this page only” (exact URL, session-scoped). Do not offer “everywhere” in the per-site dialog; that is the master toggle in Settings.

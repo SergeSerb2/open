@@ -1,0 +1,14 @@
+# Renderer code communicates with the browser through Mojo only. Never pull
+# the browser service, matcher, or Rust bridge into the renderer source set.
+include_rules = [
+  "-open/adblock",
+  "+open/adblock/mojom",
+  "+open/adblock/renderer",
+  "+chrome/common/chrome_isolated_world_ids.h",
+  "-content",
+  "+content/public/renderer",
+  "+gin",
+  "+mojo/public/cpp/bindings",
+  "+third_party/blink/public",
+  "+v8/include",
+]

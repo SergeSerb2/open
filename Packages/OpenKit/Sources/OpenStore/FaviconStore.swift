@@ -5,7 +5,7 @@ import SQLite3
 import UniformTypeIdentifiers
 
 public enum FaviconSourceKind: String, Codable, Sendable {
-    case appleTouch = "apple-touch", manifest, link, favicon = "favicon.ico"
+    case appleTouch = "apple-touch", manifest, link, favicon = "favicon.ico", curated
 }
 
 public struct FaviconImageInfo: Codable, Sendable {

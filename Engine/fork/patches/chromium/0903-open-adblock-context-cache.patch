@@ -1,0 +1,76 @@
+diff --git a/components/web_cache/browser/web_cache_manager.cc b/components/web_cache/browser/web_cache_manager.cc
+index 8241e23..9fd28ac 100644
+--- a/components/web_cache/browser/web_cache_manager.cc
++++ b/components/web_cache/browser/web_cache_manager.cc
+@@ -84,6 +84,17 @@ void WebCacheManager::ClearCacheForProcess(content::ChildProcessId process_id) {
+   }
+ }
+
++bool WebCacheManager::ClearCacheForProcessOnNavigation(
++    content::ChildProcessId process_id) {
++  auto it = web_cache_services_.find(process_id);
++  auto* process = content::RenderProcessHost::FromID(process_id);
++  if (it == web_cache_services_.end() || !process || !process->IsReady()) {
++    return false;
++  }
++  it->second->ClearCache(true);
++  return true;
++}
++
+ void WebCacheManager::ClearRendererCache(
+     WebCacheManager::ClearCacheOccasion occasion) {
+   for (auto& service : web_cache_services_) {
+diff --git a/components/web_cache/browser/web_cache_manager.h b/components/web_cache/browser/web_cache_manager.h
+index 3a6f576..214f76e 100644
+--- a/components/web_cache/browser/web_cache_manager.h
++++ b/components/web_cache/browser/web_cache_manager.h
+@@ -45,6 +45,12 @@ class WebCacheManager : public content::RenderProcessHostCreationObserver,
+   // Must be called between Add(process_id) and Remove(process_id).
+   void ClearCacheForProcess(content::ChildProcessId process_id);
+
++  // Arms the existing navigation-delayed clear for just this renderer.
++  // The renderer coalesces repeated requests while a clear is pending and
++  // handles navigation arriving before this IPC. Returns whether a ready
++  // renderer was sent a request; a not-yet-ready renderer has no old cache.
++  bool ClearCacheForProcessOnNavigation(content::ChildProcessId process_id);
++
+   // Clears all in-memory caches when a tab is reloaded or the user navigates
+   // to a different website.
+   void ClearCacheOnNavigation();
+diff --git a/components/web_cache/renderer/web_cache_impl.cc b/components/web_cache/renderer/web_cache_impl.cc
+index db67331..edaa22a 100644
+--- a/components/web_cache/renderer/web_cache_impl.cc
++++ b/components/web_cache/renderer/web_cache_impl.cc
+@@ -4,6 +4,7 @@
+
+ #include "components/web_cache/renderer/web_cache_impl.h"
+
++#include "base/logging.h"
+ #include "third_party/blink/public/platform/web_cache.h"
+
+ namespace web_cache {
+@@ -26,6 +27,7 @@ void WebCacheImpl::ExecutePendingClearCache() {
+     case kClearCache_Pending:
+       blink::WebCache::Clear();
+       clear_cache_state_ = kInit;
++      VLOG(1) << "WebCache: cleared_processes=1 on_navigation=1";
+       break;
+   }
+ }
+@@ -39,12 +41,16 @@ void WebCacheImpl::ClearCache(bool on_navigation) {
+   switch (clear_cache_state_) {
+     case kInit:
+       clear_cache_state_ = kClearCache_Pending;
++      VLOG(1) << "WebCache: queued_processes=1 on_navigation=1";
+       break;
+     case kNavigate_Pending:
+       blink::WebCache::Clear();
+       clear_cache_state_ = kInit;
++      VLOG(1) << "WebCache: cleared_processes=1 on_navigation=1"
++              << " navigation_already_seen=1";
+       break;
+     case kClearCache_Pending:
++      VLOG(1) << "WebCache: coalesced_processes=1 on_navigation=1";
+       break;
+   }
+ }

@@ -9,10 +9,14 @@ import plistlib
 import shutil
 import subprocess
 import time
+from collections import Counter
+from statistics import median
 from pathlib import Path
 
 
 def run(factory, results, tmp, api):
+    if os.environ.get('OPEN_E2E_WELCOME_CONTRAST_ONLY') == '1':
+        return contrast_matrix(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_NEGATIVE') == '1':
         return negative_gates(factory, results, tmp, api)
     root = Path(api.ROOT)
@@ -322,6 +326,8 @@ def run(factory, results, tmp, api):
         bar = app.call('commandbar-state')
         record('W24_cmd_t_native_context', bar.get('presented') and bar.get('mode') == 'newTab', state=bar)
         app.call('key', key='escape')
+        app.quit(); app = None
+        contrast_matrix(factory, results, tmp, api)
     finally:
         try:
             api._restore_defaults(app, saved)
@@ -330,6 +336,144 @@ def run(factory, results, tmp, api):
         for source in Path(tmp).glob('open.log*'):
             shutil.copyfile(source, evidence / source.name)
         (evidence / 'welcome-checks.json').write_text(json.dumps(dict(results), indent=2))
+
+
+def contrast_matrix(factory, results, tmp, api):
+    """Eight real-window cases, with ICC-to-sRGB pixel measurements.
+
+    Appearance overrides NSApp only. Inactive means a second owned Open process
+    has activation; no user app or system appearance setting is changed.
+    """
+    evidence = Path(api.ROOT, '.re', 'welcome-contrast', 'matrix-' + str(time.time_ns()))
+    evidence.mkdir(parents=True)
+    app = peer = None
+    rows = {}
+    peer_roots = set()
+    try:
+        app = factory(urls=(), fresh=True, extra_env={'OPEN_E2E_REDUCE_MOTION': '1'})
+        app.call('welcome', action='insert')
+        window = app.call('window-state')
+        # Reduce Motion makes hardware hover harmless. Keep a fixed left-hand
+        # frame so the active peer fits beside the entire visible Welcome page.
+        app.call('window-frame', frame=[60, 60, 1280, 800])
+        app.call('window-focus', id=window['id'], activate=True)
+        assert api.wait_until(lambda: app.call('welcome')['visible'], timeout=5, step=.1)
+        for theme in ('light', 'dark'):
+            # A warm theme reproduces the low-contrast sidebar accent reported
+            # by the lead. Same key color, forced content appearance each way.
+            style = dict(keyColor=dict(red=.66, green=.48, blue=.34, alpha=1),
+                         colorCount=1, wheel='analogous', appearance=theme,
+                         noiseFactor=0, texture='grain', intensityFactor=.8, mathVersion=1)
+            app.call('theme-set', style=style)
+            for appearance in ('light', 'dark'):
+                app.call('appearance', name=appearance)
+                for active in (True, False):
+                    name = 'W36_contrast_%s_%s_%s' % (theme, appearance, 'active' if active else 'inactive')
+                    peer_frame = None
+                    if active:
+                        if peer is not None:
+                            peer.call('yield-activation', pid=app.pid)
+                        app.call('window-focus', id=window['id'], activate=True)
+                    else:
+                        if peer is None:
+                            peer = app.foreground_peer()
+                            peer_roots.add(Path(peer.user_data))
+                        else:
+                            app.call('yield-activation', pid=peer.pid)
+                            peer.call('window-focus', id=peer.call('window-state')['id'], activate=True)
+                        # Keep the Welcome window uncovered, on the M5's main
+                        # 2560 pt screen, while the owned peer is active.
+                        peer.call('window-frame', frame=[1540, 70, 720, 500])
+                        peer_frame = peer.call('window-state')['frame']
+                        app.accept_owned_handoff(peer)
+                    time.sleep(.3)
+                    state = app.call('welcome')
+                    native_window = app.call('window-state')
+                    path = evidence / (name + '.png')
+                    capture = app.call('snapshot', path=str(path))
+                    measured = pixel_contrast(str(path), state, native_window, api)
+                    appearance_ok = ('Dark' in state['windowState']['appAppearance']) == (appearance == 'dark')
+                    activation_ok = state['windowState']['key'] == active and state['windowState']['appActive'] == active
+                    theme_state = app.call('theme-get')
+                    theme_ok = theme_state['contentAppearance'] == theme
+                    displayed = state['visible'] and state['windowState']['visible'] \
+                        and not state['windowState']['miniaturized'] and not state['windowState']['occluded']
+                    if peer_frame:
+                        x, y, w, h = native_window['frame']
+                        px, py, pw, ph = peer_frame
+                        displayed = displayed and (px >= x+w or px+pw <= x or py >= y+h or py+ph <= y)
+                    row = dict(measured, ok=measured['ok'] and appearance_ok and activation_ok and theme_ok and displayed
+                               and capture['method'].startswith('windowserver'),
+                               theme=theme, appAppearance=appearance, active=active,
+                               appearanceOK=appearance_ok, activationOK=activation_ok, themeOK=theme_ok,
+                               fullyDisplayed=displayed, frame=native_window['frame'], peerFrame=peer_frame,
+                               window=state['windowState'], themeState=theme_state,
+                               layout=state['layout'],
+                               capture=capture, screenshot=str(path), loadAverage=list(os.getloadavg()))
+                    rows[name] = row
+                    (evidence / 'ratios.json').write_text(json.dumps(rows, indent=2))
+                    results[name] = row
+    finally:
+        if peer: peer.quit()
+        if app: app.quit()
+        for data in peer_roots:
+            shutil.rmtree(data, ignore_errors=True)
+            shutil.rmtree(Path.home() / 'Library/Caches' / data.name, ignore_errors=True)
+        (evidence / 'ratios.json').write_text(json.dumps(rows, indent=2))
+
+
+def pixel_contrast(path, state, window, api):
+    """Sample solid glyph cores and the modal surface in native label bounds.
+
+    Anti-alias edge pixels are not the ink color. Use the median of the 12
+    strongest covered pixels, retain their coordinates, and require >=12 ink
+    pixels. All ten text labels must pass; the 3 reported values are minima.
+    """
+    width, height, pixel = api.read_image(path, srgb=True)
+    sx, sy = width / window['frame'][2], height / window['frame'][3]
+
+    def luminance(rgb):
+        def linear(c):
+            c = c / 255
+            return c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4
+        return sum(linear(c) * w for c, w in zip(rgb, (.2126, .7152, .0722)))
+
+    def ratio(a, b):
+        a, b = luminance(a), luminance(b)
+        return (max(a, b) + .05) / (min(a, b) + .05)
+
+    def sample(label, minimum):
+        x, y, w, h = label['frame']
+        assert x >= 0 and y >= 0 and x + w <= window['frame'][2] and y + h <= window['frame'][3]
+        points = [(px, py) for py in range(round(y * sy), round((y+h) * sy))
+                  for px in range(round(x * sx), round((x+w) * sx))]
+        colors = [(pixel(x, y), x, y) for x, y in points]
+        surface = Counter(c for c, _, _ in colors).most_common(1)[0][0]
+        ink = sorted(((ratio(c, surface), c, x, y) for c, x, y in colors
+                      if max(abs(a-b) for a, b in zip(c, surface)) >= 3), reverse=True)[:12]
+        core = tuple(median(item[1][i] for item in ink) for i in range(3)) if ink else surface
+        contrast = ratio(core, surface)
+        return dict(ok=len(ink) == 12 and contrast >= minimum, ratio=contrast, minimum=minimum,
+                    textRGB=core, surfaceRGB=surface, frame=label['frame'],
+                    corePixels=[dict(x=x, y=y, rgb=c, ratio=r) for r, c, x, y in ink])
+
+    layout = state['layout']
+    samples = {name: sample(label, 3) for name, label in layout['textPixels'].items()}
+    for link in layout.get('linkPixels', []):
+        samples['link_' + link['label']] = sample(link, 4.5)
+    for index, card in enumerate(layout['cards']):
+        for role, label in card['textPixels'].items():
+            samples['card%d_%s' % (index+1, role)] = sample(label, 4.5)
+        for label in card.get('labelPixels', []):
+            samples['card%d_label_%s' % (index+1, label['label'])] = sample(label, 4.5)
+    minima = dict(header=min(samples[name]['ratio'] for name in ('heading', 'subheading')),
+                  title=min(samples['card%d_title' % i]['ratio'] for i in range(1, 5)),
+                  body=min(samples['card%d_body' % i]['ratio'] for i in range(1, 5)))
+    labels_present = [label['label'] for card in layout['cards'] for label in card.get('labelPixels', [])] == ['+ New Tab', 'Home']
+    links_present = [link['label'] for link in layout.get('linkPixels', [])] == ['Learn Essential Shortcuts', 'Settings']
+    return dict(ok=labels_present and links_present and all(s['ok'] for s in samples.values()), ratios=minima, samples=samples,
+                illustrationLabelsPresent=labels_present, footerLinksPresent=links_present,
+                pixels=[width, height], colorSpace='sRGB (embedded ICC converted by sips)')
 
 
 COPY = [
@@ -355,17 +499,28 @@ def design_gates(state, appearance):
     def near(actual, expected, tolerance=.005):
         return len(actual) == len(expected) and all(abs(a - b) <= tolerance for a, b in zip(actual, expected))
 
+    def composite(foreground, background):
+        return [c * foreground[3] + b * (1 - foreground[3])
+                for c, b in zip(foreground[:3], background[:3])] + [1]
+
+    def luminance(color):
+        linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in color[:3]]
+        return sum(c * weight for c, weight in zip(linear, (.2126, .7152, .0722)))
+
     color_ok = len(cards) == 4
     for card in cards:
         paint = card['paints']
         color_ok = color_ok and near(paint.get('surface', []), surface) \
             and near(paint.get('row', []), [ink, ink, ink, .14 if dark else .10]) \
-            and near(paint.get('active', []), [61/255, 107/255, 1, .9]) \
+            and near(paint.get('active', []), [.201293, .370453, .947755, 1]) \
             and abs(paint.get('sidebar', [0, 0, 0, 0])[3] - .55) <= .005
         if 'otherSidebar' in paint:
             color_ok = color_ok and abs(paint['otherSidebar'][3] - .55) <= .005
         if 'text' in paint:
-            color_ok = color_ok and near(paint['text'], [ink, ink, ink, .75])
+            home_surface = composite(paint['otherSidebar'], composite(paint['row'], composite(paint['sidebar'], surface)))
+            text_luma, surface_luma = luminance(paint['text']), luminance(home_surface)
+            home_ratio = (max(text_luma, surface_luma) + .05) / (min(text_luma, surface_luma) + .05)
+            color_ok = color_ok and abs(paint['text'][3] - 1) <= .005 and home_ratio >= 5.19
         if 'activeText' in paint:
             color_ok = color_ok and near(paint['activeText'], [1, 1, 1, 1])
     return {

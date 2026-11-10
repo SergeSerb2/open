@@ -2,18 +2,19 @@ diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc b/ce
 index f990219e7..4c92639a3 100644
 --- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
 +++ b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
-@@ -45,6 +45,7 @@
+@@ -45,6 +45,8 @@
  #include "content/public/common/content_switches.h"
  #include "net/ssl/ssl_cert_request_info.h"
  #include "net/ssl/ssl_private_key.h"
++#include "open/adblock/open_adblock_cosmetics_host.h"
 +#include "open/adblock/open_adblock_hooks.h"
  #include "third_party/blink/public/common/web_preferences/web_preferences.h"
  #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
- 
+
 @@ -185,6 +186,15 @@ HINSTANCE GetCodeModuleHandle() {
  }
  #endif
- 
+
 +// Open: the ad-block service of |frame|'s Profile, or null.
 +open_engine::OpenAdBlockService* OpenAdBlockServiceFor(
 +    content::RenderFrameHost* frame) {
@@ -24,12 +25,12 @@ index f990219e7..4c92639a3 100644
 +}
 +
  }  // namespace
- 
+
  ChromeContentBrowserClientCef::ChromeContentBrowserClientCef() = default;
 @@ -510,6 +520,12 @@ void ChromeContentBrowserClientCef::WillCreateURLLoaderFactory(
      return;
    }
- 
+
 +  // Open: ad blocking, outermost interceptor (docs/plans/adblock-fork.md §7).
 +  open_engine::MaybeProxyURLLoaderFactoryForAdBlock(
 +      CefBrowserContext::FromProfile(profile)->open_adblock_service(), frame,
@@ -42,7 +43,7 @@ index f990219e7..4c92639a3 100644
 @@ -570,6 +586,69 @@ void ChromeContentBrowserClientCef::WillCreateURLLoaderFactory(
        std::move(request_handler));
  }
- 
+
 +bool ChromeContentBrowserClientCef::WillInterceptWebSocket(
 +    content::RenderFrameHost* frame) {
 +  return open_engine::AdBlockWantsWebSocket(OpenAdBlockServiceFor(frame),
@@ -109,6 +110,17 @@ index f990219e7..4c92639a3 100644
  bool ChromeContentBrowserClientCef::HandleExternalProtocol(
      const GURL& url,
      content::WebContents::Getter web_contents_getter,
+@@ -717,6 +797,10 @@ void ChromeContentBrowserClientCef::ExposeInterfacesToRenderer(
+
+   CefBrowserManager::ExposeInterfacesToRenderer(registry, associated_registry,
+                                                 host);
++
++  auto* context = CefBrowserContext::FromBrowserContext(host->GetBrowserContext());
++  open_engine::ExposeAdBlockInterfacesToRenderer(
++      registry, context ? context->open_adblock_service() : nullptr);
+ }
+
+ void ChromeContentBrowserClientCef::RegisterBrowserInterfaceBindersForFrame(
 diff --git a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h b/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
 index c7dc8039c..0487b262d 100644
 --- a/cef/libcef/browser/chrome/chrome_content_browser_client_cef.h
