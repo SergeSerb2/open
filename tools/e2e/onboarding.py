@@ -287,7 +287,7 @@ def run(factory, results, tmp, h):
         with tempfile.TemporaryDirectory(prefix='open-intro-replay-', dir='/tmp') as root:
             Path(root, 'State').mkdir()
             Path(root, 'State/browser.json').write_bytes(prior)
-            app = h.Open('Debug', 'chrome', root, ['--use-mock-keychain', '--intro-sound=silent',
+            app = h.Open(app.config, 'chrome', root, ['--use-mock-keychain', '--intro-sound=silent',
                 '--replay-onboarding', '--arc-dir='+str(source)], str(evidence/'replay-temp.log'), urls=(), first_run=True)
             app.focus_tracker = h._ACTIVE_FOCUS_TRACKER
             h._ACTIVE_FOCUS_TRACKER.apps.append(app)
