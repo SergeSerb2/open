@@ -131,8 +131,11 @@ def run(factory, results, tmp, h):
                        and app.eval(tab, 'window.fixtureAdLoaded===true') is False, panel=s, native=native(tab))
                 # Normal clicks still persist to the parent owner.
                 tap(); assert tile_is('off'); assert barrier(tab, 1)
+                def saved_domain():
+                    return any('scc.test' in json.loads(p.read_text()) for p in Path(app.user_data).glob('Profiles/*/[Aa]d[Bb]lock/exclusions.json'))
+                saved_exclusion = wait(saved_domain, timeout=8)
                 persisted = files()
-                record('T_normal_saved_exclusion', any('plain.scc.test' in json.loads((Path(app.user_data) / p).read_text()) for p in persisted if p.endswith('exclusions.json')), files=persisted)
+                record('T_normal_saved_exclusion', saved_exclusion, files=persisted)
                 tap(); assert tile_is('on'); assert barrier(tab, 0)
                 parent_profile = app.call('settings-adblock-site', tab=tab)['profile']
                 def private_window():
@@ -192,8 +195,8 @@ def run(factory, results, tmp, h):
                 record('T_profile_close_refresh', unavailable and state()['presented'] and bool(tile(unavailable).get('help')) and not close_state['open'], panel=unavailable, store=close_state)
                 app.call('settings-adblock-lifecycle', profile=parent_profile, action='open')
                 record('T_profile_reopen_refresh', bool(tile_is('on')), panel=state())
-            # No user-facing certificate proceed path exists in Open. Exercise
-            # the live error state and a real mixed-content warning instead.
+            # Exercise the built-in certificate error page. Use its existing
+            # proceed link when offered; never add a shell bypass or trust rule.
             if group in ('all', 'security'):
                 visit(tab, f['secure'] + '/secure')
                 secure = wait(lambda: app.call('security-state', tab=tab)['level'] == 'secure', timeout=10)
@@ -206,7 +209,7 @@ def run(factory, results, tmp, h):
                 panel = wait(lambda: (lambda s: s if s['security']['title'] == 'Connection: Insecure' else None)(state()), timeout=8)
                 record('T_security_mixed_live_refresh', mixed and panel and panel['presented']
                        and panel['sourceReads']['changeDeliveries'] > deliveries and app.eval(tab, 'window.mixedLoaded===true'),
-                       panel=panel, engine=app.call('security-state', tab=tab), variant='untrusted error plus mixed content; no proceed UI')
+                       panel=panel, engine=app.call('security-state', tab=tab), variant='mixed-content warning on an already-open panel')
                 visit(tab, f['http'] + '/plain'); s = open_panel()
                 record('T_security_plain_http', s['security']['title'] == 'Connection: Insecure', panel=s)
                 # Begin on secure HTTPS so a canceled provisional navigation
@@ -216,7 +219,23 @@ def run(factory, results, tmp, h):
                 bad = wait(lambda: (lambda s: s if s['level'] == 'dangerous' else None)(app.call('security-state', tab=tab)), timeout=15)
                 s = open_panel()
                 error_document = app.eval(tab, "({title:document.title,url:location.href,proceed:!!document.querySelector('#proceed-link')})")
-                record('T_security_untrusted_https', bad and s['security']['title'] == 'Connection: Insecure', panel=s, engine=bad, requestedOrigin=f['bad'], errorDocument=error_document)
+                interstitial_panel = s
+                error_ok = bad and s['security']['title'] == 'Connection: Insecure'
+                proceed = app.eval(tab, """(()=>{
+                  document.querySelector('#details-button')?.click();
+                  const link=document.querySelector('#proceed-link');
+                  if(!link || !link.getClientRects().length || getComputedStyle(link).visibility==='hidden')return false;
+                  link.click();return true})()""")
+                proceed_ok, engine = True, bad
+                if proceed:
+                    app.call('wait', tab=tab)
+                    loaded = wait(lambda: app.eval(tab, 'document.title') == 'SCC local fixture', timeout=10)
+                    engine = app.call('security-state', tab=tab); s = open_panel()
+                    proceed_ok = loaded and engine['level'] == 'dangerous' and s['host'] == 'untrusted.scc.test' and s['security']['title'] == 'Connection: Insecure'
+                record('T_security_untrusted_https', error_ok and proceed_ok,
+                       panel=s, engine=engine, interstitialPanel=interstitial_panel, interstitialEngine=bad,
+                       requestedOrigin=f['bad'], errorDocument=error_document, proceeded=proceed,
+                       variant='existing Privacy error details/proceed link' if proceed else 'approved untrusted-error plus mixed-content variant')
         finally:
             if app:
                 try: h._restore_defaults(app, saved)
