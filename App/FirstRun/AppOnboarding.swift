@@ -60,7 +60,7 @@ extension AppDelegate {
           self?.onboardingReceipt = final
         }
       }
-      controller.showPlaceholder()
+      if !engineReady { controller.showPlaceholder() }
     }
     guard engineReady else { return }
     if isFirstRun && !firstRunSaved && !onboardingEngineSettled {
