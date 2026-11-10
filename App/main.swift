@@ -95,12 +95,12 @@ if firstFrame.presented {
   if appDelegate.isFirstRun { appDelegate.onboardingStartup["firstWindowFrameHostTime"] = CACurrentMediaTime() }
   #endif
   if !appDelegate.isFirstRun {
-  LaunchTiming.shared.mark("sidebarDrawn")
-  #if OPEN_AUTOMATION
-  LaunchTiming.shared.recordSidebarImages()
-  appDelegate.recordFirstFrameMenuProbe()
-  LaunchTiming.shared.postKeyReadinessProbe(to: appDelegate.frontWindowController?.window)
-  #endif
+    LaunchTiming.shared.mark("sidebarDrawn")
+    #if OPEN_AUTOMATION
+    LaunchTiming.shared.recordSidebarImages()
+    appDelegate.recordFirstFrameMenuProbe()
+    LaunchTiming.shared.postKeyReadinessProbe(to: appDelegate.frontWindowController?.window)
+    #endif
   }
 } else {
   // An off-screen/asleep display may never tick. Presentation confirmation

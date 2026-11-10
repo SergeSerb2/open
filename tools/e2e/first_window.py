@@ -10,12 +10,13 @@ def before_engine(timing, startup, evidence):
     keys = ('windowShown', 'firstWindowDrawn', 'engineStart', 'engineStarted')
     marks = [timing.get(key) for key in keys]
     return (all(isinstance(t, (int, float)) for t in marks)
-            and marks == sorted(marks) and marks[1] < marks[2]
+            and marks == sorted(marks)
             and timing.get('firstFrameConfirmed') is True
             and evidence.get('visibleOnboardingWindows') == 1
             and evidence.get('pagesBeforeEngine') == 0
             and evidence.get('contextsBeforeEngine') == 0
-            and isinstance(startup.get('firstWindowFrameHostTime'), (int, float)))
+            and isinstance(startup.get('firstWindowFrameHostTime'), (int, float))
+            and startup['firstWindowFrameHostTime'] < startup.get('engineStartBeginHostTime', 0))
 
 
 def run(factory, results, tmp, h):
@@ -68,3 +69,30 @@ def run(factory, results, tmp, h):
         done.set(); observer.join(timeout=6)
         if app is not None:
             app.quit()
+
+    # Termination in the temporary native loop must skip Chromium entirely.
+    root = Path(tmp)/'first-window-early-quit'
+    log = Path(tmp)/'first-window-early-quit.log'
+    with log.open('w') as stream:
+        quit = h.subprocess.run([app.executable, '--user-data-dir='+str(root), '--intro-sound=off'],
+            env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE='1', OPEN_E2E_OWNER_PID=str(os.getpid()),
+                     OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS='1'), stdout=stream, stderr=h.subprocess.STDOUT, timeout=15)
+    text = log.read_text(errors='replace')
+    results['first_window_quit_before_engine'] = dict(ok=quit.returncode == 0
+        and 'termination before engine' in text and 'terminationSkippedEngine' in text
+        and 'engineStart' not in text and not (root/'State/browser.json').exists(),
+        exit=quit.returncode, load=os.getloadavg())
+    unconfirmed = None
+    try:
+        unconfirmed = factory(urls=(), fresh=True, extra_args=['--intro-sound=off'],
+                              extra_env={'OPEN_AUTOMATION_SKIP_DISPLAY_LINK': '1'})
+        timing = unconfirmed.call('timing')
+        results['first_window_timeout_continues'] = dict(ok=timing.get('firstFrameConfirmed') is False
+            and 'firstWindowDrawn' not in timing and 'sidebarDrawn' not in timing
+            and timing.get('firstFrameWaitTimedOut', 0) >= 3000
+            and timing.get('engineStart', 0) >= timing['firstFrameWaitTimedOut']
+            and 'engineStarted' in timing and unconfirmed.call('onboarding').get('active') is True,
+            timing=timing, load=os.getloadavg())
+    finally:
+        if unconfirmed is not None:
+            unconfirmed.quit()
