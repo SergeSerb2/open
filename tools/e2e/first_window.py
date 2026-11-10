@@ -25,6 +25,7 @@ def run(factory, results, tmp, h):
     observed = {}
     done = threading.Event()
     previous = set(id(a) for a in h._OWNED_APPS)
+    offsets = {a.log.name: Path(a.log.name).stat().st_size for a in h._OWNED_APPS}
 
     def observe():
         try:
@@ -33,7 +34,9 @@ def run(factory, results, tmp, h):
                 app = next((a for a in h._OWNED_APPS if id(a) not in previous and a.pid), None)
                 if app is None:
                     continue
-                text = Path(app.log.name).read_text(errors='replace')
+                with Path(app.log.name).open(errors='replace') as log:
+                    log.seek(offsets.get(app.log.name, 0))
+                    text = log.read()
                 if 'Open: pre-engine timing ' not in text:
                     continue
                 sample = h.subprocess.run([app.window_counter, str(app.pid)], capture_output=True, text=True, timeout=5)

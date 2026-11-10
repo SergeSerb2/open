@@ -120,6 +120,7 @@ def run(factory, results, tmp, h):
             reason='static firstWindowDrawn precedes engine.start; this later mark measures the first animated intro frame',
             load=os.getloadavg())
         if os.environ.get('OPEN_E2E_ONBOARDING_FRAMES_ONLY') == '1': return
+        app.quit()
         runpy.run_path(str(Path(h.ROOT)/'tools/e2e/first_window.py'))['run'](factory, results, tmp, h)
         # Run every existing functional predicate on a separate unmeasured
         # launch. Its early keys, phase polling and PNGs cannot perturb frames.
