@@ -34,7 +34,17 @@ final class WelcomePageView: NSScrollView {
   private let shortcuts = NSButton(title: "Learn Essential Shortcuts", target: nil, action: nil)
   private let settings = NSButton(title: "Settings", target: nil, action: nil)
   var footerFrame: NSRect { shortcuts.frame.union(settings.frame) }
+  #if OPEN_AUTOMATION
+  var footerLinks: [NSButton] { [shortcuts, settings] }
+  #endif
   private var observers: [NSObjectProtocol] = []
+  private var appearanceObservation: NSKeyValueObservation?
+  private struct ColorInputs: Equatable {
+    let style: SpaceThemeStyle?
+    let system: ContentAppearance
+    let key: Bool
+  }
+  private var colorInputs: ColorInputs?
   private var completion: Timer?
   var hasCompletion: Bool { completion != nil }
   private var nextPlaylistCard: Int? = 0
@@ -81,6 +91,14 @@ final class WelcomePageView: NSScrollView {
     for i in 0..<3 { cards[i].nextKeyView = cards[i + 1] }
     cards[3].nextKeyView = shortcuts; shortcuts.nextKeyView = settings
     let center = NotificationCenter.default
+    for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+      observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.updateColors() }
+      })
+    }
+    appearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+      MainActor.assumeIsolated { self?.updateColors() }
+    }
     for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
                  NSWindow.didDeminiaturizeNotification,
                  NSApplication.didHideNotification, NSApplication.didUnhideNotification] {
@@ -106,7 +124,7 @@ final class WelcomePageView: NSScrollView {
       NSWorkspace.shared.notificationCenter.removeObserver(observer)
     }
   }
-  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); syncVisibility() }
+  override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateColors(); syncVisibility() }
   override func viewDidHide() { super.viewDidHide(); syncVisibility() }
   override func viewDidUnhide() { super.viewDidUnhide(); syncVisibility() }
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
@@ -133,14 +151,24 @@ final class WelcomePageView: NSScrollView {
     updateColors(); syncVisibility()
   }
   func updateColors() {
-    let system: ContentAppearance = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
-    let style = styleProvider?(), appearance = style?.resolvedAppearance(system: system) ?? system
+    // A Space can override the window appearance. The system fallback must
+    // come from the app, not from that already-overridden window/view.
+    let system: ContentAppearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    let style = styleProvider?()
+    let inputs = ColorInputs(style: style, system: system, key: window?.isKeyWindow == true)
+    guard inputs != colorInputs else { return }; colorInputs = inputs
+    let appearance = style?.resolvedAppearance(system: system) ?? system
     let palette = style?.palette(for: appearance), dark = appearance == .dark
-    backgroundColor = palette?.background.nsColor ?? (dark ? NSColor(srgbRed: 0.11, green: 0.12, blue: 0.14, alpha: 1) : .white)
+    let fallback = dark ? NSColor(srgbRed: 0.11, green: 0.12, blue: 0.14, alpha: 1) : .white
+    backgroundColor = WelcomeTextColors.opaque(palette?.background.nsColor ?? fallback, over: fallback)
     let primary = palette?.foregroundPrimary.nsColor ?? (dark ? .white : .black)
     let secondary = palette?.foregroundSecondary.nsColor ?? primary.withAlphaComponent(0.6)
-    heading.textColor = primary; subheading.textColor = secondary
+    let header = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: backgroundColor)
+    heading.textColor = header.primary; subheading.textColor = header.secondary
+    let link = WelcomeTextColors.text(.linkColor, on: backgroundColor)
+    shortcuts.contentTintColor = link; settings.contentTintColor = link
     let fill = WelcomeColors.surface(backgroundColor, dark: dark)
+    let cardText = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: fill)
     let tint: NSColor
     if let style {
       let field = ThemeField.Evaluator(style: style, windowSize: CGSize(width: 1000, height: 1000), isActive: true)
@@ -148,7 +176,7 @@ final class WelcomePageView: NSScrollView {
       tint = NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
     } else { tint = NSColor(srgbRed: 0.24, green: 0.29, blue: 0.48, alpha: 1) }
     for card in cards {
-      card.apply(fill: fill, primary: primary, secondary: secondary,
+      card.apply(fill: fill, primary: cardText.primary, secondary: cardText.secondary,
         background: backgroundColor, sidebarTint: tint, dark: dark)
     }
   }

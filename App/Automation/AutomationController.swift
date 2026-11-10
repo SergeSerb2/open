@@ -331,6 +331,11 @@
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-adblock": return try await settingsAdBlock(a)
+      case "settings-adblock-site": return try settingsAdBlockSite(a)
+      #if DEBUG
+      case "settings-adblock-profile": return try await settingsAdBlockProfile(a)
+      case "settings-adblock-lifecycle": return try await settingsAdBlockLifecycle(a)
+      #endif
       case "settings-adblock-engine": return settingsAdBlockEngine()
       case "settings-toggle":
         let settings = app.settingsPresenter.settings

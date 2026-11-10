@@ -6,6 +6,7 @@
 #define OPEN_ADBLOCK_OPEN_ADBLOCK_MATCHER_H_
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -13,6 +14,7 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
@@ -28,6 +30,10 @@ namespace open_engine {
 // Step 4 measures its gates at 8 and 16 KiB; the cap becomes 8 KiB only if a
 // gate fails at 16 KiB.
 inline constexpr uint32_t kOpenAdBlockMatchCapBytes = 16 * 1024;
+
+// First-load requests share one process-wide queue. A full queue fails open.
+inline constexpr size_t kOpenAdBlockMaxColdHolds = 128;
+inline constexpr auto kOpenAdBlockColdHoldLimit = base::Milliseconds(1500);
 
 // Process-wide sequences (adblock-fork §7.6, D-12). Each is created on first
 // use; creating one starts no thread.
@@ -82,6 +88,8 @@ struct AdBlockMatcherCounters {
   // G-6 (§7.8): checks over 1 ms, and the slowest check.
   std::atomic<uint64_t> checks_over_1ms{0};
   std::atomic<uint64_t> max_check_us{0};
+  std::atomic<uint64_t> cold_holds{0};
+  std::atomic<uint64_t> cold_hold_max_ms{0};
   std::atomic<uint64_t> cosmetic_dropped_procedural{0};
   std::atomic<uint64_t> cosmetic_dropped_unsafe{0};
   std::atomic<uint64_t> cosmetic_dropped_style{0};
@@ -106,6 +114,17 @@ class OpenAdBlockMatcher
   void SetEngine(std::shared_ptr<const EngineHolder> engine);
   void SetEnabled(bool enabled);
   void SetExclusions(base::flat_set<std::string> normalized_domains);
+  // Includes awaiting the first current.json publication. A real load error
+  // ends the wait; completed also closes the initial window for zero lists.
+  void SetFirstLoadPending(bool pending, bool completed = false);
+
+  bool NeedsFirstEngineHold(std::string_view top_host) const;
+  // Matcher sequence only. Call only for eligible subresources/subframes,
+  // never main-frame navigations. The callback runs once on this sequence;
+  // true means this request must fail open (deadline or queue limit).
+  void HoldForFirstEngine(std::string top_host,
+                          base::TimeTicks request_start,
+                          base::OnceCallback<void(bool)> resume);
 
   // enabled, an engine loaded, and |top_host| not excluded.
   bool IsActiveFor(std::string_view top_host) const;
@@ -133,12 +152,16 @@ class OpenAdBlockMatcher
   const AdBlockMatcherCounters& counters() const { return counters_; }
 
  private:
+  class ColdHoldQueue;
+  static ColdHoldQueue& ColdHolds();
   friend class base::RefCountedThreadSafe<OpenAdBlockMatcher>;
   ~OpenAdBlockMatcher();
 
   SEQUENCE_CHECKER(sequence_checker_);
   std::shared_ptr<const EngineHolder> engine_;
   bool enabled_ = false;
+  bool first_load_pending_ = false;
+  bool initial_load_completed_ = false;
   base::flat_set<std::string> exclusions_;
   mutable AdBlockMatcherCounters counters_;
 };

@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/byte_size.h"
+#include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/logging.h"
@@ -570,6 +571,19 @@ OpenAdBlockURLLoaderFactory::~OpenAdBlockURLLoaderFactory() {
   FlushStops();
 }
 
+// Only cold-held requests need a copy. Warm requests keep the existing path
+// and serialize the incoming ResourceRequest directly. At most 128 copies
+// (including sockets' continuations) are retained across the whole process.
+struct OpenAdBlockURLLoaderFactory::ColdRequest {
+  mojo::PendingReceiver<network::mojom::URLLoader> receiver;
+  int32_t request_id;
+  uint32_t options;
+  network::ResourceRequest request;
+  mojo::PendingRemote<network::mojom::URLLoaderClient> client;
+  net::MutableNetworkTrafficAnnotationTag annotation;
+  base::TimeTicks arrival;
+};
+
 void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingReceiver<network::mojom::URLLoader> receiver,
     int32_t request_id,
@@ -578,8 +592,50 @@ void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& annotation) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  BusyScope busy(CpuPart::kRequest);
   const base::TimeTicks arrival = base::TimeTicks::Now();
+  if (request.url.SchemeIsHTTPOrHTTPS() &&
+      request.destination != RequestDestination::kDocument &&
+      context_.matcher->NeedsFirstEngineHold(context_.top_host)) {
+    auto held = std::make_unique<ColdRequest>(ColdRequest{
+        std::move(receiver), request_id, options, request, std::move(client),
+        annotation, arrival});
+    ++cold_pending_;
+    context_.matcher->HoldForFirstEngine(
+        context_.top_host, arrival,
+        base::BindOnce(&OpenAdBlockURLLoaderFactory::ResumeColdRequest,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(held)));
+    return;
+  }
+  StartRequest(std::move(receiver), request_id, options, request,
+               std::move(client), annotation, arrival, false);
+}
+
+void OpenAdBlockURLLoaderFactory::ResumeColdRequest(
+    std::unique_ptr<ColdRequest> held,
+    bool fail_open) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_GT(cold_pending_, 0u);
+  --cold_pending_;
+  if (target_.is_connected()) {
+    StartRequest(std::move(held->receiver), held->request_id, held->options,
+                 held->request, std::move(held->client), held->annotation,
+                 held->arrival, fail_open);
+  }
+  // This can delete the factory. The held pipes are dropped on cancellation.
+  MaybeDeleteSelf();
+}
+
+void OpenAdBlockURLLoaderFactory::StartRequest(
+    mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+    int32_t request_id,
+    uint32_t options,
+    const network::ResourceRequest& request,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+    const net::MutableNetworkTrafficAnnotationTag& annotation,
+    base::TimeTicks arrival,
+    bool fail_open) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BusyScope busy(CpuPart::kRequest);
   auto pass_through = [&] {
     target_->CreateLoaderAndStart(std::move(receiver), request_id, options,
                                   request, std::move(client), annotation);
@@ -590,7 +646,7 @@ void OpenAdBlockURLLoaderFactory::CreateLoaderAndStart(
   // (defensive: main-frame navigation factories are not wrapped). Not
   // |is_outermost_main_frame|: that flag marks every request the main frame
   // makes, its subresources included.
-  if (!context_.matcher->IsActiveFor(context_.top_host) ||
+  if (fail_open || !context_.matcher->IsActiveFor(context_.top_host) ||
       !request.url.SchemeIsHTTPOrHTTPS() ||
       request.destination == RequestDestination::kDocument) {
     pass_through();
@@ -713,7 +769,7 @@ void OpenAdBlockURLLoaderFactory::OnTargetDisconnect() {
 }
 
 void OpenAdBlockURLLoaderFactory::MaybeDeleteSelf() {
-  if (receivers_.empty() && loaders_.empty()) {
+  if (receivers_.empty() && loaders_.empty() && cold_pending_ == 0) {
     delete this;
   }
 }

@@ -62,3 +62,8 @@ paths: chrome/common/chrome_isolated_world_ids.h
 
 # 0106-open-code-sign-clone-reuse.patch
 paths: chrome/browser/mac/BUILD.gn chrome/browser/mac/code_sign_clone_manager.h chrome/browser/mac/code_sign_clone_manager.mm
+# 0902-open-adblock-isolated-world.patch
+paths: chrome/common/chrome_isolated_world_ids.h extensions/renderer/isolated_world_manager.cc extensions/renderer/script_injection.cc
+
+# 0903-open-adblock-context-cache.patch
+paths: components/web_cache/browser/web_cache_manager.cc components/web_cache/browser/web_cache_manager.h components/web_cache/renderer/web_cache_impl.cc
