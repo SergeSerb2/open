@@ -789,7 +789,11 @@ def checks(factory, results, tmp, config, harness):
             library()
             # Under load the row can appear before its live Cancel control: wait for
             # the actual button the user would press (the row's own identifiers).
-            wait(lambda: 'Cancel' in row(cancelled).get('buttons', []))
+            ready = wait(lambda: 'Cancel' in row(cancelled).get('buttons', []))
+            if not ready:
+                check('clear_cancel_button_' + label, False, item=item(cancelled), row=row(cancelled),
+                      running=state()['running'], sheets=state()['sheets'])
+                raise RuntimeError('clear fixture has no live Cancel button: ' + json.dumps(item(cancelled)))
             app.call('download-row', id=cancelled, action='Cancel')
             if not wait(lambda: all(item(k).get('state') == s for k, s in [(inside, 'completed'), (outside, 'completed'), (failed, 'failed'), (cancelled, 'cancelled')])):
                 raise RuntimeError('terminal download fixture did not finish')
