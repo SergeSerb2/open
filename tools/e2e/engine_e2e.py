@@ -12292,7 +12292,8 @@ def page_translate_checks(factory, results, tmp):
 def main():
     global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE
     ap = argparse.ArgumentParser()
-    ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
+    ap.add_argument("--style", choices=["alloy", "chrome"],
+                    help="runtime style (default: chrome for context-menus, alloy for other suites)")
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
@@ -12324,6 +12325,10 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    # Context menus assert Chrome's full model and extension contributions, as
+    # used by normal Open launches. Alloy has CEF's shorter, different menu.
+    if opts.style is None:
+        opts.style = "chrome" if opts.only == "context-menus" else "alloy"
     if opts.page_site_data_only and opts.only != "page":
         ap.error("--page-site-data-only requires --only page")
     _CONTINUE_ON_TIMING_FAILURE = opts.continue_on_timing_failure
