@@ -50,6 +50,11 @@ class OpenAdBlockService {
   // UI mirror of the switch (and not shut down).
   bool IsEnabled() const;
 
+  // Records a document's factory before the disabled-path early return.
+  // Initial enabled documents wait for their first engine, so they do not
+  // arm a clear. Disabled or verified zero-list documents can cache content.
+  void OnDocumentFactoryCreated();
+
   // Normalized and checked here; the callers' input is not trusted.
   void SetExcludedDomains(std::vector<std::string> registrable_domains);
   // UI mirror: is |host| (lowercase, no trailing dot) or a parent domain of
@@ -83,6 +88,11 @@ class OpenAdBlockService {
   void SetStatusCallback(
       base::RepeatingCallback<void(const AdBlockStatus&)> callback);
 
+  // The CEF owner installs a weak context-scoped callback at creation,
+  // before configuring this service. It arms renderer MemoryCache clearing at next navigation;
+  // the renderer coalesces repeated requests until that navigation.
+  void SetRendererCacheInvalidator(base::RepeatingCallback<int()> callback);
+
   base::WeakPtr<OpenAdBlockService> GetWeakPtr();
 
   // The result of one background load.
@@ -93,6 +103,8 @@ class OpenAdBlockService {
     ~BuildResult();
 
     std::shared_ptr<const EngineHolder> engine;
+    // current.json has not been published yet (not a corrupt generation).
+    bool awaiting_generation = false;
     // Verified generation with no enabled lists. Success without creating an
     // engine, loading resources, or entering the engine registry.
     bool empty_generation = false;
@@ -126,12 +138,16 @@ class OpenAdBlockService {
                BuildResult result);
   void PostToMatcher(base::OnceCallback<void(OpenAdBlockMatcher*)> update);
   void NotifyStatus();
+  void InvalidateRendererCaches(const char* reason);
 
   const base::FilePath profile_dir_;
   const scoped_refptr<OpenAdBlockMatcher> matcher_;
   base::FilePath adblock_root_;
   bool enabled_ = false;
+  bool initial_load_pending_ = false;
   bool shut_down_ = false;
+  bool has_document_ = false;
+  bool may_have_unblocked_content_ = false;
   base::flat_set<std::string> excluded_domains_;
 
   // The latest load id, shared with the build tasks so a stale build stops
@@ -140,6 +156,7 @@ class OpenAdBlockService {
 
   AdBlockStatus status_;
   base::RepeatingCallback<void(const AdBlockStatus&)> status_callback_;
+  base::RepeatingCallback<int()> renderer_cache_invalidator_;
 
   base::WeakPtrFactory<OpenAdBlockService> weak_ptr_factory_{this};
 };

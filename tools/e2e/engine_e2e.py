@@ -246,6 +246,19 @@ class Open:
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
+        # Screen launches are serialized. Keep a private receipt of the real
+        # executable identity so first-after-build/install costs stay visible
+        # without treating them as same-binary repeat-launch budgets.
+        binary_stat = os.stat(app)
+        binary_identity = [os.path.realpath(app), binary_stat.st_dev, binary_stat.st_ino,
+                           binary_stat.st_mtime_ns, binary_stat.st_size]
+        receipt_key = hashlib.sha256(os.path.realpath(app).encode()).hexdigest()
+        launch_receipt = Path(ROOT) / '.re/e2e-tools' / ('last-launched-binary-' + receipt_key + '.json')
+        try:
+            previous_binary = json.loads(launch_receipt.read_text())
+        except (OSError, ValueError):
+            previous_binary = None
+        self.first_launch_after_build = previous_binary != binary_identity
         activator_source = os.path.join(ROOT, "tools", "e2e", "activate-own-app.swift")
         self.activator = os.path.join(ROOT, ".re", "e2e-tools", "activate-own-app")
         if not os.path.exists(self.activator) or os.path.getmtime(self.activator) < os.path.getmtime(activator_source):
@@ -270,6 +283,14 @@ class Open:
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
+        self.world_audit_dir = env.get("OPEN_E2E_WORLD_AUDIT_DIR")
+        self.world_audit_stderr = next((arg.split("=", 1)[1] for arg in reversed(extra_args)
+                                       if arg.startswith("--enable-logging=")), None) == "stderr"
+        if self.world_audit_dir:
+            modules = [arg.split("=", 1)[1] for arg in extra_args if arg.startswith("--vmodule=")]
+            modules.append("isolated_world_manager=1,script_injection=1,open_adblock_renderer_agent=1")
+            extra_args = [arg for arg in extra_args if not arg.startswith("--vmodule=")]
+            extra_args += ["--verbose", "--v=0", "--vmodule=" + ",".join(modules)]
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
@@ -292,9 +313,16 @@ class Open:
         # The early-launcher-exit fixture must exercise open(1), not the App
         # child that stays alive until quit. Keep strict death checks for both.
         self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls and not launch_without_wait
+        self.launch_output = open(self.launch_log_path, "a") if self.direct_child and self.world_audit_dir else None
+        self.aggregate_log = self.log if self.launch_output else None
+        if self.launch_output:
+            # Existing allocation checks read app.log while the App runs.
+            self.log = self.launch_output
         self.proc = subprocess.Popen(args if self.direct_child else launch,
                                      env=env if self.direct_child else None,
-                                     stdout=self.log, stderr=subprocess.STDOUT)
+                                     stdout=self.launch_output or self.log, stderr=subprocess.STDOUT)
+        launch_receipt.parent.mkdir(parents=True, exist_ok=True)
+        launch_receipt.write_text(json.dumps(binary_identity))
         if self.direct_child:
             self.pid = self.proc.pid
         _OWNED_APPS.append(self)
@@ -526,10 +554,31 @@ class Open:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
                 self.proc.wait()
-            if os.path.exists(self.launch_log_path):
-                self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
-            self.log.close()
+            if self.launch_output:
+                self.launch_output.close()
+                self.aggregate_log.write(Path(self.launch_log_path).read_text(errors="replace"))
+                self.aggregate_log.close()
+            else:
+                if os.path.exists(self.launch_log_path):
+                    self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
+                self.log.close()
             self.closed = True
+            if self.world_audit_dir:
+                # Save every launch before a fresh factory clears its data root.
+                audit = Path(self.world_audit_dir)
+                audit.mkdir(parents=True, exist_ok=True)
+                engine_log = Path(self.user_data) / "State" / "engine.log"
+                # Some real suites select --enable-logging=stderr. Preserve
+                # that launch's output rather than the shared aggregate log.
+                if self.world_audit_stderr or not engine_log.is_file():
+                    engine_log = Path(self.launch_log_path)
+                if engine_log.is_file():
+                    target = audit / ("engine-%s-%s.log" % (self.pid, time.time_ns()))
+                    shutil.copyfile(engine_log, target)
+                    self.quit_report["world_audit_log"] = str(target)
+                    self.quit_report["world_audit_source"] = str(engine_log)
+                else:
+                    self.quit_report.update(ok=False, world_audit_error="engine and launch logs are missing")
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
@@ -719,6 +768,9 @@ def extension_checks(app, style, results):
     results["content_scripts"] = {"ok": bool(dr["mode"]) and len(worlds) >= 2, "isolated_worlds": worlds,
                                   "darkreader": dr}
     results["content_scripts"]["screenshot"] = shot(app, "%s-content-script-darkreader.png" % style)
+    if os.environ.get('OPEN_E2E_WORLD_AUDIT_DIR'):
+        import extension_worlds
+        extension_worlds.run(app, results, wait_until, new_tab, _static_server, EXT['darkreader'])
 
     # declarativeNetRequest (uBlock Origin Lite). Control: the features run
     # disables native blocking and loads the same URLs without extensions.
@@ -4444,19 +4496,27 @@ def page_commands_checks(factory, results, tmp):
     server, origin = page_fixture_server()
     app = factory(urls=(), fresh=True)
     shared_quotes = None
+    clipboard_saved = app.call("pasteboard-preserve")
     try:
+        assert clipboard_saved, "clipboard preservation failed"
         # Shared defaults domain: set the one key this suite reads, restore it in `finally`.
         shared_quotes = app.call("defaults", key="open.advanced.enableSharedQuotes")
         app.call("defaults", key="open.advanced.enableSharedQuotes", value=True)
         page_copy_rows(app, results, origin)
+        import clean_links
+        clean_links.checks(app, results, origin, sys.modules[__name__])
         page_quote_rows(app, results, origin)
         page_zoom_rows(app, results, origin)
     finally:
         try:
             app.call("defaults", key="open.advanced.enableSharedQuotes", value=shared_quotes)
         finally:
-            app.quit()
-            server.shutdown()
+            try:
+                if clipboard_saved:
+                    results["CL_clipboard_restored"] = {"ok": app.call("pasteboard-restore")}
+            finally:
+                app.quit()
+                server.shutdown()
 
 
 def sidebar_checks(factory, results, tmp):
@@ -4670,8 +4730,10 @@ def startup_failure_checks(factory, results, tmp):
             and timing["engineStart"] >= timing["firstFrameWaitTimedOut"] and "engineStarted" in timing
             and unconfirmed.eval(tab["id"], "document.title") == "Unconfirmed frame",
             "timing": timing, "hosts": unconfirmed.call("host-counts")}
-        results["launch_waiter_early_exit"] = {"ok": unconfirmed.launch_waiter_ended_before_automation
+        results["launch_waiter_early_exit"] = {"ok": not unconfirmed.direct_child
+            and unconfirmed.launch_waiter_ended_before_automation
             and unconfirmed.proc.poll() == 0 and check_page(unconfirmed, tab["id"], "Unconfirmed frame"),
+            "directAppChild": unconfirmed.direct_child,
             "launcherExit": unconfirmed.proc.returncode,
             "waiterEndedBeforeAutomation": unconfirmed.launch_waiter_ended_before_automation,
             "actualAppPID": unconfirmed.pid}
@@ -7186,6 +7248,9 @@ CAPTURE_BANDS = [(224, 64, 64), (64, 176, 80), (48, 96, 224), (224, 192, 48), (1
 
 def page_checks(factory, results, tmp, style="alloy"):
     """page-platform §8.3 `--only page`: one suite, one row group per feature."""
+    if os.environ.get("OPEN_E2E_PAGE_COPY_ONLY") == "1":
+        page_commands_checks(factory, results, tmp)
+        return
     # D4 runs before foreground-sensitive groups, so consent-limited self-scripting
     # evidence remains available even when a later group is interrupted.
     page_tools_checks(factory, results, tmp, style)

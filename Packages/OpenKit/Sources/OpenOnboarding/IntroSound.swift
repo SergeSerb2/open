@@ -2,12 +2,108 @@ import AppKit
 import AVFoundation
 import CoreAudio
 import QuartzCore
+import Synchronization
+#if DEBUG || OPEN_AUTOMATION
+import os.signpost
+#endif
 
-/// AVAudioPlayer ownership transfers once from the preparation worker to main.
-private final class PreparedIntroPlayer: @unchecked Sendable {
-    let player: AVAudioPlayer
+private struct IntroPreparedInfo: Sendable {
     let readyHostTime: Double
-    init(_ player: AVAudioPlayer) { self.player = player; readyHostTime = CACurrentMediaTime() }
+    let duration: Double
+}
+
+/// The worker publishes readiness before it queues any main-actor callback.
+/// No audio API is called under this lock, or by the main thread.
+private final class IntroAudioMailbox: Sendable {
+    enum Phase: Sendable { case pending, ready(IntroPreparedInfo), failed, cancelled }
+    struct State: Sendable {
+        var phase: Phase = .pending
+        #if DEBUG || OPEN_AUTOMATION
+        var workerReady: Double?
+        var prepareStart: Double?
+        #endif
+    }
+    let value = Mutex(State())
+    func read() -> State { value.withLock { $0 } }
+}
+
+/// The player stays on one worker executor, including its first hardware start.
+private actor IntroAudioWorker {
+    struct Scheduled: Sendable {
+        let hostTime: Double
+        #if DEBUG || OPEN_AUTOMATION
+        let returnedAt: Double
+        let playhead: Double
+        let deviceLead: Double
+        #endif
+    }
+    private let mailbox: IntroAudioMailbox
+    private var player: AVAudioPlayer?
+    private var cancelled = false
+    init(mailbox: IntroAudioMailbox) { self.mailbox = mailbox }
+
+    func prepare(url: URL, silent: Bool) {
+        guard !cancelled else { return }
+        let prepared: AVAudioPlayer?
+        do {
+            #if DEBUG || OPEN_AUTOMATION
+            let log = OSLog(subsystem: "io.github.sergeserb2.open", category: "IntroPacing")
+            let id = OSSignpostID(log: log)
+            os_signpost(.begin, log: log, name: "IntroAudioPlayerInit", signpostID: id)
+            defer { os_signpost(.end, log: log, name: "IntroAudioPlayerInit", signpostID: id) }
+            #endif
+            prepared = try? AVAudioPlayer(contentsOf: url)
+        }
+        guard let value = prepared else { publishFailure(); return }
+        value.volume = silent ? 0 : 0.5
+        let ready: Bool
+        do {
+            #if DEBUG || OPEN_AUTOMATION
+            let log = OSLog(subsystem: "io.github.sergeserb2.open", category: "IntroPacing")
+            let id = OSSignpostID(log: log)
+            os_signpost(.begin, log: log, name: "IntroAudioPrepare", signpostID: id)
+            defer { os_signpost(.end, log: log, name: "IntroAudioPrepare", signpostID: id) }
+            #endif
+            ready = value.prepareToPlay()
+        }
+        guard ready else { publishFailure(); return }
+        let info = IntroPreparedInfo(readyHostTime: CACurrentMediaTime(), duration: value.duration)
+        let accepted = mailbox.value.withLock { state in
+            #if DEBUG || OPEN_AUTOMATION
+            state.workerReady = info.readyHostTime
+            #endif
+            if case .cancelled = state.phase { return false }
+            state.phase = .ready(info); return true
+        }
+        if accepted { player = value } else { value.stop() }
+    }
+    private func publishFailure() {
+        mailbox.value.withLock { state in
+            if case .cancelled = state.phase { return }
+            state.phase = .failed
+        }
+    }
+    func schedule() -> Scheduled? {
+        guard !cancelled, let player else { return nil }
+        #if DEBUG || OPEN_AUTOMATION
+        let log = OSLog(subsystem: "io.github.sergeserb2.open", category: "IntroPacing")
+        let id = OSSignpostID(log: log)
+        os_signpost(.begin, log: log, name: "IntroAudioFirstStart", signpostID: id)
+        defer { os_signpost(.end, log: log, name: "IntroAudioFirstStart", signpostID: id) }
+        #endif
+        let device = player.deviceCurrentTime, host = CACurrentMediaTime()
+        let lead = IntroTimeline.beat("syncLead").end
+        guard player.play(atTime: device+lead) else { return nil }
+        let returned = CACurrentMediaTime()
+        guard returned < host+lead else { player.stop(); return nil }
+        #if DEBUG || OPEN_AUTOMATION
+        return Scheduled(hostTime: host+lead, returnedAt: returned, playhead: player.currentTime, deviceLead: device+lead-player.deviceCurrentTime)
+        #else
+        return Scheduled(hostTime: host+lead)
+        #endif
+    }
+    func fade(duration: Double) { player?.setVolume(0, fadeDuration: duration) }
+    func stop() { cancelled = true; player?.stop(); player = nil }
 }
 
 @MainActor
@@ -16,17 +112,30 @@ public final class IntroSound {
     public private(set) var decision = "pending"
     public private(set) var reason = ""
     public private(set) var events: [[String: Any]] = []
+    #if DEBUG || OPEN_AUTOMATION
+    public private(set) var scheduledPlayhead = 0.0
+    public private(set) var scheduledDeviceLead = 0.0
+    public private(set) var audioScheduleReturnedHostTime: Double?
+    private var animationT0HostTime: Double?
+    private var decisionHostTime: Double?
+    #endif
     public private(set) var audioStartHostTime: Double?
     public private(set) var playerWasCreated = false
-    private var player: AVAudioPlayer?
+    private let mailbox: IntroAudioMailbox
+    private let worker: IntroAudioWorker
+    private var hasPlayer = false
+    private var duration = 0.0
     private var preparation: Task<Void, Never>?
     private var deadline: Task<Void, Never>?
     private var releaseTask: Task<Void, Never>?
-    private var resolved = false
-    private var onPrepared: (@MainActor () -> Void)?
+    private var playback: Task<Void, Never>?
+    private var preparationStarted = false
+    private var stopped = false
+    private var onStart: (@MainActor (Double) -> Void)?
+    private var startRequestHostTime: Double?
     private let mode: Mode
     private let muteReason: String?
-    public var playerCreated: Bool { player != nil }
+    public var playerCreated: Bool { hasPlayer }
     public static var resourceURL: URL? {
         Bundle.module.url(forResource: "open-intro", withExtension: "m4a", subdirectory: "Onboarding")
     }
@@ -35,98 +144,154 @@ public final class IntroSound {
     }
 
     public init(mode: Mode = .normal, defaults: UserDefaults = .standard) {
+        let mailbox = IntroAudioMailbox()
+        self.mailbox = mailbox; worker = IntroAudioWorker(mailbox: mailbox)
         self.mode = mode
-        // Silent is an explicit offline automation playback route. It bypasses
-        // output-mute/UI-effects checks, but still respects the app preference.
         if mode == .off { muteReason = "launch-option" }
         else if defaults.object(forKey: "open.onboarding.introSoundEnabled") as? Bool == false { muteReason = "setting" }
         else if mode != .silent, (UserDefaults.standard.object(forKey: "com.apple.sound.uiaudio.enabled") as? NSNumber ?? UserDefaults(suiteName: UserDefaults.globalDomain)?.object(forKey: "com.apple.sound.uiaudio.enabled") as? NSNumber)?.intValue == 0 { muteReason = "ui-sounds" }
         else { muteReason = nil }
     }
 
-    /// Completes once, within 300 ms. Late preparation is discarded and released.
-    public func prepare(_ completion: @escaping @MainActor () -> Void) {
-        if resolved { completion(); return }
-        onPrepared = completion
-        guard preparation == nil else { return }
-        if let muteReason { resolve("muted", muteReason); prepared(); return }
-        if mode == .failDevice { resolve("failed", "no-output-device"); prepared(); return }
+    /// Preparation can overlap synchronous engine startup. Its completion is
+    /// published under a lock even while the main actor is unable to run.
+    public func prepare() {
+        #if DEBUG || OPEN_AUTOMATION
+        let pacingRegion = IntroPacingTrace.begin("sound.prepare.main")
+        defer { pacingRegion?.end() }
+        #endif
+        guard !preparationStarted, !stopped else { return }
+        preparationStarted = true
+        if let muteReason { resolve("muted", muteReason); return }
+        if mode == .failDevice { resolve("failed", "no-output-device"); return }
         if mode != .silent, let problem = Self.outputProblem() {
-            resolve(problem == "no-output-device" ? "failed" : "muted", problem); prepared(); return
+            resolve(problem == "no-output-device" ? "failed" : "muted", problem); return
         }
         guard let url = Self.resourceURL, FileManager.default.fileExists(atPath: url.path) else {
-            resolve("failed", "file-missing"); prepared(); return
+            resolve("failed", "file-missing"); return
         }
-        let silent = mode == .silent
-        let prepareDeadline = CACurrentMediaTime()+IntroTimeline.beat("soundDeadline").end
-        let worker = Task.detached(priority: .userInitiated) { () -> PreparedIntroPlayer? in
-                guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
-                // Set before prepare/play, so no automated run can emit a sample.
-                player.volume = silent ? 0 : 0.5
-                guard player.prepareToPlay() else { return nil }
-                return PreparedIntroPlayer(player)
+        #if DEBUG || OPEN_AUTOMATION
+        mailbox.value.withLock { $0.prepareStart = CACurrentMediaTime() }
+        #endif
+        let silent = mode == .silent, audioWorker = worker
+        let resultTask = Task.detached(priority: .userInitiated) {
+            await audioWorker.prepare(url: url, silent: silent)
         }
         preparation = Task { [weak self] in
-            let result = await worker.value
-            guard let self, !resolved else { result?.player.stop(); return }
-            deadline?.cancel(); deadline = nil
-            guard let result else { resolve("failed", "prepare"); prepared(); return }
-            guard result.readyHostTime <= prepareDeadline else {
-                result.player.stop(); resolve("failed", "timeout"); prepared(); return
-            }
-            player = result.player; playerWasCreated = true; resolved = true
-            prepared()
+            await resultTask.value
+            guard !Task.isCancelled, let self, !stopped else { return }
+            decideReadiness()
         }
+    }
+
+    /// Called at the proposed animation gate after engine startup settles.
+    /// The 300 ms wait starts here, never before synchronous engine startup.
+    public func scheduleStart(_ completion: @escaping @MainActor (Double) -> Void) {
+        guard !stopped, startRequestHostTime == nil else { return }
+        prepare()
+        startRequestHostTime = CACurrentMediaTime(); onStart = completion
+        decideReadiness()
+        guard onStart != nil, let startRequestHostTime else { return }
         deadline = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(max(0, prepareDeadline-CACurrentMediaTime())), tolerance: .zero)
-            guard !Task.isCancelled, let self, !resolved else { return }
-            resolve("failed", "timeout"); prepared()
+            let end = startRequestHostTime+IntroTimeline.beat("soundDeadline").end
+            try? await Task.sleep(for: .seconds(max(0, end-CACurrentMediaTime())), tolerance: .zero)
+            guard !Task.isCancelled, let self, !stopped else { return }
+            // Read the worker's timestamp, not delivery order of main tasks.
+            decideReadiness(deadlineReached: true)
         }
     }
-    private func prepared() { let completion = onPrepared; onPrepared = nil; completion?() }
-
-    /// deviceCurrentTime and CA time are sampled together; both schedules share
-    /// one lead. The receipt records their actual host-clock conversion.
-    public func start(animationHostTime: Double) {
-        guard let player else { return }
-        let host = CACurrentMediaTime(), device = player.deviceCurrentTime
-        let deviceStart = device + max(0, animationHostTime - host)
-        guard player.play(atTime: deviceStart) else {
-            player.stop(); self.player = nil; resolve("failed", "play"); return
-        }
-        audioStartHostTime = host + deviceStart - device
-        resolve("played", mode == .silent ? "silent" : "output")
-        releaseTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(player.duration + IntroTimeline.beat("syncLead").end), tolerance: .zero)
-            guard !Task.isCancelled else { return }; self?.stop()
+    private func decideReadiness(deadlineReached: Bool = false) {
+        guard let completion = onStart, let startRequestHostTime, !stopped else { return }
+        if decision != "pending" { onStart = nil; completion(CACurrentMediaTime()); return }
+        switch mailbox.read().phase {
+        case .ready(let info):
+            guard info.readyHostTime <= startRequestHostTime+IntroTimeline.beat("soundDeadline").end else {
+                failStart(completion, reason: "timeout"); return
+            }
+            onStart = nil; deadline?.cancel(); deadline = nil
+            duration = info.duration; hasPlayer = true; playerWasCreated = true
+            schedulePlayback(completion)
+        case .failed: failStart(completion, reason: "prepare")
+        case .cancelled: break
+        case .pending:
+            if deadlineReached { failStart(completion, reason: "timeout") }
         }
     }
-
+    private func failStart(_ completion: @MainActor (Double) -> Void, reason: String) {
+        onStart = nil; deadline?.cancel(); deadline = nil
+        resolve("failed", reason); cancelWorker(); completion(CACurrentMediaTime())
+    }
+    private func schedulePlayback(_ completion: @escaping @MainActor (Double) -> Void) {
+        playback = Task { [weak self, worker] in
+            let scheduled = await worker.schedule()
+            guard !Task.isCancelled, let self, !stopped, self.hasPlayer else { await worker.stop(); return }
+            guard let scheduled, scheduled.hostTime > CACurrentMediaTime() else {
+                hasPlayer = false; resolve("failed", "start-deadline"); cancelWorker()
+                completion(CACurrentMediaTime()); return
+            }
+            #if DEBUG || OPEN_AUTOMATION
+            scheduledPlayhead = scheduled.playhead; scheduledDeviceLead = scheduled.deviceLead
+            audioScheduleReturnedHostTime = scheduled.returnedAt
+            #endif
+            audioStartHostTime = scheduled.hostTime
+            resolve("played", mode == .silent ? "silent" : "output")
+            completion(scheduled.hostTime)
+            releaseTask = Task { [weak self, duration] in
+                try? await Task.sleep(for: .seconds(duration + IntroTimeline.beat("syncLead").end), tolerance: .zero)
+                guard !Task.isCancelled else { return }; self?.stop()
+            }
+        }
+    }
+    public var musicHasStarted: Bool { audioStartHostTime.map { CACurrentMediaTime() >= $0 } ?? false }
+    #if DEBUG || OPEN_AUTOMATION
+    public func animationWillStart(at hostTime: Double) {
+        animationT0HostTime = hostTime
+    }
+    #endif
     public func fadeOut() {
-        guard let player else { return }
+        guard hasPlayer else { return }
         let duration = IntroTimeline.beat("handoffSound").end
-        player.setVolume(0, fadeDuration: duration)
+        Task { [worker] in await worker.fade(duration: duration) }
         releaseTask?.cancel()
         releaseTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(duration), tolerance: .zero)
             guard !Task.isCancelled else { return }; self?.stop()
         }
     }
+    private func cancelWorker() {
+        mailbox.value.withLock { $0.phase = .cancelled }
+        Task { [worker] in await worker.stop() }
+    }
     public func stop() {
-        resolved = true; deadline?.cancel(); deadline = nil
-        onPrepared = nil
-        preparation?.cancel(); preparation = nil
+        stopped = true; deadline?.cancel(); deadline = nil; onStart = nil
+        preparation?.cancel(); preparation = nil; playback?.cancel(); playback = nil
         releaseTask?.cancel(); releaseTask = nil
-        player?.stop(); player = nil
+        hasPlayer = false; cancelWorker()
     }
     private func resolve(_ decision: String, _ reason: String) {
-        resolved = true; self.decision = decision; self.reason = reason
-        events.append(["decision": decision, "reason": reason, "hostTime": CACurrentMediaTime()])
+        self.decision = decision; self.reason = reason
+        let host = CACurrentMediaTime()
+        #if DEBUG || OPEN_AUTOMATION
+        decisionHostTime = host
+        #endif
+        events.append(["decision": decision, "reason": reason, "hostTime": host])
     }
     public var state: [String: Any] {
-        ["decision": decision, "reason": reason, "events": events,
+        var result: [String: Any] = ["decision": decision, "reason": reason, "events": events,
          "playerCreated": playerCreated, "playerWasCreated": playerWasCreated,
          "audioStartHostTime": audioStartHostTime as Any? ?? NSNull()]
+        #if DEBUG || OPEN_AUTOMATION
+        let prepared = mailbox.read()
+        result["scheduleReturnedHostTime"] = audioScheduleReturnedHostTime as Any? ?? NSNull()
+        result["scheduledPlayhead"] = scheduledPlayhead
+        result["scheduledDeviceLeadMS"] = scheduledDeviceLead*1000
+        result["musicStarted"] = musicHasStarted
+        result["timing"] = ["prepareStart": prepared.prepareStart as Any? ?? NSNull(),
+            "workerReady": prepared.workerReady as Any? ?? NSNull(),
+            "startRequest": startRequestHostTime as Any? ?? NSNull(),
+            "t0": animationT0HostTime as Any? ?? NSNull(), "decision": decisionHostTime as Any? ?? NSNull()]
+        #endif
+        return result
     }
 
     /// Read-only, fixed-size CoreAudio queries. Missing controls are normal on

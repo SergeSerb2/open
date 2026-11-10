@@ -12,7 +12,15 @@ public enum LibrarySection: String, CaseIterable, Sendable {
     } }
 }
 public enum OriginFilter: String, CaseIterable, Sendable { case all, spaces, littleOpen }
-@MainActor public protocol DownloadsProvider: AnyObject { var downloads: [DownloadItemSnapshot] { get } }
+@MainActor public protocol DownloadsProvider: AnyObject {
+    var downloads: [DownloadItemSnapshot] { get }
+    var downloadHistoryError: String { get }
+    func refreshDownloads() async
+}
+public extension DownloadsProvider {
+    var downloadHistoryError: String { "" }
+    func refreshDownloads() async {}
+}
 @MainActor public protocol CapturesProvider: AnyObject { var captures: [CaptureItemSnapshot] { get }; var directory: URL { get }; var loadFailed: Bool { get }; func remove(id: UUID) throws }
 public extension CapturesProvider { var loadFailed: Bool { false } }
 @MainActor public protocol LibraryActions: AnyObject {

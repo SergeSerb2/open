@@ -1,6 +1,7 @@
 #if OPEN_AUTOMATION
   import AppKit
   import OpenEngine
+  import OpenOnboarding
 
   /// PNG snapshots of OUR windows only, taken inside the app (no
   /// screen-recording permission needed).
@@ -41,9 +42,13 @@
       defer { underlays.forEach { $0.removeFromSuperview() } }
       // Draw pending AppKit changes (a command that just changed the sidebar)
       // and give the window server a frame to pick them up.
-      window.contentView?.layoutSubtreeIfNeeded()
-      window.displayIfNeeded()
-      CATransaction.flush()
+      do {
+        let region = IntroPacingTrace.begin("automation.snapshot.layoutAndFlush")
+        defer { region?.end() }
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        CATransaction.flush()
+      }
       try? await Task.sleep(for: .milliseconds(underlays.isEmpty ? 50 : 120))
       // Install page pixels before the input; otherwise the normal snapshot's
       // preparation wait would miss a 0.1 s window animation entirely.
@@ -55,6 +60,8 @@
       var base: NSImage
       var method: String
       atCapture?()
+      let captureRegion = IntroPacingTrace.begin("automation.snapshot.captureAndEncode")
+      defer { captureRegion?.end() }
       if let image = windowServerImage(window), !isBlank(image) {
         base = NSImage(cgImage: image, size: window.frame.size)
         method = "windowserver+devtools"
@@ -70,6 +77,7 @@
         throw AutomationController.Failure(message: "cannot capture window")
       }
       let size = window.frame.size
+      let compositionRegion = IntroPacingTrace.begin("automation.snapshot.composite")
       let out = NSImage(size: size)
       out.lockFocus()
       base.draw(in: NSRect(origin: .zero, size: size))
@@ -77,6 +85,9 @@
         page.draw(in: frame)
       }
       out.unlockFocus()
+      compositionRegion?.end()
+      let encodeRegion = IntroPacingTrace.begin("automation.snapshot.PNGEncodeAndWrite")
+      defer { encodeRegion?.end() }
       guard let tiff = out.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
         let png = bitmap.representation(using: .png, properties: [:])
       else { throw AutomationController.Failure(message: "PNG encoding failed") }
@@ -107,6 +118,8 @@
     }
 
     static func windowServerImage(_ window: NSWindow) -> CGImage? {
+      let region = IntroPacingTrace.begin("automation.snapshot.windowServerImage")
+      defer { region?.end() }
       guard let lib = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY),
         let sym = dlsym(lib, "CGWindowListCreateImageFromArray")
       else { return nil }

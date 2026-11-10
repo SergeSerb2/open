@@ -10,6 +10,7 @@
 
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/task_runner.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_routing_id.h"
@@ -56,14 +57,31 @@ OpenAdBlockService* ActiveServiceFor(OpenAdBlockService* service,
   return service;
 }
 
-// Matcher sequence: does |url| match for a socket of the page on |top_host|?
-bool SocketBlocked(scoped_refptr<OpenAdBlockMatcher> matcher,
-                   GURL url,
-                   GURL source,
-                   std::string top_host,
-                   open_adblock::OpenRequestType type) {
-  return matcher->IsActiveFor(top_host) &&
-         matcher->Check(url, source, type, kOpenAdBlockMatchCapBytes).matched;
+// Matcher sequence, including the bounded first-load wait. The reply retains
+// the existing UI/frame-liveness path; holding adds no UI work per request.
+void CheckSocket(scoped_refptr<OpenAdBlockMatcher> matcher,
+                 GURL url,
+                 GURL source,
+                 std::string top_host,
+                 open_adblock::OpenRequestType type,
+                 base::TimeTicks request_start,
+                 base::OnceCallback<void(bool)> reply) {
+  auto check = base::BindOnce(
+      [](scoped_refptr<OpenAdBlockMatcher> matcher, GURL url, GURL source,
+         std::string top_host, open_adblock::OpenRequestType type,
+         base::OnceCallback<void(bool)> reply, bool fail_open) {
+        const bool blocked = !fail_open && matcher->IsActiveFor(top_host) &&
+            matcher->Check(url, source, type, kOpenAdBlockMatchCapBytes).matched;
+        std::move(reply).Run(blocked);
+      },
+      matcher, std::move(url), std::move(source), top_host, type,
+      std::move(reply));
+  if (matcher->NeedsFirstEngineHold(top_host)) {
+    matcher->HoldForFirstEngine(std::move(top_host), request_start,
+                                std::move(check));
+  } else {
+    std::move(check).Run(false);
+  }
 }
 
 void CountSocketBlock(content::RenderFrameHost* frame, const char* kind) {
@@ -167,8 +185,16 @@ void MaybeProxyURLLoaderFactoryForAdBlock(
     const net::IsolationInfo& isolation_info,
     network::URLLoaderFactoryBuilder& factory_builder) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!service) {
+    return;
+  }
+  // Track documents even while disabled or on a zero-list generation. Those
+  // pages may populate MemoryCache before blocking is turned back on.
+  if (type == FactoryType::kDocumentSubResource) {
+    service->OnDocumentFactoryCreated();
+  }
   // §7.2 rule 1 and 2: a Profile with a service that blocks ads.
-  if (!service || !service->IsEnabled()) {
+  if (!service->IsEnabled()) {
     return;
   }
   // The tab's counts exist before its first stop, so a page with none (or
@@ -259,6 +285,7 @@ void AdBlockCreateWebSocket(
     content::ContentBrowserClient::WebSocketOptions options,
     AdBlockChromeWebSocket chrome) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  const auto request_start = base::TimeTicks::Now();
   OpenAdBlockService* service = ActiveServiceFor(active_service, frame);
   if (!service) {
     if (chrome_intercepts) {
@@ -271,15 +298,18 @@ void AdBlockCreateWebSocket(
     }
     return;
   }
-  AdBlockMatcherTaskRunner()->PostTaskAndReplyWithResult(
+  auto reply = base::BindPostTask(
+      content::GetUIThreadTaskRunner({}),
+      base::BindOnce(&OnWebSocketChecked, frame->GetGlobalId(), chrome_intercepts,
+                     std::move(factory), url, site_for_cookies, user_agent,
+                     std::move(handshake_client), std::move(options),
+                     std::move(chrome)));
+  AdBlockMatcherTaskRunner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&SocketBlocked, service->matcher(), url,
+      base::BindOnce(&CheckSocket, service->matcher(), url,
                      frame->GetLastCommittedOrigin().GetURL(), TopHostOf(frame),
-                     open_adblock::OpenRequestType::Websocket),
-      base::BindOnce(&OnWebSocketChecked, frame->GetGlobalId(),
-                     chrome_intercepts, std::move(factory), url,
-                     site_for_cookies, user_agent, std::move(handshake_client),
-                     std::move(options), std::move(chrome)));
+                     open_adblock::OpenRequestType::Websocket, request_start,
+                     std::move(reply)));
 }
 
 void AdBlockWillCreateWebTransport(
@@ -293,6 +323,7 @@ void AdBlockWillCreateWebTransport(
     content::ContentBrowserClient::WillCreateWebTransportCallback callback,
     AdBlockChromeWebTransport chrome) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  const auto request_start = base::TimeTicks::Now();
   content::RenderFrameHost* frame =
       content::RenderFrameHost::FromID(process_id, frame_routing_id);
   OpenAdBlockService* service = ActiveServiceFor(active_service, frame);
@@ -301,14 +332,17 @@ void AdBlockWillCreateWebTransport(
                           std::move(handshake_client), std::move(callback));
     return;
   }
-  AdBlockMatcherTaskRunner()->PostTaskAndReplyWithResult(
-      FROM_HERE,
-      base::BindOnce(&SocketBlocked, service->matcher(), url,
-                     initiator_origin.GetURL(), TopHostOf(frame),
-                     open_adblock::OpenRequestType::Other),
+  auto reply = base::BindPostTask(
+      content::GetUIThreadTaskRunner({}),
       base::BindOnce(&OnWebTransportChecked, process_id, frame_routing_id, url,
                      initiator_origin, std::move(handshake_client),
                      std::move(callback), std::move(chrome)));
+  AdBlockMatcherTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CheckSocket, service->matcher(), url,
+                     initiator_origin.GetURL(), TopHostOf(frame),
+                     open_adblock::OpenRequestType::Other, request_start,
+                     std::move(reply)));
 }
 
 }  // namespace open_engine

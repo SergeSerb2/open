@@ -33,3 +33,6 @@ paths: cef/libcef/browser/chrome/chrome_browser_context.cc cef/libcef/browser/re
 paths: cef/libcef/renderer/render_frame_observer.cc
 # 0602-open-browser-extra-info.patch
 paths: cef/libcef/browser/browser_info.cc cef/libcef/browser/browser_info.h
+
+# 0901-open-adblock-renderer-agent.patch
+paths: cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc

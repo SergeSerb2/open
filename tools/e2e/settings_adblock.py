@@ -20,6 +20,9 @@ def fixtures(root, tmp):
 
 
 def run(factory, results, tmp, root, wait):
+    if os.environ.get('OPEN_E2E_ADBLOCK_INTEGRITY_ONLY') == '1':
+        integrity(factory, results, root, wait)
+        return
     if os.environ.get('OPEN_E2E_ADBLOCK_REAL_ONLY') == '1':
         real_engine(factory, results, wait)
         return
@@ -27,6 +30,7 @@ def run(factory, results, tmp, root, wait):
     if os.environ.get('OPEN_E2E_ADBLOCK_BINDING_ONLY') == '1':
         return
     real_engine(factory, results, wait)
+    integrity(factory, results, root, wait)
     from engine_e2e import _restore_defaults
     app = factory(fresh=True)
     saved = {}
@@ -92,6 +96,141 @@ def run(factory, results, tmp, root, wait):
         finally:
             app.quit()
             _restore_defaults(app, saved)
+
+
+def integrity(factory, results, root, wait):
+    """Tamper the loaded App's real generation, then use the public Update Now call."""
+    import hashlib
+    import http.server
+    import threading
+    from engine_e2e import _restore_defaults
+
+    bodies = {name: (Path(root) / 'Vendor/adblock' / name).read_bytes()
+              for name in ('easylist.txt', 'easyprivacy.txt')}
+    requests = []
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            requests.append(self.path)
+            if self.path.endswith('.txt'):
+                body, mime = bodies[Path(self.path).name], 'text/plain'
+            elif self.path.startswith('/ad.js'):
+                body, mime = b'window.__adLoaded=true;', 'application/javascript'
+            elif self.path.startswith('/control.js'):
+                body, mime = b'window.__controlLoaded=true;', 'application/javascript'
+            else:
+                body = b'''<!doctype html><title>Open integrity recovery</title>
+<link rel="icon" href="data:,"><script>window.__done=0;</script>
+<script src="http://demand.supply/ad.js" onload="__done++" onerror="__done++"></script>
+<script src="/control.js" onload="__done++" onerror="__done++"></script>'''
+                mime = 'text/html'
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Content-Type', mime)
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            try: self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError): pass
+        def log_message(self, *_): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    args = ['--host-resolver-rules=MAP open-adblock.test 127.0.0.1:%d, MAP demand.supply 127.0.0.1:%d' %
+            (server.server_port, server.server_port), '--no-proxy-server']
+    keys = {'open.settings.lastPane': 'general',
+            'open.general.searchSuggestNoticeDismissed': True}
+    app, saved = None, {}
+    try:
+        for mode in ('fallback', 'reseed'):
+            app = factory(urls=('about:blank',), fresh=True, load_extensions=False, extra_args=args,
+                          extra_env={'OPEN_ADBLOCK_DEBUG_SOURCE_ROOT':
+                                     'http://127.0.0.1:%d' % server.server_port})
+            for key, value in keys.items():
+                if key not in saved: saved[key] = app.call('defaults', key=key, persistent=True)
+                app.call('defaults', key=key, value=None)
+                app.call('defaults', key=key, value=value)
+            app.call('settings-pane', pane='advanced')
+            assert wait(lambda: app.call('settings-adblock')['ready'], timeout=40)
+            profile = next(p for p in app.call('profiles-shell')['profiles'] if p['name'] == 'Default')
+            # Cancel the scheduler outside the flow through its existing real Store hook.
+            app.call('adblock-memory', action='pause-updates', profile=profile['id'])
+            def native_status():
+                return next((c['adBlockStatus'] for p in app.call('settings-adblock-engine')['profiles']
+                             if p['profile'] == profile['id'] for c in p['contexts']
+                             if c['adBlockStatus']['engine_loaded']), None)
+            before_native = wait(native_status, timeout=40)
+            assert before_native and before_native['list_count'] == 2, before_native
+            pid = app.pid
+            directory = Path(app.user_data) / 'Profiles' / profile['directory'] / 'AdBlock/lists'
+            if mode == 'fallback':
+                seed_update = app.call('settings-adblock', updateNow=True)
+                assert not seed_update['error'] and not seed_update['lastError'], seed_update
+            pointer = json.loads((directory / 'current.json').read_text())
+            # An unchanged seed update publishes a pointer without reloading the engine.
+            before_native = native_status()
+            assert before_native, 'native engine unavailable before tamper'
+            assert bool(pointer.get('previous')) == (mode == 'fallback'), pointer
+            generation = directory / 'generations' / str(pointer['live']['generation'])
+            target = generation / 'EasyList.txt'
+            original = target.read_bytes()
+            tampered = bytearray(original)
+            tampered[500] ^= 1
+            target.write_bytes(tampered)
+            update = app.call('settings-adblock', updateNow=True)
+            current = json.loads((directory / 'current.json').read_text())
+            live = directory / 'generations' / str(current['live']['generation'])
+            restored = (live / 'EasyList.txt').read_bytes()
+            quarantines = list((directory / 'quarantine').glob(str(pointer['live']['generation']) + '-*'))
+            native = wait(lambda: next((c['adBlockStatus'] for p in app.call('settings-adblock-engine')['profiles']
+                          if p['profile'] == profile['id'] for c in p['contexts']
+                          if c['adBlockStatus']['engine_loaded']
+                          and c['adBlockStatus']['load_generation'] == current['live']['generation']), None), timeout=40)
+            tab = app.call('open', url='about:blank')['id']
+            app.call('wait', tab=tab)
+            app.call('devtools', tab=tab, method='Network.enable')
+            app.call('events')
+            requests.clear()
+            app.call('navigate', tab=tab, url='http://open-adblock.test/recovered')
+            app.call('wait', tab=tab)
+            completed = wait(lambda: app.call('eval', tab=tab, js='window.__done===2'), timeout=20)
+            scripts = app.call('eval', tab=tab,
+                               js='({ad:window.__adLoaded===true,control:window.__controlLoaded===true})')
+            errors = [e['params'].get('errorText') for e in app.call('events')
+                      if e['type'] == 'devtools' and e['method'] == 'Network.loadingFailed']
+            blocked = (completed and scripts['control'] and not scripts['ad']
+                       and 'net::ERR_BLOCKED_BY_CLIENT' in errors
+                       and not any(p.startswith('/ad.js') for p in requests))
+            settings = app.call('settings-adblock')
+            repaired = any(r['id'] == 'EasyList' and r['repaired']
+                           and 'EasyList: size or SHA-256 mismatch' in r['integrityRecovery']
+                           and 'quarantined' in r['integrityRecovery']
+                           and ('fell back' if mode == 'fallback' else 'reseeded/refetched') in r['integrityRecovery']
+                           for r in update['updateResults'])
+            ok = (repaired and update['updateReloads'] == 1 and not update['error']
+                  and not update['lastError'] and restored == original and len(quarantines) == 1
+                  and (quarantines[0] / 'EasyList.txt').read_bytes() == tampered and bool(native)
+                  and native['load_generation'] > before_native['load_generation'] and native['list_count'] == 2
+                  and not native['last_error']
+                  and blocked and app.pid == pid and not settings['error'] and not settings['lastError']
+                  and 'last list update failed' not in str(settings['text']).lower())
+            name = 'AD4_update_now_tamper_' + mode
+            results[name] = dict(ok=ok, update=update, native=native, nativeBefore=before_native,
+                                 sameProcess=app.pid == pid, scripts=scripts, networkErrors=errors,
+                                 blockedAfterRecovery=bool(blocked), settings=settings,
+                                 quarantineCount=len(quarantines),
+                                 originalSHA256=hashlib.sha256(original).hexdigest(),
+                                 restoredSHA256=hashlib.sha256(restored).hexdigest())
+            print(name, 'PASS' if ok else 'FAIL', flush=True)
+            app.quit()
+            app = None
+    finally:
+        try:
+            if app:
+                for key, value in saved.items(): app.call('defaults', key=key, value=value)
+                app.quit()
+        finally:
+            _restore_defaults(app, saved)
+            server.shutdown()
+            server.server_close()
 
 
 def binding(factory, results, wait):
@@ -299,6 +438,7 @@ def real_engine(factory, results, wait):
         body = (repo / 'Vendor/adblock' / name).read_bytes()
         assert hashlib.sha256(body).hexdigest() == digest, 'fixture must match the official bundled pin'
         pinned[name] = body
+    assert b'##.ad-slot' in pinned['easylist.txt'].splitlines(), 'cosmetic control must use a pinned EasyList rule'
     synthetic_lists = threading.Event()
     hold_lists, list_started, release_lists = (threading.Event() for _ in range(3))
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -311,7 +451,11 @@ def real_engine(factory, results, wait):
                 name = Path(urllib.parse.urlsplit(self.path).path).name
                 body = (b'[Adblock Plus 2.0]\n||demand.supply/ad.js$script\n'
                         b'||demand.supply/resource.js$script,redirect=noopjs\n'
-                        if synthetic_lists.is_set() else pinned[name])
+                        # A byte-identical 200 response correctly skips reload.
+                        # Change only a comment so the refresh assertion observes
+                        # a new generation with the same official blocking rules.
+                        if synthetic_lists.is_set() else
+                        pinned[name] + b'\n! Open local refresh fixture\n')
                 mime = 'text/plain'
             elif self.path.startswith('/resource.js'):
                 body, mime = b'window.__resourceNetwork=true;', 'application/javascript'
@@ -323,7 +467,8 @@ def real_engine(factory, results, wait):
                 body = b'''<!doctype html><title>Open ad-block acceptance</title>
 <link rel="icon" href="data:,"><script>window.__done=0;</script>
 <script src="http://demand.supply/ad.js" onload="__done++" onerror="__done++"></script>
-<script src="/control.js" onload="__done++" onerror="__done++"></script>'''
+<script src="/control.js" onload="__done++" onerror="__done++"></script>
+<div class="ad-slot">Open cosmetic acceptance</div>'''
                 mime = 'text/html'
             self.send_response(200)
             self.send_header('Content-Type', mime)
@@ -376,6 +521,25 @@ def real_engine(factory, results, wait):
         print('AD3_' + name, evidence.get('status', 'PASS' if ok else 'FAIL'), flush=True)
         results['AD3_' + name] = dict(ok=bool(ok), **evidence)
     observations = {}
+    cosmetic_observations = {}
+    cosmetic_state = '''(() => ({
+        display: getComputedStyle(document.querySelector('.ad-slot')).display,
+        sheets: document.styleSheets.length,
+        globals: Object.getOwnPropertyNames(window).filter(n => n.startsWith('__openAdBlock'))
+    }))()'''
+    def cosmetic_verdict(state, hidden):
+        return ((state['display'] == 'none') == hidden
+                and state['sheets'] == 0 and state['globals'] == [])
+    def cosmetic(tab, name, hidden):
+        if hidden:
+            wait(lambda: app.call('eval', tab=tab, js=cosmetic_state)['display'] == 'none', timeout=10)
+        else:
+            # Observe after the generic observer's 100 ms batching interval.
+            app.call('eval', tab=tab, js='new Promise(resolve => setTimeout(() => resolve(true), 300))')
+        state = app.call('eval', tab=tab, js=cosmetic_state)
+        cosmetic_observations[name] = state
+        row('cosmetic_' + name, cosmetic_verdict(state, hidden), **state)
+    tab_windows = {}
     def request_verdict(evidence, blocked):
         state = evidence['scriptState']
         return (state['control'] and state['ad'] == (not blocked)
@@ -383,6 +547,10 @@ def real_engine(factory, results, wait):
                 and ('net::ERR_BLOCKED_BY_CLIENT' in evidence['networkErrors']) == blocked
                 and evidence['adReachedServer'] == (not blocked))
     def visit(tab, name, blocked):
+        if tab in tab_windows:
+            # Tab automation resolves against the front window's model; private
+            # windows use a separate model from their normal parent window.
+            app.call('window-focus', id=tab_windows[tab], activate=True)
         initial_page = app.call('tab-state', tab=tab)['page']
         # open() returns a tab before CEF's asynchronous OnAfterCreated.
         # Observe its real live/load state before installing Network observers.
@@ -433,6 +601,8 @@ def real_engine(factory, results, wait):
         body = (generation / resource['file']).read_bytes()
         return dict(generation=live['generation'],
                     manifestVerified=hashlib.sha256(manifest_bytes).hexdigest() == live['manifestSHA256'],
+                    listSHA256s={f['listID']: f['sha256'] for f in manifest['files']
+                                 if f['listID'] != '_resources'},
                     resourceSHA256=hashlib.sha256(body).hexdigest(),
                     resourceVerified=resource['file'] == 'resources.json'
                         and resource['bytes'] == len(body) and resource['sha256'] == resource_digest,
@@ -499,16 +669,28 @@ def real_engine(factory, results, wait):
             expectedResources=resource_count, status=status(original['id']), manifest=manifest)
         tab = app.call('open', url='about:blank')['id']
         visit(tab, 'enabled_blocks', True)
+        cosmetic(tab, 'enabled_hides', True)
         app.call('settings-adblock', host='open-adblock.test', excluded=True)
         visit(tab, 'excluded_allows', False)
+        cosmetic(tab, 'excluded_visible', False)
         app.call('settings-adblock', host='open-adblock.test', excluded=False)
         next_request(tab, 'reincluded_next_request_same_document', True)
         visit(tab, 'reincluded_blocks', True)
         app.call('settings-adblock', enabled=False)
         visit(tab, 'global_off_allows', False)
+        cosmetic(tab, 'global_off_visible', False)
         app.call('settings-adblock', enabled=True)
         next_request(tab, 'global_on_next_request_same_document', True)
         visit(tab, 'global_on_blocks_same_process', True)
+        cosmetic(tab, 'global_on_hides_again', True)
+        cosmetic_pairs = [('enabled_hides', 'excluded_visible'),
+                          ('global_on_hides_again', 'global_off_visible')]
+        row('cosmetic_gates_reject_inverse_controls', all(
+            cosmetic_verdict(cosmetic_observations[positive], True)
+            and cosmetic_verdict(cosmetic_observations[negative], False)
+            and not cosmetic_verdict(cosmetic_observations[negative], True)
+            and not cosmetic_verdict(cosmetic_observations[positive], False)
+            for positive, negative in cosmetic_pairs), pairs=cosmetic_pairs)
         app.call('settings-adblock', enabled=False)
         next_request(tab, 'global_off_next_request_same_document', False)
         app.call('settings-adblock', enabled=True)
@@ -537,6 +719,7 @@ def real_engine(factory, results, wait):
         # Give this regular two-Profile fixture its own real Space and tab.
         app.call('space-create', title='Engine Independent', profile=other['name'])
         other_tab = app.call('open', url='about:blank')['id']
+        tab_windows[other_tab] = app.call('window-state')['id']
         assert app.call('tab-state', tab=other_tab)['profile'] == other['id']
         assert loaded(other['id'])
         initial_update(other)
@@ -601,25 +784,106 @@ def real_engine(factory, results, wait):
         assert loaded(original['id']) and loaded(other['id'])
         measure(app, other_tab, [original, other], status, wait, row)
         app.call('ext-shortcuts', action='close')
+        app.call('window-focus', id=tab_windows[other_tab], activate=True)
         app.call('select', tab=other_tab)
         app.call('menu-perform', id='new-incognito-window')
         private = wait(lambda: next((w for w in app.call('incognito-state')['windows'] if w['private']), None), timeout=15)
         assert private
         app.call('window-focus', id=private['id'], activate=True)
         private_tab = app.call('open', url='about:blank')['id']
+        tab_windows[private_tab] = private['id']
         assert loaded(other['id'], True)
         row('otr_shares_parent_engine', status(other['id'], True)['engine_shared'])
         visit(private_tab, 'otr_parent_enabled_blocks', True)
+        private_id = next(c['identifier'] for c in profile_state(other['id'])['contexts'] if c['offTheRecord'])
+        def saved_settings():
+            parent = Path(app.user_data) / 'Profiles' / other['directory'] / 'AdBlock'
+            paths = [Path(app.user_data) / 'adblock-settings.json',
+                     parent / 'exclusions.json', parent / 'catalog-state.json']
+            return {str(path.relative_to(Path(app.user_data))):
+                    (path.read_bytes(), path.stat().st_mtime_ns) if path.exists() else None
+                    for path in paths}
+        before_private = saved_settings()
+        private_choice = app.call('settings-adblock-site', tab=private_tab, excluded=True)
+        row('otr_session_choice_is_effective', private_choice['available']
+            and not private_choice['shouldBlock'] and private_choice['privateSession'] == private_id
+            and profile_state(other['id'])['storeExcludedDomains'] == [], state=private_choice)
+        visit(private_tab, 'otr_session_excluded_allows', False)
+        visit(other_tab, 'otr_session_normal_still_blocks', True)
+        row('otr_session_settings_unchanged', saved_settings() == before_private,
+            files=sorted(before_private), bytesAndModificationTimesUnchanged=saved_settings() == before_private)
+
+        # A parent change must preserve the private-only choice in the union.
         app.call('profiles-shell', profile=other['id'], action='adblock-open')
+        app.call('settings-adblock', host='parent-only.test', excluded=True)
+        inherited = next(c for c in profile_state(other['id'])['contexts'] if c['offTheRecord'])
+        row('otr_parent_change_preserves_session_union',
+            inherited['excludedDomains'] == ['open-adblock.test', 'parent-only.test']
+            and inherited['storeEffectiveExcludedDomains'] == inherited['excludedDomains']
+            and profile_state(other['id'])['storeExcludedDomains'] == ['parent-only.test'], context=inherited)
+        app.call('settings-adblock', host='parent-only.test', excluded=False)
+        before_remove = saved_settings()
+        app.call('settings-adblock-site', tab=private_tab, excluded=False)
+        visit(private_tab, 'otr_session_reincluded_blocks', True)
+        row('otr_session_removal_settings_unchanged', saved_settings() == before_remove)
+
+        # Saved exclusions remain inherited; removing a session choice cannot
+        # remove a saved parent choice under the union contract.
         app.call('settings-adblock', host='open-adblock.test', excluded=True)
         visit(private_tab, 'otr_parent_excluded_allows', False)
+        inherited_choice = app.call('settings-adblock-site', tab=private_tab, excluded=False)
+        row('otr_cannot_remove_parent_saved_exclusion', not inherited_choice['shouldBlock']
+            and profile_state(other['id'])['storeExcludedDomains'] == ['open-adblock.test'])
         app.call('settings-adblock', host='open-adblock.test', excluded=False)
         visit(private_tab, 'otr_parent_reincluded_blocks', True)
+        app.call('settings-adblock-site', tab=private_tab, excluded=True)
+        visit(private_tab, 'otr_session_before_close_allows', False)
+        app.call('ext-shortcuts', action='close')
+        app.call('window-focus', id=private['id'], activate=True)
+        app.call('window-close')
+        assert wait(lambda: not any(w['id'] == private['id'] for w in app.call('incognito-state')['windows']), timeout=15)
+        closed_session = app.call('settings-adblock-profile', profile=other['id'], privateSession=private_id)
+        row('otr_closed_context_detached', bool(wait(lambda:
+            not app.call('settings-adblock-profile', profile=other['id'], privateSession=private_id)['privateSessionOpen']
+            and not any(c['offTheRecord'] for c in profile_state(other['id'])['contexts']), timeout=15)), state=closed_session)
+        app.call('window-focus', id=tab_windows[other_tab], activate=True)
+        app.call('select', tab=other_tab)
+        app.call('menu-perform', id='new-incognito-window')
+        reopened = wait(lambda: next((w for w in app.call('incognito-state')['windows'] if w['private']), None), timeout=15)
+        assert reopened
+        app.call('window-focus', id=reopened['id'], activate=True)
+        reopened_tab = app.call('open', url='about:blank')['id']
+        tab_windows[reopened_tab] = reopened['id']
+        assert loaded(other['id'], True)
+        visit(reopened_tab, 'otr_new_session_blocks_again', True)
+        reopened_choice = app.call('settings-adblock-site', tab=reopened_tab)
+        row('otr_new_session_drops_old_choice', reopened_choice['privateSession'] != private_id
+            and reopened_choice['shouldBlock'] and reopened_choice['excludedDomains'] == [], state=reopened_choice)
+        app.call('profiles-shell', profile=other['id'], action='adblock-open')
+        closed_profile = app.call('settings-adblock-lifecycle', profile=other['id'], action='close')
+        closed_site = app.call('settings-adblock-site', tab=other_tab)
+        row('closed_profile_unavailable', closed_profile['didChangeCount'] > 0
+            and all(not n['open'] and not n['snapshotEnabled'] for n in closed_profile['notifications'])
+            and not closed_profile['snapshotEnabled'] and not closed_profile['open'] and not closed_site['available']
+            and not profile_state(other['id'])['storeReady'], profile=closed_profile, site=closed_site)
+        app.call('settings-adblock', enabled=False)
+        app.call('settings-adblock', enabled=True)
+        closed_contexts = profile_state(other['id'])['contexts']
+        row('global_toggle_keeps_closed_profile_detached', bool(closed_contexts)
+            and all(not c['adBlockEnabled'] and not c['listDirectorySet'] for c in closed_contexts), contexts=closed_contexts)
+        reopened_profile = app.call('settings-adblock-lifecycle', profile=other['id'], action='open')
+        row('profile_open_notifies_after_publication', reopened_profile['didChangeCount'] > 0
+            and reopened_profile['open'] and reopened_profile['snapshotEnabled']
+            and all(n['open'] and n['snapshotEnabled'] for n in reopened_profile['notifications']), state=reopened_profile)
+        assert loaded(other['id']) and loaded(other['id'], True)
+        visit(other_tab, 'reopened_parent_blocks', True)
+        visit(reopened_tab, 'reopened_parent_otr_blocks', True)
         copied = app.call('settings-adblock', copyDebug=True)['copiedDebugInfo']
         debug_keys = sorted(status(other['id']))
         expected_keys = sorted(['enabled', 'engine_loaded', 'engine_from_dat', 'engine_shared',
                                'dat_policy', 'list_count', 'resources_loaded', 'last_build_ms',
-                               'last_error', 'excluded_count', 'load_generation'])
+                               'last_error', 'excluded_count', 'load_generation',
+                               'awaiting_generation', 'cold_holds', 'cold_hold_max_ms'])
         row('debug_copy_privacy', bool(copied) and '/' not in copied and '://' not in copied
             and 'open-adblock.test' not in copied and app.user_data not in copied
             and debug_keys == expected_keys, keys=debug_keys)
@@ -634,13 +898,22 @@ def real_engine(factory, results, wait):
                  ('list_enabled_blocks', 'other_profile_list_independent'),
                  ('list_enabled_blocks', 'all_lists_disabled_allows'),
                  ('otr_parent_enabled_blocks', 'otr_parent_excluded_allows'),
-                 ('otr_parent_reincluded_blocks', 'otr_parent_excluded_allows')]
+                 ('otr_parent_reincluded_blocks', 'otr_parent_excluded_allows'),
+                 ('otr_session_normal_still_blocks', 'otr_session_excluded_allows'),
+                 ('otr_new_session_blocks_again', 'otr_session_before_close_allows')]
         row('request_gates_reject_inverse_controls', all(
             request_verdict(observations[positive], True)
             and request_verdict(observations[negative], False)
             and not request_verdict(observations[negative], True)
             and not request_verdict(observations[positive], False)
             for positive, negative in pairs), pairs=pairs)
+        retired_profile = app.call('settings-adblock-lifecycle', profile=other['id'], action='retire')
+        retired_site = app.call('settings-adblock-site', tab=other_tab)
+        row('retired_profile_unavailable', retired_profile['didChangeCount'] > 0
+            and all(not n['open'] and not n['snapshotEnabled'] for n in retired_profile['notifications'])
+            and not retired_profile['snapshotEnabled'] and retired_profile['retired'] and not retired_profile['open']
+            and not retired_site['available'] and not profile_state(other['id'])['storeReady'],
+            profile=retired_profile, site=retired_site)
 
         # N-19 through the real App: publish a small lossless redirect list via
         # the real downloader, then relaunch from its verified on-disk DAT.

@@ -34,9 +34,9 @@ CefRefPtr<CefV8Context> CefGetOpenScriptContext(
     blink::WebIsolatedWorldInfo info;
     info.human_readable_name = blink::WebString::FromUtf8("Open");
     blink::SetIsolatedWorldInfo(ISOLATED_WORLD_ID_OPEN, info);
-    // This enters Blink's normal isolated-world creation path. It shares
-    // document-start delivery with future Open cosmetic runtimes, without
-    // the late-connecting cef.mojom frame pipe (adblock-fork F-27).
+    // This enters Blink's normal isolated-world creation path for Open page
+    // runtimes. The private cosmetic observer uses its own world (adblock
+    // overlay, Chromium 0902), without the late cef.mojom frame pipe.
     frame->ExecuteScriptInIsolatedWorld(
         ISOLATED_WORLD_ID_OPEN,
         blink::WebScriptSource(blink::WebString::FromUtf8("void 0")),

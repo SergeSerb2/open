@@ -115,6 +115,17 @@ class OpenAdBlockURLLoaderFactory : public network::mojom::URLLoaderFactory {
   void OnTargetDisconnect();
   void MaybeDeleteSelf();
   void FlushStops();
+  struct ColdRequest;
+  void ResumeColdRequest(std::unique_ptr<ColdRequest> request, bool fail_open);
+  void StartRequest(
+      mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& annotation,
+      base::TimeTicks arrival,
+      bool fail_open);
 
   SEQUENCE_CHECKER(sequence_checker_);
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> receivers_;
@@ -126,6 +137,8 @@ class OpenAdBlockURLLoaderFactory : public network::mojom::URLLoaderFactory {
   int pending_redirected_ = 0;
   // Runs only while counts wait (no timer while idle).
   base::OneShotTimer flush_timer_;
+  size_t cold_pending_ = 0;
+  base::WeakPtrFactory<OpenAdBlockURLLoaderFactory> weak_ptr_factory_{this};
 };
 
 }  // namespace open_engine

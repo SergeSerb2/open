@@ -1,0 +1,29 @@
+# Copyright 2026 The Open Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("renderer") {
+  sources = [
+    "open_adblock_isolated_world.h",
+    "open_adblock_page_script.cc",
+    "open_adblock_page_script.h",
+    "open_adblock_renderer_agent.cc",
+    "open_adblock_renderer_agent.h",
+  ]
+  deps = [
+    "//chrome/common",
+    "//gin",
+    "//third_party/blink/public:blink",
+  ]
+  # The agent's public header exposes these types. Keep GN include checking
+  # enabled, including when the CEF renderer client includes that header.
+  public_deps = [
+    "//base",
+    "//content/public/renderer",
+    "//mojo/public/cpp/bindings",
+    "//open/adblock/mojom",
+    "//url",
+    "//v8",
+  ]
+  visibility = [ "//cef/*" ]
+}

@@ -1,15 +1,27 @@
-# Session Downloads (S11)
+# Downloads (S11)
+
+The persisted-history work on `s11/downloads-history` is **ready for its first
+build**, with no runtime acceptance yet. The 2026-11-09 disk hold forbids builds
+and verify-all until the lead clears it; both screen holds remain in force.
+See [the implementation and pending rows](re/downloads-s11.md#persistent-history-and-profile-filter-2026-11-09-implementation).
+The older acceptance receipts below apply to the original session-download
+implementation, not to the new history work.
 
 This branch implements the lead's Downloads design. Transfers and controls use
 the real App, native Library rows, native save sheets and the engine automation
 socket. The Home ring geometry and recent-download interval remain marked
 guesses from the lead's design.
 
-`DownloadsCenter` owns the session list for all engine contexts. Only engine
+`DownloadsCenter` owns the live list for regular engine contexts. Only engine
 `downloadDidUpdate` callbacks supply progress. The Library reads immutable
 snapshots and native rows send actions to this center. One queued main-actor
 turn coalesces a burst; no timer or display link polls downloads. Completed
-files are checked off the main actor, and no download history is written.
+files are checked off the main actor. Terminal history is stored per Profile,
+with the newest 1,000 records retained. Library loads it lazily below session
+rows. The Profile filter appears with two or more Profiles. Private downloads
+never enter this provider. Historical rows reuse the file actions and can retry
+their source URL. Remove/Trash, Clear Browsing Data and Profile deletion also
+remove the corresponding persisted rows.
 
 Folder mode resolves the Profile's folder on a filesystem actor, claims a unique
 name against existing files and concurrent requests, and lets Chromium resolve
@@ -34,7 +46,7 @@ existing shutdown path. A confirmed close does not show the alert again when
 sleep capture asks to terminate a second time. The generic Warn before quitting
 preference has no guessed UI; see [static evidence](re/downloads-s11.md).
 
-## Verification state
+## Original session-download verification (2026-11-05)
 
 Builds use `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`, through
 `~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Debug`. The built engine
@@ -85,8 +97,9 @@ an automation flag, as the design permits; it opens no Finder window. Copy write
 the real pasteboard file URL, and Trash uses FileManager.
 
 The suite clones the built App with a unique preferences domain, uses a unique
-profile/data/cache root and ephemeral loopback port, restores its keys in
-`finally`, cancels sheets and reaps only its own verified PIDs. On this macOS,
+profile/data/cache root and ephemeral loopback port, cancels sheets in `finally`
+and reaps only its own verified PIDs. Quit-preference variants now use transient
+launch arguments; the suite no longer issues `defaults` commands. On this macOS,
 remote save panels hide their native buttons. The automation uses the allowed
 URL-input path through NSSavePanel's native response method. Its existing sheet
 completion reads `panel.url`; the automation does not answer the engine directly.
