@@ -12420,13 +12420,16 @@ def main():
     # data root stays under Application Support so Chromium's cache rule
     # applies as for users (~/Library/Caches/<root name>, docs/plans/profiles.md);
     # its name is unique per run, so the cache root is too.
-    # Keep AF_UNIX's 104-byte sun_path limit with this suite's longer name.
-    root_kind = "sidebarc" if opts.only == "sidebar-completion" else opts.only
-    if opts.only == 'passwords-probe':
-        root_kind = 'pwprobe'  # Leave room for automation.sock in macOS sun_path.
-    if opts.only == 'secrets-import':
-        root_kind = 'secrets'
-    run_name = "Open-E2E-%s-%s-%d-%s" % (root_kind, opts.style, os.getpid(), os.urandom(4).hex())
+    # AF_UNIX sun_path has 104 bytes including its terminator. Budget against
+    # the actual home path and PID width: profiles-engine reached exactly 104
+    # on the M1, so its App could never create the automation socket.
+    support = os.path.expanduser('~/Library/Application Support/')
+    suffix = '-%s-%d-%s' % (opts.style, os.getpid(), os.urandom(4).hex())
+    budget = 103 - len((support + 'Open-E2E-' + suffix + '/automation.sock').encode())
+    if budget < 1:
+        sys.exit('home path leaves no room for the macOS automation socket (103-byte maximum)')
+    root_kind = re.sub('[^a-z]', '', opts.only or 'all')[:min(8, budget)]
+    run_name = 'Open-E2E-' + root_kind + suffix
     sweep_stale_runs()
     user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
     # Chromium keeps profile caches in ~/Library/Caches/<root name>.
