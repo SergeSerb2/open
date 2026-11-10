@@ -11,6 +11,7 @@ import time
 import uuid
 from pathlib import Path
 from profiles_first_navigation import run as first_navigation
+from profiles_pending_navigation import run as pending_navigation, DELAY_KEY, DELAY_MS
 
 
 def run(factory, results, tmp, api, defaults_before):
@@ -320,10 +321,17 @@ def run(factory, results, tmp, api, defaults_before):
             thread.join(timeout=5)
 
     try:
+        if os.environ.get('OPEN_PROFILES_PENDING_NAV_ONLY') == '1':
+            launch(fresh=True, extra_env={DELAY_KEY: str(DELAY_MS)})
+            pending_navigation(app, results, origin, api)
+            return
         launch(fresh=True)
         first_navigation(app, results, origin, api)
         if os.environ.get('OPEN_PROFILES_FIRST_NAV_ONLY') == '1':
             return
+        app.quit()
+        launch(fresh=True, extra_env={DELAY_KEY: str(DELAY_MS)})
+        pending_navigation(app, results, origin, api)
         app.quit()
         if not any(os.environ.get(key) == '1' for key in
                    ('OPEN_PROFILES_SHELL_PAGES_ONLY', 'OPEN_PROFILES_SHELL_REPAIR_ONLY')):

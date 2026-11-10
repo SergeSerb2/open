@@ -273,6 +273,8 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   CefRefPtr<OEClient> _client;
   CefRefPtr<CefBrowser> _browser;
   NSURL* _pendingURL;
+  NSString* _browserCreationURL;
+  BOOL _hasNavigationAfterCreationSnapshot;
   BOOL _creating;
   BOOL _awaitingPopup;
   BOOL _closeRequested;
@@ -503,6 +505,38 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   CefString url = _restoreHistory
                       ? CefString()
                       : OECef(_pendingURL.absoluteString ?: @"about:blank");
+  _browserCreationURL = OEString(url);
+  _hasNavigationAfterCreationSnapshot = NO;
+#if DEBUG
+  // As with the App's OPEN_AUTOMATION slow-start fixture, keep this hook
+  // out of Release. Yield after the snapshot so a real loadURL: can arrive.
+  if ([OEEngine.shared.configuration.additionalSwitches
+          containsObject:@"--open-automation"]) {
+    NSInteger delay = [NSProcessInfo.processInfo.environment[
+        @"OPEN_AUTOMATION_BROWSER_CREATION_DELAY_MS"] integerValue];
+    if (delay >= 1 && delay <= 5000) {
+      fprintf(stderr, "OpenEngine: browser-creation-delay page=%ld ms=%ld\n",
+              (long)self.identifier, (long)delay);
+      __weak OEWebContent* weakSelf = self;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delay * NSEC_PER_MSEC),
+                     dispatch_get_main_queue(), ^{
+        [weakSelf oe_createBrowserWithURL:url];
+      });
+      return;
+    }
+  }
+#endif
+  [self oe_createBrowserWithURL:url];
+}
+
+- (void)oe_createBrowserWithURL:(const CefString&)initialURL {
+  // The automation delay may outlive the host or its Profile.
+  if (_closeRequested || _browser || !self.context.oe_isReady ||
+      !self.context.oe_requestContext) {
+    _creating = NO;
+    return;
+  }
+  CefString url = initialURL;
   CefRefPtr<CefRequestContext> context = self.context.oe_requestContext;
   if (_configuration.runtimeStyle == OERuntimeStyleChrome &&
       [self oe_createHostedTab:url]) {
@@ -518,6 +552,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     // A Views-window Chrome page navigates at creation: no restore there.
     [self oe_restoreFailed];
     url = OECef(_pendingURL.absoluteString ?: @"about:blank");
+    // The fallback URL is consumed by this creation call itself.
+    _browserCreationURL = OEString(url);
+    _hasNavigationAfterCreationSnapshot = NO;
   }
   if (_configuration.runtimeStyle == OERuntimeStyleChrome) {
     _chromeHost = OECreateChromeHostWindow(
@@ -615,10 +652,21 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   _browser = browser;
   _creating = NO;
   _awaitingPopup = NO;
+  // Popups/adopted views have no creation snapshot. An ordinary initial
+  // URL also needs no second load unless loadURL: changed it after that snapshot.
+  NSURL* pendingNavigation =
+      _hasNavigationAfterCreationSnapshot && _browserCreationURL &&
+              ![_pendingURL.absoluteString isEqualToString:_browserCreationURL]
+          ? _pendingURL : nil;
+  BOOL restoreLoadedURL = NO;
   if (_restoreHistory) {
     // Before the page can be shown (hosted tabs: still inside CreateTab).
     [self oe_restoreHistoryIntoBrowser:browser];
+    restoreLoadedURL =
+        _navigationHistoryRestore == OENavigationHistoryRestoreFailed;
   }
+  _browserCreationURL = nil;
+  _hasNavigationAfterCreationSnapshot = NO;
   // Released at the end of this method; -close or the parking path in
   // -dealloc take over from here.
   OEWebContent* keepAlive = _creatingSelf;
@@ -630,6 +678,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
     _client->SetClosing();
     browser->GetHost()->CloseBrowser(true);
     return;
+  }
+  if (pendingNavigation && !restoreLoadedURL) {
+    browser->GetMainFrame()->LoadURL(OECef(pendingNavigation.absoluteString));
   }
   if (_muted) {
     browser->GetHost()->SetAudioMuted(true);
@@ -932,6 +983,7 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   }
   if (!_browser) {
     _pendingURL = URL;
+    if (_browserCreationURL) _hasNavigationAfterCreationSnapshot = YES;
     return;
   }
   _browser->GetMainFrame()->LoadURL(OECef(URL.absoluteString));
@@ -1048,7 +1100,9 @@ typedef void (^OEOpenWorldCompletion)(id _Nullable, NSError* _Nullable);
   NSLog(@"OEWebContent: navigation history restore failed; loading the "
         @"fallback URL");
   _restoreHistory = nil;
-  _pendingURL = _restoreFallbackURL;
+  // A navigation submitted after the creation snapshot wins over the saved
+  // fallback. The failed-restore path below loads that URL exactly once.
+  if (!_hasNavigationAfterCreationSnapshot) _pendingURL = _restoreFallbackURL;
   _restoreFallbackURL = nil;
   _navigationHistoryRestore = OENavigationHistoryRestoreFailed;
 }
