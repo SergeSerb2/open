@@ -476,7 +476,9 @@ def run(factory, results, tmp, env, functional_only=False):
             p0,p1=p95(baseline),p95(shown);d0,d1=drops(baseline),drops(shown)
             # Break the real page frame path, then let the bounded promise end.
             # The same acceptance predicate must reject the slow frames.
-            slow=app.eval(tab,js.replace('scrollBy(0,12);','scrollBy(0,12);let until=performance.now()+12;while(performance.now()<until){}')
+            # The broken path must exceed a frame on the actual display. A
+            # fixed 12 ms workload fits inside one frame at 60 Hz.
+            slow=app.eval(tab,js.replace('scrollBy(0,12);',f'scrollBy(0,12);let until=performance.now()+{interval+12};while(performance.now()<until){{}}')
                           .replace('frames.length<240','frames.length<60'))
             negative_rejected=not (p95(slow)<=p0+1 and drops(slow)<=d0+.01)
             record('S13_scroll',p1<=p0+1 and d1<=d0+.01 and negative_rejected,closedP95=p0,openP95=p1,closedDropped=d0,openDropped=d1,refreshMilliseconds=interval,
