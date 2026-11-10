@@ -116,7 +116,7 @@ final class EditorStage {
         host = EditorHost(neutral: state == "editor-neutral-page");if let url { host.url = url };if !waitForColors { host.snapshotDelay = 0.2 }
         suite = "open.harness.editor."+UUID().uuidString;defaults = UserDefaults(suiteName: suite)!
         defaults.set(state != "editor-first-run",forKey: "open.boosts.hasDismissedInterstitial")
-        defaults.set(!["editor-global-off","editor-double-banner"].contains(state),forKey: "open.advanced.enableBoosts");host.globallyEnabled = defaults.bool(forKey: "open.advanced.enableBoosts")
+        defaults.set(!["editor-global-off","editor-double-banner"].contains(state),forKey: BoostPreferences.globallyEnabledKey);host.globallyEnabled = defaults.bool(forKey: BoostPreferences.globallyEnabledKey)
         var seed = boost ?? Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000004"),name: "My Boost",siteMatch: SiteMatch(domain: host.url.host!))
         if ["editor-not-active","editor-double-banner"].contains(state) { seed.siteMatch = SiteMatch(domain: "other.example.com") }
         if state == "editor-legacy" { seed.colorAdjustment = ColorAdjustment(brightness: 2,invert: 0.5) }

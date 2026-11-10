@@ -47,7 +47,7 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     defer { LaunchTiming.shared.mark("boostOwnerInitEnd") }
     #endif
     self.app = app
-    boostsGloballyEnabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
+    boostsGloballyEnabled = UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true
     app.profileTeardown.register(self)
     defaultsObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.preferencesChanged() }
@@ -123,7 +123,7 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     adapter.updateScripts(profile: profile)
   }
   private func preferencesChanged() {
-    let enabled = UserDefaults.standard.object(forKey: "open.advanced.enableBoosts") as? Bool ?? true
+    let enabled = UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true
     guard enabled != boostsGloballyEnabled else { return }
     boostsGloballyEnabled = enabled; revision &+= 1
     adapter.globalSwitchChanged()
@@ -142,15 +142,15 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
   func factory(for id: ItemID) -> EngineWebContentHostFactory? {
     app.hostFactories.values.first { $0.hosts[id] != nil }
   }
-  func canEdit(tabID: ItemID) -> Bool {
+  func canEdit(tabID: ItemID, committedURL: URL? = nil) -> Bool {
     guard let factory = factory(for: tabID), !factory.isIncognito, factory.controller != nil, let host = factory.hosts[tabID], !host.closed,
-          !host.content.context.isEphemeral, !isRetired(host.profileID), let url = host.content.url,
+          !host.content.context.isEphemeral, !isRetired(host.profileID), let url = committedURL ?? host.content.url,
           ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { return false }
     return true
   }
-  func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode) {
-    guard canEdit(tabID: tabID), let factory = factory(for: tabID), let host = factory.hosts[tabID],
-          let controller = factory.controller, let window = controller.window, let url = host.content.url else { return }
+  func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode, committedURL: URL? = nil) {
+    guard canEdit(tabID: tabID, committedURL: committedURL), let factory = factory(for: tabID), let host = factory.hosts[tabID],
+          let controller = factory.controller, let window = controller.window, let url = committedURL ?? host.content.url else { return }
     let editor = controller.boostEditor ?? BoostEditorController(host: editorHost)
     controller.boostEditor = editor
     let context = SiteControlContext(tabID: tabID, profileID: host.profileID, url: url, displayHost: url.host ?? "")
@@ -171,7 +171,13 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     adapter.committed(host, url: url, newDocument: newDocument)
     host.owner?.controller?.boostEditor?.pageDidNavigate(tabID: host.tabID, url: url)
     if newDocument { host.owner?.controller?.boostEditor?.boundPageDidCommit(tabID: host.tabID) }
-    if let id = pendingEditors.removeValue(forKey: host.tabID) { openEditor(boostID: id, tabID: host.tabID, mode: .simple) }
+    // The engine's commit delegate precedes its URL-property notification.
+    // Validate and present against that committed address; consuming the
+    // request while content.url is nil loses Library Edit permanently.
+    if let id = pendingEditors[host.tabID], canEdit(tabID: host.tabID, committedURL: url) {
+      pendingEditors[host.tabID] = nil
+      openEditor(boostID: id, tabID: host.tabID, mode: .simple, committedURL: url)
+    }
   }
   func hostClosed(_ host: EngineWebContentHost) {
     pendingEditors[host.tabID] = nil

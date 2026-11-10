@@ -967,6 +967,7 @@ extension AppDelegate: CommandDispatcher {
     guard allowsFirstRunCommand(id) else { return false }
     if id == "settings", settingsShortcutCaptured { return false }
     if id == "check-for-updates" { return true }
+    if id == "boost-gallery" { return boostGalleryEnabled }
     if let enabled = littleOpenCommandEnabled(id) { return enabled }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if let enabled = PageTools.isAppCommandEnabled(id) { return enabled }  // App/Page/PageToolsCommands.swift
@@ -1022,7 +1023,8 @@ extension AppDelegate: CommandDispatcher {
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
-    case "view-boosts": settingsPresenter.showLibrary(section: .boosts)
+    case "view-boosts": settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .list, boostsProfileID: boostLibraryInvokingProfileID)
+    case "boost-gallery": if boostGalleryEnabled { settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .gallery, boostsProfileID: boostLibraryInvokingProfileID) }
     case "keyboard-shortcuts-edu":
       // Help ▸ Essential Keyboard Shortcuts: Arc's floating EDU window (commandbar-completion §4.5, CC-27).
       EssentialShortcutsWindowController.shared.show(near: frontWindowController?.window ?? NSApp.keyWindow, store: keyBindings)
