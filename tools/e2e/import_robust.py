@@ -393,7 +393,7 @@ def run(factory, results, tmp, h):
                     if case == 'history_wal_unreadable' and not negative: Path(str(directory/'User Data/Default/History')+'-wal').chmod(0)
                 try:
                     launch(directory); before = app.call('spaces')
-                    if case in ('folder_missing', 'folder_unreadable'):
+                    if case in ('folder_missing', 'sidebar_missing', 'folder_unreadable'):
                         # Setup skips Import when discovery finds no source
                         # (#267). Do not force the retired Import screen. The
                         # negative fixture keeps the source readable, so this

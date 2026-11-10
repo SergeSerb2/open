@@ -2281,6 +2281,15 @@ def context_menu_commands(app, results, *, run_all_commands=True):
                     if app.proc.poll() is not None:
                         crashed = "%s: %s" % (target, label)
                         break
+                    if menu_key(command['title']) == menu_key('Print…'):
+                        # Chromium's preview uses the hosted browser's own
+                        # Views window. Closing that window closes its tabs.
+                        # Cancel the preview through its real App key path.
+                        preview = [window for window in app.call('windows')
+                                   if window['visible'] and 'NativeWidget' in window['class']]
+                        for window in preview:
+                            app.call('key', key='escape', window=window['number'], route='app')
+                        report['printPreviewWindows'] = [window['number'] for window in preview]
                     dismissed = app.call("dismiss") + close_new_windows()
                     if dismissed:
                         report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
