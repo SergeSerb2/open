@@ -112,10 +112,11 @@ static void OEApplyAdBlock(OEBrowserContext* context) {
       ? CefGetOpenAdBlockStatus(self.oe_requestContext) : nullptr;
   if (!status) {
     return @{@"enabled": @(self.isAdBlockEnabled), @"engine_loaded": @NO,
+        @"awaiting_generation": @NO,
         @"engine_from_dat": @NO, @"engine_shared": @NO, @"dat_policy": @"",
         @"list_count": @0, @"resources_loaded": @0, @"last_build_ms": @(-1),
         @"last_error": @"", @"excluded_count": @(self.adBlockExcludedDomains.count),
-        @"load_generation": @0};
+        @"load_generation": @0, @"cold_holds": @0, @"cold_hold_max_ms": @0};
   }
   NSMutableDictionary<NSString*, id>* result = [NSMutableDictionary dictionary];
   CefDictionaryValue::KeyList keys;
