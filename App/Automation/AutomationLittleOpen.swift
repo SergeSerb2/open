@@ -15,7 +15,7 @@ extension AppDelegate {
 }
 
 extension AutomationController {
-  static let littleOpenCommands: Set<String> = ["little-open-state", "little-open-action", "little-open-eval", "little-open-profile-alert", "little-open-dock-menu", "little-open-link-click"]
+  static let littleOpenCommands: Set<String> = ["little-open-state", "little-open-action", "little-open-eval", "little-open-profile-alert", "little-open-dock-menu", "little-open-link-click", "little-open-downloads"]
 
   private func littleOpenState() -> [String: Any] {
     func frame(_ rect: CGRect) -> [Double] { [rect.minX, rect.minY, rect.width, rect.height] }
@@ -90,6 +90,7 @@ extension AutomationController {
   }
 
   func runLittleOpenCommand(_ cmd: String, _ args: [String: Any]) async throws -> Any {
+    if cmd == "little-open-downloads" { return try littleOpenDownloads(args) }
     if cmd == "little-open-state" { return littleOpenState() }
     if cmd == "little-open-link-click" {
       let factory = try window

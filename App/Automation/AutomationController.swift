@@ -2303,6 +2303,11 @@
       var keyTime: Double?
       var capturedAfterKey: Double?
       let toggle = a["toggleSidebar"] as? Bool == true
+      let overlays = try (a["overlayWindows"] as? [Int] ?? []).map { number in
+        guard let window = NSApp.windows.first(where: { $0.windowNumber == number && $0.isVisible })
+        else { throw Failure(message: "overlay window is not owned and visible") }
+        return window
+      }
       let method = try await WindowSnapshot.capture(target, to: url, afterPreparation: toggle ? {
         let time = ProcessInfo.processInfo.systemUptime
         if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: time,
@@ -2310,7 +2315,7 @@
           keyTime = CACurrentMediaTime()
           NSApp.sendEvent(event)
         }
-      } : nil, atCapture: { capturedAfterKey = keyTime.map { CACurrentMediaTime() - $0 } })
+      } : nil, atCapture: { capturedAfterKey = keyTime.map { CACurrentMediaTime() - $0 } }, overlayWindows: overlays)
       return ["path": path, "method": method, "capturedAfterKey": capturedAfterKey ?? NSNull()] as [String: Any]
     }
 
