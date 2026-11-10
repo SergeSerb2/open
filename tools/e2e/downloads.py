@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import plistlib
 import socket
+import sqlite3
 import subprocess
 import threading
 import time
@@ -22,8 +23,11 @@ def server():
         def log_message(self, *_): pass
         def do_GET(self):
             route = self.path.split('?', 1)[0]
-            if route == '/':
+            if route in ('/', '/arm'):
                 body = b'<!doctype html><title>Downloads fixture</title><body>Downloads fixture</body>'
+                if route == '/arm':
+                    body = (b'<!doctype html><title>Unload fixture</title><button id=arm '
+                            b'onclick="onbeforeunload=e=>{e.preventDefault();e.returnValue=1}">Arm</button>')
                 self.send_response(200); self.send_header('Connection', 'close'); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body); return
             unknown = route == '/unknown'
             slow = route in ('/slow', '/unknown', '/finish')
@@ -31,7 +35,8 @@ def server():
             length = count * 16384
             self.send_response(200)
             self.send_header('Content-Type', 'application/octet-stream')
-            name = 'open-e2e-fallback-%d.txt' % os.getpid() if route == '/fallback' else 'sample.txt'
+            name = ('open-e2e-fallback-%d.txt' % os.getpid() if route == '/fallback'
+                    else 'private-history.txt' if route == '/private' else 'sample.txt')
             self.send_header('Content-Disposition', 'attachment; filename="%s"' % name)
             if not unknown: self.send_header('Content-Length', str(length if route != '/fail' else length * 100))
             self.send_header('Connection', 'close')
@@ -77,9 +82,8 @@ def checks(factory, results, tmp, config, harness):
     subprocess.run(['codesign', '--force', '--sign', '-', str(opener)], check=True, capture_output=True)
     opened_file = root / 'opened-file.json'
     launch_env = {'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_IDLE_DOWNLOADS': '1', 'OPEN_E2E_APP_BUNDLE': str(bundle), 'OPEN_DOWNLOADS_DEFAULT_DIRECTORY': str(root / 'DefaultDownloads')}
-    app = factory(urls=(), extra_env=launch_env)
+    app = factory(urls=(), extra_env=launch_env, extra_args=['-open.general.warnBeforeQuitting', 'YES'])
     app.preferences_domain = domain
-    saved = {}
     def state(): return app.call('downloads-state')
     def item(key): return next((v for v in state()['items'] if v['id'] == key), {})
     def row(key): return next((v for v in state()['rows'] if v['id'] == key), {})
@@ -274,23 +278,337 @@ def checks(factory, results, tmp, config, harness):
         app.call('download-idle', action='end')
 
 
+    def history_flow():
+        nonlocal app, tab
+        home_space = next(v['id'] for v in app.call('spaces') if v['focused'])
+        normal_window = next(v for v in app.call('incognito-state')['windows'] if not v['private'])
+        library()
+        if len(app.call('profiles-shell')['profiles']) == 1:
+            check('history_single_profile_filter_hidden', not state()['profileFilter'])
+        dismiss_library()
+
+        # Real completed, cancelled and failed transfers in the first Profile.
+        completed = start('/fast?history=completed')
+        wait(lambda: item(completed).get('fileExists'))
+        old = start('/fast?history=old'); wait(lambda: item(old).get('fileExists'))
+        app.call('download-start-age', id=old, seconds=7200)
+        failed = start('/fail?history=failed'); wait(lambda: item(failed).get('state') == 'failed', 30)
+        cancelled = start('/slow?history=cancelled'); library()
+        wait(lambda: 'Cancel' in row(cancelled).get('buttons', []))
+        app.call('download-row', id=cancelled, action='Cancel')
+        wait(lambda: item(cancelled).get('state') == 'cancelled')
+        dismiss_library()
+        before_first = {key: item(key) for key in (completed, old, failed, cancelled)}
+
+        app.call('space-create', title='History Second', profile='History Second')
+        profile2 = next(v['profile'] for v in app.call('spaces') if v['focused'])
+        second = root / 'history-second'; second.mkdir()
+        app.call('download-settings', profile=profile2, directory=str(second), ask=False)
+        tab = E.new_tab(app, base + '/')
+        other = start('/fast?history=second'); wait(lambda: item(other).get('fileExists'))
+        before_second = item(other)
+        check('history_two_profile_downloads', before_second.get('profile') == profile2
+              and all(v.get('profile') == profile for v in before_first.values()), first=before_first, second=before_second)
+
+        # Private download uses the real Incognito menu and engine. It must finish
+        # on disk without publishing a regular row or writing either Profile store.
+        app.call('menu-perform', id='new-incognito-window')
+        private = wait(lambda: next((v for v in app.call('incognito-state')['windows'] if v['private']), None))
+        if not private: raise RuntimeError('history private window missing')
+        try:
+            app.call('window-focus', id=private['id'], activate=True)
+            private_tab = E.new_tab(app, base + '/')
+            private_dir = root / 'history-private'; private_dir.mkdir()
+            app.call('download-dir', path=str(private_dir))
+            app.eval(private_tab, 'document.body.innerHTML = \'<a id="private-download" href="/private?history=private">Download</a>\'')
+            app.call('click', tab=private_tab, selector='#private-download')
+            private_file = private_dir / 'private-history.txt'
+            private_complete = wait(lambda: private_file.exists() and private_file.stat().st_size == 131072)
+            check('history_private_transfer', private_complete)
+        finally:
+            app.call('window-focus', id=private['id'], activate=True); app.call('window-close')
+            app.call('window-focus', id=normal_window['id'], activate=True)
+
+        def stored_rows():
+            app.call('download-history-flush')
+            records = []
+            for path in Path(app.user_data).glob('Profiles/*/State/downloads.sqlite3'):
+                with contextlib.closing(sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True)) as db:
+                    records += [json.loads(v[0]) for v in db.execute('SELECT payload FROM downloads')]
+            return records
+        disk = stored_rows()
+        required = set(before_first) | {other}
+        check('history_terminal_store', required <= {r['id'] for r in disk}
+              and all(r['endedAt'] >= r['startedAt'] and r['sourceURL'] and r['profileID'] for r in disk), rows=disk)
+        check('history_private_absent_store', not any('private-history' in json.dumps(v) or 'history=private' in json.dumps(v) for v in disk))
+
+        def restart(expected_ids):
+            nonlocal app, tab
+            dismiss_library()
+            app.call('download-policy', quit='close')
+            app.activation_trace = app.call('activation-events')
+            app.call('quit')
+            if not wait(lambda: not app.process_path(app.pid), 15): raise RuntimeError('history clean quit did not finish')
+            app.quit()
+            app = factory(urls=(), fresh=False, extra_env=launch_env)
+            app.preferences_domain = domain
+            app.call('download-policy', quit='keep', recordFiles=True)
+            # No launch history read: the first Library opening hydrates it.
+            check('history_lazy_before_library_' + str(len([k for k in results if k.startswith('history_lazy_before_library_')])),
+                  not state()['items'], items=state()['items'])
+            app.call('command', id='view-downloads')
+            def restored_expected():
+                snapshot = state()
+                rows = {v['id']: v for v in snapshot['items']}
+                # Even an expected empty list must wait for the real lazy load
+                # and its publication, never accept all([]) as restoration.
+                return (snapshot['historyLoaded'] and not snapshot['queued']
+                        and expected_ids <= rows.keys()
+                        and all(rows[key]['historical'] for key in expected_ids))
+            if not wait(restored_expected):
+                raise RuntimeError('history relaunch did not restore expected IDs: ' + ', '.join(sorted(expected_ids)))
+
+        restart(required)
+        restored = {v['id']: v for v in state()['items']}
+        check('history_relaunch_two_profiles', required <= set(restored)
+              and len(restored) == len(state()['items']) and all(restored[k]['historical'] for k in required)
+              and all(restored[k]['state'] == before_first[k]['state'] for k in before_first)
+              and restored[other]['profile'] == profile2, items=list(restored.values()))
+        check('history_profile_filter_menu', state()['profileFilter'].get('titles', [])[0:1] == ['All Profiles']
+              and 'History Second' in state()['profileFilter'].get('titles', []), filter=state()['profileFilter'])
+        for selected, wanted in [(profile, set(before_first)), (profile2, {other})]:
+            app.call('download-profile-filter', profile=selected)
+            filtered = wait(lambda: wanted <= set(state()['visibleItems'])
+                            and all(v['profile'] == selected for v in state()['items'] if v['id'] in state()['visibleItems']))
+            check('history_profile_filter_' + ('first' if selected == profile else 'second'), filtered,
+                  visible=state()['visibleItems'], filter=state()['profileFilter'])
+        app.call('download-profile-filter', profile='all')
+        check('history_profile_filter_all', required <= set(state()['visibleItems']))
+        check('history_private_absent_relaunch', not any('history=private' in v['source'] for v in state()['items']))
+
+        # Historical rows use the same native menu and real file opener as live rows.
+        app.call('download-profile-filter', profile=profile2)
+        wait(lambda: bool(row(other)) and item(other).get('fileExists'))
+        app.call('download-policy', openApp=str(opener))
+        titles = [v['title'] for v in menu(other)]
+        action_count = len(state()['fileActions'])
+        opened_file.unlink(missing_ok=True)
+        for title in (titles[0], titles[1], 'Show in Finder'): menu(other, title)
+        actions = wait(lambda: state()['fileActions'][action_count:] if len(state()['fileActions']) >= action_count + 3 else None)
+        def receipt():
+            try: return json.loads(opened_file.read_text())
+            except (OSError, ValueError): return None
+        opened = wait(receipt)
+        if opened and opened.get('pid'): app.owned_processes[opened['pid']] = str(executable.resolve())
+        check('history_open_copy_reveal', actions and [a['action'] for a in actions[:3]] == ['open', 'copy', 'reveal']
+              and opened and opened.get('bytes') == 131072
+              and urllib.parse.unquote(urllib.parse.urlparse(state()['copiedFileURL']).path) == before_second['path'], actions=actions, receipt=opened)
+
+        Path(before_first[completed]['path']).unlink()
+        app.call('download-profile-filter', profile=profile)
+        dismiss_library(); library()
+        missing = wait(lambda: row(completed).get('subtitle') == 'File moved or deleted.')
+        missing_menu = menu(completed)
+        check('history_missing_file_safe', missing and all(not v['enabled'] for v in missing_menu[:3])
+              and any(v['title'] == 'Hide from Open' and v['enabled'] for v in missing_menu), row=row(completed), menu=missing_menu)
+        menu(completed, 'Hide from Open'); wait(lambda: not item(completed))
+
+        # Retry must re-download its recorded URL under its original Profile.
+        before_retry = set(v['id'] for v in state()['items'])
+        before_retry_tabs = {v['id'] for v in app.call('tabs')}
+        app.call('download-profile-filter', profile=profile2)
+        wait(lambda: bool(row(other)))
+        menu(other, 'Retry'); dismiss_library()
+        retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['state'] == 'completed'), None))
+        check('history_retry', retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
+              and Path(retried['path']).exists(), item=retried)
+        for new_tab in app.call('tabs'):
+            if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
+        library(); wait(lambda: bool(row(other))); menu(other, 'Move to Trash')
+        check('history_trash', wait(lambda: not item(other)) and not Path(before_second['path']).exists())
+
+        # Last hour removes recent terminals only; the old first-Profile row and
+        # all second-Profile rows survive. Then All time removes the old row too.
+        response = app.call('settings-clear-data', profile=profile, kinds=8, range='Last hour')
+        wait(lambda: all(not item(k) for k in (failed, cancelled)))
+        check('history_clear_range', response['status'] == 'Done' and bool(item(old))
+              and bool(retried and item(retried['id'])), response=response)
+        restart({old, retried['id']})
+        check('history_remove_clear_persist', not any(item(k) for k in (completed, failed, cancelled, other))
+              and bool(item(old)) and bool(retried and item(retried['id'])), items=state()['items'])
+        response = app.call('settings-clear-data', profile=profile, kinds=8, range='All time')
+        restart({retried['id']})
+        check('history_clear_all_persist', response['status'] == 'Done'
+              and not any(v['profile'] == profile for v in state()['items'])
+              and bool(retried and item(retried['id'])), items=state()['items'])
+
+        # The real typed Settings deletion closes the owner before removing its
+        # directory. Opening Library and quitting again must not recreate it.
+        dismiss_library(); app.call('space', space=home_space)
+        profile_row = next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile2)
+        profile_dir = Path(app.user_data) / 'Profiles' / profile_row['directory']
+        # Settings offers Delete Profile only for a Profile with no Spaces: move the second
+        # Space to Default first (the same path as boost_profile_retirement.py).
+        for space in [v for v in app.call('spaces') if v['profile'] == profile2]:
+            assert app.call('space-profile', space=space['id'], profile='Default')
+            E._try(lambda: app.call('alert', button='Change Profile'))
+        wait(lambda: next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile2)['spaces'] == 0)
+        # Settings shows a Profile by name; its SwiftUI controls install a moment later.
+        app.call('profiles-shell', action='show', profile=profile_row['name'])
+        # A first Settings visit can attach the search-suggestions notice; answer it.
+        if wait(lambda: 'Got it' in (app.call('profiles-shell').get('sheetText') or []) or None, 2):
+            app.call('profiles-shell', action='press', label='Got it')
+            wait(lambda: app.call('profiles-shell')['sheet'] == 0 or None, 5)
+        try:
+            def press_delete():
+                try:
+                    app.call('profiles-shell', action='press', label='Delete Profile'); return True
+                except RuntimeError:
+                    return None
+            if not wait(press_delete, 5):
+                shell = app.call('profiles-shell')
+                print('history_profile_deletion diagnostic:', json.dumps({k: shell.get(k) for k in ('settings', 'sheet', 'sheetText', 'selected', 'profiles')})[:1500], flush=True)
+                raise RuntimeError('Delete Profile control did not appear')
+            wait(lambda: app.call('profiles-shell')['sheet'] > 0)
+            app.call('profiles-shell', action='type-delete', text='History Second')
+            app.call('profiles-shell', action='press', label='Delete')
+            deleted = wait(lambda: not app.call('profiles-shell')['deleting']
+                           and all(p['id'] != profile2 for p in app.call('profiles-shell')['profiles']))
+            check('history_profile_deletion', deleted and not profile_dir.exists()
+                  and not any(v['profile'] == profile2 for v in state()['items']))
+        finally:
+            app.call('profiles-shell', action='cancel')
+            settings_window = app.call('profiles-shell')['settings']
+            if settings_window:
+                E._try(lambda: app.call('key', window=settings_window, key='w', modifiers=['cmd'], route='app'))
+        restart(set())
+        check('history_profile_deletion_persists', not profile_dir.exists()
+              and not any(v['profile'] == profile2 for v in state()['items']))
+        dismiss_library(); app.call('space', space=home_space)
+        tab = E.new_tab(app, base + '/')
+
+    def history_errors_flow():
+        nonlocal app, tab
+        dismiss_library()
+        tab = E.new_tab(app, base + '/')
+        seed_download = start('/fast?history=limits'); wait(lambda: item(seed_download).get('fileExists'))
+        profile_row = next(p for p in app.call('profiles-shell')['profiles'] if p['id'] == profile)
+        path = Path(app.user_data) / 'Profiles' / profile_row['directory'] / 'State/downloads.sqlite3'
+
+        def stop():
+            dismiss_library(); app.call('download-history-flush'); app.call('download-policy', quit='close')
+            app.activation_trace = app.call('activation-events'); app.call('quit')
+            if not wait(lambda: not app.process_path(app.pid), 15): raise RuntimeError('history boundary fixture quit did not finish')
+            app.quit()
+
+        def launch_and_check(name, count=None):
+            nonlocal app
+            app = factory(urls=(), fresh=False, extra_env=launch_env); app.preferences_domain = domain
+            app.call('download-policy', quit='keep', recordFiles=True)
+            app.call('command', id='view-downloads')
+            observed = wait(lambda: state() if (state()['historyError'] if count is None else
+                                               len([v for v in state()['items'] if v['profile'] == profile]) == count) else None)
+            owned = [v for v in state()['items'] if v['profile'] == profile]
+            check(name, observed and (bool(state()['historyError']) and not owned if count is None else not state()['historyError'] and len(owned) == count),
+                  count=len(owned), error=state()['historyError'])
+
+        stop()
+        check('history_store_private_permissions', path.stat().st_mode & 0o777 == 0o600)
+        with contextlib.closing(sqlite3.connect(path)) as db, db:
+            template = json.loads(db.execute('SELECT payload FROM downloads WHERE id=?', (seed_download,)).fetchone()[0])
+
+        def seed(count):
+            # Synthetic on-disk fixture from a real engine download. Only change
+            # the disposable root while Open is stopped; the real Library reads it.
+            with contextlib.closing(sqlite3.connect(path)) as db, db:
+                db.execute('DELETE FROM downloads')
+                for i in range(count):
+                    record = dict(template, id='history-boundary-%04d' % i,
+                                  startedAt=template['startedAt'] - i, endedAt=template['endedAt'] - i)
+                    db.execute('INSERT INTO downloads VALUES(?,?,?,?)',
+                               (record['id'], record['startedAt'], record['endedAt'], json.dumps(record)))
+
+        try:
+            seed(1000); launch_and_check('history_count_at_limit', count=1000)
+            dismiss_library(); tab = E.new_tab(app, base + '/')
+            newest = start('/fast?history=prune'); wait(lambda: item(newest).get('fileExists'))
+            app.call('download-history-flush')
+            with contextlib.closing(sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True)) as db:
+                ids = {r[0] for r in db.execute('SELECT id FROM downloads')}
+            check('history_newest_1000_pruned', len(ids) == 1000 and newest in ids and 'history-boundary-0999' not in ids, count=len(ids))
+            stop()
+            seed(1001); launch_and_check('history_count_over_limit_loads_newest', count=1000)
+            check('history_over_count_oldest_omitted', not item('history-boundary-1000')
+                  and bool(item('history-boundary-0000')) and bool(item('history-boundary-0999')))
+            dismiss_library(); tab = E.new_tab(app, base + '/')
+            recovered = start('/fast?history=over-count-recovery'); wait(lambda: item(recovered).get('fileExists'))
+            app.call('download-history-flush')
+            with contextlib.closing(sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True)) as db:
+                ids = {r[0] for r in db.execute('SELECT id FROM downloads')}
+            check('history_over_count_write_recovers', len(ids) == 1000 and recovered in ids
+                  and 'history-boundary-0999' not in ids and 'history-boundary-1000' not in ids, count=len(ids))
+            stop()
+            seed(1)
+            with contextlib.closing(sqlite3.connect(path)) as db, db: db.execute('UPDATE downloads SET payload=?', ('{"invalid":true}',))
+            launch_and_check('history_corrupt_record_refused'); stop()
+            seed(1)
+            healthy = path.read_bytes()
+            path.write_bytes(b'not a SQLite database\n')
+            launch_and_check('history_corrupt_file_refused'); stop()
+            with path.open('wb') as file: file.truncate(32 * 1024 * 1024 + 1)
+            launch_and_check('history_oversized_file_refused'); stop()
+            path.write_bytes(healthy)
+            launch_and_check('history_valid_file_restored', count=1)
+        finally:
+            # A failed assertion or interrupted App must still leave no fixture
+            # process or oversized sparse file. The outer finally owns App cleanup.
+            if app.closed and path.exists() and path.stat().st_size > 32 * 1024 * 1024:
+                path.unlink()
+        dismiss_library(); tab = E.new_tab(app, base + '/')
+
     def quit_flow():
-        nonlocal app
-        running = start('/slow'); wait(lambda: item(running).get('received', 0) > 0)
-        app.call('download-policy', quit='keep')
+        nonlocal app, tab
+        # Earlier history cases relaunch without preference arguments. Start
+        # this case explicitly with YES, then restore with NO for the second pass.
+        dismiss_library(); app.call('download-policy', quit='close')
+        app.activation_trace = app.call('activation-events'); app.call('quit')
+        if not wait(lambda: not app.process_path(app.pid), 15): raise RuntimeError('quit fixture setup did not finish')
+        app.quit()
+        app = factory(urls=(), fresh=False, extra_env=launch_env,
+                      extra_args=['-open.general.warnBeforeQuitting', 'YES'])
+        app.preferences_domain = domain
+        tab = E.new_tab(app, base + '/')
         for warn in (True, False):
-            app.call('defaults', key='open.general.warnBeforeQuitting', value=warn)
+            running = start('/slow'); wait(lambda: item(running).get('received', 0) > 0)
+            app.call('download-policy', quit='keep')
             before_quit = item(running)['received']; count = len(state()['quitAlerts'])
             app.call('quit')
             alerts = wait(lambda: state()['quitAlerts'] if item(running).get('received', 0) > before_quit and len(state()['quitAlerts']) > count else None)
             check('quit_keep_warn_%s' % str(warn).lower(), alerts and alerts[-1] == {'title': 'Downloads in progress', 'body': 'There are downloads in progress. Closing the application will cancel them.', 'buttons': ['Close Open', 'Keep browsing']} and item(running)['state'] == 'inProgress', alerts=alerts)
-        E._restore_defaults(app, saved); saved.clear()
-        app.call('download-policy', quit='close')
-        app.activation_trace = app.call('activation-events')
-        app.call('quit')
-        exited = wait(lambda: not app.process_path(app.pid), 15)
+            before_close = item(running)
+            app.call('download-policy', quit='close')
+            app.activation_trace = app.call('activation-events')
+            # No download-history-flush: only AppDelegate's approved-quit path
+            # can save this in-progress transfer as a persisted cancellation.
+            app.call('quit')
+            exited = wait(lambda: not app.process_path(app.pid), 15)
+            app.quit()
+            check('quit_close_warn_%s' % str(warn).lower(), exited)
+            app = factory(urls=(), fresh=False, extra_env=launch_env,
+                          extra_args=['-open.general.warnBeforeQuitting', 'NO'])
+            app.preferences_domain = domain
+            app.call('download-policy', quit='keep')
+            app.call('command', id='view-downloads')
+            restored = wait(lambda: item(running) if item(running).get('historical') else None)
+            check('quit_cancel_persisted_warn_%s' % str(warn).lower(), restored
+                  and restored['state'] == 'cancelled' and restored['profile'] == before_close['profile']
+                  and restored['source'] == before_close['source'], item=restored)
+            dismiss_library()
+            if warn: tab = E.new_tab(app, base + '/')
+        # The restoration check leaves a live App with no active transfer.
+        app.activation_trace = app.call('activation-events'); app.call('quit')
+        if not wait(lambda: not app.process_path(app.pid), 15): raise RuntimeError('quit restoration cleanup did not finish')
         app.quit()
-        check('quit_close', exited)
         app = factory(urls=(), fresh=True, extra_env=launch_env)
         app.preferences_domain = domain
         app.call('download-policy', quit='record')
@@ -300,6 +618,149 @@ def checks(factory, results, tmp, config, harness):
         no_alert_exit = wait(lambda: not app.process_path(app.pid), 15)
         app.quit()
         check('quit_empty', not empty['running'] and not empty['quitAlerts'] and no_alert_exit)
+
+    def generic_quit_flow():
+        nonlocal app, tab
+        key = 'open.general.warnBeforeQuitting'
+
+        def relaunch():
+            nonlocal app
+            app = factory(urls=(), fresh=True, extra_env=launch_env)
+            app.preferences_domain = domain
+            app.call('download-policy', quit='keep')
+
+        def request(button):
+            app.call('quit-warning', button=button, request=True)
+
+        def exited():
+            return wait(lambda: not app.process_path(app.pid), 15)
+
+        def generic_alerts():
+            return Path(app.launch_log_path).read_text(errors='replace').count('generic-quit-alert-presented')
+
+        def download_alerts():
+            return Path(app.launch_log_path).read_text(errors='replace').count('downloads-quit-alert-presented')
+
+        def stable_snapshot(value):
+            # Native modal focus can update usage timestamps without changing a tab/window.
+            if isinstance(value, dict):
+                return {k: stable_snapshot(v) for k, v in value.items() if k not in ('lastActiveAt', 'lastFocusedAt')}
+            if isinstance(value, list):
+                return [stable_snapshot(v) for v in value]
+            return value
+
+        def tab_ids(value):
+            if isinstance(value, dict):
+                own = {value['id']} if {'id', 'url', 'createdAt'} <= value.keys() else set()
+                return own.union(*(tab_ids(v) for v in value.values()))
+            if isinstance(value, list):
+                return set().union(*(tab_ids(v) for v in value))
+            return set()
+
+        # Real menu-command quit, native NSAlert buttons, two browser windows.
+        if app.closed:
+            relaunch()
+            tab = E.new_tab(app, base + '/')
+        app.call('defaults', key=key, value=True)
+        app.call('command', id='new-window')
+        windows_before = app.call('shell-windows')
+        snapshot_before = stable_snapshot(json.loads(Path(app.call('save')).read_text()))
+        before = generic_alerts()
+        request('cancel')
+        cancelled = wait(lambda: not app.process_path(app.pid) or E._try(lambda: app.call('quit-warning')))
+        if not app.process_path(app.pid):
+            app.quit()
+            check('generic_quit_cancel', False, reason='App exited instead of presenting a cancellable warning', quit=app.quit_report)
+            return
+        snapshot_after = stable_snapshot(json.loads(Path(app.call('save')).read_text()))
+        check('generic_quit_cancel', cancelled and generic_alerts() == before + 1
+              and app.call('shell-windows') == windows_before and snapshot_before == snapshot_after
+              and cancelled[-1]['windows'] == len(windows_before)
+              and cancelled[-1]['tabs'] == len(tab_ids(snapshot_before)) >= 1
+              and cancelled[-1]['title'] == 'Quit Open?' and cancelled[-1]['buttons'] == ['Quit', 'Cancel']
+              and cancelled[-1]['keys'] == ['\r', '\x1b'], alerts=cancelled,
+              windowsBefore=windows_before, windowsAfter=app.call('shell-windows'), snapshotIntact=snapshot_before == snapshot_after)
+
+        # Accepted approval survives async history/sleep/engine shutdown retries.
+        request('quit')
+        clean_exit = exited()
+        alerts = generic_alerts()
+        app.quit()
+        check('generic_quit_accept', clean_exit and alerts == before + 2 and not app.quit_report['forced'],
+              alerts=alerts - before, quit=app.quit_report)
+
+        relaunch()
+        app.call('defaults', key=key, value=False)
+        request('cancel')  # A broken always-on prompt would cancel this quit.
+        immediate = exited()
+        alerts = generic_alerts()
+        app.quit()
+        check('generic_quit_off', immediate and alerts == 0 and not app.quit_report['forced'], alerts=alerts, quit=app.quit_report)
+
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        tab = E.new_tab(app, base + '/')
+        profile_id = next(v['profile'] for v in app.call('spaces') if v['focused'])
+        app.call('download-settings', profile=profile_id, directory=str(first), ask=False)
+        running = start('/slow')
+        wait(lambda: item(running).get('received', 0) > 0)
+        app.call('download-policy', quit='keep')
+        request('cancel')
+        kept = wait(lambda: state()['quitAlerts'])
+        check('generic_quit_downloads_keep_one', kept and len(kept) == 1 and generic_alerts() == 0
+              and download_alerts() == 1 and item(running)['state'] == 'inProgress', alerts=kept, genericAlerts=generic_alerts())
+        app.call('download-policy', quit='close')
+        request('cancel')  # A stacked generic alert would keep the App alive.
+        download_exit = exited()
+        alerts = [download_alerts(), generic_alerts()]
+        app.quit()
+        check('generic_quit_downloads_close_one', download_exit and alerts == [2, 0] and not app.quit_report['forced'],
+              alerts=alerts, quit=app.quit_report)
+
+        # Review R1 finding 1: an approved attempt that a page's beforeunload "Stay" ends
+        # must not leave the next quit prompt-free. Close Open, Stay, new download, quit:
+        # the downloads alert must appear again.
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        tab = E.new_tab(app, base + '/')
+        profile_id = next(v['profile'] for v in app.call('spaces') if v['focused'])
+        app.call('download-settings', profile=profile_id, directory=str(first), ask=False)
+        armed = E.new_tab(app, base + '/arm')
+        app.call('wait', tab=armed)
+        try:
+            app.call('click', tab=armed, selector='#arm')  # beforeunload needs a user activation
+            running = start('/slow')
+            wait(lambda: item(running).get('received', 0) > 0)
+            app.call('download-policy', quit='close')
+            downloads_before = download_alerts()
+            request('quit')
+            def dialog_visible():
+                return bool((E._try(lambda: app.call('dialog-state')) or {}).get('visible'))
+            stay = wait(lambda: dialog_visible() or None, 10)
+            if stay: app.call('dialog-button', accept=False)
+            survived = wait(lambda: (not dialog_visible() and bool(app.process_path(app.pid))) or None, 5)
+            again = start('/slow')
+            wait(lambda: item(again).get('received', 0) > 0)
+            app.call('download-policy', quit='keep')
+            request('cancel')
+            asked_again = wait(lambda: download_alerts() >= downloads_before + 2 or None, 10)
+            check('generic_quit_stay_then_requit', bool(stay) and bool(survived) and bool(asked_again)
+                  and item(again).get('state') == 'inProgress' and app.process_path(app.pid),
+                  stay=bool(stay), survived=bool(survived), downloadAlerts=download_alerts() - downloads_before,
+                  again=item(again))
+        finally:
+            # Leave no page or quit prompt behind (review checklist §4).
+            E._try(lambda: app.call('dialog-button', accept=False) if (app.call('dialog-state') or {}).get('visible') else None)
+            E._try(lambda: app.eval(armed, 'onbeforeunload=null;true'))
+            E._try(lambda: app.call('download-policy', quit='close'))
+            app.quit()
+
+        # The harness must still exit with the setting on and no alert policy.
+        relaunch()
+        app.call('defaults', key=key, value=True)
+        app.quit()
+        check('generic_quit_harness_bypass', not app.quit_report['forced'] and generic_alerts() == 0,
+              quit=app.quit_report, alerts=generic_alerts())
 
     def clear_flow():
         nonlocal tab
@@ -361,11 +822,8 @@ def checks(factory, results, tmp, config, harness):
 
 
     try:
-        # The cloned bundle has its own domain; reset/restore every key this suite owns.
-        for key, value in {'open.general.warnBeforeQuitting': True, 'open.library.lastSection': None,
-                           'open.settings.lastPane': None, 'open.settings.selectedProfileID': None}.items():
-            saved[key] = app.call('defaults', key=key, persistent=True)
-            app.call('defaults', key=key, value=value)
+        # The cloned bundle starts with a unique empty preferences domain.
+        # Quit preference variants use transient launch arguments, no defaults writes.
         app.call('download-policy', quit='keep', recordFiles=True)
         with server() as base:
             tab = E.new_tab(app, base + '/')
@@ -374,7 +832,9 @@ def checks(factory, results, tmp, config, harness):
             sentinel = first / 'sample.txt'; sentinel.write_text('do not overwrite')
             app.call('download-settings', profile=profile, directory=str(first), ask=False)
             flows = {"controls": controls_flow, "files": files_flow, "save": save_flow,
-                     "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow, "quit": quit_flow}
+                     "profiles": profiles_flow, "fallback": fallback_flow, "badge": badge_flow, "clear": clear_flow,
+                     "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
+                     "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
             selected = set(selection.split(',')) if selection else set(flows)
             flows['cancel-sheet'] = cancel_sheet_flow
@@ -385,12 +845,11 @@ def checks(factory, results, tmp, config, harness):
                     flow()
     finally:
         if not app.closed:
+            E._try(lambda: app.call('profiles-shell', action='cancel'))
             E._try(lambda: app.call('download-policy', quit='close'))
             for sheet in E._try(lambda: state()['sheets']) or []:
                 E._try(lambda: app.call('download-save', id=sheet['id'], action='cancel'))
-        E._restore_defaults(app, saved)
         if not app.closed:
             pid = E._try(lambda: state()['openerPID']) or 0
             if pid > 0: app.owned_processes[pid] = str(executable.resolve())
         app.quit()
-        subprocess.run(['defaults', 'delete', domain], capture_output=True)

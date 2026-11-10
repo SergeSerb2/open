@@ -1,5 +1,6 @@
 import AppKit
 import OpenMedia
+import OpenModel
 import OpenWeb
 
 /// Exact PP-8 order, backed by the same settings/site matching as AutoPiPPolicy.
@@ -30,7 +31,10 @@ import OpenWeb
                 case .openAutomatically, .turnOff:
                     if let name = sourceURL?.host { settings.setAutomatic(action == .openAutomatically, host: name, privateSession: privateSession) }
                 case .copyURL:
-                    if let sourceURL { pasteboard.clearContents(); pasteboard.setString(sourceURL.absoluteString, forType: .string); pasteboard.setString(sourceURL.absoluteString, forType: .URL) }
+                    if let sourceURL {
+                        let clean = URLCleaner.clean(sourceURL).url.absoluteString
+                        pasteboard.clearContents(); pasteboard.setString(clean, forType: .string); pasteboard.setString(clean, forType: .URL)
+                    }
                 case .toggleMute: host.setMuted(!host.mediaMuted); onMuteChanged?()
                 }
             }

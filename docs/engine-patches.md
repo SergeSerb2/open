@@ -18,6 +18,70 @@ For this plan:
 
 ## Summary
 
+### Persistent code-sign clone (Section 16, 2026-11-08)
+
+`chromium/0106-open-code-sign-clone-reuse.patch` wires the overlay
+`chrome/browser/mac/open_code_sign_clone.{h,cc}` into the existing clone
+manager. The feature remains enabled. A per-install private cache validates
+the executable's device, inode, size and nanosecond mtime, plus its hard link,
+before reuse. Failed checks retain Chromium's original per-run behavior.
+The cache lease protects a running browser's clone during live replacement.
+Design, rejected-disable evidence and current verification status are in
+[the clone report](re/codesign-clone-reuse.md). Normal-App reuse, invalidation,
+separate installs, fallback and the requested ad-hoc live swap passed.
+The historical scan gate remains FAIL against the 7/7 target: residual
+first-after-gap scans, cause open, despite stable executable metadata
+(functional set 6/7). The rebuilt-engine morning set is separately 7/7
+scan-free with unchanged metadata. It does not explain the earlier scans.
+Hardened DLV now passes the three requested M1 update directions. The
+pre-#271 quiet-window runner completed seven pairs, but both variants failed
+the cold/warm budgets.
+Timing on the rebuilt post-#271 engine remains pending the next quiet window.
+The earlier full gate recorded 24 PASS and 1 FAIL (`commandbar-render`, two
+timing rows at load1 29.1); the report keeps that historical failure.
+Chromium `0106` follows main's `0801–0810`; the numeric-order WARN is expected.
+
+After merging #271 and main `3fb0645c`, the S16 rebuild/distribution and both
+normal App builds passed. Distribution SHA-256 is
+`346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
+Engine-status is 7 PASS, 0 FAIL, 1 order WARN. Normal-App rows a/c/d/f pass
+again on this engine. See the report's post-#271 cohort for suite and full-gate
+results. No launch-gain claim follows from these functional rows.
+The earlier post-#271 gate stopped after 15 PASS when a real crash appeared;
+the lead later attributed it to S11/window-border. The later 09:15 renderer
+STOP was Section 13's intentional passing popup-renderer crash control, per
+the lead's attribution. Both original STOP receipts remain in the report.
+
+After main #280 and #281 were merged as `8cac5c6f`, both Apps were rebuilt.
+Current normal-App a/c/d/f pass; b is separately 7/7 scan-free with unchanged
+metadata. The historical b FAIL and its first-after-gap cause remain open.
+Both ad-hoc swap directions pass. Shell passes 7 rows, Features 27 (including
+non-fatal chrome://kill recovery), updater 103, and engine-status remains
+7 PASS / 0 FAIL / 1 order WARN. The current full gate is **24 PASS / 1 FAIL**:
+command-bar timing row 151 is +0.309 ms against +0.300 ms at load1 8.7.
+Two isolated attempts remain FAIL; the second exceeded the quiet load gate.
+They are not combined into PASS. The exact table, loads and limits are in
+the report. No code in the command-bar CLI path changed.
+
+The M1 DLV matrix now passes both **+0106 → +0106** Release↔Debug directions
+and the first-update **main(#271) → +0106** direction. Each of the three
+inputs passed one initial plain launch. The main control was App-only built
+from merge-base main `bc5678d1` against s8-main's recorded #271 distribution;
+no engine build ran. DLV signing and launches ran only on M1, with separate
+screen-lock calls, clear before/after dialog checks and no new crash report.
+Receipts are on M5 and the owned M1 worktree is removed. The M5 branch,
+Vendor engine and exact +0106 App were restored after the control build.
+The final merge of main `28001634` is `8afd3cc1`. It adds no engine
+input. Both normal Apps rebuilt and engine-status remains 7 PASS / 0 FAIL /
+1 order WARN. Shell passes 7 rows. Updater emits 97 PASS rows, then stops
+in the cancelled-termination retry case: known #283, with later rows incomplete.
+All cleanup and before/after dialog checks pass. The lead's 11:18 GO accepts
+the retained 24/1 full gate and +0.309 ms command-bar timing FAIL under TANDEM
+4l; #266 changes no OpenKit code relative to merged main. The PR is ready
+under that ruling. First-after-gap scans (3/7 daytime, 1/7 functional) stay
+OPEN. Row g remains pending the next quiet window, with no launch-gain claim.
+No engine rebuild or refresh ran; the lead owns the merge and engine refresh.
+
 ### E11/E12 and tab event follow-ups (2026-11-05)
 
 The E11 window hook is `chromium/0306-open-extension-windows-tabs.patch`.
@@ -552,6 +616,31 @@ purge (median 5, load1 9.23–22.73). The following burst has warm CPU maxima
 `.re/s13/e1/idle-resume-proof.json` and `idle-resume-verdict-identity.json`.
 The later main `d26300e6` integration passes 20 native processes and 40 baseline-identical initial/resumed corpus dumps. Its 16 KiB text/DAT physical deltas are 55.157/52.110 MiB steady and 57.094/54.188 MiB after the corpus plus idle purge. G-2 CPU, G-6 and ruling 4a pass. Merged N 32/32, positive/allowed COUNT and quiet G-4/G-5/G-6 pass. Both COUNT negative controls pass; strict App acceptance passes 79/79, including 11 record-only rows. Regression/full-gate work remains pending. The dev distribution is recorded; the Debug App builds with matching normalized engine code. Only lead rulings 2a and 4a replace the original budgets.
 
+### Step 5 implementation checkpoint (2026-11-09, generic observer after DCL)
+
+Product `4ce7facb`, main engine PR #266 merged; ready for lead PR creation and review.
+Hostname-specific CSS stays at document start. Generic world creation,
+binding, scan and observation queue one genuine idle task after DCL;
+C-4 requires eventual hiding. The 30k yield/resume, 64-sheet cap and
+world-7 separation remain. One real-App renderer attribution is recorded
+in `.re/s13/e5/RENDERER-ATTRIBUTION.md` and the plan §8.2 erratum.
+
+| Piece | Behavior and verification |
+|---|---|
+| `chromium/0902` | Private world 7; extensions start at 8. Fresh adblock: 86 PASS, 11/11 launch logs and 13 world-7 observers. Fresh extensions: 12 PASS, 1/1 launch log, 27 allocations, 106 injections and 6 world-7 observers. Extension allocations/isolated injections use worlds 8–11, main injections use 0; no extension allocation/injection uses 7. Page/iframe reciprocal separation passes after enabled=true, engine_loaded=true and load_generation=1. |
+| `cef/0311` registry and `cef/0901` P-4 | Matcher work stays off UI. Fresh owned/full/scoped/strict 8/0/0, headless 2/2, CEF 20/20, both 30k hide/yield 10/10, binding-before-execution 45/45, distribution/App/fingerprint PASS. Adblock 86 includes all five cosmetic controls; extensions 12 includes real CWS and reciprocal page/iframe proof. |
+| Non-official timing | New C-G1 once: p50 106.5 µs / p99 233.0 µs, 100 measured documents; raw budget PASS, load1 11.19–14.42, absolute_load_valid=False. First-process calls remain separate. Inherited C-G2 84/714 µs, T 64.9 ms, 239,510 checks, load1 8.49–13.31; C-G3 353 µs, load1 13.98. Original six quiet pairs FAIL (+1.45 ms paired median) remain recorded. Eight alternating App pairs: cosmetics 39.300 ms / 6761.0 µs native busy CPU; exact main 518 network-only 39.900 ms / 7498.5 µs. Median paired wall delta -2.050 ms / -4.478%; PASS under the lead's ≤ +0.5 ms OR ≤ +1.5% rule. Load1 5.92–7.31; absolute_load_valid=True, status=PASS. |
+| Parser-corpus modes (`cef/0310`, self-test) | Unchanged accepted source: 150,000 list / 100,000 URL / 30,000 DAT / 30,000 resources inputs PASS. Full and data-only modes are non-official; no corpus repeat after unchanged source. |
+| Full M5 gate | 26 PASS / 0 FAIL / 0 INTERRUPTED / 0 SKIP; complete summary, commands, seconds, loads and source-qualified earlier Section 6/features/page set in `.re/s13/e5/PR-BODY.md`. |
+
+The sanitizer's quote/escape/delimiter and 256 KiB rules remain unchanged.
+Only fixed `display:none!important` rules execute; no scriptlets or
+procedural/style/remove actions. Generic batches carry top origin to
+re-check enabled/exclusion state. Earlier isolated 39-patch/67-file
+apply/reverse proof remains historical; current strict state is 41 patches /
+140 overlays. No new single-allocation claim or fresh-Profile startup fix.
+The lead opens and reviews the PR; all earlier raw failures are retained.
+
 ### Control API (Section 13, 2026-11-07)
 
 The `cef_open_adblock.h` overlay adds six free functions, with generated C
@@ -625,7 +714,7 @@ The review's own probe gave the same picture: 28.8 µs against 4.9 µs on realis
 - Bundled seeds are pinned by SHA-256 (`tools/fetch-adblock-lists.sh`, also `--max-filesize 16 MiB`).
 - The engine is given only verified generation files, read with a size bound.
 
-The parsers are memory-safe Rust apart from the `unsafe` crates listed above. A crate call that returns a `Result` can still panic on hostile input, and a panic ends the browser process (`-Cpanic=abort`): `Engine::deserialize` panicked on a DAT of 4 bytes (review 98-3), and `rmp-serde` resizes a buffer to a stream-controlled length of up to 4 GiB before it reads the bytes (`decode.rs:870`): a 14-byte DAT allocated 512 MiB (review R2-1), and an allocation failure aborts too; PartitionAlloc aborts on any single request over 2^31 − 2 MiB (2,145,386,496 B). The shim now walks every DAT before the crate reads it (`check_dat` in `lib.rs`): the crate's magic and version 0, then one MessagePack value whose every str, bin and ext length and every array and map count fits in the bytes left, at most 2^24 values and 32 levels, and nothing after it. A str or bin buffer can then be no larger than the DAT (at most 256 MiB, the service's read limit). A decoded collection is not bounded by the DAT's size: one DAT byte can become a 24-byte `String`, and at 2^27 values a 42.7 MiB DAT made one `Vec<String>` request 2,147,450,880 B and aborted the dev build (review R3-1). The value cap bounds collections: at 2^24 values the largest single requests measured are 536,862,720 B (`Vec<String>`) and 822,083,592 B (`HashMap<String, Vec<String>>`, heap peak 1.3 GiB), both under the ceiling. List text has its own limits before parsing (`check_build_limits`, review R3-2): at most 2^21 list lines across a build (today 132,043), and at most 64 MiB of cosmetic selector copies (the crate stores a selector once per hostname; today 596,174 bytes). A 16 MiB list of 5,592,405 two-character rules and a 149 KB line with 10,000 hostnames each aborted the dev build before; both are now refused with a reason, and the load fails. The self-test refuses the review's crafted DATs and lists with resident memory flat, and checks each limit at its boundary. The DAT receipt proves integrity at rest only: a same-user writer can forge a matching DAT and receipt, which the threat model accepts. Follow-up (`docs/followups.md`): fuzz list parsing, resources parsing and DAT deserialization, and add a parse time limit, before the first public release. adblock, regex, aho-corasick, the psl crate's embedded Public Suffix List data, and three RustSec advisories (`idna` 0.2.3 RUSTSEC-2024-0421, `rmp-serde` 0.15.5 RUSTSEC-2022-0092, `paste` 1.0.15 RUSTSEC-2024-0436; impact notes in docs/release/licenses.md) are on the release license and security review list (U-6).
+The parsers are memory-safe Rust apart from the `unsafe` crates listed above. A crate call that returns a `Result` can still panic on hostile input, and a panic ends the browser process (`-Cpanic=abort`): `Engine::deserialize` panicked on a DAT of 4 bytes (review 98-3), and `rmp-serde` resizes a buffer to a stream-controlled length of up to 4 GiB before it reads the bytes (`decode.rs:870`): a 14-byte DAT allocated 512 MiB (review R2-1), and an allocation failure aborts too; PartitionAlloc aborts on any single request over 2^31 − 2 MiB (2,145,386,496 B). The shim now walks every DAT before the crate reads it (`check_dat` in `lib.rs`): the crate's magic and version 0, then one MessagePack value whose every str, bin and ext length and every array and map count fits in the bytes left, at most 2^24 values and 32 levels, and nothing after it. A str or bin buffer can then be no larger than the DAT (at most 256 MiB, the service's read limit). A decoded collection is not bounded by the DAT's size: one DAT byte can become a 24-byte `String`, and at 2^27 values a 42.7 MiB DAT made one `Vec<String>` request 2,147,450,880 B and aborted the dev build (review R3-1). The value cap bounds collections: at 2^24 values the largest single requests measured are 536,862,720 B (`Vec<String>`) and 822,083,592 B (`HashMap<String, Vec<String>>`, heap peak 1.3 GiB), both under the ceiling. List text has its own limits before parsing (`check_build_limits`, review R3-2): at most 2^21 list lines across a build (today 132,043), and at most 64 MiB of cosmetic selector copies (the crate stores a selector once per hostname; today 596,174 bytes). A 16 MiB list of 5,592,405 two-character rules and a 149 KB line with 10,000 hostnames each aborted the dev build before; both are now refused with a reason, and the load fails. The self-test refuses the review's crafted DATs and lists with resident memory flat, and checks each limit at its boundary. The DAT receipt proves integrity at rest only: a same-user writer can forge a matching DAT and receipt, which the threat model accepts. The full-size parser corpus passed on 2026-11-08 in non-official cefsimple mode `--open-adblock-fuzz-full` (seed `0x9e3779b97f4a7c15`): 150,000 mutated list lines, 100,000 mutated URLs, 3,000 real-DAT mutations, 3,000 resources JSON mutations, the four-byte DAT and the review CSS-injection lines, with no crash or panic. Parser work took 216.933 s, peak browser footprint was 202.11 MiB, and load1 ranged 7.64–14.82. List acceptance counts shim build admission, not per-rule parse failures. The slowest of 153,002 shim builds took 279.599 ms; a parse time limit is still not enforced. See [the run receipt](plans/adblock-fork.md#full-size-parser-corpus-as-built-2026-11-08) and `.re/s13/e4/FUZZ.md`. Per-rule failure counts and R2-8's build-generated feature receipt also remain in `docs/followups.md`. adblock, regex, aho-corasick, the psl crate's embedded Public Suffix List data, and three RustSec advisories (`idna` 0.2.3 RUSTSEC-2024-0421, `rmp-serde` 0.15.5 RUSTSEC-2022-0092, `paste` 1.0.15 RUSTSEC-2024-0436; impact notes in docs/release/licenses.md) are on the release license and security review list (U-6).
 
 **Vendored crate checksums** (review 97-4). Chromium's `Cargo.lock` has no checksums and gnrt empties `.cargo-checksum.json`, so this table records the crates.io SHA-256 of each new crate's `.crate` file. Each value was checked against the downloaded `.crate` file in the local Cargo cache (`shasum -a 256 ~/.cargo/registry/cache/*/<name>-<version>.crate`, 23 of 23 equal, 2026-10-26). The vendored sources are those tarballs, byte for byte, except the documented crate patches (adblock and libafl `Cargo.toml` regex features, the seahash `LICENSE`) and gnrt's generated `OWNERS` files.
 
@@ -830,7 +919,7 @@ Overlay (no patch): `cef/include/cef_navigation_history.h` (`CefNavigationHistor
 
 Section 8 decisions (differences from memory-fork §3/§5, with the reason):
 
-- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102, 0103 and 0106 stay unused. The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
+- **Free functions in overlay headers instead of `CefBrowserHost` methods; no 0102/0103/0106 patch files at that milestone.** `engine-refresh-patches` captures one `git diff HEAD` per patch over its manifest paths, so two patches can never share a file (docs/engine-fork.md: "Paths for different logical patches must not overlap"). The plan's six patches all edit `cef_browser.h` and `browser_host_base.{h,cc}`, and `browser_host_base.h` already belongs to 0302. fork-infra D-2 and §9.2 rule 2 prefer overlay code with free functions over new methods in a widely included header. Freeze (P-MEM-02), discard (P-MEM-03) and the unload flag (P-MEM-06) therefore need no existing-file edit at all; the numbers 0102 and 0103 stay unused. Section 16 later assigned 0106 to code-sign clone reuse (see the summary above). The series stays in numeric order (0101, 0104, 0105 before 0302), so `engine-status` S-8 still passes; with no shared files the apply order does not matter.
 - **Freeze state lives in a `WebContentsUserData`** (`PageLifecycleState`, overlay) instead of a `page_frozen_` member on `CefBrowserHostBase` (D-4's reason holds: content has no getter). It clears when the page becomes visible or its primary page changes, so "show unfreezes" needs no hunk in the `WasHidden` paths.
 - **Visibility uses `UpdateWebContentsVisibility`, not `WasShown()`/`WasHidden()`** (P1 finding: a direct `WasShown()` leaves "first set visible" unset and WebContents then ignores the view's later HIDDEN).
 - **Restore checks for an unused controller, not `GetEntryCount() == 0`.** A fresh `NavigationController` always holds the initial NavigationEntry, so the plan's check would refuse every restore. Capture also returns null for a controller with only the initial entry. A restore into a page that is already visible (an Alloy view in a shown window) calls `LoadIfNecessary()`; otherwise the entry loads when the page is shown (`SetActive(true)`).

@@ -45,6 +45,16 @@ public final class StoredFaviconCache {
         return entry.displayedImage
     }
 
+    /// A direct-site prefetch has updated this same store. Refresh an existing
+    /// negative entry as well as warming a new one; no network request is made.
+    public func refreshFromStore(for url: URL) {
+        guard let key = FaviconStore.cacheKey(url) else { return }
+        let entry = entry(for: key, url: url)
+        entry.revision += 1
+        reads.removeAll { $0.0 == key || entries[$0.0] !== $0.1 }
+        reads.append((key, entry)); startWorker()
+    }
+
     /// Coalesce repeated reports for a page. Refuse oversized or excess input
     /// before retaining it; callers keep the existing placeholder on failure.
     @discardableResult

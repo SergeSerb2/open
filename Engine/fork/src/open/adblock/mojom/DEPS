@@ -1,0 +1,6 @@
+# This boundary contains the wire types only, with URL's public Mojo types.
+include_rules = [
+  "-open/adblock",
+  "+open/adblock/mojom",
+  "+url/mojom",
+]

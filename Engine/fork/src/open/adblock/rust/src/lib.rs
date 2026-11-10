@@ -94,6 +94,9 @@ mod ffi {
 
     /// The result of one network check.
     struct OpenBlockerResult {
+        /// The crate accepted the URL/source/type as a request. A parse
+        /// failure is allowed through, separately from a valid unmatched URL.
+        request_valid: bool,
         /// A blocking rule matched (after exceptions).
         matched: bool,
         /// An `$important` rule matched (the crate already applied precedence).
@@ -585,6 +588,7 @@ pub fn open_adblock_check(
     let cap = usize::try_from(max_input_bytes).unwrap_or(usize::MAX);
     let (url, fragment, truncated) = match_input(url, cap);
     let mut result = OpenBlockerResult {
+        request_valid: false,
         matched: false,
         important: false,
         has_redirect: false,
@@ -597,6 +601,7 @@ pub fn open_adblock_check(
     let Ok(request) = Request::new(url, source_url, type_name) else {
         return result;
     };
+    result.request_valid = true;
     let blocker = engine.inner.check_network_request(&request);
     result.matched = blocker.matched;
     result.important = blocker.important;

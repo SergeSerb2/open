@@ -207,6 +207,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var observing = true
     private var observationArmed = false
     private var refreshPending = false
+    private var systemAppearanceObservation: NSKeyValueObservation?
     private let snapshotStore: SnapshotStore?
     /// Toasts over the web panel (page-platform §4.1, D-1): one center per window.
     public let toastOverlay = ToastOverlayView()
@@ -241,17 +242,20 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let state = model.windows.first { $0.id == windowID }
         let dimensions = size ?? CGSize(width: max(640, state?.frameWidth ?? 1280), height: max(480, state?.frameHeight ?? 800))
         root = BrowserRootView(frame: CGRect(origin: .zero, size: dimensions))
+        // Only the frame follows the Space; private content keeps its fixed dark appearance.
+        root.appearance = incognitoTitle == nil ? NSApp.effectiveAppearance : NSAppearance(named: .darkAqua)
         context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
-        context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
+        context.systemAppearance = context.isIncognito ? .dark : ContentAppearance(NSApp.effectiveAppearance)
         WindowSpeedTrace.mark("sidebarInitBegin")
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
         WindowSpeedTrace.mark("sidebarAndContainerCreated")
         splitController = SplitViewController(model: model, windowID: windowID, container: container)
         let window = BrowserWindow(contentRect: root.bounds, styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        if incognitoTitle != nil { window.contentAppearanceOverride = NSAppearance(named: .darkAqua) }
         WindowSpeedTrace.mark("nativeWindowCreated")
         window.isReleasedWhenClosed = false; window.isRestorable = false
         window.title = incognitoTitle == nil ? "Open" : "Incognito";
-        if incognitoTitle != nil { window.appearance = NSAppearance(named: .darkAqua) }; window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.tabbingMode = .disallowed; window.isMovableByWindowBackground = false
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
@@ -259,11 +263,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.onLayoutPass = { [weak self] in self?.placeTrafficLights() }
         window.onCloseRequest = { [weak self] in self?.onCloseRequested?() }
         if let state { window.setFrame(CGRect(x: state.frameX, y: state.frameY, width: dimensions.width, height: dimensions.height), display: false) }
-        root.onAppearance = { [weak self] in
-            guard let self else { return }
-            self.context.systemAppearance = self.root.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
-            self.sidebar.themeBackground = self.background
-            self.refresh()
+        systemAppearanceObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, _ in
+            // assumeIsolated requires every NSApp.appearance write to run on the main thread.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let appearance = NSApp.effectiveAppearance
+                let content = self.window.flatMap { ($0 as? SpaceThemeWindow)?.contentAppearanceOverride } ?? appearance
+                if self.root.appearance?.name != content.name { self.root.appearance = content }
+                let system: ContentAppearance = self.context.isIncognito ? .dark : ContentAppearance(appearance)
+                if self.context.systemAppearance != system { self.context.systemAppearance = system }
+                self.refresh()
+            }
         }
         root.addSubview(background)
         emptyPanelHost.wantsLayer = true; emptyPanelHost.layer?.addSublayer(emptyPanel)
@@ -360,6 +370,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
     }
     public func refresh() {
+        updateWindowAppearance()
         spaceCreationController?.closeThemeEditorIfSpaceChanged()
         if let editor = themeEditor, let id = editor.session?.spaceID,
            model.space(id: id) == nil || context.window?.focusedSpaceID != id { closeThemeEditor() }
@@ -368,6 +379,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         observationArmed = true
         withObservationTracking {
             _ = context.currentTab?.url; _ = context.currentTab?.title; _ = context.window?.focusedSpaceID
+            _ = context.focusedSpace?.theme
             _ = context.window?.selectedNodeBySpace; _ = context.window?.sidebarMode; _ = context.window?.sidebarWidth; _ = context.window?.showsToolbar; _ = splitController.split?.focusedPaneID
             _ = splitController.split?.orientation; _ = splitController.split?.fractions
             for tab in splitController.split?.panes ?? context.currentTab.map({ [$0] }) ?? [] { _ = tab.live.sleepPhase }
@@ -390,6 +402,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // show() binds the focused host now and defers other panes one turn (§5.4).
         // Refreshing placeholders here repeats every pane's chrome/layout work.
         peekStorage?.refresh(); layoutContent(); syncPeekSidebar(); onVisibilityChange?()
+    }
+    private func updateWindowAppearance() {
+        let appearance: ContentAppearance = context.isIncognito ? .dark
+            : context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
+        let name: NSAppearance.Name = appearance == .dark ? .darkAqua : .aqua
+        if window?.appearance?.name != name { window?.appearance = appearance.nsAppearance }
     }
     private func syncPeekSidebar() {
         var badges: [ItemID: SidebarPeekBadge] = [:]
@@ -1134,6 +1152,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
     public func windowWillClose(_ notification: Notification) {
+        // Tear down this controller's appearance observation once at window close.
+        systemAppearanceObservation = nil
         boostEditor?.close(returnFocus: false)
         pendingSpaceCreationOptions = nil
         cancelSidebarResize()
@@ -1188,7 +1208,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 /// The standard browser window. It reports the end of each layout pass, before the window
 /// draws, so the traffic lights can be placed after AppKit's own title bar layout.
 @MainActor
-final class BrowserWindow: NSWindow {
+final class BrowserWindow: SpaceThemeWindow {
     var allowsActivation = true
     override var canBecomeKey: Bool { allowsActivation && super.canBecomeKey }
     override var canBecomeMain: Bool { allowsActivation && super.canBecomeMain }
@@ -1218,13 +1238,11 @@ final class BrowserWindow: NSWindow {
 @MainActor
 final class BrowserRootView: NSView {
     var onLayout: (() -> Void)?
-    var onAppearance: (() -> Void)?
     var onDragBackground: ((NSEvent) -> Void)?
     override init(frame: CGRect) { super.init(frame: frame); wantsLayer = true }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     override func layout() { super.layout(); onLayout?() }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); onAppearance?() }
     override func mouseDown(with event: NSEvent) {
         if convert(event.locationInWindow, from: nil).y < 10 { onDragBackground?(event) }
     }
