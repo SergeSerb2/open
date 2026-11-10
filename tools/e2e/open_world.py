@@ -105,6 +105,13 @@ def run(app, results, tmp, new_tab, wait_until):
         try:
             ready_receipt = messages()
             ready = ready_receipt["messages"]
+            # The factory also records whether the Boost picker consumed a
+            # message. The transport callback has only the four message fields.
+            # This P7 message must remain unhandled by the picker.
+            transport_keys = {"content", "type", "payloadJSON", "documentID"}
+            message_schema_ok = all(set(m) == transport_keys | {"pickerAccepted"}
+                and m["pickerAccepted"] is False for m in ready)
+            transport_messages = [{k: m[k] for k in transport_keys} for m in ready]
             first = ready[0] if ready else {}
             evaluate("__open.receive({v:1,type:'p7:reply',payload:{ok:true}})")
             reply = evaluate("__p7Received")
@@ -123,13 +130,15 @@ def run(app, results, tmp, new_tab, wait_until):
             received = wait_until(lambda: [m for m in messages()["messages"]
                 if m["type"] == "p7:ready" and m["documentID"] != first.get("documentID")], timeout=10)
             results["open_world_messages"] = {
-                "ok": ready_receipt["callbacks"] == ready and len(ready) == 1 and first.get("type") == "p7:ready"
+                "ok": message_schema_ok and ready_receipt["callbacks"] == transport_messages
+                    and len(ready) == 1 and first.get("type") == "p7:ready"
                     and first.get("payloadJSON") == '{"answer":42}' and bool(first.get("documentID"))
                     and same == first["documentID"] and len(received or []) == 1
                     and len(poison_messages) == 1 and poison_messages[0]["payloadJSON"] == '{"safe":true}'
                     and promise_result == 17
                     and reply == {"v": 1, "type": "p7:reply", "payload": {"ok": True}} and js_error,
-                "first": first, "nextDocumentID": (received or [{}])[0].get("documentID"),
+                "first": first, "callbacks": ready_receipt["callbacks"], "messageSchemaOK": message_schema_ok,
+                "nextDocumentID": (received or [{}])[0].get("documentID"),
                 "sameDocumentID": same, "reply": reply, "exceptionReported": js_error}
         except Exception as error:
             results["open_world_messages"] = {"ok": False, "error": str(error)}
