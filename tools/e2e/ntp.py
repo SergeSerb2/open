@@ -7,21 +7,25 @@ def run(factory, results, api, style):
                'chrome://new-tab-page-third-party/')
     app = None
     try:
-        app = factory(urls=(aliases[0],))
+        # Model chrome: URLs deliberately force a Chrome host, even when the
+        # shell defaults to Alloy. about:newtab reaches the actual Alloy host.
+        initial = 'about:newtab' if style == 'alloy' else aliases[0]
+        app = factory(urls=(initial,))
         tab = app.call('tabs')[0]['id']
         pid = app.call('ping')['pid']
 
         def loaded(name, address):
+            app.call('wait', tab=tab)
             state = api.wait_until(lambda: (lambda p: p if p.get('live') and not p.get('loading', True) else None)(app.page(tab)),
                                    timeout=15, step=.05)
             expected = 'about:blank' if style == 'alloy' else 'Chrome NTP'
             correct = bool(state) and (state['url'] == 'about:blank' if style == 'alloy'
                 else state['url'] in aliases)
-            results[name] = {'ok': correct
+            results[name] = {'ok': correct and state.get('style') == style
                              and app.call('ping')['pid'] == pid,
                              'requested': address, 'page': state, 'expected': expected}
 
-        loaded('initial_newtab', aliases[0])
+        loaded('initial_newtab', initial)
         for index, address in enumerate(aliases):
             app.call('navigate', tab=tab, url=address)
             loaded('navigate_alias_' + str(index), address)
