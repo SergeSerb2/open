@@ -10,6 +10,7 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
+from profiles_first_navigation import run as first_navigation
 
 
 def run(factory, results, tmp, api, defaults_before):
@@ -319,6 +320,11 @@ def run(factory, results, tmp, api, defaults_before):
             thread.join(timeout=5)
 
     try:
+        launch(fresh=True)
+        first_navigation(app, results, origin, api)
+        if os.environ.get('OPEN_PROFILES_FIRST_NAV_ONLY') == '1':
+            return
+        app.quit()
         if not any(os.environ.get(key) == '1' for key in
                    ('OPEN_PROFILES_SHELL_PAGES_ONLY', 'OPEN_PROFILES_SHELL_REPAIR_ONLY')):
             check_adblock()
