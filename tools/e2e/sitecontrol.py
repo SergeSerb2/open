@@ -154,6 +154,20 @@ def run(factory, results, tmp, env, functional_only=False):
                     return next((context for profile in app.call('settings-adblock-engine')['profiles']
                                  for context in profile['contexts']
                                  if any(p['identifier'] == page for p in context['pages'])), {})
+                # Settings disables exclusion edits until its Profile is ready.
+                # Keep that ordering explicit, including the unchanged-main control.
+                settings_ready = wait(lambda: app.call('settings-adblock')['ready'], timeout=30)
+                if not settings_ready:
+                    record('S2_settings_ready', False, timeoutSeconds=30)
+                    raise AssertionError('S2 Settings Profile did not become ready')
+                def exclusion_barrier(excluded):
+                    expected = 1 if excluded else 0
+                    status = wait(lambda: (lambda c: c if c.get('adBlockStatus',{}).get('excluded_count') == expected else None)(native_adblock()), timeout=10)
+                    if not status:
+                        record('S2_exclusion_barrier', False, expectedCount=expected,
+                               timeoutSeconds=10, native=native_adblock())
+                        raise AssertionError('S2 native exclusion state did not settle')
+                    return status
                 ready = wait(lambda: native_adblock().get('adBlockStatus',{}).get('engine_loaded'), timeout=40)
                 app.call('navigate', tab=tab, url=origin+'/ads.html'); app.call('wait', tab=tab)
                 initial_on = opened()
@@ -168,10 +182,12 @@ def run(factory, results, tmp, env, functional_only=False):
                 off = app.call('site-controls', action='tap', id='row.contentBlocking')
                 files = list(Path(app.user_data).glob('Profiles/*/adblock/exclusions.json'))
                 persisted = any('127.0.0.1' in json.loads(p.read_text()) for p in files)
+                off_native = exclusion_barrier(True)
                 app.call('site-controls', action='tap', id='reload'); app.call('wait', tab=tab)
                 allowed = app.eval(tab,'window.fixtureAdLoaded === true')
                 on = app.call('site-controls', action='tap', id='row.contentBlocking') if state()['presented'] else None
                 if on is None: opened(); on = app.call('site-controls',action='tap',id='row.contentBlocking')
+                on_native = exclusion_barrier(False)
                 app.call('site-controls', action='tap', id='reload'); app.call('wait', tab=tab)
                 denied = app.eval(tab,'window.fixtureAdLoaded === true')
                 record('S2_adblock', row(off,'row.contentBlocking').get('subtitle') == 'Off' and off['reloadVisible'] and persisted
