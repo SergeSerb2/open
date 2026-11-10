@@ -355,80 +355,92 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
-Step 3 verification (child A, 2026-11-09): current App proof source
-`daf5daa1` merges main `31576213` (#279, #297 and #298). Framework SHA-256:
+Step 3 verification (child A, 2026-11-10): Evidence head
+`4aff4575` merges main `683df62b`, including #266, #291, #292, #293, #295, #297, #298, #279, #300, #277, #278 and #301. Framework SHA-256:
 `891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67`.
-Branch and unchanged-main Debug/Release builds, all four fingerprints,
-45/45 unique automation keys on both Debug builds, and smokes PASS.
-The merge keeps both sitecontrol and boost-gallery in the e2e suite lists.
-An initial merged Debug failed because Gallery's added committedURL
-parameter did not satisfy SiteControlBoostProvider. The narrow adapter in
-`AppBoostsSiteControlProvider.swift` forwards committedURL:nil; corrected
-Debug and Release builds pass. Gallery retains its explicit URL path.
+Branch and unchanged-main (`cdae460b`) Debug/Release builds, engine fingerprints, 45/45
+unique automation keys and smokes PASS. Branch normal features passes
+30 rows. Normal unchanged-main features passes
+30 rows. Earlier main js_dialogs FAILs and diagnostic
+runs remain historical evidence in the PR. Widevine PASS on both; no
+Widevine known-failure label applies. New #298 Sad Tab termination rows
+and `crash_recovery` are DEFERRED through the existing `OPEN_E2E_NO_CRASH_PROBES=1` gate
+(M1-only by rule); the three healthy Sad Tab flows run on the M5.
 
-S2 fully PASSes on #295: branch and unchanged main each complete five
-Off/On cycles and all ten native exclusion barriers, with Settings ready,
-defaults restored and no leftover process. The first supplemental branch
-control stopped after its first Off reload with no visible URL anchor;
-initial blocking and that exclusion barrier passed, but no full cycle
-completed. Its rerun uses the full suite's explicit window frame/focus
-setup. The original FAIL remains in the PR. Every S2 assertion and threshold
-is unchanged. The pinned local request is `http://demand.supply/ad.js`,
-EasyList `||demand.supply^$script`, resolved to the ephemeral fixture server
-without real ad-domain traffic, per S12 lead 12:40. The old same-origin
-`/ad.js` loads with blocking On on branch and unchanged main; the earlier
-old-fixture negative remains recorded. The Settings-ready and native
-excluded_count waits follow the 14:52/14:58 rulings; the 17:22 ruling
-requires full PASS on #295, with no former S13 cache-bug waiver.
+Release App source is `2a56a89d3ad596791ec4f792469600b272ff87d3`. Debug is rebuilt after #301. M5 suites, with exact source/receipt provenance retained in the PR: commandbar 77, app-actions
+77, extensions-ui 72 (including real-App
+`X13_picker`), toolbar 10, features 30, page
+118, split 40, space-editor 167
+and incognito 31 PASS. Boosteditor 28 PASS. Incognito's
+`no_snapshot_history_change` PASS includes #261. Page retains four BLOCKED
+rows and one DEFERRED row; incognito's native 2x capture remains DEFERRED.
+Site Control has 32 PASS, with only the lead-accepted
+S11/S12 visual FAILs (S12-V). Window has 80 PASS and five raw FAILs: two known startup budget misses
+and three color failures reproduced on unchanged main. The PR retains
+the matching metrics and exact receipt provenance. Window medians (ms):
+`{"cold_fresh_profile": {"engineStart": 351, "engineStarted": 432, "firstContentfulPaint": 650, "main": 179, "modelLoaded": 195, "sidebarDrawn": 350}, "warm_existing_profile": {"engineStart": 325, "engineStarted": 418, "firstContentfulPaint": 623, "main": 170, "modelLoaded": 183, "sidebarDrawn": 323}}`. The four paired startup
+groups use engine891c2353 on both sides: raw no-slower MISS. Pooled
+branch cold sidebar/paint medians are 273/496 ms; warm medians are
+274.5/502 ms. Main medians are 269/494 and 272.5/486.5 ms. Branch
+results remain inside TANDEM §4a known-main limits of 400/700 ms.
+The PR retains all raw medians, loads, first failures and interruptions.
 
-Current merged-head M5 results: commandbar 77 PASS, app-actions 77 PASS
-(on fresh attempt 2; the first native-key-focus FAIL is retained),
-extensions-ui 72 PASS including real-App `X13_picker`, toolbar 10 PASS,
-and branch/unchanged-main features 30 PASS each. Each features run has
-18 DEFERRED crash rows through the existing `OPEN_E2E_NO_CRASH_PROBES=1`
-gate; the new Sad Tab healthy controls run, but M1-only termination rows
-are not accepted from this M5 run. No M1 work was done.
+S2 initially FAILED with the old same-origin `/ad.js` fixture on branch;
+unchanged main also loads that script with blocking On, while its loaded
+native filter blocks shipped EasyList rule `||demand.supply^$script`.
+The S12 lead's 12:40 ruling classifies this as a fixture defect. The ad
+request now uses that pinned domain, resolved to the ephemeral local server
+for every suite launch, including performance launches. The EasyList pin
+and rule text are verified before launch. Every original S2 assertion and
+threshold is unchanged. The Settings-ready wait before the first toggle
+and the native excluded_count barrier before each reload follow the
+S12 lead14:52/14:58 rulings. Branch and unchanged main both pass all five
+Off/On cycles on #295; the17:22 ruling removes the former cache-bug waiver. Initial On blocks, Off/site exclusion plus reload
+loads, and On again plus reload blocks: PASS. Restoring only the old
+same-origin request makes S2 and its initial-On proof FAIL as required.
 
-Site Control completed 31 PASS and three raw FAILs: P1 first-draw p95
-10.435 ms against the unchanged 8 ms limit at load1/5/15
-18.589/16.543/17.113, plus the lead-accepted S11/S12 visual FAILs (S12-V).
-S1 open/toggle, S8 pane anchor, S2 initial-On/toggle/stale-tile, S4/S10
-saved Boost/private rows and F3/F5/F9/F4 positive rows PASS. P1's quiet
-retry was stopped before launch to finish functional suites first; it
-remains pending. Forced draw is automation-only, not shipping first-draw
-acceptance. No visual parity is claimed.
+The saved real Boost, live off/on glyph/CSS, edit, host-boundary negative
+and same-parent private S4/S10 rows PASS. Compiling without the sole provider
+binding rejects the saved row/glyph proof. F3's stale-tile proof PASSes in
+both directions and rejects the old callback; F5's content/mtime proof
+rejects both old read and unconditional initialization writes; F9 rejects
+the old unavailable assertion; F4 rejects enabled private Manage Boosts.
+All six mutation cases and the provider variant restore exact source and
+signed positive payload bytes, then the restored real-App rows PASS.
+Native F25 and the Advanced Settings early-failure cleanup/defaults canary
+PASS. The final preflight, full-gate summary and checklist belong to #276.
 
-At 20:59 the page suite lost focus to Zen on all three fresh attempts
-(partial PASS counts 25, 13 and 3). Each is INTERRUPTED and excluded from
-acceptance; cleanup/defaults audits pass and no new crash report appears.
-The lead's two-retry limit is reached. A's on-screen sequence is stopped;
-there is no global crash hold. Current-head page, split, space-editor,
-incognito and window completion, quiet P1, fresh compiled-provider and
-review-negative runs, F25/canary, four paired startup groups, final
-preflight and the full high gate remain pending. No final gate has started
-and #276 remains DRAFT. Earlier engine891c j receipts (all 11 suites,
-six mutations, provider omission, F25/canary and exact restoration) remain
-historical; they are not presented as current merged-head reruns.
+Per D-10 and §Incognito, parent-Profile Boost metadata is read-only in
+private windows, with no application, writes or enabled actions. F2's
+close/retire notices are resolved by main #291. F4-rest/F6/F7/F8 remain in
+`docs/followups.md`; the private-session tile API switch remains a separate
+PR after #276, per lead item32. E1, remaining E2 and the certificate viewer are post-v1. E3 security state is a v1 blocker owned by the S12 lead final batch (LEAD-UPDATE item39). Gap item1(c) is
+PARTIAL: host-cookie Clear Cookies uses the legacy bridge; Clear Cache is
+absent/refused. S12-G moves both … menu operations onto `clearSiteData`
+after A and G merge. P1's forced-draw path is automation-only and does not
+establish shipping first-draw acceptance. No visual parity is claimed.
 
-Per D-10 and plan §Incognito, private windows display parent-Profile
-matching Boost metadata read-only, with no application, writes or enabled
-actions. Main #291 resolves F2 close/retire notifications; no assertion was
-changed for Profile closure. The private tile API switch stays separate
-under item32. F4-rest/F6/F7/F8, E1–E3 and S12-V remain in
-`docs/followups.md`. Gap item 1(c) is PARTIAL: Clear Cookies uses the legacy
-host-cookie bridge; Clear Cache is absent/refused. S12-G: the Site Control
-… menu moves Clear Cache and Clear Cookies onto the clearSiteData bridge
-after A and G merge. No Clear Cache wiring was added.
+Pre-#301 Favorites proofs failed before panel open and after open/close
+on branch, matching unchanged main (S11 bug, lead11:35/11:42). The
+visible-panel negative passed. #301 is merged. Lead11:58 requires no
+Favorites rerun. After #277, the old features receipt comparison failed
+on both builds because the factory adds pickerAccepted:false. The fixed
+harness compares every transport field and explicitly checks the picker
+flag. Its changed-callback negative fails the row. S13's old 12 ms slow
+frame negative fits within a frame at the new 60 Hz display. It now uses
+the measured frame interval plus 12 ms. S13 passes and rejects the slow
+path with every positive threshold unchanged.
+No engine root was edited or built; no M1 work was done.
 
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
-| Popover from the URL pill button | FA SC-1 | site-control-boost-editor Step 3 | `OpenSiteControl`, `BrowserSiteControl`, URL/pane glyphs | `AppSiteControlSource`, factory/window hooks (`s12/scc-app`) | Real `sitecontrol` flow on engine34619927; final PR receipt | implemented; visual acceptance pending | URL, floating-card, pane and toolbar anchors; closes on tab/Space/window changes and Peek; unavailable in Little Open. S1 checks available/unavailable ad-block state against the real store; F5 proves opening the panel writes no permission index. S11/S12 remain FAIL. |
+| Popover from the URL pill button | FA SC-1 | site-control-boost-editor Step 3 | `OpenSiteControl`, `BrowserSiteControl`, URL/pane glyphs | `AppSiteControlSource`, factory/window hooks (`s12/scc-app`) | Real `sitecontrol` flow on engine891c2353; final PR receipt | implemented; visual acceptance pending | URL, floating-card, pane and toolbar anchors; closes on tab/Space/window changes and Peek; unavailable in Little Open. S1 checks available/unavailable ad-block state against the real store; F5 proves opening the panel writes no permission index. S11/S12 remain FAIL. |
 | Site permissions rows | FA SC-2 | site-control-boost-editor §3.8 | `SiteControlRow` | Existing `SitePermissionStore`; token-based change notification | e2e `sitecontrol` S3 | implemented | Only non-Ask permission decisions appear; toggle writes through the engine owner. Prompt anchor hook uses the visible SCC button. Engine E1 scalar settings APIs are supplied by #205; SCC binding is deferred under lead 22:38. |
-| Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | `app.stores.boosts` via `SiteControlBoostProvider` | S4/S10 real saved matching Boost, toggles/editor/glyph and private refusals; engine34619927 rerun | implemented; final proof in PR | No second BoostStore. The source reads `factory.isIncognito` and matches private rows through their parent Profile. Private controls are disabled; creation, editing, Customize and toggles refuse. |
-| Extensions section (pin, site access) | FA SC-4 | extensions-ui §3.9 | Shared `OpenExtensionsUI` items; empty SCC Add tile | Per-window context and Cmd+E picker | Fresh M5 engine34619927 `extensions-ui` 72/72, including X-13 | implemented on branch | Same context as the window's strips. Picker focuses the first current item; second Cmd+E closes and third reopens. Arrows and type-select move, Return runs, Esc closes; empty picker focuses Add Extension. |
+| Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | `app.stores.boosts` via `SiteControlBoostProvider` | S4/S10 real saved matching Boost, toggles/editor/glyph and private refusals; engine891c2353 rerun | implemented; final proof in PR | No second BoostStore. The source reads `factory.isIncognito` and matches private rows through their parent Profile. Private controls are disabled; creation, editing, Customize and toggles refuse. |
+| Extensions section (pin, site access) | FA SC-4 | extensions-ui §3.9 | Shared `OpenExtensionsUI` items; empty SCC Add tile | Per-window context and Cmd+E picker | Fresh M5 engine891c2353 `extensions-ui` 72/72, including X-13 | implemented on branch | Same context as the window's strips. Picker focuses the first current item; second Cmd+E closes and third reopens. Arrows and type-select move, Return runs, Esc closes; empty picker focuses Add Extension. |
 | Share and two Capture actions; Copy URL shortcut | FA SC-5 | site-control-boost-editor §3.4 | Four action buttons | Existing App commands | e2e `sitecontrol` S6; `page` | implemented | Fourth action is Capture Full Page. Copy URL stays on ⇧⌘C and the URL field; no SCC Copy button. |
 | Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor §3.8 | `OpenAdBlock.setExcluded`, `didChange` | Existing shared App store and native adapter | S2 initial On, Off/reload/load, On/reload/block; stale tile and old-fixture negatives | implemented on branch | Uses shipped EasyList pinned rule served locally, per S12 lead 12:40. S2 assertions/thresholds unchanged. Profile-close/retire notices come from main #291; private tile API switch remains separate. |
-| Security state (secure or not) | FA SC-7 | site-control-boost-editor §3.9 | Static footer label | HTTPS Secure; HTTP Insecure; other schemes hide | S1/S9 | partial | Engine E3 connection/certificate APIs are available and engine-verified by #205 (sitedata 10/10 with ten negative proofs). SCC consumption remains a follow-up, per lead 22:38. |
+| Security state (secure or not) | FA SC-7 | site-control-boost-editor §3.9 | Static footer label | HTTPS Secure; HTTP Insecure; other schemes hide | S1/S9 | partial | Engine E3 connection/certificate APIs are available and engine-verified by #205 (sitedata 10/10 with ten negative proofs). E3 security-state wiring is a v1 blocker in the S12 lead final batch, per item39. Certificate viewer is post-v1. |
 | Clear cookies and cache for the site | app-shell §4.9 | site-control-boost-editor §3.9 | Native ⋯ menu | Existing `clearBrowsingData(origin:)` | e2e `sitecontrol` S5 | partial | Clear Cookies clears host cookies only, then offers Reload. Main's non-nil-origin implementation does not clear the HTTP cache. Engine E2 `clearSiteData(origin:types:)` is available and engine-verified by #205 (sitedata 10/10 with ten negative proofs). Scoped Clear Cache and zoom-reset UI consumption remain separate; SCC wiring is deferred, per lead 22:38. |
 
 ### 1.14 Ad blocking
@@ -480,7 +492,7 @@ Main has the shell and engine milestones listed above. The suites here are separ
 | Install, remove, enable/disable, permission prompts and Web Store consent | FA EX-15 | extensions-ui §3.11, E8–E10 | live per-context manager ([#177](https://github.com/SergeSerb2/open/pull/177)), prompt sheet/queue (#175) | main (#189) | `extensions`; `extensions-p3` 14/14 and hosted-store receipt; `extensions-ui` install Cancel/Add, X14/X15, FIFO/close/quit | done (partial) | Open sheets are the normal handler. Chromium dialogs run only without a shell handler. Packed permission-increase update/re-enable consent is UNVERIFIED; normal disable/re-enable and optional permissions pass. |
 | Extensions menu, overflow, Manage/Add pages | MH Extensions; FA EX-5/11 | extensions-ui §3.5, §3.12 | `ExtensionsMenuBuilder`, `OpenCommands` | main (#175, [#179](https://github.com/SergeSerb2/open/pull/179), #189) | `extensions-render menu.bar/menu.relabel`; `extensions-ui X16/X17`, overflow anchor | done | Pinned first, unpinned by name, then Manage/Add; lazy menu update. Manage is a focused-Space singleton. The page-menu Manage hook is still open in Section 11. |
 | URL, pane and toolbar placement; Find coexistence | FA EX-1/2 | extensions-ui §3.2–3.3 | `ExtensionStripView`, `ToolbarMetrics.siteControls(width:stripWidth:)` | main (#175, #189) | `extensions-render`; `extensions-ui X3/X18`, toolbar/overflow and native Find overlap; `find` F33 six pinned-strip native-close gates | done | URL hover-only; focused pane only. Toolbar rightmost maxX w−5; SCC left of strip (guess C1). Reference captures remain open. |
-| Cmd+E extension picker / SCC Extensions section | FA EX-6–10 | extensions-ui §3.9–3.10 | shared row/tile body and keyboard focus (#175); hidden command (#179) | `AppSiteControlSource` and window presenter (`s12/scc-app`); shared context/refresh seam (#189) | library `picker.keys`, `sitecontrol-render extensions-check`; fresh M5 engine34619927 `extensions-ui` 72/72, including `X13_picker` | implemented on `s12/scc-app` | Section 12 supplies the presenter/data source. X-13 passes in the fresh M5 engine34619927 receipt; material acceptance remains open. Old and interrupted receipts do not count. |
+| Cmd+E extension picker / SCC Extensions section | FA EX-6–10 | extensions-ui §3.9–3.10 | shared row/tile body and keyboard focus (#175); hidden command (#179) | `AppSiteControlSource` and window presenter (`s12/scc-app`); shared context/refresh seam (#189) | library `picker.keys`, `sitecontrol-render extensions-check`; fresh M5 engine891c2353 `extensions-ui` 72/72, including `X13_picker` | implemented on `s12/scc-app` | Section 12 supplies the presenter/data source. X-13 passes in the fresh M5 engine891c2353 receipt; material acceptance remains open. Old and interrupted receipts do not count. |
 | Little Open Extensions button and menu | FA EX-3 | extensions-ui §3.4, ruling A | title-bar button/menu and standalone browser attachment | #185 page; [#192](https://github.com/SergeSerb2/open/pull/192) | `extensions-ui X19_button_menu`, `X19_popup_less_target`, `X19_activeTab_grant`, `X19_popup_tabs_query`, `X19_popup_anchor`, `X19_extra_tab_main_today`, `X19_one_action`, `X19_zero_actions`, `X19_profile_switch` PASS | done | Button inside URL capsule [w−252,16,16,16], guess S-7. Actions bind to the standalone OEBrowser, then re-attach after Profile replacement. Old delegate and action list clear. No main-window fallback. Extra extension tabs open selected in the most recent main window’s Today (guess, Arc capture needed). |
 | Native extension popup windows | FA EX-12 | extensions-ui §3.8, E11 | `ExtensionWindowController` | main ([#184](https://github.com/SergeSerb2/open/pull/184)) | `extensions-e2 X20_*`: native class/view, bounds, popup type, resize/focus/remove; popup Cmd+W | done | Standard titled/resizable window with its own hidden Browser/strip and native frame autosave. |
 | Extension keyboard shortcuts and Settings Extension Shortcuts | FA EX-11; MH Custom shortcuts | extensions-ui §6.2–6.3 | command snapshots (#177), Shortcuts menu/notice (#179) | `ExtensionShortcutTable`, Settings adapter (#189) | `extensions-ui X12_*`, `X27_*` ([closeout PR](https://github.com/SergeSerb2/open/pull/190)); `settings-preview`; `commands-dump` | done | X-27 proves menu singleton, exact user-conflict notice, dropped command, Open-key priority and extension recovery through real KeyBindingStore saves. Global (`"global": true`) command OS delivery remains UNVERIFIED. |
