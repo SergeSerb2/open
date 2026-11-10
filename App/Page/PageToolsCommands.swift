@@ -24,12 +24,6 @@ enum PageTools {
   /// (the shared value crosses the App scripting adapter). Default false (T-13, Q3).
   static let allowJavaScriptFromAppleEventsKey = "open.developer.allowJavaScriptFromAppleEvents"
 
-  /// Per-site HTTP cache clearing is Site Control E2, which needs a fork patch
-  /// (DevTools `Storage.clearDataForOrigin` has no HTTP cache type, and CEF can
-  /// only clear every site's cache). Clear Cache and Refresh stays disabled
-  /// until the engine reports per-site clearing (page-platform §4.9, D-12).
-  static let siteDataClearAvailable = false
-
   /// Runtime menu state (page-platform §7.1, `CommandMenuState`): the Appearance radio
   /// checkmark on the stored value, the Allow JavaScript from Apple Events checkmark, and
   /// View ▸ Cast… hidden (Cast is out of v1, §4.12, Q2). Window and app dispatchers both ask.
@@ -93,8 +87,7 @@ extension EngineWebContentHostFactory {
     guard PageTools.pageIDs.contains(id) else { return nil }
     guard let page = selectedContent, page.isLive else { return false }
     switch id {
-    case "clear-cookies-and-refresh": return PageTools.isSitePage(page.url)
-    case "clear-cache-and-refresh": return PageTools.siteDataClearAvailable && PageTools.isSitePage(page.url)
+    case "clear-cookies-and-refresh", "clear-cache-and-refresh": return PageTools.isSitePage(page.url)
     case "toggle-developer-mode": return DeveloperMode.host(for: page.url) != nil
     default: return true
     }
@@ -111,8 +104,8 @@ extension EngineWebContentHostFactory {
     case "javascript-console": page.showDevTools(panel: .console)
     case "inspect-elements": page.showDevTools(panel: .inspectMode)
     case "network-inspector": page.showDevTools(panel: .network)
-    case "clear-cookies-and-refresh": clearCookiesAndRefresh(page)
-    case "clear-cache-and-refresh": return false  // disabled until E2 (siteDataClearAvailable)
+    case "clear-cookies-and-refresh": PageSiteDataCommands.clearAndRefresh(page, kinds: .cookies)
+    case "clear-cache-and-refresh": PageSiteDataCommands.clearAndRefresh(page, kinds: .cache)
     case "toggle-developer-mode":
       // §4.10.3: the focused page's site; toast "Developer Mode On" / "Developer Mode Off".
       guard let host = DeveloperMode.host(for: page.url) else { return false }
@@ -127,19 +120,5 @@ extension EngineWebContentHostFactory {
   func pageMenuState(for id: String) -> CommandMenuState? {
     if id == "toggle-developer-mode" { return DeveloperMode.menuState(for: selectedContent?.url) }
     return PageTools.menuState(for: id)
-  }
-
-  /// §4.9 interim (before Site Control E2): the host cookies of the focused page's
-  /// host (`clearBrowsingData(origin:)`), then a reload. The reload is the feedback
-  /// (no toast, guess). Peek: the top Peek page (`selectedContent`).
-  private func clearCookiesAndRefresh(_ page: OEWebContent) {
-    guard let url = page.url, PageTools.isSitePage(url),
-      var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
-    parts.path = "/"; parts.query = nil; parts.fragment = nil; parts.user = nil; parts.password = nil
-    guard let origin = parts.url else { return }
-    page.context.clearBrowsingData(origin: origin) { [weak page] in
-      guard let page, page.isLive else { return }
-      page.reload()
-    }
   }
 }

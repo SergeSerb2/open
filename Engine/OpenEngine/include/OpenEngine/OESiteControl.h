@@ -33,6 +33,8 @@ typedef NS_OPTIONS(NSUInteger, OESiteDataType) {
 /// Cache/storage match the exact origin in all storage-key contexts. Cookies
 /// match its host and parent Domain cookies, across paths/partitions; cookies
 /// intrinsically share schemes/ports. Unrelated host-only cookies stay intact.
+/// A parent Domain cookie is shared by siblings. This match relies on Chromium
+/// refusing to store public-suffix Domain cookies (for example co.uk/github.io).
 /// Empty types succeeds; invalid inputs/backend failures return an error.
 - (void)clearSiteDataForOrigin:(NSURL*)origin types:(OESiteDataType)types
                    completion:(void (^NS_SWIFT_UI_ACTOR)(NSError* _Nullable error))completion
