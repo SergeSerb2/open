@@ -43,6 +43,7 @@ def run(factory, results, tmp, h):
                 if sample.returncode:
                     raise RuntimeError(sample.stderr)
                 observed.update(json.loads(sample.stdout))
+                observed['hostTime'] = time.monotonic()
                 observed['beforeAutomationReady'] = not done.is_set()
                 return
         except Exception as error:
@@ -62,6 +63,8 @@ def run(factory, results, tmp, h):
             timing=timing, startup=startup, evidence=evidence, load=os.getloadavg())
         results['first_window_server_before_engine_ready'] = dict(ok=observed.get('count', 0) == 1
             and observed.get('beforeAutomationReady') is True
+            and startup.get('engineStartBeginHostTime', 1) <= observed.get('hostTime', 0)
+            < startup.get('engineStartEndHostTime', 0)
             and any(w['number'] == evidence.get('onboardingWindowNumber') for w in observed.get('windows', [])),
             observed=observed, load=os.getloadavg())
         # The very same window survives the engine/animation transition.
