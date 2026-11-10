@@ -42,7 +42,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   var liveState: WebContentLiveState {
     WebContentLiveState(isLoading: content.isLoading, progress: content.estimatedProgress,
       canGoBack: content.canGoBack, canGoForward: content.canGoForward,
-      isAudible: content.isAudible, isCrashed: content.crashState != .none)
+      // Unresponsive (4) still has a renderer. Preserve the raw engine state;
+      // only terminated renderers need a replacement page.
+      isAudible: content.isAudible, isCrashed: content.crashState == .crashed
+        || content.crashState == .killed || content.crashState == .outOfMemory)
   }
   var view: NSView { content.view }
   var currentURL: URL? { content.url }

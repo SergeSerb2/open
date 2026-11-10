@@ -19,7 +19,8 @@
     private typealias CreateFromArray = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
 
     static func capture(_ window: NSWindow, to url: URL, afterPreparation action: (() -> Void)? = nil,
-                        delay: Double = 0.025, atCapture: (() -> Void)? = nil) async throws -> String {
+                        delay: Double = 0.025, atCapture: (() -> Void)? = nil,
+                        overlayWindows: [NSWindow] = []) async throws -> String {
       var overlays: [(NSRect, NSImage)] = []
       var underlays: [NSView] = []
       for content in OEEngine.shared.allWebContents
@@ -83,6 +84,13 @@
       base.draw(in: NSRect(origin: .zero, size: size))
       for (frame, page) in overlays {
         page.draw(in: frame)
+      }
+      // Transient popovers are not always native childWindows. Composite only
+      // explicitly requested owned windows at their real on-screen positions.
+      for overlay in overlayWindows where overlay.isVisible {
+        guard let image = windowServerImage(overlay) else { continue }
+        NSImage(cgImage: image, size: overlay.frame.size).draw(in:
+          overlay.frame.offsetBy(dx: -window.frame.minX, dy: -window.frame.minY))
       }
       out.unlockFocus()
       compositionRegion?.end()

@@ -443,6 +443,8 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `frame-save-counters` | — | Actual snapshot captures, dirty schedules, factory tree changes and mirror syncs |
 | `space-profile` | `space`, `profile` name | Production sidebar profile assignment intent; closes old Space hosts |
 | `peek-open`, `peek-expand`, `peek-close`, `peek-state` | `tab`, `url` for open | Production Peek entry, promotion, dismissal and host identity |
+| `sad-tab-state` | model `tab` ID, or `peek: true` | Reads the actual replacement view: `shown`, view ID, default Reload, and button AX labels/IDs. Does not set crash state. |
+| `sad-tab-action` | model `tab` ID, or `peek: true`; `action: reload` or `close` | Performs the visible Sad Tab's actual AppKit button action. Refuses healthy/hidden pages. |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `credentials` | optional `profile`: UUID, name, or data directory | Counts only: `logins`, `blockedSites`, local `cards` and `addresses`, `cookies`, saving preferences, `canEnable*`, `supportsSecretsImport`, and `usesMockKeychain`. Uses the existing lazy profile-context factory; no credential values. |
 | `credentials-prefs` | optional `profile`: UUID, name, or data directory; optional strict Boolean `passwordSaving`, `cardsSaving`, `addressesSaving`, `cardReauthentication` | Reads or changes that profile's real `OEBrowserContext` preferences. Returns all four preferences and the engine's `canEnablePasswordSaving`, `canEnableCreditCardsSaving` (also named `canEnableCardsSaving`). The engine exposes no separate address capability. Rejects unknown arguments or profiles. No Open Settings switches are added; users change these preferences on Chromium's pages. |
@@ -554,6 +556,40 @@ to 8,192 UTF-8 bytes; 8,193 bytes fail. Submit requires nonempty text. The submi
 hook waits for the real navigation intent before resuming creation. The close
 hook continues through the production cancellation guard. Normal creation uses
 neither hook. `little-open-action {id:"…", action:"hide"}` orders out that owned window; `focus` resurfaces it. The save-sheet stress flow uses these native lifecycle actions without system input. See [the deferred Browser report](little-open/deferred-browser.md).
+
+## Little Open downloads tray
+
+`little-open-downloads {id:"<session UUID>"}` reads the window's Downloads button,
+aggregate progress, session items, visible native rows and popover window number.
+Closed session IDs return `exists:false` and `trayExists:false`. State includes
+`parentKey`, `parentFocusRestored`, `popoverKey`, `firstAction`, `handledKeys`,
+`axRowOrder`, each row's `axChildren` and icon availability, and the tray update count.
+`downloads-state` adds each item's `littleOpenSession`, each save sheet's
+`parent` window number, and the retained source-browser count `detachedPages`.
+
+`action:"toggle"` presses the actual title-bar button. `action:"row"` requires
+`download:"<download ID>"` and `button:"Pause"|"Resume"|"Cancel"|"Open"|"Show in Finder"|"Retry"`
+and presses that row's visible, enabled NSButton. `action:"close"` closes the owned
+popover. `action:"key", key:"Escape"|"Return"|"Cmd+W", target:"parent"|"popover"`
+sends key down/up through `OEApplication.sendEvent` to the specified owned window.
+`action:"escape"` is the popover Escape shorthand. `action:"move"` presses the
+native title-bar Space pill. Missing sessions refuse actions; hidden buttons
+and unavailable row actions are refused.
+
+`action:"arm-early-move"` holds real progress callbacks at the DownloadsCenter
+boundary. Immediately after the next destination continuation, it moves that
+source Little Open to Space, then releases the held callback. It neither creates
+snapshots nor changes the engine transfer. This gives the attribution row a
+repeatable destination-before-progress boundary.
+
+`OPEN_DOWNLOADS_CASE=littleopen tools/e2e/engine_e2e.py --only downloads --style chrome`
+runs the focused real-App flow. The default downloads suite also includes it.
+It uses the normal built bundle, a temporary Foundation home and data/cache roots,
+real loopback transfers, native tray controls and the existing file-opener probe.
+For an image over the source page, `snapshot` accepts
+`overlayWindows:[<owned visible popover window number>]`. It composites those
+owned windows at their actual positions over the page capture.
+See [the tray receipt](engine-spike/s11-littleopen-downloads-tray.md).
 
 ## Window pixels
 
