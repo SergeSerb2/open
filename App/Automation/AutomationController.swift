@@ -236,6 +236,8 @@
           return row
         }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
+      case "site-controls": return try await runSiteControl(a)
+      case "site-controls-idle": return try siteControlIdle(a)
       case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state", "creation-state":
         if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
         return try await runEditorCommand(cmd, a)

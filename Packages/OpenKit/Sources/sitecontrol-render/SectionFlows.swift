@@ -88,7 +88,7 @@ enum SectionFlows {
         stage.key(code: 36, characters: "\r")
         check("capped SCC Return runs the visible selected extension", selectedVisible && ran == "grid.69" && closedBeforeRun)
         _ = context.setActions([]); stage.controller.refreshExtensions(); present()
-        check("empty hosted extensions use standard SCC mode with Add only", stage.controller.mode == .standard && !stage.controller.view.panel.hasExtensionItems && body.items.count == 1)
+        check("empty hosted picker focuses the SCC Add tile", stage.controller.mode == .extensionPicker && !stage.controller.view.panel.hasExtensionItems && stage.focusedID == "extension.add")
         stage.controller.dismiss(reason: .escape, animated: false)
         return rows
     }

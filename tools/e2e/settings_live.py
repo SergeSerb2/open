@@ -10,6 +10,7 @@ def run(factory, results, tmp, wait_until, restore_defaults):
     url = fixture.resolve().as_uri()
     app = factory(urls=(url,), fresh=True)
     keys = ('open.appIcon.selectedID', 'open.advanced.tabSleepMode', 'open.settings.lastPane',
+            'open.library.lastSection',
             'open.general.searchSuggestNoticeDismissed', 'open.links.openPeekShiftClick',
             'open.links.openPeekOtherSites', 'open.peek.shiftClick', 'open.peek.otherSites')
     saved = {key: app.call('defaults', key=key, persistent=True) for key in keys}
@@ -61,17 +62,27 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         s = app.call('settings-state')
         results['settings_general_action_error'] = {'ok': s['pane'] == 'general'
             and s['generalError'] == 'Updates are not set up in this build.', 'error': s['generalError']}
+        library_before = app.call('library-section')
         before_boosts = app.call('settings-state')
         app.call('menu-perform', id='view-boosts')
+        library = wait_until(lambda: (lambda s: s if s['visible'] and s['section'] == 'boosts' else None)(
+            app.call('library-section')), timeout=5, step=.05)
         s = app.call('settings-state')
         boosts_window = next((window for window in app.call('windows') if window['number'] == s['library']), None)
-        # Boosts now has a real Library destination on main, rather than the
-        # retired Advanced-pane unavailable message.
-        results['settings_boosts_library'] = {'ok': s['librarySection'] == 'boosts'
+        legacy_error = 'Boost editing is not available in this build.'
+        legacy_assertion = s['pane'] == 'advanced' and s['advancedStatus'] == legacy_error
+        results['settings_view_boosts_library'] = {'ok': not library_before['visible']
+            and bool(library) and s['library'] > 0 and s['librarySection'] == 'boosts'
             and bool(boosts_window and boosts_window['visible'] and boosts_window['key'])
-            and not (before_boosts['library'] > 0 and before_boosts['librarySection'] == 'boosts'),
-            'section': s['librarySection'], 'window': boosts_window, 'negativeProof': before_boosts['library'] == 0}
+            and not (before_boosts['library'] > 0 and before_boosts['librarySection'] == 'boosts')
+            and s['advancedStatus'] == '' and not legacy_assertion,
+            'library': library, 'window': s['library'], 'nativeWindow': boosts_window,
+            'advancedStatus': s['advancedStatus'], 'negativeBeforeWindow': before_boosts['library'] == 0,
+            'negativeClosed': library_before, 'legacyExpectedError': legacy_error,
+            'negativeOldAssertionRejected': not legacy_assertion}
         app.call('key', key='w', modifiers=['cmd'], window=s['library'], route='app')
+        assert wait_until(lambda: not app.call('library-section')['visible'], timeout=5, step=.05)
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
 
         # The picker action writes the actual preference and replaces NSApp's actual image.
         app.call('settings-pane', pane='appIcon')
@@ -167,8 +178,12 @@ def run(factory, results, tmp, wait_until, restore_defaults):
         results['settings_peek_migration'] = {'ok': migrated == [False, False] and winning == [True, True],
             'legacyCopiedWhenMissing': migrated, 'canonicalWins': winning}
     finally:
-        if not app.closed:
-            app.call('settings-profile', cancel=True)
-            app.call('settings-icon', select='openDefault')
-        restore_defaults(app, saved)
-        app.quit()
+        try:
+            if not app.closed:
+                app.call('settings-profile', cancel=True)
+                app.call('settings-icon', select='openDefault')
+        finally:
+            try:
+                restore_defaults(app, saved)
+            finally:
+                app.quit()

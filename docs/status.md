@@ -136,7 +136,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Hover-reveal card while hidden | IS §13, §20.2 | app-shell §3.3 | `OpenFeatures/BrowserWindowController.swift`, `OpenFeatures/SidebarRevealController.swift` | main | e2e `window` (`hide_reveal`, `fullscreen_hover_reveal`, `reveal_timing`, `card_edges_*`, `chrome_card_material`); card fixes in #90 | done | Zones and the 0.15 s dwell decoded (IS §13); exit delay is a guess. S2 (2026-10-26): slide in ≈ 0.14 s with a 3 pt overshoot, out ≈ 0.10 s. Section 5: the card is its theme tint over the blurred page (`WindowMaterial`, design.md §16.6), ΔE00 0.91 / 0.71 to S2 05/0009 and 0029. |
 | Resize 164–500 pt; drag past the minimum hides while pressed; Cmd+S restores the pre-drag width; double-click on the edge resets to 228 | FC §1.7 r36; IS §13, §20.1 | app-shell §3.3 (D4) | `OpenDesign` `WindowMetrics`, `CompactToolbarMetrics` | main (#126, #129) | e2e `window` (`width_*`, floor 164 with the compact toolbar); e2e `sidebar-completion` E19; `features-render` GH1–GH5 (A1, #126); 2026-10-28 [re-check](sidebar-completion/recheck-122.md) | done (partial) | The 164 pt floor shipped with the compact toolbar (#126); #122's interim 218 pt floor is gone. Native held-drag limits, hidden release/restore, and double-click from 364 and 500 to 228 all pass. No value changed in merged #129. C10 is complete for the broad flow; refinement `drag-hide-threshold` remains open for the exact x82 trigger. 2026-11-06 on `s5/resize-cancel-undo`: native key-loss/sheet cancellation restores the start state, ignores late drag/up, and permits edge-hover reveal; mode undo records one/zero actions. Real-App `window` 80 PASS (2 Debug timing SKIP, existing card-material DEFERRED), `sidebar` 19 PASS; all four new rows FAIL with the fix removed. Targeted verification: 5/5 PASS. |
 | Hint toast on first hide ("You can use ⌘S…") | IS §13 | sidebar-completion §3.12 (A1) | `OpenFeatures/HintToastView.swift`, `OpenDesign/HintToastTokens.swift` | main (#126) | `features-render` HT1–HT3; e2e `sidebar-completion` E17; compare with A0440 worst 1 pt, ΔE00 1.17 (`docs/sidebar-completion/a1/hint-compare.md`) | done | Shows once, on the first hide by any path (toolbar button, Cmd+S, View menu, "More options", resize gesture); `open.sidebar.hideHintShown` records it. |
-| URL pill: host, Copy button, Site Control button; click opens Cmd+L | FC §4.1 r2; IS §3 | app-shell §3.5 (Step C) | `OpenSidebar/ChromeViews.swift` | main | `sidebar-render check` (click reaches the delegate); Step C in #85 | done (partial) | Click now opens the real command bar (`performSidebar` `.openCommandBar`). The Site Control button still sends `showSiteControls`, which the App refuses (factory line 366). |
+| URL pill: host, Copy button, Site Control button; click opens Cmd+L | FC §4.1 r2; IS §3 | app-shell §3.5 (Step C) | `OpenSidebar/ChromeViews.swift` | main | `sidebar-render check` (click reaches the delegate); Step C in #85 | done (partial) | Click now opens the real command bar (`performSidebar` `.openCommandBar`). The Site Control button now opens the in-window SCC on `s12/scc-app`; open/Boost states share the pane/toolbar glyph. See §1.13 for acceptance gaps. |
 | Toolbar row: toggle, back, forward, reload; a split keeps only the toggle | IS §11; design.md §15 | design.md | `ChromeViews.swift` | main (#126) | `sidebar-render check`; CT1–CT3 (#126); compact compare with S2 06/0029 worst 1 pt, ΔE00 0.80 (`docs/sidebar-completion/a1/compact-toolbar-compare.md`) | done (partial) | Below 219 pt: Back, Forward, "More options" (28 × 28), smaller arrows as measured (A1, #126). The "More options" menu content is a guess until C11. |
 | Bottom bar: Home (Library), Space switcher, plus menu | FC §1.1 r6, §1.8 r41; FA SP-1; IS §5 | design.md | `OpenSidebar/BottomBarView.swift` | main | `sidebar-render check` | done | Home opens the Library in the App (Step C, #85; factory `showLibrary`). |
 | Tooltips: capsule, keycaps, placement | IS §5 | design.md §5.6 | `OpenSidebar/Tooltip.swift` | main | `sidebar-render check` (one schedule per hover) | done | 0.6 s delay is a guess. Tooltip fill for the default theme measured in #113. |
@@ -355,17 +355,93 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 
 ### 1.13 Site Control Center
 
+Step 3 verification (child A, 2026-11-10): Evidence head
+`4aff4575` merges main `683df62b`, including #266, #291, #292, #293, #295, #297, #298, #279, #300, #277, #278 and #301. Framework SHA-256:
+`891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67`.
+Branch and unchanged-main (`cdae460b`) Debug/Release builds, engine fingerprints, 45/45
+unique automation keys and smokes PASS. Branch normal features passes
+30 rows. Normal unchanged-main features passes
+30 rows. Earlier main js_dialogs FAILs and diagnostic
+runs remain historical evidence in the PR. Widevine PASS on both; no
+Widevine known-failure label applies. New #298 Sad Tab termination rows
+and `crash_recovery` are DEFERRED through the existing `OPEN_E2E_NO_CRASH_PROBES=1` gate
+(M1-only by rule); the three healthy Sad Tab flows run on the M5.
+
+Release App source is `2a56a89d3ad596791ec4f792469600b272ff87d3`. Debug is rebuilt after #301. M5 suites, with exact source/receipt provenance retained in the PR: commandbar 77, app-actions
+77, extensions-ui 72 (including real-App
+`X13_picker`), toolbar 10, features 30, page
+118, split 40, space-editor 167
+and incognito 31 PASS. Boosteditor 28 PASS. Incognito's
+`no_snapshot_history_change` PASS includes #261. Page retains four BLOCKED
+rows and one DEFERRED row; incognito's native 2x capture remains DEFERRED.
+Site Control has 32 PASS, with only the lead-accepted
+S11/S12 visual FAILs (S12-V). Window has 80 PASS and five raw FAILs: two known startup budget misses
+and three color failures reproduced on unchanged main. The PR retains
+the matching metrics and exact receipt provenance. Window medians (ms):
+`{"cold_fresh_profile": {"engineStart": 351, "engineStarted": 432, "firstContentfulPaint": 650, "main": 179, "modelLoaded": 195, "sidebarDrawn": 350}, "warm_existing_profile": {"engineStart": 325, "engineStarted": 418, "firstContentfulPaint": 623, "main": 170, "modelLoaded": 183, "sidebarDrawn": 323}}`. The four paired startup
+groups use engine891c2353 on both sides: raw no-slower MISS. Pooled
+branch cold sidebar/paint medians are 273/496 ms; warm medians are
+274.5/502 ms. Main medians are 269/494 and 272.5/486.5 ms. Branch
+results remain inside TANDEM §4a known-main limits of 400/700 ms.
+The PR retains all raw medians, loads, first failures and interruptions.
+
+S2 initially FAILED with the old same-origin `/ad.js` fixture on branch;
+unchanged main also loads that script with blocking On, while its loaded
+native filter blocks shipped EasyList rule `||demand.supply^$script`.
+The S12 lead's 12:40 ruling classifies this as a fixture defect. The ad
+request now uses that pinned domain, resolved to the ephemeral local server
+for every suite launch, including performance launches. The EasyList pin
+and rule text are verified before launch. Every original S2 assertion and
+threshold is unchanged. The Settings-ready wait before the first toggle
+and the native excluded_count barrier before each reload follow the
+S12 lead14:52/14:58 rulings. Branch and unchanged main both pass all five
+Off/On cycles on #295; the17:22 ruling removes the former cache-bug waiver. Initial On blocks, Off/site exclusion plus reload
+loads, and On again plus reload blocks: PASS. Restoring only the old
+same-origin request makes S2 and its initial-On proof FAIL as required.
+
+The saved real Boost, live off/on glyph/CSS, edit, host-boundary negative
+and same-parent private S4/S10 rows PASS. Compiling without the sole provider
+binding rejects the saved row/glyph proof. F3's stale-tile proof PASSes in
+both directions and rejects the old callback; F5's content/mtime proof
+rejects both old read and unconditional initialization writes; F9 rejects
+the old unavailable assertion; F4 rejects enabled private Manage Boosts.
+All six mutation cases and the provider variant restore exact source and
+signed positive payload bytes, then the restored real-App rows PASS.
+Native F25 and the Advanced Settings early-failure cleanup/defaults canary
+PASS. The final preflight, full-gate summary and checklist belong to #276.
+
+Per D-10 and §Incognito, parent-Profile Boost metadata is read-only in
+private windows, with no application, writes or enabled actions. F2's
+close/retire notices are resolved by main #291. F4-rest/F6/F7/F8 remain in
+`docs/followups.md`; the private-session tile API switch remains a separate
+PR after #276, per lead item32. E1, remaining E2 and the certificate viewer are post-v1. E3 security state is a v1 blocker owned by the S12 lead final batch (LEAD-UPDATE item39). Gap item1(c) is
+PARTIAL: host-cookie Clear Cookies uses the legacy bridge; Clear Cache is
+absent/refused. S12-G moves both … menu operations onto `clearSiteData`
+after A and G merge. P1's forced-draw path is automation-only and does not
+establish shipping first-draw acceptance. No visual parity is claimed.
+
+Pre-#301 Favorites proofs failed before panel open and after open/close
+on branch, matching unchanged main (S11 bug, lead11:35/11:42). The
+visible-panel negative passed. #301 is merged. Lead11:58 requires no
+Favorites rerun. After #277, the old features receipt comparison failed
+on both builds because the factory adds pickerAccepted:false. The fixed
+harness compares every transport field and explicitly checks the picker
+flag. Its changed-callback negative fails the row. S13's old 12 ms slow
+frame negative fits within a frame at the new 60 Hz display. It now uses
+the measured frame interval plus 12 ms. S13 passes and rejects the slow
+path with every positive threshold unchanged.
+No engine root was edited or built; no M1 work was done.
+
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
-| Popover from the URL pill button | FA SC-1 | site-control-boost-editor (#61, spec in #107); interim `NSPopover` in app-shell §4.9 | popover chrome in PR #69; sidebar sends `showSiteControls` | none | none on `main` | in PR | Step 1 is PR #69. In the App today `showSiteControls` still returns `false` (factory line 366). The panel is 236 pt with a top arrow (capture session 2, #107). |
-| Site permissions rows | FA SC-2 | site-control-boost-editor Step 2; app-shell §4.9 | sections in PR #96; engine scalar content-settings registry and setter | none | e2e `features` "Permission prompts" and `sitedata` JavaScript/images/session/invalid/bounds (engine) | in PR | Step 2 is PR #96. |
-| Boosts section | FA SC-3 | site-control-boost-editor Steps 2, 4 | in PR #96, #103 | none | none | in PR | |
-| Extensions section (pin, site access) | FA SC-4 | site-control-boost-editor; extensions-ui §3.9–3.10 | `OpenExtensionsUI`, optional SCC context ([#175](https://github.com/SergeSerb2/open/pull/175)) | App `.showSiteControls` remains a stub | `extensions-render picker.keys`; `sitecontrol-render extensions-check`; `extensions-ui X13_picker` BLOCKED | planned (library ready) | Section 12 owns the SCC presenter/data source and Cmd+E picker. Pin/context-menu APIs and per-window context are wired in [#189](https://github.com/SergeSerb2/open/pull/189). |
-| Footer: Copy URL, Share | FA SC-5 | site-control-boost-editor | in PR #69, #96 | none | none | in PR | Session 2: 4 action buttons (Share, New Boost, two Capture). Copy URL moved to the ⋯ menu (#107). |
-| Footer: Capture, Capture in Portrait Mode, Capture Full Page | FA SC-5, §9.1 | page-platform (#73) | none | none | none | planned | See Capture in §1.17. |
-| Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor; `docs/adblock-lists.md` | `OpenAdBlock/SiteRules.swift` (`setExcluded`) | none | `openkit adblock` | planned | The toggle needs the panel (PR #69, #96) and blocking (§1.14). |
-| Security state (secure or not) | FA SC-7 | site-control-boost-editor E3 | native/OpenWeb connection and certificate APIs | Section 12 engine branch | `sitedata` 10/10, with ten break-and-restore failures | engine verified; UI separate | UI consumption remains separate. |
-| Clear cookies and cache for the site; zoom reset | app-shell §4.9 | app-shell §4.9; site-control-boost-editor E2 | engine `clearSiteData(origin:types:)` | Section 12 engine branch | `sitedata` 10/10, with ten break-and-restore failures | engine verified; UI separate | Origin-filtered HTTP cache/storage; host cookies. Panel consumption remains separate. |
+| Popover from the URL pill button | FA SC-1 | site-control-boost-editor Step 3 | `OpenSiteControl`, `BrowserSiteControl`, URL/pane glyphs | `AppSiteControlSource`, factory/window hooks (`s12/scc-app`) | Real `sitecontrol` flow on engine891c2353; final PR receipt | implemented; visual acceptance pending | URL, floating-card, pane and toolbar anchors; closes on tab/Space/window changes and Peek; unavailable in Little Open. S1 checks available/unavailable ad-block state against the real store; F5 proves opening the panel writes no permission index. S11/S12 remain FAIL. |
+| Site permissions rows | FA SC-2 | site-control-boost-editor §3.8 | `SiteControlRow` | Existing `SitePermissionStore`; token-based change notification | e2e `sitecontrol` S3 | implemented | Only non-Ask permission decisions appear; toggle writes through the engine owner. Prompt anchor hook uses the visible SCC button. Engine E1 scalar settings APIs are supplied by #205; SCC binding is deferred under lead 22:38. |
+| Boosts section | FA SC-3 | site-control-boost-editor Steps 3, 5 | `OpenSiteControl` | `app.stores.boosts` via `SiteControlBoostProvider` | S4/S10 real saved matching Boost, toggles/editor/glyph and private refusals; engine891c2353 rerun | implemented; final proof in PR | No second BoostStore. The source reads `factory.isIncognito` and matches private rows through their parent Profile. Private controls are disabled; creation, editing, Customize and toggles refuse. |
+| Extensions section (pin, site access) | FA SC-4 | extensions-ui §3.9 | Shared `OpenExtensionsUI` items; empty SCC Add tile | Per-window context and Cmd+E picker | Fresh M5 engine891c2353 `extensions-ui` 72/72, including X-13 | implemented on branch | Same context as the window's strips. Picker focuses the first current item; second Cmd+E closes and third reopens. Arrows and type-select move, Return runs, Esc closes; empty picker focuses Add Extension. |
+| Share and two Capture actions; Copy URL shortcut | FA SC-5 | site-control-boost-editor §3.4 | Four action buttons | Existing App commands | e2e `sitecontrol` S6; `page` | implemented | Fourth action is Capture Full Page. Copy URL stays on ⇧⌘C and the URL field; no SCC Copy button. |
+| Ad-block per-site toggle with reload | FA SC-6, AD-7 | site-control-boost-editor §3.8 | `OpenAdBlock.setExcluded`, `didChange` | Existing shared App store and native adapter | S2 initial On, Off/reload/load, On/reload/block; stale tile and old-fixture negatives | implemented on branch | Uses shipped EasyList pinned rule served locally, per S12 lead 12:40. S2 assertions/thresholds unchanged. Profile-close/retire notices come from main #291; private tile API switch remains separate. |
+| Security state (secure or not) | FA SC-7 | site-control-boost-editor §3.9 | Static footer label | HTTPS Secure; HTTP Insecure; other schemes hide | S1/S9 | partial | Engine E3 connection/certificate APIs are available and engine-verified by #205 (sitedata 10/10 with ten negative proofs). E3 security-state wiring is a v1 blocker in the S12 lead final batch, per item39. Certificate viewer is post-v1. |
+| Clear cookies and cache for the site | app-shell §4.9 | site-control-boost-editor §3.9 | Native ⋯ menu | Existing `clearBrowsingData(origin:)` | e2e `sitecontrol` S5 | partial | Clear Cookies clears host cookies only, then offers Reload. Main's non-nil-origin implementation does not clear the HTTP cache. Engine E2 `clearSiteData(origin:types:)` is available and engine-verified by #205 (sitedata 10/10 with ten negative proofs). Scoped Clear Cache and zoom-reset UI consumption remain separate; SCC wiring is deferred, per lead 22:38. |
 
 ### 1.14 Ad blocking
 
@@ -416,7 +492,7 @@ Main has the shell and engine milestones listed above. The suites here are separ
 | Install, remove, enable/disable, permission prompts and Web Store consent | FA EX-15 | extensions-ui §3.11, E8–E10 | live per-context manager ([#177](https://github.com/SergeSerb2/open/pull/177)), prompt sheet/queue (#175) | main (#189) | `extensions`; `extensions-p3` 14/14 and hosted-store receipt; `extensions-ui` install Cancel/Add, X14/X15, FIFO/close/quit | done (partial) | Open sheets are the normal handler. Chromium dialogs run only without a shell handler. Packed permission-increase update/re-enable consent is UNVERIFIED; normal disable/re-enable and optional permissions pass. |
 | Extensions menu, overflow, Manage/Add pages | MH Extensions; FA EX-5/11 | extensions-ui §3.5, §3.12 | `ExtensionsMenuBuilder`, `OpenCommands` | main (#175, [#179](https://github.com/SergeSerb2/open/pull/179), #189) | `extensions-render menu.bar/menu.relabel`; `extensions-ui X16/X17`, overflow anchor | done | Pinned first, unpinned by name, then Manage/Add; lazy menu update. Manage is a focused-Space singleton. The page-menu Manage hook is still open in Section 11. |
 | URL, pane and toolbar placement; Find coexistence | FA EX-1/2 | extensions-ui §3.2–3.3 | `ExtensionStripView`, `ToolbarMetrics.siteControls(width:stripWidth:)` | main (#175, #189) | `extensions-render`; `extensions-ui X3/X18`, toolbar/overflow and native Find overlap; `find` F33 six pinned-strip native-close gates | done | URL hover-only; focused pane only. Toolbar rightmost maxX w−5; SCC left of strip (guess C1). Reference captures remain open. |
-| Cmd+E extension picker / SCC Extensions section | FA EX-6–10 | extensions-ui §3.9–3.10 | shared row/tile body and keyboard focus (#175); hidden command (#179) | `.showSiteControls` stub; context/refresh seam ready (#189) | library `picker.keys`, `sitecontrol-render extensions-check`; real-App `extensions-ui X13_picker` BLOCKED | planned | Section 12 owns the presenter/data source. No real-App picker acceptance yet. |
+| Cmd+E extension picker / SCC Extensions section | FA EX-6–10 | extensions-ui §3.9–3.10 | shared row/tile body and keyboard focus (#175); hidden command (#179) | `AppSiteControlSource` and window presenter (`s12/scc-app`); shared context/refresh seam (#189) | library `picker.keys`, `sitecontrol-render extensions-check`; fresh M5 engine891c2353 `extensions-ui` 72/72, including `X13_picker` | implemented on `s12/scc-app` | Section 12 supplies the presenter/data source. X-13 passes in the fresh M5 engine891c2353 receipt; material acceptance remains open. Old and interrupted receipts do not count. |
 | Little Open Extensions button and menu | FA EX-3 | extensions-ui §3.4, ruling A | title-bar button/menu and standalone browser attachment | #185 page; [#192](https://github.com/SergeSerb2/open/pull/192) | `extensions-ui X19_button_menu`, `X19_popup_less_target`, `X19_activeTab_grant`, `X19_popup_tabs_query`, `X19_popup_anchor`, `X19_extra_tab_main_today`, `X19_one_action`, `X19_zero_actions`, `X19_profile_switch` PASS | done | Button inside URL capsule [w−252,16,16,16], guess S-7. Actions bind to the standalone OEBrowser, then re-attach after Profile replacement. Old delegate and action list clear. No main-window fallback. Extra extension tabs open selected in the most recent main window’s Today (guess, Arc capture needed). |
 | Native extension popup windows | FA EX-12 | extensions-ui §3.8, E11 | `ExtensionWindowController` | main ([#184](https://github.com/SergeSerb2/open/pull/184)) | `extensions-e2 X20_*`: native class/view, bounds, popup type, resize/focus/remove; popup Cmd+W | done | Standard titled/resizable window with its own hidden Browser/strip and native frame autosave. |
 | Extension keyboard shortcuts and Settings Extension Shortcuts | FA EX-11; MH Custom shortcuts | extensions-ui §6.2–6.3 | command snapshots (#177), Shortcuts menu/notice (#179) | `ExtensionShortcutTable`, Settings adapter (#189) | `extensions-ui X12_*`, `X27_*` ([closeout PR](https://github.com/SergeSerb2/open/pull/190)); `settings-preview`; `commands-dump` | done | X-27 proves menu singleton, exact user-conflict notice, dropped command, Open-key priority and extension recovery through real KeyBindingStore saves. Global (`"global": true`) command OS delivery remains UNVERIFIED. |
@@ -798,7 +874,7 @@ Capture session 2 ran on 2026-10-26 and is committed as findings only (#106; rou
 | Decision | Default today | Source |
 |---|---|---|
 | Folders as `chrome.tabGroups` | Decided in #64: v1 has no tab groups. Folder tabs stay pinned with `groupId: -1`. | `docs/re/arccore-engine.md` §4.3.1; engine-patches P1 |
-| Do Boosts apply in incognito, Peek, Little Open, and Split panes? | Private windows disable Boost scripts, live apply, editor and Customize Page, including per-parent OTR contexts (lead 2026-11-07 15:32). Other contexts follow Section 12. | boosts-zap Q4 ("Product to confirm") |
+| Do Boosts apply in incognito, Peek, Little Open, and Split panes? | Private windows disable Boost scripts, live apply, editor and Customize Page, including per-parent OTR contexts (lead 2026-11-07 15:32). SCC reads `factory.isIncognito`, matches parent-Profile rows and disables their controls. Fresh engine619324d3 S4/S10 receipts are recorded in the PR. Other contexts follow Section 12. | boosts-zap Q4 ("Product to confirm") |
 | Keep Safe Browsing on? | Not decided | engine-patches P5 ("Keep Safe Browsing as a product decision") |
 | Pinned tabs sleep like other tabs (Chrome protects them) | Sleep; say so in Settings | memory-design §5 |
 | Tab-sleep mode names in Settings | Designer names later | memory-fork lead decision |
@@ -1016,7 +1092,7 @@ This appendix is the first audit's table. It is history. Section 8 current dispa
 | Archive | Clear Archive | — | `clear-archive` | main (#132) | `I10_clear_archive_*` | Library confirmation, Cancel and Clear |
 | Extensions | Manage Extensions… | — | `manage-extensions` | Y | Y | [#179](https://github.com/SergeSerb2/open/pull/179), [#189](https://github.com/SergeSerb2/open/pull/189); `extensions-ui X17_manage_singleton` |
 | Extensions | Add Extension… | — | `add-extension` | Y | Y | #179, #189; real menu X16; dispatch opens a new Web Store Today tab |
-| Extensions (hidden) | Open Extensions | Cmd+E | `open-extensions-picker` | Y | — | #179 registry; #189 context seam; X13 BLOCKED on Section 12 SCC presenter |
+| Extensions (hidden) | Open Extensions | Cmd+E | `open-extensions-picker` | Y | — | #179 registry; #189 context seam; fresh M5 engine619324d3 X13 PASS on `s12/scc-app` |
 | Settings > Shortcuts > … | Extension Shortcuts | — | `extension-shortcuts` (also code-only) | Y | Y | `settings-preview`; `extensions-ui X27_*`; [closeout PR](https://github.com/SergeSerb2/open/pull/190) |
 | Window | Minimize | Cmd+M | `minimize-window` | Y | Y | — |
 | Window | Zoom | — | `zoom-window` | — | — | system (no dispatch spec) |

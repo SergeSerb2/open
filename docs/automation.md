@@ -178,6 +178,7 @@ after relaunch, unchanged Default counts, and an unchanged counts ledger.
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
+- `OPEN_AUTOMATION_OFFSCREEN_SMOKE=1` starts the packaged engine and socket without browser or first-run windows. Use a disposable data root and the on-screen lock for the first launch after packaging changes. Check `shell-windows` and the owned on-screen window count are both empty, then quit. This mode does not measure normal startup or UI behavior.
 - Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
 
 First run is detected once, before data-root preparation, when
@@ -475,6 +476,41 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `extensions` | — | Installed extensions and the window's toolbar actions, with `duplicatesDropped` from the App's first-occurrence normalization. Action fields match `actions` below. |
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
+| `site-controls` | `action: open\|close\|state\|tap\|menu`, `via: urlField\|pane` (default `urlField`), `id`, `item` | Opens through the actual URL-field or focused pane button; taps an enabled visible control; dispatches the actual enabled native menu item. `state` returns the anchor tab/host, presentation mode, rows with titles/subtitles/states, control/item visibility, menu, reload state, anchor/body frames and arrow tip (flipped window points), URL button state, extension items/focus, and first-draw milliseconds (controller entry through native layout/display and first Core Animation submission). Only the automation callback forces display for that receipt; the shipping App uses normal AppKit draw scheduling. `isIncognito` reads the current factory's private-window flag; `canCreateBoost` is false in private windows. `sourceReads` reports full snapshots, lightweight button reads and coalesced change deliveries for page-load diagnostics. `sourceActions` counts calls to `toggle` and `openAdBlockSettings`; S1 checks that the unavailable ad-block row opens Settings once without calling `toggle`. `about:`/unavailable pages return `no site`. Row ids include `row.contentBlocking` and `row.permission.camera`; buttons include `action.share`, `action.newBoost`, `action.capture`, `action.captureFull`, `extension.add`, and `reload`. |
+| `site-controls-idle` | `action: begin\|watch\|reset\|read\|canary\|end` | Real-App SCC performance proof. Requires the harness-only injected scheduler/view observer. Watches the panel tree, returns ten native observer counters and process CPU seconds; `canary` schedules and invalidates a real timer. The shipping App does not load the observer. |
+
+Site Control review proofs also use `site-controls action=permission-index` to await the current Profile's pending permission-index task (no permission read/decision is made). `action=adblock-state` reads the existing store's binding, Profile availability, enabled flag and `shouldBlock` for the panel host without creating a store. For the stale-callback proof only, `capture-content-blocking` retains one available tile and its tab, `set-adblock-excluded excluded=<bool>` changes the real store for the normal panel's host, and `toggle-captured-content-blocking` consumes that tile through the real panel `onToggle` callback after checking its tab. These commands exist only in the automation build; they do not change the shipping interaction path.
+
+S2 uses the shipped EasyList rule `||demand.supply^$script`. The suite checks the
+list's pinned hash and maps `demand.supply` to its local fixture server, with
+proxies disabled. The ad request never goes to that public host. It records
+initial blocking after the native lists load, then keeps the existing Off /
+reload / allowed and On / reload / blocked assertions. The old same-origin
+`/ad.js` URL matched no shipped rule and failed on branch and unchanged main;
+the S12 lead ruled it a fixture defect at 12:40 on 2026-11-09. Restoring that URL
+is the negative control; no S2 assertion or threshold is relaxed.
+
+The `sitecontrol` suite attaches an INFO-only R-7 `backgroundResponse` diagnostic
+to S11. It samples (300,140) and (260,250) under the open panel with the engine
+page white, then black, and reports both sRGB values and ΔE00. A change below 3
+at both points indicates the remote-layer sampling risk in plan §11.1. This
+diagnostic does not change the S11/S12 acceptance limits or turn a FAIL into PASS.
+The `split` suite also records the frontmost PID's command line on focus loss
+when the process still exists. An exited process is reported as unavailable;
+the suite retains its INTERRUPTED result.
+
+P1's native negative controls inject a 12 ms delay into layout, display and
+flush in three separate real-App launches. `drawNativeProbe` returns the injected
+probe's live call/delay counters; `firstDrawNativeProbe` records those counters
+at each first-draw callback, before later AppKit work. Both are empty without
+the injected probe. The source-refresh diagnostic loads SCC's 2000-card
+`heavy.html` with the panel closed and open, then changes the title 250 times.
+
+For M1 functional receipts, `--functional-only` is available with `--only
+sitecontrol`, `extensions-ui`, or `split`. It records M5 display/performance rows
+as DEFERRED without running them. The default full suites keep every gate and
+threshold. M1 receipts never replace M5 timing, pixel, color or full-gate proof.
+| `pasteboard` | optional `text` | Reads the general pasteboard string. `text` sets a sentinel for Copy URL negative controls. |
 | `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, `live` (from the live model, else the profile's list), and the toolbar image and plain icon (PNG byte count, hash, point width, `pixels`: each representation's pixel size, and `object`: the image object's identity) |
 | `ext-pin` | `extension`, `pinned` (default `true`), optional `index` | Pin or unpin an action; optionally move it through the guarded App host. |
 | `ext-move` | `extension`, `index`, optional `engine` | Move only a currently pinned action. Negative automation indices return an error. Clamp to the normalized pinned list and skip a no-op, as a native drag does. `engine=true` directly probes the engine's invalid-index refusal instead. |
@@ -1471,12 +1507,23 @@ the Update Theme action name. A3 undo/redo compares against that ledger.
 The `peek` suite opens Settings ▸ Links and uses `defaults` to write the
 canonical `open.links.openPeekShiftClick` key bound by that pane; there is no
 Settings switch UI driver. It then proves a real Shift-click does not Peek.
-The `commandbar` suite includes `settings_live.py`: native New Profile menu
+The `commandbar` and `app-actions` suites include `settings_live.py`: native New Profile menu
 and sidebar sheet, Cmd+, typing guard and Escape, local action errors, actual
 1024 px App icon application/cache/reset, restore after content with measured
 cost, Peek migration/precedence, and global sleep reconciliation on create and
 launch. `OPEN_SETTINGS_FAIL_IN_SHEET=1` forces a failure with Create Profile
 open; finally cancels the sheet, restores exact saved preferences, and quits.
+`settings_view_boosts_library` runs View Boosts and checks that the real Library
+opens on Boosts with no Advanced error. It rejects the former unavailable-error
+assertion, closes the Library through the App's Cmd+W path, and restores
+`open.library.lastSection` with the other saved preferences. The outer commandbar
+flow also resets and restores that key before the Settings flows run, so earlier
+History/Archive/Downloads checks do not change the suite’s saved Library section.
+Both cleanup paths attempt restoration and quit even if an earlier cleanup
+action fails.
+For a shared-screen hold, `OPEN_VERIFY_FOCUS_ATTEMPTS=1` makes the native
+Site Control editor harness stop after its first foreground interruption.
+Unset or `3` retains its existing three-attempt limit; other values fail.
 
 The sleep suite uses existing `sleep-clock` and `sleep-tick` hooks to pass the
 30 s freeze deadline and 48 h without changing production delays. Never
@@ -1609,6 +1656,8 @@ Automation-only screenshot/export hooks: `set-appearance appearance=light|dark` 
 The `first-run` API remains the importer verification seam. Its compatibility actions walk setup's real navigation; the `screen` field names the new screen while `step` names Section 7's import state. No legacy first-run window is shown.
 
 Boost editor B27 deletes a Profile through the real Settings confirmation with a dirty Boost store, waits beyond its debounce, quits and relaunches. The Profile folder and Boost file must remain absent. A disabled-retirement App supplies the deliberate negative proof.
+
+Shared-screen e2e callers can pass `--focus-attempts 1` to `tools/e2e/engine_e2e.py` to stop the suite after its first foreground interruption, preserving the interrupted receipt and running cleanup. The default remains three attempts; passwords probes always use one.
 
 Clean-link copy coverage: `OPEN_E2E_PAGE_COPY_ONLY=1 tools/e2e/engine_e2e.py --only page`
 runs the existing copy/quote/zoom group plus row, selection and folder copy (plain/Markdown),

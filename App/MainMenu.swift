@@ -403,9 +403,7 @@ extension EngineWebContentHostFactory {
       } else { _ = openNewTab(url: url, background: false) }
     case "add-extension": _ = openNewTab(url: URL(string: "https://chromewebstore.google.com/category/extensions")!, background: false)
     case "open-extensions-picker":
-      // S6 App step: this factory has no reachable SiteControlController entry point yet.
-      // The SCC integration supplies the §3.10 anchor and .extensionPicker presentation.
-      NSSound.beep()
+      guard controller?.presentExtensionPicker() == true else { return false }
     case "expand-all-folders", "collapse-all-folders":
       // The key window's focused Space only; one undo step (completion §3.4).
       if let space = focusedSpace { _ = model.setAllFoldersExpanded(spaceID: space.id, expanded: id == "expand-all-folders") }

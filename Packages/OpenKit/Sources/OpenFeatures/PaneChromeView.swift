@@ -2,6 +2,7 @@ import AppKit
 import OpenDesign
 import OpenModel
 import OpenExtensionsUI
+import OpenSidebar
 
 @MainActor
 final class ActionButton: NSButton {
@@ -10,6 +11,7 @@ final class ActionButton: NSButton {
     var dimsWhenDisabled = true
     var glyphPointSize: CGFloat = 16
     var glyphOffset = CGSize.zero
+    var siteControlState: SiteControlButtonState? { didSet { if siteControlState != oldValue { needsDisplay = true } } }
     init(symbol: String, title: String, action: @escaping () -> Void) {
         super.init(frame: .zero); isBordered = false; image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         imageScaling = .scaleProportionallyDown; self.title = ""; toolTip = title
@@ -21,6 +23,10 @@ final class ActionButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         if let circleFill {
             circleFill.setFill(); NSBezierPath(ovalIn: bounds.insetBy(dx: (bounds.width - bounds.height) / 2, dy: 0)).fill()
+        }
+        if let state = siteControlState, state != .rest {
+            SiteControlGlyphView.draw(in: bounds, pointSize: glyphPointSize, isOpen: state.isOpen, isBoosted: state.isBoosted,
+                tint: contentTintColor ?? .black); return
         }
         guard let source = image, let context = NSGraphicsContext.current?.cgContext else { return }
         let symbol = source.withSymbolConfiguration(.init(pointSize: glyphPointSize, weight: .regular)) ?? source
@@ -42,6 +48,15 @@ public final class PaneChromeView: NSView {
     var onClose: (() -> Void)?
     var onMenu: ((NSView) -> Void)?
     var onURL: (() -> Void)?
+    var onSiteControls: (() -> Void)?
+    public var siteControlState = SiteControlButtonState.rest {
+        didSet { buttons[4].siteControlState = siteControlState }
+    }
+    public var siteControlsAnchor: NSView { buttons[4] }
+    @discardableResult public func pressSiteControls() -> Bool {
+        guard buttons[4].isEnabled, !buttons[4].isHidden else { return false }
+        buttons[4].performClick(nil); return true
+    }
     /// After the copy button copied the URL; true when trackers were removed (Arc CC-31a).
     var onCopy: ((Bool) -> Void)?
     /// Right-click menu of the content toolbar (§4.6.2); pane bars have none.
@@ -102,7 +117,9 @@ public final class PaneChromeView: NSView {
         let back = host?.canGoBack ?? false, forward = host?.canGoForward ?? false
         if buttons[0].isEnabled != back { buttons[0].isEnabled = back }
         if buttons[1].isEnabled != forward { buttons[1].isEnabled = forward }
-        if buttons[4].isEnabled { buttons[4].isEnabled = false }
+        let siteAvailable = onSiteControls != nil && host?.currentURL?.scheme != "about" && host?.currentURL != nil
+        if buttons[4].isEnabled != siteAvailable { buttons[4].isEnabled = siteAvailable }
+        buttons[4].siteControlState = siteControlState
         let loading = host?.isLoading == true
         if reloadShowsStop != loading {
             buttons[2].image = NSImage(systemSymbolName: loading ? "xmark" : "arrow.clockwise", accessibilityDescription: "Reload or Stop")
@@ -161,6 +178,8 @@ public final class PaneChromeView: NSView {
                 let (clean, removed) = URLCleaner.clean(url)
                 NSPasteboard.general.clearContents(); NSPasteboard.general.setString(clean.absoluteString, forType: .string); onCopy?(!removed.isEmpty)
             }
+        case 4:
+            if NSApp.currentEvent?.modifierFlags.contains(.option) != true { onSiteControls?() }
         case 5: onMenu?(buttons[5])
         case 6: onClose?()
         default: onURL?()

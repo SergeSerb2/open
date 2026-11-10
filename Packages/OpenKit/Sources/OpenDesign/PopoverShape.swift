@@ -1,9 +1,10 @@
 import AppKit
 import QuartzCore
 
-/// Shared system-popover choice. The on-engine material calibration is Step 3.
+/// Shared system-popover choice: interim (lead 2026-11-06).
+/// S11/S12 stay open; the R-7 child-window fallback belongs to a follow-up PR.
 public enum PopoverMaterial {
-    public static let material: NSVisualEffectView.Material = .popover
+    public static let material: NSVisualEffectView.Material = .hudWindow
     public static let blending: NSVisualEffectView.BlendingMode = .withinWindow
     public static let shadowOpacity = SiteControlMetrics.shadowOpacity
     public static let shadowRadius = SiteControlMetrics.shadowRadius

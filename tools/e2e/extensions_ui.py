@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 pack_probe = runpy.run_path(str(Path(__file__).with_name("extensions_p3.py")))["pack_probe"]
 
 
-def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions, engine):
+def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, extensions, engine, functional_only=False):
     from settings_adblock import run as settings_adblock
     if os.environ.get("OPEN_E2E_EXTENSIONS_UI_SCOPE") == "adblock":
         settings_adblock(factory, results, tmp, root, wait_until)
@@ -174,19 +174,27 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         results["X6_popup"] = {"ok": p["key"] and p["ready"] and frame(p["contentSize"])[0] > 25
             and active == expected and abs(panel[1] + panel[3] - (anchor[1] - 6)) <= 1, "state": p, "activeTab": active}
         close()
+        # The popup and tab switches above can leave a pending strip layout.
+        # Capture only after the actual badge target has its visible slot.
+        hover()
+        badge_target = wait_until(lambda: (lambda s: s if s['visible'] and probe in s['ids'] else None)(strip()), timeout=5)
+        assert badge_target, strip()
         app.eval(content, "chrome.action.setBadgeText({tabId:" + str(active) + ",text:'7'}).then(()=>true)")
         badge = wait_until(lambda: action(probe).get("badge") == "7", timeout=5)
-        hover(); badged = capture("badge-seven")
+        hover(); badged = capture("badge-seven") if not functional_only else None
         app.eval(content, "chrome.action.setBadgeText({tabId:" + str(active) + ",text:''}).then(()=>true)")
         clear = wait_until(lambda: action(probe).get("badge") in (None, ""), timeout=5)
-        hover(); unbadged = capture("badge-empty")
-        _, h, bp = read_image(badged); _, _, np = read_image(unbadged)
-        badge_strip = strip()
-        slot = badge_strip["frames"][badge_strip["ids"].index(probe)]
-        # The snapshot is top-left; automation reports Cocoa window coordinates.
-        x, y, w, hh = slot; y = h - y - hh
-        difference = sum(bp(xx, yy) != np(xx, yy) for xx in range(int(x), int(x+w)) for yy in range(int(y), int(y+hh)))
-        results["X4_badge_pixels"] = {"ok": bool(badge and clear) and difference > 0, "changedPixels": difference}
+        hover(); unbadged = capture("badge-empty") if not functional_only else None
+        if functional_only:
+            results["X4_badge_pixels"] = {"status":"DEFERRED", "reason":"M5 pixel receipt required (TANDEM §4M)"}
+        else:
+            _, h, bp = read_image(badged); _, _, np = read_image(unbadged)
+            badge_strip = strip()
+            slot = badge_strip["frames"][badge_strip["ids"].index(probe)]
+            # The snapshot is top-left; automation reports Cocoa window coordinates.
+            x, y, w, hh = slot; y = h - y - hh
+            difference = sum(bp(xx, yy) != np(xx, yy) for xx in range(int(x), int(x+w)) for yy in range(int(y), int(y+hh)))
+            results["X4_badge_pixels"] = {"ok": bool(badge and clear) and difference > 0, "changedPixels": difference}
         other = new_tab(app,"about:blank")
         other_chrome = app.call("engine-sleep")["chromeTabId"]
         app.eval(content,"Promise.all([chrome.action.setBadgeText({tabId:"+str(active)+",text:'7'}),chrome.action.setBadgeText({tabId:"+str(other_chrome)+",text:''})]).then(()=>true)")
@@ -313,17 +321,20 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         disabled = wait_until(lambda: action(probe).get("enabled") is False, timeout=5)
         hover(); menu = app.call("ext-click", extension=probe, surface="url")
         results["X10_disabled_menu"] = {"ok": bool(disabled) and bool(menu.get("menu")), "menu": menu}
-        hover(); disabled_image = capture("disabled")
+        hover(); disabled_image = capture("disabled") if not functional_only else None
         app.eval(control, "chrome.action.enable().then(()=>true)")
         wait_until(lambda: action(probe).get("enabled"), timeout=5)
-        hover(); enabled_image = capture("enabled")
-        _,height,disabled_pixel = read_image(disabled_image); _,_,enabled_pixel = read_image(enabled_image)
-        slot = strip()["frames"][0]; x,y,w,hh = slot; y=height-y-hh
-        def colored(pixel):
-            return sum(max(pixel(xx,yy)[:3])-min(pixel(xx,yy)[:3]) > 20
-                for xx in range(int(x),int(x+w)) for yy in range(int(y),int(y+hh)))
-        disabled_color,enabled_color=colored(disabled_pixel),colored(enabled_pixel)
-        results["X10_grayscale_pixels"]={"ok":disabled_color < enabled_color,"disabledColoredPixels":disabled_color,"enabledColoredPixels":enabled_color}
+        hover(); enabled_image = capture("enabled") if not functional_only else None
+        if functional_only:
+            results["X10_grayscale_pixels"]={"status":"DEFERRED", "reason":"M5 color receipt required (TANDEM §4M)"}
+        else:
+            _,height,disabled_pixel = read_image(disabled_image); _,_,enabled_pixel = read_image(enabled_image)
+            slot = strip()["frames"][0]; x,y,w,hh = slot; y=height-y-hh
+            def colored(pixel):
+                return sum(max(pixel(xx,yy)[:3])-min(pixel(xx,yy)[:3]) > 20
+                    for xx in range(int(x),int(x+w)) for yy in range(int(y),int(y+hh)))
+            disabled_color,enabled_color=colored(disabled_pixel),colored(enabled_pixel)
+            results["X10_grayscale_pixels"]={"ok":disabled_color < enabled_color,"disabledColoredPixels":disabled_color,"enabledColoredPixels":enabled_color}
         hover(); right = app.call("ext-click", extension=probe, surface="url", button="right")
         titles = [i["title"] for i in right.get("menu", [])]
         app.call("ext-menu", extension=probe, select="Unpin")
@@ -450,8 +461,42 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             bind_named("Command+Shift+U")
             app.call("close",tab=command_settings)
             app.call("select",tab=control)
+        picker_before = app.call("ext-picker")
+        app.call("key", key="e", modifiers=["command"], route="app")
         picker = app.call("ext-picker")
-        results["X13_picker"] = {"status":"BLOCKED", "reason":picker.get("blocked", "SCC extension picker not presented"), "state":picker}
+        app.call("key", key="e", modifiers=["command"], route="app")
+        picker_toggled_closed = app.call("ext-picker")
+        app.call("key", key="e", modifiers=["command"], route="app")
+        picker_toggled_open = app.call("ext-picker")
+        picker_items = app.call("site-controls", action="state")["extensionItems"]
+        # Four actions use rows; larger action sets use the five-column grid.
+        forward, backward = ("right", "left") if len(picker_items) > 5 else ("down", "up")
+        app.call("key", key=forward, route="app")
+        picker_forward = app.call("ext-picker")
+        app.call("key", key=backward, route="app")
+        picker_backward = app.call("ext-picker")
+        app.call("key", key="a", route="app")
+        picker_selected = app.call("ext-picker")
+        app.call("key", key="return", route="app")
+        picker_ran = wait_until(lambda: app.call("ext-popup-state").get("visible"), timeout=10)
+        picker_after = app.call("ext-picker")
+        close()
+        app.call("key", key="e", modifiers=["command"], route="app")
+        picker_reopened = app.call("ext-picker")
+        app.call("key", key="escape", route="app")
+        picker_escaped = app.call("ext-picker")
+        results["X13_picker"] = {"ok": not picker_before.get("presented") and picker.get("presented")
+            and not picker_toggled_closed.get("presented") and picker_toggled_open.get("presented")
+            and bool(picker_items) and picker.get("focusedID") == picker_items[0]["id"]
+            and len(picker_items) > 1 and picker_forward.get("focusedID") == picker_items[1]["id"]
+            and picker_backward.get("focusedID") == picker_items[0]["id"]
+            and picker_selected.get("focusedID") == probe
+            and bool(picker_ran) and not picker_after.get("presented") and picker_reopened.get("presented")
+            and not picker_escaped.get("presented"), "state":picker, "selected":picker_selected,
+            "negativeClosed":picker_before, "items":picker_items, "arrowKeys":[forward,backward],
+            "toggleClosed":picker_toggled_closed, "toggleOpen":picker_toggled_open,
+            "afterForward":picker_forward, "afterBackward":picker_backward,
+            "afterReturn":picker_after, "afterEscape":picker_escaped}
         bar = app.call("ext-ui-menu", kind="bar")
         names = [a["name"] for a in sorted(actions(), key=lambda a: (not a["pinned"], a["pinnedIndex"] if a["pinned"] else a["name"]))]
         shown_names = [x["title"] for x in bar if not x["separator"]]
@@ -485,16 +530,20 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         for appearance in ("light", "dark"):
             close(); app.call("appearance", name=appearance); capture("pane-" + appearance)
         app.call("split")
-        samples,click_samples = [],[]
-        for i in range(20):
-            p = popup(probe)
-            if p and p["readyToVisibleMs"] is not None: samples.append(p["readyToVisibleMs"])
-            if p and p["clickToVisibleMs"] is not None: click_samples.append(p["clickToVisibleMs"])
-            close()
-        p95 = sorted(samples)[math.ceil(.95*len(samples))-1] if samples else None
-        results["popup_ready_visible_p95"] = {"ok": len(samples) >= 20 and p95 <= 16.7,
-            "samples": samples, "p95ms": p95, "load": os.getloadavg(),
-            "clickToVisibleSamples":click_samples,"clickToVisibleP95ms":sorted(click_samples)[18] if len(click_samples)>=20 else None}
+        if functional_only:
+            results["popup_ready_visible_p95"]={"status":"DEFERRED", "reason":"M5 timing receipt required (TANDEM §4M)"}
+        else:
+            samples,click_samples,popup_states = [],[],[]
+            for i in range(20):
+                p = popup(probe)
+                popup_states.append(p)
+                if p and p["readyToVisibleMs"] is not None: samples.append(p["readyToVisibleMs"])
+                if p and p["clickToVisibleMs"] is not None: click_samples.append(p["clickToVisibleMs"])
+                close()
+            p95 = sorted(samples)[math.ceil(.95*len(samples))-1] if samples else None
+            results["popup_ready_visible_p95"] = {"ok": len(samples) >= 20 and p95 <= 16.7,
+                "samples": samples, "popupStates": popup_states, "p95ms": p95, "load": os.getloadavg(),
+                "clickToVisibleSamples":click_samples,"clickToVisibleP95ms":sorted(click_samples)[18] if len(click_samples)>=20 else None}
         # A real packed install owns and displays the same sheet that automation answers.
         crx = pack_probe(root, tmp, prefix="ui-install")
         installs = []
