@@ -833,12 +833,12 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts.png"))
                 let texts = try await renderedTexts()
                 try require(texts.contains("Calm docs") && texts.contains("Made for example.org/docs"), "Boost rows did not render: \(texts)")
-                env.defaults.set(false, forKey: "open.advanced.enableBoosts")
+                env.defaults.set(false, forKey: BoostPreferences.globallyEnabledKey)
                 try await withAccessibleHost(BoostsSection(model: library), size: CGSize(width: 684, height: 600)) { host in
-                    try require(env.defaults.bool(forKey: "open.advanced.enableBoosts") == false, "negative control: Boosts were already on")
+                    try require(env.defaults.bool(forKey: BoostPreferences.globallyEnabledKey) == false, "negative control: Boosts were already on")
                     try require(pressAccessibilityElement(host, label: "Turn On"), "Turn On was not available")
                 }
-                try require(env.defaults.bool(forKey: "open.advanced.enableBoosts"), "Turn On did not write the supplied defaults store")
+                try require(env.defaults.bool(forKey: BoostPreferences.globallyEnabledKey), "Turn On did not write the supplied defaults store")
                 env.libraryActions.boostRows = [:]
                 try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("boosts-empty.png"))
                 let empty = try await renderedTexts()

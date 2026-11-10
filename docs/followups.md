@@ -375,7 +375,33 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 - Color uses the plan's interim root filters. Paint-time color remap remains the
   engine lane's Step 4R; filters can affect images/video/canvas.
 - Code mode is integrated from #203, including live CSS and document-bound JS
-  reload state. Gallery stays disabled; P7 still blocks selector picking.
+  reload state. The local Gallery shares the Library's Boost owner and actions;
+  BG1–BG3, Profile/layout and private/global-off flows pass in the real App on
+  2026-11-09; targeted Settings and Site Control render checks pass. Eight
+  deliberate source regressions are confirmed; Boost editor, command bar,
+  Settings and Chrome-style incognito suites pass. Restored Debug/Release and
+  the complete Gallery run passed on engine 34619927. The final main d279ae85
+  merge, Debug/Release, Gallery 14/14 and full gate 25/25 pass on engine
+  891c2353; lead source review is approved. After the clean main a5987e02
+  overlap merge, Debug/key audit, Gallery 14/14, command bar/live Settings 77/77
+  and Settings Preview pass under rule 5a. Native incognito 2x capture remains
+  a display follow-up. See
+  [Gallery acceptance](boost-gallery.md).
+  P7 still blocks selector picking.
+- Library command readiness (BG review F5, Section 12 lead, 2026-11-09):
+  factory-level `view-library`, `view-boosts` and `boost-gallery` routes do not
+  share the AppDelegate's first-run gate or the editor commands' `engineReady`
+  check. The Gallery fix keeps existing Library parity. Follow up on a shared
+  first-run/engine-ready policy for these routes, with real-App first-window
+  and onboarding checks after the holds. Do not treat this as a new Gallery
+  acceptance PASS or enable Boost services during menu validation.
+- Pending Library Edit after navigation (BG post-proof review, Section 12 lead,
+  2026-11-09; non-blocking): the committed-URL race fix retains a pending Edit
+  through a non-editable commit until the tab closes. A later HTTP(S) commit can
+  therefore open the editor. Consider dropping the request after the first
+  non-editable top-level commit other than `about:blank`. Keep the existing
+  private-context, Profile and liveness checks; verify both navigation paths
+  through the real Library Edit flow before changing this policy.
 - Private windows refuse Boosts. The App skips registration, script installation and live plans for OTR contexts; editor commands and Customize Page refuse. The same-parent Profile row and deliberate script-leak negative proof cover this boundary.
 - Profile deletion retires the registered Boost owner before folder removal. The store discards dirty state, cancels and drains writes, and stays closed for the process lifetime. B27 covers Settings delete → debounce → quit → relaunch with a deliberate disabled-retirement negative proof.
 
