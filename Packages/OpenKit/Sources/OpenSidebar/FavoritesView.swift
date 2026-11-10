@@ -358,11 +358,14 @@ final class FavoriteTileView: NSView {
         }
     }
 
-    /// The action owns its hit target; the collection handles tile selection and drags.
+    /// The action owns its hit target; the rest of the tile hits the tile itself. NSCollectionView
+    /// (macOS 27) finds the clicked item by hit-testing item views, so a tile that returns nil
+    /// is never selected or dragged. The tile does not handle mouse events: they travel up the
+    /// responder chain (tile → item → collection view), which does selection and drags.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let accessory, !accessory.isHidden else { return nil }
         let local = convert(point, from: superview)
-        return accessory.frame.contains(local) ? accessory.hitTest(local) : nil
+        if let accessory, !accessory.isHidden, accessory.frame.contains(local) { return accessory.hitTest(local) }
+        return bounds.contains(local) ? self : nil
     }
 
     override func isAccessibilityElement() -> Bool { true }
