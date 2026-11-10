@@ -336,11 +336,13 @@ committed).
 | P-4 `03xx-open-adblock-renderer-hook.patch` (revised 2026-10-26) | `cef` | `cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc` only | In `RenderFrameCreated` (`:41-50`), one line after the `CefRenderFrameObserver` is made: `new open_engine::OpenAdBlockRendererAgent(render_frame);  // Deletes itself.`, plus one include (§8.3). The agent is its own `content::RenderFrameObserver`. Budget: about +3/−0 lines. **No** `cef.mojom`, `frame_host_impl`, `frame_impl` or `render_frame_observer` change. **Shared owner patch:** Boost Step 4R also hooks this file (`RenderThreadStarted`, `RenderFrameCreated`; `docs/plans/boost-color-remap.md` §10.1). Whichever feature lands second adds its hunks to the existing owner patch. Prefer the feature-neutral name `0402-open-renderer-client-hooks.patch` for both |
 | P-5 (overlay, revised 2026-11-07) | `src` | `cef/include/cef_open_adblock.h`, `open/adblock/open_adblock_api.cc`, `open/open_libcef_sources.gni` | Six free functions (§11 Step 6); engine-apply regenerates translator outputs and build entries from the overlay header. No upstream patch or virtual-method change is needed |
 | P-6 `0005-open-adblock-cefsimple-smoke.patch` | `cef` | `cef/tests/cefsimple/simple_app.cc`, `cef/tests/cefsimple/simple_handler.cc/.h` | **Test-only.** Switch-gated harness (§13.1). Keep last in the series so it can be dropped without touching P-2…P-5 |
+| `0903-open-adblock-context-cache.patch` (as built, [#295](https://github.com/SergeSerb2/open/pull/295)) | `chromium` | `components/web_cache/browser/web_cache_manager.{h,cc}`, `components/web_cache/renderer/web_cache_impl.cc` | Per-process `ClearCache(true)` at navigation, with renderer coalescing and VLOG counts. The CEF owner installs a weak context callback; the service selects stricter-state triggers. Startup is exempt. See the renderer memory-cache errata. |
 
-No `patches/chromium/` entries. If implementation proves a Chromium-side
-hunk is required (for example a `BUILD.gn` dep that cannot live in
-`cef/BUILD.gn`), stop and add it as `patches/chromium/0001-…` with the
-fork-infra §8 round-trip proof, and note why in the PR.
+The original P-1…P-6 sketch assumed no Chromium patches. As built,
+Chromium 0902 reserves private world 7 and moves extension allocation to
+8 or above; 0903 adds the per-process navigation-delayed cache primitive
+above. Both follow the fork-infra §8 round-trip workflow. The checked-in
+series and manifests define the current patch names and order.
 
 Numbering note (2026-10-26): as built, Open's CEF series uses `03xx`
 names (`0310-open-adblock-service-owner.patch` for P-2,
@@ -3344,8 +3346,12 @@ it verified the #98 form) + the Swift manifest change. One PR.
 initialization they retain the latest values and queue one weak ready
 callback; closed contexts ignore mutations and report defaults. The Swift
 `AdBlockEngineAdapter` binds only when native `adBlockSupported` is YES,
-opens loaded/new Profiles after first paint, and configures late regular
-and OTR contexts. Store events drive configure, enabled, exclusions,
+opens existing loaded Profiles after first paint, and configures late regular
+and OTR contexts. Merged #287 seeds and configures fresh Profiles at context
+creation. Merged [#293](https://github.com/SergeSerb2/open/pull/293) adds the
+bounded native first-engine request hold; [#295](https://github.com/SergeSerb2/open/pull/295)
+invalidates renderer memory caches when blocking becomes stricter.
+Store events drive configure, enabled, exclusions,
 reload and closed transitions. Profile retirement remains the #241 path.
 The automation support override is for placeholder binding coverage only;
 the real-engine flow omits it and requires native support.
@@ -4719,6 +4725,25 @@ showed no first-paint slowdown against main `1a37e49a`: fresh medians main
 The combined native deadline/boundary proof is recorded in §10 rule 1 and
 `docs/adblock-design.md`; these App-only timing receipts remain historical.
 
+### Cold-start native erratum (merged #293, 2026-11-09)
+
+[#293](https://github.com/SergeSerb2/open/pull/293) closes the first-engine
+window left by #287. Enabled, non-excluded eligible subrequests wait while
+the first engine is pending, including an unpublished generation pointer.
+Main-frame navigation passes through. Each held request has its own
+1,500 ms deadline and the process has a 128-request bound; overflow and
+expired holds fail open. Invalid inputs end pending; an engine or verified
+zero-list generation completes the initial load. Existing-engine reloads
+keep serving with that engine. Context status exposes `awaiting_generation`,
+`cold_holds` and `cold_hold_max_ms`. Native deadline, 128/129 boundary and
+error/zero-list/cancellation receipts remain in §10 rule 1 and
+`docs/adblock-design.md`; the Step 9 repeat soak does not replace them.
+
+[#295](https://github.com/SergeSerb2/open/pull/295) therefore skips cache
+clears at initial enable and first protected engine install. Its accepted
+1.5-second fail-open exception remains. Later stricter-state changes use
+the scoped renderer clear described below.
+
 ### Section 13 lead decisions (2026-11-07)
 
 1. **Order.** Step 4 (with the §13.5.1 rulings) first. Then the control
@@ -5175,12 +5200,115 @@ pass. Retain the earlier loaded CPU receipts (12.756 ms at load1 48–50
 and 8.576 ms at 40–42) as historical attempts.
 N-18 currently proves hook reachability only: no HTTP/3
 endpoint establishes ready rejection. N-21 retains the accepted early-hints
-network-fetch gap (R-14). Step 5 cosmetics and Step 9 soak remain later work.
+network-fetch gap (R-14). This historical Step 4 receipt predates merged
+Step 5 (#292); the current Step 9 scope and remaining gaps are below.
 
+
+### Step 9 as built (2026-11-09)
+
+**Docs and soak branch:** `s13/step9-docs`, updated to main
+`697ad0d1980927f6b0c0fad4d51c34a3d630bd45` after merged #293 and #295.
+The lead released s13b as main's engine. Before any soak launch, strict
+built and distribution checks each passed 8/8; distribution SHA-256
+`891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67` and
+normalized code SHA-256
+`29475f28b9a09a1bde47516a7886d85c6123b39106b04e73a0c22e8dd1ad9384`
+match the rebuilt Debug App. All nine requested complete runs have PASS
+receipts. App adblock totals 312/312 rows, extensions/world 36/36, and CEF
+60/60 executable rows. Both 30k fixtures pass 30/30 repetitions each;
+C-9 stays reserved.
+
+One extra unchanged-main extensions attempt failed at the Dark Reader
+popup (`eval: no page for 7`). Its eight passing checks, popup FAIL and
+suite-wrapper FAIL remain retained. A fresh attempt passed all 12 rows.
+The popup-close cause is unconfirmed. Later 1Password welcome selection
+follows the intended harness order and does not prove a cause. Passive
+tracing on the three successful runs captured no external focus loss;
+observation overhead can affect a race. This qualifies the repeat soak;
+it does not establish failure-free behavior. See the open verification
+follow-up and `.re/s13/e5/STEP9-POPUP-FLAKE.md`.
+
+The lead's Step 9 scope is three complete runs each of the full App
+adblock suite in Chrome style, extensions with numeric and reciprocal
+page/iframe world proof, and the CEF cosmetic functional set. Each CEF
+run includes 20 executable rows, C-9 reserved, both 30,000-node fixtures
+10 times, and install-before-execute. Each complete suite takes its own
+screen lock and honors Section 16 priority. Foreground steals retain their
+raw INTERRUPTED attempt and cause, with at most three attempts per
+requested run. Other failures stop for inspection and remain FAIL in the
+record, even if an unchanged-source retry succeeds.
+This repeat suite scope does not claim the historical 30-minute continuous
+reload loop or a new quiet timing measurement. Existing performance
+receipts retain their original heads, loads and acceptance rulings. The
+lead runs the final full gate on final main after the last engine PR;
+this docs branch runs only `adblock-perf,adblock-catalog`.
+
+| Requested main soak | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| App adblock, full Chrome scope | PASS 104/104; 304.822 s; load1 11.760→9.326; attempt 1 | PASS 104/104; 297.300 s; load1 7.589→7.707; attempt 1 | PASS 104/104; 303.895 s; load1 17.726→14.613; attempt 1 |
+| Extensions and page/iframe world proof | PASS 12/12 + world proof; 30.773 s; load1 6.750→6.601; attempt 2 | PASS 12/12 + world proof; 30.361 s; load1 7.707→11.073; attempt 1 | PASS 12/12 + world proof; 31.176 s; load1 14.613→12.991; attempt 1 |
+| CEF 20 rows, both 30k fixtures and ordering | PASS 20/20; 30k initial/insertion 10/10 each; 127.390 s; load1 6.601→7.589; attempt 1 | PASS 20/20; 30k initial/insertion 10/10 each; 125.794 s; load1 11.073→17.726; attempt 1 | PASS 20/20; 30k initial/insertion 10/10 each; 125.246 s; load1 12.991→14.562; attempt 1 |
+
+Durations include launch and world audit, but exclude screen-lock waiting.
+All three load averages, exact commands, App/engine identities
+and every raw attempt are recorded in `.re/s13/e5/PR-BODY-step9.md` and
+`step9-soak.results.json`. Each successful App run restores defaults and
+leaves zero owned windows/processes; all launch world logs pass audit. Earlier
+#292 acceptance remains separate: full M5 gate 26/26 at `d15989f8`, eight
+quiet App pairs median paired delta −2.050 ms/−4.478%, and the once-only
+C-G1 p50/p99 106.5/233 µs (loaded PASS).
+
+**What ships.** Steps 4/6/8 provide native network/socket blocking, the
+CEF/OpenEngine API, Profile/OTR context binding, exclusions, shared engines,
+list reloads and teardown. Step 5 provides plain CSS filtering, specific
+sheets at document start and bounded generic observation after DCL/idle
+in private world 7. Extension isolated worlds start at 8. Step 7 supplies
+47 redirect resources and their source notices in verified generations.
+The App includes bundled seeds, the other-blocker warning, in-place
+integrity recovery, fresh-Profile seeding, and private-session exclusions
+with close/retire change notices. Site Control panel integration belongs
+to Section 12's separate #276.
+
+| Merged PR | Delivered behavior |
+|---|---|
+| [#241](https://github.com/SergeSerb2/open/pull/241) | Other-blocker warning, pinned bundled lists and Profile storage retirement. |
+| [#247](https://github.com/SergeSerb2/open/pull/247) | OpenEngine categories and production App adapter behind native support. |
+| [#262](https://github.com/SergeSerb2/open/pull/262) | Pinned uBO redirect resources and `_resources` generation entry. |
+| [#271](https://github.com/SergeSerb2/open/pull/271) | Native network proxy, CEF/OpenEngine control API and shared immutable engines. |
+| [#282](https://github.com/SergeSerb2/open/pull/282) | Real profile-open p95 and in-place Update Now integrity recovery. |
+| [#287](https://github.com/SergeSerb2/open/pull/287) | Seed/configure fresh Profiles at context creation. |
+| [#291](https://github.com/SergeSerb2/open/pull/291) | Close/retire publication notices and session-only private exclusions. |
+| [#292](https://github.com/SergeSerb2/open/pull/292) | Cosmetic filtering, private world reservation and full parser-corpus modes. |
+| [#293](https://github.com/SergeSerb2/open/pull/293) | Bounded native first-engine request hold, unpublished-generation waiting and native hold counters. |
+| [#295](https://github.com/SergeSerb2/open/pull/295) | Context-scoped renderer MemoryCache clearing on stricter state; startup clears skipped. |
+
+**Open limits.** The merged cold-start hold intentionally fails open
+after its 1,500 ms per-request deadline or at the 128-request process-wide
+queue bound; it does not delay main-frame navigation. R-14 accepts network fetches for early-hints preloads, including cookies and
+possible cache population; N-21 only blocks the page's request and needs
+a valid EarlyHints event. N-18 proves WebTransport hook reachability,
+not HTTP/3 ready rejection or absence of a server session. Scriptlets,
+procedural selectors, `:style()` and `:remove*` remain post-v1. Parse
+failure counts and an enforced per-build parse deadline remain open;
+R2-8's feature receipt is still hand-written. Independent idle PA growth
+has no attributed owner. The crate's roughly 37 MiB rule data/index
+restructure and throttle interception are post-v1. Cross-Profile C-G2
+contention and the original quiet wall-max proof remain separately scoped;
+this soak does not create those measurements.
+
+**Licensing check.** [The release inventory](../release/licenses.md)
+still matches the shipped components: adblock-rust 0.8.11 is MPL-2.0;
+47 uBO redirect resources and their original source/notices are GPL-3.0;
+EasyList/EasyPrivacy ship unmodified with headers and attribution under
+the documented GPL-3.0-or-later OR CC-BY-SA-3.0 alternatives. No scriptlet
+templates ship. U-6's written license choice/review, U-8's public exact
+source location and complete Chromium credits remain release gates.
+This check changes no dependency, asset, license text or public-release
+approval.
 
 ### Step 5 as built (2026-11-09, generic observer after DCL)
 
-**Merged candidate: `s13/step5-pr` (PR pending lead creation); ready for lead PR creation and review.**
+**Merged in [#292](https://github.com/SergeSerb2/open/pull/292), main `3b45f509`.**
 Product source `4ce7facb234cb96d0abdbf9fd730478ddf511198` includes main
 engine PR #266 (0106), merged through `cbe13bfa`. Independent patch 0106
 was moved first in numeric Chromium series order; patch contents and the
@@ -5189,7 +5317,10 @@ packaging and remains in the receipts. The rebuilt s13b engine passes
 owned objects/targets, scoped GN/checkdeps, full CEF and strict 8/0/0.
 Fresh distribution, App Debug and normalized fingerprint pass. Code SHA:
 `5f65f8e8495fa03508987d929971cb073f779d84927b8e4f3444c16c2a15be5b`.
-Later commits update evidence only. No unit tests or desktop input.
+Before merge, main overlap kept #287 fresh-seed and #291 lifecycle/private-session
+flows alongside cosmetics/world rows. App Debug and fingerprint passed; full
+adblock 104/104 and extensions/world 12/12 passed at `ee13e40e`. The lead
+retained the 26/26 full gate at `d15989f8` under TANDEM 5a. No unit tests or desktop input.
 
 **Attribution and timing change.** The first six quiet pairs were a real
 regression: paired median +1.45 ms, 5/6 slower; condition medians 38.15 vs
@@ -5588,6 +5719,11 @@ OTR. All build and runtime acceptance rows still require real receipts.
 
 
 ### Renderer memory-cache control errata (2026-11-09)
+
+Merged in [#295](https://github.com/SergeSerb2/open/pull/295), main `697ad0d1`.
+Section 12's intermittent exclusion reloads were a renderer MemoryCache
+bypass, not native Settings publication ordering. Its first Off action
+at `ready=false` was correctly refused by the disabled Settings controls.
 
 A normal reload can reuse a fresh script from Blink's renderer MemoryCache.
 That path makes no URLLoader request, so resetting request factories alone
