@@ -185,6 +185,10 @@ def run(factory, results, tmp, h):
             and s.get('style',{}).get('colorCount')==1 and bool(s.get('style',{}).get('keyColor')), data, pending)
         gate('handoff_done', lambda s: not s['active'] and not s['dim']['exists'] and s['screen']=='done', final, handoff)
         results['steps_browser_key'] = dict(ok=any(w.get('key') for w in app.call('windows') if w.get('class')=='BrowserWindow'), load=os.getloadavg())
+        # Cover this whole wait with the existing foreground guard. Welcome
+        # resumes its current card after occlusion; an interrupted playlist
+        # cannot prove the uninterrupted [1,2,3,4] sequence below.
+        app.begin_timing('Welcome playlist after first-run handoff')
         until(lambda: app.call('welcome')['playlist']=='stopped' and not app.call('welcome')['animating'], timeout=38)
         stopped = app.call('welcome')
         gate('welcome_playlist_ends', lambda s: s.get('playedCards')==[1,2,3,4] and not s.get('animating')
