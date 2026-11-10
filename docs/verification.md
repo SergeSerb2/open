@@ -82,24 +82,33 @@ Performance budgets are never retried or relaxed by the runner.
 
 ### Display and timer portability (Section 16)
 
-Visual references use the exact key `scale-<native backing scale>-icc-<SHA256>`.
+Visual references use the exact key
+`scale-<native backing scale>-icc-<SHA256>-mode-<width>x<height>-pixels-<width>x<height>-mhz-<refresh>`.
+The mode records logical and physical dimensions and the refresh rate in integer
+millihertz. Unknown modes fail without fallback, even when scale and ICC match.
 The ICC digest covers the color profile of the render host's screen. The host
 is never ordered on screen. Its screen is explicit, so selection does not use
-the requested synthetic render scale, a hostname, or a machine name. Both scale
-and the full profile digest must match. Each renderer also checks its actual
+the requested synthetic render scale, a hostname, or a machine name. Scale, the full profile digest, and the complete mode must match. Each renderer also checks its actual
 host window against the selected key before drawing. A display change fails.
 An unknown key fails with its key and a
 recording instruction. There is no fallback and no automatic recording.
 
 | Display | Native scale | ICC SHA-256 | Reference |
 |---|---:|---|---|
-| M5 AW2726DM | 1 | `b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43` | Original PNGs and original color caps |
-| M1 built-in | 2 | `b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856` | New exact 2x PNGs and recorded color caps |
-| M5 built-in, expected from its installed Color LCD profile | 2 | `689713e234c3a538d0c88d0ad0693b98d983cee00aefa50522cc6d9d001062fa` | Unknown key: FAIL; display rerun pending (lead/user) |
+| M5 AW2726DM, 2560×1440 pixels/points, 240 Hz | 1 | `b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43` | Original PNGs and original color caps |
+| M1 built-in, 1512×982 points / 3024×1964 pixels, 120 Hz | 2 | `b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856` | New exact 2x PNGs and recorded color caps |
 
-The M5 built-in key is an offline profile inventory, not a runtime selection
-proof. No display setup was changed. Its actual selection and render proof are
-**display rerun pending (lead/user)** and are not a merge requirement.
+The M5 reference is the external AW2726DM (user decision, 2026-11-10 16:19).
+The M5 lid stays closed. The M1 reference remains its built-in 2x panel.
+Check and record the mode before each M5 on-screen run. The temporary display
+and strict-performance deferrals expired at the lead's “M5 panel ready” ruling.
+
+Schema 2 binds the existing exact scale/ICC references to these modes. It keeps
+the PNG hashes and all color caps unchanged. `assetKey` names the retained M1
+PNG directory; it does not select a display or provide fallback. For paired
+sidebar comparisons against unchanged schema-1 main, the baseline binary gets
+its committed scale/ICC key. The parent checks the complete mode before and
+after every pair. The candidate renderer checks the complete key itself.
 
 `space-legacy` and editor P1 retain all six original PNGs. The M5 renders at
 scale 1 and requires the same exact PNG bytes. The new M1 references render at
