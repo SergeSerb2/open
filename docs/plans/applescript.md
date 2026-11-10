@@ -16,8 +16,8 @@ How to use this plan:
    keep the `OpenScripting` types in this plan and adapt only the thin app-side adapter in §7.
    Do not redesign the dictionary to fit a draft engine API.
 4. No unit tests. Verify with the `osascript` checks in §11 against the real app, per AGENTS.md rule 6.
-5. Never launch `/Applications/Arc.app`. Never read Arc script results from a running Arc.
-   You may read `/Applications/Arc.app/Contents/Resources/Arc.sdef` read-only to confirm a code.
+5. Arc runtime checks require a lead-assigned capture session under AGENTS.md rules 4–5.
+   Outside that session, read only static evidence. You may read `/Applications/Arc.app/Contents/Resources/Arc.sdef` read-only to confirm a code.
    Do not copy that file into this repo. Write `Open.sdef` from §3 of this plan.
 
 ---
@@ -1691,7 +1691,7 @@ No claim about Little tabs (A15) or incognito windows beyond what §11 records.
 
 | ID | Question | Blocks | Default assumed in this plan |
 |---|---|---|---|
-| Q1 | Does Arc's `execute` return the JS completion value stringified, and what happens on a JS error? (§10.4 Q1; needs a user script run against Arc — agents must not launch Arc.) | Exact `execute` text forms | §6.6 conversion table; JS errors error 1013. If a user later runs Arc and reports a different form (for example errors returned as text), change §6.6 step 4 only. |
+| Q1 | Does Arc's `execute` return the JS completion value stringified, and what happens on a JS error? (§10.4 Q1; needs an Arc script run by the user or a lead-assigned capture agent under AGENTS.md rules 4–5.) | Exact `execute` text forms | §6.6 conversion table; JS errors error 1013. If a user later runs Arc and reports a different form (for example errors returned as text), change §6.6 step 4 only. |
 | Q2 | Does Arc's `make` support creating `space` objects? (§10.4 Q2) | `make new space` | Unsupported (error 1009, §5.7). The sdef does not restrict `new`; Open restricts by behavior. |
 | Q3 | Where does a tab land when its `location` is set — start, end, or original position? (§10.4 Q3) | `location` setter ordering | End of the destination list (§5.5). One-line change if Arc evidence arrives. |
 | Q4 | Are Little tabs model tabs in a hidden Space, or separate window state? (M4 owns Little Arc.) | A15 full pass | `ScriptHost.makeLittleTab` hook returns nil → error 1011 until M4 decides. The hook shape does not change. |
