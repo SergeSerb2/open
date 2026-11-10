@@ -1228,8 +1228,9 @@ key, Gallery is an app-level regular-Profile Library command, matching View
 Boosts (F3, lead ruling). Factory-level Library readiness is a shared follow-up
 ([F5](../followups.md#section-12-boost-app-runtime-limits)). Targeted real-App
 Gallery flows and eight deliberate source regressions pass.
-Restored Debug/Release and the complete Gallery run pass on engine 34619927;
-the final main merge, full gate and lead review remain pending, tracked in
+Debug/Release, the complete Gallery run (14/14) and final full gate (25/25)
+pass on engine 891c2353 after merging main d279ae85. Lead source review is
+approved. Shared readiness and pending-Edit policy remain follow-ups, tracked in
 [Gallery acceptance](../boost-gallery.md).
 
 ---

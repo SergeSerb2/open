@@ -56,34 +56,84 @@ The existing command registry and action title are unchanged. The change is
 outside the command bar's text, drawing and keystroke code, but the lead's required TANDEM
 §4c/§4d timing qualification still applies.
 
-## Targeted validation, 2026-11-09
+## Final validation, 2026-11-09
 
-PR #279 remains a draft. Under LEAD-UPDATE items 29–31, no main merge or final
-full gate runs until the lead sends “your turn”, after #276, #278 and #277 merge.
-The last merged main is `3fb0645c`; App build head is `61ace5ec`.
-Final flow head is `c9e50b6dcc0069483e9fce7018e2c762e51d1386`; only Python fixture setup changed after the App builds.
+Main `d279ae85e0b1edad3cd060e5eb0ed083eb10b0f7` merged cleanly in `53803fd3`.
+Validation code/docs head: `3a3e1730600e8592592e1c66d9d00aaba4f32456`. The final engine view is main
+`627745e0`, framework SHA-256 `891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67`. The built App's embedded code hash and
+UUID match that distribution. Active fingerprint checks use the new SHA;
+no product gate hard-codes the old fingerprints. No engine file changed here.
 
-Earlier targeted functional proofs and all eight deliberate source regressions
-used engine `8e8a461c8cf3242e5fbcc3cc6ebe706a6a8ad8054a1e077830bc7094048295b1`.
-They stand under item 31: #266 changes no App, OpenKit or web-content code.
-Restored Debug, Release and the final Gallery run use the updated main engine
-view, SHA-256 `346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd`.
-No engine file changed in this PR. The final gate must merge main `7ae68e4a`
-or later, rebuild on that engine, audit keys, and update fingerprint gates.
-Any paired startup/launch comparison must use the same engine on both sides.
-No live BG gate hard-codes the old fingerprint.
+| Check | Result | Receipt / 1-, 5-, 15-minute load |
+|---|---|---|
+| Debug | PASS | 574.801 s; 70.24/36.56/21.31 → 45.93/44.34/32.04 |
+| Shared keys | PASS | 20 distinct settings-state keys, zero duplicates; one full enabled-key literal in OpenModel |
+| Release | PASS | 442.192 s; 45.93/44.34/32.04 → 20.21/31.41/30.69 |
+| Gallery | PASS 14/14 | 118.064 s; 19.90/30.21/30.28 → 11.83/24.02/27.82; zero focus interruptions; owned cleanup PASS |
+| Final full verify-all | PASS 25/25, zero FAIL/SKIP/INTERRUPTED | 1204.366 s; 9.77/22.36/27.09 → 21.35/34.94/30.75 |
+| commandbar-render, strict | PASS 151/151 | CPU p95 5.18 ms; completion +0.149 ms; load 57.1/34.5/27.1; no quiet/paired rerun needed under §4c/§4d |
 
-Builds ran sequentially under outer `/tmp/s12-build.lock`, then the shared
-`s12-heavy.sh high` wrapper, with
+Debug → key audit → Release ran sequentially under `/tmp/s12-build.lock`, then
+`s12-heavy.sh high`. The full gate ran through `s12-heavy.sh high` without the
+build lock, per item 34. Every build/check used
 `OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main`. Only this checkout's
-superseded build outputs were removed after saving logs. Each App suite takes
-one screen-lock invocation and waits outside all locks for the priority flag.
-Native Settings and Site Control checks use the repository screen worker.
-No unit tests, computer use, Arc launch, new worktree or engine-root edits.
+superseded build outputs were removed after preserving logs. The detached
+build worker survived the system cancel; its Debug, key-audit and Release
+receipts all exited 0. Its final engine manifest and completion footer were
+observed after exit; no duplicate build ran.
 
-Receipts, source diffs, logs and synthetic captures are retained in
-`.re/s12-bg/resume-20261109-0830/` in the project root. Elapsed receipts include
-lock queue time; loads below are 1/5/15-minute averages.
+Each App suite used the screen lock and respected the shared priority flag.
+Native verifier checks used the repository screen worker. Native rest, hover
+and resized Gallery captures were inspected again. Every Gallery row, including
+BG1–BG3, both caller Profile cases, the key-Library case, layout, global-off,
+private refusal and real keys passed on the new engine. No unit tests, computer
+use, Arc launch, new worktree or engine-root edits.
+
+The final gate table follows. `import-arc` requires `--with-arc-data` and is not
+selected by the normal full gate; no personal Arc data was needed.
+
+| Check | Result | Seconds |
+|---|---|---|
+| build | PASS | 112 |
+| commands-demo | PASS | 6 |
+| roundtrip | PASS | 1 |
+| space-legacy | PASS | 2 |
+| space-editor | PASS | 87 |
+| space-pad-compare | PASS | 3 |
+| suggest-check | PASS | 27 |
+| commands-dump | PASS | 0 |
+| route | PASS | 16 |
+| favicons | PASS | 11 |
+| media-demo | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 5 |
+| profiles | PASS | 4 |
+| settings-preview | PASS | 343 |
+| sidebar-render | PASS | 113 |
+| sidebar-compare | PASS | 125 |
+| commandbar-render | PASS | 35 |
+| features-render | PASS | 91 |
+| extensions-render | PASS | 7 |
+| sitecontrol-render | PASS | 171 |
+| onboarding-render | PASS | 29 |
+| boosts | PASS | 4 |
+| verify-secrets-fixture | PASS | 9 |
+
+
+Full receipts, logs, engine manifests and synthetic Gallery captures are in
+`.re/s12-bg/final-20261109-1905/` in the project root. Both App builds have zero
+errors and zero warnings in the new Gallery files. Existing engine, package and
+shared-automation warnings remain in the saved App build logs; the full gate's
+OpenKit Release build is warning/error free. Elapsed receipts include lock wait.
+
+## Earlier targeted validation
+
+Earlier receipts remain in `.re/s12-bg/resume-20261109-0830/` and
+`.re/s12-bg/gate-20261109/`. The functional proofs and eight deliberate source
+regressions on engine `8e8a461c` stand under the lead's item 31 ruling. The
+restored earlier builds and Gallery rerun used engine `34619927`. These are
+historical receipts; the new-engine builds, Gallery and full gate are above.
 
 | Check | Result | Evidence / load |
 |---|---|---|
@@ -99,19 +149,19 @@ lock queue time; loads below are 1/5/15-minute averages.
 | boosteditor | PASS 27/27 | Run end 11.25/9.48/9.20; cleanup PASS, no focus interruption |
 | commandbar + live Settings | PASS 77/77, including 16 settings_ rows | Run end 13.28/10.20/9.47; cleanup PASS |
 | incognito, Chrome style | PASS 31; native 2x capture DEFERRED on 1x display | Suite load 23.72/13.74/10.79; cleanup PASS, no focus interruption |
-| Full verify-all | NOT RUN | Lead's explicit merge-order hold |
+| Full verify-all | NOT RUN in this earlier phase | Former merge-order hold; final gate above is complete |
 
 The earlier limited verifier at product code `749da3a0` passed 5/5 selected rows:
 build, commands-demo (326/326), suggest-check (56/56), commands-dump (0/0/0;
 same 11 allowed-missing), and commandbar-render (151/151). It was not a full gate.
-Final builds have no errors and no warning in the new Gallery files. Existing
+These earlier builds have no errors and no warning in the new Gallery files. Existing
 engine nullability/incomplete-implementation and package/shared-automation
 warnings remain; source-warning audits and full build logs are retained.
 
 ## Real-App proof
 
 `tools/e2e/engine_e2e.py --only boost-gallery --config Debug
---engine-sha256 346199271164fc90ceff0535f171be279635645e94093ec870e0cb704f2dc5dd
+--engine-sha256 891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67
 --stop-on-app-death` drives native menus, real hosted Library/Settings controls,
 editor controls and pages. Keys use `route='app'` through
 `OEApplication.sendEvent`. The bounded `AutomationBoostGallery.swift` traversal
@@ -170,7 +220,7 @@ The first combined final run passed 13 rows including resize, then the focus
 helper incorrectly required a non-empty grid after Delete removed both cards.
 The helper now requires the actual layout control for that focus setup; other
 card/grid assertions are unchanged. The raw failure and cleanup PASS remain.
-The corrected complete suite passes all 14 rows.
+The corrected complete suite passed all 14 rows; the new-engine final run also passes 14/14.
 
 The initial focus check wrongly expected Library Cmd+L to open a browser bar.
 Source tracing and real List/Gallery parity prove the existing inert path;
@@ -184,8 +234,9 @@ observation receipts remain available.
 
 F3's app-level regular-Profile parity is accepted. F5's shared factory readiness
 policy remains in `docs/followups.md`. The lead approved F1/F2/F4/F6 source at
-`749da3a0`; later automation and the shared Library Edit fix still need lead
-review. The final main merge, rebuild and full verify-all wait for “your turn”.
+`749da3a0`, then the automation and shared Library Edit fix at `6986ccda`
+(12:35). The pending Edit after a non-editable navigation is a non-blocking
+follow-up in `docs/followups.md`. The final merged-head gate is complete.
 
 Sharing, online browsing/install and preview generation remain out of scope.
 Arc Gallery's shared-browsing role remains a guess in the feature-gap audit;

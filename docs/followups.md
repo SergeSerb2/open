@@ -371,8 +371,10 @@ User-operated Arc captures are still needed for the editor layout and destinatio
   2026-11-09; targeted Settings and Site Control render checks pass. Eight
   deliberate source regressions are confirmed; Boost editor, command bar,
   Settings and Chrome-style incognito suites pass. Restored Debug/Release and
-  the complete Gallery run pass on engine 34619927. Native incognito 2x capture,
-  the final merge-order gate and lead review remain pending. See
+  the complete Gallery run passed on engine 34619927. The final main d279ae85
+  merge, Debug/Release, Gallery 14/14 and full gate 25/25 pass on engine
+  891c2353; lead source review is approved. Native incognito 2x capture remains
+  a display follow-up. See
   [Gallery acceptance](boost-gallery.md).
   P7 still blocks selector picking.
 - Library command readiness (BG review F5, Section 12 lead, 2026-11-09):

@@ -134,7 +134,7 @@ preserves layout and Profile. Both layouts use the same search, Profile picker
 and sole `app.stores.boosts` owner. Gallery cards use the existing
 Boost glyph and brand colour, with name, site, enable switch, Edit and Delete.
 They do not request page snapshots or load pages for previews. See
-[local Gallery acceptance](boost-gallery.md) for targeted results and the final merge-order gate.
+[local Gallery acceptance](boost-gallery.md) for the final merged-head gate and retained targeted results.
 Library Boosts uses the same stores and a Profile picker, with Edit, Rename,
 Delete, enable switches, the empty state and global Turn On action. Library Rename
 and enable changes update an open editor immediately without adding an undo step.
