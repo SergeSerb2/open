@@ -123,7 +123,18 @@ only. Snapshots, reload and DevTools use OpenEngine. Cmd+Z/Shift+Cmd+Z enter via
 OEApplication before page edit routing and use the editor's own undo stack.
 
 `new-boost`, `edit-boost`, `new-legacy-boost`, Customize Page and `view-boosts`
-are wired. Legacy opens Code mode. Gallery is disabled.
+are wired. Legacy opens Code mode. File ▸ Boost Gallery and the command-bar action
+open the same Library window with a local card grid. The command is disabled in
+private windows and when `open.advanced.enableBoosts` is off. `view-boosts` opens
+the list. The in-window List/Gallery control changes layout without changing
+Profile. Only the key Library keeps its Profile picker; otherwise the invoking
+browser or editor supplies its Profile, even if the Library is already open
+on another Profile. `view-library`
+preserves layout and Profile. Both layouts use the same search, Profile picker
+and sole `app.stores.boosts` owner. Gallery cards use the existing
+Boost glyph and brand colour, with name, site, enable switch, Edit and Delete.
+They do not request page snapshots or load pages for previews. See
+[local Gallery acceptance](boost-gallery.md) for the final merged-head gate and retained targeted results.
 Library Boosts uses the same stores and a Profile picker, with Edit, Rename,
 Delete, enable switches, the empty state and global Turn On action. Library Rename
 and enable changes update an open editor immediately without adding an undo step.

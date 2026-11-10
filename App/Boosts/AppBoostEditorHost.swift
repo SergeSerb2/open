@@ -48,8 +48,7 @@ final class AppBoostEditorHost: BoostEditorHost {
   func reload(tabID: ItemID) { boosts.factory(for: tabID)?.hosts[tabID]?.reload() }
   func currentURL(tabID: ItemID) -> URL? { boosts.factory(for: tabID)?.hosts[tabID]?.content.url }
   func showBoostsLibrary(profileID: ProfileID) {
-    boosts.app.settingsPresenter.showLibrary(section: .boosts)
-    boosts.app.settingsPresenter.library?.historyProfileID = profileID
+    boosts.app.settingsPresenter.showLibrary(section: .boosts, boostsProfileID: profileID)
   }
   func browserWindowFrame(tabID: ItemID) -> NSRect? { boosts.factory(for: tabID)?.window?.frame }
 }

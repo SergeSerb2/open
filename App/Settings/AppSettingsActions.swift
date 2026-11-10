@@ -78,7 +78,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     settings.profiles.beginCreate(sourceSpace: sourceSpace)
     show(pane: .profiles)
   }
-  func showLibrary(section: LibrarySection? = nil) {
+  func showLibrary(section: LibrarySection? = nil, boostsPresentation: BoostsPresentation? = nil, boostsProfileID: ProfileID? = nil) {
+    // Only the key Library owns its picker. Browser/editor requests use their
+    // explicit Profile even when the Library is already visible on Boosts.
+    // A general Library open changes neither layout nor Profile.
+    let preservesBoostsProfile = libraryPresenter?.window?.isKeyWindow == true
     app.downloadsCenter.refreshFiles()
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
@@ -91,7 +95,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)
-    if let library, (section ?? library.section) == .history,
+    if let library, section == .boosts {
+      if let boostsPresentation { library.boostsPresentation = boostsPresentation }
+      if !preservesBoostsProfile, let profileID = boostsProfileID ?? app.model.defaultProfile?.id,
+        app.model.profile(id: profileID) != nil {
+        library.historyProfileID = profileID
+      }
+    }
+    if let library, section == .history,
       libraryPresenter?.window?.isVisible != true {
       library.historyProfileID = app.frontStandardWindowController?.context.focusedSpace?.profileID
         ?? app.model.defaultProfile?.id ?? library.historyProfileID

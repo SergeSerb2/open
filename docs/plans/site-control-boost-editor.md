@@ -77,7 +77,8 @@ engine extension state. This plan adds no second store for any of those values (
 ## Non-goals
 
 - Boost sharing, install links, the online Boost Gallery, "Report Boost", preview images, Boost
-  authors (BO-6; accounts are out of v1 scope). `boost-gallery` stays disabled.
+  authors (BO-6; accounts are out of v1 scope). `boost-gallery` opens only the
+  local Library card grid; see [Gallery acceptance](../boost-gallery.md).
 - The design of the engine color remap. It is a v1 step with its own RE study and engine plan
   (Step 4R, Q12 ruling). This plan only fixes its place in the order and its gates. #103 ships the
   existing CSS-filter runtime as an interim.
@@ -531,7 +532,7 @@ unless another frame is cited. The editor is always light; there are no dark tok
 | `new-boost` | Creates a new Boost (§3.7) and opens the editor in simple mode. |
 | `edit-boost` / "Customize Page…" | Opens the first matching Boost in matcher order; if none, behaves as `new-boost`. |
 | `new-legacy-boost` | As `new-boost`, then code mode on the CSS tab (Open choice). |
-| `boost-gallery` | `isCommandEnabled` returns `false`. |
+| `boost-gallery` | Local Library ▸ Boosts card grid. Disabled in private windows and while Boosts are globally off. |
 | Bound tab | The editor is bound to the tab (and pane) it opened for. Switching tab, Space, or window to another tab closes it (Open choice). Navigating the bound tab to a URL the Boost does not match keeps it open with the "Not active" banner (§4.3). |
 | Close | Done (header), Esc (§4.12), the bound tab closes, or the profile closes. Close exits Zap, flushes pending state with `BoostStore.saveNow` (lead round 2), and deletes the Boost if it was created in this session and is still empty. |
 | Incognito | The four open commands are disabled (D-10). |
@@ -1213,13 +1214,26 @@ the render harness passes fakes).
 | Extension picker key binding (extensions-UI plan, Q11) | `siteControl.present(anchor: §3.6.1 rule, tabID: focused tab, mode: .extensionPicker)` |
 | `.customizePage(tabID:)` | `edit-boost` for that tab |
 | `new-boost`, `edit-boost`, `new-legacy-boost` | §4.1 |
-| `view-boosts` | Library window, section `boosts` |
-| `boost-gallery` | disabled |
+| `view-boosts` | Library window, section `boosts`, explicit list presentation |
+| `boost-gallery` | Same Library window, section `boosts`, gallery presentation; preserve the Library picker only if Library is key, otherwise use the invoking browser/editor Profile even when Library is already open |
 | Tab selection change, Space switch, window resign main | Close the panel; close the editor if its bound tab is no longer shown |
 | Panel open/close; matcher result for the selected tab | Set the URL field's `siteControlState` (§3.10): `rest`, `open`, `boosted`, or `openBoosted` (enum declared in OpenSidebar next to `URLFieldView`, because OpenSidebar must not import OpenSiteControl) |
 
-`isCommandEnabled` returns false for the Boost commands in incognito windows and on non-http(s)
-pages.
+`isCommandEnabled` returns false for the Boost commands in incognito windows.
+Editor commands also refuse non-http(s) pages. The local Gallery needs no page,
+but refuses the global Boosts-off state.
+The Boosts List/Gallery control changes layout in the Library itself.
+`view-library` changes neither Profile nor presentation. With no browser window
+key, Gallery is an app-level regular-Profile Library command, matching View
+Boosts (F3, lead ruling). Factory-level Library readiness is a shared follow-up
+([F5](../followups.md#section-12-boost-app-runtime-limits)). Targeted real-App
+Gallery flows and eight deliberate source regressions pass.
+Debug/Release, the complete Gallery run (14/14) and final full gate (25/25)
+pass on engine 891c2353 after merging main d279ae85. Lead source review is
+approved. Later main a5987e02 merged cleanly; Debug/key audit, Gallery 14/14,
+command bar/live Settings 77/77 and Settings Preview pass under rule 5a. Shared
+readiness and pending-Edit policy remain follow-ups, tracked in
+[Gallery acceptance](../boost-gallery.md).
 
 ---
 
