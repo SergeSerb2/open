@@ -186,6 +186,27 @@ public struct ArcImporter {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.malformedSidebar }
         return root
     }
+    /// StorableSidebar encodes a dictionary as alternating identity/value pairs.
+    /// The global key is {"global":{}}; Little Browser keys carry their own ID.
+    /// Pair order changes as Arc opens windows, so it cannot select the sidebar.
+    static func globalSidebar(in root: [String: Any]) throws -> [String: Any] {
+        guard let sidebar = root["sidebar"] as? [String: Any],
+              let containers = sidebar["containers"] as? [Any],
+              !containers.isEmpty, containers.count.isMultiple(of: 2) else {
+            throw ImportError.malformedSidebar
+        }
+        var global: [String: Any]?
+        for index in stride(from: 0, to: containers.count, by: 2) {
+            guard let key = containers[index] as? [String: Any], key.count == 1,
+                  let payload = key["global"] as? [String: Any], payload.isEmpty else { continue }
+            guard global == nil, let holder = containers[index + 1] as? [String: Any] else {
+                throw ImportError.malformedSidebar
+            }
+            global = holder
+        }
+        guard let global else { throw ImportError.malformedSidebar }
+        return global
+    }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
     static func profileReferenceKey(_ raw:Any?)->String {
         if let value=raw as? String {return value}
@@ -211,7 +232,8 @@ public struct ArcImporter {
     public func spaceMappingLabels() throws -> [String] {
         // Mapping labels need no cache I/O; the caller can be on the UI actor.
         let root=try readSidebarRoot()
-        guard let sidebar=root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,let holder=containers[1] as? [String:Any],let spaces=holder["spaces"] as? [Any] else {throw ImportError.malformedSidebar}
+        let holder = try Self.globalSidebar(in: root)
+        guard let spaces=holder["spaces"] as? [Any] else {throw ImportError.malformedSidebar}
         return stride(from:1,to:spaces.count,by:2).compactMap {index in
             guard let object=spaces[index] as? [String:Any] else {return nil}
             let name=(object["title"] as? String).flatMap{$0.isEmpty ? nil:$0} ?? "Untitled Space"
@@ -429,10 +451,8 @@ public struct ArcImporter {
     public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:], includeArchive: Bool = true) throws -> ArcImportResult {
         let parsed = try parsed ?? readSidebar()
         let root = parsed.root
-        guard let sidebar = root["sidebar"] as? [String: Any],
-              let containers = sidebar["containers"] as? [Any], containers.count >= 2,
-              let holder = containers[1] as? [String: Any],
-              let itemsArr = holder["items"] as? [Any],
+        let holder = try Self.globalSidebar(in: root)
+        guard let itemsArr = holder["items"] as? [Any],
               let spacesArr = holder["spaces"] as? [Any] else {
             throw ImportError.malformedSidebar
         }
@@ -1029,7 +1049,7 @@ public struct ArcImporter {
                             defaultSpaceID: SpaceID, report initial: ImportReport) -> ArchiveReadResult {
         var report = initial
         var archiveRecords: [ArchivedTabRecord] = []
-        let holder = ((parsed.root["sidebar"] as? [String: Any])?["containers"] as? [Any])?.dropFirst().first as? [String: Any]
+        let holder = try? Self.globalSidebar(in: parsed.root)
         let items = holder?["items"] as? [Any] ?? []
         var liveArcIDs = Set<String>()
         for index in stride(from: 0, to: max(0, items.count - 1), by: 2) {
