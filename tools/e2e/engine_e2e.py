@@ -5724,7 +5724,8 @@ def profiles_checks(factory, results, tmp, config):
         """The launch's layout step alone: the app exits before the engine
         starts, so the moved files are exactly what was on disk."""
         before = open(browser_json, "rb").read()
-        code, text = run_binary(label, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1")
+        code, text = run_binary(label, OPEN_AUTOMATION_LAYOUT_ONLY="1")
+        assert code == 0 and "Open: automation layout-only complete" in text, (code, text[-1000:])
         return code, text, open(browser_json, "rb").read() == before
 
     def migrated_layout():
