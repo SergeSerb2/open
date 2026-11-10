@@ -826,6 +826,8 @@ Module: bundle `ARC_SadTab.bundle`; types `SadTab`, `SadTabView`, `SadTabHostVie
 
 - **ST-1 — A crashed or failed web content shows the Sad Tab page.** The host view replaces the dead web content with Arc's error page and offers its actions (`SadTabAction`; string "Action to retake capture." is Capture, not Sad Tab). Guess: actions are Reload and Close, following Chromium's sad-tab model. Open: same replacement behavior with its own page; exact copy and buttons need a runtime screenshot.
 
+  Open implementation: `OpenFeatures/SadTabView.swift` draws an SF Symbol and uses Open's own copy, "This page crashed" / "Something went wrong while showing this page.", with Reload and Close Tab. This artwork, copy, and action choice are **Open's design, a parity guess until an Arc capture lands**. `WebContentContainer` replaces each crashed pane independently; Peek uses the same view in its own overlay. Reload keeps the existing host, model tab ID, URL, history, and Chromium tab identity. See `docs/verification/sad-tab.md` for the allowed checks and deferred renderer-termination rows. Little Open uses a separate standalone surface, so this shared-container implementation does not cover it.
+
 ### 9.11 URL inputter (command-bar URL field)
 
 Module: bundle `ARC_URLInputter.bundle`; types `URLInputter`, `URLInputterView`, `URLInputterFeature`, `URLInputterSubmitButton`, `URLInputterSearchOutput`; files `URLInputter/FaviconProvider.swift`, `URLInputter/URLInputSearchClient.swift`, `URLInputter/URLInputterReducer.swift`.

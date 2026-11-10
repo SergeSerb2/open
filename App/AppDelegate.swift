@@ -753,6 +753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     littleOpenCoordinator?.closeAll()
+    downloadsCenter.closeDetachedPages()
     engineReady = false
     refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
@@ -797,6 +798,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   private func downloadOwner(_ download: OEDownload) -> EngineWebContentHostFactory? {
     if let page = download.webContent {
+      if let host = littleOpenHosts.values.first(where: { $0.content === page }) { return host.owner }
       return hostFactories.values.first { $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } }
     }
     return frontWindowController.flatMap { hostFactories[$0.windowID] }

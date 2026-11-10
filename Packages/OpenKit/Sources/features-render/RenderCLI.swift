@@ -2,7 +2,7 @@ import Foundation
 struct CLIError: Error, CustomStringConvertible { var description: String }
 enum RenderCLI {
     static let usage = """
-    features-render render --scene little-bar|little-page|little-picker --out FILE [--scale 1|2]
+    features-render render --scene little-bar|little-page|little-picker|sad-tab --out FILE [--scale 1|2] [--appearance light|dark] [--width W]
     features-render split|peek|little|switcher --out FILE [--snapshot DIR] [--size WxH] [--scale 1|2]
         render-only: [--width W] [--page-color HOST=RRGGBB ...] [--seed-today-split URL=TITLE] [--keep-titles]
     features-render pip --out FILE [--size 384x216] [--scale 1|2] [--state playing|paused|ended]

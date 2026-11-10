@@ -72,10 +72,12 @@ extension AutomationController {
          "profile": item.profileID.description, "startedAt": item.startedAt.timeIntervalSince1970,
          "endedAt": item.endedAt?.timeIntervalSince1970 as Any? ?? NSNull(),
          "source": item.sourceURL?.absoluteString ?? "", "historical": item.isHistorical,
+         "littleOpenSession": center.sourceSessionForAutomation(item.id) ?? "",
          "fileExists": item.fileExists as Any? ?? NSNull()] as [String: Any]
       }, "rows": downloadRows().map { ["id": $0.item.id, "subtitle": $0.subtitle.stringValue, "buttons": $0.buttons.map { $0.identifier?.rawValue ?? "" }] },
        "badge": app.frontWindowController?.sidebar.downloadBadgeEvidence ?? [:], "running": center.hasRunning,
        "queued": center.queued, "updates": center.updateCount, "publishes": center.publishCount,
+       "detachedPages": center.detachedPageCountForAutomation,
        "openerPID": center.fileOpenerPID, "historyError": center.downloadHistoryError, "historyLoaded": center.historyLoaded,
        "profileFilter": downloadProfileControl().map { ["visible": !$0.isHidden, "titles": $0.itemTitles,
          "selected": ($0.selectedItem?.representedObject as? String) ?? "all"] as [String: Any] } ?? [:],
@@ -84,7 +86,8 @@ extension AutomationController {
        "fallbacks": center.fallbackCount, "error": center.lastFileError, "fileActions": center.fileActions, "quitAlerts": center.quitAlerts,
        "sheets": center.choices.map { ["id": $0.key, "name": $0.value.panel.nameFieldStringValue,
          "directory": $0.value.panel.directoryURL?.path ?? "", "visible": $0.value.panel.isVisible,
-         "sheet": $0.value.panel.sheetParent != nil] as [String: Any] }] as [String: Any]
+         "sheet": $0.value.panel.sheetParent != nil,
+         "parent": $0.value.panel.sheetParent?.windowNumber ?? 0] as [String: Any] }] as [String: Any]
     case "download-row", "download-menu":
       guard let id = args["id"] as? String, let row = downloadRows().first(where: { $0.item.id == id }) else { throw Failure(message: "download row is not visible") }
       if cmd == "download-row" {

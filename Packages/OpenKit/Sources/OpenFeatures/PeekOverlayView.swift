@@ -23,7 +23,8 @@ public final class PeekOverlayView: NSView {
     public let panel = NSView()
     public let pageClip = NSView()
     public private(set) var swipeIndicator: SwipeIndicatorView?
-    public var style: SpaceThemeStyle = .defaultTheme(system: .light) { didSet { swipeIndicator?.style = style } }
+    public private(set) var sadTabView: SadTabView?
+    public var style: SpaceThemeStyle = .defaultTheme(system: .light) { didSet { swipeIndicator?.style = style; sadTabView?.style = style } }
     public private(set) var buttons: [NSButton] = []
     public var contentRect = CGRect.zero { didSet { needsLayout = true } }
     /// The measured Peek base includes the window's right margin with an anchored sidebar.
@@ -68,14 +69,29 @@ public final class PeekOverlayView: NSView {
         pageClip.subviews.forEach { $0.frame = pageClip.bounds }
         panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
     }
-    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() }; swipeIndicator = nil }
-    func showHost(_ host: any WebContentHost) {
+    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() }; swipeIndicator = nil; sadTabView = nil }
+    func showHost(_ host: any WebContentHost, close: @escaping () -> Void) {
+        let wasSad = sadTabView != nil
+        let hadPageFocus = (window?.firstResponder as? NSView).map { $0 === pageClip || $0.isDescendant(of: pageClip) } ?? false
+        if host.liveState.isCrashed {
+            host.view.isHidden = true
+            if sadTabView == nil {
+                clearHost(); host.view.isHidden = true
+                let sad = SadTabView(style: style); sadTabView = sad; pageClip.addSubview(sad)
+            }
+            sadTabView?.onReload = { [weak host] in host?.reload() }; sadTabView?.onClose = close
+            sadTabView?.frame = pageClip.bounds
+            if hadPageFocus && !wasSad { window?.makeFirstResponder(sadTabView) }
+            return
+        }
         if host.view.superview !== pageClip {
             clearHost()
             pageClip.addSubview(host.view)
         }
+        host.view.isHidden = false
         host.view.frame = pageClip.bounds; host.view.autoresizingMask = [.width, .height]
         host.view.alphaValue = host.isLoading ? 0 : 1
+        if hadPageFocus && wasSad { host.focus() }
     }
     public func showHistorySwipe(_ event: SwipeIndicatorView.Event) {
         let indicator: SwipeIndicatorView
