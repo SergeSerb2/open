@@ -7642,9 +7642,40 @@ def capture_checks(factory, results, tmp):
         app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={})
         emulated[0] = False
 
-        # C7 needs incognito windows (app-shell 4.8, not built yet); features-render C3/C7 covers the ephemeral path.
-        results['capture_c7_incognito'] = {'status': 'BLOCKED', 'reason': 'no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)'}
         results['capture_shortcut_hint_once'] = {'ok': state()['hintShows'] == 1, 'hintShows': state()['hintShows']}
+        # C7: use the native private-window command and real capture pipeline.
+        # The normal Library remains byte-for-byte unchanged, including files.
+        normal_window = app.call('window-state')['id']
+        before_windows = {w['id'] for w in app.call('incognito-state')['windows']}
+        before_rows = rows()
+        capture_directory = Path(app.call('captures')['directory'])
+        before_files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                        for p in capture_directory.iterdir() if p.is_file()}
+        app.call('menu-perform', id='new-incognito-window')
+        private_window = wait_until(lambda: next((w for w in app.call('incognito-state')['windows']
+            if w['private'] and w['id'] not in before_windows), None), timeout=5, step=.05)
+        assert private_window, 'private capture window did not open'
+        try:
+            app.call('window-focus', id=private_window['id'], activate=True)
+            private_tab = app.call('open', url=origin + '/long.html')['id']
+            app.call('wait', tab=private_tab)
+            private_state = app.call('incognito-state', private=True)
+            private_capture = app.call('capture', mode='area', rect=[100, 100, 300, 200])['state']
+            captured = private_capture.get('result', {})
+            after_files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                           for p in capture_directory.iterdir() if p.is_file()}
+            results['capture_c7_incognito'] = {'ok': private_state.get('private') is True
+                and private_state.get('ephemeral') is True and captured.get('bytes', 0) > 0
+                and captured.get('kind') == 'area' and captured.get('saved') == ''
+                and 'library' not in private_capture.get('card', {}).get('actions', [])
+                and rows() == before_rows and before_files == after_files,
+                'private': private_state.get('private'), 'ephemeral': private_state.get('ephemeral'),
+                'capture': captured, 'libraryUnchanged': rows() == before_rows and before_files == after_files}
+            close_card()
+        finally:
+            app.call('window-focus', id=private_window['id'], activate=True)
+            app.call('window-close')
+            app.call('window-focus', id=normal_window, activate=True)
     finally:
         for cmd, kw in (('dismiss', {}), ('capture-action', {'action': 'cancel'})):
             try:
@@ -12028,7 +12059,7 @@ def page_notification_checks(factory, results, tmp):
             # but clients.openWindow() creates no page Open hosts (2026-11-02: no OEWebContent, no
             # tab-strip request). page-platform §2.2 assumed P1 handles it; it does not
             # (docs/followups.md, "Notifications (clients.openWindow)"). Never counted as a pass.
-            n6 = dict(n6, status='BLOCKED', reason='P1: clients.openWindow from a service worker opens no page in Open (followups)')
+            n6 = dict(n6, status='DEFERRED', reason='product gap')
             n6.pop('ok')
         results['N6_click_opens_tab'] = n6
         for t in opened6 or []:
