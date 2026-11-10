@@ -135,6 +135,9 @@ final class EngineSleepAdapter: SleepEngine {
     if refuseForDevTools(tabID) { return false }
     var all = true
     for (_, host) in open {
+      // Discard preserves isLive and has no WebContentChange bit. Invalidate
+      // picker authority before the renderer disappears, including its UI flag.
+      app.stores.boosts.existingEditorHost?.exitZap(tabID: tabID)
       let done = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
         host.content.discard { c.resume(returning: $0) }
       }
