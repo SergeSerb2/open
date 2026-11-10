@@ -37,3 +37,11 @@ without model mutation when the global identity is missing or duplicated.
 `OPEN_E2E_IMPORT_ROBUST_ONLY=containers` selects those six rows.
 The fixture contains no user data. Synthetic fixtures now use the observed
 global identity instead of an unobserved string key.
+
+The real `openkit import-arc` CLI also exercises both pair orders and the two
+refusal cases. The saved pre-fix CLI from the 2026-11-10 main sweep imports
+one Little Browser Space when that pair comes first, accepts a missing global
+identity, and accepts a duplicate global identity. The fixed CLI imports the
+two synthetic global Spaces in both orders and refuses both malformed cases.
+All four source fixtures remain unchanged. Private receipts and the old binary
+hash are in `.re/gate-health/step3/import-cli{,-old}/results.json`.

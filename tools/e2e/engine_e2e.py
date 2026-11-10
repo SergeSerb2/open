@@ -4511,7 +4511,7 @@ def page_zoom_rows(app, results, origin):
     reset = wait_until(lambda: abs(app.eval(tab, "visualViewport.scale") - 1) < 0.01, timeout=5, step=0.1)
     results["Z2_pinch_then_actual_size"] = {"ok": bool(pinched) and held > 1.5 and bool(reset), "pinched": pinched, "heldAfter1s": held,
         "after": app.eval(tab, "visualViewport.scale")}
-    results["Z3_smart_zoom"] = {"status": "DEFERRED", "reason": "no synthetic smart-zoom path; user check U-S1"}
+    results["Z3_smart_zoom"] = {"status": "BLOCKED", "reason": "needs a physical trackpad gesture check by the user (U-S1)"}
     # Z2 on a Peek page (an Alloy page in a Chrome-style window): Actual Size targets the top Peek page.
     app.call("pin", tab=tab)
     app.call("peek-open", tab=tab, url=origin + "/zoom.html#peek")

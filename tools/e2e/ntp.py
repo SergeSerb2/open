@@ -14,13 +14,17 @@ def run(factory, results, api, style):
         tab = app.call('tabs')[0]['id']
         pid = app.call('ping')['pid']
 
-        def loaded(name, address):
+        def loaded(name, address, renderer_source=None):
             app.call('wait', tab=tab)
             state = api.wait_until(lambda: (lambda p: p if p.get('live') and not p.get('loading', True) else None)(app.page(tab)),
                                    timeout=15, step=.05)
-            expected = 'about:blank' if style == 'alloy' else 'Chrome NTP'
-            correct = bool(state) and (state['url'] == 'about:blank' if style == 'alloy'
-                else state['url'] in aliases)
+            # Chromium can refuse a renderer's privileged about: navigation
+            # itself, before OnBeforeBrowse, by showing about:blank#blocked.
+            # Our callback otherwise cancels it and preserves the document.
+            allowed = ({renderer_source, 'about:blank#blocked'} if renderer_source is not None
+                       else {'about:blank'} if style == 'alloy' else set(aliases))
+            expected = sorted(allowed)
+            correct = bool(state) and state['url'] in allowed
             results[name] = {'ok': correct and state.get('style') == style
                              and app.call('ping')['pid'] == pid,
                              'requested': address, 'page': state, 'expected': expected}
@@ -33,10 +37,11 @@ def run(factory, results, api, style):
             # A renderer navigation bypasses OEWebContent.loadURL. The page's
             # own script and a real DOM link must also stay out of NTP WebUI.
             for index, address in enumerate(aliases):
+                source = app.page(tab)['url']
                 app.eval(tab, 'document.body.innerHTML = \'<a id="ntp">New tab</a>\';'
                          'document.querySelector("a").href=' + json.dumps(address))
                 app.call('click', tab=tab, selector='#ntp')
-                loaded('link_alias_' + str(index), address)
+                loaded('link_alias_' + str(index), address, renderer_source=source)
         # The refusal must not disable ordinary engine navigation.
         app.call('navigate', tab=tab, url='data:text/html,<title>NTP control</title>')
         app.call('wait', tab=tab)
