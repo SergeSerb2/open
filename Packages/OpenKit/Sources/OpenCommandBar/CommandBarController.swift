@@ -39,6 +39,9 @@ public final class CommandBarController: NSObject {
     public var showsPrivacyFooter: Bool { view.showsFooter }
 
     public private(set) var isPresented = false
+    /// A second Cmd+T / Cmd+L closes the bar only when the user opened it with that key (Arc 06-keys, 12c). A bar the
+    /// App shows by itself (a new window) re-presents instead. The App sets this before `present`.
+    public var closesOnModeKey = true
     public private(set) var request: CommandBarRequest?
     /// What the user typed: the engine's query text (D4). Equals `fieldText` unless an inline
     /// completion shows; then the field also holds the completed part.
@@ -145,7 +148,7 @@ public final class CommandBarController: NSObject {
         }
         // A second Cmd+T closes the New Tab bar; a second Cmd+L closes the address editor (Arc 06-keys, 12c).
         panel.input.editor.onModeKey = { [weak self] key in
-            guard let self, self.isPresented, let mode = self.request?.mode else { return false }
+            guard let self, self.isPresented, self.closesOnModeKey, let mode = self.request?.mode else { return false }
             guard (key == "t" && mode == .newTab) || (key == "l" && mode == .editCurrentURL) else { return false }
             self.dismiss(reason: .programmatic)
             return true

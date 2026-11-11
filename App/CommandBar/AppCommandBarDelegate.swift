@@ -44,7 +44,9 @@ final class AppCommandBarSession: CommandBarDelegate {
   init(factory: EngineWebContentHostFactory) { self.factory = factory }
 
   var isPresented: Bool { controller?.isPresented == true }
-  func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil) {
+  /// True when the user opened the current presentation (Cmd+T / Cmd+L, menu, sidebar): only then a second key closes it.
+  private(set) var openedByUser = false
+  func show(_ mode: CommandBarMode, requestedAt: Double, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
     openedAt = requestedAt
     let pinned = editingPinnedTab.flatMap { id in factory.model.tab(id: id).flatMap { $0.pinnedURL == nil ? nil : $0 } }
     pinnedEditTabID = pinned?.id
@@ -104,6 +106,7 @@ final class AppCommandBarSession: CommandBarDelegate {
                                       width: max(CommandCard.inlineMinimumWidth, field.width), height: 0))
     }
     // The sidebar behind the card (anchored mode only; a hidden sidebar shows none).
+    openedByUser = userInitiated; bar.closesOnModeKey = userInitiated
     bar.view.sidebarMaxX = factory.windowState.sidebarMode == .anchored && !windowController.sidebar.isHidden
       ? windowController.sidebar.convert(windowController.sidebar.bounds, to: bar.view).maxX : nil
     bar.present(CommandBarRequest(mode: mode, profileID: profile.id, spaceID: factory.focusedSpace?.id,

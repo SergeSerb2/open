@@ -137,7 +137,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// On-device page translation for this window (page-platform Step 10).
   private(set) lazy var translate = TranslateAdapter(factory: self)
   private(set) var lastNavigationFocusRestored = false
-  func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil) {
+  /// `userInitiated`: Cmd+T / Cmd+L, the menu, or the sidebar; false when the App shows the bar by itself (a new window).
+  func showCommandBar(_ mode: CommandBarMode, editingPinnedTab: ItemID? = nil, userInitiated: Bool = false) {
     guard !isClosing, !app.terminationRequested else { return }
     iconPicker?.close()
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
@@ -145,11 +146,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
     // A second Cmd+T while the New Tab bar is open, or a second Cmd+L while the address editor is
     // open, closes it (Arc 06-keys, 12c; plan D3 §2.3).
-    if let session = commandBarSession, session.isPresented, editingPinnedTab == nil, session.pinnedEditTabID == nil,
-       mode == .newTab || mode == .editCurrentURL, session.controller?.request?.mode == mode {
+    if userInitiated, let session = commandBarSession, session.isPresented, session.openedByUser, editingPinnedTab == nil,
+       session.pinnedEditTabID == nil, mode == .newTab || mode == .editCurrentURL, session.controller?.request?.mode == mode {
       session.dismiss(); return
     }
-    commandBarSession?.show(mode, requestedAt: requestedAt, editingPinnedTab: editingPinnedTab)
+    commandBarSession?.show(mode, requestedAt: requestedAt, editingPinnedTab: editingPinnedTab, userInitiated: userInitiated)
   }
   /// Edit Pinned URL confirmed in the command bar (app-shell §4.1): the pinned URL changes; a tab that
   /// was still on its old pinned page also goes to the new one (guess: no capture of Arc's dialog).
@@ -1023,8 +1024,8 @@ extension EngineWebContentHostFactory {
 }
 
 extension EngineWebContentHostFactory {
-  @objc func newTab(_ sender: Any?) { showCommandBar(.newTab) }
-  @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
+  @objc func newTab(_ sender: Any?) { showCommandBar(.newTab, userInitiated: true) }
+  @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL, userInitiated: true) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
     if let panel = controller?.boostEditor?.panel, candidate === panel || candidate.sheetParent === panel { return true }

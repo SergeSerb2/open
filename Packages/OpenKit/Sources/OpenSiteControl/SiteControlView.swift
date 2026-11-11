@@ -138,7 +138,7 @@ public final class SiteControlPanelView: NSView {
     private let material = NSVisualEffectView()
     private let fallback = CALayer(), materialTint = CALayer(), surfaceMask = CAShapeLayer(), rim = CAShapeLayer(), separator = CAShapeLayer()
     /// D3 §2.5 material: an opaque-looking body and the Space tint to 62 % of the width. Static layers.
-    private let spaceTint = CAGradientLayer(), topZone = CAGradientLayer(), topZoneMask = CAGradientLayer()
+    private let spaceTint = CAGradientLayer(), topZone = CAGradientLayer()
     /// Rim and separator sit in their own view above the blur: AppKit keeps subview layers above manual sublayers.
     private let chrome = SiteControlChromeView()
     /// The sidebar's content appearance (the URL-field plate token follows it, not the window's).
@@ -170,8 +170,6 @@ public final class SiteControlPanelView: NSView {
         spaceTint.startPoint = CGPoint(x: 0,y: 0.5); spaceTint.endPoint = CGPoint(x: 1,y: 0.5)
         spaceTint.locations = [0,NSNumber(value: Double(SiteControlMetrics.tintStop)),1]
         material.layer?.addSublayer(spaceTint); material.layer?.addSublayer(topZone)
-        topZone.mask = topZoneMask
-        topZoneMask.startPoint = CGPoint(x: 0,y: 0.5); topZoneMask.endPoint = CGPoint(x: 1,y: 0.5)
         // The offscreen harness bitmap (empty in the App) sits under the rim and separator, so the Dark separator's
         // plus-lighter composites over it in the offscreen renderer as it does over the live material.
         addSubview(chrome); chrome.layer?.addSublayer(fallback); chrome.layer?.addSublayer(rim); chrome.layer?.addSublayer(separator)
@@ -250,12 +248,10 @@ public final class SiteControlPanelView: NSView {
             let top = RGBA(field.red + (1 - field.red) * k, field.green + (1 - field.green) * k, field.blue + (1 - field.blue) * k)
             // The effect view is not flipped: its layer's y grows up, so the top zone sits at the top of its bounds.
             let zone = body.minY + spec.topExtent, flipped = false
-            topZone.frame = CGRect(x: 0, y: flipped ? 0 : bounds.height - zone, width: w, height: zone)
+            // Over the sidebar part only: the frame ends at the sidebar edge (no mask layer, so no offscreen pass on first draw).
+            topZone.frame = CGRect(x: 0, y: flipped ? 0 : bounds.height - zone, width: max(0, min(edge, w)), height: zone)
             topZone.colors = [top.withAlpha(spec.topAlpha).cgColor, top.withAlpha(0).cgColor]
             topZone.startPoint = CGPoint(x: 0.5, y: flipped ? 0 : 1); topZone.endPoint = CGPoint(x: 0.5, y: flipped ? 1 : 0)
-            topZoneMask.frame = topZone.bounds
-            topZoneMask.colors = [CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 0)]
-            topZoneMask.locations = [0, x(edge - half), x(edge + half), 1]
             topZone.isHidden = spec.topAlpha == 0
         } else { spaceTint.isHidden = true; topZone.isHidden = true }
         surfaceMask.frame = bounds; surfaceMask.path = path
