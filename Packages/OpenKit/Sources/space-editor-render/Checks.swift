@@ -31,7 +31,7 @@ enum Checks {
         let metadata = try Data(contentsOf: RenderCLI.fixtureURL("portable/manifest.json"))
         guard metadata.count <= 1_048_576 else { throw CLIError(description: "oversized P1 metadata") }
         let manifest = try JSONDecoder().decode(PortableBaselines.self, from: metadata)
-        guard manifest.schemaVersion == 2, manifest.environments.count <= 16 else {
+        guard manifest.schemaVersion == 3, manifest.environments.count <= 16 else {
             throw CLIError(description: "invalid P1 baseline manifest")
         }
         guard let entry = manifest.environments[key] else {
@@ -43,7 +43,7 @@ enum Checks {
             throw CLIError(description: "invalid trusted P1 baseline metadata")
         }
         let assetKey = entry.assetKey ?? key
-        guard entry.original == true || assetKey.range(of: "^scale-[12]-icc-[0-9a-f]{64}(?:-mode-[0-9]{1,5}x[0-9]{1,5}-pixels-[0-9]{1,5}x[0-9]{1,5}-mhz-[0-9]{1,7})?$", options: .regularExpression) != nil else {
+        guard entry.original == true || assetKey.range(of: "^scale-[12]-icc(?:-header-v1)?-[0-9a-f]{64}(?:-mode-[0-9]{1,5}x[0-9]{1,5}-pixels-[0-9]{1,5}x[0-9]{1,5}-mhz-[0-9]{1,7})?$", options: .regularExpression) != nil else {
             throw CLIError(description: "invalid P1 asset key")
         }
         print("P1 baseline: \(key); trusted main \(entry.trustedMainCommit); byte identity")
