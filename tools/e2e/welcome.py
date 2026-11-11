@@ -628,10 +628,14 @@ def pause_resume_playlist(app, api):
         return api.wait_until(lambda: (lambda s: s if predicate(s) else None)(state()), timeout=timeout, step=.05)
     initial = await_state(lambda s: s['visible'] and s['playlist'] == 'playing' and s['animating'])
     window = app.call('window-state')['id']
+    mini_started = time.monotonic()
     app.call('window-miniaturize')
-    mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=1, step=.05)
+    mini = api.wait_until(lambda: app.call('window-state')['miniaturized'],
+                         timeout=max(0, 1-(time.monotonic()-mini_started)), step=.05)
     paused = await_state(lambda s: not s['visible'] and at_rest(s)
-                         and all(not host['animating'] for host in s['hosts']), timeout=1)
+                         and all(not host['animating'] for host in s['hosts']),
+                         timeout=max(0, 1-(time.monotonic()-mini_started)))
+    pause_seconds = time.monotonic()-mini_started
     before = state(); start = time.monotonic(); time.sleep(5)
     after = state(); seconds = time.monotonic()-start
     cpu = (after['appCPUSeconds']-before['appCPUSeconds'])/seconds*100
@@ -640,11 +644,12 @@ def pause_resume_playlist(app, api):
     time.sleep(4.3) # More than the first card's duration: no delayed restart.
     still = state()
     manual = app.call('welcome', action='replay', card=2)
-    return dict(ok=bool(initial and mini and paused and at_rest(after) and restored and at_rest(still)
+    return dict(ok=bool(initial and mini and paused and pause_seconds <= 1 and at_rest(after) and restored and at_rest(still)
                         and still['playedCards'] == paused['playedCards']
                         and manual['animating'] and manual['activeCard'] == 2 and manual['playlist'] == 'stopped'
                         and (app.config != 'Release' or cpu < 1)),
                 initial=initial, paused=paused, restored=restored, still=still, manual=manual,
+                pauseSeconds=pause_seconds, pauseLimitSeconds=1,
                 appCPUPercent=cpu, seconds=seconds, limitPercent=1, cpuLoadAverage=list(os.getloadavg()))
 
 
