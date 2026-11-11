@@ -8,8 +8,32 @@ import OpenAdBlock
 
 @MainActor @Observable public final class SettingsViewModel {
     public typealias PaneID = OpenSettings.PaneID
-    public var selectedPane: PaneID { didSet { defaults.set(selectedPane.rawValue, forKey: "open.settings.lastPane") } }
-    public var selectedProfileID: ProfileID { didSet { adBlock?.refresh(); links.littleOpenAutoArchiveAfter = model.profile(id: selectedProfileID)?.settings.littleOpenAutoArchiveAfter ?? .sixHours } }
+    public var selectedPane: PaneID { didSet {
+        defaults.set(selectedPane.rawValue, forKey: "open.settings.lastPane")
+        if selectedSection.legacyPane != selectedPane { selectedSection = .legacy(selectedPane) }
+    } }
+    public var selectedSection: SettingsSection = .general { didSet {
+        defaults.set(selectedSection.rawValue, forKey: "open.settings.lastSection")
+        if selectedPane != selectedSection.legacyPane { selectedPane = selectedSection.legacyPane }
+    } }
+    public var searchQuery = "" { didSet { updateSettingsSearch() } }
+    public var searchResults: [SettingsSearchEntry] = []
+    public var searchSelection = 0
+    public var searchCPUMilliseconds = 0.0
+    public var searchFocusRequest = 0
+    public var arrivalID: String?
+    public var arrivalRevision = 0
+    #if DEBUG || OPEN_AUTOMATION
+    @ObservationIgnored public var onSectionDraw: ((SettingsSection, Double) -> Void)?
+    #endif
+    public var sectionBack: [SettingsSection] = []
+    public var sectionForward: [SettingsSection] = []
+    public var appearanceWindowID: WindowID?
+    public var showsControlsKit = false
+    public var focusedSettingID: String?
+    public var showsLegacyAdBlock = false
+    public var archiveApplyAvailable = false
+    public var selectedProfileID: ProfileID { didSet { archiveApplyAvailable = false; if !searchQuery.isEmpty { updateSettingsSearch() }; adBlock?.refresh(); links.littleOpenAutoArchiveAfter = model.profile(id: selectedProfileID)?.settings.littleOpenAutoArchiveAfter ?? .sixHours } }
     public let model: BrowserModel
     public let actions: any SettingsActions
     public let defaults: UserDefaults
@@ -21,6 +45,7 @@ import OpenAdBlock
     }
     /// Optional deep link into a long pane; used by the renderer and app presenters.
     public var scrollTarget: String?
+    public var updateState: String?
     public var statusText = ""
     public var linksError = ""
     public var preferenceRevision = 0
@@ -44,13 +69,15 @@ import OpenAdBlock
     @ObservationIgnored public private(set) lazy var appIcon = AppIconViewModel(root: self)
     public func bool(_ key: String) -> Bool { _ = preferenceRevision; return defaults.object(forKey: key) as? Bool ?? (SettingsDefaults.values[key] as? Bool ?? false) }
     public func string(_ key: String) -> String { _ = preferenceRevision; return defaults.string(forKey: key) ?? (SettingsDefaults.values[key] as? String ?? "") }
-    public func set(_ value: Any, for key: String) { defaults.set(value, forKey: key); defaults.synchronize(); preferenceRevision &+= 1 }
+    public func set(_ value: Any, for key: String) { defaults.set(value, forKey: key); defaults.synchronize(); preferenceRevision &+= 1; if !searchQuery.isEmpty { updateSettingsSearch() } }
 
     public init(model: BrowserModel, actions: any SettingsActions, defaults: UserDefaults, root: URL, snapshot: SnapshotStore, focusedProfileID: ProfileID? = nil) {
         SettingsDefaults.register(in: defaults)
         self.model = model; self.actions = actions; self.defaults = defaults; self.root = root
         self.snapshot = snapshot
-        selectedPane = PaneID(rawValue: defaults.string(forKey: "open.settings.lastPane") ?? "") ?? .general
+        let initialPane = PaneID(rawValue: defaults.string(forKey: "open.settings.lastPane") ?? "") ?? .general
+        selectedPane = initialPane
+        selectedSection = SettingsSection(rawValue: defaults.string(forKey: "open.settings.lastSection") ?? "") ?? .legacy(initialPane)
         selectedProfileID = focusedProfileID ?? model.windows.first.flatMap { model.space(id: $0.focusedSpaceID)?.profileID } ?? model.defaultProfile?.id ?? ProfileID()
         links = Self.makeLinks(model: model, actions: actions, defaults: defaults, snapshotProvider: nil)
         refreshLinks()

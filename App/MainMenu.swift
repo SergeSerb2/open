@@ -107,6 +107,8 @@ enum MainMenu {
   #endif
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
+    if let capture = event.window?.firstResponder as? any SettingsKeyCapturing,
+       capture.captureSettingsKey(event) { return true }
     // Native intro responder/default button owns unmodified keys. Do not load
     // browser command services while the first-run welcome is on screen.
     if let introWindow = app.onboardingWindowController?.window, event.window === introWindow {
@@ -198,6 +200,7 @@ extension EngineWebContentHostFactory {
 
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if SettingsSuggestionsProvider.url(for: id) != nil { return true }
     if id == "check-for-updates" { return true }
     if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
@@ -272,6 +275,7 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if let url = SettingsSuggestionsProvider.url(for: id) { return app.settingsPresenter.showSettingsURL(url) }
     #if OPEN_AUTOMATION
     AutomationShortcutTrace.record(id)
     #endif

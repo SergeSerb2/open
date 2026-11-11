@@ -11,57 +11,72 @@ public struct LinksPane:View {
     @Bindable var links:LinksSettingsModel
     @State private var editing:RuleDraft?
     @State private var tested = false
+    @Environment(\.colorScheme) private var scheme
     public init(root:SettingsViewModel) {self.root=root;links=root.links}
-    public var body:some View {
-        Text("Little Open is a smaller, simpler Open window for quick lookups and reading links.").fixedSize(horizontal:false,vertical:true).padding(.bottom,4)
-        SettingsGroup {
-            SettingsRow(height:36) {SettingsSwitch("Open Little Open when I press \(hotkey) in any app",isOn:toggle(\.littleOpenHotkeyEnabled))}
-            SettingsRow(height:36) {SettingsSwitch("Open Little Open when clicking on links with ⌥⌘ held",isOn:toggle(\.optionCommandClickLittleOpen))}
-            SettingsRow(height:36) {SettingsSwitch("Links from other apps open in Little Open",isOn:toggle(\.externalLinksInLittleOpen))}
-            SettingsRow(height:44,divider:false) {HStack {Text("Archive Little Open windows after");Spacer();SettingsPopUp("Archive Little Open windows after",selection:Binding(get:{links.littleOpenAutoArchiveAfter},set:{links.littleOpenAutoArchiveAfter=$0;root.commitLinks()}),width:155,entries:AutoArchiveInterval.allCases.map{.option($0.settingsTitle + ($0 == .sixHours ? " (default)":""),$0)})}}
+    public var body: some View {
+        OpenSettingsGroup("Little Open") {
+            linkToggle("little-open-hotkey", title: "Open Little Open in any app", help: "Press \(hotkey) from any app.", key: \.littleOpenHotkeyEnabled, defaultValue: true)
+            linkToggle("option-command-click", title: "Open Little Open with Option-Command-click", key: \.optionCommandClickLittleOpen, defaultValue: true)
+            linkToggle("external-links", title: "Links from other apps open in Little Open", key: \.externalLinksInLittleOpen, defaultValue: true, last: true)
         }
-        Rectangle().fill(Color(nsColor:SettingsTokens.divider.nsColor)).frame(height:1).padding(.vertical,10)
-        Text("Peek is a way to preview a link without opening a new tab. It's perfect for quickly looking at a link from an email, news article, or tweet.").fixedSize(horizontal:false,vertical:true).padding(.bottom,4)
-        SettingsGroup {
-            SettingsRow(height:36) {PreferenceToggle(title:"Open a Peek window when clicking on links with Shift held",key:"open.links.openPeekShiftClick",root:root)}
-            SettingsRow(height:49,divider:false) {VStack(alignment:.leading,spacing:3) {PreferenceToggle(title:"Open a Peek window when clicking on links to other sites",key:"open.links.openPeekOtherSites",root:root);Text("This only affects Favorites and Pinned tabs").font(.system(size:11)).italic().foregroundStyle(.secondary)}}
+        OpenSettingsGroup("Peek") {
+            OpenPreferenceRow(root: root, id: "links/peek-shift-click", title: "Open Peek with Shift-click", key: "open.links.openPeekShiftClick")
+            OpenPreferenceRow(root: root, id: "links/peek-other-sites", title: "Open Peek for links to other sites", key: "open.links.openPeekOtherSites", help: "Applies to Favorites and Pinned tabs.", last: true)
         }
-        Rectangle().fill(Color(nsColor:SettingsTokens.divider.nsColor)).frame(height:1).padding(.vertical,10)
-        VStack(alignment:.leading,spacing:10) {
-        Text("Air Traffic Control").font(Font(SettingsTokens.section.font)).foregroundStyle(Color(nsColor:SettingsTokens.secondary.nsColor)).padding(.leading,10)
-        Text("Routes let you choose where specific sites open inside Open. First match wins.").fixedSize(horizontal:false,vertical:true)
-        SettingsError(text:root.linksError)
-        SettingsGroup {
-            SettingsRow(minimumHeight:SettingsTokens.controlRowHeight) {VStack(alignment:.leading,spacing:3) {
-                HStack {Text("Default destination");Spacer();RouteDestinationPicker(links:links,selection:Binding(get:{links.defaultRoutingDestination},set:{links.defaultRoutingDestination=$0;root.commitLinks()}))}
-                LinkIssues(issues:links.issues().filter{$0.ruleID == LinksSettingsModel.defaultDestinationIssueID},defaultDestination:true)
-            }}
-            ForEach(Array(links.drafts.enumerated()),id:\.element.id) {index,draft in
-                SettingsRow(divider:index < links.drafts.count-1,minimumHeight:44) {VStack(alignment:.leading,spacing:3) {HStack(spacing:8) {
-                    Button {editing=draft} label:{HStack {VStack(alignment:.leading,spacing:2){Text(draft.pattern.isEmpty ? "New rule":draft.pattern).lineLimit(1);Text("\(matchTitle(draft.matchKind)) · \(draft.pattern)").font(.system(size:11)).foregroundStyle(.secondary).lineLimit(1)};Spacer();Text(links.destinationLabel(draft.destination)).foregroundStyle(.secondary).lineLimit(1)}}.buttonStyle(.plain)
-                    Button {links.deleteRule(id:draft.id);root.commitLinks()} label:{Image(systemName:"minus.circle.fill").font(.system(size:16)).foregroundStyle(.secondary)}.buttonStyle(.plain).help("Delete rule")
-                }.draggable(draft.id.description).dropDestination(for:String.self) {values,_ in guard let value=values.first,let from=links.drafts.firstIndex(where:{$0.id.description == value}) else {return false};links.moveRule(from:from,to:index);root.commitLinks();return true}
-                LinkIssues(issues:links.issues().filter{$0.ruleID == draft.id})
-                }}
-                .contextMenu {Button("Edit Rule…"){editing=draft};Button("Move Up"){links.moveRule(from:index,to:index-1);root.commitLinks()}.disabled(index == 0);Button("Move Down"){links.moveRule(from:index,to:index+1);root.commitLinks()}.disabled(index == links.drafts.count-1)}
+        OpenSettingsGroup("Air Traffic Control") {
+            OpenSettingsRow(root: root, id: "links/destination", title: "Default destination", help: "Choose where links open when no rule matches.", changed: links.defaultRoutingDestination != .littleOpen(profile: nil), reset: { links.defaultRoutingDestination = .littleOpen(profile: nil); root.commitLinks() }) { RouteDestinationPicker(links: links, selection: Binding(get: { links.defaultRoutingDestination }, set: { links.defaultRoutingDestination = $0; root.commitLinks() })) }
+            LinkIssues(issues: links.issues().filter { $0.ruleID == LinksSettingsModel.defaultDestinationIssueID }, defaultDestination: true).padding(.horizontal, 14)
+            ForEach(Array(links.drafts.enumerated()), id: \.element.id) { index, draft in
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 10) {
+                        Button { editing = draft } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(draft.pattern.isEmpty ? "New rule" : draft.pattern).font(.system(size: 13)).lineLimit(1)
+                                    Text(matchTitle(draft.matchKind)).font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
+                                }
+                                Spacer()
+                                Text(links.destinationLabel(draft.destination)).font(.system(size: 12)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor)).lineLimit(1)
+                            }.contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                        Button { links.deleteRule(id: draft.id); root.commitLinks() } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain).accessibilityLabel("Delete rule " + draft.pattern)
+                    }
+                    .draggable(draft.id.description).dropDestination(for: String.self) { values, _ in
+                        guard let value = values.first, let from = links.drafts.firstIndex(where: { $0.id.description == value }) else { return false }
+                        links.moveRule(from: from, to: index); root.commitLinks(); return true
+                    }
+                    LinkIssues(issues: links.issues().filter { $0.ruleID == draft.id })
+                }.padding(14)
+                    .overlay(alignment: .bottom) { Rectangle().fill(Color(nsColor: SettingsStyle.hairline.nsColor)).frame(height: 1).padding(.leading, 14) }
+                    .contextMenu {
+                        Button("Edit Rule…") { editing = draft }
+                        Button("Move Up") { links.moveRule(from: index, to: index - 1); root.commitLinks() }.disabled(index == 0)
+                        Button("Move Down") { links.moveRule(from: index, to: index + 1); root.commitLinks() }.disabled(index == links.drafts.count - 1)
+                    }
+            }
+            OpenSettingsRow(root: root, id: "links/rules", title: links.drafts.isEmpty ? "No routing rules yet" : "First matching rule wins", help: "Send a site to a Space or to Little Open.", last: true) {
+                Button("Add Rule…") { editing = RuleDraft(from: RoutingRule(match: .hostEquals(""), destination: .littleOpen(profile: nil))) }
             }
         }
-        Button("Add Rule…") {let rule=RoutingRule(match:.hostEquals(""),destination:.littleOpen(profile: nil));editing=RuleDraft(from:rule)}
-        .sheet(item:$editing){draft in LinkRuleSheet(root:root,draft:draft,onDone:{editing=nil})}
-        }.id("links-rules")
-        VStack(alignment:.leading,spacing:10) {
-        Text("Test a Link")
-        SettingsGroup {
-            SettingsRow {HStack {TextField("URL or host",text:$links.testURLString);Button("Test"){tested=true;links.runTest()}}}
-            SettingsRow {AppPicker(bundleID:$links.testSourceBundleID)}
-            SettingsRow(divider:false) {HStack {Text("Most Recent Space");Spacer();SettingsPopUp("Most Recent Space",selection:$links.testMostRecentSpaceID,width:185,entries:[.option("Automatic",nil)]+links.spaces.map{.option($0.title,Optional($0.id))})}}
+        .sheet(item: $editing) { draft in LinkRuleSheet(root: root, draft: draft, onDone: { editing = nil }) }
+        SettingsInlineMessage(text: root.linksError)
+        OpenSettingsGroup("Test a Link") {
+            HStack(spacing: 10) { TextField("URL or host", text: $links.testURLString).textFieldStyle(.plain).accessibilityLabel("URL or host"); Button("Test") { tested = true; links.runTest() } }.padding(14)
+            AppPicker(bundleID: $links.testSourceBundleID).padding(.horizontal, 14).padding(.bottom, 10)
+            OpenSettingsRow(root: root, id: "links/test", title: "Most Recent Space", last: true) {
+                OpenSettingsPop(title: "Most Recent Space", value: $links.testMostRecentSpaceID, options: [("Automatic", nil)] + links.spaces.map { ($0.title, Optional($0.id)) })
+            }
         }
-        if tested && !links.testInputIsValid {SettingsError(text:"Enter a valid URL.")}
-        if let decision=links.testDecision {
-            if let summary=root.linkTestSummary {Text(summary).fixedSize(horizontal:false,vertical:true)}
-            DisclosureGroup("Details") {Text(RoutingDecisionFormatter.report(decision,spaces:root.routingSpaces)).font(.system(.caption,design:.monospaced)).textSelection(.enabled).fixedSize(horizontal:false,vertical:true)}
+        if tested && !links.testInputIsValid { SettingsInlineMessage(text: "Enter a valid URL.") }
+        if let decision = links.testDecision {
+            if let summary = root.linkTestSummary { SettingsInlineMessage(text: summary) }
+            DisclosureGroup("Details") { Text(RoutingDecisionFormatter.report(decision, spaces: root.routingSpaces)).font(.system(size: 11.5, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
         }
-        }.id("links-test")
+    }
+    private func linkToggle(_ id: String, title: String, help: String = "", key: ReferenceWritableKeyPath<LinksSettingsModel, Bool>, defaultValue: Bool, last: Bool = false) -> some View {
+        OpenSettingsRow(root: root, id: "links/" + id, title: title, help: help, changed: links[keyPath: key] != defaultValue, last: last, reset: { links[keyPath: key] = defaultValue; root.commitLinks() }) {
+            Toggle(title, isOn: toggle(key)).toggleStyle(OpenSettingsSwitchStyle(accent: Color(nsColor: SettingsStyle.accessibleAccent(root.settingsAccentSource, dark: scheme == .dark)), label: title))
+        }
     }
     private func matchTitle(_ kind:RuleDraft.MatchKind)->String {switch kind {case .hostContains:"Host contains";case .hostEquals:"Host equals";case .urlPrefix:"URL starts with"}}
     private var hotkey:String {CommandRegistry.byID["little-open-global"].flatMap{root.shortcutsStore.effectiveShortcuts(for:$0).first?.symbolDisplay} ?? "---"}
@@ -76,13 +91,13 @@ public struct LinkRuleSheet:View {
     public var body:some View {VStack(alignment:.leading,spacing:18) {
         Text("Link Routing").font(.title2)
         HStack {Text("Match");Spacer();SettingsPopUp("Match",selection:$draft.matchKind,width:185,entries:[.option("Host contains",.hostContains),.option("Host equals",.hostEquals),.option("URL starts with",.urlPrefix)])}
-        TextField("Pattern",text:$draft.pattern)
+        TextField("Pattern",text:$draft.pattern).accessibilityLabel("Pattern")
         HStack {Text("Open in");Spacer();RouteDestinationPicker(links:root.links,selection:$draft.destination)}
         AppPicker(bundleID:$draft.sourceBundleID)
         LinkIssues(issues:root.links.issues(replacing:draft).filter{$0.ruleID == draft.id})
         SettingsError(text:root.linksError)
-        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save Rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(root.links.issues(replacing:draft).contains(where:\.isError))}
-    }.padding(24).frame(width:520,height:380).buttonStyle(SettingsButtonStyle())}
+        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save Rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).disabled(root.links.issues(replacing:draft).contains(where:\.isError))}
+    }.padding(24).frame(width:520,height:380).settingsSheet()}
 }
 private struct LinkIssues: View {
     let issues: [RuleIssue]

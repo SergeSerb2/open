@@ -10,6 +10,52 @@ import OpenDesign
     public private(set) var store: KeyBindingStore
     private var saved: KeyBindingStore
     public var query = ""
+    public var filter = "all"
+    public var category = "all"
+    public var findByKeys = false
+    public var findShortcut: OpenCommands.KeyboardShortcut?
+    public static func category(for command: CommandDefinition) -> String {
+        if command.id.contains("split") { return "Split View" }
+        if command.menuPath?.first == "Tabs" || ["new-tab", "close-tab", "next-tab", "previous-tab"].contains(command.id) { return "Tabs" }
+        return command.menuPath?.first ?? "Other"
+    }
+    public var categoryNames: [String] {
+        let names = Set(CommandRegistry.active.map { Self.category(for: $0) })
+        return ["Tabs", "Spaces", "Split View"].filter { names.contains($0) } + names.subtracting(["Tabs", "Spaces", "Split View"]).sorted()
+    }
+    public func count(for filter: String) -> Int { CommandRegistry.active.filter { matches($0, filter: filter) }.count }
+    private func matches(_ command: CommandDefinition, filter: String) -> Bool {
+        switch filter {
+        case "changed": return store.bindings[command.id] != nil
+        case "unassigned": return store.effectiveShortcuts(for: command).isEmpty
+        case "conflicts": return unexpected.contains { $0.commandIDs.contains(command.id) }
+        default: return true
+        }
+    }
+    public func find(_ shortcut: OpenCommands.KeyboardShortcut) { findShortcut = shortcut; findByKeys = false; query = "" }
+    public func conflictText(for id: String) -> String? {
+        let others = unexpected.filter { $0.commandIDs.contains(id) }.flatMap(\.commandIDs).filter { $0 != id }
+        guard !others.isEmpty else { return nil }
+        return "Also used by “" + others.map { CommandRegistry.byID[$0]?.title ?? "reserved key" }.joined(separator: "”, “") + "”. Choose one to keep."
+    }
+    public func keepShortcut(for id: String) {
+        let others = Set(unexpected.filter { $0.commandIDs.contains(id) }.flatMap(\.commandIDs)).subtracting([id])
+        guard others.allSatisfy({ CommandRegistry.byID[$0]?.isCustomizable == true && CommandRegistry.byID[$0]?.isReserved == false }) else { return }
+        for other in others { store.setOverride(.init(shortcuts: [], priority: store.bindings[other]?.priority), for: other) }
+        saveDraft()
+    }
+    public func canKeepShortcut(for id: String) -> Bool {
+        let others = Set(unexpected.filter { $0.commandIDs.contains(id) }.flatMap(\.commandIDs)).subtracting([id])
+        return !others.isEmpty && others.allSatisfy { CommandRegistry.byID[$0]?.isCustomizable == true && CommandRegistry.byID[$0]?.isReserved == false }
+    }
+    public func importBindings(from url: URL) {
+        do { store = try KeyBindingStore.load(from: url); saveDraft() }
+        catch { statusText = "Could not read key bindings. Your saved shortcuts were kept." }
+    }
+    public func exportBindings(to url: URL) {
+        do { try saved.save(to: url); statusText = "Exported." }
+        catch { statusText = "Could not export key bindings." }
+    }
     public var recordingCommandID: String?
     public var appendRecording = false
     public var selectedCommandID: String?
@@ -39,6 +85,9 @@ import OpenDesign
     public func openExtensionShortcuts() { root.actions.openURL(URL(string: "chrome://extensions/shortcuts")!, profileID: root.selectedProfileID) }
     public var commands: [CommandDefinition] { CommandRegistry.active.filter { command in
         (query.isEmpty || ([displayTitle(command), command.id] + command.aliases).contains { $0.localizedCaseInsensitiveContains(query) })
+        && matches(command, filter: filter)
+        && (category == "all" || Self.category(for: command) == category)
+        && (findShortcut == nil || store.effectiveShortcuts(for: command).contains(findShortcut!))
     }.sorted { displayTitle($0).localizedStandardCompare(displayTitle($1)) == .orderedAscending } }
     public func displayTitle(_ command:CommandDefinition)->String {command.title == "Automatic" ? "Use Automatic Appearance":command.title}
     public func beginRecording(_ id: String, append: Bool = false) { guard CommandRegistry.byID[id]?.isCustomizable == true else { return }; selectedCommandID = id; appendRecording = append; recordingCommandID = id; statusText = "Press a shortcut. Escape cancels; Delete clears." }
@@ -75,68 +124,77 @@ import OpenDesign
     }
 }
 public struct ShortcutsPane: View {
-    @Bindable var model:ShortcutsViewModel
-    public init(model:ShortcutsViewModel) {self.model=model}
-    public var body:some View {
-        VStack(spacing:30) {
-            ShortcutsCallout(model:model).frame(width:359,height:35)
-            HStack(alignment:.top,spacing:16) {
-                VStack(spacing:0) {
-                    HStack {Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Type a feature name or shortcut",text:$model.query).textFieldStyle(.plain)}.padding(.horizontal,10).frame(height:38)
-                    Divider()
-                    List(selection:$model.selectedCommandID) {
-                        let defaults=model.commands.filter{model.store.bindings[$0.id] == nil}
-                        let custom=model.commands.filter{model.store.bindings[$0.id] != nil}
-                        if !defaults.isEmpty {Section("Default Shortcuts") {ForEach(defaults){row($0)}}}
-                        if !custom.isEmpty {Section("Custom Shortcuts") {ForEach(custom){row($0)}}}
-                    }.listStyle(.plain).environment(\.defaultMinListRowHeight,48)
-                }.frame(width:340,height:450).background(Color(nsColor:SettingsTokens.fill.nsColor),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:SettingsTokens.border.nsColor)))
-                VStack(alignment:.leading,spacing:12) {
-                    HStack(spacing:8) {Image(systemName:"command");Image(systemName:"return")}.font(.system(size:25)).foregroundStyle(Color(nsColor:SettingsTokens.link.nsColor)).frame(height:50)
-                    Text("Custom Shortcuts").font(.system(size:13,weight:.semibold))
-                    Text("Change shortcuts for your favorite actions, and choose whether Open or a website takes priority.").font(.system(size:11)).foregroundStyle(.secondary)
-                    if model.selectedCommandID.flatMap({CommandRegistry.byID[$0]})?.isCustomizable == true {
-                        Text("When shortcuts conflict").font(.system(size:11))
-                        Picker("When shortcuts conflict",selection:Binding(get:{model.root.string("open.shortcuts.defaultPriority")},set:{model.root.set($0,for:"open.shortcuts.defaultPriority")})) {Text("Open wins").tag("browser");Text("Website wins").tag("site");Text("Website first, Open on double-press").tag("site-then-browser")}.labelsHidden().controlSize(.regular)
-                    }
-                    if model.selectedCommandID?.hasPrefix("go-to-tab-") == true {
-                        PreferenceToggle(title:"Include Favorites in ordering.",key:"open.shortcuts.includeFavoritesInTabNumbering",root:model.root).font(.system(size:11))
-                        PreferenceToggle(title:"Switch to ninth tab.",key:"open.shortcuts.switchToNinthEnabled",root:model.root).font(.system(size:11))
-                    }
-                    if model.recordingCommandID == nil && !model.banner.isEmpty {SettingsError(text:model.statusMessage).font(.system(size:11));Button("Revert"){model.revert()}}
-                    if model.recordingCommandID != nil {KeyRecorder(model:model).frame(height:1)}
-                    if (model.recordingCommandID != nil || model.banner.isEmpty) && !model.statusMessage.isEmpty {Text(model.statusMessage).font(.system(size:11)).foregroundStyle(.secondary)}
-                    if !model.extensionConflicts.isEmpty {
-                        ExtensionConflictNotice(conflicts: model.extensionConflicts, action: { model.openExtensionShortcuts() })
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength:0)
-                    HStack(spacing:6) {Spacer(minLength:0);Button("Reset All Shortcuts"){model.resetAll(confirmed:false)}.controlSize(.mini)
-                        ShortcutsMoreMenu(model:model).frame(width:22,height:18)
-                    }
-                }.frame(width:200,height:450,alignment:.topLeading)
+    @Bindable var model: ShortcutsViewModel
+    @Environment(\.colorScheme) private var scheme
+    private var accent: Color { Color(nsColor: SettingsStyle.accessibleAccent(model.root.settingsAccentSource, dark: scheme == .dark)) }
+    public init(model: ShortcutsViewModel) { self.model = model }
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
+                TextField("Find a command", text: $model.query, prompt: Text("Find a command").foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))).textFieldStyle(.plain).accessibilityLabel("Find a command")
+                if let shortcut = model.findShortcut {
+                    Button(shortcut.symbolDisplay + " ×") { model.findShortcut = nil }.buttonStyle(.plain).font(.system(size: 11))
+                }
+                Button(model.findByKeys ? "Press a shortcut… Esc cancels" : "Press keys ⌥⌘K") { model.findByKeys.toggle() }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Color(nsColor: model.findByKeys ? SettingsStyle.attentionText.nsColor : SettingsStyle.secondary.nsColor))
+            }.padding(.horizontal, 10).frame(height: 34)
+                .background(Color(nsColor: SettingsStyle.card.nsColor), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: SettingsStyle.controlLine.nsColor), lineWidth: 1))
+            HStack(spacing: 6) {
+                ForEach([("All", "all"), ("Changed", "changed"), ("Unassigned", "unassigned"), ("Conflicts", "conflicts")], id: \.1) { title, filter in
+                    Button { model.filter = filter } label: {
+                        HStack(spacing: 5) { Text(title); Text(String(model.count(for: filter))).font(.system(size: 11)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor)) }
+                            .font(.system(size: 12, weight: .medium)).padding(.horizontal, 10).frame(height: 26)
+                            .background((model.filter == filter ? accent.opacity(0.2) : Color(nsColor: SettingsStyle.control.nsColor)), in: Capsule())
+                    }.buttonStyle(.plain).accessibilityLabel(title + " shortcuts").accessibilityAddTraits(model.filter == filter ? [.isSelected] : [])
+                }
+                Spacer(minLength: 0)
             }
-        }.frame(maxWidth:.infinity, maxHeight:.infinity,alignment:.top)
-        .confirmationDialog("Reset all shortcuts to their defaults?",isPresented:$model.confirmsReset){Button("Reset All Shortcuts",role:.destructive){model.resetAll(confirmed:true)}}
-    }
-    private func row(_ command:CommandDefinition)->some View {
-        HStack(spacing:8) {
-            Text(model.displayTitle(command)).font(.system(size:13)).lineLimit(2);Spacer(minLength:0)
-            Button {model.selectedCommandID=command.id;model.beginRecording(command.id,append:NSApp.currentEvent?.modifierFlags.contains(.shift) == true)} label:{
-                Text(model.recordingCommandID == command.id ? "Type…" : keyText(command)).font(Font(SettingsTokens.keycap.font)).frame(width:63,height:23).background(Color(nsColor:SettingsTokens.button.nsColor),in:RoundedRectangle(cornerRadius:4))
-            }.buttonStyle(.plain).disabled(!command.isCustomizable)
-        }.frame(height:48).tag(command.id).listRowInsets(.init(top:0,leading:17.5,bottom:0,trailing:10)).contentShape(Rectangle())
-        .contextMenu {
-            if command.isCustomizable {Button("Record Shortcut"){model.beginRecording(command.id)};Button("Clear"){model.clear(command.id)};Button("Reset"){model.reset(command.id)}
-                Menu("When shortcuts conflict") {
-                    Button("Open wins"){model.priority(.browserFirst,for:command.id)}
-                    Button("Website wins"){model.priority(.siteFirst,for:command.id)}
-                    Button("Website first, Open on double-press"){model.priority(.siteThenBrowserOnDoublePress,for:command.id)}
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    categoryChip("All categories", value: "all")
+                    ForEach(model.categoryNames, id: \.self) { categoryChip($0, value: $0) }
+                }.fixedSize()
+                HStack(spacing: 6) {
+                    ForEach(Array(model.categoryNames.prefix(3)), id: \.self) { categoryChip($0, value: $0) }
+                    OpenSettingsPop(title: "Shortcut category", value: $model.category, options: [("All categories", "all")] + model.categoryNames.map { ($0, $0) })
+                }.fixedSize()
+                OpenSettingsPop(title: "Shortcut category", value: $model.category, options: [("All categories", "all")] + model.categoryNames.map { ($0, $0) })
+            }
+            SettingsShortcutsList(model: model, commands: model.commands, revision: model.store, recording: model.recordingCommandID, findByKeys: model.findByKeys, selection: model.selectedCommandID)
+                .frame(height: 386).clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: SettingsStyle.hairline.nsColor), lineWidth: 1))
+            if model.commands.isEmpty { SettingsInlineMessage(text: "No shortcuts found. Try another name or filter.") }
+            if !model.statusMessage.isEmpty { SettingsInlineMessage(text: model.statusMessage) }
+            if !model.unexpected.isEmpty { Button("Revert Unsaved Changes") { model.revert() } }
+            if !model.extensionConflicts.isEmpty { ExtensionConflictNotice(conflicts: model.extensionConflicts, action: { model.openExtensionShortcuts() }) }
+            HStack { Button("Learn the Essential Shortcuts") { model.root.actions.openEssentialShortcuts() }.buttonStyle(.plain).font(.system(size: 11.5)).id("shortcuts/essential"); Spacer(); ShortcutsMoreMenu(model: model).frame(width: 22, height: 22) }
+            OpenSettingsGroup("When shortcuts overlap") {
+                OpenSettingsRow(root: model.root, id: "shortcuts/priority", title: "When shortcuts conflict", changed: model.root.string("open.shortcuts.defaultPriority") != "browser", last: true, reset: { model.root.set("browser", for: "open.shortcuts.defaultPriority") }) {
+                    OpenSettingsPop(title: "When shortcuts conflict", value: Binding(get: { model.root.string("open.shortcuts.defaultPriority") }, set: { model.root.set($0, for: "open.shortcuts.defaultPriority") }), options: [("Open wins", "browser"), ("Website wins", "site"), ("Website first, Open on double-press", "site-then-browser")])
                 }
             }
+
+        }.sheet(isPresented: $model.confirmsReset) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Reset all shortcuts?").font(.system(size: 22, weight: .semibold))
+                Text("Your custom shortcuts and priorities will return to their defaults.")
+                HStack {
+                    Button("Cancel") { model.confirmsReset = false }.keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button("Reset All Shortcuts", role: .destructive) { model.resetAll(confirmed: true); model.confirmsReset = false }.keyboardShortcut(.defaultAction)
+                }
+            }.padding(24).frame(width: 460).settingsSheet()
         }
     }
-    private func keyText(_ command:CommandDefinition)->String {let keys=model.store.effectiveShortcuts(for:command);return keys.isEmpty ? "---":keys.map(\.symbolDisplay).joined(separator:" ")}
+    private func categoryChip(_ title: String, value: String) -> some View {
+        Button { model.category = value } label: {
+            Text(title).font(.system(size: 11.5, weight: .medium)).padding(.horizontal, 9).frame(height: 24)
+                .background(model.category == value ? accent.opacity(0.2) : Color(nsColor: SettingsStyle.control.nsColor), in: Capsule())
+        }.buttonStyle(.plain).accessibilityLabel("Category: " + title)
+    }
+
 }
 private struct KeyRecorder: NSViewRepresentable {
     let model: ShortcutsViewModel
@@ -236,12 +294,14 @@ private struct ShortcutsMoreMenu: NSViewRepresentable {
         setAccessibilityLabel("More shortcut actions")
         let menu = NSMenu()
         menu.addItem(withTitle: "", action: nil, keyEquivalent: "").image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More shortcut actions")
-        for (title, selector) in [("Revert Unsaved Changes", #selector(revert)), ("Shortcut Help", #selector(help)), ("Extension Shortcuts", #selector(extensions))] {
+        for (title, selector) in [("Revert Unsaved Changes", #selector(revert)), ("Import Shortcuts…", #selector(importKeys)), ("Export Shortcuts…", #selector(exportKeys)), ("Shortcut Help", #selector(help)), ("Extension Shortcuts", #selector(extensions))] {
             let item = menu.addItem(withTitle: title, action: selector, keyEquivalent: ""); item.target = self
         }
         self.menu = menu
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    @objc private func importKeys() { let panel = NSOpenPanel(); panel.canChooseDirectories = false; if panel.runModal() == .OK, let url = panel.url { model.importBindings(from: url) } }
+    @objc private func exportKeys() { let panel = NSSavePanel(); panel.nameFieldStringValue = "Open-shortcuts.json"; if panel.runModal() == .OK, let url = panel.url { model.exportBindings(to: url) } }
     @objc private func revert() { model.revert() }
     @objc private func help() { model.root.actions.openHelp(topic: "shortcuts") }
     @objc private func extensions() { model.openExtensionShortcuts() }

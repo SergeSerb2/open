@@ -20,6 +20,7 @@
   /// windows and pages; nothing here sends input to other apps.
   @MainActor
   final class AutomationController {
+    var settingsPerformanceProbe: SettingsPerformanceProbe?
     struct Failure: Error { let message: String }
 
     var extensionRedrawMeasurement: ExtensionRedrawMeasurement?
@@ -333,6 +334,8 @@
           "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
           "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
       case "settings-profile": return try settingsProfile(a)
+      case "settings-ui": return try settingsUI(a)
+      case "settings-perf": return try settingsPerformance(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-adblock": return try await settingsAdBlock(a)

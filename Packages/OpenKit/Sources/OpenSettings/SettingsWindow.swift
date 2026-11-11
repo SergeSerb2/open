@@ -3,124 +3,103 @@ import SwiftUI
 import OpenDesign
 import OpenModel
 
+/// An active native recorder owns keys before the app's saved shortcuts.
+/// Looking up the current responder does not construct Settings at launch.
+@MainActor public protocol SettingsKeyCapturing: AnyObject {
+    func captureSettingsKey(_ event: NSEvent) -> Bool
+}
+
 public struct SettingsContent: View {
     @Bindable var viewModel: SettingsViewModel
-    let includesWindowTitle: Bool
-    public init(viewModel: SettingsViewModel, includesWindowTitle: Bool = true) { self.viewModel = viewModel; self.includesWindowTitle = includesWindowTitle }
+    public init(viewModel: SettingsViewModel, includesWindowTitle: Bool = true) { self.viewModel = viewModel }
     public var body: some View {
-        VStack(spacing: 0) {
-            ZStack(alignment: .top) {
-                Color(nsColor: SettingsTokens.band.nsColor)
-                if includesWindowTitle { Text(viewModel.selectedPane.title).font(Font(SettingsTokens.title.font)).foregroundStyle(.secondary).frame(height: SettingsTokens.titleHeight) }
-                SettingsTabBar(viewModel: viewModel).frame(height: SettingsTokens.bandHeight)
-            }.frame(height: SettingsTokens.bandHeight)
-            if viewModel.selectedPane == .shortcuts {
-                ShortcutsPane(model: viewModel.shortcuts).padding(.horizontal, SettingsTokens.contentInset).padding(.top, 19)
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: SettingsTokens.groupGap) {
-                            switch viewModel.selectedPane {
-                            case .general: GeneralPane(model: viewModel.general)
-                            case .profiles: ProfilesPane(model: viewModel.profiles)
-                            case .links: LinksPane(root: viewModel)
-                            case .appIcon: AppIconPane(model: viewModel.appIcon)
-                            case .advanced: AdvancedPane(model: viewModel.advanced)
-                            case .shortcuts: EmptyView()
-                            }
-                        }.padding(.horizontal, SettingsTokens.contentInset).padding(.top, SettingsTokens.firstBoxGap).padding(.bottom, 20)
-                    }.task(id:viewModel.scrollTarget) {
-                        // Wait for the destination views to enter the laid-out scroll tree.
-                        guard let target=viewModel.scrollTarget else {return}
-                        await Task.yield()
-                        proxy.scrollTo(target,anchor:.bottom)
-                    }
-                }
-            }
-        }.font(Font(SettingsTokens.label.font)).controlSize(.regular)
-        .background(Color(nsColor: SettingsTokens.content.nsColor)).buttonStyle(SettingsButtonStyle()).ignoresSafeArea()
+        HStack(spacing: 0) {
+            SettingsNavigation(viewModel: viewModel, section: viewModel.selectedSection,
+                query: viewModel.searchQuery, results: viewModel.searchResults, updateState: viewModel.updateState,
+                focusRequest: viewModel.searchFocusRequest)
+                .frame(width: SettingsTokens.Redesign.navigationWidth)
+            Rectangle().fill(Color(nsColor: SettingsTokens.Redesign.hairline.nsColor)).frame(width: 1)
+            SettingsDetail(root: viewModel)
+        }
+        .font(.system(size: 13)).foregroundStyle(Color(nsColor: SettingsTokens.Redesign.text.nsColor))
+        .background(Color(nsColor: SettingsTokens.Redesign.background.nsColor)).ignoresSafeArea()
         .onChange(of: viewModel.model.spaces.map { "\($0.id)|\($0.profileID)|\($0.title ?? "")" }) { _, _ in viewModel.refreshLinks(preserveDrafts: true); viewModel.profiles.refresh() }
         .onChange(of: viewModel.model.profiles.map { "\($0.id)|\($0.name)" }) { _, _ in viewModel.profiles.refresh(); viewModel.adBlock?.refresh(); viewModel.refreshLinks(preserveDrafts: true) }
         .sheet(isPresented: $viewModel.showsPreviews) { PreviewsSheet(model: viewModel.general) }
         .sheet(isPresented: $viewModel.showsSearchEngines) { SearchEnginesSheet(model: viewModel.profiles) }
         .sheet(isPresented: $viewModel.showsImport) { ImportWizard(root: viewModel) }
+        .sheet(isPresented: Binding(get: { viewModel.profiles.showsCreate }, set: { viewModel.profiles.showsCreate = $0 })) { ProfileNameSheet(model: viewModel.profiles, create: true) }
+        .sheet(isPresented: Binding(get: { viewModel.profiles.showsRename }, set: { viewModel.profiles.showsRename = $0 })) { ProfileNameSheet(model: viewModel.profiles, create: false) }
+        .sheet(isPresented: Binding(get: { viewModel.profiles.showsClear }, set: { viewModel.profiles.showsClear = $0 })) { ClearBrowsingDataSheet(model: viewModel.profiles) }
+        .sheet(isPresented: Binding(get: { viewModel.profiles.confirmsDelete || viewModel.profiles.confirmsUnused }, set: { if !$0 { viewModel.profiles.confirmsDelete = false; viewModel.profiles.confirmsUnused = false } })) { ProfileDeleteSheet(model: viewModel.profiles) }
+        .sheet(isPresented: $viewModel.showsControlsKit) { SettingsControlsKit(root: viewModel) }
+        .sheet(isPresented: Binding(get: { viewModel.profiles.showsSuggestNotice }, set: { if !$0 { viewModel.profiles.showsSuggestNotice = false } })) { SuggestNoticeSheet(model: viewModel.profiles) }
     }
 }
-private struct SettingsTabBar: NSViewRepresentable {
-    let viewModel: SettingsViewModel
-    func makeNSView(context: Context) -> TabBandView {
-        let band = TabBandView()
-        for pane in PaneID.allCases {
-            let button = SettingsTabButton(title: pane.title, target: context.coordinator, action: #selector(Coordinator.select(_:)))
-            button.identifier = .init(pane.rawValue); button.symbol = pane.symbol
-            button.setButtonType(.toggle); button.isBordered = false
-            button.setAccessibilityLabel(pane.title); band.addSubview(button)
+
+@MainActor private final class OpenSettingsWindow: NSWindow {
+    let settings: SettingsViewModel
+    init(settings: SettingsViewModel) {
+        self.settings = settings
+        super.init(contentRect: CGRect(origin: .zero, size: SettingsTokens.Redesign.window),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if attachedSheet != nil || settings.shortcuts.recordingCommandID != nil { return super.performKeyEquivalent(with: event) }
+        let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+        if flags == .command {
+            if key == "f" { settings.searchFocusRequest &+= 1; return true }
+            if key == "[" { settings.goBack(); return true }
+            if key == "]" { settings.goForward(); return true }
+            if let number = Int(key), (1...9).contains(number) { settings.navigate(to: SettingsSection.allCases[number - 1]); return true }
         }
-        return band
-    }
-    func updateNSView(_ band: TabBandView, context: Context) {
-        for case let button as SettingsTabButton in band.subviews {
-            button.state = button.identifier?.rawValue == viewModel.selectedPane.rawValue ? .on : .off; button.needsDisplay = true
+        if flags == [.command, .option], key == "k", settings.selectedSection == .shortcuts {
+            settings.shortcuts.findByKeys.toggle(); return true
         }
-        band.window?.title = viewModel.selectedPane.title
+        return super.performKeyEquivalent(with: event)
     }
-    func makeCoordinator() -> Coordinator { Coordinator(viewModel) }
-    @MainActor final class Coordinator: NSObject {
-        let model: SettingsViewModel
-        init(_ model: SettingsViewModel) { self.model = model }
-        @objc func select(_ sender: NSButton) { if let id = sender.identifier, let pane = PaneID(rawValue: id.rawValue) { model.selectedPane = pane } }
-    }
-}
-private final class TabBandView: NSView {
-    override var isFlipped: Bool { true }
-    override func layout() {
-        super.layout()
-        let widths = subviews.compactMap { ($0 as? NSButton).map { max(54, ($0.title as NSString).size(withAttributes: [.font: SettingsTokens.tabLabel.font]).width + 13) } }
-        var x = (bounds.width - widths.reduce(0,+) - CGFloat(max(0,widths.count-1))*3)/2
-        for (view,width) in zip(subviews,widths) { view.frame = .init(x:x,y:34,width:width,height:45); x += width+3 }
+    override func cancelOperation(_ sender: Any?) {
+        if settings.shortcuts.recordingCommandID != nil { settings.shortcuts.cancelRecording() }
+        else if !settings.searchQuery.isEmpty { settings.searchQuery = "" }
+        else { super.cancelOperation(sender) }
     }
 }
-private final class SettingsTabButton: NSButton {
-    var symbol = "gearshape"
-    override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        if state == .on { SettingsTokens.selectedTab.nsColor.setFill(); NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill() }
-        let color = state == .on ? SettingsTokens.link.nsColor : NSColor.secondaryLabelColor
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
-        if let image {
-            let tinted = NSImage(size:.init(width:20,height:20),flipped:false) { rect in
-                image.draw(in:rect);color.setFill();rect.fill(using:.sourceAtop);return true
-            }
-            tinted.draw(in:.init(x:(bounds.width-20)/2,y:4,width:20,height:20),from:.zero,operation:.sourceOver,fraction:1,respectFlipped:true,hints:nil)
-        }
-        let attrs: [NSAttributedString.Key: Any] = [.font: SettingsTokens.tabLabel.font, .foregroundColor: color]
-        let size = (title as NSString).size(withAttributes: attrs)
-        (title as NSString).draw(at: .init(x:(bounds.width-size.width)/2,y:34-size.height/2), withAttributes: attrs)
-    }
-}
+
 @MainActor public enum SettingsWindow {
     public static func makeWindow(viewModel: SettingsViewModel) -> NSWindow {
-        let window = NSWindow(contentRect: .init(x:0,y:0,width:684,height:650), styleMask:[.titled,.closable,.miniaturizable,.fullSizeContentView], backing:.buffered,defer:false)
-        window.titlebarAppearsTransparent = true; window.titleVisibility = .visible
-        window.backgroundColor = SettingsTokens.band.nsColor
-        window.contentViewController = NSHostingController(rootView: SettingsContent(viewModel:viewModel,includesWindowTitle:false))
-        window.setFrame(.init(x:200,y:200,width:684,height:650),display:false)
-        window.title = viewModel.selectedPane.title; window.isReleasedWhenClosed = false; return window
+        let window = OpenSettingsWindow(settings: viewModel)
+        window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
+        window.backgroundColor = SettingsTokens.Redesign.background.nsColor
+        window.minSize = SettingsTokens.Redesign.minimum
+        let hosting = NSHostingController(rootView: SettingsContent(viewModel: viewModel))
+        hosting.sizingOptions = []
+        window.contentViewController = hosting
+        window.setFrame(NSRect(origin: window.frame.origin, size: SettingsTokens.Redesign.window), display: false)
+        window.title = viewModel.selectedSection.title; window.isReleasedWhenClosed = false
+        window.setFrameAutosaveName("OpenSettingsRedesign")
+        if !window.setFrameUsingName("OpenSettingsRedesign") { window.center() }
+        return window
     }
 }
+
 @MainActor public final class SettingsPresenter: NSObject, NSWindowDelegate {
     public let viewModel: SettingsViewModel
     public private(set) var window: NSWindow?
-    public init(viewModel: SettingsViewModel) { self.viewModel=viewModel;super.init() }
-    public func show(pane: PaneID? = nil) { if let pane { viewModel.selectedPane=pane }; if window == nil { window=SettingsWindow.makeWindow(viewModel:viewModel);window?.delegate=self }; viewModel.refreshExternalState();window?.makeKeyAndOrderFront(nil) }
-    /// App calls before its first remote suggestion query. False means present and await the notice.
-    @discardableResult public func prepareForRemoteSuggestions(profileID: OpenModel.ProfileID) -> Bool {
-        viewModel.profiles.prepareForRemoteSuggestions(profileID:profileID)
+    public private(set) var lastOpenMilliseconds = 0.0
+    public init(viewModel: SettingsViewModel) { self.viewModel = viewModel; super.init() }
+    public func show(pane: PaneID? = nil) {
+        let start = ProcessInfo.processInfo.systemUptime
+        if let pane { viewModel.selectedPane = pane; viewModel.selectedSection = .legacy(pane); viewModel.searchQuery = "" }
+        if window == nil { window = SettingsWindow.makeWindow(viewModel: viewModel); window?.delegate = self }
+        viewModel.refreshExternalState(); window?.makeKeyAndOrderFront(nil)
+        window?.contentView?.layoutSubtreeIfNeeded(); window?.displayIfNeeded()
+        lastOpenMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1_000
     }
-    /// Explicit presentation action. A query gate alone never changes Settings or opens a window.
-    public func presentSearchSuggestionNotice(profileID:OpenModel.ProfileID) {
-        viewModel.profiles.presentSuggestNotice(profileID:profileID)
-        if viewModel.profiles.showsSuggestNotice {show(pane:.profiles)}
+    @discardableResult public func prepareForRemoteSuggestions(profileID: OpenModel.ProfileID) -> Bool { viewModel.profiles.prepareForRemoteSuggestions(profileID: profileID) }
+    public func presentSearchSuggestionNotice(profileID: OpenModel.ProfileID) {
+        viewModel.profiles.presentSuggestNotice(profileID: profileID)
+        if viewModel.profiles.showsSuggestNotice { viewModel.navigate(to: .search, row: "suggestions"); show() }
     }
     public func windowDidBecomeKey(_ notification: Notification) { viewModel.refreshExternalState() }
 }

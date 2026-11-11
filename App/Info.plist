@@ -66,6 +66,7 @@
 			<array>
 				<string>http</string>
 				<string>https</string>
+				<string>open</string>
 			</array>
 			<key>LSHandlerRank</key>
 			<string>Default</string>

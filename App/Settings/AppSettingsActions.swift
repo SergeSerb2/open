@@ -36,6 +36,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       vm?.links.isDefaultBrowser = state.values.allSatisfy { $0 }
       app?.firstRunWindowController?.model.refreshDefaultBrowserStatus()
     }
+    vm.updateState = app.updater?.settingsStatus
     settingsStorage = vm
     return vm
   }
@@ -68,11 +69,21 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
   func show(pane: PaneID? = nil) {
     attachBrowserStores(openingSettings: true)
+    settings.appearanceWindowID = app.frontStandardWindowController?.windowID
     settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild()
   }
+  func show(section: SettingsSection, row: String? = nil, profileID: ProfileID? = nil) {
+    if let profileID, app.model.profile(id: profileID) != nil { settings.profiles.select(profileID) }
+    settings.navigate(to: section, row: row); show()
+  }
+  @discardableResult func showSettingsURL(_ url: URL) -> Bool {
+    guard settings.openSettingsURL(url) else { return false }
+    show(); return true
+  }
+  func updateStatusDidChange(_ status: String?) { settingsStorage?.updateState = status }
   func showProfileSettings(profileID: ProfileID) {
     guard app.model.profile(id: profileID) != nil else { return }
-    settings.profiles.select(profileID); show(pane: .profiles)
+    show(section: .tabsArchive, row: "archive-after", profileID: profileID)
   }
   func showNewProfile(sourceSpace: SpaceID? = nil) {
     settings.profiles.beginCreate(sourceSpace: sourceSpace)
@@ -410,6 +421,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     app.tabSleep.reconcileSettingsPolicy()
   }
   func setApplicationIcon(id: String) { settings.appIcon.errorText = app.applicationIcon.apply(id: id) ?? "" }
+  func setWebsiteAppearance(_ value: String) {
+    _ = WebsiteAppearance.select(commandID: "appearance-" + value)
+    app.scheduleMenuRebuild()
+  }
   /// Settings ▸ Advanced "Reset Translated-site Prompts" (page-platform §4.7.7): app scope, every profile.
   func resetTranslatePrompts(profileID: ProfileID) -> String? { TranslatePreferences().reset(); return nil }
   func openURL(_ url: URL, profileID: ProfileID) {
