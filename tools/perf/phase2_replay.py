@@ -136,6 +136,7 @@ def main():
     a.out = private_path(a.out)
     if a.out.exists(): p.error('Preserve receipts: output already exists')
     if a.allow_display_drift and not a.calibrate: p.error('--allow-display-drift requires --calibrate; scoring remains forbidden')
+    if a.app_cadence and not a.calibrate: p.error('--app-cadence requires --calibrate; the extra display link must stay off for scoring')
     if a.export_replay: return export(a.reference, a.export_replay, a.out)
     if not a.calibrate and background_jobs():
         p.error('Background build is active: score measurements are invalid; only --calibrate is allowed (under load, not for scoring)')
@@ -189,7 +190,7 @@ def main():
         arc_access='Frozen reference only; no Arc launch, defaults or live data access')
     run = {'schema': 1, 'date': now(), 'provenance': current, 'samples': [], 'blocked': {},
         'calibration_only': a.calibrate, 'selected_metrics': sorted(selected), 'gate_attempts': [],
-        'qualification': 'under load, not for scoring' if a.calibrate else 'scored replay; background jobs forbidden'}
+        'qualification': 'unscored functional calibration; actual load retained' if a.calibrate else 'scored replay; background jobs forbidden'}
     work = a.out.parent / (a.out.stem + '-samples'); work.mkdir(parents=True)
     collector = Collector(work / 'collector', port=manifest['port'])
     root = Path(tempfile.mkdtemp(prefix='op.')); atomic(a.out, run)
@@ -237,6 +238,8 @@ def main():
     except BaseException as exc:
         run['stop_reason'] = str(exc) or type(exc).__name__
     finally:
+        if a.calibrate and any(s.get('qualification') == 'under load, not for scoring' for s in run['samples']):
+            run['qualification'] = 'under load, not for scoring'
         run['end_date'] = now(); atomic(a.out, run); collector.close(); shutil.rmtree(root)
     if not run.get('stop_reason') and not a.calibrate:
         score = compare(reference, run)

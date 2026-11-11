@@ -234,7 +234,8 @@ def worker(cfg):
          'arc_version_before':None if open_only else version(False),
          'arc_core_before':None if open_only else arc_core(),'display_before':probe('metadata')}
     row['background_jobs_before']=background_jobs()
-    row['qualification']='under load, not for scoring' if calibration else 'scored'
+    row['qualification']=('under load, not for scoring' if row['background_jobs_before'] or
+        row['load_before'][0]>cfg['provenance'].get('max_load1',10) else 'unscored functional calibration') if calibration else 'scored'
     atomic(out/'sample.json',row)
     if os.environ.get('OPEN_HEAVY_HELD')!='1':raise RuntimeError('Exclusive queue slot missing')
     if existing_pids(ARC) or existing_pids(OPEN):
@@ -353,6 +354,8 @@ def worker(cfg):
         row['arc_core_after']=None if open_only else arc_core();row['display_after']=probe('metadata')
         row['load_after']=list(os.getloadavg())
         row['background_jobs_after']=background_jobs()
+        if calibration and (row['background_jobs_after'] or row['load_after'][0]>max_load):
+            row['qualification']='under load, not for scoring'
         if row['background_jobs_after'] and not calibration:row['error']='Background build invalidates score measurements'
         row['valid']=not row.get('error') and not row.get('restore_error') and row.get('cleanup') and (calibration or max(row['load_before'][0],row['load_after'][0])<=max_load)
         for what in ('arc_version','arc_core','display'):

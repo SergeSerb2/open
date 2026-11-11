@@ -174,8 +174,11 @@ tools/perf/run.sh open --phase 2 --samples 1 --calibrate \
 tools/perf/run.sh open --phase 2 --samples 7 \
   --out .re/perf/open-phase2.json
 tools/perf/run.sh open --phase 2 --samples 5 \
-  --metrics 'fps.sidebar_scroll.*' --app-cadence \
+  --metrics 'fps.sidebar_scroll.*' \
   --out .re/perf/sidebar-main-n5.json
+tools/perf/run.sh open --phase 2 --samples 1 --calibrate \
+  --metrics 'fps.sidebar_scroll.*' --app-cadence \
+  --out .re/perf/sidebar-app-cadence-calibration.json
 ```
 
 Full replay requires N7. Named metric subsets accept a declared N1–N7.
@@ -194,8 +197,9 @@ ticket does not exclude it. No M5 score measurement is valid while that
 build runs. Phase 2 replay checks live background-holder records before and
 after each session and refuses scoring. `--calibrate` may run functional
 flows under load once the user's browser is quit; it records actual load,
-skips the quiet-load gate, labels numbers **under load, not for scoring**,
-and writes no scorecard. The scorer also refuses calibration receipts.
+skips the quiet-load gate, labels loaded sessions **under load, not for scoring**,
+and writes no scorecard. Quiet calibration remains explicitly unscored.
+The scorer also refuses calibration receipts.
 Older Phase 1 entry points require the same operator check; do not run them
 for scores during a background build.
 
@@ -209,10 +213,15 @@ unscored. It never edits the Arc reference. The override is refused without
 `--app-cadence` adds informative, automation-only observations during the
 sidebar trial: App display-link timestamps and native clip bounds-change
 timestamps, capped at 4,096 samples or ten seconds. The observer restores
-the clip's notification setting on stop. Display-link callbacks do not prove
-drawing or scanout. Bounds changes show sidebar movement inside the App;
+the clip's notification setting on stop. It creates a default AppKit view
+display link; these are probe callbacks, not counters from an existing
+product display link. They do not prove drawing or scanout. Bounds changes
+show sidebar movement inside the App;
 the independent 120 fps detector still scores visible changed-image pacing.
-The probe adds work and is off unless explicitly requested.
+The probe adds work and is off unless explicitly requested. The CLI requires
+`--calibrate` for this probe. Collect it separately from scored frame-pacing rows.
+Every wheel trial already records the script's actual native-event intervals
+without this extra display link.
 
 `tools/perf/assemble.py --input RECEIPT:TASK,TASK ... --negative RECEIPT
 --out .re/perf/DATE/accepted.json` combines selected accepted task receipts,
