@@ -16,6 +16,7 @@ public final class SiteControlView: NSView {
     public var sidebarMaxX: CGFloat? { didSet { if sidebarMaxX != oldValue { needsLayout = true } } }
     let panelShadow = CALayer()
     private let shadowCut = CAShapeLayer()
+    private var shadowCutShape: CGPath?
     public var isActive = false
     public var presentationLayers: [CALayer] { [panel.layer,panelShadow].compactMap { $0 } }
     public var panelFrame: CGRect { panel.convert(panel.bodyRect,to: self) }
@@ -63,10 +64,14 @@ public final class SiteControlView: NSView {
         panelShadow.bounds = panel.bounds; panelShadow.anchorPoint = unit; panelShadow.position = position
         panelShadow.shadowPath = panel.shape
         // The body is translucent: cut the panel out of its own shadow, so the shadow never darkens what shows through.
-        let cut = CGMutablePath(); let margin = SiteControlMetrics.panelShadowRadius * 4 + SiteControlMetrics.panelShadowOffsetY
-        cut.addRect(panel.bounds.insetBy(dx: -margin, dy: -margin)); cut.addPath(panel.shape)
-        shadowCut.frame = panel.bounds; shadowCut.path = cut; shadowCut.fillRule = .evenOdd
-        panelShadow.mask = shadowCut
+        // Rebuilt only when the panel's shape changes.
+        if shadowCutShape !== panel.shape {
+            shadowCutShape = panel.shape
+            let cut = CGMutablePath(); let margin = SiteControlMetrics.panelShadowRadius * 4 + SiteControlMetrics.panelShadowOffsetY
+            cut.addRect(panel.bounds.insetBy(dx: -margin, dy: -margin)); cut.addPath(panel.shape)
+            shadowCut.frame = panel.bounds; shadowCut.path = cut; shadowCut.fillRule = .evenOdd
+            panelShadow.mask = shadowCut
+        }
         panelShadow.shadowOffset = CGSize(width: 0,height: SiteControlMetrics.panelShadowOffsetY)
         CATransaction.commit()
     }
@@ -144,8 +149,12 @@ public final class SiteControlPanelView: NSView {
     /// The sidebar's content appearance (the URL-field plate token follows it, not the window's).
     public var sidebarContent = ContentAppearance.dark { didSet { if sidebarContent != oldValue { needsLayout = true } } }
     /// The tint colour and spec in use (rims, tile rings and the More circle take a share of its hue).
+    /// Set on layout; controls are touched only when the value changes (a redraw of every control costs first-draw time).
     private(set) var panelTint: (RGBA, SiteControlMaterialSpec)? {
-        didSet { controls.forEach { $0.panelTint = panelTint.map { ($0.0, $0.1.ringTintShare, $0.1.moreTintShare) }; $0.ringOverride = panelTint?.1.ring } }
+        didSet {
+            guard panelTint?.0 != oldValue?.0 || panelTint?.1 != oldValue?.1 else { return }
+            controls.forEach { $0.panelTint = panelTint.map { ($0.0, $0.1.ringTintShare, $0.1.moreTintShare) }; $0.ringOverride = panelTint?.1.ring }
+        }
     }
     func tinted(_ c: RGBA, share: Double?) -> RGBA {
         guard let share, share > 0, let t = panelTint?.0 else { return c }
