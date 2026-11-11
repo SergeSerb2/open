@@ -1749,7 +1749,7 @@
       return value
     }
     private static func mappedExecutableURL(_ pid: Int32) -> URL? {
-      var path = [CChar](repeating: 0, count: Int(PROC_PIDPATHINFO_MAXSIZE))
+      var path = [CChar](repeating: 0, count: 4096)
       guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
       return URL(fileURLWithPath: path.withUnsafeBufferPointer { String(cString: $0.baseAddress!) })
     }
