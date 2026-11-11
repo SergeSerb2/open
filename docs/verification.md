@@ -20,7 +20,7 @@ default, plus both NTP styles and the real owner-death flow. The superseded
 flow is required. Card, WebAuthn and HTTP Basic observation paths that can open
 system dialogs stay outside the default selection and in the exception inventory.
 
-The M1 runs the crash-capable suites: features, profiles, profiles-engine,
+The M1 runs the crash-capable suites: NTP (both styles), features, profiles, profiles-engine,
 passwords, secrets-import, and owner-watch. On the M5 these rows say
 `M1_REQUIRED` and fail until `--m1-receipts` supplies matching evidence. Produce
 it on a detached M1 checkout at the exact candidate commit, using its recorded
@@ -28,7 +28,7 @@ engine distribution and the same config and lane:
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh \
-  --only e2e-features,e2e-profiles,e2e-profiles-engine,e2e-passwords,e2e-secrets-import,e2e-owner-watch \
+  --only e2e-ntp,e2e-ntp-alloy,e2e-features,e2e-profiles,e2e-profiles-engine,e2e-passwords,e2e-secrets-import,e2e-owner-watch \
   --config Release --log-dir .re/gate-m1
 ```
 
@@ -38,7 +38,10 @@ config, style, lane and named stage. A failed, ambiguous, missing or interrupted
 receipt cannot pass. Each real-App receipt must include successful owned-process
 cleanup and zero remaining windows. The gate retains raw FAIL, BLOCKED, DEFERRED
 and INTERRUPTED states. System dialogs and new Open crash reports stop further
-screen launches; the dialog stays untouched for the user or lead.
+screen launches; the dialog stays untouched for the user or lead. The preflight
+uses a compiled read-only CoreGraphics helper, with no Apple events. The external
+AppleScript suite runs on the M5: the M1 forbids AppleScript/osascript over SSH
+(LEAD 18:50) and reports that stage as `M5_REQUIRED`.
 
 The separate `--lane observers` runs on the M1. It covers the native
 `features-idle` observer and the injected stages of Site Control, Find, Split,
@@ -79,24 +82,33 @@ Keep at most one waiting screen job per agent, and record waits over ten minutes
 
 ### Display and timer portability (Section 16)
 
-Visual references use the exact key `scale-<native backing scale>-icc-<SHA256>`.
+Visual references use the exact key
+`scale-<native backing scale>-icc-<SHA256>-mode-<width>x<height>-pixels-<width>x<height>-mhz-<refresh>`.
+The mode records logical and physical dimensions and the refresh rate in integer
+millihertz. Unknown modes fail without fallback, even when scale and ICC match.
 The ICC digest covers the color profile of the render host's screen. The host
 is never ordered on screen. Its screen is explicit, so selection does not use
-the requested synthetic render scale, a hostname, or a machine name. Both scale
-and the full profile digest must match. Each renderer also checks its actual
+the requested synthetic render scale, a hostname, or a machine name. Scale, the full profile digest, and the complete mode must match. Each renderer also checks its actual
 host window against the selected key before drawing. A display change fails.
 An unknown key fails with its key and a
 recording instruction. There is no fallback and no automatic recording.
 
 | Display | Native scale | ICC SHA-256 | Reference |
 |---|---:|---|---|
-| M5 AW2726DM | 1 | `b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43` | Original PNGs and original color caps |
-| M1 built-in | 2 | `b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856` | New exact 2x PNGs and recorded color caps |
-| M5 built-in, expected from its installed Color LCD profile | 2 | `689713e234c3a538d0c88d0ad0693b98d983cee00aefa50522cc6d9d001062fa` | Unknown key: FAIL; display rerun pending (lead/user) |
+| M5 AW2726DM, 2560×1440 pixels/points, 240 Hz | 1 | `b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43` | Original PNGs and original color caps |
+| M1 built-in, 1512×982 points / 3024×1964 pixels, 120 Hz | 2 | `b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856` | New exact 2x PNGs and recorded color caps |
 
-The M5 built-in key is an offline profile inventory, not a runtime selection
-proof. No display setup was changed. Its actual selection and render proof are
-**display rerun pending (lead/user)** and are not a merge requirement.
+The M5 reference is the external AW2726DM (user decision, 2026-11-10 16:19).
+The M5 lid stays closed. The M1 reference remains its built-in 2x panel.
+Check and record the mode before each M5 on-screen run. The temporary display
+and strict-performance deferrals expired at the lead's “M5 panel ready” ruling.
+
+Schema 2 binds the existing exact scale/ICC references to these modes. It keeps
+the PNG hashes and all color caps unchanged. `assetKey` names the retained M1
+PNG directory; it does not select a display or provide fallback. For paired
+sidebar comparisons against unchanged schema-1 main, the baseline binary gets
+its committed scale/ICC key. The parent checks the complete mode before and
+after every pair. The candidate renderer checks the complete key itself.
 
 `space-legacy` and editor P1 retain all six original PNGs. The M5 renders at
 scale 1 and requires the same exact PNG bytes. The new M1 references render at
@@ -132,6 +144,19 @@ separate 80 ms debounce / 300 ms configured-timeout behavior check is unchanged.
 Calibration measures scheduler and local-query overhead. It does not claim that
 CPU counters measure sleeping time or that a busy host meets a quiet latency
 budget.
+
+The 2026-11-10 M5 qualification used the AW2726DM at 2560×1440 logical and
+physical pixels, scale 1, 240 Hz, ICC SHA-256
+`b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43`.
+That scale/ICC matches the retained AW references. All 12 PNGs, their hashes,
+and all sidebar colour limits remain unchanged; old/new reference ΔE00 is
+0 for mean, p95, and maximum. No reference was re-recorded. The real-window
+`chrome_dark_rings`, `traffic_light_look`, and `traffic_light_stale_hover`
+rows pass on this mode. Replaying their saved synthetic screenshots with an
+intentionally wrong ring colour fails the same pixel predicates (positive
+ΔE00 at most 0.59; wrong-colour ΔE00 16.3–36.7). This replay needs no second
+screen session and changes no reference. Raw receipts remain in the agent's
+ignored `.re/gate-health/step1/` directory.
 
 The explicit negative-proof switch only breaks checks. It cannot make a gate
 pass. `OPEN_VERIFY_BREAK=all` changes one channel of one rendered pixel by

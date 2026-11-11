@@ -999,7 +999,12 @@ def main():
         matches(r"^states passed: 13/13;", text)
         output = Path(re.search(r"output: (\S+)", text)[1])
         baseline = os.environ.get("SIDEBAR_BASELINE_RENDERER") or str(output / "main-source/Packages/OpenKit/.build/release/sidebar-render")
-        all_passed(run(str(root / "Packages/OpenKit/.build/release/sidebar-render"), "divider-check", "--baseline", baseline, "--out", str(output / "cu5")))
+        comparison = json.loads((output / "receipt.json").read_text())
+        display = runpy.run_path(str(root / "tools/verification/portable-baselines.py"))["display_environment"]
+        require(display() == comparison["environment"], "display changed before divider comparison")
+        all_passed(run(str(root / "Packages/OpenKit/.build/release/sidebar-render"), "divider-check", "--baseline", baseline,
+                       "--baseline-display-key", comparison["baselineDisplayKey"], "--out", str(output / "cu5")))
+        require(display() == comparison["environment"], "display changed during divider comparison")
     elif name == "boosts":
         boosts(root)
     elif name == "import-arc":

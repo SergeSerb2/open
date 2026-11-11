@@ -102,10 +102,10 @@ def private_roots(root):
     return data
 
 
-def command(args, log):
+def command(args, log, env=None):
     with log.open("wb") as stream:
         try:
-            subprocess.run([str(a) for a in args], stdout=stream, stderr=subprocess.STDOUT, check=True, timeout=600)
+            subprocess.run([str(a) for a in args], stdout=stream, stderr=subprocess.STDOUT, check=True, timeout=600, env=env)
         except subprocess.SubprocessError:
             raise ValueError("state command failed; inspect its private log: " + str(log)) from None
 
@@ -129,7 +129,7 @@ def build_main(out, ref):
     return package / ".build/release/sidebar-render"
 
 
-def run_state(renderer, root, capture, state, target):
+def run_state(renderer, root, capture, state, target, verification_key=None):
     name, _, snapshot, render, compare = state
     target.mkdir(parents=True)
     if name == "default-dark":
@@ -149,8 +149,9 @@ def run_state(renderer, root, capture, state, target):
     import struct
     width, height = struct.unpack(">II", capture.read_bytes()[16:24])
     common = ["--width", "228", "--scale", "1"]
+    env = dict(os.environ, OPEN_VERIFY_DISPLAY_KEY=verification_key) if verification_key else None
     command([renderer, "render", "--snapshot", root / snapshot, "--out", target / "render.png", "--size", f"{width}x{height}",
-             "--appearance", "dark", *([] if "--space" in render else ["--space", "0"]), *common, *render], target / "render.log")
+             "--appearance", "dark", *([] if "--space" in render else ["--space", "0"]), *common, *render], target / "render.log", env=env)
     if os.environ.get("OPEN_VERIFY_BREAK") in ("all", "color") and "branch" in target.parts:
         command(["/usr/bin/swift", Path(__file__).with_name("break-render.swift"), target / "render.png", "color"],
                 target / "negative-proof.log")
@@ -230,8 +231,13 @@ def record_limits(baseline, data, captures, out, attempts, receipt):
         count, position = LIMITS[name][:2]
         measurements = []
         for attempt in range(1, attempts + 1):
+            reader = runpy.run_path(str(Path(__file__).with_name("portable-baselines.py")))["display_environment"]
+            if reader() != receipt["environment"]:
+                raise ValueError("display changed before reference recording")
             table = run_state(baseline, data, captures[frame], state,
-                              out / "main" / name / f"attempt-{attempt}")
+                              out / "main" / name / f"attempt-{attempt}", receipt["baselineDisplayKey"])
+            if reader() != receipt["environment"]:
+                raise ValueError("display changed during reference recording")
             rows, worst = table_metrics(table)
             measurements.append({"attempt": attempt, "count": len(rows),
                                  "summaryCount": worst[2], "position": str(worst[0]),
@@ -312,10 +318,21 @@ def main():
         out.mkdir(mode=0o700, parents=True, exist_ok=False)
     renderer = args.renderer.resolve()
     ref_sha = subprocess.check_output(["git", "rev-parse", args.baseline_ref], cwd=ROOT, text=True).strip()
+    # The comparison binary is built from unchanged main. During the schema-1
+    # transition it understands scale/ICC only. Read its committed schema;
+    # never retry or pick another key after a failed lookup. The parent checks
+    # the full current mode before and after each paired render in either case.
+    old_metadata = subprocess.check_output(["git", "show", ref_sha + ":tools/verification/sidebar-color-baselines.json"], cwd=ROOT)
+    if len(old_metadata) > 1_048_576:
+        raise ValueError("oversized main display metadata")
+    baseline_manifest = json.loads(old_metadata)
+    baseline_key = key.split("-mode-", 1)[0] if baseline_manifest.get("schemaVersion") == 1 else key
+    if not args.record_limits and baseline_key not in baseline_manifest.get("environments", {}):
+        raise ValueError("unchanged main has no exact display reference: " + baseline_key)
     baseline = args.baseline_renderer.resolve() if args.baseline_renderer else build_main(out, ref_sha)
     receipt = {"gate": {"positionAndInk": "identical", "colorMetricDrift": str(COLOR_DRIFT),
                         "arcLimits": LIMITS, "selectedColorLimits": color_limits, "sha": "informational"},
-               "environment": environment, "envKey": key, "baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
+               "environment": environment, "envKey": key, "baselineDisplayKey": baseline_key, "baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
                "baselineBinarySHA256": hashlib.sha256(baseline.read_bytes()).hexdigest(),
                "snapshotSHA256": {name: hashlib.sha256((root / name / "State/browser.json").read_bytes()).hexdigest()
                                   for name in ("snap-static", "snap-real")},
@@ -332,8 +349,12 @@ def main():
             name, frame, _, _, _ = state
             attempt_results = []
             for attempt in range(1, args.attempts + 1):
-                tables = {kind: run_state(binary, data, captures[frame], state, out / kind / name / f"attempt-{attempt}")
+                if portability["display_environment"]() != environment:
+                    raise ValueError("display changed before paired render")
+                tables = {kind: run_state(binary, data, captures[frame], state, out / kind / name / f"attempt-{attempt}", baseline_key if kind == "main" else key)
                           for kind, binary in (("main", baseline), ("branch", renderer))}
+                if portability["display_environment"]() != environment:
+                    raise ValueError("display changed during paired render")
                 result = gate_tables(name, tables, color_limits)
                 attempt_results.append({"attempt": attempt, **result})
                 if result["passed"] or attempt == args.attempts:
