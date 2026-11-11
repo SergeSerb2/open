@@ -73,6 +73,40 @@ def idle_window(app):
             'counterDelta':{k:v-before['counters'].get(k,0) for k,v in after['counters'].items()}}
 
 
+def idle_sample_attribution(sample):
+    """Keep worker bursts informational under LEAD 08:00, with raw evidence.
+
+    The main thread attributes an excess when it is the largest positive
+    App-thread group delta against the two closed windows. Pair 1 of the
+    accepted iteration was dominated by workers, despite smaller main work.
+    Cumulative Library counters use their window deltas; live gauges use
+    their settled values as well. Cached timings and lifetime totals do not
+    describe activity during the window.
+    """
+    windows=sample['idleWindows']
+    def threads(window):
+        totals={}
+        for row in window['attribution']['threads']:
+            name=row['name'];totals[name]=totals.get(name,0)+row['cpuPercent']
+        return totals
+    before,opened,after=[threads(windows[key]) for key in ['closedBefore','open','closedAfter']]
+    deltas={name:opened.get(name,0)-statistics.mean([before.get(name,0),after.get(name,0)])
+            for name in set(before)|set(opened)|set(after)}
+    main=deltas.get('CrBrowserMain',0)
+    dominant=max(deltas,key=deltas.get,default='')
+    counters=windows['open']['counterDelta'];gauges=windows['open']['counters']
+    activity={key:value for key,value in counters.items() if value>0 and
+              (key.startswith('wake.') or key in ['created','configured','reloadData','tableUpdates','formatting','listLayout','rasterStores','rasterPixels','textRasters','glyphRasters'])}
+    activity.update({key:gauges.get(key,0) for key in ['tasks','timers','displayLinks','animations'] if gauges.get(key,0)>0})
+    high=sample['idleDeltaPercentagePoints']>.075
+    main_attributed=main>0 and dominant=='CrBrowserMain'
+    failed=high and (main_attributed or bool(activity))
+    return {'deltaPercentagePoints':sample['idleDeltaPercentagePoints'],'aboveSampleCeiling':high,
+            'mainThreadDeltaPercentagePoints':main,'dominantAppThreadGroup':dominant,
+            'threadGroupDeltasPercentagePoints':deltas,'mainThreadAttributed':main_attributed,
+            'libraryActivity':activity,'status':'FAIL' if failed else 'INFO' if high else 'PASS','ok':not failed}
+
+
 def seed(root,bundle,output):
     app=None
     with server() as base:
@@ -135,7 +169,7 @@ def scroll_fixture(root,snapshot):
 
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
-    receipt={'configuration':'Release','samples':[],'method':'LEAD 06:50: app-side event dispatch to CATransaction flush containing the complete first screen or filtered result. Physical clocks are informational. Idle is open minus mean(closed before, closed after).','validity':{'load1Maximum':3.5,'loadReadings':2,'spacingSeconds':10,'foreignCPUThreshold':None,'quietDeadlineSecondsPerPair':900},'limits':{'firstSubmittedMilliseconds':8,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
+    receipt={'configuration':'Release','samples':[],'method':'LEAD 06:50 clocks/validity; LEAD 08:00 qualification. App-side event dispatch to the CATransaction flush containing the complete first screen or filtered result. Physical clocks and row-setup sub-targets are informational. Idle median is open minus mean(closed before, closed after); high samples fail only when attributed to the main thread or Library activity.','validity':{'load1Maximum':3.5,'loadReadings':2,'spacingSeconds':10,'foreignCPUThreshold':None,'quietDeadlineSecondsPerPair':900},'limits':{'firstSubmittedMilliseconds':8,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
     if args.resume_from:
         previous=json.loads(args.resume_from.read_text())
         assert previous['configuration']==receipt['configuration'] and previous['limits']==receipt['limits']
@@ -248,15 +282,19 @@ def main(args):
                 'fullyDrawnContent':verdict([s['open']['contentSubmittedMilliseconds'] for s in receipt['samples']],100),
                 'coldSection':verdict([max(r['contentSubmittedMilliseconds'] for r in s['coldSections']) for s in receipt['samples']],50),
                 'warmSection':verdict([max(r['contentSubmittedMilliseconds'] for r in s['warmSections']) for s in receipt['samples']],8.3),
-                'search':verdict([s['search']['contentSubmittedMilliseconds'] for s in receipt['samples']],16),
-                'idleDelta':verdict([s['idleDeltaPercentagePoints'] for s in receipt['samples']],.05),
-                'rowConfigureP95':verdict([s['idleCounters']['configureP95'] for s in receipt['samples']],.3),
-                'coldApply':verdict([max(x['counters'].get('last.apply',0) for x in s['coldSections'] if x['counterDelta'].get('tableUpdates',0)>0) for s in receipt['samples']],4)}
+                'search':verdict([s['search']['contentSubmittedMilliseconds'] for s in receipt['samples']],16)}
+            attribution=[idle_sample_attribution(s) for s in receipt['samples']]
+            idle_values=[s['idleDeltaPercentagePoints'] for s in receipt['samples']]
+            receipt['summary']['idleDelta']={'values':idle_values,'median':statistics.median(idle_values),'limit':.05,
+                'sampleAttribution':attribution,'ok':statistics.median(idle_values)<=.05 and all(s['ok'] for s in attribution)}
+            def diagnostic(values,target):return {'values':values,'median':statistics.median(values),'diagnosticTarget':target,'status':'INFO','informational':True}
+            receipt['summary']['rowConfigureP95']=diagnostic([s['idleCounters']['configureP95'] for s in receipt['samples']],.3)
+            receipt['summary']['coldApply']=diagnostic([max(x['counters'].get('last.apply',0) for x in s['coldSections'] if x['counterDelta'].get('tableUpdates',0)>0) for s in receipt['samples']],4)
             maxima=[s['idleCounters']['configureMaximum'] for s in receipt['samples']]
-            receipt['summary']['rowConfigureMaximum']={'values':maxima,'median':statistics.median(maxima),'limit':1,'ok':max(maxima)<=1}
+            receipt['summary']['rowConfigureMaximum']=dict(diagnostic(maxima,1),maximum=max(maxima))
             receipt['warmZeroConfiguration']=all(s['counterDelta'].get('configured',-1)==0 and s['counterDelta'].get('reloadData',-1)==0 for row in receipt['samples'] for s in row['warmSections'])
             receipt['idleCountersOK']=all(all(row['idleCounters'].get(k,-1)==0 for k in ['tasks','timers','displayLinks','animations']) for row in receipt['samples'])
-            receipt['nativeBudgetsOK']=all(v['ok'] for v in receipt['summary'].values()) and receipt['warmZeroConfiguration'] and receipt['idleCountersOK'] and receipt['earlyCold']['ok']
+            receipt['nativeBudgetsOK']=all(v['ok'] for v in receipt['summary'].values() if not v.get('informational')) and receipt['warmZeroConfiguration'] and receipt['idleCountersOK'] and receipt['earlyCold']['ok']
             receipt['scroll']={'status':'UNVERIFIED','reason':'10,000-row native submission and physical 120Hz dropped-frame qualification are separate from the 1,000-download fixture.'}
             receipt['returningLaunch']={'status':'UNVERIFIED','reason':'No baseline artifact supplied.'}
             if args.baseline_bundle:
