@@ -13,6 +13,10 @@ public final class FilePreviewCache {
     private var pending: [String:[@MainActor () -> Void]] = [:]
     private let placeholder = NSImage(systemSymbolName:"doc",accessibilityDescription:nil) ?? NSImage()
     private init() { images.countLimit = 128; images.totalCostLimit = 16*1024*1024 }
+    public func warmPlaceholder() {
+        var rect = CGRect(x:0,y:0,width:64,height:64)
+        _ = placeholder.cgImage(forProposedRect:&rect,context:nil,hints:nil)
+    }
     public func image(for url:URL,onReady:@escaping @MainActor () -> Void) -> NSImage {
         let key = url.path, cached = images.object(forKey:url.path as NSString)
         if pending[key] != nil {

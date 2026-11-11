@@ -273,6 +273,7 @@ extension LibraryPanelView {
         statusLabel.stringValue = section == .downloads && !viewModel.downloads.downloadHistoryError.isEmpty ? viewModel.downloads.downloadHistoryError : viewModel.statusText
         statusLabel.isHidden = statusLabel.stringValue.isEmpty || section == .spaces
         for (target,host) in hosts { host.list.isHidden = target != section || host.list.rowCount == 0 || section == .spaces }
+        layoutActiveList()
         content.isHidden = !rowsEmpty || (section == .spaces && manager != nil)
         manager?.isHidden = section != .spaces
         header.isHidden = section == .spaces || filterOpen; filter.isHidden = !section.hasFilter || filterOpen

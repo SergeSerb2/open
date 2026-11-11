@@ -58,7 +58,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
     override var isFlipped: Bool { true }
 
     override init(frame: NSRect) {
-        super.init(frame: frame); wantsLayer = true
+        super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay
         scroll.drawsBackground = false; scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true; scroll.scrollerStyle = .overlay
         scroll.automaticallyAdjustsContentInsets = false

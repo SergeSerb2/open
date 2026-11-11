@@ -159,6 +159,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         preparing = true; prebuiltReady = false
         if !warmedRows {
             (searchField as? LibrarySearchField)?.warmEditor()
+            FilePreviewCache.shared.warmPlaceholder()
             for name in ["globe","folder","paintbrush.pointed","doc"] { _ = symbol(name) }
             LibraryListView.warmRowKinds(foreground:foreground,overlay:overlay)
             warmedRows = true
@@ -324,9 +325,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         if searchField.frame != searchFrame { searchField.frame = searchFrame }
         filter.frame=CGRect(x:336,y:10,width:73,height:36)
         content.frame=CGRect(x:112,y:56,width:max(0,bounds.width-112),height:max(0,height-56))
-        let listTop: CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132) : 56
-        let listFrame = CGRect(x:112,y:listTop,width:304,height:max(0,height-listTop-(statusLabel.isHidden ? 0 : 42)))
-        if listView.frame != listFrame { listView.frame = listFrame }
+        layoutActiveList()
         statusLabel.frame = CGRect(x:124,y:height-38,width:281,height:34)
         boostDisabledText.frame = CGRect(x:124,y:99,width:190,height:20)
         boostTurnOn.frame = CGRect(x:327,y:94,width:78,height:30)
@@ -345,6 +344,11 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         let lines = ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:236,height:100),options:[.usesLineFragmentOrigin,.usesFontLeading]).height)
         let buttonWidth = (emptyButton.title as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:13,weight:.semibold)]).width+24
         emptyButton.frame=frame(centerX-buttonWidth/2,top+92+max(17,lines)+14,buttonWidth,28)
+    }
+    func layoutActiveList() {
+        let top:CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132) : 56
+        let rect = CGRect(x:112,y:top,width:304,height:max(0,bounds.height-top-(statusLabel.isHidden ? 0 : 42)))
+        if listView.frame != rect { listView.frame = rect; listView.layoutSubtreeIfNeeded() }
     }
     public func setSearch(_ text: String) {
         viewModel.query = text
