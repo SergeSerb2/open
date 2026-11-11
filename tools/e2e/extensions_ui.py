@@ -66,7 +66,9 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             elif current["more"]:
                 app.call("ext-click", extension="more", surface=surface, select=action(identifier)["name"])
             else:
-                raise RuntimeError("action has neither a visible slot nor an overflow menu: " + identifier)
+                raise RuntimeError("action has neither a visible slot nor an overflow menu: " + json.dumps(
+                    dict(extension=identifier, strip=current, actions=actions(), tabs=app.call("tabs"),
+                         events=app.call("events"), focus=app.call("native-focus-state")), sort_keys=True))
         return wait_until(lambda: (lambda s: s if s.get("visible") else None)(app.call("ext-popup-state")), timeout=15)
     def page(): return app.call("ext-popup")["page"]["identifier"]
     def capture(name, window=None):

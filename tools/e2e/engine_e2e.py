@@ -2810,6 +2810,9 @@ def _window_flow_checks(factory, results, tmp):
             "zones": zones}
         first = app.call("window-state")
         w1 = first["id"]
+        # Restoring a window constrains it to the display's visible area. Keep
+        # the fixture above the actual Dock, while retaining exact equality.
+        base_y = max(60, first["mainScreenVisibleFrame"][1])
         results["native_window"] = {
             "ok": first["titled"] and first["hiddenTitle"] and not first["peekCreated"]
                   and len(first["trafficLights"]) == 3
@@ -2822,7 +2825,7 @@ def _window_flow_checks(factory, results, tmp):
         app.call("save")
         counts = app.call("frame-save-counters")
         for index in range(12):
-            app.call("window-frame", frame=[80 + index, 60 + index, 1000, 700])
+            app.call("window-frame", frame=[80 + index, base_y + index, 1000, 700])
         immediate = app.call("frame-save-counters")
         wait_until(lambda: app.call("frame-save-counters")["captures"] > counts["captures"], timeout=4, step=0.1)
         debounced = app.call("frame-save-counters")
@@ -2830,12 +2833,12 @@ def _window_flow_checks(factory, results, tmp):
             with open(os.path.join(app.user_data, "State", "browser.json")) as stream:
                 row = json.load(stream)["windows"][0]
             return [row[k] for k in ("frameX", "frameY", "frameWidth", "frameHeight")]
-        saved = wait_until(lambda: saved_frame() == [91, 71, 1000, 700], timeout=4, step=0.1)
+        saved = wait_until(lambda: saved_frame() == [91, base_y + 11, 1000, 700], timeout=4, step=0.1)
         results["frame_save_debounced"] = {"ok": immediate["captures"] == counts["captures"]
             and debounced["captures"] == counts["captures"] + 1
             and immediate["treeChanges"] == counts["treeChanges"] and immediate["mirrorSyncs"] == counts["mirrorSyncs"] and bool(saved),
             "before": counts, "immediate": immediate, "debounced": debounced}
-        app.call("window-frame", frame=[80, 60, 1000, 700])
+        app.call("window-frame", frame=[80, base_y, 1000, 700])
         a = new_tab(app, fixture("Window A"))
         b = app.call("open", url=fixture("Window B"), background=True)["id"]
         results["background_lazy"] = {"ok": not app.tab(b)["loaded"] and not app.tab(b)["hasWebContent"]}
