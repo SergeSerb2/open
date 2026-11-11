@@ -39,6 +39,8 @@ import OpenStore
     private var historyLoadRevision = 0
     public var confirmsClearHistory = false
     public var pendingHistoryDeletes: [URL] = []
+    public private(set) var historyHasMore = true
+    public private(set) var historyLoading = false
     public private(set) var historyRows: [HistoryMatch] = []
     public private(set) var historyFavicons: [URL: Data] = [:]
     public private(set) var thumbnailImages: [UUID: NSImage] = [:]
@@ -266,5 +268,28 @@ import OpenStore
         catch { statusText = "Could not delete the capture. \(error.localizedDescription)" }
     }
     public func saveCapture(_ item: CaptureItemSnapshot, to url: URL) { statusText = actions.saveCapture(id: item.id, to: url) ?? "Saved." }
-    public func reloadHistory() async { historyLoadRevision += 1; let revision = historyLoadRevision, profile = historyProfileID, text = query; let rows: [HistoryMatch]; if text.isEmpty { rows = await histories[profile]?.recent() ?? [] } else { rows = await histories[profile]?.search(text, limit: 100) ?? [] }; guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows; if historyFaviconImages.count > 512 {historyFavicons=[:];historyFaviconImages=[:]}; if let faviconStore { for row in rows { let data = await faviconStore.icon(for: row.url)?.png32; guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else {return}; if historyFavicons[row.url] != data {historyFaviconImages[row.url]=data.flatMap{NSImage(data:$0)}};historyFavicons[row.url] = data } } }
+    public func reloadHistory() async {
+        historyLoadRevision += 1; historyLoading = false; historyHasMore = true; historyRows = []
+        await loadNextHistoryPage()
+    }
+    public func loadNextHistoryPage() async {
+        guard historyHasMore, !historyLoading else { return }
+        historyLoading = true
+        let revision = historyLoadRevision, profile = historyProfileID, text = query, offset = historyRows.count
+        defer { if revision == historyLoadRevision { historyLoading = false } }
+        let rows: [HistoryMatch]
+        if text.isEmpty { rows = await histories[profile]?.recent(limit:100,offset:offset) ?? [] }
+        else { rows = Array((await histories[profile]?.search(text,limit:offset+100) ?? []).dropFirst(offset)) }
+        guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else { return }
+        historyRows += rows; historyHasMore = rows.count == 100
+        if historyFaviconImages.count > 512 { historyFavicons = [:]; historyFaviconImages = [:] }
+        if let faviconStore {
+            for row in rows {
+                let data = await faviconStore.icon(for:row.url)?.png32
+                guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else { return }
+                if historyFavicons[row.url] != data { historyFaviconImages[row.url] = data.flatMap { NSImage(data:$0) } }
+                historyFavicons[row.url] = data
+            }
+        }
+    }
 }

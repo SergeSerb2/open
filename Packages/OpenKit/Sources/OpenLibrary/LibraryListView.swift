@@ -31,12 +31,14 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     private let scroll = NSScrollView()
     private(set) var items: [LibraryRowItem] = []
     private var entries: [Entry] = []
+    private var lastSelectedRow = -1
     private enum Entry { case heading(String), item(Int) }
     var foreground = NSColor.labelColor { didSet { table.reloadData() } }
     var overlay = NSColor.labelColor { didSet { table.reloadData() } }
     var gallery = false { didSet { if gallery != oldValue { rebuild() } } }
     var onSelection: ((String?) -> Void)?
     var onEnd: (() -> Void)?
+    private(set) var dragSession: [String:Any] = ["began":0,"ended":0]
     private(set) var activeMenu: NSMenu?
     private(set) var hoveredID: String?
     override var isFlipped: Bool { true }
@@ -55,7 +57,9 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
         table.target = self; table.action = #selector(activateClicked)
         table.onActivate = { [weak self] in self?.activateSelected() }
         table.onDelete = { [weak self] in self?.deleteSelected() }
-        table.menuAtRow = { [weak self] row in self?.menu(at: row) }
+        table.menuAtRow = { [weak self] row in
+            guard let self else { return nil }; let menu = self.menu(at:row); self.activeMenu = menu; return menu
+        }
         table.setDraggingSourceOperationMask(.copy, forLocal: false)
         table.setAccessibilityLabel("Library items")
         scroll.documentView = table; addSubview(scroll)
@@ -82,7 +86,13 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if case .heading = entries[row] { return 27 }; return gallery ? 118 : 56
     }
-    func tableViewSelectionDidChange(_ notification:Notification) { onSelection?(selectedItem?.id) }
+    func tableViewSelectionDidChange(_ notification:Notification) {
+        for row in Set([lastSelectedRow,table.selectedRow]) where row >= 0 {
+            (table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.selected = row == table.selectedRow
+        }
+        lastSelectedRow = table.selectedRow
+        onSelection?(selectedItem?.id)
+    }
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { item(at: row) != nil }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         switch entries[row] {
@@ -96,6 +106,7 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
             view.identifier = .init("row")
             view.onHover = nil
             view.configure(items[index], foreground: foreground, overlay: overlay, gallery: gallery)
+            view.selected = row == table.selectedRow
             view.hovered = items[index].id == hoveredID
             view.onHover = { [weak self, weak view] hovered in
                 guard let self, let view else { return }
@@ -111,6 +122,15 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     }
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
         item(at: row)?.dragURL.map { $0 as NSURL }
+    }
+    func tableView(_ tableView:NSTableView, draggingSession session:NSDraggingSession, willBeginAt screenPoint:NSPoint, forRowIndexes rowIndexes:IndexSet) {
+        dragSession = ["began":(dragSession["began"] as? Int ?? 0)+1,"ended":dragSession["ended"] as? Int ?? 0,
+            "types":session.draggingPasteboard.types?.map(\.rawValue) ?? [],
+            "url":session.draggingPasteboard.string(forType:.fileURL) ?? session.draggingPasteboard.string(forType:.URL) ?? ""]
+        session.animatesToStartingPositionsOnCancelOrFail = false
+    }
+    func tableView(_ tableView:NSTableView, draggingSession session:NSDraggingSession, endedAt screenPoint:NSPoint, operation:NSDragOperation) {
+        dragSession["ended"] = (dragSession["ended"] as? Int ?? 0)+1; dragSession["operation"] = operation.rawValue
     }
     private func item(at row: Int) -> LibraryRowItem? {
         guard entries.indices.contains(row), case .item(let index) = entries[row] else { return nil }; return items[index]
@@ -205,6 +225,7 @@ private final class LibraryItemView: NSView {
     var item: LibraryRowItem?
     var onHover: ((Bool) -> Void)?
     var onMenu: (() -> Void)?
+    var selected = false { didSet { setAccessibilitySelected(selected); needsDisplay = true } }
     var hovered = false { didSet { buttons.forEach { $0.isHidden = !hovered && !gallery }; needsLayout = true; needsDisplay = true; onHover?(hovered) } }
     private let icon = NSImageView(), title = NSTextField(labelWithString:""), subtitle = NSTextField(labelWithString:"")
     private var buttons: [LibraryControl] = []
@@ -277,8 +298,8 @@ private final class LibraryItemView: NSView {
         }
     }
     override func draw(_ dirtyRect:NSRect) {
-        if hovered || gallery {
-            overlay.withAlphaComponent(hovered ? 0.105 : 0.045).setFill()
+        if hovered || selected || gallery {
+            overlay.withAlphaComponent(hovered || selected ? 0.105 : 0.045).setFill()
             NSBezierPath(roundedRect:CGRect(x:8,y:gallery ? 4 : 0,width:max(0,bounds.width-15),height:bounds.height-(gallery ? 8 : 0)),xRadius:11,yRadius:11).fill()
         }
         if let progress = item?.progress {

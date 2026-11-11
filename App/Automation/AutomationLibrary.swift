@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
 import AppKit
+import ObjectiveC
 import OpenSettings
 import OpenLibrary
 
@@ -30,6 +31,17 @@ extension AutomationController {
         guard let raw=args["section"] as? String, let section=LibraryPanelSection(rawValue:raw), panel.sections.contains(section) else { throw Failure(message:"unknown or hidden section") }
         panel.select(section)
       case "search": panel.setSearch(args["text"] as? String ?? "")
+      case "save-panel":
+        guard let sheet = session.controller?.window?.attachedSheet as? NSSavePanel else { throw Failure(message:"Library save panel is not open") }
+        let cancel = args["cancel"] as? Bool ?? false
+        let path = args["path"] as? String
+        guard cancel || (path?.hasPrefix("/") == true && (path?.utf8.count ?? 4097) <= 4096 && path?.contains("\0") == false) else { throw Failure(message:"expected an absolute save path") }
+        let selector = NSSelectorFromString("completeWithReturnCode:url:urls:")
+        guard let method = class_getInstanceMethod(type(of:sheet),selector), let types = method_getTypeEncoding(method), String(cString:types) == "v40@0:8q16@24@32" else { throw Failure(message:"save panel URL input unavailable") }
+        typealias Complete = @convention(c) (AnyObject,Selector,Int,NSURL?,NSArray?) -> Void
+        let complete = unsafeBitCast(method_getImplementation(method),to:Complete.self)
+        let url = cancel ? nil : path.map { URL(fileURLWithPath:$0) }
+        complete(sheet,selector,cancel ? NSApplication.ModalResponse.cancel.rawValue : NSApplication.ModalResponse.OK.rawValue,url as NSURL?,url.map { [$0 as NSURL] as NSArray })
       case "release-delay":
         guard let delay = args["seconds"] as? Double, delay.isFinite, delay >= 0.1, delay <= 60 else { throw Failure(message:"release delay must be 0.1...60 seconds") }
         session.releaseDelay = delay
@@ -48,6 +60,20 @@ extension AutomationController {
         return ["items":menu]
       case "show-row-menu":
         guard let id = args["id"] as? String, panel.showRowMenu(id) else { throw Failure(message:"row menu unavailable") }
+      case "row-drag-session":
+        guard let id = args["id"] as? String, panel.selectRow(id), let target = session.controller?.window,
+          let row = (panel.automationState()["rows"] as? [[String:Any]])?.first(where: { $0["id"] as? String == id }),
+          let box = row["frame"] as? [CGFloat], panel.dragPayload(id) != nil else { throw Failure(message:"row is not draggable") }
+        let start = panel.convert(CGPoint(x:box[0]+30,y:box[1]+box[3]/2),to:nil)
+        func event(_ type:NSEvent.EventType,_ point:CGPoint) -> NSEvent? {
+          NSEvent.mouseEvent(with:type,location:point,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,
+            windowNumber:target.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:type == .leftMouseUp ? 0 : 1)
+        }
+        let end = CGPoint(x:start.x+480,y:start.y+12)
+        guard let down = event(.leftMouseDown,start), let drag = event(.leftMouseDragged,end), let up = event(.leftMouseUp,end) else { throw Failure(message:"could not create drag events") }
+        DispatchQueue.main.async {
+          NSApp.postEvent(down,atStart:false); NSApp.postEvent(drag,atStart:false); NSApp.postEvent(up,atStart:false)
+        }
       case "row-drag":
         guard let id = args["id"] as? String, let payload = panel.dragPayload(id) else { throw Failure(message:"row is not draggable") }
         return payload
@@ -74,6 +100,7 @@ extension AutomationController {
     state["open"]=controller.isLibraryOpen
     state["created"]=true
     state["panelCreated"]=session.panel != nil
+    state["releasedPanelAlive"]=session.releasedPanel != nil
     state["panelGeneration"]=session.panelGeneration
     state["releaseDelay"]=session.releaseDelay
     state["key"]=controller.window?.isKeyWindow ?? false

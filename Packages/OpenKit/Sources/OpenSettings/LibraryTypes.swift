@@ -65,7 +65,7 @@ extension LibraryActions { public func flushHistoryWrites() async {} }
             // refuses a file that grows between opening and reading it.
             let file: FileHandle
             do { file = try FileHandle(forReadingFrom: indexURL) }
-            catch let error as CocoaError where error.code == .fileReadNoSuchFile { captures = []; loadFailed = false; return }
+            catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile { captures = []; loadFailed = false; return }
             defer { try? file.close() }
             let data = try file.read(upToCount: 16 * 1024 * 1024 + 1) ?? Data()
             guard data.count <= 16 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }

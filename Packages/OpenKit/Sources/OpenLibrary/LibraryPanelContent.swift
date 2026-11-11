@@ -86,6 +86,13 @@ extension LibraryPanelView {
         case .easels: break
         }
         updateEmptyCopy()
+        if section == .media, viewModel.captures.loadFailed {
+            emptyTitle.stringValue = "Could not load media"
+            emptyBody.stringValue = "Close the Library and try again."
+        }
+        statusLabel.stringValue = section == .downloads && !viewModel.downloads.downloadHistoryError.isEmpty ? viewModel.downloads.downloadHistoryError : viewModel.statusText
+        statusLabel.isHidden = statusLabel.stringValue.isEmpty || section == .spaces
+        if rows.count < 8, (section == .archive && hasActiveFilters || section == .history && !historyWhenChips.isEmpty) { loadNextPage() }
         listView.gallery = section == .boosts && viewModel.boostsPresentation == .gallery
         listView.update(rows)
         listView.isHidden = rows.isEmpty || section == .spaces
@@ -180,7 +187,7 @@ extension LibraryPanelView {
                 }
             }
             return LibraryRowItem(id:id.description,title:viewModel.archivedDisplayTitle(row),subtitle:row.url.absoluteString,kind:"archive",day:dayLabel(row.archivedAt),
-                image:viewModel.faviconImages[id] ?? symbol(row.kind == .folder ? "folder" : "globe"),dragURL:row.url,activate:restore,
+                image:viewModel.faviconImages[id] ?? symbol(row.kind == .folder ? "folder" : "globe"),dragURL:row.kind == .folder ? nil : row.url,activate:restore,
                 hoverActions:[.init(title:"Delete",glyph:.trash,run:remove),.init(title:"Restore",glyph:.undo,run:restore)])
         }
     }
@@ -256,6 +263,16 @@ extension LibraryPanelView {
         guard let window else { return }
         let panel = NSSavePanel(); panel.nameFieldStringValue = item.fileName
         panel.beginSheetModal(for:window) { [weak self] response in if response == .OK, let url = panel.url { self?.viewModel.saveCapture(item,to:url) } }
+    }
+    func loadNextPage() {
+        if section == .archive { loadNextArchivePage() }
+        else if section == .history, isPresented, viewModel.historyHasMore, !viewModel.historyLoading, !historyPageLoading {
+            historyPageLoading = true
+            Task { @MainActor [weak self] in
+                guard let self else { return }; await self.viewModel.loadNextHistoryPage(); self.historyPageLoading = false
+                if self.isPresented, self.section == .history { self.renderRows() }
+            }
+        }
     }
     func loadNextArchivePage() {
         guard isPresented, section == .archive, viewModel.archiveHasMore, !viewModel.archiveLoading, !archivePageLoading else { return }

@@ -57,6 +57,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var archiveSpaceChips: Set<String> = []
     var historyWhenChips: Set<String> = []
     var archivePageLoading = false
+    var historyPageLoading = false
+    let statusLabel = NSTextField(wrappingLabelWithString:"")
 
     public init(viewModel: LibraryViewModel, context: SidebarContext) {
         self.viewModel = viewModel; self.context = context
@@ -93,7 +95,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         boostDisabledText.font = .systemFont(ofSize:13)
         boostTurnOn.onPress = { [weak self] in self?.viewModel.defaults.set(true,forKey:"open.advanced.enableBoosts"); self?.renderRows() }
         addSubview(boostDisabledText); addSubview(boostTurnOn)
-        listView.onEnd = { [weak self] in self?.loadNextArchivePage() }
+        statusLabel.font = .systemFont(ofSize:12); addSubview(statusLabel)
+        listView.onEnd = { [weak self] in self?.loadNextPage() }
         boostsLayout.target = self; boostsLayout.action = #selector(changeBoostLayout)
         boostsLayout.setAccessibilityLabel("Boosts layout"); boostsLayout.identifier = .init("boosts.layout")
         boostsProfile.target = self; boostsProfile.action = #selector(changeBoostProfile)
@@ -183,6 +186,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         overlay = appearance == .dark ? .white : foreground
         for control in Array(tiles.values)+[back,filter,emptyButton] { control.foreground=foreground;control.overlay=overlay }
         boostDisabledText.textColor = foreground.withAlphaComponent(0.68); boostTurnOn.foreground = foreground; boostTurnOn.overlay = overlay
+        statusLabel.textColor = foreground.withAlphaComponent(0.68)
         searchField.textColor = foreground
         listView.foreground = foreground; listView.overlay = overlay
         searchGlyph.color = foreground.withAlphaComponent(0.68)
@@ -228,7 +232,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         filter.frame=CGRect(x:336,y:10,width:73,height:36)
         content.frame=CGRect(x:112,y:56,width:max(0,bounds.width-112),height:max(0,height-56))
         let listTop: CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132) : 56
-        listView.frame = CGRect(x:112,y:listTop,width:304,height:max(0,height-listTop))
+        listView.frame = CGRect(x:112,y:listTop,width:304,height:max(0,height-listTop-(statusLabel.isHidden ? 0 : 42)))
+        statusLabel.frame = CGRect(x:124,y:height-38,width:281,height:34)
         boostDisabledText.frame = CGRect(x:124,y:99,width:190,height:20)
         boostTurnOn.frame = CGRect(x:327,y:94,width:78,height:30)
         filterEditor.frame = CGRect(x:112,y:0,width:305,height:filterEditor.contentHeight)
@@ -288,8 +293,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
                     "hitClass":hit.map { String(describing:type(of:$0)) } ?? "", "canDragWindow":tile.mouseDownCanMoveWindow]
             },
             "header":["searchFrame":section == .spaces ? [] : rect(header),"filterFrame":section.hasFilter ? rect(filter) : [],"filterOpen":filterOpen,"chips":filterOpen ? filterEditor.state(in:self) : []] as [String:Any],
-            "search":viewModel.query,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden],
-            "firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? ""]
+            "dragSession":listView.dragSession,"search":viewModel.query,"filterActive":hasActiveFilters,"rows":listView.state(in:self),"boostsLayout":viewModel.boostsPresentation == .gallery ? "Gallery" : "List", "status":viewModel.statusText, "emptyVisible":!content.isHidden,"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled,"buttonVisible":!emptyButton.isHidden],
+            "menuOpen":listView.activeMenu != nil,"firstResponder":window?.firstResponder.map { String(describing:type(of:$0)) } ?? ""]
     }
     public func hoverTile(_ section: LibraryPanelSection, hovered: Bool) { tiles[section]?.hovered=hovered }
     public func pressBack() { back.performClick(nil) }

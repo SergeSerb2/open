@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import struct
+import sqlite3
 import subprocess
 import tempfile
 import time
@@ -49,11 +50,16 @@ def run(output,bundle=None,frames=False):
             app.call('window-focus',id=owner,activate=True)
             state(action='open',section='media')
             check('media_truthful_empty',wait(lambda:state().get('emptyVisible')) and state()['emptyState']['title']=='No media yet' and not state()['emptyState']['buttonVisible'],state=state()['emptyState'])
+            index_file=Path(data)/'State/captures.json';index_file.parent.mkdir(exist_ok=True)
+            index_file.write_text('broken capture index');state(action='refresh')
+            check('media_corrupt_index_error',wait(lambda:state()['emptyState']['title']=='Could not load media'))
+            index_file.unlink();state(action='refresh')
+            check('media_missing_index_recovers',wait(lambda:state()['emptyState']['title']=='No media yet'))
             # Reopen cancels the old release; the next close releases the actual view.
             state(action='release-delay',seconds=.6);generation=state()['panelGeneration'];state(action='close');time.sleep(.3)
             state(action='open',section='media');time.sleep(.4)
             check('reopen_cancels_release',state()['panelCreated'] and state()['panelGeneration']==generation)
-            state(action='close');check('closed_view_released',wait(lambda:not state().get('panelCreated',True)),state=state())
+            state(action='close');check('closed_view_released',wait(lambda:not state().get('panelCreated',True)) and not state().get('releasedPanelAlive',True),state=state())
             state(action='open',section='downloads');check('reopen_builds_fresh_panel',state()['panelGeneration']==generation+1)
             app.call('download-policy',recordFiles=True)
             download_dir=Path(data)/'download-files';download_dir.mkdir()
@@ -74,7 +80,12 @@ def run(output,bundle=None,frames=False):
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
             menu(complete,'Copy');check('download_copy_file',app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt'))
             payload=state(action='row-drag',id=complete);check('download_drag_file', 'public.file-url' in payload['types'] and payload['url'].endswith('/sample.txt'),payload=payload)
+            before_drag=state()['dragSession']['began'];state(action='row-drag-session',id=complete)
+            check('download_native_drag_session',wait(lambda:state()['dragSession']['began']>before_drag),session=state()['dragSession'])
+            check('download_native_drag_ended',wait(lambda:state()['dragSession']['ended']>0),session=state()['dragSession'])
             menu(complete,'Open');check('download_open_action',bool(app.call('downloads-state')['fileActions']))
+            state(action='show-row-menu',id=complete);check('native_menu_presented',wait(lambda:state()['menuOpen']));key('escape')
+            check('escape_dismisses_menu_first',state()['open'] and not state()['menuOpen'] and state()['section']=='downloads')
             state(action='search',text='unmatched-library');check('download_search_empty',not rows() and state()['emptyState']['title']=='No matches')
             key('escape');check('escape_clears_search',state()['open'] and state()['search']=='')
             state(action='filter',open=True);check('download_profile_chips',len(state()['header']['chips'])>=1)
@@ -95,15 +106,38 @@ def run(output,bundle=None,frames=False):
             payload=state(action='row-drag',id=history['id']);check('history_drag_url',payload['url']==history['id'],payload=payload)
             state(action='filter',open=True);state(action='chip',id='when:yesterday');check('history_when_empty',not rows());capture('history-filter-no-matches')
             state(action='chip',id='when:yesterday');state(action='filter',open=False)
+            history_file=app.call('history-state')['file']
+            with sqlite3.connect(history_file) as db:
+                for index in range(240):
+                    visited=time.time()-1000-index
+                    inserted=db.execute('INSERT INTO urls(url,title,visit_count,typed_count,last_visit) VALUES(?,?,1,0,?)',('https://history.example.test/item/%d'%index,'Library history %03d'%index,visited))
+                    db.execute('INSERT INTO visits(url_id,time,transition) VALUES(?,?,?)',(inserted.lastrowid,visited,'link'))
+            state(action='select',section='history');check('history_first_page',wait(lambda:len(rows())==100))
+            state(action='focus-list');first_selected=state()['rows'][0]['id'];key('down')
+            check('down_moves_row_focus',any(r['selected'] and r['id']!=first_selected for r in rows()))
+            key('up');check('up_moves_row_focus',rows()[0]['selected'])
+            state(action='row-select',id=rows()[-1]['id']);check('history_paginates',wait(lambda:len(rows())>100),count=len(rows()))
             state(action='row-select',id=history['id']);key('return');check('return_opens_history',wait(lambda:not state()['open']) and len(app.call('tabs'))>1)
+            state(action='open',section='history');assert wait(lambda:bool(rows()))
+            delete_id=next(r['id'] for r in rows() if r['id']!=history['id'])
+            state(action='row-select',id=delete_id);key('delete',['cmd']);app.call('alert',window='library',button='Cancel')
+            check('history_delete_cancel',bool(row(delete_id)))
+            state(action='row-select',id=delete_id);key('delete',['cmd']);app.call('alert',window='library',button='Delete')
+            check('history_delete_confirm',wait(lambda:not row(delete_id)))
+            state(action='close')
             # Closing an ordinary real tab archives it through the existing path.
-            other=app.call('tabs')[-1]['id'];app.call('select',tab=other);app.call('command',id='close-tab')
+            other=app.call('tabs')[-1]['id'];app.call('select',tab=other);app.call('command',id='archive-tab')
             state(action='open',section='archive');check('archive_real_rows',wait(lambda:bool(rows())),rows=rows())
             archived=rows()[0];state(action='hover-row',id=archived['id']);check('archive_hover_actions',row(archived['id'])['actions']==['Delete','Restore']);capture('archive-hover')
             state(action='filter',open=True);check('archive_filters',len(state()['header']['chips'])>=4);capture('archive-filters')
+            state(action='chip',id='reason:auto');check('archive_reason_empty',wait(lambda:not rows()))
+            state(action='chip',id='reason:auto');state(action='chip',id='reason:manual');check('archive_manual_filter',wait(lambda:bool(row(archived['id']))))
+            state(action='chip',id='reason:manual');state(action='chip',id='space:little');check('archive_location_empty',wait(lambda:not rows()))
+            state(action='chip',id='space:little');check('archive_location_reset',wait(lambda:bool(row(archived['id']))))
             state(action='filter',open=False);state(action='row-action',id=archived['id'],name='Restore');check('archive_restore_closes',wait(lambda:not state()['open']))
             # Use the real capture pipeline and persisted index.
-            app.call('select',tab=tab)
+            capture_tab=new_tab(app,base+'/');app.call('focus',tab=capture_tab)
+            check('capture_ready_page',wait(lambda:next(m['enabled'] for m in app.call('menu-state') if m['id']=='capture-page')))
             receipt=app.call('capture',mode='area',rect=[30,30,240,150]);check('capture_real_file',receipt['state']['phase'] in ['showing'],receipt=receipt)
             app.call('capture-action',action='cancel')
             state(action='open',section='media');check('media_capture_rows',wait(lambda:bool(rows())),rows=rows())
@@ -111,9 +145,13 @@ def run(output,bundle=None,frames=False):
             capture_row=rows()[0];state(action='hover-row',id=capture_row['id']);check('capture_native_menu',[m['title'] for m in menu(capture_row['id'])]==['Open','Copy','Show in Finder','Save As…','separator','Delete']);capture('media-captures')
             payload=state(action='row-drag',id=capture_row['id']);check('capture_drag_file','public.file-url' in payload['types'],payload=payload)
             menu(capture_row['id'],'Copy');check('capture_copy_image',app.call('library-captures-state')['pasteboardHasImage'])
+            menu(capture_row['id'],'Save As…');save_path=Path(data)/'saved-capture.png';state(action='save-panel',path=str(save_path))
+            check('capture_save_as_file',wait(lambda:save_path.exists()) and save_path.read_bytes().startswith(b'\x89PNG'))
             menu(capture_row['id'],'Open');check('capture_open_recorded',bool(app.call('library-captures-state')['opened']))
             state(action='row-select',id=capture_row['id']);key('delete',['cmd'])
             app.call('alert',window='library',button='Cancel');check('capture_delete_cancel',bool(row(capture_row['id'])))
+            state(action='row-select',id=capture_row['id']);key('delete',['cmd']);app.call('alert',window='library',button='Delete')
+            check('capture_delete_confirm',wait(lambda:not rows()))
             # Build a Boost with the real editor, then use its native Library controls.
             state(action='close');boost_tab=new_tab(app,'https://alpha.example.test/boost.html');app.call('wait',tab=boost_tab)
             app.call('menu-perform',id='new-boost');check('boost_real_editor',wait(lambda:app.call('boost-editor').get('colorsReady')))

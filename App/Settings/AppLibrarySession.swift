@@ -17,6 +17,7 @@ final class AppLibrarySession {
   var releaseDelay = 60.0
   #endif
   private(set) var panelGeneration = 0
+  private(set) weak var releasedPanel: LibraryPanelView?
 
   init(model: LibraryViewModel, controller: BrowserWindowController) {
     self.model = model; self.controller = controller
@@ -63,6 +64,7 @@ final class AppLibrarySession {
     releaseTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .seconds(delay))
       guard !Task.isCancelled, let self, self.controller?.isLibraryOpen != true else { return }
+      self.releasedPanel = self.panel
       self.controller?.releaseLibraryPanel(); self.panel = nil; self.model.releaseContentViews(); self.releaseTask = nil
     }
   }
