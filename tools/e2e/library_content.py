@@ -239,7 +239,8 @@ def run(output,bundle=None,frames=False,mockups=None):
                             capture(theme+'-'+appearance+'-sidebar',sidebar=sidebar,themeState=app.call('theme-get',space=space['id']))
                             state(action='open',section='downloads');time.sleep(.25)
                             capture(theme+'-'+appearance+'-downloads',sidebar=sidebar,themeState=app.call('theme-get',space=space['id']))
-                for width,height in [(1280,800),(900,850)]:
+                state(action='open',section='downloads')
+                for width,height in ([] if os.environ.get('OPEN_LIBRARY_L3_FRAMES')=='1' else [(1280,800),(900,850)]):
                     app.call('window-frame',frame=[40,50,width,height],unconstrained=True)
                     for section in ['downloads','archive','history','media','boosts','spaces']:
                         state(action='select',section=section);time.sleep(.25)

@@ -43,7 +43,7 @@ when the last file expires. Private windows do not show the button.
 `AppLibrarySession` owns one panel per browser window. Data providers and
 `LibraryViewModel` stay shared with their existing stores/actions. No Library
 session or view is constructed at launch. Closing stops content subscriptions;
-60 seconds later the heavy views and image caches are released. Reopen cancels
+60 seconds later the heavy views and model image caches are released. Reopen cancels
 that release. The old `LibraryWindow`, SwiftUI section views and History feature
 flag have been removed.
 

@@ -3,7 +3,7 @@ import QuartzCore
 import OpenDesign
 
 /// App supplies session state only; the sidebar owns the badge's drawing and
-/// finite animations. Geometry is the S11 design's labelled guess.
+/// finite animations. Completion previews follow the approved Library design.
 public struct DownloadBadgeFile: Equatable, Sendable {
     public let id: String
     public let name: String
