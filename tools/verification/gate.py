@@ -22,7 +22,8 @@ NATIVE = ('space-editor', 'settings-preview', 'features-render', 'sitecontrol-re
 M1_NATIVE = {'features-idle'}
 # Transitive observer/fault-probe flows, not only direct suite implementations.
 M1_E2E = {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwords',
-          'passwords-probe', 'secrets-import', 'owner-watch'}
+          'passwords-probe', 'secrets-import', 'owner-watch', 'actions', 'incognito'}
+E2E_DEPENDENCIES = {'sidebar': ('profiles',)}
 OBSERVER_SUITES = {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'}
 M5_E2E = {'applescript'}  # No external AppleScript/osascript over SSH on the M1.
 SAFE_M5 = set('ntp onboarding welcome import-robust firstrun shell extensions tabstrip window sidebar peek commandbar app-actions actions extensions-p3 extensions-ui sitecontrol extensions-e2 sidebar-completion toolbar numbering media relaunch page page-chrome sleep context-menus routing history applescript boosteditor boost-gallery space-editor incognito sitedata find split littleopen downloads measure'.split())
@@ -439,6 +440,12 @@ def main():
         selected = [name for name in all_names if name in expanded]
     if options.no_e2e and any(n.startswith('e2e-') for n in selected):
         parser.error('--no-e2e conflicts with an e2e selection')
+    for suite, dependencies in E2E_DEPENDENCIES.items():
+        if 'e2e-' + suite in selected:
+            for dependency in dependencies:
+                label = 'e2e-' + dependency
+                if label not in selected:
+                    selected.append(label)
     if 'import-arc' in selected and not options.with_arc_data:
         if options.only:
             parser.error('--only import-arc requires --with-arc-data')
@@ -573,6 +580,18 @@ def main():
             except Exception as error:
                 rows.append(dict(row=label+'/evidence',status='FAIL',reason=str(error),evidence=str(inputs)))
                 screen_safe = False
+    # A coverage note is not a passing assertion. Resolve it only against an
+    # actual passing row from the same source/configuration's required suite.
+    by_row = {row['row']: row for row in rows}
+    for row in rows:
+        if row['status'] != 'COVERAGE_REQUIRED':
+            continue
+        target = by_row.get(row['coveredBy'])
+        row['status'] = 'PASS' if target and target['status'] == 'PASS' else 'NOT_RUN'
+        row['reason'] = ('Real acceptance row: ' if row['status'] == 'PASS'
+                         else 'Missing or failed acceptance row: ') + row['coveredBy']
+        if target:
+            row['evidence'] = target['evidence']
     if fingerprint() != source:
         rows.append(dict(row='gate/source',status='FAIL',reason='source or engine changed during the gate',evidence=''))
     if rc and not any(row['status'] in ('FAIL', 'INTERRUPTED') for row in rows):

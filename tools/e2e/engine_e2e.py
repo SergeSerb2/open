@@ -4703,7 +4703,9 @@ def sidebar_checks(factory, results, tmp):
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
             "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
-        results["durable_profile_storage"] = {"status": "SKIP", "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)"}
+        results["durable_profile_storage"] = {
+            "status": "INFO", "coveredBy": "profiles/durable_second_profile",
+            "reason": "requires the real cross-launch cookie/storage assertion in the Profiles suite"}
         background = new_tab(app, fixture("Profile background"))
         app.call("select", tab=e)
         previous = app.page(e)["identifier"]

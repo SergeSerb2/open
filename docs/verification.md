@@ -28,15 +28,16 @@ default, plus both NTP styles and the real owner-death flow. The superseded
 flow is required. Card, WebAuthn and HTTP Basic observation paths that can open
 system dialogs stay outside the default selection and in the exception inventory.
 
-The M1 runs the crash-capable suites: NTP (both styles), features, profiles, profiles-engine,
-passwords, secrets-import, and owner-watch. On the M5 these rows say
+The M1 runs the crash-capable suites: NTP (both styles), features, actions,
+profiles, profiles-engine, passwords, secrets-import, and owner-watch. It also
+runs incognito, whose native captures require its built-in 2x display. On the M5 these rows say
 `M1_REQUIRED` and fail until `--m1-receipts` supplies matching evidence. Produce
 it on a detached M1 checkout at the exact candidate commit, using its recorded
 engine distribution and the same config and lane:
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh \
-  --only e2e-ntp,e2e-ntp-alloy,e2e-features,e2e-profiles,e2e-profiles-engine,e2e-passwords,e2e-secrets-import,e2e-owner-watch \
+  --only e2e-ntp,e2e-ntp-alloy,e2e-features,e2e-actions,e2e-incognito,e2e-profiles,e2e-profiles-engine,e2e-passwords,e2e-secrets-import,e2e-owner-watch \
   --config Release --log-dir .re/gate-m1
 ```
 
@@ -50,6 +51,12 @@ screen launches; the dialog stays untouched for the user or lead. The preflight
 uses a compiled read-only CoreGraphics helper, with no Apple events. The external
 AppleScript suite runs on the M5: the M1 forbids AppleScript/osascript over SSH
 (LEAD 18:50) and reports that stage as `M5_REQUIRED`.
+
+Sidebar's profile-storage coverage note requires the real
+`profiles/durable_second_profile` cookie and storage assertion. Selecting
+Sidebar also selects Profiles. The note is accepted only when that exact
+runtime row passes on the same source, configuration and lane; missing or
+failed coverage fails the gate. It grants no exception to a skipped test.
 
 The separate `--lane observers` runs on the M1. It covers the native
 `features-idle` observer and the injected stages of Site Control, Find, Split,

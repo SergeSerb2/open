@@ -88,6 +88,12 @@ def e2e_rows(directory, suite, identity, engine, config, style, lane):
         else:
             status = value.get('status')
             if status == 'INFO':
+                if 'coveredBy' in value:
+                    target = value['coveredBy']
+                    if target != 'profiles/durable_second_profile' or suite != 'sidebar':
+                        raise ValueError('unknown cross-suite coverage dependency')
+                    rows.append(dict(row=suite+'/'+key, status='COVERAGE_REQUIRED',
+                                     reason=value.get('reason', ''), coveredBy=target, evidence=str(path)))
                 continue
             if status not in ('BLOCKED', 'DEFERRED', 'FAIL', 'INTERRUPTED', 'NOT_RUN',
                               'UNVERIFIED', 'SKIP', 'NOT_REQUESTED'):
