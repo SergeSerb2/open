@@ -287,7 +287,8 @@ final class FavoriteTileView: NSView {
         fill.cornerRadius = FavoritesMetrics.cornerRadius
         fill.shadowPath = CGPath(roundedRect: bounds, cornerWidth: FavoritesMetrics.cornerRadius, cornerHeight: FavoritesMetrics.cornerRadius, transform: nil)
         CATransaction.commit()
-        let s = FavoritesMetrics.iconFrameSize
+        let s = context?.favoriteIconFraction.map { min(bounds.width,bounds.height)*$0 } ?? FavoritesMetrics.iconFrameSize
+        favicon.inkSize = context?.favoriteIconFraction == nil ? SpaceListMetrics.faviconInk:s
         favicon.frame = backingAlignedRect(CGRect(x: (bounds.width - s) / 2, y: (bounds.height - s) / 2, width: s, height: s), options: .alignAllEdgesNearest)
     }
 
@@ -299,6 +300,7 @@ final class FavoriteTileView: NSView {
         }) { [weak self] in self?.needsDisplay = true }
         let appearance = style?.resolvedAppearance(system: context.systemAppearance) ?? context.systemAppearance
         CATransaction.begin()
+        CATransaction.setDisableActions(!context.animatesChanges)
         CATransaction.setAnimationDuration(selected ? Motion.selectionFade : Motion.hoverFade)
         if selected {
             fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor

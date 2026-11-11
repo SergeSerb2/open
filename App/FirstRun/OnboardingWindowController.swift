@@ -292,6 +292,18 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     return false
   }
   func stop() { lifecycle.forEach { $0.cancel() }; lifecycle.removeAll(); intro.stop(); sound.stop(); dim.close() }
+  /// Closing an AppKit window does not discard its content backing. Detach the
+  /// first-run tree explicitly once the fade has completed.
+  func releaseArtwork() {
+    window?.makeFirstResponder(nil)
+    (window as? OnboardingWindow)?.setupPrimary = nil
+    (window as? OnboardingWindow)?.setupBack = nil
+    steps?.releaseArtwork(); steps = nil; nextContent = nil; favoriteIcons = nil
+    intro.removeFromSuperview()
+    window?.contentViewController = nil; window?.contentView = nil
+    dim.contentView = nil
+    onHandoff = nil; onFirstFrame = nil
+  }
   var state: [String: Any] {
     var state = intro.state
     state["active"] = window?.isVisible == true
@@ -302,6 +314,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     state["frameSize"] = [window?.frame.width ?? 0, window?.frame.height ?? 0]
     state["dim"] = ["exists": dim.isVisible, "alpha": dimView.layer?.presentation()?.opacity ?? dimView.layer?.opacity ?? 0, "ignoresMouseEvents": dim.ignoresMouseEvents, "child": dim.parent === window]
     #if OPEN_AUTOMATION
+    state["artwork"] = steps?.preview.artworkState as Any? ?? NSNull()
     state["preAnimationStatic"] = staticProof as Any? ?? NSNull()
     if measureFrames {
       state["currentSceneLayers"] = intro.staticSceneState

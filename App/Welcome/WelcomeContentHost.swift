@@ -27,8 +27,10 @@ final class WelcomeContentHost: WebContentHost {
     self.tabID = tabID; self.owner = owner
     page.styleProvider = { [weak owner] in
       guard let owner, let space = owner.space(for: tabID) else { return nil }
+      guard space.theme.style != nil || space.theme.importedArcThemeJSON != nil else { return nil }
       return owner.controller?.context.style(for: space)
     }
+    page.themeProvider = { [weak owner] in owner?.space(for: tabID)?.theme }
     page.openShortcuts = { [weak owner] in owner?.app.performCommand("keyboard-shortcuts-edu") }
     page.openSettings = { [weak owner] in owner?.app.settingsPresenter.show(pane: .general) }
   }

@@ -171,8 +171,27 @@ class FocusTracker:
         # Intentional quit/SIGKILL recovery closes the owned instance before
         # recording a row or launching its replacement.
         crashed = bool(_open_crash_reports() - self.crashes_before)
+        def matches_owned_process(app):
+            expected = os.path.realpath(app.executable)
+            actual = app.process_path(app.pid)
+            if not actual:
+                # proc_pidpath can return no metadata for a live process on
+                # macOS. Recheck its identity, never substitute PID existence
+                # for the executable match. Real exit/reuse still fails.
+                for attempt in range(3):
+                    try:
+                        os.kill(app.pid, 0)
+                    except ProcessLookupError:
+                        return False
+                    time.sleep(.02)
+                    actual = app.process_path(app.pid)
+                    if actual:
+                        print('PROCESS_IDENTITY_RECHECK pid=%d attempts=%d matched=%s' %
+                              (app.pid, attempt + 1, actual == expected), flush=True)
+                        break
+            return actual == expected
         dead = any(app.pid and not app.closed and
-                   app.process_path(app.pid) != os.path.realpath(app.executable)
+                   not matches_owned_process(app)
                    for app in self.apps)
         if crashed or dead:
             self.fatal_app_death = True
