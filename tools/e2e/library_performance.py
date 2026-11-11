@@ -189,7 +189,7 @@ def main(args):
                 search=active.call('library-performance',operation='search',text='z')
                 assert search['providerRows']==1,search
                 active.call('key',key='escape',route='app');active.call('library',action='focus-rail');time.sleep(5.3)
-                before=active.call('library-performance',operation='cpu')['cpuSeconds'];open_before=cpu_snapshot(active);start=time.monotonic();time.sleep(30)
+                before_read=active.call('library-performance',operation='cpu');before=before_read['cpuSeconds'];open_before=cpu_snapshot(active);start=time.monotonic();time.sleep(30)
                 open_cpu=active.call('library-performance',operation='cpu')
                 open_seconds=time.monotonic()-start;open_after=cpu_snapshot(active)
                 idle=100*(open_cpu['cpuSeconds']-before)/open_seconds
@@ -197,7 +197,7 @@ def main(args):
                 before_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_before=cpu_snapshot(active);closed_start=time.monotonic();time.sleep(30)
                 after_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_seconds=time.monotonic()-closed_start;closed_after=cpu_snapshot(active);closed_idle=100*(after_closed-before_closed)/closed_seconds
                 end_cpu=cpu(active.bundle)
-                row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleAttribution':{'open':cpu_delta(open_before,open_after,open_seconds),'closed':cpu_delta(closed_before,closed_after,closed_seconds)},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':open_cpu['counters'],'prebuild':prebuild}
+                row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleAttribution':{'open':cpu_delta(open_before,open_after,open_seconds),'closed':cpu_delta(closed_before,closed_after,closed_seconds)},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':open_cpu['counters'],'idleCounterDelta':{k:v-before_read['counters'].get(k,0) for k,v in open_cpu['counters'].items()},'prebuild':prebuild}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
                 row['valid']=end_cpu<=200;receipt['samples'].append(row);save()
                 # Keep the full compositor signatures and cleanup receipt in

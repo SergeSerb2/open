@@ -72,7 +72,7 @@ final class AppLibrarySession {
     let delay = 60.0
     #endif
     releaseTask = Task { @MainActor [weak self] in
-      try? await Task.sleep(for: .seconds(delay))
+      try? await Task.sleep(for: .seconds(delay), tolerance: .zero)
       guard !Task.isCancelled, let self, self.controller?.isLibraryOpen != true else { return }
       #if OPEN_AUTOMATION
       self.releaseFiredAt = ProcessInfo.processInfo.systemUptime
