@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 from screen_cleanup import cleanup_owned
+from intentional_crash import expected_reports, read_markers
 
 ROOT = Path(__file__).resolve().parents[2]  # final location tools/verification/gate.py
 NATIVE = ('space-editor', 'settings-preview', 'features-render', 'sitecontrol-render')
@@ -177,6 +178,7 @@ def run_screen(args):
     native_roots = directory / 'native-roots'
     native_roots.mkdir(mode=0o700)
     ledger = directory / 'processes.jsonl'
+    fault_ledger = directory / 'intentional-faults.jsonl'
 
     def cancel(signum, _):
         nonlocal interrupted
@@ -193,7 +195,8 @@ def run_screen(args):
             job = subprocess.Popen(command, cwd=args.cwd or ROOT, stdout=output, stderr=subprocess.STDOUT,
                                    env=dict(os.environ, OPEN_VERIFY_EXTERNAL_SCREEN_LOCK='1',
                                        OPEN_VERIFY_GATE_SCREEN_ROOT=str(native_roots),
-                                       OPEN_VERIFY_PROCESS_LEDGER=str(ledger)), start_new_session=True)
+                                       OPEN_VERIFY_PROCESS_LEDGER=str(ledger),
+                                       OPEN_VERIFY_INTENTIONAL_CRASH_LEDGER=str(fault_ledger)), start_new_session=True)
             deadline = time.monotonic() + args.timeout
             while job.poll() is None:
                 if interrupted or time.monotonic() >= deadline:
@@ -247,10 +250,17 @@ def run_screen(args):
             dialogs = []
             errors.append('system window postflight: ' + str(error))
         crashes = sorted({p.name for p in report_root.glob('Open*.ips')}-reports_before)
-        safe = not dialogs and not crashes and not leaked_group and not errors
+        try:
+            expected = sorted(expected_reports(crashes, read_markers(fault_ledger), report_root))
+        except Exception as error:
+            expected = []
+            errors.append('intentional fault attribution: ' + str(error))
+        unexpected = sorted(set(crashes) - set(expected))
+        safe = not dialogs and not unexpected and not leaked_group and not errors
         write_json(directory / 'screen-end.json', dict(ended=time.time(), seconds=time.monotonic() - started,
                                                      interrupted=interrupted, safe=safe, systemWindows=dialogs,
-                                                     newCrashes=crashes, errors=errors, leakedGroup=leaked_group))
+                                                     newCrashes=crashes, expectedCrashes=expected,
+                                                     unexpectedCrashes=unexpected, errors=errors, leakedGroup=leaked_group))
         if not safe:
             code = code or 2
     return code

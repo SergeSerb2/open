@@ -52,6 +52,14 @@ uses a compiled read-only CoreGraphics helper, with no Apple events. The externa
 AppleScript suite runs on the M5: the M1 forbids AppleScript/osascript over SSH
 (LEAD 18:50) and reports that stage as `M5_REQUIRED`.
 
+Actions declares its intentional `Page.crash` before sending it on the M1.
+The shared `/tmp/open-intentional-crash-11.json` marker and private stage ledger
+record the App PID and its live renderer PIDs. Only one renderer report with
+that parent, a SIGABRT on the DevTools command thread, and a crash timestamp
+within 30 seconds can match. The full report stays on disk and is named in
+`expectedCrashes`; every other report and every system dialog still stops the
+gate. The original strict Actions failure is retained as the negative proof.
+
 Sidebar's profile-storage coverage note requires the real
 `profiles/durable_second_profile` cookie and storage assertion. Selecting
 Sidebar also selects Profiles. The note is accepted only when that exact

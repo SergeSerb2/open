@@ -1587,7 +1587,7 @@ that `/login` → 302 `/welcome` → immediate JavaScript `/dashboard` navigatio
 keeps the real save sheet visible until answered. The final 0808 engine must pass virtual WebAuthn create/get and native Escape cancellation with its parent alive. A blocked row is never reported as PASS.
 
 Pass `--stop-on-app-death` to a regression suite to stop all remaining flows
-on the first failed row, unexpected App exit, new Open crash report, or lost
+on the first failed row, unexpected App exit, unexpected Open crash report, or lost
 foreground. Strict runs launch Open as a direct child and verify its OS parent
 PID. They do not retry. `--row-timeout` defaults to 120 seconds (maximum 120);
 `--suite-timeout` defaults to 600 seconds. A separate supervisor stops the
@@ -1598,6 +1598,10 @@ or replies. Historical F3 hang evidence remains in `.re/s15/f3/passwords-initial
 The old HTTPS-First failure is `Open-2026-11-06-203144.ips` (2026-11-06 20:31:44
 -0700): SIGABRT in `tabs::TabDialogManager::CreateTabScopedDialog` through
 `AskBeforeHttpDialogController::ShowDialog`; see the Step 0 crash receipt.
+The Actions popup `Page.crash` is predeclared on the M1. Its exact owned
+renderer/App parent, abort stack and crash time must match the private fault
+ledger; the report remains visible in the gate's `expectedCrashes` receipt.
+This does not exempt any App crash, other renderer fault, or system dialog.
 
 Other fixture suites can load `tools/e2e/passwords.py` with `runpy.run_path`.
 `show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5)`

@@ -50,6 +50,8 @@ if sys.path[:1] != [_E2E_DIR]:
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
+_FAULT_TOOLS = runpy.run_path(os.path.join(ROOT, 'tools/verification/intentional_crash.py'))
+_EXPECTED_RENDERER_FAULTS = []
 _ACTIVE_FOCUS_TRACKER = None
 _OWNED_APPS = []
 _SUITE_CRASH_BASELINE = None
@@ -147,7 +149,7 @@ def supervise_suite(arguments):
 def check_suite_app_death(app=None):
     if _SUITE_CRASH_BASELINE is None:
         return
-    if _open_crash_reports() - _SUITE_CRASH_BASELINE:
+    if _unexpected_crash_reports(_SUITE_CRASH_BASELINE):
         raise SuiteAppDied('new Open crash report; stopped all remaining flows')
     if app and app.pid and not app.closed:
         try:
@@ -174,7 +176,7 @@ class FocusTracker:
             return
         # Intentional quit/SIGKILL recovery closes the owned instance before
         # recording a row or launching its replacement.
-        crashed = bool(_open_crash_reports() - self.crashes_before)
+        crashed = bool(_unexpected_crash_reports(self.crashes_before))
         dead = []
         for app in self.apps:
             if app.pid and not app.closed:
@@ -200,7 +202,7 @@ class FocusTracker:
         if crashed or dead:
             self.fatal_app_death = True
             raise AppDied('App death or new crash report; stopped before the next flow: '
-                          + json.dumps(dict(processes=dead, newReports=sorted(_open_crash_reports() - self.crashes_before))))
+                          + json.dumps(dict(processes=dead, newReports=sorted(_unexpected_crash_reports(self.crashes_before)))))
 
     def loss(self):
         interruptions = []
@@ -1313,6 +1315,34 @@ def _open_crash_reports():
     except OSError:
         return set()
     return {n for n in names if n.startswith(("Open", "cefsimple")) and n.endswith((".ips", ".crash"))}
+
+
+def _unexpected_crash_reports(baseline):
+    reports = _open_crash_reports() - baseline
+    return reports - _FAULT_TOOLS['expected_reports'](reports, _EXPECTED_RENDERER_FAULTS, _CRASH_DIR)
+
+
+def declare_popup_renderer_fault(app):
+    if not subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'):
+        raise RuntimeError('intentional renderer faults require the M1')
+    app.discover_owned_processes()
+    marker = dict(method='Page.crash', appPID=app.pid, started=time.time(),
+                  rendererPIDs=[pid for pid, path in app.owned_processes.items()
+                                if path.endswith('/Open Helper (Renderer)') and app.process_path(pid) == path])
+    if not marker['rendererPIDs'] or len(marker['rendererPIDs']) > 256 or len(_EXPECTED_RENDERER_FAULTS) >= 16:
+        raise RuntimeError('cannot record bounded owned renderer identities')
+    # The shared marker lets the lead identify the planned fault before it
+    # happens. The private stage ledger also survives a killed harness.
+    shared = Path('/tmp/open-intentional-crash-11.json')
+    temporary = shared.with_suffix('.tmp-%d' % os.getpid())
+    temporary.write_text(json.dumps(marker) + '\n')
+    temporary.replace(shared)
+    ledger = os.environ.get('OPEN_VERIFY_INTENTIONAL_CRASH_LEDGER')
+    if ledger:
+        with open(ledger, 'a') as stream:
+            stream.write(json.dumps(marker) + '\n')
+    _EXPECTED_RENDERER_FAULTS.append(marker)
+    return marker
 
 
 def relaunch_checks(app_factory, results, tmp):
@@ -5508,6 +5538,7 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
         state = open_popup(ACTION_PROBE)
         crash["opened"] = bool(state)
         if state:
+            crash['intentionalFault'] = declare_popup_renderer_fault(app)
             try:
                 app.call("devtools", tab=state["page"]["identifier"], method="Page.crash", timeout=5)
             except Exception as e:  # the renderer dies before it answers
