@@ -136,7 +136,7 @@ closing the card. This is attribution to recorded processes, not a sole
 cause or a fix. Follow-up [#316](https://github.com/SergeSerb2/open/issues/316).
 The full quiet Media stage is still required; its earlier preflight launched
 no App. Raw receipts are `.re/step4-m1-b9531ac3-all/timing-measure/` and
-`.re/step4-focused-receipts/idle-r1/`. LEAD 10:30 (2026-11-11) approves exactly `measure/media_idle_cpu` and `media/media_idle_cpu` as DEFERRED, tied to #316 and owned by performance/engine H. The deferral ends when the #316 fix lands. The 0.5-point limit and raw 0.5458/0.5453 values remain unchanged. Both stages must still run complete and valid; no other Media or Measure row is deferred.
+`.re/step4-focused-receipts/idle-r1/`. LEAD 10:30 (2026-11-11) approves exactly `measure/media_idle_cpu` and `media/media_idle_cpu` as DEFERRED, tied to #316 and owned by performance/engine H. The deferral ends when the #316 fix lands. The 0.5-point limit and raw 0.5458/0.5453 values remain unchanged. Both stages must still run complete and valid; no other Media or Measure row is deferred. Resolved 2026-11-11 by the lead's window rule (see `docs/verification.md`, paused-media idle CPU rule): the rows now sample 12–20 s after pause, pass on valid quiet M1 stages, and both exceptions are removed. These raw 6–14 s values stay on record.
 
 ## Icon readback on the 2x display
 
