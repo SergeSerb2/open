@@ -9419,9 +9419,11 @@ def sidebar_a2_checks(app, results, require, evidence, tmp):
     require('E11_hover_pinned_shows_page_preview', shown and shown['host'] != '' and shown['card'][0] == state()['sidebarLiveWidth'] + 8,
             state=shown or app.call('preview-state'))
     app.call('snapshot', path=os.path.join(evidence, 'a2-page-preview.png'))
-    app.call('mouse', action='hover', x=1200, y=600)
+    window_before_leave = state()
+    leave_tracking = app.call('mouse', action='hover', x=1200, y=600)
     gone = wait_until(lambda: app.call('preview-state')['kind'] == 'none', timeout=3)
-    require('E11_leaving_hides_preview', gone, state=app.call('preview-state'))
+    require('E11_leaving_hides_preview', gone, state=app.call('preview-state'),
+            window=window_before_leave, tracking=leave_tracking)
     # E12: a page global set while the page shows in the card survives selecting the tab.
     point = row(pin)['point']
     app.call('mouse', action='hover', x=point[0], y=point[1])
