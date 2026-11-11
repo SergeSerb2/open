@@ -107,6 +107,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         searchField.font = .systemFont(ofSize: 14); searchField.focusRingType = .none
         searchField.lineBreakMode = .byTruncatingTail; searchField.usesSingleLineMode = true
         searchField.delegate = self
+        searchField.identifier = .init("library.search")
         searchField.setAccessibilityLabel("Search Library")
         searchGlyph.glyph = .search
         header.addSubview(searchGlyph); header.addSubview(searchField)
@@ -134,6 +135,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         boostList.onPress = { [weak self] in self?.setBoostLayout("List") }
         boostGallery.onPress = { [weak self] in self?.setBoostLayout("Gallery") }
         boostsProfile.onPress = { [weak self] in self?.showBoostProfiles() }
+        emptyTitle.identifier = .init("library.emptyTitle"); emptyBody.identifier = .init("library.emptyBody")
+        statusLabel.identifier = .init("library.status"); boostDisabledText.identifier = .init("library.boostDisabled")
         emptyTitle.font = .systemFont(ofSize:17,weight:.bold); emptyTitle.alignment = .center
         emptyBody.font = .systemFont(ofSize:14); emptyBody.alignment = .center
         emptyBody.maximumNumberOfLines = 4

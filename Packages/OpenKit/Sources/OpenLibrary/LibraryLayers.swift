@@ -65,6 +65,7 @@ final class LibraryField: NSTextField {
         let scale = window?.backingScaleFactor ?? 2
         LibraryRaster.pixels += dirtyRect.width*dirtyRect.height*scale*scale
         LibraryRaster.note("nativeFieldDraw")
+        LibraryRaster.note("nativeFieldDraw."+(identifier?.rawValue ?? "unidentified"))
         super.draw(dirtyRect)
     }
 }
