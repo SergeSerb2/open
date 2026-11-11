@@ -74,11 +74,11 @@ def idle_window(app):
 
 
 def idle_sample_attribution(sample):
-    """Keep worker bursts informational under LEAD 08:00, with raw evidence.
+    """Keep high idle samples unresolved until their work is attributed.
 
-    The main thread attributes an excess when it is the largest positive
-    App-thread group delta against the two closed windows. Pair 1 of the
-    accepted iteration was dominated by workers, despite smaller main work.
+    LEAD 08:30 clarified that a main-thread delta above the sample ceiling
+    fails even when a worker has a larger delta. A separate order-swapped
+    receipt can explain launch-time overlap; this table keeps the raw verdict.
     Cumulative Library counters use their window deltas; live gauges use
     their settled values as well. Cached timings and lifetime totals do not
     describe activity during the window.
@@ -99,7 +99,7 @@ def idle_sample_attribution(sample):
               (key.startswith('wake.') or key in ['created','configured','reloadData','tableUpdates','formatting','listLayout','rasterStores','rasterPixels','textRasters','glyphRasters'])}
     activity.update({key:gauges.get(key,0) for key in ['tasks','timers','displayLinks','animations'] if gauges.get(key,0)>0})
     high=sample['idleDeltaPercentagePoints']>.075
-    main_attributed=main>0 and dominant=='CrBrowserMain'
+    main_attributed=main>.075
     failed=high and (main_attributed or bool(activity))
     return {'deltaPercentagePoints':sample['idleDeltaPercentagePoints'],'aboveSampleCeiling':high,
             'mainThreadDeltaPercentagePoints':main,'dominantAppThreadGroup':dominant,
@@ -304,7 +304,7 @@ def main(args):
             if args.frame_helper and len([s for s in receipt['samples'] if s['physicalOpen']])==args.samples:
                 receipt['physicalFirstChange']={'values':[s['physicalOpen']['first_changed_ms'] for s in receipt['samples']],'informational':True}
                 receipt['physicalFinalContent']={'values':[s['physicalOpen']['first_final_content_ms'] for s in receipt['samples']],'informational':True}
-            if args.frame_helper and args.samples==5 and receipt['nativeBudgetsOK']:
+            if args.frame_helper and args.samples==5:
                 scroll_root=scroll_fixture(root,snapshot)
                 scroll_loads,scroll_cpu,scroll_waits=quiet()
                 active=launch(scroll_root,args.bundle,output,'scroll')
