@@ -278,9 +278,19 @@
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return app.activationTrace.events
       case "yield-activation":
+        // CEF may expose its persistent hard link as executableURL. The peer
+        // must map this exact file; a separate copy with equal bytes is refused.
         guard let pid = a["pid"] as? Int32, pid != getpid(),
           let target = NSRunningApplication(processIdentifier: pid),
-          target.executableURL?.resolvingSymlinksInPath() == Bundle.main.executableURL?.resolvingSymlinksInPath()
+          let targetFile = target.executableURL,
+          let ownFile = Bundle.main.executableURL,
+          let targetAttributes = try? FileManager.default.attributesOfItem(atPath: targetFile.path),
+          let ownAttributes = try? FileManager.default.attributesOfItem(atPath: ownFile.path),
+          let targetDevice = targetAttributes[.systemNumber] as? NSNumber,
+          let targetInode = targetAttributes[.systemFileNumber] as? NSNumber,
+          let ownDevice = ownAttributes[.systemNumber] as? NSNumber,
+          let ownInode = ownAttributes[.systemFileNumber] as? NSNumber,
+          targetDevice == ownDevice, targetInode == ownInode
         else { throw Failure(message: "activation peer must be another instance of this exact Open executable") }
         NSApp.yieldActivation(to: target); return true
       case "native-focus-state":
@@ -1135,7 +1145,16 @@
           }
           // Chromium's own windows (DevTools, Chrome windows, Picture in
           // Picture) are Views windows.
-          let foreign = !ours.contains(ObjectIdentifier(win)) && !(win is NSPanel) && win.isVisible
+          // A Chrome-style page is a NativeWidget child of our browser
+          // window. Closing it closes the hosted tab and can close the last
+          // shell window. Only standalone Chromium windows are disposable.
+          var ancestor: NSWindow? = win
+          var belongsToBrowser = false
+          while let current = ancestor {
+            if ours.contains(ObjectIdentifier(current)) { belongsToBrowser = true; break }
+            ancestor = current.parent
+          }
+          let foreign = !belongsToBrowser && !(win is NSPanel) && win.isVisible
             && win.className.contains("NativeWidget")
           if foreign {
             dismissed.append("window:" + win.className)
@@ -1652,7 +1671,7 @@
     /// (window base coordinates): exit to owners it left, enter to owners it reached,
     /// and move to owners whose areas track movement.
     @discardableResult
-    private func hover(_ window: NSWindow, at location: NSPoint) -> [String: [String]] {
+    private func hover(_ window: NSWindow, at location: NSPoint, exitingOnly: Bool = false) -> [String: [String]] {
       // The whole frame view, so the title bar (window buttons) is included.
       guard let content = window.contentView?.superview ?? window.contentView else { return [:] }
       // AppKit builds tracking areas lazily, once the hardware pointer has reached the
@@ -1661,7 +1680,6 @@
       prepare(content)
       var inside: [ObjectIdentifier: NSResponder] = [:]
       var moving: [ObjectIdentifier: NSResponder] = [:]
-      var owners: [ObjectIdentifier: NSResponder] = [:]
       // The point is visible in `view` when it lies inside the view and every ancestor
       // (scroll views and pages clip their content). Not `visibleRect`: views that do not
       // clip to their bounds (the macOS 14+ default) report the whole window there.
@@ -1678,7 +1696,6 @@
         let local = view.convert(location, from: nil)
         for area in view.trackingAreas {
           guard let owner = area.owner as? NSResponder else { continue }
-          if area.options.contains(.mouseEnteredAndExited) { owners[ObjectIdentifier(owner)] = owner }
           let hit = area.options.contains(.inVisibleRect) ? visible(view) : area.rect.contains(local) && visible(view)
           guard hit else { continue }
           if area.options.contains(.mouseEnteredAndExited) { inside[ObjectIdentifier(owner)] = owner }
@@ -1694,9 +1711,14 @@
       }
       let move = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
         context: nil, eventNumber: Self.syntheticPointerTag, clickCount: 0, pressure: 0)
-      // Exit goes to every owner away from the point, not only those this command entered:
-      // the hardware pointer may have entered others (its tracking areas are real).
-      if let exit = enterExit(.mouseExited) { for (id, owner) in owners where inside[id] == nil { owner.mouseExited(with: exit) } }
+      // Exit before the queued native motion can enter the new target. A late
+      // synthetic SpacePageView exit would otherwise cancel the Favorite preview
+      // that native motion just armed; its duplicate enter cannot re-arm it.
+      if exitingOnly {
+        let leaving = hoveredOwners.filter { inside[$0.key] == nil }
+        if let exit = enterExit(.mouseExited) { for owner in leaving.values { owner.mouseExited(with: exit) } }
+        return ["exited": leaving.values.map { String(describing: type(of: $0)) }.sorted()]
+      }
       if let enter = enterExit(.mouseEntered) { for (id, owner) in inside where hoveredOwners[id] == nil { owner.mouseEntered(with: enter) } }
       if let move { for owner in moving.values { owner.mouseMoved(with: move) } }
       let entered = inside.filter { hoveredOwners[$0.key] == nil }.values
@@ -2032,12 +2054,19 @@
       guard leave ? targets == 0 : targets == 1 else { throw Failure(message: "hover needs one node or favorite, or leave") }
       let point = try leave ? NSPoint(x: controller.contentView.bounds.maxX - 80, y: controller.contentView.bounds.midY) : sidebarPoint(args, controller: controller, favorite: args["favorite"] != nil)
       try await activateForInput(target)
-      _ = try await mouse(["action": "hover", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y)], factory)
+      let tracking = try await mouse(["action": "hover", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y)], factory)
       if ms > 0 { try await Task.sleep(for: .milliseconds(ms)) }
-      return try previewState(args)
+      var result = try previewState(args)
+      result["tracking"] = tracking
+      result["point"] = [point.x, point.y]
+      let tracker = controller.context.hoverPreviews
+      result["armed"] = tracker.isArmed
+      result["scheduledShows"] = tracker.scheduledShowCount
+      result["showDeadline"] = tracker.scheduledShowDeadline.map { $0 as Any } ?? NSNull()
+      return result
     }
 
-    private func previewState(_ a: [String: Any]) throws -> Any {
+    private func previewState(_ a: [String: Any]) throws -> [String: Any] {
       let controller = try sidebarController(a)
       let preview = controller.hoverPreview
       var kind = "none", target = ""
@@ -2088,6 +2117,7 @@
         }
         defer { if let monitor { NSEvent.removeMonitor(monitor) } }
         let location = NSPoint(x: point[0], y: target.frame.height - point[1])
+        let leaving = action == "hover" ? hover(target, at: location, exitingOnly: true) : [:]
         if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
         // The local monitor consumes motion on native dequeue. A second
         // queued move must not overtake/coalesce the leave-edge event that
@@ -2103,7 +2133,8 @@
         // that re-reads the pointer then (the window buttons' hover) must still see the old
         // point, so the enter and exit events drive the change, as real pointer motion does.
         if action == "hover" {
-          let result = hover(target, at: location)
+          var result = hover(target, at: location)
+          result["exited"] = leaving["exited"] ?? []
           BrowserWindowController.automationPointer = (number, location)
           return result
         }
@@ -2131,6 +2162,10 @@
         // Real input arrives after the display cycle has laid the window out (the window
         // buttons are placed at its end); run that pass before hit-testing.
         target.layoutIfNeeded()
+        // A click also moves the simulated pointer. Reconcile tracking before
+        // mouseDown, so an old Favorite enter cannot outlive a row click.
+        _ = hover(target, at: point, exitingOnly: true)
+        _ = hover(target, at: point)
         if a["queued"] as? Bool == true {
           // Controls that read NSApp.currentEvent (Option-click pane Close) need
           // native dequeue, not a direct sendEvent with an unrelated current event.

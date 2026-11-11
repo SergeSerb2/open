@@ -140,6 +140,29 @@ def run(factory, results, tmp, api):
                and baseline['animationCount'] == 0 and not baseline['pendingCompletion'], state=baseline)
         creation_count = baseline['engineContentCreationCount']
         inserted = app.call('welcome', action='insert')
+        # On a small display every legal 1280x800 window can contain the
+        # resting pointer. Test the actual card rectangles, not just the
+        # window bounds. Moving our window is enough; never move the pointer.
+        positioned = False
+        for width, height in ((1280, 800), (1000, 700)):
+            for x, y in ((60, 60), (1240, 60), (60, 600), (1240, 600), (600, 300)):
+                app.call('window-frame', frame=[x, y, width, height])
+                native = app.call('window-state')
+                cx, cy = native['cursor']
+                cards = state()['layout']['cards']
+                if all(not (r[0] - 4 <= cx <= r[0] + r[2] + 4
+                            and r[1] - 4 <= cy <= r[1] + r[3] + 4)
+                       for r in (c['windowFrame'] for c in cards)):
+                    positioned = True
+                    break
+            if positioned:
+                break
+        if not positioned:
+            raise api.FocusInterruption('hardware pointer intersects Welcome cards', [native])
+        # Any hover while finding a safe position interrupted this first page's
+        # playlist. Reopen the real page at the settled position for W02-W06.
+        app.call('close', tab=inserted['tab'])
+        inserted = app.call('welcome', action='insert')
         welcome = inserted['tab']
         shown = await_state(lambda s: s['visible'] and s['activeCard'] == 1 and s['animating'])
         tab = app.call('tab-state', tab=welcome)

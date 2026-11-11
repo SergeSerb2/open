@@ -41,6 +41,9 @@ settings:
       # The automation socket (docs/automation.md) is compiled into Debug only,
       # unless OPEN_AUTOMATION=1 is passed to tools/build.sh for Release.
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG OPEN_AUTOMATION
+      # Xcode versions differ in their inherited C/ObjC debug definitions.
+      # OpenEngine's Debug-only creation-delay fixture must be compiled on both.
+      GCC_PREPROCESSOR_DEFINITIONS: $(inherited) DEBUG=1
 
 packages:
   # Engine-agnostic Swift packages (model, stores, web protocols).

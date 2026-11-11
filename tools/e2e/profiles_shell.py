@@ -110,6 +110,11 @@ def run(factory, results, tmp, api, defaults_before):
         return dict(shot, path=str(destination), nativeScale=scale)
 
     def press(label, **args):
+        if label == 'Delete Profile' and not args:
+            return app.press_profile_delete()
+        if label == 'Delete Unused Profiles…' and not args:
+            app.call('settings-ui', action='link', url='open://settings/profiles/manage')
+            label = 'Delete unused Profiles…'
         return state(action='press', label=label, **args)
 
     def manager_profile_checks():
