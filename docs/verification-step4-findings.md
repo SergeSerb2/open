@@ -75,7 +75,10 @@ The final M5 gate must build and exercise this fix with the affected compiler.
   passed when the help tab committed before the popup became visible. The
   retained receipts are `.re/x19-sequence-bc2c577a-{negative-r1,diagnostic-r2,diagnostic-r3}/`.
   Wait at most 30 seconds for that actual Profile-specific help tab and live
-  content, then close its fixture window before the native popup click. This
+  content, then close that tab and restore the main window's original Space
+  before the native popup click. The initial setup repair incorrectly expected
+  a new window; `space-create` focuses the new Space in the existing window.
+  Its explicit readiness row failed safely and remains retained. This
   also restores the later routing row's intended absence of a Profile-B main
   window. Keep the existing popup, target, routing and 15-second predicates;
   record the final popup state if the original assertion fails.

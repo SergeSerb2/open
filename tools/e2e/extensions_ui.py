@@ -851,16 +851,17 @@ def little_open_checks(app, results, local_origin, probe, control, extensions, w
         changed=wait_until(lambda:(lambda s:s if extensions["bitwarden"] not in s["ids"] and probe in s["ids"] else None)(little_call("ext-strip")),timeout=10)
         # This fresh Profile has its own first-install work. Dark Reader's
         # delayed help tab can take key focus after the probe popup opens.
-        # Observe that actual tab, then close its fixture window so the later
-        # routing row still proves the case with no main window in Profile B.
+        # Observe that actual tab, then close it and restore the main Space so
+        # the later routing row still has no main window in Profile B.
         profile_install=wait_until(lambda:next((t for t in app.call("tabs")
             if t["profile"]==other_profile and t["url"].startswith("https://darkreader.org/help/")
             and t["hasWebContent"]),None),timeout=30)
         install_window=app.call("window-state")
         results["X19_profile_install_ready"]={"ok":bool(profile_install)
-            and install_window["id"]!=original_main["id"] and install_window["space"]==other_space,
+            and install_window["id"]==original_main["id"] and install_window["space"]==other_space,
             "tab":profile_install,"window":install_window["id"],"space":install_window["space"]}
-        app.call("window-close")
+        app.call("close",tab=profile_install["id"])
+        app.call("space",space=original_main["space"])
         app.call("window-focus",id=original_main["id"],activate=True)
         little_call("ext-click",extension="more",select="Action Probe")
         new_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(little_call("ext-popup-state")),timeout=15)
