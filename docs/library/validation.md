@@ -406,3 +406,34 @@ and keys suites, main merge, exact-head M1 receipts, full M5 gate, push and PR r
 NOT RUN. Both D1 machine queues are clear and no D1 App process remains. Future M1
 work uses one bounded ticket per pair or touched suite (about 15 minutes maximum
 while others wait), with receipt copying and analysis after release.
+
+## LEAD 13:50 — explicit flush restored; scoped ready-open check
+
+The no-flush experiment is reverted. Every idle turn again handles one row and
+calls `CATransaction.flush()` before yielding. The complete OpenLibrary module
+is byte-identical to `55b507c3`: Git tree `6747b46483dee5c5d61993dd9c2dce5996b891f5`,
+source-content SHA-256 `6545a65406364960b56ff1e64b74ddcb127b822b7f9ef527d859f1ecdc5e1611`. Warm section and search carry under the
+lead's explicit ruling; they are not repeated.
+
+The new opt-in automation heartbeat records every complete main-loop busy interval
+from automation startup, including the implicit Core Animation commit. It does
+not add a display link, timer, or product scheduling change. Each preparation
+slice is matched to its own busy interval. The ready-open receipt records the
+open's launch age, `prebuiltReady`, the App prebuild task and all panel task counts
+before the action. The required three pairs wait for preparation to finish;
+any open that instead reports pending preparation remains a separate INFO row.
+
+Acceptance is median ready-open ≤8 ms, every scored sample ≤12 ms, every slice
+≤8.0 ms and clear Library busy ≤8.3 ms. Mixed intervals retain their full duration
+and measured Library contribution; the runner invents no exclusion. The one
+measurement ticket has a thirteen-minute deadline with time reserved for cleanup.
+Touched suites each use a separate ticket. Receipt copying occurs after release.
+
+The open action phase calls `AppSettingsActions.showLibrary`: it acknowledges the
+download badge, registers stores, selects the retained section, attaches/presents
+the panel, installs focus/key handlers, makes its window key and requests a menu
+rebuild. Native layout, display and the final commit flush are separate phases.
+This call graph is not a measured attribution of the transaction-wide flush.
+
+The prior failed no-flush receipt and its cumulative maxima stay unchanged.
+No new qualification result, main merge, full gate or PR is claimed here.

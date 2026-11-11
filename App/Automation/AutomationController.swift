@@ -22,6 +22,7 @@
   @MainActor
   final class AutomationController {
     var settingsPerformanceProbe: SettingsPerformanceProbe?
+    var libraryPreparationHeartbeat: LibraryPreparationHeartbeat?
     struct Failure: Error { let message: String }
 
     var extensionRedrawMeasurement: ExtensionRedrawMeasurement?
@@ -55,7 +56,13 @@
     var profileProofContexts: [String: OEBrowserContext] = [:]
     var recordedOpenWorldCallbacks: [[String: Any]] = []
 
-    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
+    init(app: AppDelegate) {
+      self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self
+      if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREPARATION_TRACE"] == "1" {
+        libraryPreparationHeartbeat = LibraryPreparationHeartbeat()
+        libraryPreparationHeartbeat?.start()
+      }
+    }
 
     var window: EngineWebContentHostFactory {
       get throws {

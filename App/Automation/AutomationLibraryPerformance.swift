@@ -9,11 +9,18 @@ extension AutomationController {
   func libraryPerformance(_ args:[String:Any]) async throws -> [String:Any] {
     let operation = args["operation"] as? String ?? "state"
     let adapter = app.settingsPresenter
+    if operation == "preparation-state" { return libraryPreparationState() }
+    if operation == "preparation-trace" {
+      guard let trace = libraryPreparationHeartbeat else { throw Failure(message:"Library preparation trace not enabled at launch") }
+      if args["stop"] as? Bool == true { trace.stop() }
+      return trace.json(slices:adapter.activeLibrarySession?.panel?.idleWorkIntervals ?? [])
+    }
     if operation == "cpu" {
       var usage = rusage(); getrusage(RUSAGE_SELF,&usage)
       return ["cpuSeconds":Double(usage.ru_utime.tv_sec+usage.ru_stime.tv_sec)+Double(usage.ru_utime.tv_usec+usage.ru_stime.tv_usec)/1_000_000,"launchElapsedMilliseconds":LaunchTiming.shared.elapsedMilliseconds,"counters":adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]]
     }
     let countersBefore = adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]
+    let preparationBefore = operation == "open" ? libraryPreparationState() : [:]
     var started = ProcessInfo.processInfo.systemUptime
     if operation == "scroll-series" {
       guard let panel = adapter.activeLibrarySession?.panel,panel.isPresented else { throw Failure(message:"Library not open") }
@@ -80,12 +87,24 @@ extension AutomationController {
     let full=(panel.nativeCommittedAt-started)*1000
     if operation == "search" { panel.markSearchCommit() }
     return ["firstSubmittedMilliseconds":first,"contentSubmittedMilliseconds":full,
+      "preparationBefore":preparationBefore,
       "providerRows":panel.filteredRowCount,
       "actionMilliseconds":actionMilliseconds,"firstSubmissionPhases":firstPhases,
       "searchTimestamps":operation == "search" ? panel.searchTimestamps : [:],
       "panelGeneration":adapter.activeLibrarySession?.panelGeneration ?? 0,
       "visibleRows":panel.listReuseState["rows"] ?? 0,"counters":panel.performanceCounters,
       "counterDelta":panel.performanceCounters.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(countersBefore[$1.key] ?? 0) }]
+  }
+
+  func libraryPreparationState() -> [String:Any] {
+    let panel = app.settingsPresenter.activeLibrarySession?.panel
+    let ready = panel?.prebuiltReady ?? false
+    let pending = app.libraryPrebuildTask != nil
+    let tasks = panel?.performanceCounters["tasks"] ?? 0
+    return ["launchMilliseconds":LaunchTiming.shared.elapsedMilliseconds,
+      "prebuiltReady":ready,"prebuildTaskPending":pending,"panelTasks":tasks,
+      "completed":ready && !pending && tasks == 0,
+      "idleSliceCount":panel?.idleWorkIntervals.count ?? 0]
   }
 }
 #endif
