@@ -37,8 +37,8 @@ extension AutomationController {
       _ = try await sendKey(["key":"f","modifiers":["cmd"],"route":"app"],try? window)
       // Focus is setup. Time the actual in-app key dispatch, without sendKey's
       // fixed post-delivery wait, which is for asynchronous CEF page callbacks.
-      started = ProcessInfo.processInfo.systemUptime
-      adapter.activeLibrarySession?.panel?.beginSearchMeasurement()
+      guard let searchPanel = adapter.activeLibrarySession?.panel else { throw Failure(message:"Library not created") }
+      started = searchPanel.beginSearchMeasurement()
       for character in text {
         for type in [NSEvent.EventType.keyDown,.keyUp] {
           guard let event=NSEvent.keyEvent(with:type,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,

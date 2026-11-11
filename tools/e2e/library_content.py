@@ -142,7 +142,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
                     inserted=db.execute('INSERT INTO urls(url,title,visit_count,typed_count,last_visit) VALUES(?,?,1,0,?)',('https://history.example.test/item/%d'%index,'Library history %03d'%index,visited))
                     db.execute('INSERT INTO visits(url_id,time,transition) VALUES(?,?,?)',(inserted.lastrowid,visited,'link'))
             state(action='select',section='history');check('history_first_page',wait(lambda:len(rows())==100))
-            state(action='focus-rail');key('tab');check('tab_rail_to_search',state()['firstResponder']=='NSTextView')
+            state(action='focus-rail');key('tab');check('tab_rail_to_search',state()['firstResponder'] in ['NSTextView','LibrarySearchEditor'],responder=state()['firstResponder'])
             key('tab');check('tab_search_to_filter',state()['firstResponder']=='LibraryControl',responder=state()['firstResponder'])
             key('space');check('keyboard_opens_filter',state()['header']['filterOpen']);key('escape')
             state(action='focus-rail');key('tab');key('tab');key('tab');check('tab_filter_to_list',state()['firstResponder']=='LibraryTableView')

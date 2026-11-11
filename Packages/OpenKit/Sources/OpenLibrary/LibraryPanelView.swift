@@ -40,7 +40,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     let header = NSView()
     public let searchField: NSTextField = LibrarySearchField()
     public var searchTimestamps: [String:Double] { (searchField as? LibrarySearchField)?.timestamps ?? [:] }
-    public func beginSearchMeasurement() { (searchField as? LibrarySearchField)?.beginMeasurement() }
+    public func beginSearchMeasurement() -> Double {
+        (searchField as? LibrarySearchField)?.beginMeasurement() ?? ProcessInfo.processInfo.systemUptime
+    }
     public func markSearchCommit() { (searchField as? LibrarySearchField)?.timestamps["commit"] = nativeCommittedAt }
     public internal(set) var nativeCommittedAt = 0.0
     var switchPhases: [String:Double] = [:]

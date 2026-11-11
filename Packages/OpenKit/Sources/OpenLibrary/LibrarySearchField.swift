@@ -14,7 +14,12 @@ final class LibrarySearchField: LibraryField {
     }
     required init?(coder:NSCoder) { fatalError() }
     func note(_ name:String) { timestamps[name] = ProcessInfo.processInfo.systemUptime }
-    func beginMeasurement() { timestamps = [:]; note("dispatch") }
+    func beginMeasurement() -> Double {
+        timestamps = [:]
+        let dispatched = ProcessInfo.processInfo.systemUptime
+        timestamps["dispatch"] = dispatched
+        return dispatched
+    }
     private func editor() -> LibrarySearchEditor {
         if let editorStorage { return editorStorage }
         let editor = LibrarySearchEditor(usingTextLayoutManager:false); editorStorage = editor
