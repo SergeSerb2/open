@@ -65,6 +65,10 @@ timing-lane receipt, a rented incognito stage (its native captures are keyed to 
 M1 built-in 2x display), and a receipt without the rented host metadata. Timing
 rows inside a rented stage are kept as INFO only; the quiet M1 timing receipt is
 still required. A rented Mac refuses `--lane timing` and runs incognito never.
+Limit (2026-11-11): over SSH the rented desktop refuses `NSRunningApplication`
+activation of the App child (`activate-own-app` returns `accepted:false`, also under
+`launchctl asuser`), so strict suites stop with "direct App child activation refused".
+Owner-watch, which launches no activated App, passes there.
 
 Actions declares its intentional `Page.crash` before sending it on the M1.
 The shared `/tmp/open-intentional-crash-11.json` marker and private stage ledger

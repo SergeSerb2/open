@@ -179,7 +179,7 @@ def main():
     receipt = dict(schema=1, machine='M5', config=options.config, style='chrome', lane='merge',
                    selected=selected, partialSelectors=partial, started=time.time(),
                    prReady=not options.only and not options.quick and not options.no_e2e,
-                   chunks=[], stages=[], rows=[], source=None)
+                   chunks=[], stages=[], rows=[], source=None, refusedReceipts=[])
     rows = {}; stages = {}; unsafe = False
     def cancel(signum, _):
         global CANCELLED
@@ -269,6 +269,9 @@ def main():
             if key in rows and rows[key] != row:
                 raise RuntimeError('conflicting duplicate chunk row: '+key)
             rows[key] = row
+        for entry in data.get('refusedReceipts', []):
+            if entry not in receipt['refusedReceipts']:
+                receipt['refusedReceipts'].append(entry)
         for stage in data['stages']:
             key = stage['name']
             if key in stages and stages[key] != stage:
@@ -285,6 +288,9 @@ def main():
     lines += ['| '+row['row']+' | '+row['status']+' | '+row.get('observedStatus',row['status'])+' | '+row['policy']+' | '+row.get('reason','').replace('|','/')+' |' for row in receipt['rows']]
     lines += ['', '| Chunk | Exit | Slot seconds |', '|---|---:|---:|']
     lines += ['| '+chunk['name']+' | '+str(chunk['exit'])+' | '+str(chunk['slotSeconds'])+' |' for chunk in receipt['chunks']]
+    if receipt['refusedReceipts']:
+        lines += ['', '| Refused receipt | Row | Reason |', '|---|---|---|']
+        lines += ['| '+r['receipt']+' | '+r['row']+' | '+r['reason'].replace('|','/')+' |' for r in receipt['refusedReceipts']]
     lines += ['', '| Exception | Verdict | Clears when |', '|---|---|---|']
     lines += ['| '+entry['row']+' | '+entry['verdict']+' | '+entry['clearsWhen']+' |' for entry in inventory]
     lines += ['', 'Gate: '+('PASS' if receipt['ok'] else 'FAIL'), 'Logs: '+str(directory)]
