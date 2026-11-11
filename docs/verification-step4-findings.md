@@ -115,3 +115,5 @@ samples measured 26–51 ms. The phase values do not prove a sole cause.
 LEAD 08:20 approves this exact performance-lane deferral. [#314](https://github.com/SergeSerb2/open/issues/314)
 tracks moving the write/landing work off the main thread or splitting it
 into slices ≤8 ms. The original receipt is retained unchanged.
+
+A later valid M1 sample at `b9531ac3` passed all import assertions: maximum lag 46.919 ms, writeArchive 33.828 ms, landSidebar 13.090 ms, History 1,027.408 ms and idle 0.398%, with pre-load1 3.294/3.348. Its raw gate rejects the now-stale exact exception. Remove that active exception and re-evaluate the raw PASS rows; retain the original valid failure and #314. No product input changed and no fix is claimed. Receipt: `.re/step4-m1-b9531ac3-all/timing-import-robust/`.

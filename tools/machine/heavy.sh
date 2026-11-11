@@ -8,6 +8,7 @@
 #   - heavy.sh /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock CMD   (the strict-timing form)
 #   - anything started from the performance worktree (perf-arc-vs-open, tools/perf)
 # Order is strict FIFO: a waiting exclusive job is never overtaken.
+# A BACKGROUND job (OPEN_HEAVY_BACKGROUND=1, the engine release build) takes no slot.
 # Nested calls run inside the outer slot. See the queue with queue.sh.
 PFX="${OPEN_HEAVY_PREFIX:-/tmp/open-heavy}"
 [ $# -gt 0 ] || { echo "usage: heavy.sh CMD [ARGS...]" >&2; exit 64; }
@@ -76,6 +77,21 @@ sync_legacy() {
 cleanup() { rm -f "$T" "$HD/$$"; sync_legacy; }
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
+
+# A BACKGROUND job (OPEN_HEAVY_BACKGROUND=1; the engine release build) runs for
+# hours with its own job limit. It takes no build slot and never blocks the
+# queue; only one runs at a time. It is listed as a holder with kind "background".
+if [ "${OPEN_HEAVY_BACKGROUND:-}" = 1 ]; then
+  rm -f "$T"
+  exec 9>>"$PFX-bg.lock"
+  if ! /usr/bin/lockf -s -t 0 9 2>/dev/null; then
+    echo "heavy.sh: a background job is already running" >&2; exit 75
+  fi
+  printf '%s\t%s\n' "$line" background > "$HD/$$"
+  sync_legacy
+  OPEN_HEAVY_HELD=1 OPEN_HEAVY_KIND=background "$@" 9>&-
+  exit $?
+fi
 
 held=""
 release() { local fd; for fd in $held; do eval "exec $fd>&-"; done; held=""; }

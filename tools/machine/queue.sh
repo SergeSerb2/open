@@ -4,6 +4,7 @@ PFX="${OPEN_HEAVY_PREFIX:-/tmp/open-heavy}"
 N=$(cat "$HOME/Library/Caches/OpenRE/heavy-slots" 2>/dev/null); case "$N" in 1|2|3|4|5|6) ;; *) N=1 ;; esac
 echo "machine: $(scutil --get ComputerName 2>/dev/null)   load: $(sysctl -n vm.loadavg)   cores: $(sysctl -n hw.ncpu)"
 echo "BUILD slots (heavy.sh): $N. A normal job takes one; an exclusive job (measurement, strict timing) takes all."
+echo "  (a [background] job, the engine release build, takes no slot)"
 h=0
 for f in "$PFX-holders"/*; do
   [ -e "$f" ] || continue

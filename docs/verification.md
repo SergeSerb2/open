@@ -105,9 +105,9 @@ The committed machine setup scripts and queue contract are in
 slots and the M1 has one; both keep one screen slot. Build and screen work may
 overlap. Measurements use `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh` to take every
 build slot, then the screen lock when needed. The strict-timing lockf form is
-exclusive automatically. A budget failure while another M5 build slot was
-occupied is void; rerun only that row exclusively, keeping both receipts
-and its unchanged budget.
+exclusive automatically. Budget rows qualify on the quiet M1 lane below;
+invalid M5 samples remain INFO with their raw assertions and load ledger.
+A valid M5 budget miss still fails. Keep every limit and both receipts.
 Keep at most one waiting screen job per agent, and record waits over ten minutes.
 
 The M5 merge dispatcher holds no outer build ticket (LEAD 08:00). CLI checks

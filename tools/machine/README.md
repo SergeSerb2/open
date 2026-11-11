@@ -71,6 +71,17 @@ Do not hold either slot while thinking or waiting for user input. Keep the
 M1's compile cap at 6 of its 8 cores. Report queue waits over 10 minutes and
 dead-looking holders to the lead. Never stop or adopt another agent's job.
 
-A timing or budget failure sampled while another M5 build slot was occupied
-is void. Rerun only that row with `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh
-tools/verify-all.sh --only ROW`; keep its original budget and both receipts.
+Latency/CPU budgets qualify on the M1 Release timing lane. Hold its heavy
+and screen slots; require two load1 readings ≤3.5 ten seconds apart before
+the sample, with a six-minute preflight cap. Other CPU is recorded only;
+there is no after-run load condition. While any timing job holds those slots,
+run no other M1 builds, decodes, analyses or SSH polling loops. A queued job
+waits for that reservation. M5 samples that miss the validity rule remain
+INFO with their raw assertions and load ledger; a valid M5 miss still fails.
+The exact M5 `onboarding/strict_120hz` row keeps its separate display rule.
+
+The lead added the engine-release-only `OPEN_HEAVY_BACKGROUND=1` mode at
+09:55 on 2026-11-11 (E-questions.md). It holds one separate background lock
+and appears as a `background` holder, taking no normal build slot. Normal
+A gates and timing jobs must not use this mode. The installed scripts are
+shared; record a diff in A-questions.md and ask the lead before any install.
