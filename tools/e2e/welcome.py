@@ -645,7 +645,7 @@ def pause_resume_playlist(app, api):
                         and manual['animating'] and manual['activeCard'] == 2 and manual['playlist'] == 'stopped'
                         and (app.config != 'Release' or cpu < 1)),
                 initial=initial, paused=paused, restored=restored, still=still, manual=manual,
-                appCPUPercent=cpu, seconds=seconds, limitPercent=1, loadAverage=list(os.getloadavg()))
+                appCPUPercent=cpu, seconds=seconds, limitPercent=1, cpuLoadAverage=list(os.getloadavg()))
 
 
 def occlude_resume_playlist(app, api):
