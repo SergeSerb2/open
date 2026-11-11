@@ -59,6 +59,14 @@ final class AppCommandBarSession: CommandBarDelegate {
         if self.openFirstResultsMilliseconds == nil {
           self.openFirstResultsMilliseconds = LaunchTiming.shared.elapsedMilliseconds - self.openedAt
         }
+        #if OPEN_AUTOMATION
+        PerfAttribution.mark("commandBar.firstSnapshot")
+        // A synchronous snapshot is committed by endEvent after focus/layout finish.
+        // Only an asynchronous result needs its own boundary flush.
+        if !PerfAttribution.eventInFlight {
+          PerfAttribution.submit("commandBar.firstSnapshot", window: self.factory.window)
+        }
+        #endif
       }
       controller = bar
       bar.view.frame = windowController.contentView.bounds

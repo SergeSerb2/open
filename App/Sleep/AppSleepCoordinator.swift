@@ -255,6 +255,9 @@ final class AppSleepCoordinator {
   }
 
   func wake(_ id: ItemID) {
+    #if OPEN_AUTOMATION
+    PerfAttribution.count("sleep.wake"); PerfAttribution.mark("sleep.wakeRequested")
+    #endif
     guard let controller, !wakeRequests.contains(id) else { return }
     // Selection shows a retained page before the queued wake task runs. Chromium
     // can finish its discard reload in that gap, so arm the first-commit record
@@ -265,7 +268,13 @@ final class AppSleepCoordinator {
     }
     wakeRequests.insert(id)
     Task { @MainActor [weak self] in
+      #if OPEN_AUTOMATION
+      PerfAttribution.mark("sleep.taskEntered")
+      #endif
       await controller.tabBecameVisible(id)
+      #if OPEN_AUTOMATION
+      PerfAttribution.mark("sleep.controllerReturned")
+      #endif
       guard let self else { return }
       self.wakeRequests.remove(id)
       for factory in self.app.hostFactories.values { factory.controller?.container.refreshPlaceholders() }
