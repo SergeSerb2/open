@@ -105,7 +105,8 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     return SiteControlContext(tabID: tabID, profileID: host.profileID, url: url,
       displayHost: url.host() ?? url.absoluteString,
       isIncognito: factory.isIncognito,
-      security: url.scheme == "https" ? .secure : url.scheme == "http" ? .insecure : .unknown)
+      security: ["https", "http"].contains(url.scheme?.lowercased() ?? "")
+        ? (url.scheme?.lowercased() == "https" && host.content.securityLevel == .secure ? .secure : .insecure) : .unknown)
   }
   func buttonState(for tabID: ItemID) -> (available: Bool, boosted: Bool) {
     #if OPEN_AUTOMATION
@@ -127,8 +128,14 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       let store = adBlockStore
       // Settings can open the store before the App has an engine adapter.
       // Configuration alone must never claim that requests are being blocked.
-      let available = store?.onEngineEvent != nil && store?.isProfileOpen(profileID) == true && store?.isEnabled == true
-      let on = available && (try? store?.siteSnapshot(for: profileID).shouldBlock(host: url.host() ?? "")) == true
+      let adBlockProfileID = factory.incognitoSession?.parent.id ?? profileID
+      let privateSession = factory.isIncognito ? factory.incognitoSession?.context?.identifier : nil
+      let sessionAvailable = !factory.isIncognito || privateSession.map {
+        store?.isPrivateSessionOpen($0, profile: adBlockProfileID) == true
+      } == true
+      let available = store?.onEngineEvent != nil && store?.isProfileOpen(adBlockProfileID) == true
+        && store?.isEnabled == true && sessionAvailable
+      let on = available && (try? store?.siteSnapshot(for: adBlockProfileID, privateSession: privateSession).shouldBlock(host: url.host() ?? "")) == true
       tiles.append(SiteSettingTile(id: "contentBlocking", kind: .contentBlocking, title: "Block Ads & Trackers",
         subtitle: on ? "On" : "Off", state: available ? (on ? .on : .off) : .unavailable,
         symbol: "hand.raised.fill", help: available ? (on ? "The built-in ad blocker is on for this site." : "The built-in ad blocker is off for this site.") : "The built-in ad blocker is off. You can turn it on in Settings."))
@@ -150,7 +157,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: boostProfileID) ?? [] : []
     return SiteControlSnapshot(context: context, tiles: tiles, boosts: boosts,
       boostsGloballyEnabled: boostProvider?.boostsGloballyEnabled ?? true,
-      capabilities: factory.extensions.host == nil ? [] : [.extensionPinning],
+      capabilities: factory.extensions.host == nil ? [.clearCache, .securityState] : [.clearCache, .securityState, .extensionPinning],
       commandsEnabled: ["new-boost": boostProvider != nil && !context.isIncognito, "share-page": true,
         "capture-page": context.isWebsite, "capture-full-page": context.isWebsite])
   }
@@ -161,11 +168,14 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard let factory, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite else { return }
     switch tile.kind {
     case .contentBlocking:
-      guard let store = adBlockStore, store.onEngineEvent != nil, store.isEnabled, store.isProfileOpen(snapshot.context.profileID),
+      let adBlockProfileID = factory.incognitoSession?.parent.id ?? snapshot.context.profileID
+      let privateSession = factory.isIncognito ? factory.incognitoSession?.context?.identifier : nil
+      guard let store = adBlockStore, store.onEngineEvent != nil, store.isEnabled, store.isProfileOpen(adBlockProfileID),
+            !factory.isIncognito || privateSession.map({ store.isPrivateSessionOpen($0, profile: adBlockProfileID) }) == true,
             let host = snapshot.context.url.host() else { openAdBlockSettings(tabID: tabID); return }
       do {
-        let currentlyBlocking = try store.siteSnapshot(for: snapshot.context.profileID).shouldBlock(host: host)
-        try store.setExcluded(host, excluded: currentlyBlocking, profile: snapshot.context.profileID)
+        let currentlyBlocking = try store.siteSnapshot(for: adBlockProfileID, privateSession: privateSession).shouldBlock(host: host)
+        try store.setExcluded(host, excluded: currentlyBlocking, profile: adBlockProfileID, privateSession: privateSession)
       }
       catch { factory.controller?.toasts.show(.init(title: "Ad blocking settings could not be saved.")) }
     case .permission(let permission):
@@ -195,13 +205,12 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard factory?.selectedTab?.id == tabID else { return }; factory?.extensions.run(id, source: .menuEntry)
   }
   func setExtensionPinned(_ id: String, pinned: Bool) { factory?.extensions.host?.setPinned(pinned, extensionID: id) }
-  func showSecurityDetails(tabID: ItemID) {} // E3: the footer is a static label.
+  func showSecurityDetails(tabID: ItemID) {} // Certificate viewer is post-v1.
   func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID) {
-    guard kinds == .cookies, let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
+    guard kinds == .cookies || kinds == .cache,
+          let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
           let page = factory?.hosts[tabID]?.content else { return }
-    // Main's non-nil-origin API clears host cookies only (not Domain= cookies).
-    // E2 now supplies a scoped operation; SCC binding remains a follow-up.
-    page.context.clearBrowsingData(origin: snapshot.context.url) {}
+    PageSiteDataCommands.clearAndRefresh(page, kinds: kinds == .cache ? .cache : .cookies)
   }
   func openURLInNewTab(_ url: URL, tabID: ItemID) {
     guard factory?.selectedTab?.id == tabID else { return }; _ = factory?.openNewTab(url: url, background: false)
