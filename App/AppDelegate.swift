@@ -7,6 +7,7 @@ import OpenFeatures
 import QuartzCore
 import OpenCommands
 import OpenSettings
+import OpenLibrary
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -385,6 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     scheduleLibraryPrebuild()
   }
   func noteLibraryInput() {
+    LibraryPanelView.noteUserInput()
     libraryLastInput = ProcessInfo.processInfo.systemUptime
     libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     settingsPresenter.cancelLibraryIdleWork()

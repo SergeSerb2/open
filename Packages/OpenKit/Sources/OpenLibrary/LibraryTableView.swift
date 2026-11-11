@@ -22,10 +22,12 @@ final class LibraryTableView: NSView, NSDraggingSource {
     var onDragBegin: ((NSDraggingSession) -> Void)?
     var onDragEnd: ((NSDraggingSession,NSDragOperation) -> Void)?
     var onScroll: (() -> Void)?
-    var onSettle: (() -> Void)?
+    var onSettle: (() async -> Void)?
     var onPrefetch: ((NSRange,Int,Int) -> Void)?
     private var previousFirstRow = 0
     private var settleTask: Task<Void,Never>?
+    private var settleGeneration = 0
+    private var overscanViewport: CGRect?
     var pendingIdle: Bool { settleTask != nil }
     private var previousY: CGFloat = 0
     private(set) var phases: [String:Double] = [:]
@@ -63,6 +65,7 @@ final class LibraryTableView: NSView, NSDraggingSource {
                     guard let self else { return }
                     let started = ProcessInfo.processInfo.systemUptime
                     LibraryRaster.note("clipBoundsObserver")
+                    LibraryIdleWork.noteInput()
                     self.onScroll?(); self.reconcile()
                     let y = self.enclosingScrollView?.contentView.bounds.minY ?? 0
                     let range = self.rows(in:self.visibleRect)
@@ -97,15 +100,34 @@ final class LibraryTableView: NSView, NSDraggingSource {
         if let identifier = view.identifier { pool[identifier,default:[]].append(view) }
     }
     func scheduleSettle() {
-        settleTask?.cancel()
+        cancelIdle()
+        let generation = settleGeneration
         settleTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for:.milliseconds(80))
             guard let self,!Task.isCancelled else { return }
-            self.settleTask = nil; self.onSettle?()
+            await self.onSettle?()
+            if generation == self.settleGeneration { self.settleTask = nil }
         }
     }
-    func cancelIdle() { settleTask?.cancel(); settleTask = nil }
-    func prepareOverscan() { reconcile(overscan:true) }
+    func cancelIdle() { settleTask?.cancel(); settleTask = nil; settleGeneration += 1 }
+    func prepareOverscan(isCurrent: () -> Bool) async {
+        let viewport = enclosingScrollView?.contentView.bounds ?? bounds
+        let range = rows(in:viewport.insetBy(dx:0,dy:-viewport.height))
+        overscanViewport = viewport
+        for row in range.location..<(range.location+range.length) {
+            guard !Task.isCancelled,isCurrent() else { return }
+            let completed = await LibraryIdleWork.perform {
+                guard isCurrent(),rows.indices.contains(row),
+                    viewport == (enclosingScrollView?.contentView.bounds ?? bounds) else { return }
+                let started = ProcessInfo.processInfo.systemUptime
+                reconciling = true
+                realize(row,display:true)
+                reconciling = false
+                record("reconcile",started)
+            }
+            guard completed else { return }
+        }
+    }
     func view(atColumn:Int,row:Int,makeIfNecessary:Bool) -> NSView? {
         guard rows.indices.contains(row) else { return nil }
         if let view = live[rows[row].key]?.view { return view }
@@ -127,16 +149,21 @@ final class LibraryTableView: NSView, NSDraggingSource {
         let viewport = enclosingScrollView?.contentView.bounds ?? bounds
         let range = self.rows(in:overscan ? viewport.insetBy(dx:0,dy:-viewport.height) : viewport)
         let visible = range.length == 0 ? [] : Array(range.location..<(range.location+range.length))
-        let keys = Set(visible.map { rows[$0].key })
+        // Keep completed overscan rows, but never populate the unfinished part
+        // from an implicit layout pass between idle slices.
+        let retained = self.rows(in:overscanViewport == viewport ? viewport.insetBy(dx:0,dy:-viewport.height) : viewport)
+        let keys = Set((retained.location..<(retained.location+retained.length)).map { rows[$0].key })
         for key in Array(live.keys) where !keys.contains(key) { retire(key) }
-        for row in visible {
+        for row in visible { realize(row,display:overscan) }
+    }
+    private func realize(_ row:Int,display:Bool) {
             let descriptor = rows[row]
             if let entry = live[descriptor.key],entry.version != descriptor.version { retire(descriptor.key) }
             let view: NSView
             if let existing = live[descriptor.key]?.view { view = existing }
             else {
                 let start = ProcessInfo.processInfo.systemUptime
-                guard let made = makeRow?(row) else { continue }
+                guard let made = makeRow?(row) else { return }
                 record("configure",start)
                 view = made; if view.superview !== self { addSubview(view) }; view.isHidden = false
             }
@@ -146,7 +173,7 @@ final class LibraryTableView: NSView, NSDraggingSource {
                 let start = ProcessInfo.processInfo.systemUptime
                 view.layoutSubtreeIfNeeded(); record("cellLayout",start)
             }
-            if overscan {
+            if display {
                 let start = ProcessInfo.processInfo.systemUptime
                 view.displayIfNeeded()
                 func display(_ layer:CALayer) { layer.displayIfNeeded(); for child in layer.sublayers ?? [] { display(child) } }
@@ -154,7 +181,6 @@ final class LibraryTableView: NSView, NSDraggingSource {
                 record("overscanDisplay",start)
             }
             live[descriptor.key] = (row,descriptor.version,view)
-        }
     }
     func rect(ofRow row:Int) -> CGRect {
         guard rows.indices.contains(row) else { return .zero }
@@ -186,6 +212,8 @@ final class LibraryTableView: NSView, NSDraggingSource {
         record("scrollTo",start)
     }
     override func scrollWheel(with event:NSEvent) {
+        LibraryIdleWork.noteInput()
+        cancelIdle()
         let start = ProcessInfo.processInfo.systemUptime
         super.scrollWheel(with:event); record("scrollWheel",start)
     }

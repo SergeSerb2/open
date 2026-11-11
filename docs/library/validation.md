@@ -254,3 +254,32 @@ code and the runner changed for this check; product rendering is unchanged.
 LEAD 11:20 requires a new plan for a non-flush failure. The staged gate on main
 will use its bounded tickets and exact-head M1 receipts; the old private
 exclusive gate wrapper must not be reused. No reference is re-recorded.
+
+
+## LEAD 12:25 clock ruling and bounded preparation
+
+The retained wheel receipt has 33 raw capture gaps, representing 43 nominal
+120 Hz intervals. Under the lead's revised attribution rule, all 43 are INFO,
+"outside the App (compositor or capture cadence)". None overlaps a main-thread
+busy interval of at least 8 ms, a display-link interval over 12.5 ms, or a tick
+with a new offset and no App commit. The two late link callbacks occur after
+the final physical change. The M1 built-in panel uses adaptive refresh;
+repeated native offsets at the tail are not App misses. Raw counts are retained.
+Direct callback p95/max stays 1.673/2.429 ms. The broader moving main-busy p95
+4.151 ms is a separate diagnostic clock. The 61.854 ms early launch gap without
+Library counter changes is assigned to performance agent H.
+
+The narrow product change splits pool preparation, overscan rendering and
+first-use row warming into cancellable idle turns. Each row is configured and
+rendered before yielding to the run loop. Input cancels pending work; preparation
+resumes when idle. Launch preparation waits for launch age 2 s and 500 ms without
+input; the hidden panel shell still waits at least 3 s after the sidebar draw.
+Prepared overscan rows survive implicit layout. Visible rows still finish
+synchronously when the user opens before preparation completes.
+
+New scoped acceptance is pending: A/B/control once, ready-open/warm/search three
+pairs, and touched real-App suites. The probe records per-slice durations, exact
+continuous main-busy intervals, and a no-input settling tail. Required limits
+are 4 ms per slice and 6 ms for Library-attributed busy intervals at launch and
+after motion. The accepted five-pair receipt and idle median remain separate.
+No full gate or PR is claimed by this entry.

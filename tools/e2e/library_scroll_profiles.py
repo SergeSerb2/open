@@ -27,8 +27,66 @@ LIMITS = {
 }
 
 
+def classify_gaps(native, gaps):
+    """LEAD 12:25: retain raw capture gaps; attribute only App clock evidence.
+
+    startTicks and capture ticks share mach_absolute_time. Heartbeat launch
+    ages use the per-callback launch anchor. The old receipt records a positive
+    layout/display/flush duration after every wheel submitNativeFrame call;
+    these are durations, not monotonically increasing commit counters.
+    """
+    rows = native['frames']
+    classified = []
+    for gap in gaps:
+        left, right = gap['startTicks'], gap['endTicks']
+        busy, late, missing_commit, ticks = [], [], [], []
+        for i, row in enumerate(rows):
+            heartbeat = row['heartbeat']
+            anchor = row['startTicks']-row['launchMilliseconds']/TICK_MS
+            if heartbeat['maxBusyAgeMilliseconds'] >= 8:
+                begin = anchor+heartbeat['busyStartLaunchMilliseconds']/TICK_MS
+                end = anchor+heartbeat['busyEndLaunchMilliseconds']/TICK_MS
+                if begin < right and end > left: busy.append(i+1)
+            if i and row['intervalMilliseconds'] > 12.5:
+                if rows[i-1]['startTicks'] < right and row['startTicks'] > left: late.append(i+1)
+            if left <= row['startTicks'] <= right:
+                ticks.append(i+1)
+                changed = i and row['input'].get('offsetBefore') != rows[i-1]['input'].get('offsetBefore')
+                committed = any(row['counters'].get('last.'+phase, 0)>0 for phase in ['layout','display','flush'])
+                if changed and not committed: missing_commit.append(i+1)
+        attributed = bool(busy or late or missing_commit)
+        classified.append(dict(gap, callbacks=ticks, busyCallbacks=busy,
+            lateDisplayLinkCallbacks=late, changedOffsetWithoutCommitCallbacks=missing_commit,
+            appAttributed=attributed, classification='App-attributed' if attributed else
+            'outside the App (compositor or capture cadence)'))
+    count = sum(gap['missedIntervals'] for gap in classified if gap['appAttributed'])
+    return {'rule':'LEAD 12:25 (11 Nov)', 'rawMissedIntervals':sum(g['missedIntervals'] for g in gaps),
+            'appAttributedMissedIntervals':count, 'outsideAppIntervals':sum(g['missedIntervals'] for g in classified if not g['appAttributed']),
+            'gaps':classified}
+
+
+def idle_work(native):
+    slices = native.get('idleWorkIntervals', [])
+    frames = native['frames']+native.get('settlingFrames', [])
+    attributed = []
+    for i, row in enumerate(frames):
+        h = row['heartbeat']
+        low, high = h['busyStartLaunchMilliseconds'], h['busyEndLaunchMilliseconds']
+        matching = [s for s in slices if s['startLaunchMilliseconds'] < high and s['endLaunchMilliseconds'] > low]
+        if matching:
+            attributed.append({'callback':i+1,'settling':i>=len(native['frames']),
+                'milliseconds':h['maxBusyAgeMilliseconds'],'startLaunchMilliseconds':low,
+                'endLaunchMilliseconds':high,'slices':matching})
+    maximum = max((r['milliseconds'] for r in attributed), default=0)
+    unit_max = max((s['milliseconds'] for s in slices), default=0)
+    return {'slices':slices,'libraryBusyIntervals':attributed,
+            'largestLibraryBusyMilliseconds':maximum,'maximumSliceMilliseconds':unit_max,
+            'ok':maximum<=6 and unit_max<=4}
+
+
 def analyze(native, physical):
     rows = native['frames']
+    all_rows = rows+native.get('settlingFrames', [])
     dispatch_costs = sorted(row['milliseconds'] for row in rows)
     # Precise NSScrollView events can apply their clip changes after dispatch.
     # For wheel qualification include all run-loop busy wall time in each
@@ -69,38 +127,41 @@ def analyze(native, physical):
                        for key in rows[-1]['counterDelta']
                        if key.startswith('scroll.') or key in ['formatting', 'listLayout', 'wake.trackingMilliseconds']}
     raw = sum(gap['missedIntervals'] for gap in gaps)
-    # No exclusion by assumption. Only a control reproduced at the same launch
-    # offset could justify one. The early control cannot explain a >=150s gap.
-    return {'callbacks': len(rows), 'p95Milliseconds': p95,
-            'maximumMilliseconds': max(costs),
+    classification = classify_gaps(native, gaps)
+    return {'callbacks': len(rows), 'p95Milliseconds': dispatch_costs[min(len(dispatch_costs)-1, int(len(dispatch_costs)*.95))],
+            'mainBusyP95Milliseconds': p95,
+            'maximumMilliseconds': max(dispatch_costs),
+            'mainBusyMaximumMilliseconds': max(costs),
             'movingCallbacks': len(moving), 'movingP95Milliseconds': moving_p95,
             'allCallbacksP95Milliseconds': costs[min(len(costs)-1, int(len(costs)*.95))],
             'directCallbackP95Milliseconds': dispatch_costs[min(len(costs)-1, int(len(costs)*.95))],
             'directCallbackMaximumMilliseconds': max(dispatch_costs),
-            'workClock': 'max(native callback wall time, complete main-run-loop busy interval)' if native['profile'] == 'wheel' else 'native callback wall time',
-            'created': rows[-1]['counters']['created']-rows[0]['counters']['created']+rows[0]['counterDelta'].get('created', 0),
-            'configured': rows[-1]['counters']['configured']-rows[0]['counters']['configured']+rows[0]['counterDelta'].get('configured', 0),
+            'workClock': 'native callback through explicit App commit; full main-busy intervals retained separately',
+            'created': all_rows[-1]['counters']['created']-rows[0]['counters']['created']+rows[0]['counterDelta'].get('created', 0),
+            'configured': all_rows[-1]['counters']['configured']-rows[0]['counters']['configured']+rows[0]['counterDelta'].get('configured', 0),
             'configuredDuringCallbacks': sum(row['counterDelta'].get('configured', 0) for row in rows),
             'configuredBetweenCallbacks': sum(row['betweenCallbackDelta'].get('configured', 0) for row in rows),
             'startLaunchMilliseconds': rows[0]['launchMilliseconds'],
             'endLaunchMilliseconds': rows[-1]['launchMilliseconds'],
             'activePhysicalChanges': len(active), 'activePhysicalMissedIntervals': raw,
             'fullCaptureMissedIntervals': physical['missed120HzIntervals'],
-            'excludedIntervals': 0, 'appAttributedMissedIntervals': raw,
+            'excludedIntervals': raw-classification['appAttributedMissedIntervals'],
+            'appAttributedMissedIntervals': classification['appAttributedMissedIntervals'],
+            'physicalGapClassification': classification,
             'physicalGaps': gaps, 'busyGapsAtLeast8ms': busy,
             'phaseMaximumMilliseconds': phases,
             'deferredPhaseMaximumMilliseconds': deferred_phases,
             'physicalWindow': {'startTicks': first, 'endTicks': last,
                                'firstChangeTicks': active[0] if active else None,
                                'lastChangeTicks': active[-1] if active else None},
-            'heartbeatContexts': native['heartbeatContexts']}
+            'heartbeatContexts': native['heartbeatContexts'], 'idlePreparation':idle_work(native)}
 
 
 def main(args):
     out = args.output.resolve(); out.mkdir(parents=True, exist_ok=False)
     bundle = args.bundle.resolve()
-    result = {'configuration': 'Release', 'rule': 'LEAD 11:20 (11 Nov)',
-              'limits': LIMITS, 'complete': False, 'productRenderingChanged': False,
+    result = {'configuration': 'Release', 'rule': 'LEAD 12:25 (11 Nov)',
+              'limits': LIMITS, 'complete': False, 'productRenderingChanged': True,
               'executableSHA256': hashlib.sha256((bundle/'Contents/MacOS/Open').read_bytes()).hexdigest(),
               'oldGapLaunchOffsetEstimateMilliseconds': [[2940, 3170], [3160, 3390]],
               'oldOffsetCaveat': 'Reconstructed from external file/tick anchors; not exact process-start timestamps.'}
@@ -120,6 +181,7 @@ def main(args):
         control = app.call('library-performance', operation='scroll-series', profile='control',
                            beginAtLaunchMilliseconds=2000)
         result['control'] = control
+        result['controlIdlePreparation'] = idle_work(control)
         assert not control['inputError'] and len(control['frames']) == 216
         coverage = [control['frames'][0]['launchMilliseconds'], control['frames'][-1]['launchMilliseconds']]
         result['controlCoverageMilliseconds'] = coverage
@@ -135,7 +197,7 @@ def main(args):
         while age < 150000:
             seconds = min(30, (150000-age)/1000)
             time.sleep(seconds); age += seconds*1000
-        for profile, duration in [('wheel', 6500), ('scroller', 1800)]:
+        for profile, duration in [('wheel', 8500), ('scroller', 4000)]:
             app.call('library-performance', operation='scroll', row=0)
             time.sleep(.5)
             assert wait_until(lambda: app.call('library-performance', operation='cpu')['counters'].get('tasks', 0) == 0, timeout=15)
@@ -160,7 +222,7 @@ def main(args):
                 assert inputs[-1]['offsetAfter'] > inputs[539]['offsetAfter'], 'momentum did not move the list'
                 assert len({i['offsetBefore'] for i in inputs}) > 500, 'wheel velocity curve did not move the list'
                 assert all(i['timestamp'] > 0 for i in inputs)
-            row['ok'] = row['valid'] and row['maximumMilliseconds'] <= 8.3 and row['created'] == 0
+            row['ok'] = row['valid'] and row['maximumMilliseconds'] <= 8.3 and row['created'] == 0 and row['idlePreparation']['ok']
             if profile == 'wheel':
                 row['ok'] = row['ok'] and row['p95Milliseconds'] <= 4 and row['appAttributedMissedIntervals'] <= 1
             print(json.dumps({key: value for key, value in row.items() if key in [
@@ -169,7 +231,7 @@ def main(args):
             save()
         result['settled'] = app.call('library-performance', operation='cpu')
         result['complete'] = True
-        result['ok'] = result['wheel']['ok'] and result['scroller']['ok']
+        result['ok'] = result['wheel']['ok'] and result['scroller']['ok'] and result['controlIdlePreparation']['ok']
     except Exception as error:
         result['error'] = repr(error)
         raise

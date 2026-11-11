@@ -24,8 +24,15 @@ extension AutomationController {
         try await Task.sleep(for:.milliseconds(beginAt-LaunchTiming.shared.elapsedMilliseconds))
       }
       let probe = LibraryScrollProbe()
+      let idleStart = panel.idleWorkIntervals.count
       let samples = await probe.run(panel,profile:profile)
-      return ["profile":profile.rawValue,"frames":samples.map(\.json),"counters":panel.performanceCounters,"inputError":probe.inputError,
+      let launchUptime = ProcessInfo.processInfo.systemUptime-LaunchTiming.shared.elapsedMilliseconds/1000
+      return ["profile":profile.rawValue,"frames":samples.prefix(profile.callbacks).map(\.json),
+        "settlingFrames":samples.dropFirst(profile.callbacks).map(\.json),"counters":panel.performanceCounters,"inputError":probe.inputError,
+        "idleWorkIntervals":panel.idleWorkIntervals.dropFirst(idleStart).map { slice in
+          ["startLaunchMilliseconds":(slice["startUptime"]!-launchUptime)*1000,
+           "endLaunchMilliseconds":(slice["endUptime"]!-launchUptime)*1000,"milliseconds":slice["milliseconds"]!]
+        },
         "heartbeatContexts":["0":"App main run loop outside scroll callback","1":"Library scrollToRow and submitNativeFrame","2":"NSWindow.sendEvent wheel delivery","3":"Library submitNativeFrame"]]
     }
     switch operation {
@@ -128,7 +135,7 @@ private final class LibraryScrollProbe: NSObject {
     }
     scroll = find(panel)
     guard scroll != nil else { inputError = "visible Library scroll view not found"; return [] }
-    rows.reserveCapacity(profile.callbacks)
+    rows.reserveCapacity(profile.callbacks+216)
     heartbeat.start(launchUptime:ProcessInfo.processInfo.systemUptime-LaunchTiming.shared.elapsedMilliseconds/1000)
     observer = CFRunLoopObserverCreateWithHandler(nil,CFRunLoopActivity.beforeWaiting.rawValue|CFRunLoopActivity.afterWaiting.rawValue,true,0) { [heartbeat] _,activity in
       heartbeat.beat(busy:activity == .afterWaiting)
@@ -149,7 +156,7 @@ private final class LibraryScrollProbe: NSObject {
     let launchMilliseconds = LaunchTiming.shared.elapsedMilliseconds
     var input: [String:Double] = [:]
     let visible: Int
-    switch profile {
+    switch index >= profile.callbacks ? .control : profile {
     case .scroller:
       heartbeat.context("Library scrollToRow and submitNativeFrame")
       visible = panel.scrollToRow(Int((Double(index)/119)*Double(max(0,count-1))))
@@ -200,7 +207,7 @@ private final class LibraryScrollProbe: NSObject {
     heartbeat.context("App main run loop outside scroll callback")
     previousCounters = after
     previousTimestamp = link.timestamp
-    if rows.count == profile.callbacks { finish() }
+    if rows.count == profile.callbacks+(profile == .control ? 0 : 216) { finish() }
   }
   func finish() {
     link?.invalidate(); link = nil
@@ -229,6 +236,11 @@ private final class LibraryScrollHeartbeat: @unchecked Sendable {
     lock.withLock {
       let now = ProcessInfo.processInfo.systemUptime
       if self.busy { intervalBusyMilliseconds += (now-accountedTimestamp)*1000 }
+      if self.busy,!busy,(now-timestamp)*1000 > maxBusy {
+        maxBusy = (now-timestamp)*1000
+        busyStart = (timestamp-launchUptime)*1000; busyEnd = (now-launchUptime)*1000
+        busyEntry = entry
+      }
       self.busy = busy; timestamp = now; accountedTimestamp = now
     }
   }

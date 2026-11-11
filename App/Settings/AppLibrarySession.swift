@@ -41,6 +41,7 @@ final class AppLibrarySession {
   }
   @discardableResult func prepareShell() -> LibraryPanelView {
     if let panel { return panel }
+    LibraryPanelView.deferIdlePreparation(until:ProcessInfo.processInfo.systemUptime+max(0,2-LaunchTiming.shared.elapsedMilliseconds/1000))
     let panel = LibraryPanelView(viewModel:model,context:controller!.context)
     panel.onClose = { [weak self] in self?.close() }
     panel.onWidthChange = { [weak self] width in

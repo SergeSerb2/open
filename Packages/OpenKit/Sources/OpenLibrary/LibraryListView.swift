@@ -61,6 +61,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
     private var prefetchWorker: Task<[LibraryPreparedText],Never>?
     private var prefetchGeneration = 0
     private var prefetchRange = NSRange(location:0,length:0)
+    private var overscanGeneration = 0
     var pendingTasks: Int { (prefetch == nil ? 0 : 1)+(table.pendingIdle ? 1 : 0) }
     override var isFlipped: Bool { true }
 
@@ -78,7 +79,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.onDragEnd = { [weak self] session,operation in self?.dragEnded(session,operation:operation) }
         table.onActivate = { [weak self] in self?.activateSelected() }
         table.onDelete = { [weak self] in self?.deleteSelected() }
-        table.onSettle = { [weak self] in self?.prepareOverscan() }
+        table.onSettle = { [weak self] in await self?.prepareOverscan() }
+        table.onScroll = { [weak self] in self?.overscanGeneration += 1 }
         table.onPrefetch = { [weak self] range,direction,stride in self?.prefetchRows(range,direction:direction,stride:stride) }
         table.menuAtRow = { [weak self] row in
             guard let self else { return nil }; let menu = self.menu(at:row); self.activeMenu = menu; return menu
@@ -86,14 +88,19 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.setAccessibilityLabel("Library items")
         scroll.documentView = table; addSubview(scroll)
     }
-    func cancelPrefetch() { prefetch?.cancel(); prefetchWorker?.cancel(); prefetch = nil; prefetchWorker = nil; table.cancelIdle(); prefetchGeneration += 1; prefetchRange.length = 0 }
-    func prepareOverscan() {
+    func cancelPrefetch() { prefetch?.cancel(); prefetchWorker?.cancel(); prefetch = nil; prefetchWorker = nil; table.cancelIdle(); prefetchGeneration += 1; prefetchRange.length = 0; overscanGeneration += 1 }
+    func prepareOverscan() async {
         guard rowCount>0,bounds.height>0 else { return }
+        overscanGeneration += 1
+        let generation = overscanGeneration
         let range = table.rows(in:table.visibleRect)
         // Reserve enough cells for a full viewport at either edge of a heading.
         // Parking keeps native tracking/hierarchy setup out of scrolling.
         let capacity = Int(ceil(bounds.height/(gallery ? 118 : 56)))*3+6
         while cellsCreated < capacity {
+            guard generation == overscanGeneration,!Task.isCancelled else { return }
+            let completed = await LibraryIdleWork.perform {
+            guard generation == overscanGeneration else { return }
             let view = LibraryItemView(); view.identifier = .init("row"); cellsCreated += 1
             if let first = sources.first {
                 view.frame = CGRect(x:0,y:0,width:bounds.width,height:gallery ? 118 : 56)
@@ -101,13 +108,21 @@ final class LibraryListView: NSView, NSMenuDelegate {
                 view.layoutSubtreeIfNeeded(); view.displayIfNeeded(); view.layer?.displayIfNeeded()
             }
             table.park(view)
+            }
+            guard completed else { return }
         }
         let headingCount = entries.reduce(0) { count,entry in if case .heading = entry { return count+1 }; return count }
         while headingsCreated < min(capacity,headingCount) {
+            guard generation == overscanGeneration,!Task.isCancelled else { return }
+            let completed = await LibraryIdleWork.perform {
+            guard generation == overscanGeneration else { return }
             let view = LibraryHeadingView(); view.identifier = .init("day"); headingsCreated += 1
             table.park(view)
+            }
+            guard completed else { return }
         }
-        table.prepareOverscan()
+        await table.prepareOverscan { generation == self.overscanGeneration }
+        guard generation == overscanGeneration,!Task.isCancelled else { return }
         prefetchRows(range,direction:1)
     }
     func prefetchRows(_ range:NSRange,direction:Int,stride:Int = 0) {
@@ -156,7 +171,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
     required init?(coder: NSCoder) { fatalError() }
     /// First-use font, date and symbol costs belong to the idle prebuild.
     /// These temporary rows never enter a window, take focus or start work.
-    static func warmRowKinds(foreground:NSColor,overlay:NSColor) {
+    static func warmRowKinds(foreground:NSColor,overlay:NSColor) async -> Bool {
         let now = Date()
         _ = now.formatted(date:.omitted,time:.shortened)
         _ = now.formatted(date:.abbreviated,time:.omitted)
@@ -172,12 +187,17 @@ final class LibraryListView: NSView, NSMenuDelegate {
             if let layer = view.layer { display(layer) }
         }
         for kind in ["download","archive","history","capture","boost","boostGallery"] {
+            guard await LibraryIdleWork.perform({
             let row = LibraryItemView(frame:CGRect(x:0,y:0,width:304,height:56))
             row.configure(LibraryRowItem(id:"warm-"+kind,title:"Library row",subtitle:"Page · Today",kind:kind,image:placeholder,activate:{},actions:actions,hoverActions:actions),foreground:foreground,overlay:overlay,gallery:kind == "boostGallery")
             render(row)
+            }) else { return false }
         }
+        guard await LibraryIdleWork.perform({
         let heading = LibraryHeadingView(frame:CGRect(x:0,y:0,width:304,height:27))
         heading.configure("Today",color:foreground.withAlphaComponent(0.68)); render(heading)
+        }) else { return false }
+        return true
     }
     override func layout() {
         let started = ProcessInfo.processInfo.systemUptime

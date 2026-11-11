@@ -13,6 +13,9 @@ final class LibraryRailDocument: NSView {
 /// through every transparent part; only the rail adds its darkening and shadow.
 @MainActor
 public final class LibraryPanelView: NSView, NSTextFieldDelegate {
+    public static func deferIdlePreparation(until uptime:Double) { LibraryIdleWork.notBefore = uptime }
+    public static func noteUserInput() { LibraryIdleWork.noteInput() }
+    public var idleWorkIntervals: [[String:Double]] { LibraryIdleWork.intervals }
     public override var isFlipped: Bool { true }
     private let railTint = CALayer()
     private let railShadow = CAGradientLayer()
@@ -166,7 +169,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             (searchField as? LibrarySearchField)?.warmEditor()
             FilePreviewCache.shared.warmPlaceholder()
             for name in ["globe","folder","paintbrush.pointed","doc"] { _ = LibraryImages.value(symbol(name)) }
-            LibraryListView.warmRowKinds(foreground:foreground,overlay:overlay)
+            guard await LibraryListView.warmRowKinds(foreground:foreground,overlay:overlay),
+                !Task.isCancelled else { preparing = false; return }
             warmedRows = true
         }
         refresh(); observeTheme(); observeContent(); refreshData()
@@ -202,7 +206,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             }
             host.wasWarmed = host.loaded
             guard !Task.isCancelled else { return }
-            host.list.prepareOverscan()
+            await host.list.prepareOverscan()
             try? await Task.sleep(for:.milliseconds(32))
         }
     }
