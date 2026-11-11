@@ -541,6 +541,8 @@ live Open Default; named Profiles still match stable import IDs only.
 
 - **v1 blocker, engine — historical Downloads Retry.** CEF clears the download browser association when the initial attachment tab closes, so the completed bytes never produce a terminal callback to Open. Deliver updates through a Profile-level owner that outlives the tab, with safe Profile retirement; no separate App download path. The unchanged real-App `downloads/history_retry` row remains failing under one exact temporary DEFERRED entry, which expires when the engine patch lands. [Finding and two real-App receipts](re/download-retry-callback-lifetime.md). Owner: engine lane / lead.
 
+- Sweep intermittent native guards (2026-11-10) — root cause remains unproven for sidebar E11 preview dismissal, Passwords P-16 popup dismissal, and the Downloads full-sequence clear fixture receiving an already-cancelled transfer. Keep the original failing receipts and every existing predicate; no gate exceptions apply. Full sidebar229/229, later Passwords78PASS/1approvedBLOCKED, and fresh clear11/11 pass. The #301 reverse/restore comparison leaves A3 hover passing while both native Favorite click guards fail only on reversed code. [Finding inventory and receipt revisions](re/sweep-health-2026-11-10.md). Owner: Plan A / App shell.
+
 ## Onboarding art review — 2026-11-10
 
 | Follow-up | Owner / status | Evidence |
