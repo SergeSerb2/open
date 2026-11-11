@@ -66,7 +66,7 @@ All original failures remain in the private receipts under
 wrappers add counters and diagnostic controls; they do not change the row's
 predicate.
 
-## Correct fixture boundary
+## Completed-Welcome diagnostic control
 
 R7's first completion probe observed a stopped state before Welcome's first
 frame; it did not establish a completed fixture and still failed. R8 required
@@ -79,10 +79,9 @@ completions, zero animations, and no pending timer. Before load1 was
 separate after-cleanup reading was 139.4%. Cleanup passed without a new
 crash or system dialog.
 
-The harness now establishes that completed Welcome state before the large
-Settings import and records it in `large_fixture.idleFixture`. A missing
-completion fails setup after 60 seconds. It does not stop a production
-animation or extend the wait after import. No production Welcome,
-onboarding, import, or engine behavior changed for this correction. The
-original failures and the transient Chromium thread activity remain evidence;
-they are not an approved exception or a claim that all startup CPU is fixed.
+LEAD21:00 rules that the original valid failures are a product regression.
+The completed-Welcome control is diagnostic only. The production gate keeps
+its original flow, wait, CPU interval, and failing predicate. A proposed
+pre-import completion precondition was withdrawn before qualification.
+The next step is the requested main-merge bisection, beginning with
+`44b19f3d` and `b0ebbacf`, plus attribution of Release profiler startup.
