@@ -204,9 +204,12 @@ final class URLFieldView: NSView {
     /// field, or while the Site Control panel is open (Arc 14c rest/hover frames; plan D3 §2.4).
     private var showsButtons: Bool { context.forcedHover == .urlField || pointerInside }
 
+    func fieldFill(hovered: Bool) -> DesignColor { Self.fill(context: context, hovered: hovered) }
+
     /// Field fill: the sidebar foreground at 14 % (Open's default dark theme: white 8 %; default Light keeps
-    /// `SidebarRole.fieldFill`). Hover adds 5 % (guess: the old token step; not in the mock-up).
-    func fieldFill(hovered: Bool) -> DesignColor {
+    /// `SidebarRole.fieldFill`). Hover adds 5 % (guess: the old token step; not in the mock-up). The URL
+    /// status button under the field shares it.
+    static func fill(context: SidebarContext, hovered: Bool) -> DesignColor {
         if context.isIncognito { return DesignColor(.white(hovered ? 0.20 : 0.15)) }
         let style = context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
         if style.isDefaultTheme {

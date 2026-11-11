@@ -12,9 +12,10 @@ public enum SiteControlMetrics {           // §3. m = measured (S2), g = guess,
     /// D3 §2.5: four equal tiles, 32 tall, 7 apart: (236 − 2 × 12 − 3 × 7) / 4 = 47.75.
     public static let actionButton = CGSize(width: 47.75, height: 32), actionGap: CGFloat = 7
     public static let actionRadius: CGFloat = 8, actionGlyph: CGFloat = 16
-    /// Section titles 13 pt with 14 above and 8 below (line box 15.5): content starts 37.5 after the tiles,
-    /// the title baseline 11 above it (descender 3 + 8).
-    public static let gapAfterActions: CGFloat = 37.5, sectionGap: CGFloat = 37.5
+    /// Section titles 13 pt with 14 above and 8 below (line box 15.5): content starts ≈ 37.5 after the tiles,
+    /// the title baseline 11 above it (descender 3 + 8). Whole points (38 / 37, same 75 pt total) keep the
+    /// 1 pt separator on a pixel row at 1x.
+    public static let gapAfterActions: CGFloat = 38, sectionGap: CGFloat = 37
     public static let labelBaselineAboveContent: CGFloat = 11, labelRowHeight: CGFloat = 24
     /// "Add extension" chip 46 × 28, radius 7 (D3 §2.5).
     public static let extensionTile = CGSize(width: 46, height: 28), extensionColumns = 4
