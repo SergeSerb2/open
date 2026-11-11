@@ -1,9 +1,11 @@
 # Library validation
 
-Status: STOP after the LEAD 12:50 lean checks. All three pairs are valid,
-but ready-open median 10.882 ms exceeds its 8 ms budget. Warm section and search
-pass. The earlier scroll and idle rulings remain recorded below. No further
-rerun, main merge, full gate or PR was started after this required failure.
+Status: STOP after the LEAD 13:50 restored-flush check on `754cb5b5`.
+All three pairs are valid and preparation finished before every open.
+Ready-open median/max is 8.818/14.316 ms (limits 8/12); the largest idle slice
+is 12.279 ms (limit 8.0), with 13.869 ms of enclosing busy time (limit 8.3).
+Warm section and search carry by module identity. Earlier receipts and rulings
+remain below. No further rerun, main merge, full gate, push or PR was started.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -437,3 +439,125 @@ This call graph is not a measured attribution of the transaction-wide flush.
 
 The prior failed no-flush receipt and its cumulative maxima stay unchanged.
 No new qualification result, main merge, full gate or PR is claimed here.
+
+
+## LEAD 13:50 restored-flush result — STOP with 3/3 valid pairs
+
+The single scoped Release run on `754cb5b5a52f5df41eae87af3ce92689cb37c8f2`
+completed all three baseline/candidate pairs. Every pair is valid. Preparation
+finished before every open, so no sample qualifies as INFO "open during
+preparation". Required ready-open and preparation rows fail. Per LEAD 13:50,
+D1 stopped before any further rerun, product edit, touched suite, main merge,
+exact-head M1 lane, full M5 gate, push or PR.
+
+| Required row | Measured ms | Limit ms | Result |
+|---|---:|---:|---|
+| Ready-open median | 8.818 | ≤8.0 | FAIL |
+| Ready-open maximum | 14.316 | ≤12.0 | FAIL |
+| Individual idle slice maximum | 12.279 | ≤8.0 | FAIL |
+| Clear Library-associated busy interval maximum | 13.869 | ≤8.3 | FAIL |
+
+The restored explicit `CATransaction.flush()` runs after each one-row idle
+slice. An opt-in automation heartbeat observes the main loop from startup,
+including implicit Core Animation commits. It records full busy intervals,
+not only the cumulative slice counter. All 210 preparation slices (70 per
+pair) have complete coverage; no trace overflow occurred. The observers were
+removed before trace retrieval. The trace does not add a polling timer or
+display link.
+
+### Validity and ready-open phases
+
+Each baseline and candidate passed two pre-launch load1 readings ≤3.5.
+Foreign-process CPU remains INFO and is not a post-hoc validity filter.
+
+| Pair | Baseline load1 | Candidate load1 | Open launch age s | Ready-open ms | Action ms | Layout ms | Display ms | Flush ms |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| 1 | 3.451 / 3.074 | 3.074 / 2.841 | 5.193 | 14.316 | 7.101 | 0.992 | 0.551 | 5.670 |
+| 2 | 2.693 / 3.121 | 3.121 / 2.641 | 4.950 | 7.266 | 3.813 | 0.413 | 0.301 | 2.738 |
+| 3 | 3.430 / 3.056 | 3.056 / 3.476 | 5.115 | 8.818 | 4.782 | 0.417 | 0.261 | 3.356 |
+
+The exact `preparationBefore` state is captured inside the open operation,
+before its action starts, rather than inferred from an earlier poll.
+
+| Pair | completed | prebuiltReady | prebuildTaskPending | panelTasks | idleSliceCount |
+|---|---|---|---|---:|---:|
+| 1 | true | true | false | 0 | 70 |
+| 2 | true | true | false | 0 | 70 |
+| 3 | true | true | false | 0 | 70 |
+
+Every open created/configured/reloaded zero rows and formatted no data. Each
+rasterized one Library search-field backing store (30,528 pixels), with zero
+row-text or glyph rasters. These counters do not establish the cause of the
+open's action or transaction-wide flush cost.
+
+The action phase calls `AppSettingsActions.showLibrary`
+(`App/Settings/AppSettingsActions.swift`): refresh download files and acknowledge
+the badge; get archive/history stores and register them; call
+`AppLibrarySession.show`; make the browser window key, activate the App and
+schedule a menu rebuild. `AppLibrarySession.show`
+(`App/Settings/AppLibrarySession.swift`) cancels release, reuses the prepared
+panel, selects the retained section, attaches/presents it, lays out the browser
+container, installs its key handler and focuses the rail. The automation submit
+then measures layout, display and the final transaction flush separately. This
+source call graph explains what the action includes; it does not assign its
+elapsed time to individual calls or attribute the entire flush to the Library.
+
+### Individual slice and full busy-interval evidence
+
+The maximum slice is slice 1 in every pair. Its full enclosing main-loop busy
+interval is also the largest interval associated with preparation in that pair.
+Measured Library slice work dominates each interval; the remainder stays visible.
+
+| Pair | Max slice ms | Full busy interval ms | Library overlap ms | Other main-thread time ms | Slice / busy result |
+|---|---:|---:|---:|---:|---|
+| 1 | 12.279 | 13.869 | 12.280 | 1.589 | FAIL / FAIL |
+| 2 | 8.559 | 10.335 | 8.559 | 1.776 | FAIL / FAIL |
+| 3 | 9.234 | 10.122 | 9.234 | 0.888 | FAIL / FAIL |
+
+| Pair | Slice launch range ms | Full busy launch range ms |
+|---|---|---|
+| 1 | 4089.071–4101.351 | 4088.890–4102.759 |
+| 2 | 3867.335–3875.894 | 3867.259–3877.594 |
+| 3 | 3974.607–3983.841 | 3974.508–3984.630 |
+
+The Library-overlap clock uses slice start/end timestamps, while the slice's
+own duration ends just before its final timestamp is recorded. This explains
+the sub-microsecond difference in pair 1 before rounding. No interval is excluded.
+The trace has no per-entry slice labels. `LibraryListView.warmRowKinds`
+(`Packages/OpenKit/Sources/OpenLibrary/LibraryListView.swift`) is a source
+candidate: its idle loop creates/configures/renders one row at a time, beginning
+with a download row. The receipt does not prove that this is slice 1's entry
+point, nor which operation inside the slice caused its maximum.
+
+### Identity, carried checks and cleanup
+
+The entire OpenLibrary module is byte-identical to `55b507c3`:
+Git tree `6747b46483dee5c5d61993dd9c2dce5996b891f5`, source-content SHA-256
+`6545a65406364960b56ff1e64b74ddcb127b822b7f9ef527d859f1ecdc5e1611`.
+`git diff --exit-code 55b507c3 -- Packages/OpenKit/Sources/OpenLibrary` passes.
+Warm-section and search checks carry under LEAD 13:50; they were not rerun.
+This identity does not override the new measured ready-open or slice failures.
+
+The Release build passed before measurement. Executable SHA-256:
+`8f2e906dafb530609bfa7bed1f0c96e7bb71a95e0635d9d677cdbb7d43d4f483`.
+All 3,021 transported source hashes, artifact hashes and the deep/strict
+signature matched inside the M1 slot. OpenEngine remains
+`f4bce022c1473542e1220260bcec2a2d2c9eab83cf5bffe502feca79b4155a6d`;
+CEF remains `1a22c4aa1b49d7199915766efc2e7665262ec36993ab0b96e4e4200375f762c0`.
+
+The ticket waited 480 seconds, then ran for about four minutes. It released
+before receipt copying and analysis. All six launches quit normally
+(`forced=false`); every cleanup report passes with zero owned windows/processes.
+Post-run audits found no remaining D1 job, holder or waiter on either Mac.
+The user's M5 launchd/default-profile Open session was left untouched.
+No full gate was invoked, so there is no partial-M1 receipt refusal to report.
+The LEAD 14:00 lean exception remains the plan only after a passing ruling.
+
+Receipt: `.re/l3/l3-explicit-flush-ready-r1/result.json`;
+SHA-256 `09c6918e8a0a821e201fa208b4f6980d949af0567f329efaced00b4956b6e267`.
+M1 retained receipt: `receipts/l3-explicit-flush-ready-r1/result.json`.
+Launcher log: `.re/l3/explicit-flush-ready-r1.log`.
+
+Pending lead decision: What narrow next step should D1 take for the failed
+ready-open and preparation bounds after explicit flush was restored and all
+three opens occurred after preparation finished? No further work is queued.
