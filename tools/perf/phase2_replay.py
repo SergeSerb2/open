@@ -127,6 +127,7 @@ def main():
     p.add_argument('--samples', type=int, default=7)
     p.add_argument('--metrics', help='Comma-separated Phase 2 metric IDs or glob patterns; named subsets may use smaller N')
     p.add_argument('--calibrate', action='store_true', help='Unscored real-flow check; may use N1')
+    p.add_argument('--allow-display-drift', action='store_true', help='Calibration only: record both display keys; never score')
     p.add_argument('--app-cadence', action='store_true', help='Record bounded App display-link and sidebar bounds-change timestamps (informative)')
     p.add_argument('--fail-after-metric', help='Calibration-only cleanup proof after a real measured action')
     p.add_argument('--max-load', type=float, default=10)
@@ -134,6 +135,7 @@ def main():
     a = p.parse_args(); os.umask(0o077)
     a.out = private_path(a.out)
     if a.out.exists(): p.error('Preserve receipts: output already exists')
+    if a.allow_display_drift and not a.calibrate: p.error('--allow-display-drift requires --calibrate; scoring remains forbidden')
     if a.export_replay: return export(a.reference, a.export_replay, a.out)
     if not a.calibrate and background_jobs():
         p.error('Background build is active: score measurements are invalid; only --calibrate is allowed (under load, not for scoring)')
@@ -167,7 +169,18 @@ def main():
         if tree_digest(pair['snapshot']) != pair['snapshot_sha256']: raise ValueError('Private replay state changed')
     current = provenance(include_arc=False)
     for key in ('hardware', 'os', 'display'):
-        if current[key] != reference['provenance'][key]: raise ValueError('Cannot replay across different ' + key)
+        if current[key] != reference['provenance'][key]:
+            if key == 'display' and a.calibrate and a.allow_display_drift:
+                def geometry(display):
+                    result = copy.deepcopy(display)
+                    result['screens'] = [{k: v for k, v in screen.items() if k not in ('id', 'icc_sha256')}
+                        for screen in result['screens']]
+                    return result
+                if geometry(current[key]) != geometry(reference['provenance'][key]):
+                    raise ValueError('Calibration display override permits only ICC/ID drift; mode and scale must match')
+                current['calibration_display_exception'] = {'frozen': reference['provenance'][key], 'actual': current[key],
+                    'qualification': 'Unscored functional replay only; no matching Arc reference on this display key'}
+            else: raise ValueError('Cannot replay across different ' + key)
     current.update(phase2_run_id=f'{time.time_ns():x}', detector=manifest['detector'],
         space_transition_route=manifest['space_transition_route'], max_load1=a.max_load,
         measurement_helpers={name: sha(PRIVATE / 'bin' / name) for name in ('frames', 'probe', 'ax-perf')},

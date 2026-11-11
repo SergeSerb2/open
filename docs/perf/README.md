@@ -199,6 +199,13 @@ and writes no scorecard. The scorer also refuses calibration receipts.
 Older Phase 1 entry points require the same operator check; do not run them
 for scores during a background build.
 
+An approved functional check after the M5 restart uses
+`--calibrate --allow-display-drift`. This narrow override permits changed
+ICC hashes and transient display IDs only; mode, scale, host and OS must
+still match. It records the frozen and actual display metadata and remains
+unscored. It never edits the Arc reference. The override is refused without
+`--calibrate`; scored replay still requires an exact display match.
+
 `--app-cadence` adds informative, automation-only observations during the
 sidebar trial: App display-link timestamps and native clip bounds-change
 timestamps, capped at 4,096 samples or ten seconds. The observer restores
