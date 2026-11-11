@@ -149,14 +149,14 @@ final class AppSleepCoordinator {
   }
 
   /// The front window's ToastCenter (page-platform §4.1) with a Settings button that opens
-  /// Settings ▸ Advanced, where the Tab Sleeping mode is (Arc shows a Settings accessory; its
+  /// Settings ▸ Tabs & Archive, where the Tab Sleeping mode is (Arc shows a Settings accessory; its
   /// exact target is a guess).
   private func showToast(_ title: String) {
     guard let toasts = app.frontWindowController?.toasts else { return }
     let content = ToastContent(title: title, accessory: .button(symbol: "gearshape", accessibilityLabel: "Settings"))
     toasts.show(content) { [weak app] handle in
       handle.dismiss()
-      app?.settingsPresenter.show(pane: .advanced)
+      app?.settingsPresenter.show(section: .tabsArchive, row: "sleep")
     }
   }
 

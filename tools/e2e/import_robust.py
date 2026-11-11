@@ -176,6 +176,69 @@ def run(factory, results, tmp, h):
     try:
         source = root/'healthy'; fixture(source, h)
         if only != 'timing':
+            # Fully synthetic Storable identities. A Little Browser can precede
+            # the global pair in real Arc files; its own tab must stay out of
+            # both the review counts and the imported sidebar.
+            little_space = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/little-space')).upper()
+            little_tab = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/little-tab')).upper()
+            little_container = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/little-container')).upper()
+            little = dict(items=[little_container, dict(id=little_container,
+                data={'itemContainer': {}}, childrenIds=[little_tab]), little_tab,
+                dict(id=little_tab, data={'tab': {'savedURL': 'https://example.com/little-only',
+                    'savedTitle': 'Synthetic Little-only tab'}}, childrenIds=[])],
+                spaces=[little_space, dict(id=little_space, title='Synthetic Little-only Space',
+                    profile={'default': True}, containerIDs=['pinned', little_container])])
+            for little_first in (True, False):
+                directory = root/('little-first' if little_first else 'global-first')
+                shutil.copytree(source, directory)
+                path = directory/'StorableSidebar.json'
+                document = json.loads(path.read_text())
+                global_pair = document['sidebar']['containers']
+                little_pair = [{'littleBrowser': {'_0': little_space}}, little]
+                document['sidebar']['containers'] = (little_pair + global_pair if little_first
+                                                     else global_pair + little_pair)
+                path.write_text(json.dumps(document))
+                for entry in ('first-run', 'settings'):
+                    launch(directory)
+                    if entry == 'settings':
+                        app.call('first-run', action='fresh')
+                        outcome = settings_import(directory)
+                        counts, review = outcome.get('settingsOutcome', {}), outcome.get('settingsCounts', {})
+                    else:
+                        outcome = first_import()
+                        counts, review = outcome.get('outcome', {}), outcome.get('counts', {})
+                        finish_first()
+                    stored = json.loads(Path(app.call('save')).read_text())
+                    stored_spaces = {space['id'].upper() for space in stored['spaces']}
+                    row('container_identity_%s_%s' % ('little_first' if little_first else 'global_first', entry),
+                        review.get('Spaces') == 2 and counts.get('Imported Spaces') == 2
+                        and little_space not in stored_spaces
+                        and 'little-only' not in json.dumps(stored)
+                        and {'Alpha', 'Beta'} <= {space['title'] for space in stored['spaces']},
+                        reviewSpaces=review.get('Spaces'), importedSpaces=counts.get('Imported Spaces'),
+                        littleSpaceImported=little_space in stored_spaces)
+                    app.quit(); app = None
+            for case in ('global_missing', 'global_duplicate'):
+                directory = root/case
+                shutil.copytree(source, directory)
+                path = directory/'StorableSidebar.json'
+                document = json.loads(path.read_text())
+                pairs = document['sidebar']['containers']
+                document['sidebar']['containers'] = ([{'littleBrowser': {'_0': little_space}}, little]
+                    if case == 'global_missing' else pairs + pairs)
+                path.write_text(json.dumps(document))
+                launch(directory)
+                before = app.call('spaces')
+                outcome = first_import()
+                row('container_identity_' + case,
+                    outcome.get('failures', {}).get('Spaces') == 'Could not be read'
+                    and app.call('spaces') == before
+                    and not (Path(app.user_data)/'State/browser.json').exists(),
+                    failures=outcome.get('failures'), saved=(Path(app.user_data)/'State/browser.json').exists())
+                app.quit(); app = None
+            if only == 'containers':
+                return
+        if only != 'timing':
             for mode in ('settings_twice', 'first_then_settings'):
                 launch(source)
                 if mode == 'settings_twice':
@@ -330,6 +393,21 @@ def run(factory, results, tmp, h):
                     if case == 'history_wal_unreadable' and not negative: Path(str(directory/'User Data/Default/History')+'-wal').chmod(0)
                 try:
                     launch(directory); before = app.call('spaces')
+                    if case in ('folder_missing', 'sidebar_missing', 'folder_unreadable'):
+                        # Setup skips Import when discovery finds no source
+                        # (#267). Do not force the retired Import screen. The
+                        # negative fixture keeps the source readable, so this
+                        # route assertion must then fail.
+                        app.call('first-run', action='import')
+                        routed = state()
+                        row(case, routed.get('screen') == 'favorites'
+                            and routed.get('probeReady') and not routed.get('sidebarFound')
+                            and app.call('spaces') == before
+                            and not (Path(app.user_data)/'State/browser.json').exists(),
+                            screen=routed.get('screen'), probeReady=routed.get('probeReady'),
+                            sidebarFound=routed.get('sidebarFound'))
+                        app.quit(); app = None
+                        continue
                     outcome = first_import()
                     if case == 'wal_locked_snapshot':
                         row(case, outcome.get('step') == 'report' and not outcome.get('failures')
@@ -380,11 +458,25 @@ def run(factory, results, tmp, h):
         row('large_fixture', stored['spaces'] == 7 and stored['archive'] == 2000 and stored['historyKeys'] == 100000,
             counts=stored, metrics=metrics)
         row('timing_history_100k', metrics.get('historyMilliseconds', float('inf')) <= 1400,
-            timing=True, targetMilliseconds=1400, planLimitMilliseconds=3000, metrics=metrics, startLoad=started_load)
+            timing=True, functionalOK="historyMilliseconds" in metrics, targetMilliseconds=1400, planLimitMilliseconds=3000, metrics=metrics, startLoad=started_load)
         row('timing_main_responsive', metrics.get('maxMainLagMilliseconds', float('inf')) < 50
-            and metrics.get('watchdogSamples', 0) > 0, timing=True, limitMilliseconds=50, metrics=metrics, startLoad=started_load)
-        # Ten seconds after completion: no timer, polling or repeated import writes.
+            and metrics.get('watchdogSamples', 0) > 0, timing=True, functionalOK=metrics.get("watchdogSamples", 0) > 0,
+            reason='maximum import main-thread lag must be below 50 ms with watchdog samples',
+            limitMilliseconds=50, metrics=metrics, startLoad=started_load)
+        # Import work has a ten-second drain. Welcome has a separate finite
+        # playlist: never count its intentional motion as idle or stop it here.
         time.sleep(10)
+        welcome = app.call('welcome')
+        deadline = time.monotonic()+max(0, 30-welcome.get('appearanceElapsed', 0))
+        def settled(value):
+            return value['animationCount'] == 0 and not value['pendingCompletion'] \
+                and value.get('pendingDisplayUpdates', 0) == 0
+        while not settled(welcome) and time.monotonic() < deadline:
+            time.sleep(.1)
+            welcome = app.call('welcome')
+        playlist_settled = settled(welcome) and welcome.get('playlistElapsed', 0) <= 30
+        row('welcome_playlist_settles', playlist_settled, settleCapSeconds=30,
+            reason=None if playlist_settled else 'welcome playlist did not settle', welcome=welcome)
         files_before, counters_before = file_state(), app.call('frame-save-counters')
         cpu_before, wall_before = cpu_seconds(), time.monotonic()
         if negative:
@@ -393,9 +485,9 @@ def run(factory, results, tmp, h):
         cpu = (cpu_seconds()-cpu_before)/(time.monotonic()-wall_before)*100
         files_after, counters_after = file_state(), app.call('frame-save-counters')
         metrics_after = state().get('importMetrics', {})
-        row('idle_after_import', files_before == files_after and counters_before == counters_after
+        row('idle_after_import', playlist_settled and files_before == files_after and counters_before == counters_after
             and metrics_after.get('watchdogActive') == 0 and cpu < 1,
-            timing=True, appCPUPercent=cpu, countersBefore=counters_before, countersAfter=counters_after,
+            timing=True, functionalOK=playlist_settled and files_before == files_after and counters_before == counters_after and metrics_after.get("watchdogActive") == 0, appCPUPercent=cpu, countersBefore=counters_before, countersAfter=counters_after,
             changedStoreFiles=sum(files_before.get(k) != files_after.get(k) for k in files_before.keys() | files_after.keys()),
             metrics=metrics_after)
     finally:

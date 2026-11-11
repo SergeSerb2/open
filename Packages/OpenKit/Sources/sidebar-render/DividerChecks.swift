@@ -9,12 +9,20 @@ import OpenSidebar
         }
         let root = URL(fileURLWithPath: output)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        // The caller reads unchanged main's committed manifest. Schema 1 uses
+        // scale/ICC; the candidate and caller still check the complete mode.
+        let baselineDisplayKey = RenderCLI.value(args, "--baseline-display-key")
         func command(_ executable: String, _ arguments: [String], log: URL) throws {
             _ = FileManager.default.createFile(atPath: log.path, contents: nil)
             let handle = try FileHandle(forWritingTo: log)
             defer { try? handle.close() }
             let process = Process(); process.executableURL = URL(fileURLWithPath: executable)
             process.arguments = arguments; process.standardOutput = handle; process.standardError = handle
+            if executable == baseline, let baselineDisplayKey {
+                var environment = ProcessInfo.processInfo.environment
+                environment["OPEN_VERIFY_DISPLAY_KEY"] = baselineDisplayKey
+                process.environment = environment
+            }
             try process.run(); process.waitUntilExit()
             guard process.terminationStatus == 0 else { throw CLIError(description: "CU5 command failed; see \(log.path)") }
         }

@@ -51,7 +51,7 @@ def crash_symbols(h, names):
 
 
 def run(h, factory, results, tmp, row_ids=None,
-        result_name='results-passwords-probe.json', engine_distribution_sha256=None):
+        result_name='results-passwords-probe.json', engine_distribution_sha256=None, dialog_free=False):
     app = None
     last_tab = None
     baseline = h._open_crash_reports()
@@ -59,6 +59,16 @@ def run(h, factory, results, tmp, row_ids=None,
     evidence = {'started': timestamp(), 'featureAssertions': False, 'load': os.getloadavg(), 'rows': results,
                 'isolation': 'fresh App/profile per row; saved-data refill and cookie relaunch stay inside their row',
                 'requestedRows': row_ids or ['PR-%d' % n for n in range(1, 10)]}
+    if dialog_free:
+        # These superseded observations stay visible without opening system
+        # dialogs. The merge gate's exact exceptions preserve their status.
+        for rid, reason in {
+            'PR-4': 'superseded payment card probe requires a dialog-free path',
+            'PR-5': 'superseded WebAuthn probe requires a dialog-free path',
+            'PR-7': 'superseded HTTP Basic probe requires a dialog-free path',
+        }.items():
+            results[rid] = {'status': 'BLOCKED', 'reason': reason}
+        evidence['requestedRows'] = ['PR-1', 'PR-2', 'PR-3', 'PR-6', 'PR-8', 'PR-9']
     # Same default as tools/fetch-engine.sh; the M1 builds from it without the variable.
     root_readme = Path(os.environ.get('OPEN_ENGINE_ROOT') or os.path.expanduser('~/Developer/open-engine')) / 'README.txt'
     hashes = re.findall(r'framework SHA-256 ([0-9a-f]{64})', root_readme.read_text()) if root_readme.is_file() else []

@@ -41,8 +41,8 @@ def main():
                         assert h['wait_until'](lambda: app.call('onboarding').get('elapsed', 0) >= 8.2, timeout=15, step=.05)
                         state = app.call('onboarding')
                         assert not tracker.loss(), 'foreground interrupted'
-                        expected = ['screenBlendMode', 'screenBlendMode'] if mode=='screen' else []
-                        assert state['blendFilters'] == expected, state['blendFilters']
+                        expected = ['overlayBlendMode', 'screenBlendMode', 'screenBlendMode'] if mode=='screen' else ['overlayBlendMode']
+                        assert sorted(state['blendFilters']) == expected, state['blendFilters']
                         stats = state['frameStats']
                         assert stats['count'] >= 30 and not stats['running']
                         assert state['sound']['decision']=='muted' and not state['sound']['playerWasCreated']

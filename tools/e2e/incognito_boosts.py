@@ -9,7 +9,9 @@ def check_boosts_private(app, normal, base, wait, results, harness):
     def tap(control):
         editor('tap', id=control)
     def probe(tab):
-        return app.eval(tab, "({js:window.s12PrivateBoost??null,style:!!document.getElementById('open-boosts-style'),runtime:typeof window.__openBoosts,filter:getComputedStyle(document.documentElement).filter})")
+        value = app.eval(tab, "({js:window.s12PrivateBoost??null,style:!!document.getElementById('open-boosts-style'),filter:getComputedStyle(document.documentElement).filter})")
+        value['runtime'] = app.eval(tab, "typeof window.__openBoosts", world='open')
+        return value
     try:
         focus(normal)
         for key, value in {'open.advanced.enableBoosts': True,
@@ -69,7 +71,8 @@ def check_boosts_private(app, normal, base, wait, results, harness):
             ok=state['private'] and state['ephemeral'] and state['parent'] == profile
                 and state['originalContext'] == normal_context and not state['boostScriptIDs']
                 and first == after == empty and len(refused) == 4
-                and customize is False and not editor()['open'],
+                and customize is False and not editor()['open']
+                and editor('zap-available', tab=private_tab) is False,
             negative=active['js'] == 'normal-only' and active['style'],
             normal=active, privateFirstDocument=first, privateAfterRefresh=after,
             parent=state['parent'], originalContext=state['originalContext'],

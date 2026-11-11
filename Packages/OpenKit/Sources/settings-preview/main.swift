@@ -138,39 +138,52 @@ import CryptoKit
         settings.selectedPane = .shortcuts
         env.actions.extensionConflicts = PreviewActions.sampleExtensionConflicts
         for dark in [false,true] { for scale in scales {
-            try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: dark,
+            try await render(SettingsContent(viewModel: settings), size: CGSize(width: 960, height: 660), scale: scale, dark: dark,
                              to: output.appendingPathComponent("shortcuts-extension-conflicts-\(dark ? "dark" : "light")@\(scale)x.png"))
         } }
         env.actions.extensionConflicts = []
         if args.contains("--extension-shortcuts-only") { return }
         for pane in PaneID.allCases {
             settings.selectedPane = pane
-            for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: true, to: output.appendingPathComponent("\(pane == .appIcon ? "app-icon" : pane.rawValue)@\(scale)x.png")) }
+            for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 960, height: 660), scale: scale, dark: true, to: output.appendingPathComponent("\(pane == .appIcon ? "app-icon" : pane.rawValue)@\(scale)x.png")) }
+        }
+        for section in SettingsSection.allCases {
+            settings.navigate(to: section)
+            for dark in [false, true] { for scale in scales {
+                try await render(SettingsContent(viewModel: settings), size: CGSize(width: 960, height: 660), scale: scale, dark: dark,
+                                 to: output.appendingPathComponent("section-\(section.rawValue)-\(dark ? "dark" : "light")@\(scale)x.png"))
+            } }
         }
         try await renderProfilesShell(output:output,scales:scales)
         for section in LibrarySection.allCases {
             library.section = section
             for scale in scales { try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: scale, dark: true, to: output.appendingPathComponent("library-\(section.rawValue)@\(scale)x.png")) }
         }
-        for pane in [PaneID.general, .profiles] { settings.selectedPane = pane; for dark in [false,true] { for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: dark, to: output.appendingPathComponent("\(pane.rawValue)-\(dark ? "dark" : "light")@\(scale)x.png")) } } }
+        for pane in [PaneID.general, .profiles] { settings.selectedPane = pane; for dark in [false,true] { for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 960, height: 660), scale: scale, dark: dark, to: output.appendingPathComponent("\(pane.rawValue)-\(dark ? "dark" : "light")@\(scale)x.png")) } } }
         settings.links.testURLString="example.com/x";settings.links.runTest()
         // Tall panes have additional viewport captures, using the same view and scroll entry point.
         for (pane, target, name) in [(PaneID.links, "links-rules", "links-rules"), (.links, "links-test", "links-test"), (.advanced, "advanced-adblock", "advanced-adblock"), (.advanced, "advanced-sleep", "advanced-sleep-data")] {
-            settings.selectedPane = pane; settings.scrollTarget = target
-            for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: true, to: output.appendingPathComponent("\(name)@\(scale)x.png")) }
+            settings.selectedPane = pane
+            switch target {
+            case "advanced-adblock": settings.navigate(to: .adBlocking)
+            case "advanced-sleep": settings.navigate(to: .tabsArchive, row: "sleep")
+            case "links-rules": settings.navigate(to: .links, row: "rules")
+            default: settings.navigate(to: .links, row: "test")
+            }
+            for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 960, height: 660), scale: scale, dark: true, to: output.appendingPathComponent("\(name)@\(scale)x.png")) }
         }
         settings.scrollTarget = nil; settings.selectedPane = .shortcuts; settings.shortcuts.query = "New Tab"
-        for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: false, to: output.appendingPathComponent("shortcuts-custom@\(scale)x.png")) }
+        for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 960, height: 660), scale: scale, dark: false, to: output.appendingPathComponent("shortcuts-custom@\(scale)x.png")) }
         settings.shortcuts.query = ""
         let originalBindings=try Data(contentsOf:settings.shortcuts.fileURL)
         settings.shortcuts.selectedCommandID="go-to-tab-1"
         settings.shortcuts.query="Go to Tab"
-        for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-tab-controls@\(scale)x.png"))}
+        for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:960,height:660),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-tab-controls@\(scale)x.png"))}
         settings.shortcuts.query="New Window";settings.shortcuts.beginRecording("new-window")
-        for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-recording@\(scale)x.png"))}
+        for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:960,height:660),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-recording@\(scale)x.png"))}
         settings.shortcuts.record(.init(key:"y",modifiers:[.control,.option,.command]),for:"new-tab")
         settings.shortcuts.record(.init(key:"y",modifiers:[.control,.option,.command]),for:"new-window")
-        for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-conflict@\(scale)x.png"))}
+        for scale in scales {try await render(SettingsContent(viewModel:settings),size:CGSize(width:960,height:660),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-conflict@\(scale)x.png"))}
         settings.shortcuts.revert();settings.shortcuts.reset("new-tab");settings.shortcuts.query=""
         // Essential Keyboard Shortcuts window content (commandbar-completion §4.5), light and dark, and with a custom key.
         let eduSize = NSHostingView(rootView: EssentialShortcutsView(store: settings.shortcuts.store)).fittingSize
@@ -285,7 +298,7 @@ app.run()
         settings.profiles.setIcon(.symbol("briefcase.fill"),profileID:settings.model.profiles[1].id)
     }
     for scale in scales {
-        try await render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:true,to:output.appendingPathComponent("profile-icons@\(scale)x.png"))
+        try await render(SettingsContent(viewModel:settings),size:CGSize(width:960,height:660),scale:scale,dark:true,to:output.appendingPathComponent("profile-icons@\(scale)x.png"))
     }
     _ = settings.profiles.create(name:"Example Unused Profile")
     settings.profiles.beginDelete()

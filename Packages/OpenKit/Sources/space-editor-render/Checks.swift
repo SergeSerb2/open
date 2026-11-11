@@ -10,6 +10,7 @@ enum Checks {
     struct PortableBaselines: Decodable {
         struct Entry: Decodable {
             let original: Bool?
+            let assetKey: String?
             let renderScale: Int
             let trustedMainCommit: String
             let pngSHA256: [String: [String: String]]
@@ -24,16 +25,13 @@ enum Checks {
                             styleMask: .borderless, backing: .buffered, defer: false, screen: main)
         host.isReleasedWhenClosed = false
         defer { host.close() }
-        guard let screen = host.screen, [1.0, 2.0].contains(screen.backingScaleFactor),
-              let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304 else {
-            throw CLIError(description: "P1 main display has no supported scale/ICC profile")
+        guard let screen = host.screen, let key = OffscreenRenderer.displayKey(screen) else {
+            throw CLIError(description: "P1 main display has no supported scale/ICC/mode")
         }
-        let digest = SHA256.hash(data: profile).map { String(format: "%02x", $0) }.joined()
-        let key = "scale-\(Int(screen.backingScaleFactor))-icc-\(digest)"
         let metadata = try Data(contentsOf: RenderCLI.fixtureURL("portable/manifest.json"))
         guard metadata.count <= 1_048_576 else { throw CLIError(description: "oversized P1 metadata") }
         let manifest = try JSONDecoder().decode(PortableBaselines.self, from: metadata)
-        guard manifest.schemaVersion == 1, manifest.environments.count <= 16 else {
+        guard manifest.schemaVersion == 3, manifest.environments.count <= 16 else {
             throw CLIError(description: "invalid P1 baseline manifest")
         }
         guard let entry = manifest.environments[key] else {
@@ -44,8 +42,12 @@ enum Checks {
               let hashes = entry.pngSHA256["editor"], hashes.count == 3 else {
             throw CLIError(description: "invalid trusted P1 baseline metadata")
         }
+        let assetKey = entry.assetKey ?? key
+        guard entry.original == true || assetKey.range(of: "^scale-[12]-icc(?:-header-v1)?-[0-9a-f]{64}(?:-mode-[0-9]{1,5}x[0-9]{1,5}-pixels-[0-9]{1,5}x[0-9]{1,5}-mhz-[0-9]{1,7})?$", options: .regularExpression) != nil else {
+            throw CLIError(description: "invalid P1 asset key")
+        }
         print("P1 baseline: \(key); trusted main \(entry.trustedMainCommit); byte identity")
-        return (entry.original == true ? "" : "portable/\(key)/editor/", Double(entry.renderScale), hashes, key)
+        return (entry.original == true ? "" : "portable/\(assetKey)/editor/", Double(entry.renderScale), hashes, key)
     }
     static var passed = 0
     static var failed = 0

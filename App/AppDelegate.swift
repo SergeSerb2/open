@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var onboardingEngineSettled = false
   #if OPEN_AUTOMATION
   var onboardingStartup: [String: Any] = [:]
+  var onboardingLifetimeState: (() -> [String: Bool])?
   #endif
   var onboardingActivated = false
   var onboardingHandedOff = false
@@ -347,6 +348,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   /// engineDidInitialize (their order is not fixed).
   private func showWindowsIfNeeded(ignoringLittleOpen: Bool = false) {
     #if OPEN_AUTOMATION
+    // Validate the packaged engine before its first on-screen launch.
+    if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_OFFSCREEN_SMOKE"] == "1" { return }
     let pacingRegion = IntroPacingTrace.begin("browser.showWindowsIfNeeded")
     defer { pacingRegion?.end() }
     #endif
@@ -401,6 +404,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       "contextsBeforeEngine": OEEngine.shared.contexts.count,
       "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
     ]
+    #if OPEN_AUTOMATION
+    startupEvidence["adBlockOwnerOpenBeforeEngine"] = stores.existingAdBlock != nil
+    #endif
   }
 
   /// Capture shortcuts at the confirmed first frame, after AppKit's native
@@ -427,7 +433,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     hostFactories[state.id] = factory
     let title = session.map { model.profiles.count > 1 ? "Incognito · " + $0.parent.name : "Incognito" }
     let controller = BrowserWindowController(model: windowModel, windowID: state.id, factory: factory,
-      snapshotStore: session == nil && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title)
+      snapshotStore: session == nil && !(isFirstRun && onboardingWindowController?.replay == true) ? snapshotStore : nil, incognitoTitle: title,
+      siteControlSource: factory.siteControlSource, siteControlActions: factory.siteControlSource)
     LaunchTiming.shared.phase("windowControllerCreated")
     if isFirstRun, !firstRunSaved, let onboarding = onboardingWindowController, !onboarding.replay {
       controller.allowsWindowActivation = false
@@ -979,8 +986,8 @@ extension AppDelegate: CommandDispatcher {
     if id == "search-settings" {
       let named = payload.flatMap(UUID.init(uuidString:)).map { ProfileID(rawValue: $0) }.flatMap { model.profile(id: $0) == nil ? nil : $0 }
       let profile = named ?? frontWindowController.flatMap { hostFactories[$0.windowID]?.focusedProfile?.id }
-      if let profile, model.profile(id: profile) != nil { settingsPresenter.showProfileSettings(profileID: profile) }
-      else { settingsPresenter.show(pane: .profiles) }
+      if let profile, model.profile(id: profile) != nil { settingsPresenter.show(section: .search, profileID: profile) }
+      else { settingsPresenter.show(section: .search) }
       return
     }
     performCommand(id)
@@ -1003,14 +1010,7 @@ extension AppDelegate: CommandDispatcher {
     case "settings": if !settingsShortcutCaptured { settingsPresenter.show() }
     case "new-profile": settingsPresenter.showNewProfile()
     case "search-settings": performCommand(id, payload: nil)
-    case "air-traffic-control":
-      settingsPresenter.settings.scrollTarget = nil
-      settingsPresenter.show(pane: .links)
-      // A repeated invocation must scroll again even if Settings was left on Links.
-      Task { @MainActor [weak self] in
-        await Task.yield()
-        self?.settingsPresenter.settings.scrollTarget = "links-rules"
-      }
+    case "air-traffic-control": settingsPresenter.show(section: .links, row: "rules")
     case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
     case "set-default-browser": settingsPresenter.settings.general.setDefault()
     case "check-for-updates": settingsPresenter.checkForUpdates()

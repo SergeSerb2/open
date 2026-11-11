@@ -4,9 +4,19 @@ import OpenBoosts
 
 @MainActor public protocol SiteControlDataSource: AnyObject {
     func snapshot(for tabID: ItemID) -> SiteControlSnapshot?
+    /// Button refreshes must not read settings, permissions or panel rows.
+    func buttonState(for tabID: ItemID) -> (available: Bool, boosted: Bool)
     /// Each registration is independent. Remove its token when the window closes.
     func observeChanges(_ observer: @escaping @MainActor (ItemID) -> Void) -> SiteControlObservationToken
     func removeChangeObserver(_ token: SiteControlObservationToken)
+}
+
+extension SiteControlDataSource {
+    /// Keeps existing render sources compatible. The App supplies a cheap read.
+    public func buttonState(for tabID: ItemID) -> (available: Bool, boosted: Bool) {
+        let snapshot = snapshot(for: tabID)
+        return (snapshot != nil, snapshot?.boostsGloballyEnabled == true && snapshot?.boosts.contains(where: \.isEnabled) == true)
+    }
 }
 
 /// Synchronous callbacks may close or replace their caller. The controller keeps

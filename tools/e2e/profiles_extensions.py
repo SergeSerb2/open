@@ -276,7 +276,7 @@ def run(factory, results, tmp, root, wait, engine):
         unused = next(p for p in profiles() if p['name'] == 'Never Loaded')
         before_delete = context_ids()
         app.call('profiles-shell', action='show', profile='Never Loaded')
-        app.call('profiles-shell', action='press', label='Delete Profile')
+        app.press_profile_delete()
         app.call('profiles-shell', action='type-delete', text='Never Loaded')
         app.call('profiles-shell', action='press', label='Delete')
         gone = wait(lambda: not any(p['id'] == unused['id'] for p in profiles()), timeout=15)

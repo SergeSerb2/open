@@ -89,6 +89,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func goForward() { if !closed { content.goForward() } }
   func focus() { if !closed { content.focusPage(); owner?.savePromptFocusChanged() } }
   func rebind(tabID: ItemID, spaceID: SpaceID?) {
+    if tabID != self.tabID { owner?.app.stores.boosts.existingEditorHost?.exitZap(tabID: self.tabID) }
     generation += 1; self.tabID = tabID; self.spaceID = spaceID
     refreshPageBackground(); observeMute()
   }
@@ -108,6 +109,13 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
   func webContent(_ page: OEWebContent, didChange changes: OEWebContentChange) {
     guard !closed, let owner else { return }
     let token = generation
+    if (changes.contains(.loading) && page.isLoading) ||
+      (changes.contains(.live) && !page.isLive) || changes.contains(.crash) {
+      owner.app.stores.boosts.existingEditorHost?.exitZap(tabID: tabID)
+    }
+    if changes.contains(.loading) || changes.contains(.live) || changes.contains(.crash) {
+      owner.app.stores.boosts.existingEditorHost?.pickerAvailabilityChanged(tabID: tabID)
+    }
     if changes.contains(.loading), page.isLoading { historyRecorder.loadingChanged(true) }
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
       // OEWebContent still exposes the previous document's favicon here.
@@ -117,6 +125,9 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
       onURLChange?(url); cancelBackgroundRead(); pageBackgroundColor = nil; onPageBackgroundChange?(nil)
     }
     guard !closed, generation == token else { return }
+    if changes.contains(.URL) || changes.contains(.security), owner.controller?.siteControl != nil {
+      owner.siteControlSource.refresh(tabID: tabID)
+    }
     // CEF's OnLoadStart excludes same-document commits. Address changes outside
     // a document load cover pushState/fragments without duplicating that hook.
     if changes.contains(.URL), let url = page.url {

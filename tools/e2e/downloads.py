@@ -57,16 +57,18 @@ def server():
 
 def checks(factory, results, tmp, config, harness):
     E = harness
-    if os.environ.get('OPEN_DOWNLOADS_CASE', '') in ('', 'littleopen'):
+    lane = getattr(harness, 'E2E_LANE', 'all')
+    if lane != 'observers' and os.environ.get('OPEN_DOWNLOADS_CASE', '') in ('', 'littleopen'):
         import littleopen_downloads
         littleopen_downloads.checks(factory, results, tmp, E, server)
         if os.environ.get('OPEN_DOWNLOADS_CASE') == 'littleopen':
             return
     root = Path(tempfile.mkdtemp(prefix="downloads-attempt-", dir=tmp))
     probe = root / 'idle-probe.dylib'
-    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
-                    str(Path(E.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
-                    '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', str(probe)], check=True)
+    if lane != "merge":
+        subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
+                        str(Path(E.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
+                        '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', str(probe)], check=True)
     bundle = root / 'Open.app'
     source_app = os.environ.get('OPEN_DOWNLOADS_SOURCE_APP') or str(Path(E.ROOT) / 'build' / config / 'Open.app')
     subprocess.run(['cp', '-cR', source_app, str(bundle)], check=True)
@@ -87,7 +89,11 @@ def checks(factory, results, tmp, config, harness):
     subprocess.run(['codesign', '--force', '--sign', '-', str(opener)], check=True, capture_output=True)
     opened_file = root / 'opened-file.json'
     launch_env = {'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_IDLE_DOWNLOADS': '1', 'OPEN_E2E_APP_BUNDLE': str(bundle), 'OPEN_DOWNLOADS_DEFAULT_DIRECTORY': str(root / 'DefaultDownloads')}
+    if lane == 'merge':
+        launch_env.pop('DYLD_INSERT_LIBRARIES')
+        launch_env.pop('OPEN_IDLE_DOWNLOADS')
     app = factory(urls=(), extra_env=launch_env, extra_args=['-open.general.warnBeforeQuitting', 'YES'])
+    app.exclusive_bundle = True  # This suite alone owns the disposable clone.
     app.preferences_domain = domain
     def state(): return app.call('downloads-state')
     def item(key): return next((v for v in state()['items'] if v['id'] == key), {})
@@ -96,6 +102,7 @@ def checks(factory, results, tmp, config, harness):
     def check(name, ok, **evidence):
         results[name] = dict(ok=bool(ok), **evidence)
         print('downloads %-26s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
+    retry_result = None
     def menu(key, select=None):
         return app.call('download-menu', id=key, **({'select': select} if select else {}))
     def start(route, source_tab=None):
@@ -273,18 +280,20 @@ def checks(factory, results, tmp, config, harness):
         # S8's native observer: real timer canary, then a settled interval
         # with zero Home draw/layout/display/invalidations/queue work and no
         # owned timers/display links or CA animation keys.
-        app.call('download-idle', action='begin')
-        canary = app.call('download-idle', action='canary')
-        check('idle_observer_canary', canary['live'] > 0 and canary['after'] == 0, canary=canary)
-        time.sleep(.4); app.call('download-idle', action='reset')
-        before = state(); t0 = time.monotonic(); time.sleep(2)
-        counts = app.call('download-idle'); after = state()
-        check('idle_zero', counts == [0] * 10 and before['publishes'] == after['publishes'] and after['badge']['animations'] == 0 and after['badge']['trackOpacity'] == 0 and after['badge']['ringOpacity'] == 0 and after['badge']['checkOpacity'] == 0 and after['badge']['homeOpacity'] == 1 and not after['queued'], counts=counts, elapsed=time.monotonic()-t0, load=os.getloadavg(), publishes=[before['publishes'], after['publishes']])
-        app.call('download-idle', action='end')
+        if lane != "merge":
+            app.call('download-idle', action='begin')
+            canary = app.call('download-idle', action='canary')
+            check('idle_observer_canary', canary['live'] > 0 and canary['after'] == 0, canary=canary)
+            time.sleep(.4); app.call('download-idle', action='reset')
+            before = state(); t0 = time.monotonic(); time.sleep(2)
+            counts = app.call('download-idle'); after = state()
+            check('idle_zero', counts == [0] * 10 and before['publishes'] == after['publishes'] and after['badge']['animations'] == 0 and after['badge']['trackOpacity'] == 0 and after['badge']['ringOpacity'] == 0 and after['badge']['checkOpacity'] == 0 and after['badge']['homeOpacity'] == 1 and not after['queued'], counts=counts, elapsed=time.monotonic()-t0, load=os.getloadavg(), publishes=[before['publishes'], after['publishes']])
+            app.call('download-idle', action='end')
+
 
 
     def history_flow():
-        nonlocal app, tab
+        nonlocal app, tab, retry_result
         home_space = next(v['id'] for v in app.call('spaces') if v['focused'])
         normal_window = next(v for v in app.call('incognito-state')['windows'] if not v['private'])
         library()
@@ -425,10 +434,29 @@ def checks(factory, results, tmp, config, harness):
         wait(lambda: bool(row(other)))
         menu(other, 'Retry'); dismiss_library()
         retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['state'] == 'completed'), None))
-        check('history_retry', retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
-              and Path(retried['path']).exists(), item=retried)
+        # Keep the same Retry predicate and raw failure. Publish it last so
+        # the known engine gap cannot prevent independent history/quit checks.
+        retry_result = dict(ok=bool(retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
+              and Path(retried['path']).exists()), item=retried, items=state()['items'],
+              tabs=app.call('tabs'), sheets=state()['sheets'],
+              detachedPages=state()['detachedPages'], engineEvents=app.call('events'),
+              reason='' if retried else 'engine: download callbacks end when the originating tab closes (CEF download_manager_delegate_impl.cc:331-344, 483-492)')
+        # Preserve the raw assertion even if a later independent check fails.
+        # The normal checked assignment at the end still fails the suite.
+        dict.__setitem__(results, 'history_retry', retry_result)
         for new_tab in app.call('tabs'):
             if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
+        survivor = retried
+        if survivor is None:
+            # A real completed transfer is the independent second-Profile
+            # survivor for clear/retirement checks. It is never counted as Retry.
+            app.call('space', space=next(s['id'] for s in app.call('spaces') if s['profile'] == profile2))
+            tab = E.new_tab(app, base + '/')
+            control = start('/fast?history=retention-control')
+            survivor = wait(lambda: item(control) if item(control).get('state') == 'completed' else None)
+            check('history_retention_control', survivor and survivor['profile'] == profile2
+                  and Path(survivor['path']).exists(), item=survivor)
+            if not survivor: raise RuntimeError('independent history retention transfer did not complete')
         library(); wait(lambda: bool(row(other))); menu(other, 'Move to Trash')
         check('history_trash', wait(lambda: not item(other)) and not Path(before_second['path']).exists())
 
@@ -437,15 +465,15 @@ def checks(factory, results, tmp, config, harness):
         response = app.call('settings-clear-data', profile=profile, kinds=8, range='Last hour')
         wait(lambda: all(not item(k) for k in (failed, cancelled)))
         check('history_clear_range', response['status'] == 'Done' and bool(item(old))
-              and bool(retried and item(retried['id'])), response=response)
-        restart({old, retried['id']})
+              and bool(survivor and item(survivor['id'])), response=response)
+        restart({old, survivor['id']})
         check('history_remove_clear_persist', not any(item(k) for k in (completed, failed, cancelled, other))
-              and bool(item(old)) and bool(retried and item(retried['id'])), items=state()['items'])
+              and bool(item(old)) and bool(survivor and item(survivor['id'])), items=state()['items'])
         response = app.call('settings-clear-data', profile=profile, kinds=8, range='All time')
-        restart({retried['id']})
+        restart({survivor['id']})
         check('history_clear_all_persist', response['status'] == 'Done'
               and not any(v['profile'] == profile for v in state()['items'])
-              and bool(retried and item(retried['id'])), items=state()['items'])
+              and bool(survivor and item(survivor['id'])), items=state()['items'])
 
         # The real typed Settings deletion closes the owner before removing its
         # directory. Opening Library and quitting again must not recreate it.
@@ -467,7 +495,7 @@ def checks(factory, results, tmp, config, harness):
         try:
             def press_delete():
                 try:
-                    app.call('profiles-shell', action='press', label='Delete Profile'); return True
+                    app.press_profile_delete(); return True
                 except RuntimeError:
                     return None
             if not wait(press_delete, 5):
@@ -788,7 +816,12 @@ def checks(factory, results, tmp, config, harness):
             library()
             # Under load the row can appear before its live Cancel control: wait for
             # the actual button the user would press (the row's own identifiers).
-            wait(lambda: 'Cancel' in row(cancelled).get('buttons', []))
+            ready = wait(lambda: 'Cancel' in row(cancelled).get('buttons', []))
+            if not ready:
+                check('clear_cancel_button_' + label, False, item=item(cancelled), row=row(cancelled),
+                      running=state()['running'], sheets=state()['sheets'],
+                      downloadState=state(), sourcePage=app.page(tab))
+                raise RuntimeError('clear fixture has no live Cancel button: ' + json.dumps(item(cancelled)))
             app.call('download-row', id=cancelled, action='Cancel')
             if not wait(lambda: all(item(k).get('state') == s for k, s in [(inside, 'completed'), (outside, 'completed'), (failed, 'failed'), (cancelled, 'cancelled')])):
                 raise RuntimeError('terminal download fixture did not finish')
@@ -841,13 +874,17 @@ def checks(factory, results, tmp, config, harness):
                      "history": history_flow, "history-errors": history_errors_flow, "quit": quit_flow,
                      "generic-quit": generic_quit_flow}
             selection = os.environ.get('OPEN_DOWNLOADS_CASE', '')
-            selected = set(selection.split(',')) if selection else set(flows)
+            selected = {'badge'} if lane == 'observers' else set(selection.split(',')) if selection else set(flows)
             flows['cancel-sheet'] = cancel_sheet_flow
             if selected - set(flows):
                 raise RuntimeError('unknown Downloads diagnostic case: ' + selection)
             for name, flow in flows.items():
                 if name in selected:
                     flow()
+            if retry_result is not None:
+                check('history_retry', **retry_result)
+                if not retry_result['ok']:
+                    raise RuntimeError('historical Retry did not complete a new transfer')
     finally:
         if not app.closed:
             E._try(lambda: app.call('profiles-shell', action='cancel'))

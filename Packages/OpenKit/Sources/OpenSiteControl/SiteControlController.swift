@@ -4,6 +4,7 @@ import OpenModel
 import OpenDesign
 import OpenBoosts
 import OpenExtensionsUI
+import os
 
 @MainActor
 public final class SiteControlController: NSObject, NSMenuDelegate {
@@ -30,6 +31,10 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         // The shared body retains the selected ID across action updates.
         if restoreFocus && isPresented { view.window?.makeFirstResponder(view.panel.extensionsBody) }
     }
+    /// Automation opt-in: forces native display/submission for the receipt.
+    /// Nil in the shipping App, which keeps AppKit's normal draw scheduling.
+    public var onFirstDraw: ((Double) -> Void)?
+    private static let performanceLog = OSLog(subsystem: "io.github.sergeserb2.open", category: "SiteControl")
     public var onMenu: ((NSMenu,String?) -> Void)?
     public private(set) var preferredMenuItemTitle: String?
     private var activeMenu: NSMenu?
@@ -116,11 +121,16 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         else { present(anchor: anchor, tabID: tabID, mode: .standard, animated: animated) }
     }
     public func present(anchor: SiteControlAnchor, tabID: ItemID, mode: SiteControlPresentationMode = .standard, animated: Bool = true) {
+        let requestedAt = CACurrentMediaTime()
+        let signpost = OSSignpostID(log: Self.performanceLog)
+        let measureFirstDraw = onFirstDraw
+        os_signpost(.begin, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost)
+        defer { os_signpost(.end, log: Self.performanceLog, name: "ClickToFirstDraw", signpostID: signpost) }
         guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
         if isPresented && self.anchor != anchor { dismiss(reason: .anchor,animated: false) }
         if !isPresented { previousResponder = view.window?.firstResponder }
         self.anchor = anchor; self.tabID = tabID
-        self.mode = mode == .extensionPicker && extensionsUIContext?.actions.isEmpty == true ? .standard : mode
+        self.mode = mode
         if extensionsUIContext != nil { view.panel.extensionsBody.pickerMode = false }
         presentationGeneration += 1
         isPresented = true; view.isHidden = false; view.isActive = true
@@ -133,6 +143,13 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         view.window?.makeFirstResponder(view)
         if self.mode == .extensionPicker { view.panel.focusExtensionPickerItem() }
         animateOpen(animated)
+        if let measureFirstDraw {
+            // The automation callback is installed only by OPEN_AUTOMATION.
+            view.layoutSubtreeIfNeeded()
+            view.displayIfNeeded()
+            CATransaction.flush()
+            measureFirstDraw((CACurrentMediaTime() - requestedAt) * 1000)
+        }
     }
     public func layout() { layout(preservingStructureMotion: false) }
     private func layout(preservingStructureMotion: Bool) {
@@ -204,7 +221,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         let current = controls.firstIndex { view.window?.firstResponder === $0 }
         if event.keyCode == 48 {
             let backwards = event.modifierFlags.contains(.shift)
-            if view.panel.extensionsContext != nil, let section = controls.firstIndex(where: { $0.controlID == "section.extensions" }) {
+            if view.panel.hasExtensionItems, let section = controls.firstIndex(where: { $0.controlID == "section.extensions" }) {
                 if view.window?.firstResponder === view.panel.extensionsBody {
                     view.panel.focus(controls[min(controls.count - 1, section + (backwards ? 0 : 1))]); return true
                 }
@@ -280,7 +297,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
             if snapshot.capabilities.contains(.clearCache) { item("Clear Cache", "clearCache") }
             item("Clear Cookies", "clearCookies")
         }
-        separator(); item("Manage Boosts…","view-boosts")
+        separator(); item("Manage Boosts…","view-boosts",enabled: !snapshot.context.isIncognito)
         item("New Boost…","newBoost",enabled: snapshot.canCreateBoost)
         separator(); item("Manage Extensions…", "manage-extensions"); item("Add Extension…", "add-extension")
         if snapshot.context.isWebsite { separator(); item("All Site Settings…", "siteSettings") }

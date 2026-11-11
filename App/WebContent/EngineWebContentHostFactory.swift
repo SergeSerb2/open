@@ -77,7 +77,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Section 12's read-only private-state hook (lead ruling 16:12).
   var isIncognito: Bool { incognitoSession != nil }
   func scheduleSave() { if !isIncognito { app.scheduleSave() } }
-  private lazy var privateSuggest = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
+  private lazy var privateSuggest: SuggestEngine = {
+    let engine = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
+    engine.providers.append(SettingsSuggestionsProvider())
+    return engine
+  }()
   func suggestEngine() -> SuggestEngine? {
     guard let profile = focusedProfile else { return nil }
     return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)
@@ -157,7 +161,14 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
   var popupPanel: NSPanel? { extensions.popup.panel }
   private(set) lazy var extensions = WindowExtensions(factory: self)
+  private(set) lazy var siteControlSource: AppSiteControlSource = {
+    let source = AppSiteControlSource(factory: self)
+    source.boostProvider = app.stores.boosts
+    return source
+  }()
   #if OPEN_AUTOMATION
+  var siteControlDrawSamples: [Double] = []
+  var siteControlDrawNativeProbeSamples: [[UInt64]] = []
   var popupCallbackClose: (phase: String, toggle: Bool)?
   func releaseBrowsersForAutomation() -> [String: Any] {
     extensions.releaseBrowserOwnershipForAutomation(); return mirror.releaseWithoutClosingForAutomation()
@@ -286,6 +297,21 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.isApplicationActive = { [weak self] in NSApp.isActive || self?.window?.isKeyWindow == true }
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
     extensions.attach()
+    extensions.siteControl = controller.siteControl
+    #if OPEN_AUTOMATION
+    controller.siteControl?.onFirstDraw = { [weak self] ms in
+      guard let self else { return }
+      self.siteControlDrawSamples.append(ms)
+      self.siteControlDrawNativeProbeSamples.append(siteControlNativeDrawProbe())
+      if self.siteControlDrawSamples.count > 128 {
+        self.siteControlDrawSamples.removeFirst(); self.siteControlDrawNativeProbeSamples.removeFirst()
+      }
+    }
+    #endif
+    pageChrome.permissionAnchorProvider = { [weak self] page in
+      guard let self, let id = self.tabID(for: page), let anchor = self.controller?.visibleSiteControlAnchor(tabID: id) else { return nil }
+      return PermissionPromptPresenter.Anchor(view: anchor, rect: anchor.bounds)
+    }
     controller.onCloseRequested = { [weak self] in
       self?.savePrompts?.cancelAll()
       guard let self, let window = self.window else { return }
@@ -319,6 +345,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.showsFullURLWithToolbar = UserDefaults.standard.bool(forKey: AppCommand.showFullURLKey)
     controller.onStateChange = { [weak self] in
       guard let self else { return }
+      self.app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
       if let id = self.iconPickerSpaceID, self.focusedSpace?.id != id { self.iconPicker?.close() }
       if self.app.engineReady { self.markVisibleTabsLive(); self.controller?.container.refreshPlaceholders() }
       // BrowserWindowController schedules its SnapshotStore once per committed change.
@@ -676,6 +703,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
+    app.stores.boosts.existingEditorHost?.selectionChanged(in: self)
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
@@ -837,7 +865,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
-    case .showSiteControls, .shareSpace:
+    case .shareSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil
     }

@@ -114,6 +114,12 @@ final class ToolbarView: NSView {
     private var lastCompact: Bool?
 }
 
+public enum SiteControlButtonState: String, Sendable {
+    case rest, open, boosted, openBoosted
+    public var isOpen: Bool { self == .open || self == .openBoosted }
+    public var isBoosted: Bool { self == .boosted || self == .openBoosted }
+}
+
 /// The sidebar URL field: placeholder with a magnifier, or the current host.
 /// A click asks the delegate to open the command bar (Cmd+L style).
 @MainActor
@@ -125,6 +131,17 @@ final class URLFieldView: NSView {
     let copyLink = PlateButton(glyph: .copyLink)
     let siteControls = PlateButton(glyph: .siteControls)
     private(set) var extensionStrip: ExtensionStripView?
+    var siteControlsAvailable = true { didSet { if siteControlsAvailable != oldValue { needsLayout = true } } }
+    var siteControlState = SiteControlButtonState.rest {
+        didSet {
+            guard siteControlState != oldValue else { return }
+            siteControlGlyph.isOpen = siteControlState.isOpen; siteControlGlyph.isBoosted = siteControlState.isBoosted
+            siteControls.glyphView.isHidden = siteControlState != .rest
+            siteControlGlyph.isHidden = siteControlState == .rest
+            needsLayout = true
+        }
+    }
+    private let siteControlGlyph = SiteControlGlyphView(frame: .zero)
     private var pointerInside = false { didSet { if pointerInside != oldValue { needsLayout = true; needsDisplay = true } } }
     private var tracking: NSTrackingArea?
 
@@ -150,7 +167,13 @@ final class URLFieldView: NSView {
             addSubview(b)
         }
         copyLink.action = { [unowned context] in context.send(.copyCurrentURL) }
-        siteControls.action = { [unowned context] in context.send(.showSiteControls) }
+        siteControls.action = { [unowned context] in
+            guard NSApp.currentEvent?.modifierFlags.contains(.option) != true else { return }
+            context.send(.showSiteControls)
+        }
+        siteControlGlyph.isHidden = true
+        siteControlGlyph.tint = { SidebarRole.toolbarGlyph.nsColor }
+        siteControls.addSubview(siteControlGlyph)
         let style: @MainActor () -> SpaceThemeStyle = { [unowned context] in
             context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
         }
@@ -181,6 +204,7 @@ final class URLFieldView: NSView {
         let appearance = contentAppearance
         let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true }
         CATransaction.begin()
+        CATransaction.setDisableActions(!context.animatesChanges)
         CATransaction.setAnimationDuration(Motion.hoverFade)
         fill.backgroundColor = context.isIncognito ? NSColor(white: 1, alpha: 0.15).cgColor : (hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill).cgColor(appearance)
         CATransaction.commit()
@@ -221,8 +245,9 @@ final class URLFieldView: NSView {
         siteControls.frame = CGRect(x: bounds.width + ox - URLFieldMetrics.siteControlsTrailing - a, y: URLFieldMetrics.accessoryY - oy, width: a, height: a)
         copyLink.frame = siteControls.frame.offsetBy(dx: -URLFieldMetrics.accessoryPitch, dy: 0)
         copyLink.isHidden = !showAccessories
-        siteControls.isHidden = !showAccessories
-        if showAccessories {
+        siteControls.isHidden = !hasPage || !siteControlsAvailable || !(showAccessories || siteControlState.isOpen)
+        siteControlGlyph.frame = siteControls.bounds
+        if showAccessories || siteControlState.isOpen {
             right = copyLink.frame.minX - 2
             if let strip = extensionStrip, strip.showsActions, let first = strip.geometry.frames.map(\.minX).min() {
                 right = first - ox - 2

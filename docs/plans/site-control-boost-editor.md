@@ -105,7 +105,7 @@ engine extension state. This plan adds no second store for any of those values (
 | D-7 | **Amended 2026-10-26.** The pad maps a screen point to `BoostColorWheel` inputs (§4.4.2). Interim runtime (#103): the CSS-filter math (`BoostColorWheel.adjustment`) does not change; `colorAdjustment` is derived from `colorWheel` when it is set. v1 target: an engine-level color remap applied at paint time, with images, video, and canvas untouched (Step 4R). | Q12 ruling 2026-10-26 (Q4 superseded). One derivation function, one writer (§5.2). |
 | D-8 | **Amended 2026-10-26.** Zap keeps the existing in-page picker (`zap-picker.js`, closed shadow overlay). Its bar and popup take Arc's look (§4.8). The list of Zaps lives in the page bar ("Click to reveal"); the editor shows only the count on the Zap button. | Arc: bar, popup, and count measured (S2 10/0058, 0060, 0067; IS §20.6). Supersedes Q10. |
 | D-9 | Code editors are `NSTextView` with a small regex highlighter and an `NSRulerView` gutter. No dependency. | Arc's code body is an internal web page that was disabled on the capture machine (S2 10/0071), so its look is not known; the native path keeps memory and cold start low. |
-| D-10 | Boost editing, creation and application are disabled in incognito windows, including OTR contexts of the same parent Profile. | Supersedes Q6; lead 2026-11-07 15:32; Arc Incognito restriction. |
+| D-10 | Boosts cannot be installed or used in incognito windows, including OTR contexts of the same parent Profile. Creation, editing, application and toggles are disabled; matching SCC rows are disabled. | Section 10 hook and Section 12 lead ruling, 2026-11-07 15:32; supersedes Q6. |
 | D-11 | **Superseded 2026-10-26.** The panel has no header. Order: action row, Extensions, Boosts, Settings, footer. Rows replace tiles (§3.3). | S2 09/0010, 11/0005 (C2). |
 | D-12 | **New 2026-10-26.** The Boost color pad and the Space theme editor's pad share one AppKit core, `OpenDesign/ColorPad.swift` (plate, dot grid, knobs, drag and keyboard handling). Each owner supplies its geometry and color law. | Both pads are square dot-grid plates whose knob hue equals the screen angle, clockwise from 3 o'clock (theme: `space-theme-editor.md` §2.2; Boost: IS §20.15). One implementation, two styles. |
 
@@ -1392,7 +1392,7 @@ No external network is needed by these suites.
 | B1 | New Boost from the panel → `boosts list` has one Boost named "My Boost" with `siteMatch.domain == 127.0.0.1`; editor `state` shows simple mode (first-run card first on a fresh profile; `tap id=firstRun.makeABoost`). |
 | B2 | On `boost.html`: `drag points=[…]` on the pad (pad coordinates) → `eval getComputedStyle(document.documentElement).filter` contains `hue-rotate`; `boosts get` has `colorWheel.baseHue` within ± 10° of 216 (the fixture header `#2E7DF6`); `colorWheel.hue` equal to the screen angle of the last point (§4.4.2), and `colorAdjustment` equal to §4.4.5 for the stored θ, ρ, h0. |
 | B3 | `tap id=font.Avenir` (grid cell) → the `h1` computed `font-family` starts with `Avenir`; one text-size click → root `zoom` is 1.1; one case click → body `text-transform` is `capitalize`. |
-| B4 | Zap (after P7, else `blocked: P7`): Zap button on → `click` on the fixture banner (existing page click command) → `boosts get` has one Zap; banner hidden probe; the Zap button reads "Zap, 1"; "Click to reveal" on its chip → banner visible without reload. |
+| B4 | Zap through the App P7 transport: Zap button on → `click` on the fixture banner (existing page click command) → `boosts get` has one Zap; banner hidden probe; the Zap button reads "Zap, 1"; "Click to reveal" on its chip → banner visible without reload. |
 | B5 | Code: `type tab=css text="h1{color:rgb(1,2,3)}"` → within 300 ms `eval` reads the color; `type tab=js text="document.body.dataset.boosted=1"` → "Refresh to Run" visible → `reload` → `eval document.body.dataset.boosted == "1"`. |
 | B6 | Undo: `key route=app key=z modifiers=["cmd"]` with the panel key → last change reverted in `boosts get`. |
 | B7 | Name menu: Rename → "Docs Boost" stored; Delete (alert "This can't be undone.") → store empty, editor closed. |
@@ -1499,6 +1499,145 @@ commits no Zap and hides no content; CSS insertion uses the normal save debounce
 exports an alias. These package hooks do not wait for the B/C branches to merge.
 
 ---
+
+
+Step 3 verification (child A, 2026-11-10): Evidence head
+`4aff4575` merges main `683df62b`, including #266, #291, #292, #293, #295, #297, #298, #279, #300, #277, #278 and #301. Framework SHA-256:
+`891c23539c5638e89a87195e34780fec2b478bfa242b6775bfd38a334f008e67`.
+Branch and unchanged-main (`cdae460b`) Debug/Release builds, engine fingerprints, 45/45
+unique automation keys and smokes PASS. Branch normal features passes
+30 rows. Normal unchanged-main features passes
+30 rows. Earlier main js_dialogs FAILs and diagnostic
+runs remain historical evidence in the PR. Widevine PASS on both; no
+Widevine known-failure label applies. New #298 Sad Tab termination rows
+and `crash_recovery` are DEFERRED through the existing `OPEN_E2E_NO_CRASH_PROBES=1` gate
+(M1-only by rule); the three healthy Sad Tab flows run on the M5.
+
+Release App source is `2a56a89d3ad596791ec4f792469600b272ff87d3`. Debug is rebuilt after #301. M5 suites, with exact source/receipt provenance retained in the PR: commandbar 77, app-actions
+77, extensions-ui 72 (including real-App
+`X13_picker`), toolbar 10, features 30, page
+118, split 40, space-editor 167
+and incognito 31 PASS. Boosteditor 28 PASS. Incognito's
+`no_snapshot_history_change` PASS includes #261. Page retains four BLOCKED
+rows and one DEFERRED row; incognito's native 2x capture remains DEFERRED.
+Site Control has 32 PASS, with only the lead-accepted
+S11/S12 visual FAILs (S12-V). Window has 80 PASS and five raw FAILs: two known startup budget misses
+and three color failures reproduced on unchanged main. The PR retains
+the matching metrics and exact receipt provenance. Window medians (ms):
+`{"cold_fresh_profile": {"engineStart": 351, "engineStarted": 432, "firstContentfulPaint": 650, "main": 179, "modelLoaded": 195, "sidebarDrawn": 350}, "warm_existing_profile": {"engineStart": 325, "engineStarted": 418, "firstContentfulPaint": 623, "main": 170, "modelLoaded": 183, "sidebarDrawn": 323}}`. The four paired startup
+groups use engine891c2353 on both sides: raw no-slower MISS. Pooled
+branch cold sidebar/paint medians are 273/496 ms; warm medians are
+274.5/502 ms. Main medians are 269/494 and 272.5/486.5 ms. Branch
+results remain inside TANDEM §4a known-main limits of 400/700 ms.
+The PR retains all raw medians, loads, first failures and interruptions.
+
+S2 initially FAILED with the old same-origin `/ad.js` fixture on branch;
+unchanged main also loads that script with blocking On, while its loaded
+native filter blocks shipped EasyList rule `||demand.supply^$script`.
+The S12 lead's 12:40 ruling classifies this as a fixture defect. The ad
+request now uses that pinned domain, resolved to the ephemeral local server
+for every suite launch, including performance launches. The EasyList pin
+and rule text are verified before launch. Every original S2 assertion and
+threshold is unchanged. The Settings-ready wait before the first toggle
+and the native excluded_count barrier before each reload follow the
+S12 lead14:52/14:58 rulings. Branch and unchanged main both pass all five
+Off/On cycles on #295; the17:22 ruling removes the former cache-bug waiver. Initial On blocks, Off/site exclusion plus reload
+loads, and On again plus reload blocks: PASS. Restoring only the old
+same-origin request makes S2 and its initial-On proof FAIL as required.
+
+The saved real Boost, live off/on glyph/CSS, edit, host-boundary negative
+and same-parent private S4/S10 rows PASS. Compiling without the sole provider
+binding rejects the saved row/glyph proof. F3's stale-tile proof PASSes in
+both directions and rejects the old callback; F5's content/mtime proof
+rejects both old read and unconditional initialization writes; F9 rejects
+the old unavailable assertion; F4 rejects enabled private Manage Boosts.
+All six mutation cases and the provider variant restore exact source and
+signed positive payload bytes, then the restored real-App rows PASS.
+Native F25 and the Advanced Settings early-failure cleanup/defaults canary
+PASS. The final preflight, full-gate summary and checklist belong to #276.
+
+Per D-10 and §Incognito, parent-Profile Boost metadata is read-only in
+private windows, with no application, writes or enabled actions. F2's
+close/retire notices are resolved by main #291. F4-rest/F6/F7/F8 remain in
+`docs/followups.md`; the private-session tile API switch remains a separate
+PR after #276, per lead item32. E1, remaining E2 and the certificate viewer are post-v1. E3 security state is a v1 blocker owned by the S12 lead final batch (LEAD-UPDATE item39). Gap item1(c) is
+PARTIAL: host-cookie Clear Cookies uses the legacy bridge; Clear Cache is
+absent/refused. S12-G moves both … menu operations onto `clearSiteData`
+after A and G merge. P1's forced-draw path is automation-only and does not
+establish shipping first-draw acceptance. No visual parity is claimed.
+
+Pre-#301 Favorites proofs failed before panel open and after open/close
+on branch, matching unchanged main (S11 bug, lead11:35/11:42). The
+visible-panel negative passed. #301 is merged. Lead11:58 requires no
+Favorites rerun. After #277, the old features receipt comparison failed
+on both builds because the factory adds pickerAccepted:false. The fixed
+harness compares every transport field and explicitly checks the picker
+flag. Its changed-callback negative fails the row. S13's old 12 ms slow
+frame negative fits within a frame at the new 60 Hz display. It now uses
+the measured frame interval plus 12 ms. S13 passes and rejects the slow
+path with every positive threshold unchanged.
+No engine root was edited or built; no M1 work was done.
+
+Historical pre-#271 verification (child A, 2026-11-08): App source
+`d534c708` includes main `d26300e6`, #249's sole `AppBoosts` owner, #202,
+#205, repaired #252, #261 and #264. The factory
+binds SCC through `app.stores.boosts`; no second store exists. The context
+reads `factory.isIncognito`. Matching private-window rows read the session
+parent Profile, while creation/edit/toggle/Customize actions stay disabled.
+
+Fresh Debug/Release and smoke checks pass on engine `619324d3` (framework
+SHA-256 `619324d328e529295a01a56c9e596d21eb216d6ab1cebe22c5a20d6862815399`). The real
+`sitecontrol` suite records 28 PASS, S2 BLOCKED, S11/S12 known FAIL. All S4 and S10
+real-store cases pass: editor-saved CSS, matching row, live off/on without
+reload, Edit, boosted glyph, unmatched-host negative, and same-parent
+private disabled rows/action refusals. Omitting only the provider binding
+in a compiled build rejects the saved-row/glyph predicate. Source was
+restored byte for byte and rebuilt. The generated rebuild was archived;
+the saved positive Debug App bundle was restored and its original binary
+SHA-256 verified exactly. All 45 literal automation keys are unique,
+including left/right once. The Settings View Boosts row now checks the real
+Library Boosts section and rejects the old Advanced-error assertion;
+`commandbar` and `app-actions` each pass 77/77 with the eleven-key defaults
+read-back. F25 passes 11/11 on attempt 1 after lead item 22 cleared the
+earlier UserNotificationCenter interruption. The expected-error Advanced
+Settings canary restores defaults and leaves zero owned windows/processes.
+Fresh overlapping suites pass: commandbar/app-actions 77 each, extensions
+72 (including X13), toolbar 10, features 27, page 85, split 40, space-editor
+167 and incognito 31. Incognito's completed retry has zero interruptions
+and `no_snapshot_history_change` PASS. Two T3-window focus interruptions
+are retained separately. Main and branch both pass Widevine. Window has
+83 PASS plus cold/warm startup budget misses (463/738 and 458/729 ms,
+sidebar/paint); the required paired main/branch receipt, loads and full
+gate belong to the PR.
+
+S11/S12 are **FAIL, known: material and element colors, follow-up S12-V
+(lead 22:20)**, accepted as known failures for this PR only, not parity.
+The interim material is `.hudWindow` plus #686881 at 0.32. Exact S11 ΔE00:
+2.176 / 4.142 / 3.363 / 7.092. Fit predicates remain ±3 sRGB levels for the
+first two probes; validation remains ΔE00 ≤3 for the last two. The original
+S12 table is 22/40 PASS, 18 FAIL. The fresh #249 table adds six existing
+New Boost probes: 27/46 PASS, 19 FAIL. Arrow rows ΔE 12–17, rims ΔE 17–20,
+separator ΔE 14, rings ΔE 3–5.6; arrow position error 9 pt. Arrows, rims and
+separator are probably wrong tokens, not only material. Both exact tables
+stay in the PR. No comparator, threshold or baseline changed.
+
+On engine6193, S1 retained the lead-approved unavailable ad-block row and its
+one Settings call/zero toggle calls. Those receipts do not qualify #271;
+fresh S1/S2 results on the native adapter remain pending under the screen hold.
+#205 now supplies E1–E3 APIs, but SCC binding stays a listed follow-up under
+the lead's 22:38 scope ruling. Existing permission rows, origin Clear
+Cookies, scheme security and absent scoped Clear Cache stay in this PR.
+P7's engine API is preserved; consuming it in the Boost App runtime remains
+outside this SCC integration. No engine tree or Section 10 code was edited.
+
+R1 fixes retain signposts and force native layout/display/flush only in the
+automation callback; shipping presentation stays asynchronous. Source
+notifications are filtered/coalesced and buttons use a lightweight query.
+Empty Cmd+E follows §3.6.1, focuses Add Extension and handles Return. The
+final PR records fresh suite counts, negative proofs, loads, full gate
+summary and the review checklist. Interrupted receipts never count as FAIL
+or acceptance. All M5 jobs must end by23:45; otherwise resume after01:15.
+
 
 ## 11. Risks and open questions
 

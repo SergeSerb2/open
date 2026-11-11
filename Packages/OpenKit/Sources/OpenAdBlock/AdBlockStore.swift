@@ -197,6 +197,7 @@ public final class AdBlockStore {
             NotificationCenter.default.post(name: Self.didChange, object: self)
         }
         try checkActive(profile)
+        NotificationCenter.default.post(name: Self.didChange, object: self)
         if scheduleUpdates {
             let scale = Double(ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE"] ?? "1") ?? 1
             guard scale.isFinite, scale > 0, scale <= 1 else { throw AdBlockError("invalid debug schedule scale") }

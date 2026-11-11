@@ -20,6 +20,7 @@
   /// windows and pages; nothing here sends input to other apps.
   @MainActor
   final class AutomationController {
+    var settingsPerformanceProbe: SettingsPerformanceProbe?
     struct Failure: Error { let message: String }
 
     var extensionRedrawMeasurement: ExtensionRedrawMeasurement?
@@ -236,6 +237,8 @@
           return row
         }
       case _ where Self.littleOpenCommands.contains(cmd): return try await runLittleOpenCommand(cmd, a)
+      case "site-controls": return try await runSiteControl(a)
+      case "site-controls-idle": return try siteControlIdle(a)
       case "theme-get", "theme-set", "editor-open", "editor-act", "editor-close", "editor-state", "creation-state":
         if cmd == "editor-act" { nativeInputStart = ProcessInfo.processInfo.systemUptime }
         return try await runEditorCommand(cmd, a)
@@ -274,9 +277,20 @@
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return app.activationTrace.events
       case "yield-activation":
+        // Read the mapped executable from the kernel, not LaunchServices'
+        // cached executableURL. CEF may use a persistent hard link; the peer
+        // must map this exact file, never a separate copy with equal bytes.
         guard let pid = a["pid"] as? Int32, pid != getpid(),
           let target = NSRunningApplication(processIdentifier: pid),
-          target.executableURL?.resolvingSymlinksInPath() == Bundle.main.executableURL?.resolvingSymlinksInPath()
+          let targetFile = Self.mappedExecutableURL(pid),
+          let ownFile = Self.mappedExecutableURL(getpid()),
+          let targetAttributes = try? FileManager.default.attributesOfItem(atPath: targetFile.path),
+          let ownAttributes = try? FileManager.default.attributesOfItem(atPath: ownFile.path),
+          let targetDevice = targetAttributes[.systemNumber] as? NSNumber,
+          let targetInode = targetAttributes[.systemFileNumber] as? NSNumber,
+          let ownDevice = ownAttributes[.systemNumber] as? NSNumber,
+          let ownInode = ownAttributes[.systemFileNumber] as? NSNumber,
+          targetDevice == ownDevice, targetInode == ownInode
         else { throw Failure(message: "activation peer must be another instance of this exact Open executable") }
         NSApp.yieldActivation(to: target); return true
       case "native-focus-state":
@@ -331,6 +345,12 @@
           "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
           "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
       case "settings-profile": return try settingsProfile(a)
+      case "settings-ui": return try settingsUI(a)
+      case "settings-lifetime": return ["modelCreated": app.settingsPresenter.hasSettingsModel]
+      case "settings-link":
+        guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "invalid Settings URL") }
+        return ["accepted": app.settingsPresenter.showSettingsURL(url)]
+      case "settings-perf": return try settingsPerformance(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-adblock": return try await settingsAdBlock(a)
@@ -405,7 +425,7 @@
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] {
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
-          app.settingsPresenter.settings.preferenceRevision &+= 1
+          app.settingsPresenter.refreshPreferencesIfLoaded()
           if key == "open.advanced.tabSleepMode" { app.tabSleep.reconcileSettingsPolicy() }
           app.scheduleMenuRebuild()
         }
@@ -446,6 +466,7 @@
         await Task.yield()
         return result
       case "sidebar-click": return try await sidebarClick(a)
+      case "favorite-click": return try await favoriteClick(a)
       case "sidebar-key": return try await sidebarKey(a)
       case "hover": return try await sidebarHover(a)
       case "selection": return try sidebarController(a).context.selection.ids.map(\.description)
@@ -846,6 +867,8 @@
         }.map { describe($0, in: w) }
       case "site-settings", "site-setting", "site-data-clear", "security-state":
         return try await runSiteDataCommand(cmd, a, page: try content(a, w))
+      case "page-site-data-probe":
+        return try runPageSiteDataProbe(a) { try content(a, w) }
       case "eval":
         guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
         // Through the OpenWeb protocol, as OpenKit features will call it.
@@ -1114,7 +1137,16 @@
           }
           // Chromium's own windows (DevTools, Chrome windows, Picture in
           // Picture) are Views windows.
-          let foreign = !ours.contains(ObjectIdentifier(win)) && !(win is NSPanel) && win.isVisible
+          // A Chrome-style page is a NativeWidget child of our browser
+          // window. Closing it closes the hosted tab and can close the last
+          // shell window. Only standalone Chromium windows are disposable.
+          var ancestor: NSWindow? = win
+          var belongsToBrowser = false
+          while let current = ancestor {
+            if ours.contains(ObjectIdentifier(current)) { belongsToBrowser = true; break }
+            ancestor = current.parent
+          }
+          let foreign = !belongsToBrowser && !(win is NSPanel) && win.isVisible
             && win.className.contains("NativeWidget")
           if foreign {
             dismissed.append("window:" + win.className)
@@ -1631,7 +1663,7 @@
     /// (window base coordinates): exit to owners it left, enter to owners it reached,
     /// and move to owners whose areas track movement.
     @discardableResult
-    private func hover(_ window: NSWindow, at location: NSPoint) -> [String: [String]] {
+    private func hover(_ window: NSWindow, at location: NSPoint, exitingOnly: Bool = false) -> [String: [String]] {
       // The whole frame view, so the title bar (window buttons) is included.
       guard let content = window.contentView?.superview ?? window.contentView else { return [:] }
       // AppKit builds tracking areas lazily, once the hardware pointer has reached the
@@ -1640,7 +1672,6 @@
       prepare(content)
       var inside: [ObjectIdentifier: NSResponder] = [:]
       var moving: [ObjectIdentifier: NSResponder] = [:]
-      var owners: [ObjectIdentifier: NSResponder] = [:]
       // The point is visible in `view` when it lies inside the view and every ancestor
       // (scroll views and pages clip their content). Not `visibleRect`: views that do not
       // clip to their bounds (the macOS 14+ default) report the whole window there.
@@ -1657,7 +1688,6 @@
         let local = view.convert(location, from: nil)
         for area in view.trackingAreas {
           guard let owner = area.owner as? NSResponder else { continue }
-          if area.options.contains(.mouseEnteredAndExited) { owners[ObjectIdentifier(owner)] = owner }
           let hit = area.options.contains(.inVisibleRect) ? visible(view) : area.rect.contains(local) && visible(view)
           guard hit else { continue }
           if area.options.contains(.mouseEnteredAndExited) { inside[ObjectIdentifier(owner)] = owner }
@@ -1673,9 +1703,14 @@
       }
       let move = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
         context: nil, eventNumber: Self.syntheticPointerTag, clickCount: 0, pressure: 0)
-      // Exit goes to every owner away from the point, not only those this command entered:
-      // the hardware pointer may have entered others (its tracking areas are real).
-      if let exit = enterExit(.mouseExited) { for (id, owner) in owners where inside[id] == nil { owner.mouseExited(with: exit) } }
+      // Exit before the queued native motion can enter the new target. A late
+      // synthetic SpacePageView exit would otherwise cancel the Favorite preview
+      // that native motion just armed; its duplicate enter cannot re-arm it.
+      if exitingOnly {
+        let leaving = hoveredOwners.filter { inside[$0.key] == nil }
+        if let exit = enterExit(.mouseExited) { for owner in leaving.values { owner.mouseExited(with: exit) } }
+        return ["exited": leaving.values.map { String(describing: type(of: $0)) }.sorted()]
+      }
       if let enter = enterExit(.mouseEntered) { for (id, owner) in inside where hoveredOwners[id] == nil { owner.mouseEntered(with: enter) } }
       if let move { for owner in moving.values { owner.mouseMoved(with: move) } }
       let entered = inside.filter { hoveredOwners[$0.key] == nil }.values
@@ -1713,6 +1748,12 @@
       if let group = animation as? CAAnimationGroup { value["children"] = (group.animations ?? []).map(describeAnimation) }
       return value
     }
+    private static func mappedExecutableURL(_ pid: Int32) -> URL? {
+      var path = [CChar](repeating: 0, count: 4096)
+      guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
+      return URL(fileURLWithPath: path.withUnsafeBufferPointer { String(cString: $0.baseAddress!) })
+    }
+
     private func rect(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map(Double.init) }
 
     private func legacyAX(_ object: NSObject, _ attribute: String) -> String {
@@ -1921,6 +1962,24 @@
       return NSPoint(x: root.midX, y: root.midY)
     }
 
+    /// A real NSEvent click on a Favorites tile (through NSApp.sendEvent and hit testing),
+    /// with the view chain that hit testing returns at that point.
+    private func favoriteClick(_ args: [String: Any]) async throws -> Any {
+      let controller = try sidebarController(args)
+      let point = try sidebarPoint(args, controller: controller, favorite: true)
+      guard let target = controller.window, let factory = app.hostFactories[controller.windowID] else { throw Failure(message: "no browser window") }
+      try await activateForInput(target)
+      let windowPoint = controller.contentView.convert(point, to: nil)
+      var chain: [String] = []
+      var view = target.contentView?.superview?.hitTest(windowPoint) ?? target.contentView?.hitTest(windowPoint)
+      while let current = view, chain.count < 16 { chain.append(String(describing: type(of: current))); view = current.superview }
+      _ = try await mouse(["action": "click", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y),
+        "queued": args["queued"] as? Bool ?? true], factory)
+      try await Task.sleep(nanoseconds: 300_000_000)
+      return ["point": [point.x, point.y], "hitChain": chain, "selected": factory.selectedNodeID?.description ?? "",
+        "selectedTab": factory.selectedTab?.id.description ?? ""] as [String: Any]
+    }
+
     private func sidebarClick(_ args: [String: Any]) async throws -> Any {
       let controller = try sidebarController(args)
       let point = try sidebarPoint(args, controller: controller)
@@ -1993,12 +2052,19 @@
       guard leave ? targets == 0 : targets == 1 else { throw Failure(message: "hover needs one node or favorite, or leave") }
       let point = try leave ? NSPoint(x: controller.contentView.bounds.maxX - 80, y: controller.contentView.bounds.midY) : sidebarPoint(args, controller: controller, favorite: args["favorite"] != nil)
       try await activateForInput(target)
-      _ = try await mouse(["action": "hover", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y)], factory)
+      let tracking = try await mouse(["action": "hover", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y)], factory)
       if ms > 0 { try await Task.sleep(for: .milliseconds(ms)) }
-      return try previewState(args)
+      var result = try previewState(args)
+      result["tracking"] = tracking
+      result["point"] = [point.x, point.y]
+      let tracker = controller.context.hoverPreviews
+      result["armed"] = tracker.isArmed
+      result["scheduledShows"] = tracker.scheduledShowCount
+      result["showDeadline"] = tracker.scheduledShowDeadline.map { $0 as Any } ?? NSNull()
+      return result
     }
 
-    private func previewState(_ a: [String: Any]) throws -> Any {
+    private func previewState(_ a: [String: Any]) throws -> [String: Any] {
       let controller = try sidebarController(a)
       let preview = controller.hoverPreview
       var kind = "none", target = ""
@@ -2049,6 +2115,7 @@
         }
         defer { if let monitor { NSEvent.removeMonitor(monitor) } }
         let location = NSPoint(x: point[0], y: target.frame.height - point[1])
+        let leaving = action == "hover" ? hover(target, at: location, exitingOnly: true) : [:]
         if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
         // The local monitor consumes motion on native dequeue. A second
         // queued move must not overtake/coalesce the leave-edge event that
@@ -2058,19 +2125,15 @@
             guard ContinuousClock.now < deadline else { throw Failure(message: "pointer motion was not dequeued") }
             try await Task.sleep(for: .milliseconds(5))
         }
-        // Tracking areas follow the hardware pointer, so `hover` also delivers
-        // enter, move, and exit to the owners of the areas under the point. The automation
-        // pointer moves only afterwards: `hover` first rebuilds every tracking area, and state
-        // that re-reads the pointer then (the window buttons' hover) must still see the old
-        // point, so the enter and exit events drive the change, as real pointer motion does.
+        // Native motion has now arrived. Publish its point before rebuilding
+        // tracking areas: owners that sync from the pointer during that rebuild
+        // must see the new location, or they undo the preflight exit above.
+        BrowserWindowController.automationPointer = (number, location)
         if action == "hover" {
-          let result = hover(target, at: location)
-          BrowserWindowController.automationPointer = (number, location)
+          var result = hover(target, at: location)
+          result["exited"] = leaving["exited"] ?? []
           return result
         }
-        // Known at once (the move event is queued), for state that reads where the pointer
-        // is rather than waiting for an event: the window buttons' hover.
-        BrowserWindowController.automationPointer = (number, location)
         // A move delivers no enter or exit, so the owners `hover` entered before may no longer
         // hold the pointer; the next `hover` enters the owners under its point again.
         hoveredOwners = [:]
@@ -2092,6 +2155,10 @@
         // Real input arrives after the display cycle has laid the window out (the window
         // buttons are placed at its end); run that pass before hit-testing.
         target.layoutIfNeeded()
+        // A click also moves the simulated pointer. Reconcile tracking before
+        // mouseDown, so an old Favorite enter cannot outlive a row click.
+        _ = hover(target, at: point, exitingOnly: true)
+        _ = hover(target, at: point)
         if a["queued"] as? Bool == true {
           // Controls that read NSApp.currentEvent (Option-click pane Close) need
           // native dequeue, not a direct sendEvent with an unrelated current event.
@@ -2217,6 +2284,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         ".": (".", 47),
+        "[": ("[", 33), "]": ("]", 30),
         "enter": ("\u{3}", 76),
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),

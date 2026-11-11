@@ -85,6 +85,7 @@ def onscreen_suite(command):
     waiting_for_lock = False
     directory = job = lock_file = None
     cleanup_complete = False
+    borrowed = False
     output = ""
 
     def cleanup():
@@ -97,16 +98,26 @@ def onscreen_suite(command):
         try:
             if job is not None:
                 if job.returncode is None:
-                    with contextlib.suppress(ProcessLookupError):
-                        os.killpg(job.pid, signal.SIGTERM)
+                    if borrowed:
+                        # The outer gate owns this whole process group. Keep
+                        # the renderer inside it so a killed worker cannot
+                        # leave a renderer outside the outer cleanup boundary.
+                        job.terminate()
+                    else:
+                        with contextlib.suppress(ProcessLookupError):
+                            os.killpg(job.pid, signal.SIGTERM)
                     # Keep the leader unreaped through the TERM grace. Its PID
                     # cannot be reused before KILL reaches remaining group members.
                     time.sleep(2)
-                    groups = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="], text=True)
-                    if any(fields[0] == str(job.pid) and not fields[1].startswith("Z")
-                           for line in groups.splitlines() if len(fields := line.split()) == 2):
-                        with contextlib.suppress(ProcessLookupError):
-                            os.killpg(job.pid, signal.SIGKILL)
+                    if borrowed:
+                        if job.poll() is None:
+                            job.kill()
+                    else:
+                        groups = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="], text=True)
+                        if any(fields[0] == str(job.pid) and not fields[1].startswith("Z")
+                               for line in groups.splitlines() if len(fields := line.split()) == 2):
+                            with contextlib.suppress(ProcessLookupError):
+                                os.killpg(job.pid, signal.SIGKILL)
                     output, _ = job.communicate(timeout=2)
                 job.wait()
             native_apps = stop_native_suite_apps(directory.name) if directory is not None else 0
@@ -156,7 +167,22 @@ def onscreen_suite(command):
     failure = None
     try:
         lock_path = "/tmp/open-onscreen-e2e.lock"
-        while cancelled is None:
+        # A gate stage already holds the pathname lock through our cleanup.
+        # Never trust the environment marker without its live lockf ancestor.
+        if os.environ.get('OPEN_VERIFY_EXTERNAL_SCREEN_LOCK') == '1':
+            parent = os.getppid()
+            for _ in range(32):
+                if parent <= 1:
+                    break
+                fields = subprocess.check_output(['ps', '-p', str(parent), '-o', 'ppid=,args='], text=True).strip().split(None, 1)
+                if len(fields) != 2:
+                    break
+                parent, arguments = int(fields[0]), fields[1]
+                if '/usr/bin/lockf -k /tmp/open-onscreen-e2e.lock ' in arguments:
+                    borrowed = True
+                    break
+            require(borrowed, 'external screen lock marker has no live lockf owner')
+        while cancelled is None and not borrowed:
             # TANDEM-RULES §3.4a: this native suite never creates a priority flag.
             # Queue time stays outside the execution deadline, as for lock acquisition.
             priority = Path("/tmp/open-onscreen-priority")
@@ -193,14 +219,14 @@ def onscreen_suite(command):
             lock_file = None
         if cancelled is not None:
             exit_cancelled()
-        directory = tempfile.TemporaryDirectory(prefix="open-onscreen-suite-")
+        directory = tempfile.TemporaryDirectory(prefix="open-onscreen-suite-", dir=os.environ.get('OPEN_VERIFY_GATE_SCREEN_ROOT'))
         # Foundation can ignore TMPDIR for NSTemporaryDirectory on macOS. Give
         # the registered-app launcher an explicit owned root as well.
         environment = dict(os.environ, TMPDIR=directory.name + "/", OPEN_VERIFY_SUITE_ROOT=directory.name)
         print(f"On-screen lock acquired; suite deadline=180s; worker {os.getpid()}", flush=True)
         if cancelled is None:
             job = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   text=True, env=environment, start_new_session=True)
+                                   text=True, env=environment, start_new_session=not borrowed)
             print(f"On-screen renderer {job.pid}; private temporary root={directory.name}", flush=True)
             deadline = time.monotonic() + 180
             while cancelled is None:
@@ -893,7 +919,7 @@ def main():
                 "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
         # The populated and empty Boosts section each add 1x and 2x renders.
-        require(len(pngs) == 240, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 300, "missing settings/library/appearance/detail/sheet/state renders")
         require({f"library-boosts{state}@{scale}x.png" for state in ("", "-empty") for scale in (1, 2)} <= {p.name for p in pngs},
                 "missing Library Boosts renders")
         require({f"sheet-link-rule-profile-work@{scale}x.png" for scale in (1, 2)} <= {p.name for p in pngs},
@@ -923,7 +949,7 @@ def main():
             sheets = {"previews": (480, 320), "search-engines": (520, 420), "clear-data": (460, 360),
                       "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "link-rule-profile-work": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
-            expected = (440, 384) if png.name.startswith("essential-shortcuts-") else (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
+            expected = (440, 384) if png.name.startswith("essential-shortcuts-") else (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (960, 660))))
             expected = {"profile-delete-disabled": (508, 310), "profile-delete-enabled": (508, 310),
                         "profile-delete-unused": (508, 360)}.get(png.name.split("@")[0], expected)
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
@@ -945,9 +971,11 @@ def main():
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
         matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
+        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
+    elif name == "features-idle":
+        require(subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'), 'features-idle requires the M1')
         idle = run(sys.executable, str(root / "tools/verification/features-idle.py"))
         matches(r"features-render idle check: [1-9]\d* passed, 0 failed", idle)
-        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
     elif name in ("sidebar-render", "commandbar-render", "sitecontrol-render"):
         command = [str(root / "Packages/OpenKit/.build/release" / name), "check"]
         if name == "sitecontrol-render":
@@ -981,7 +1009,12 @@ def main():
         matches(r"^states passed: 13/13;", text)
         output = Path(re.search(r"output: (\S+)", text)[1])
         baseline = os.environ.get("SIDEBAR_BASELINE_RENDERER") or str(output / "main-source/Packages/OpenKit/.build/release/sidebar-render")
-        all_passed(run(str(root / "Packages/OpenKit/.build/release/sidebar-render"), "divider-check", "--baseline", baseline, "--out", str(output / "cu5")))
+        comparison = json.loads((output / "receipt.json").read_text())
+        display = runpy.run_path(str(root / "tools/verification/portable-baselines.py"))["display_environment"]
+        require(display() == comparison["environment"], "display changed before divider comparison")
+        all_passed(run(str(root / "Packages/OpenKit/.build/release/sidebar-render"), "divider-check", "--baseline", baseline,
+                       "--baseline-display-key", comparison["baselineDisplayKey"], "--out", str(output / "cu5")))
+        require(display() == comparison["environment"], "display changed during divider comparison")
     elif name == "boosts":
         boosts(root)
     elif name == "import-arc":

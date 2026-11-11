@@ -138,7 +138,6 @@ final class BoostEngineAdapter {
     // OpenEngine has no batch setter. This synchronous main-actor transaction
     // has no suspension point; only our namespace is replaced.
     for script in previous { web.removeUserScript(id: script.id) }
-    // Blocked on P7: isolated world
     for script in scripts { web.addUserScript(script) }
     registrations[key]?.scripts = scripts
     registrations[key]?.documentStartMatcher = boosts.boostsGloballyEnabled && boosts.app.model.profile(id: profile) != nil
@@ -178,7 +177,7 @@ final class BoostEngineAdapter {
         let host = boost.siteMatch.domain.contains(":") ? "[\(boost.siteMatch.domain)]" : boost.siteMatch.domain
         return "*://\(boost.siteMatch.targetsIPAddress ? host : "*." + host)/*"
       })).sorted()
-      scripts.append(UserScript(id: "open.boosts.applier.\(p.planID)", source: "(() => {\n\(gate)\n\(BoostResources.applierJS)\n\(Self.applySource(p))\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true))
+      scripts.append(UserScript(id: "open.boosts.applier.\(p.planID)", source: "(() => {\n\(gate)\n\(BoostResources.applierJS)\n\(Self.applySource(p))\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true, world: .open))
       if p.containsJS {
         // Main-world user script, separate from the managed stylesheet runtime.
         scripts.append(UserScript(id: "open.boosts.js.\(p.planID)", source: "(() => {\n\(gate)\n\(p.combinedJS)\n})();", injectionTime: .documentStart, matchPatterns: patterns, mainFrameOnly: true))
@@ -203,7 +202,7 @@ final class BoostEngineAdapter {
       do {
         // Do not deliver an old document's plan into a newly navigated page.
         self.javaScriptDeliveryCount += 1
-        _ = try await host.content.evaluateJavaScript("(() => { if (location.href !== \(Self.json(url.absoluteString))) return false; \(source) return true; })()")
+        _ = try await host.content.evaluateJavaScript("(() => { if (location.href !== \(Self.json(url.absoluteString))) return false; \(source) return true; })()", inWorld: .open)
       } catch {
         guard !Task.isCancelled, !self.boosts.app.shutdownPrepared else { return }
         let failure = error as NSError

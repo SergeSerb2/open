@@ -46,6 +46,12 @@ appDelegate.options = options
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
 #if OPEN_AUTOMATION
+// A real launch through layout migration, before any window/engine or quit
+// saves the model. A normal pre-engine quit must keep its normal save path.
+if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LAYOUT_ONLY"] == "1" {
+  FileHandle.standardError.write(Data("Open: automation layout-only complete\n".utf8))
+  exit(0)
+}
 if let receipt = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SCRIPTING_PREFLIGHT"] {
   AutomationScriptingPreflight.run(app: appDelegate, receipt: URL(fileURLWithPath: receipt))
 }
@@ -123,6 +129,10 @@ configuration.logFile = directories.root.appendingPathComponent("State/engine.lo
 configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort
 configuration.verboseLogging = options.verboseLogging
+// CEF main_runner.cc starts Chrome's MainThreadStackSamplingProfiler even in
+// our unbranded Release build (thread_profiler_configuration.cc treats it as
+// local). Open does not use its startup or periodic sampling collections.
+configuration.additionalSwitches.append("--disable-stack-profiler")
 // No userAgentProduct: Chrome's own User-Agent, as Arc does. A non-Chrome
 // product token replaces "Chrome/156", and sites and extensions then take
 // their Safari path (Bitwarden never finished loading).
