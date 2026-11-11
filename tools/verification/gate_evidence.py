@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 
+MEDIA_IDLE_EARLY_REASON = 'Chromium keeps the mixer output for 10 s after pause (audio_renderer_mixer.cc kPauseDelay)'
+
 
 MAX_RECEIPT = 64 * 1024 * 1024
 METADATA = {
@@ -113,6 +115,17 @@ def e2e_rows(directory, suite, identity, engine, config, style, lane):
                 raise ValueError('row has no acceptance predicate: '+key)
         rows.append(dict(row=suite+'/'+key, status=status, reason=value.get('reason') or value.get('error') or '',
                          evidence=str(path), **({k: value[k] for k in ('timing', 'functionalOK', 'timingAfter', 'sampleValid') if k in value})))
+        if suite in ('measure', 'media') and key == 'media_idle_cpu':
+            # #316: the former 6-14 s window is printed as INFO, never accepted.
+            early = value.get('early')
+            if (not isinstance(early, dict) or early.get('status') != 'INFO'
+                    or early.get('windowSecondsAfterPause') != [6, 14]
+                    or not isinstance(early.get('delta'), (int, float))
+                    or early.get('reason') != MEDIA_IDLE_EARLY_REASON):
+                raise ValueError('media_idle_cpu has no valid 6-14 s INFO window')
+            rows.append(dict(row=suite+'/media_idle_cpu_early', status='INFO', informational=True,
+                             reason='delta %.4f points (limit not applied): %s' % (early['delta'], early['reason']),
+                             evidence=str(path)))
     if not any(row['status'] == 'PASS' for row in rows):
         raise ValueError('suite has no passing real-App acceptance row')
     return rows

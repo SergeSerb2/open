@@ -133,23 +133,5 @@
     "owner": "lead / design D3",
     "added": "2026-11-11",
     "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
-  },
-  {
-    "row": "measure/media_idle_cpu",
-    "status": "DEFERRED",
-    "reason": "paused-card total and browser CPU floor deltas must be at most 0.5 percentage points",
-    "clearsWhen": "Issue #316 fix lands; the unchanged 0.5-point CPU delta passes in the complete valid M1 stage",
-    "owner": "performance / engine lane H, issue #316",
-    "added": "2026-11-11",
-    "expires": "Issue #316 fix lands"
-  },
-  {
-    "row": "media/media_idle_cpu",
-    "status": "DEFERRED",
-    "reason": "paused-card total and browser CPU floor deltas must be at most 0.5 percentage points",
-    "clearsWhen": "Issue #316 fix lands; the unchanged 0.5-point CPU delta passes in the complete valid M1 stage",
-    "owner": "performance / engine lane H, issue #316",
-    "added": "2026-11-11",
-    "expires": "Issue #316 fix lands"
   }
 ]
