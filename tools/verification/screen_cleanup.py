@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import re
 import signal
 import subprocess
 import time
@@ -21,7 +22,14 @@ def cleanup_owned(ledger, native_roots):
         for line in lines:
             entry = json.loads(line)
             root = Path(entry['root'])
-            if root.parent != Path.home()/'Library/Application Support' or not root.name.startswith('Open-E2E-'):
+            ordinary = (root.parent == Path.home()/'Library/Application Support'
+                        and root.name.startswith('Open-E2E-'))
+            # Onboarding replay deliberately requires an actual temporary
+            # directory. Accept only that fixture's mkdtemp prefix and its
+            # eight-character random suffix, alongside exact file identity.
+            replay = (root.parent.resolve() == Path('/tmp').resolve()
+                      and re.fullmatch(r'open-intro-replay-[a-z0-9_]{8}', root.name))
+            if not ordinary and not replay:
                 raise ValueError('screen ledger contains a foreign profile root')
             entries.append(entry)
     libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
