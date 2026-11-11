@@ -19,7 +19,7 @@ extension LibraryPanelView {
     @discardableResult public func hoverRow(_ id:String,hovered:Bool) -> Bool { listView.hover(id:id,value:hovered) }
     @discardableResult public func performRow(_ id:String,action:String) -> Bool { listView.perform(id:id,action:action) }
     public func rowMenu(_ id:String,select:String? = nil) -> [[String:Any]]? { listView.menuState(id:id,select:select) }
-    @discardableResult public func showRowMenu(_ id:String) -> Bool { listView.showMenu(id:id) }
+    @discardableResult public func showRowMenu(_ id:String,escapeOnOpen:Bool = false) -> Bool { listView.showMenu(id:id,escapeOnOpen:escapeOnOpen) }
     public func dragPayload(_ id:String) -> [String:Any]? { listView.dragState(id:id) }
     public func selectRow(_ id:String) -> Bool {
         guard let row = listView.entryIndex(id) else { return false }

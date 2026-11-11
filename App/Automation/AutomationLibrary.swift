@@ -8,6 +8,7 @@ extension AutomationController {
   func libraryPanelAction(_ args: [String:Any]) throws -> [String:Any] {
     let adapter = app.settingsPresenter
     let action = args["action"] as? String ?? "state"
+    var probeHit: String?
     if let number = args["window"] as? Int {
       guard let controller = app.windowControllers.first(where: { $0.window?.windowNumber == number }) else { throw Failure(message:"unknown browser window") }
       controller.window?.makeKeyAndOrderFront(nil)
@@ -59,20 +60,23 @@ extension AutomationController {
         guard let id = args["id"] as? String, let menu = panel.rowMenu(id,select:args["select"] as? String) else { throw Failure(message:"row menu unavailable") }
         return ["items":menu]
       case "show-row-menu":
-        guard let id = args["id"] as? String, panel.showRowMenu(id) else { throw Failure(message:"row menu unavailable") }
+        guard let id = args["id"] as? String, panel.showRowMenu(id,escapeOnOpen:args["escape"] as? Bool ?? false) else { throw Failure(message:"row menu unavailable") }
       case "row-drag-session":
         guard let id = args["id"] as? String, panel.selectRow(id), let target = session.controller?.window,
           let row = (panel.automationState()["rows"] as? [[String:Any]])?.first(where: { $0["id"] as? String == id }),
           let box = row["frame"] as? [CGFloat], panel.dragPayload(id) != nil else { throw Failure(message:"row is not draggable") }
         let start = panel.convert(CGPoint(x:box[0]+30,y:box[1]+box[3]/2),to:nil)
+        probeHit = target.contentView?.superview?.hitTest(start).map { String(describing:type(of:$0)) }
         func event(_ type:NSEvent.EventType,_ point:CGPoint) -> NSEvent? {
           NSEvent.mouseEvent(with:type,location:point,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,
             windowNumber:target.windowNumber,context:nil,eventNumber:0,clickCount:1,pressure:type == .leftMouseUp ? 0 : 1)
         }
         let end = CGPoint(x:start.x+480,y:start.y+12)
-        guard let down = event(.leftMouseDown,start), let drag = event(.leftMouseDragged,end), let up = event(.leftMouseUp,end) else { throw Failure(message:"could not create drag events") }
+        guard let down = event(.leftMouseDown,start), let initial = event(.leftMouseDragged,CGPoint(x:start.x+16,y:start.y)),
+          let drag = event(.leftMouseDragged,end), let up = event(.leftMouseUp,end) else { throw Failure(message:"could not create drag events") }
         DispatchQueue.main.async {
-          NSApp.postEvent(down,atStart:false); NSApp.postEvent(drag,atStart:false); NSApp.postEvent(up,atStart:false)
+          NSApp.postEvent(initial,atStart:false); NSApp.postEvent(drag,atStart:false); NSApp.postEvent(up,atStart:false)
+          NSApp.sendEvent(down)
         }
       case "row-drag":
         guard let id = args["id"] as? String, let payload = panel.dragPayload(id) else { throw Failure(message:"row is not draggable") }
@@ -106,6 +110,7 @@ extension AutomationController {
     state["key"]=controller.window?.isKeyWindow ?? false
     state["window"]=controller.window?.windowNumber ?? 0
     state["windowID"]=controller.windowID.description
+    if let probeHit { state["dragStartHit"] = probeHit }
     state["pageCardFrame"]=[controller.container.frame.minX,controller.container.frame.minY,controller.container.frame.width,controller.container.frame.height]
     state["showSetupMilliseconds"]=session.lastShowMilliseconds
     state["sidebarWidth"]=controller.context.sidebarWidth

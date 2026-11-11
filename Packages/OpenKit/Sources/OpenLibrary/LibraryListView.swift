@@ -40,6 +40,8 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     var onEnd: (() -> Void)?
     private(set) var dragSession: [String:Any] = ["began":0,"ended":0]
     private(set) var activeMenu: NSMenu?
+    private(set) var menuLifecycle = ["opened":0,"closed":0]
+    private var escapeMenuOnOpen = false
     private(set) var hoveredID: String?
     override var isFlipped: Bool { true }
 
@@ -87,7 +89,7 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
         if case .heading = entries[row] { return 27 }; return gallery ? 118 : 56
     }
     func tableViewSelectionDidChange(_ notification:Notification) {
-        for row in Set([lastSelectedRow,table.selectedRow]) where row >= 0 {
+        for row in Set([lastSelectedRow,table.selectedRow]) where entries.indices.contains(row) && row < table.numberOfRows {
             (table.view(atColumn:0,row:row,makeIfNecessary:false) as? LibraryItemView)?.selected = row == table.selectedRow
         }
         lastSelectedRow = table.selectedRow
@@ -153,16 +155,27 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
         }
         return menu
     }
-    func showMenu(id:String) -> Bool {
+    func showMenu(id:String,escapeOnOpen:Bool = false) -> Bool {
         guard let row = entryIndex(id), let menu = menu(at:row), let cell = table.view(atColumn:0,row:row,makeIfNecessary:true) else { return false }
         activeMenu = menu
+        escapeMenuOnOpen = escapeOnOpen
         DispatchQueue.main.async { [weak self,weak cell] in
             guard let self, let cell, self.activeMenu === menu else { return }
             menu.popUp(positioning:nil,at:CGPoint(x:cell.bounds.maxX-42,y:40),in:cell)
         }
         return true
     }
-    func menuDidClose(_ menu: NSMenu) { if activeMenu === menu { activeMenu = nil } }
+    func menuWillOpen(_ menu:NSMenu) {
+        menuLifecycle["opened",default:0] += 1
+        guard escapeMenuOnOpen, let window else { return }; escapeMenuOnOpen = false
+        for type in [NSEvent.EventType.keyDown,.keyUp] {
+            if let event = NSEvent.keyEvent(with:type,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,
+                windowNumber:window.windowNumber,context:nil,characters:"\u{1b}",charactersIgnoringModifiers:"\u{1b}",isARepeat:false,keyCode:53) {
+                NSApp.postEvent(event,atStart:false)
+            }
+        }
+    }
+    func menuDidClose(_ menu: NSMenu) { menuLifecycle["closed",default:0] += 1; if activeMenu === menu { activeMenu = nil } }
     func dismissMenu() -> Bool {
         guard let activeMenu else { return false }; activeMenu.cancelTracking(); self.activeMenu = nil; return true
     }

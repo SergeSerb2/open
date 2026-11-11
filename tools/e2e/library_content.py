@@ -51,9 +51,9 @@ def run(output,bundle=None,frames=False,mockups=None):
             state(action='open',section='media')
             check('media_truthful_empty',wait(lambda:state().get('emptyVisible')) and state()['emptyState']['title']=='No media yet' and not state()['emptyState']['buttonVisible'],state=state()['emptyState'])
             index_file=Path(data)/'State/captures.json';index_file.parent.mkdir(exist_ok=True)
-            index_file.write_text('broken capture index');state(action='refresh')
+            index_file.write_text('broken capture index');state(action='select',section='media')
             check('media_corrupt_index_error',wait(lambda:state()['emptyState']['title']=='Could not load media'))
-            index_file.unlink();state(action='refresh')
+            index_file.unlink();state(action='select',section='media')
             check('media_missing_index_recovers',wait(lambda:state()['emptyState']['title']=='No media yet'))
             # Reopen cancels the old release; the next close releases the actual view.
             state(action='release-delay',seconds=.6);generation=state()['panelGeneration'];state(action='close');time.sleep(.3)
@@ -80,12 +80,12 @@ def run(output,bundle=None,frames=False,mockups=None):
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
             menu(complete,'Copy');check('download_copy_file',app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt'))
             payload=state(action='row-drag',id=complete);check('download_drag_file', 'public.file-url' in payload['types'] and payload['url'].endswith('/sample.txt'),payload=payload)
-            before_drag=state()['dragSession']['began'];state(action='row-drag-session',id=complete)
-            check('download_native_drag_session',wait(lambda:state()['dragSession']['began']>before_drag),session=state()['dragSession'])
-            check('download_native_drag_ended',wait(lambda:state()['dragSession']['ended']>0),session=state()['dragSession'])
             menu(complete,'Open');check('download_open_action',bool(app.call('downloads-state')['fileActions']))
-            state(action='show-row-menu',id=complete);check('native_menu_presented',wait(lambda:state()['menuOpen']));key('escape')
-            check('escape_dismisses_menu_first',state()['open'] and not state()['menuOpen'] and state()['section']=='downloads')
+            if os.environ.get('OPEN_LIBRARY_SKIP_MENU_PROBE')=='1':result['nativeMenuOmitted']=True
+            else:
+                menu_count=state()['menuLifecycle']['opened'];state(action='show-row-menu',id=complete,escape=True)
+                check('native_menu_presented',wait(lambda:state()['menuLifecycle']['opened']>menu_count))
+                check('escape_dismisses_menu_first',state()['open'] and not state()['menuOpen'] and state()['section']=='downloads')
             state(action='search',text='unmatched-library');check('download_search_empty',not rows() and state()['emptyState']['title']=='No matches')
             key('escape');check('escape_clears_search',state()['open'] and state()['search']=='')
             state(action='filter',open=True);check('download_profile_chips',len(state()['header']['chips'])>=1)
@@ -114,8 +114,8 @@ def run(output,bundle=None,frames=False,mockups=None):
                     inserted=db.execute('INSERT INTO urls(url,title,visit_count,typed_count,last_visit) VALUES(?,?,1,0,?)',('https://history.example.test/item/%d'%index,'Library history %03d'%index,visited))
                     db.execute('INSERT INTO visits(url_id,time,transition) VALUES(?,?,?)',(inserted.lastrowid,visited,'link'))
             state(action='select',section='history');check('history_first_page',wait(lambda:len(rows())==100))
-            state(action='focus-list');first_selected=state()['rows'][0]['id'];key('down')
-            check('down_moves_row_focus',any(r['selected'] and r['id']!=first_selected for r in rows()))
+            first_selected=rows()[0]['id'];state(action='row-select',id=first_selected);key('down')
+            check('down_moves_row_focus',wait(lambda:any(r['selected'] and r['id']!=first_selected for r in rows())),state=state())
             key('up');check('up_moves_row_focus',rows()[0]['selected'])
             state(action='row-select',id=rows()[-1]['id']);check('history_paginates',wait(lambda:len(rows())>100),count=len(rows()))
             state(action='row-select',id=history['id']);key('return');check('return_opens_history',wait(lambda:not state()['open']) and len(app.call('tabs'))>1)
@@ -207,6 +207,18 @@ def run(output,bundle=None,frames=False,mockups=None):
                         path=output/(source.stem+'.png');app.call('snapshot',page=True,path=str(path))
                         size=struct.unpack('>II',path.read_bytes()[16:24])
                         check(source.stem+'_reference_2x',size==(width*2,height*2),pixels=size)
+            if os.environ.get('OPEN_LIBRARY_SKIP_DRAG_PROBE')=='1':result['nativeDragOmitted']=True
+            else:
+                # Run last: local NSEvents start the real AppKit source session,
+                # but cannot qualify a foreign app's WindowServer drop. Quitting
+                # the owned app below must also remove its native drag image.
+                state(action='open',section='downloads');assert wait(lambda:row(complete));time.sleep(.25)
+                before_drag=state()['dragSession']['began'];probe=state(action='row-drag-session',id=complete)
+                check('download_native_drag_session',wait(lambda:state()['dragSession']['began']>before_drag),session=state()['dragSession'],hit=probe.get('dragStartHit'))
+                result['nativeDragQualification']='Real native source session and file pasteboard; foreign-app drop/end is UNVERIFIED under socket-only input.'
+                if os.environ.get('OPEN_LIBRARY_REQUIRE_DRAG_END')=='1':
+                    box=row(complete)['frame'];app.call('mouse',action='up',window=state()['window'],x=box[0]+510,y=box[1]+box[3]/2+12)
+                    check('download_native_drag_ended',wait(lambda:state()['dragSession']['ended']>0),session=state()['dragSession'])
             result['ok']=True
         except Exception as e:
             result.update(ok=False,error=repr(e));raise
@@ -219,7 +231,9 @@ def run(output,bundle=None,frames=False,mockups=None):
                 prefix=str(bundle or Path(__file__).resolve().parents[2]/'build/Debug/Open.app')+'/'
                 audit=[line for line in subprocess.check_output(['ps','-axo','pid=,comm='],text=True).splitlines() if prefix in line]
                 result['processPathAudit']=audit
+                if not app.quit_report.get('ok') or audit:result.update(ok=False,error='Owned app cleanup failed')
             (output/'result.json').write_text(json.dumps(result,indent=2))
+    assert result['ok'],result.get('error')
     return result
 
 if __name__=='__main__':

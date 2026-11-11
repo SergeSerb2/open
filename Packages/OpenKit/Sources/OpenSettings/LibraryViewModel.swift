@@ -37,6 +37,7 @@ import OpenStore
         if oldValue != historyProfileID { pendingHistoryDeletes = []; confirmsClearHistory = false; selectedIDs = [] }
     } }
     private var historyLoadRevision = 0
+    private var historyLoadedIdentity = ""
     public var confirmsClearHistory = false
     public var pendingHistoryDeletes: [URL] = []
     public private(set) var historyHasMore = true
@@ -269,19 +270,23 @@ import OpenStore
     }
     public func saveCapture(_ item: CaptureItemSnapshot, to url: URL) { statusText = actions.saveCapture(id: item.id, to: url) ?? "Saved." }
     public func reloadHistory() async {
-        historyLoadRevision += 1; historyLoading = false; historyHasMore = true; historyRows = []
-        await loadNextHistoryPage()
+        historyLoadRevision += 1; historyLoading = false; historyHasMore = true
+        let identity = historyProfileID.description+"|"+query
+        if identity != historyLoadedIdentity { historyRows = [] }
+        historyLoadedIdentity = identity
+        await loadNextHistoryPage(reset:true)
     }
-    public func loadNextHistoryPage() async {
+    public func loadNextHistoryPage(reset:Bool = false) async {
         guard historyHasMore, !historyLoading else { return }
         historyLoading = true
-        let revision = historyLoadRevision, profile = historyProfileID, text = query, offset = historyRows.count
+        let revision = historyLoadRevision, profile = historyProfileID, text = query, offset = reset ? 0 : historyRows.count
         defer { if revision == historyLoadRevision { historyLoading = false } }
         let rows: [HistoryMatch]
         if text.isEmpty { rows = await histories[profile]?.recent(limit:100,offset:offset) ?? [] }
         else { rows = Array((await histories[profile]?.search(text,limit:offset+100) ?? []).dropFirst(offset)) }
         guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else { return }
-        historyRows += rows; historyHasMore = rows.count == 100
+        if reset { historyRows = rows } else { historyRows += rows }
+        historyHasMore = rows.count == 100
         if historyFaviconImages.count > 512 { historyFavicons = [:]; historyFaviconImages = [:] }
         if let faviconStore {
             for row in rows {
