@@ -85,6 +85,10 @@ class SuiteStopped(BaseException):
     """A failed row or watchdog cannot enter per-flow exception recovery."""
     fatal_app_death = True  # Do not query focus while unwinding a failed flow.
 
+    def __init__(self, message, failed_row=None):
+        super().__init__(message)
+        self.failed_row = failed_row
+
 
 def begin_row(name):
     global _ROW_NAME
@@ -244,7 +248,7 @@ class CheckedResults(dict):
                     print(key + ' FAIL (timing); continuing functional rows', flush=True)
                 else:
                     print(key + ' FAIL; stopping before the next row', flush=True)
-                    raise SuiteStopped('row failed: ' + key)
+                    raise SuiteStopped('row failed: ' + key, failed_row=key)
             begin_row('after ' + key)
 
 
@@ -9433,9 +9437,11 @@ def sidebar_a2_checks(app, results, require, evidence, tmp):
     require('E11_hover_pinned_shows_page_preview', shown and shown['host'] != '' and shown['card'][0] == state()['sidebarLiveWidth'] + 8,
             state=shown or app.call('preview-state'))
     app.call('snapshot', path=os.path.join(evidence, 'a2-page-preview.png'))
-    app.call('mouse', action='hover', x=1200, y=600)
+    window_before_leave = state()
+    leave_tracking = app.call('mouse', action='hover', x=1200, y=600)
     gone = wait_until(lambda: app.call('preview-state')['kind'] == 'none', timeout=3)
-    require('E11_leaving_hides_preview', gone, state=app.call('preview-state'))
+    require('E11_leaving_hides_preview', gone, state=app.call('preview-state'),
+            window=window_before_leave, tracking=leave_tracking)
     # E12: a page global set while the page shows in the card survives selecting the tab.
     point = row(pin)['point']
     app.call('mouse', action='hover', x=point[0], y=point[1])
@@ -12960,7 +12966,10 @@ def main():
             if loss:
                 interruption = {"reason": str(error), "focus": loss}
             else:
-                dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(error)})
+                detail = {"ok": False, "error": str(error)}
+                if isinstance(error, SuiteStopped) and error.failed_row:
+                    detail['failedRow'] = error.failed_row
+                dict.__setitem__(results.setdefault(opts.only, {}), "suite", detail)
                 traceback.print_exc()
         finally:
             if opts.stop_on_app_death:
