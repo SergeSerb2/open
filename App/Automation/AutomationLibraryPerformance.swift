@@ -123,7 +123,7 @@ private final class LibraryScrollProbe: NSObject {
   weak var scroll: NSScrollView?
   var inputError = ""
   let heartbeat = LibraryScrollHeartbeat()
-  var observer: CFRunLoopObserver?
+  var observers: [CFRunLoopObserver] = []
   func run(_ panel:LibraryPanelView,profile:LibraryScrollProfile) async -> [LibraryScrollFrame] {
     self.panel = panel
     self.profile = profile
@@ -137,10 +137,17 @@ private final class LibraryScrollProbe: NSObject {
     guard scroll != nil else { inputError = "visible Library scroll view not found"; return [] }
     rows.reserveCapacity(profile.callbacks+216)
     heartbeat.start(launchUptime:ProcessInfo.processInfo.systemUptime-LaunchTiming.shared.elapsedMilliseconds/1000)
-    observer = CFRunLoopObserverCreateWithHandler(nil,CFRunLoopActivity.beforeWaiting.rawValue|CFRunLoopActivity.afterWaiting.rawValue,true,0) { [heartbeat] _,activity in
-      heartbeat.beat(busy:activity == .afterWaiting)
+    // Observe sleep after Core Animation's implicit transaction commit. An
+    // order-zero beforeWaiting observer would hide that work as idle when
+    // preparation leaves commits to the run loop.
+    for (activity,order) in [(CFRunLoopActivity.afterWaiting,CFIndex.min),(.beforeWaiting,CFIndex.max)] {
+      if let observer = CFRunLoopObserverCreateWithHandler(nil,activity.rawValue,true,order,{ [heartbeat] _,activity in
+        heartbeat.beat(busy:activity == .afterWaiting)
+      }) {
+        observers.append(observer)
+        CFRunLoopAddObserver(CFRunLoopGetMain(),observer,.commonModes)
+      }
     }
-    CFRunLoopAddObserver(CFRunLoopGetMain(),observer,.commonModes)
     return await withCheckedContinuation { continuation in
       completion = continuation
       link = panel.displayLink(target:self,selector:#selector(frame(_:)))
@@ -211,7 +218,8 @@ private final class LibraryScrollProbe: NSObject {
   }
   func finish() {
     link?.invalidate(); link = nil
-    if let observer { CFRunLoopRemoveObserver(CFRunLoopGetMain(),observer,.commonModes); self.observer = nil }
+    for observer in observers { CFRunLoopRemoveObserver(CFRunLoopGetMain(),observer,.commonModes) }
+    observers = []
     heartbeat.stop()
     completion?.resume(returning:rows); completion = nil
   }

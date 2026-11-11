@@ -20,7 +20,6 @@ enum LibraryIdleWork {
             inMode: .default, dequeue: false) == nil else { return false }
         let start = ProcessInfo.processInfo.systemUptime
         body()
-        CATransaction.flush()
         let milliseconds = (ProcessInfo.processInfo.systemUptime-start)*1000
         intervals.append(["startUptime":start,"endUptime":ProcessInfo.processInfo.systemUptime,
             "milliseconds":milliseconds])
