@@ -23,14 +23,14 @@ private final class IntroButton: NSButton {
         let pacingRegion = IntroPacingTrace.begin("intro.button.draw")
         defer { pacingRegion?.end() }
         #endif
-        NSColor.white.withAlphaComponent(isHighlighted ? 0.85 : 1).setFill()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 22, yRadius: 22).fill()
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: IntroColors.blue]
+        OnboardingTokens.Room.white.withAlphaComponent(isHighlighted ? 0.85 : 1).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 26, yRadius: 26).fill()
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 17, weight: .semibold), .foregroundColor: OnboardingTokens.Room.ink]
         let size = title.size(withAttributes: attributes)
         title.draw(at: NSPoint(x: (bounds.width-size.width)/2, y: (bounds.height-size.height)/2), withAttributes: attributes)
         if window?.firstResponder === self {
             NSColor.white.withAlphaComponent(0.65).setStroke()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 22, yRadius: 22).stroke()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 26, yRadius: 26).stroke()
         }
     }
 }
@@ -108,7 +108,7 @@ public final class IntroView: NSView {
     public private(set) var ambientPaused = false
     public private(set) var handingOff = false
     private let scene = CALayer()
-    private let room = CAGradientLayer()
+    private let room = OnboardingRoomLayer(artwork: true)
     private let composition = CALayer()
     private let ambient = CALayer()
     private let mark = CALayer()
@@ -159,7 +159,11 @@ public final class IntroView: NSView {
         let scale = min(bounds.width/1280, bounds.height/800)
         scene.position = CGPoint(x: bounds.midX, y: bounds.midY)
         scene.setAffineTransform(.init(scaleX: scale, y: scale))
-        button.frame = NSRect(x: bounds.midX-100*scale, y: bounds.midY+(567-400)*scale, width: 200*scale, height: 44*scale)
+        button.frame = NSRect(x: bounds.midX-80*scale, y: 646*scale+(bounds.height-800*scale)/2, width: 160*scale, height: 52*scale)
+        button.layer?.shadowColor = OnboardingTokens.Room.bloom.cgColor
+        button.layer?.shadowOpacity = 0.35; button.layer?.shadowRadius = 20
+        button.layer?.shadowOffset = CGSize(width: 0, height: 10)
+        button.layer?.shadowPath = CGPath(roundedRect: button.bounds, cornerWidth: 26, cornerHeight: 26, transform: nil)
         commitIntroTransaction()
     }
 
@@ -169,83 +173,55 @@ public final class IntroView: NSView {
         defer { pacingRegion?.end() }
         #endif
         let full = CGRect(origin: .zero, size: OnboardingTokens.windowSize)
-        room.frame = full
-        room.colors = [IntroColors.color(0x1A3FD0).cgColor, IntroColors.room.cgColor]
-        room.startPoint = .init(x: 0.2, y: 0); room.endPoint = .init(x: 0.8, y: 1)
+        let rect = CGRect(x: 556, y: 140, width: 168, height: 248)
+        room.frame = full; room.configure(size: full.size, doorway: rect)
         scene.addSublayer(room)
         add(room, "opacity", [0, 1], "room", curve: [0, 0, 0.58, 1])
+        add(room.haze, "opacity", [0, 1], "spill")
+        add(room.spill, "opacity", [0, 0.85, 0.7], "spill", fractions: [0, 0.65, 1])
+        if useScreenBlend {
+            room.haze.compositingFilter = "screenBlendMode"
+            room.spill.compositingFilter = "screenBlendMode"
+        }
         ambient.frame = full; scene.addSublayer(ambient)
-        let orbSpecs: [(UInt32, CGFloat, CGFloat, CGFloat, Float)] = [
-            (0x3D7BFF, 590, 250, 240, 0.35), (0x6A4DFF, 500, 850, 400, 0.25), (0xFF9A3D, 640, 550, 330, 0.22)]
-        for (i, spec) in orbSpecs.enumerated() {
-            let orb = radial(spec.0, diameter: spec.1)
-            orb.position = .init(x: spec.2, y: spec.3); orb.opacity = i == 2 ? 0 : spec.4
-            ambient.addSublayer(orb); orbs.append(orb)
-            if i == 2, useScreenBlend { orb.compositingFilter = "screenBlendMode" }
-            let beat = ["orbBlue", "orbPurple", "orbWarm"][i]
-            orbTracks.append(.init(layer: orb, key: "position.x", values: [Double(spec.2), Double(spec.2+35), Double(spec.2-18), Double(spec.2)], fractions: [0, 0.35, 0.7, 1], beat: beat))
-            orbTracks.append(.init(layer: orb, key: "position.y", values: [Double(spec.3), Double(spec.3-24), Double(spec.3+18), Double(spec.3)], fractions: [0, 0.35, 0.7, 1], beat: beat))
-        }
-        add(ambient, "opacity", [0, 1], "room", curve: [0, 0, 0.58, 1])
-        add(orbs[2], "opacity", [0, 0.22], "spill")
-        let spill = radial(0xFFD9A8, diameter: 480); spill.position = .init(x: 640, y: 336)
-        if useScreenBlend { spill.compositingFilter = "screenBlendMode" }
-        spillGroup.frame = full; scene.addSublayer(spillGroup); spillGroup.addSublayer(spill)
-        add(spill, "transform.scale", [0.2, 3.5], "spill")
-        add(spill, "opacity", [0, 0.45, 0.28], "spill", fractions: [0, 0.65, 1])
-        let grain = CAReplicatorLayer(); grain.frame = full
-        #if DEBUG || OPEN_AUTOMATION
-        let grainRegion = IntroPacingTrace.begin("intro.grain.generate")
-        #endif
-        let grainImage = Grain.tile(noiseFactor: 0.6, scale: scale)
-        #if DEBUG || OPEN_AUTOMATION
-        grainRegion?.end()
-        #endif
-        if let image = grainImage {
-            let rows = CAReplicatorLayer(); rows.frame = full
-            rows.instanceCount = Int(ceil(full.height/Grain.tilePoints)); rows.instanceTransform = CATransform3DMakeTranslation(0, Grain.tilePoints, 0)
-            let tile = CALayer(); tile.frame = .init(x: 0, y: 0, width: Grain.tilePoints, height: Grain.tilePoints)
-            tile.contents = image; tile.contentsScale = scale
-            rows.addSublayer(tile); grain.addSublayer(rows)
-            grain.instanceCount = Int(ceil(full.width/Grain.tilePoints)); grain.instanceTransform = CATransform3DMakeTranslation(Grain.tilePoints, 0, 0)
-        }
-        scene.addSublayer(grain)
+        spillGroup.frame = full; scene.addSublayer(spillGroup)
         composition.frame = full; scene.addSublayer(composition)
-        mark.frame = full; mark.anchorPoint = CGPoint(x: 0.5, y: 0.42); mark.position = CGPoint(x: 640, y: 336); composition.addSublayer(mark)
-        add(mark, "position.y", [336, 276], "markMove", spring: true)
-        add(mark, "transform.scale", [1, 0.8], "markMove", spring: true)
-        let rect = CGRect(x: 596, y: 276, width: 88, height: 120)
+        mark.frame = full; mark.anchorPoint = CGPoint(x: 0.5, y: 274.0/800)
+        mark.position = CGPoint(x: 640, y: 274); composition.addSublayer(mark)
+        add(mark, "position.y", [334, 274], "markMove", spring: true)
+        add(mark, "transform.scale", [1.12, 1], "markMove", spring: true)
         let brand = OnboardingBrandMark.components(in: rect)
-        let path = brand.doorway.path
-        let interior = CAGradientLayer(); interior.frame = full
-        interior.colors = [IntroColors.color(0xFFF3DC).cgColor, IntroColors.color(0xFFC680).cgColor]
-        interior.startPoint = .init(x: 0.5, y: 0.34); interior.endPoint = .init(x: 0.5, y: 0.51)
-        let mask = CAShapeLayer(); mask.frame = full; mask.path = path; mask.fillColor = NSColor.white.cgColor
-        interior.mask = mask; mark.addSublayer(interior); add(interior, "opacity", [0, 0.92], "spill")
-        for glow in [true, false] {
-            let door = glow ? OnboardingBrandMark.components(in: rect).doorway : brand.doorway
-            door.frame = full
-            door.name = glow ? "doorGlow" : "door"
-            if glow { door.shadowPath = path?.copy(strokingWithWidth: door.lineWidth, lineCap: .round, lineJoin: .round, miterLimit: 0); door.shadowColor = NSColor.white.cgColor; door.shadowRadius = 18; door.shadowOpacity = 0.6; door.shadowOffset = .zero }
-            mark.addSublayer(door)
-            add(door, "strokeEnd", [0.08, 0.88], "door", curve: [0.65, 0, 0.35, 1])
-            if glow { add(door, "opacity", [0, 1], "door", curve: [0.65, 0, 0.35, 1]) }
-        }
-        let sunClip = CALayer(); sunClip.frame = .init(x: 0, y: 0, width: 1280, height: rect.maxY); sunClip.masksToBounds = true
+        mark.addSublayer(brand.bloom); add(brand.bloom, "opacity", [0, 1], "spill")
+        mark.addSublayer(brand.light); add(brand.light, "opacity", [0, 1], "spill")
+        let door = brand.doorway; door.frame = full; door.name = "door"
+        mark.addSublayer(door)
+        add(door, "strokeEnd", [0.08, 1], "door", curve: [0.65, 0, 0.35, 1])
+        add(door, "opacity", [0, 1], "door")
+        let sunClip = CALayer(); sunClip.frame = CGRect(x: 0, y: 0, width: 1280, height: rect.maxY); sunClip.masksToBounds = true
         mark.addSublayer(sunClip)
-        let sun = brand.sun
-        sun.shadowColor = IntroColors.color(0xFF9F2E).cgColor; sun.shadowRadius = 30; sun.shadowOpacity = 0.9
-        sun.shadowOffset = .zero; sun.shadowPath = CGPath(ellipseIn: sun.bounds, transform: nil); sun.name = "sun"
-        sunClip.addSublayer(sun)
-        add(sun, "position.y", [rect.maxY+42, 316], "sun", spring: true)
-        let word = text("Open", size: 56, weight: .semibold, frame: .init(x: 390, y: 352, width: 500, height: 72), scale: scale, alpha: 1)
+        let sun = brand.sun; sun.name = "sun"; sunClip.addSublayer(sun)
+        add(sun, "position.y", [rect.maxY+42, Double(sun.position.y)], "sun", spring: true)
+        let wordFrame = CGRect(x: 390, y: 448, width: 500, height: 130)
+        let word = CAGradientLayer(); word.frame = wordFrame
+        word.colors = [OnboardingTokens.Room.sunTop.cgColor,OnboardingTokens.Room.white.cgColor]
+        word.locations = [0.3,1]; word.startPoint = CGPoint(x: 0.5,y: 0); word.endPoint = CGPoint(x: 0.5,y: 1)
+        word.mask = text("Open", size: 104, weight: .semibold, frame: word.bounds, scale: scale, alpha: 1)
         composition.addSublayer(word)
         add(word, "opacity", [0, 1], "wordmark"); add(word, "position.y", [word.position.y+12, word.position.y], "wordmark")
-        let line = text(OnboardingTokens.line, size: 17, weight: .regular, frame: .init(x: 310, y: 431, width: 660, height: 28), scale: scale, alpha: increaseContrast ? 0.9 : 0.75)
-        composition.addSublayer(line); add(line, "opacity", [0, 1], "line")
-        for (i, title) in ["Spaces for every part of your life.", "Tabs that tidy themselves.", "Everything stays on this Mac."].enumerated() {
-            let value = text(title, size: 15, weight: .regular, frame: .init(x: 310, y: 463+CGFloat(i)*28, width: 660, height: 22), scale: scale, alpha: 0.6)
-            composition.addSublayer(value); add(value, "opacity", [0, 1], "value\(i+1)")
+        let line = text(OnboardingTokens.line, size: 22, weight: .regular,
+            frame: CGRect(x: 270, y: 577, width: 740, height: 34), scale: scale, alpha: increaseContrast ? 0.9 : 0.78)
+        composition.addSublayer(line)
+        // The identity line yields its one position to each value, then returns.
+        // All times still derive from the unchanged timeline anchors.
+        let sell = IntroTimeline.beat("sellIntro"), span = sell.end-sell.start
+        let lineStart = IntroTimeline.beat("line"), first = IntroTimeline.beat("value1"), last = IntroTimeline.beat("value3")
+        let times = [sell.start,lineStart.start,lineStart.end,first.start-0.2,first.start,last.end,sell.end]
+        add(line, "opacity", [0,0,1,1,0,0,1], "sellIntro", fractions: times.map { ($0-sell.start)/span })
+        for (i,title) in ["Spaces for every part of your life.","Tabs that tidy themselves.","Everything stays on this Mac."].enumerated() {
+            let value = text(title,size: 22,weight: .regular,frame: CGRect(x: 270,y: 577,width: 740,height: 34),scale: scale,alpha: 0.78)
+            composition.addSublayer(value)
+            add(value,"opacity",[0,1,1,0],"value\(i+1)",fractions: [0,0.18,0.82,1])
+            add(value,"position.y",[value.position.y+8,value.position.y],"value\(i+1)")
         }
         apply(at: 0)
     }
@@ -267,7 +243,7 @@ public final class IntroView: NSView {
         let layer = CATextLayer()
         #endif
         layer.frame = frame; layer.contentsScale = scale; layer.alignmentMode = .center
-        layer.string = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: NSColor.white.withAlphaComponent(alpha)])
+        layer.string = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: OnboardingTokens.Room.white.withAlphaComponent(alpha), .kern: size * (size > 50 ? -0.045 : -0.01)])
         return layer
     }
     private func add(_ layer: CALayer, _ key: String, _ values: [Double], _ beat: String, fractions: [Double] = [0, 1], curve: [Float] = [0.42, 0, 0.58, 1], spring: Bool = false) {
@@ -433,6 +409,16 @@ public final class IntroView: NSView {
         else if [36, 76, 49].contains(event.keyCode) { if ready { getStarted() } }
         else { super.keyDown(with: event) }
     }
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea)
+        if !reduceMotion { addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved,.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect], owner: self)) }
+    }
+    public override func mouseMoved(with event: NSEvent) {
+        guard !reduceMotion else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        room.parallax(x: min(3,max(-3,(p.x/max(1,bounds.width)-0.5)*6)),y: min(3,max(-3,(p.y/max(1,bounds.height)-0.5)*6)))
+    }
+    public override func mouseExited(with event: NSEvent) { room.parallax(x: 0,y: 0) }
     public override func mouseDown(with event: NSEvent) { skip() }
     public override func hitTest(_ point: NSPoint) -> NSView? {
         // Before enabled, even a click in the future button's frame skips.

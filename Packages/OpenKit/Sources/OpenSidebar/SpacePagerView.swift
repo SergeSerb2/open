@@ -115,7 +115,7 @@ final class SpacePagerView: NSView {
         offset = CGFloat(target) * w
         placeStrip()
         let style = context.style(for: focused)
-        guard animated, previous != nil, animatesSidebarChanges, !Motion.reducesMotion else {
+        guard animated, context.animatesChanges, previous != nil, animatesSidebarChanges, !Motion.reducesMotion else {
             strip.layer?.removeAnimation(forKey: "slide")
             lastSlideAnimation = nil
             animating = false

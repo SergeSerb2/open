@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var onboardingEngineSettled = false
   #if OPEN_AUTOMATION
   var onboardingStartup: [String: Any] = [:]
+  var onboardingLifetimeState: (() -> [String: Bool])?
   #endif
   var onboardingActivated = false
   var onboardingHandedOff = false

@@ -62,6 +62,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     var style: SpaceThemeStyle { context.style(for: space) }
     var contentAppearanceForSpace: ContentAppearance { context.appearance(for: space) }
+    private var animatesChanges: Bool { context.animatesChanges && animatesSidebarChanges }
 
     private func configureOutline() {
         let column = NSTableColumn(identifier: .init("Tabs"))
@@ -148,7 +149,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             if self.rootPinnedCount != self.space.pinned.count || self.rootTodayCount != self.space.today.count || self.rootPinnedCollapsed != self.space.isPinnedCollapsed {
                 self.syncRoot()
             }
-            self.syncExpansion(animated: self.animatesSidebarChanges)
+            self.syncExpansion(animated: self.animatesChanges)
         })
         // Theme and appearance.
         loops.append(ObservationLoop(read: { [weak self] in
@@ -252,7 +253,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         outline.endUpdates()
         applyingBulk = false
-        syncExpansion(animated: animatesSidebarChanges)
+        syncExpansion(animated: animatesChanges)
         updateRowStates(animated: false)
         pruneSelection()
         syncSelectionIndexes()
@@ -311,7 +312,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.beginUpdates()
         outline.moveItem(at: fromIndex, inParent: parentItem(from), to: toIndex, inParent: parentItem(to))
         outline.endUpdates()
-        syncExpansion(animated: animatesSidebarChanges)
+        syncExpansion(animated: animatesChanges)
         updateRowStates(animated: false)
         return true
     }
@@ -350,7 +351,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     private func syncFolder(_ folder: Folder) {
         guard folderChildren[ObjectIdentifier(folder)] != nil else { return }
-        syncExpansion(animated: animatesSidebarChanges, changedFolder: folder.id)
+        syncExpansion(animated: animatesChanges, changedFolder: folder.id)
     }
 
     /// Edits a cached child list in place (no copy of a 1,000-item list per step).
@@ -367,7 +368,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func apply(target new: [AnyObject], in d: Displayed, animated: Bool? = nil) {
         let steps = ListDiff.steps(old: list(for: d).map(ObjectIdentifier.init), new: new.map(ObjectIdentifier.init))
         guard !steps.isEmpty else { return }
-        let animate = animated ?? animatesSidebarChanges
+        let animate = animated ?? animatesChanges
         let parent = parentItem(d)
         if syncingExpansion, case .folder = d {
             // A folder transition only inserts or removes a subset, preserving
@@ -423,7 +424,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         }) { [weak self, weak folder] in
             guard let self, let folder, self.folderChildren[key] != nil,
                   self.context.manager?.deferHiddenUpdates() != true else { return }
-            self.syncExpansion(animated: self.animatesSidebarChanges, changedFolder: folder.id)
+            self.syncExpansion(animated: self.animatesChanges, changedFolder: folder.id)
         }
     }
 
@@ -1198,8 +1199,9 @@ final class SpaceHeaderView: NSView {
 
     override func updateLayer() {
         let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true; self?.needsLayout = true }
-        fill.backgroundColor = SidebarRole.rowHover.cgColor(contentAppearance)
         CATransaction.begin()
+        CATransaction.setDisableActions(!context.animatesChanges)
+        fill.backgroundColor = SidebarRole.rowHover.cgColor(contentAppearance)
         CATransaction.setAnimationDuration(Motion.hoverFade)
         fill.opacity = hovered ? 1 : 0
         CATransaction.commit()
