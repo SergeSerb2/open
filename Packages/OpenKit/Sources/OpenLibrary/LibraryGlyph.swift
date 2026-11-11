@@ -3,7 +3,7 @@ import AppKit
 /// Original vectors from D1-design-mockup.html, expressed in a 28-point canvas.
 /// No external images, font glyphs, or browser assets are used.
 enum LibraryGlyph: String {
-    case media, downloads, easels, spaces, boosts, archive, history, search, filter, back
+    case media, downloads, easels, spaces, boosts, archive, history, search, filter, back, dots, trash, undo
 
     func draw(in rect: CGRect, color: NSColor, selected: Bool = false) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
@@ -23,6 +23,16 @@ enum LibraryGlyph: String {
         func circle(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) -> CGPath { CGPath(ellipseIn: CGRect(x: x-r, y: y-r, width: r*2, height: r*2), transform: nil) }
         func points(_ values: [CGFloat]) -> [CGPoint] { stride(from: 0, to: values.count, by: 2).map { CGPoint(x: values[$0], y: values[$0+1]) } }
         switch self {
+        case .dots:
+            context.scaleBy(x:28/16,y:28/16)
+            for x in [CGFloat(3.5),8,12.5] { fill(circle(x,8,0.9)); stroke(circle(x,8,0.9)) }
+        case .trash:
+            context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.3)
+            for values in [[CGFloat(3),4.5,13,4.5],[6.3,4.5,6.3,3,9.7,3,9.7,4.5],[4.3,4.5,4.9,13,11.1,13,11.7,4.5],[6.8,7,6.8,10.8],[9.2,7,9.2,10.8]] { stroke(line(points(values))) }
+        case .undo:
+            context.scaleBy(x:28/16,y:28/16);context.setLineWidth(1.4)
+            stroke(line(points([6,3.5,3,6.5,6,9.5])));stroke(line(points([3.3,6.5,9,6.5])))
+            let arc=CGMutablePath();arc.addArc(center:CGPoint(x:9,y:10),radius:3.5,startAngle:-CGFloat.pi/2,endAngle:CGFloat.pi/2,clockwise:false);stroke(arc);stroke(line(points([9,13.5,7,13.5])))
         case .media:
             let card = round(7.5, 8.5, 17, 13.5, 3); fill(card); stroke(card)
             let back = CGMutablePath(); back.move(to: .init(x: 5, y: 18.5)); back.addLine(to: .init(x: 5, y: 9)); back.addCurve(to: .init(x: 8, y: 6), control1: .init(x: 5, y: 7.34), control2: .init(x: 6.34, y: 6)); back.addLine(to: .init(x: 19, y: 6)); stroke(back)

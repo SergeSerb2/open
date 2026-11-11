@@ -188,7 +188,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     library?.requestClearArchive()
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
-  @ObservationIgnored private var spaceManager: SpaceManagerView?
+  @ObservationIgnored private weak var spaceManager: SpaceManagerView?
   @ObservationIgnored private var pendingManagerProfileAlert: NSAlert?
   /// No persistent preference writes: this context never arms hover previews.
   @ObservationIgnored private let managerPreferences: UserDefaults = SpaceManagerPreferences()
@@ -231,7 +231,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         return self.confirmManagerDelete(intent, context: context, factory: factory)
       default: break
       }
-      if let factory, let handled = factory.performSidebar(intent) { return handled }
+      if let factory, let handled = factory.performSidebar(intent) {
+        if handled, case .select = intent { self.closeLibrary() }
+        return handled
+      }
       // No live browser (or a model-only intent): closing a pin must never archive it.
       switch intent {
       case .unloadTab: return false

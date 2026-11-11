@@ -416,7 +416,7 @@
       case "space-manager-state": return spaceManagerState()
       case "defaults":
         // Reads (and with `value`, writes) one Open preference in this app's own domain.
-        guard let key = a["key"] as? String, key.hasPrefix("open.") || ["libraryShowsHistory", "libraryShowsEasels", "OpenLibraryLegacyWindow"].contains(key) else { throw Failure(message: "unknown defaults domain key") }
+        guard let key = a["key"] as? String, key.hasPrefix("open.") || ["libraryShowsHistory", "libraryShowsEasels", "libraryMediaFolderSources", "OpenLibraryLegacyWindow"].contains(key) else { throw Failure(message: "unknown defaults domain key") }
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] {
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
@@ -492,7 +492,10 @@
           let frame = controller.sidebar.rowFrame(nodeID: ItemID(rawValue: uuid)) else { throw Failure(message: "no such sidebar row") }
         controller.contentView.layoutSubtreeIfNeeded()
         let inRoot = controller.contentView.convert(frame, from: controller.sidebar)
-        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
+        let style = controller.context.focusedSpace.map { controller.context.style(for:$0) }
+        let contentAppearance = style?.resolvedAppearance(system:controller.context.systemAppearance) ?? controller.context.systemAppearance
+        let ink = style?.titleColor(contentAppearance).nsColor.usingColorSpace(.sRGB)
+        return ["foreground":ink.map { [$0.redComponent,$0.greenComponent,$0.blueComponent,$0.alphaComponent] } ?? [], "frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
       case "page-selection", "swipe", "swipe-indicator":

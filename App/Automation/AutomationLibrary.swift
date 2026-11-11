@@ -30,6 +30,28 @@ extension AutomationController {
         guard let raw=args["section"] as? String, let section=LibraryPanelSection(rawValue:raw), panel.sections.contains(section) else { throw Failure(message:"unknown or hidden section") }
         panel.select(section)
       case "search": panel.setSearch(args["text"] as? String ?? "")
+      case "release-delay":
+        guard let delay = args["seconds"] as? Double, delay.isFinite, delay >= 0.1, delay <= 60 else { throw Failure(message:"release delay must be 0.1...60 seconds") }
+        session.releaseDelay = delay
+      case "filter": panel.setFilterOpen(args["open"] as? Bool ?? true)
+      case "chip":
+        guard let id = args["id"] as? String, panel.toggleChip(id) else { throw Failure(message:"unknown filter chip") }
+      case "focus-list": panel.focusList()
+      case "row-select":
+        guard let id = args["id"] as? String, panel.selectRow(id) else { throw Failure(message:"unknown row") }
+      case "hover-row":
+        guard let id = args["id"] as? String, panel.hoverRow(id,hovered:args["hovered"] as? Bool ?? true) else { throw Failure(message:"row is not visible") }
+      case "row-action":
+        guard let id = args["id"] as? String, let name = args["name"] as? String, panel.performRow(id,action:name) else { throw Failure(message:"row action unavailable") }
+      case "row-menu":
+        guard let id = args["id"] as? String, let menu = panel.rowMenu(id,select:args["select"] as? String) else { throw Failure(message:"row menu unavailable") }
+        return ["items":menu]
+      case "show-row-menu":
+        guard let id = args["id"] as? String, panel.showRowMenu(id) else { throw Failure(message:"row menu unavailable") }
+      case "row-drag":
+        guard let id = args["id"] as? String, let payload = panel.dragPayload(id) else { throw Failure(message:"row is not draggable") }
+        return payload
+      case "boost-layout": panel.setBoostLayout(args["name"] as? String ?? "List")
       case "focus-rail": panel.focusRail()
       case "hover-tile":
         guard let raw=args["section"] as? String, let section=LibraryPanelSection(rawValue:raw) else { throw Failure(message:"unknown section") }
@@ -42,7 +64,7 @@ extension AutomationController {
         var frame=window.frame;frame.size=CGSize(width:width,height:height);window.setFrame(frame,display:true)
         session.controller?.libraryWidth=panel.section == .spaces ? width-56 : 417
         session.controller?.layoutContent()
-      default: throw Failure(message:"Library action is unavailable at L1: \(action)")
+      default: throw Failure(message:"Library action is unavailable: \(action)")
       }
     }
     guard let session=adapter.activeLibrarySession,let controller=session.controller else {
@@ -51,6 +73,10 @@ extension AutomationController {
     var state=session.panel?.automationState() ?? [:]
     state["open"]=controller.isLibraryOpen
     state["created"]=true
+    state["panelCreated"]=session.panel != nil
+    state["panelGeneration"]=session.panelGeneration
+    state["releaseDelay"]=session.releaseDelay
+    state["key"]=controller.window?.isKeyWindow ?? false
     state["window"]=controller.window?.windowNumber ?? 0
     state["windowID"]=controller.windowID.description
     state["pageCardFrame"]=[controller.container.frame.minX,controller.container.frame.minY,controller.container.frame.width,controller.container.frame.height]
@@ -80,6 +106,17 @@ extension AutomationController {
       throw Failure(message: "Library not open")
     }
     if let record = args["recordFileActions"] as? Bool { adapter.recordCaptureFileActions = record }
+    if let panel = adapter.activeLibrarySession?.panel, panel.isPresented {
+      if args["focus"] as? String == "sidebar" { panel.focusRail() }
+      let s = panel.automationState()
+      return ["window":window.windowNumber,"visible":window.isVisible,"section":library.section.rawValue,
+        "loadFailed":library.captures.loadFailed,"status":library.statusText,"selected":library.selectedIDs.sorted(),
+        "pendingDelete":library.pendingCaptureDelete?.uuidString ?? "","captureCount":library.captures.captures.count,
+        "items":library.captureItems.prefix(256).map { ["id":$0.id.uuidString,"name":$0.fileName,"kind":$0.kind.rawValue] },
+        "columns":1,"gridFocused":panel.listFocused,"gridFrame":[112,56,304,max(0,panel.bounds.height-56)],
+        "firstResponder":s["firstResponder"] ?? "","text":windowText(window),"opened":adapter.captureFileActions,
+        "pasteboardHasImage":NSImage(pasteboard:.general) != nil] as [String:Any]
+    }
     window.layoutIfNeeded(); window.contentView?.layoutSubtreeIfNeeded()
     var grid: CaptureGridKeyboardView?
     var sidebar: NSTableView?

@@ -5,6 +5,9 @@ final class LibraryControl: NSButton {
     override var isFlipped: Bool { true }
     var glyph: LibraryGlyph?
     var isTile = false
+    var glyphSize: CGFloat?
+    var isChip = false
+    var showsDot = false
     var selected = false { didSet { needsDisplay = true; setAccessibilityValue(selected ? 1 : 0) } }
     var foreground = NSColor.labelColor { didSet { needsDisplay = true } }
     var overlay = NSColor.labelColor { didSet { needsDisplay = true } }
@@ -48,6 +51,11 @@ final class LibraryControl: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         let alpha: CGFloat = isHighlighted ? 0.14 : selected ? 0.105 : hovered ? 0.05 : baseAlpha
         if alpha > 0 { overlay.withAlphaComponent(alpha).setFill(); bounds.fill() }
+        if selected && isChip {
+            foreground.withAlphaComponent(0.46).setStroke()
+            let ring=NSBezierPath(roundedRect:bounds.insetBy(dx:0.75,dy:0.75),xRadius:10,yRadius:10);ring.lineWidth=1.5;ring.stroke()
+        }
+        if showsDot { foreground.setFill(); NSBezierPath(ovalIn:CGRect(x:bounds.width-8,y:5,width:4,height:4)).fill() }
         let color = foreground.withAlphaComponent(isEnabled ? selected ? 1 : 0.68 : 0.46)
         let font = NSFont.systemFont(ofSize: isTile ? 12 : labelSize, weight: .semibold)
         let attrs: [NSAttributedString.Key: Any] = [.font: font,.foregroundColor: color]
@@ -56,7 +64,7 @@ final class LibraryControl: NSButton {
             glyph?.draw(in: CGRect(x: (bounds.width-28)/2, y: 17, width:28,height:28), color: color, selected:selected)
             (title as NSString).draw(at: CGPoint(x:(bounds.width-textSize.width)/2,y:51),withAttributes:attrs)
         } else {
-            let iconWidth: CGFloat = glyph == nil ? 0 : title.isEmpty ? 18 : 16
+            let iconWidth: CGFloat = glyph == nil ? 0 : glyphSize ?? (title.isEmpty ? 18 : 16)
             let group = textSize.width + (title.isEmpty || glyph == nil ? 0 : 5) + iconWidth
             let x = (bounds.width-group)/2
             glyph?.draw(in: CGRect(x:x,y:(bounds.height-iconWidth)/2,width:iconWidth,height:iconWidth),color:color)

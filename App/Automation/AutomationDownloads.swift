@@ -15,6 +15,13 @@ extension AutomationController {
     }
     return app.settingsPresenter.libraryPresenter?.window?.contentView.flatMap(find)
   }
+  private func overlayDownloadRows() -> [[String:Any]]? {
+    guard let panel = app.settingsPresenter.activeLibrarySession?.panel, panel.isPresented, panel.section == .downloads else { return nil }
+    return (panel.automationState()["rows"] as? [[String:Any]] ?? []).map { row in
+      let id = row["id"] as? String ?? ""
+      return ["id":id,"subtitle":row["subtitle"] ?? "","buttons":panel.rowMenu(id)?.filter { $0["enabled"] as? Bool == true }.compactMap { $0["title"] as? String } ?? []]
+    }
+  }
   private func downloadRows() -> [DownloadRowView] {
     func rows(_ view: NSView) -> [DownloadRowView] {
       (view as? DownloadRowView).map { [$0] } ?? view.subviews.flatMap(rows)
@@ -27,6 +34,9 @@ extension AutomationController {
     case "download-history-flush":
       await center.flushHistory(); return true
     case "download-profile-filter":
+      if let panel = app.settingsPresenter.activeLibrarySession?.panel, let selection = args["profile"] as? String {
+        guard panel.filterDownloadProfile(selection) else { throw Failure(message:"unknown Profile") }; return true
+      }
       guard let button = downloadProfileControl(), let selection = args["profile"] as? String else { throw Failure(message: "Downloads Profile filter is not visible") }
       let index = selection == "all" ? 0 : button.itemArray.firstIndex { ($0.representedObject as? String) == selection }
       guard let index else { throw Failure(message: "unknown Downloads Profile filter") }
@@ -74,7 +84,7 @@ extension AutomationController {
          "source": item.sourceURL?.absoluteString ?? "", "historical": item.isHistorical,
          "littleOpenSession": center.sourceSessionForAutomation(item.id) ?? "",
          "fileExists": item.fileExists as Any? ?? NSNull()] as [String: Any]
-      }, "rows": downloadRows().map { ["id": $0.item.id, "subtitle": $0.subtitle.stringValue, "buttons": $0.buttons.map { $0.identifier?.rawValue ?? "" }] },
+      }, "rows": overlayDownloadRows() ?? downloadRows().map { ["id": $0.item.id, "subtitle": $0.subtitle.stringValue, "buttons": $0.buttons.map { $0.identifier?.rawValue ?? "" }] },
        "badge": app.frontWindowController?.sidebar.downloadBadgeEvidence ?? [:], "running": center.hasRunning,
        "queued": center.queued, "updates": center.updateCount, "publishes": center.publishCount,
        "detachedPages": center.detachedPageCountForAutomation,
@@ -89,6 +99,12 @@ extension AutomationController {
          "sheet": $0.value.panel.sheetParent != nil,
          "parent": $0.value.panel.sheetParent?.windowNumber ?? 0] as [String: Any] }] as [String: Any]
     case "download-row", "download-menu":
+      if let panel = app.settingsPresenter.activeLibrarySession?.panel, panel.section == .downloads, let id = args["id"] as? String {
+        if cmd == "download-row" {
+          guard let action = args["action"] as? String, panel.performRow(id,action:action) else { throw Failure(message:"download action unavailable") }; return true
+        }
+        guard let menu = panel.rowMenu(id,select:args["select"] as? String) else { throw Failure(message:"download menu unavailable") }; return menu
+      }
       guard let id = args["id"] as? String, let row = downloadRows().first(where: { $0.item.id == id }) else { throw Failure(message: "download row is not visible") }
       if cmd == "download-row" {
         guard let action = args["action"] as? String, let button = row.buttons.first(where: { $0.identifier?.rawValue == action }), button.isEnabled else { throw Failure(message: "download button unavailable") }

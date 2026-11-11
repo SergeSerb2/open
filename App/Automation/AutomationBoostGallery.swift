@@ -2,6 +2,7 @@
 import AppKit
 import OpenModel
 import OpenSettings
+import OpenLibrary
 
 extension AutomationController {
   /// Exercise hosted controls in Open's own Library/Settings window. This
@@ -89,6 +90,10 @@ extension AutomationController {
         guard app.settingsPresenter.library?.historyProfileID == profile.id else { throw Failure(message: "Profile menu selection did not apply") }
       }
     case "section":
+      if !settings, let panel = app.settingsPresenter.activeLibrarySession?.panel, let raw = args["section"] as? String,
+        let section = LibraryPanelSection(rawValue:raw == "captures" ? "media" : raw) {
+        panel.select(section); break
+      }
       guard !settings, let raw = args["section"] as? String, let section = LibrarySection(rawValue: raw),
         let index = LibrarySection.allCases.firstIndex(of: section),
         let table = nodes.compactMap({ $0 as? NSTableView }).first(where: { $0.numberOfRows == LibrarySection.allCases.count })
@@ -106,7 +111,7 @@ extension AutomationController {
       }
     case "search":
       guard let text = args["text"] as? String,
-        let field = nodes.compactMap({ $0 as? NSTextField }).first(where: { $0.placeholderString == "Search Boosts" })
+        let field = nodes.compactMap({ $0 as? NSTextField }).first(where: { $0.placeholderString?.hasPrefix("Search Boosts") == true })
       else { throw Failure(message: "Boost search field not found") }
       owner.makeFirstResponder(field); field.selectText(nil)
       _ = try await sendKey(["window": owner.windowNumber, "text": text.isEmpty ? "\u{7f}" : text, "route": "app"], try? window)

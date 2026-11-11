@@ -560,7 +560,7 @@ final class TabCellView: SidebarCellView {
             let live = currentTab.live
             return (live.isAudible, currentTab.isMuted, currentTab.hasLeftPinnedURL, live.isCapturing, currentTab.isUnread)
         }) { [weak self] in self?.needsLayout = true }
-        favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
+        favicon.frame = CGRect(x: (context?.manager?.libraryLayout == true ? 15 : m.faviconX) + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
         layoutReset(leftPinned: leftPinned)
         let a = m.accessorySize
         accessory?.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
@@ -700,7 +700,7 @@ final class FolderCellView: SidebarCellView {
     required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
-        title.font = Typography.folderTitle.font
+        title.font = context?.manager?.libraryLayout == true ? .systemFont(ofSize:15,weight:.semibold) : Typography.folderTitle.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
         title.inset = SpaceListMetrics.textInset
         title.trailingInset = SpaceListMetrics.textTrailingInset
@@ -708,6 +708,7 @@ final class FolderCellView: SidebarCellView {
     }
 
     private func bind() {
+        title.font = context?.manager?.libraryLayout == true ? .systemFont(ofSize:15,weight:.semibold) : Typography.folderTitle.font
         icon.folder = folder
         icon.cell = self
         title.text = { [weak self] in self?.folder?.title ?? "" }

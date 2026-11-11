@@ -13,6 +13,10 @@ final class AppLibrarySession {
   private(set) var panel: LibraryPanelView?
   private var releaseTask: Task<Void, Never>?
   private(set) var lastShowMilliseconds = 0.0
+  #if OPEN_AUTOMATION
+  var releaseDelay = 60.0
+  #endif
+  private(set) var panelGeneration = 0
 
   init(model: LibraryViewModel, controller: BrowserWindowController) {
     self.model = model; self.controller = controller
@@ -34,6 +38,7 @@ final class AppLibrarySession {
         controller.presentLibraryPanel(panel, width: width)
       }
       self.panel = panel
+      panelGeneration += 1
     }
     if let section { panel.select(LibraryPanelSection(section), animated: false) }
     panel.isPresented = true
@@ -50,10 +55,15 @@ final class AppLibrarySession {
     controller.dismissLibraryPanel()
     controller.window?.makeFirstResponder(controller.container)
     releaseTask?.cancel()
+    #if OPEN_AUTOMATION
+    let delay = releaseDelay
+    #else
+    let delay = 60.0
+    #endif
     releaseTask = Task { @MainActor [weak self] in
-      try? await Task.sleep(for: .seconds(60))
+      try? await Task.sleep(for: .seconds(delay))
       guard !Task.isCancelled, let self, self.controller?.isLibraryOpen != true else { return }
-      self.controller?.releaseLibraryPanel(); self.panel = nil; self.releaseTask = nil
+      self.controller?.releaseLibraryPanel(); self.panel = nil; self.model.releaseContentViews(); self.releaseTask = nil
     }
   }
 }

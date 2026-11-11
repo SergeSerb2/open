@@ -63,6 +63,10 @@ import OpenStore
         let view = settingsActions?.makeSpaceManagerView()
         if cachedSpaceManagerView !== view { cachedSpaceManagerView = view }
     }
+    public func releaseContentViews() {
+        cachedSpaceManagerView = nil
+        thumbnails = [:]; thumbnailImages = [:]; faviconImages = [:]; historyFaviconImages = [:]
+    }
     public var boostsProvider: (any BoostsProvider)?
     public var boostsPresentation: BoostsPresentation = .list
     public let downloads: any DownloadsProvider

@@ -22,7 +22,7 @@ public enum LibraryPanelSection: String, CaseIterable {
     var placeholder: String { "Search \(self == .archive ? "Archive" : title)…" }
     var emptyCopy: (title: String, body: String, button: String?) {
         switch self {
-        case .media: ("Show your media here", "Screenshots, images and videos from this Mac, ready to drag into any page.", "Choose Folders…")
+        case .media: ("No media yet", "Page captures you take appear here.", nil)
         case .downloads: ("No downloads yet", "Files you download appear here.", nil)
         case .easels: ("No Easels yet", "Press + in the sidebar to start one.", nil)
         case .spaces: ("No Spaces yet", "Your Spaces appear here.", nil)
@@ -32,6 +32,6 @@ public enum LibraryPanelSection: String, CaseIterable {
         }
     }
     public static func visible(in defaults: UserDefaults) -> [Self] {
-        allCases.filter { ($0 != .easels || defaults.bool(forKey: "libraryShowsEasels")) && ($0 != .history || defaults.object(forKey: "libraryShowsHistory") as? Bool != false) }
+        allCases.filter { $0 != .easels || defaults.bool(forKey: "libraryShowsEasels") }
     }
 }
