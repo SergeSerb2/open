@@ -365,6 +365,74 @@ class GeneratedOutputs:
             subprocess.run(['git', 'restore', '--', *changed], cwd=ROOT, check=True)
 
 
+def process_table():
+    """Live, non-zombie processes: pid -> (ppid, pgid, command)."""
+    text = subprocess.run(['ps', '-axo', 'pid=,ppid=,pgid=,stat=,command='],
+                          capture_output=True, text=True, check=True).stdout
+    table = {}
+    for line in text.splitlines():
+        fields = line.split(None, 4)
+        if len(fields) >= 4 and not fields[3].startswith('Z'):
+            table[int(fields[0])] = (int(fields[1]), int(fields[2]), fields[4] if len(fields) == 5 else '')
+    return table
+
+
+def protected_pids():
+    """The gate itself and its ancestors (FIFO heavy.sh, dispatcher) are never signalled."""
+    return {os.getpid(), *(pid for pid, _ in ancestors())}
+
+
+def track_tree(known, root=None):
+    """Adds the live descendants of known (and root) and their process-group members.
+
+    heavy.sh traps TERM without forwarding it, so its worker and compilers outlive it;
+    swift-build starts compilers in their own process groups. A pid whose command
+    changed is dropped, so a reused pid is never signalled. Never adds this gate,
+    its ancestors or this gate's own process group.
+    """
+    table = process_table(); keep = protected_pids()
+    for pid in list(known):
+        if pid not in table or table[pid][2] != known[pid]:
+            known.pop(pid)
+    if root is not None and root in table and root not in keep:
+        known[root] = table[root][2]
+    groups = {table[pid][1] for pid in known} - {os.getpgid(0)}
+    changed = True
+    while changed:
+        changed = False
+        for pid, (ppid, pgid, command) in table.items():
+            if pid not in known and pid not in keep and (ppid in known or pgid in groups):
+                known[pid] = command; groups.add(pgid); groups.discard(os.getpgid(0)); changed = True
+    STOPPED.update(known)  # Receipt: every process this cancellation owned.
+    return known
+
+
+def stop_tree(known, grace=10):
+    """TERM every tracked process, wait up to grace seconds, then KILL; returns survivors."""
+    for signum, wait in ((signal.SIGTERM, grace), (signal.SIGKILL, 5)):
+        track_tree(known)
+        for pid in list(known):
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, signum)
+        end = time.monotonic() + wait
+        while time.monotonic() < end:
+            if not track_tree(known):
+                return {}
+            time.sleep(.2)
+    return dict(track_tree(known))
+
+
+def checkout_processes():
+    """Processes whose command names a path in this checkout (verification only)."""
+    prefix = str(ROOT) + '/'; keep = protected_pids()
+    return {pid: command for pid, (_, _, command) in process_table().items()
+            if pid not in keep and prefix in command}
+
+
+GATE_DIRECTORY = None
+STOPPED = {}
+
+
 def command_run(command, log, interrupt=None):
     """Foreground wait; a screen lock parent outlives its worker's cleanup."""
     global CANCELLED
@@ -375,11 +443,18 @@ def command_run(command, log, interrupt=None):
                                  start_new_session=True)
         while child.poll() is None:
             if CANCELLED:
+                known = track_tree({}, child.pid)
                 if interrupt:
+                    # The screen worker quits its App and writes screen-end first;
+                    # keep tracking its tree so nothing it started is lost.
                     interrupt(child)
-                else:
-                    child.send_signal(signal.SIGTERM)
+                    while child.poll() is None:
+                        track_tree(known)
+                        time.sleep(.25)
+                survivors = stop_tree(known)
                 child.wait()
+                if survivors:
+                    raise KeyboardInterrupt('owned processes survived KILL: ' + ', '.join(map(str, survivors)))
                 raise KeyboardInterrupt('gate cancelled after owned cleanup')
             try:
                 child.wait(.25)
@@ -537,6 +612,8 @@ def main():
     if options.log_dir or os.environ.get('VERIFY_LOG_DIR'):
         directory.mkdir(parents=True, exist_ok=False)
     directory = directory.resolve()
+    global GATE_DIRECTORY
+    GATE_DIRECTORY = directory
     rows = []; stages = []; start = time.time()
     receipt = dict(schema=1, machine=machine(), source=source, config=options.config,
                    style='chrome', lane=options.lane, selected=selected, partialSelectors=sorted(partial),
@@ -718,8 +795,23 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except KeyboardInterrupt:
-        print('INTERRUPTED: owned worker cleanup finished', file=sys.stderr)
+    except KeyboardInterrupt as stop:
+        # Claim cleanup only after no process from this checkout remains.
+        deadline = time.monotonic() + 10
+        while (left := checkout_processes()) and time.monotonic() < deadline:
+            time.sleep(.2)
+        if GATE_DIRECTORY is not None:
+            with contextlib.suppress(Exception):
+                write_json(GATE_DIRECTORY / 'interrupted.json', dict(
+                    status='INTERRUPTED', signal=CANCELLED, ended=time.time(), reason=str(stop),
+                    stopped=[dict(pid=pid, command=command[:300]) for pid, command in sorted(STOPPED.items())],
+                    remaining=[dict(pid=pid, command=command[:300]) for pid, command in sorted(left.items())],
+                    cleanupOk=not left))
+        if left:
+            print('INTERRUPTED: cleanup INCOMPLETE; processes from this checkout remain: '
+                  + ', '.join(str(pid) for pid in sorted(left)), file=sys.stderr)
+            sys.exit(2)
+        print('INTERRUPTED: owned worker cleanup finished; no process from this checkout remains', file=sys.stderr)
         sys.exit(130)
     except Exception as error:
         print('FAIL:', error, file=sys.stderr)
