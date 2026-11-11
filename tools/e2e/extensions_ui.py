@@ -51,6 +51,11 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         time.sleep(.12)
         state = strip(); state["hoverEvent"] = event
         return state
+    def fresh_hover():
+        # Popup closure and tab changes can reset tracking while the tagged
+        # pointer stays put. Generate a real exit and entry before clicking.
+        hover(False)
+        return hover(True)
     def close():
         app.call("popup-close")
         return wait_until(lambda: not app.call("ext-popup-state")["open"], timeout=5)
@@ -59,7 +64,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         if command:
             app.call("key", key="y", modifiers=["command", "shift"], route="app")
         else:
-            hover()
+            fresh_hover()
             current = strip(surface)
             if identifier in current["ids"]:
                 app.call("ext-click", extension=identifier, surface=surface)
@@ -360,13 +365,16 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             disabled_color,enabled_color=colored(disabled_pixel),colored(enabled_pixel)
             results["X10_grayscale_pixels"]={"ok":disabled_color < enabled_color,"disabledColoredPixels":disabled_color,"enabledColoredPixels":enabled_color,
                 "slotPoints":slot,"pixelBounds":pixels,"scale":scale,"disabled":disabled_image,"enabled":enabled_image}
-        hover(); right = app.call("ext-click", extension=probe, surface="url", button="right")
+        before_context = strip()
+        context_hover = fresh_hover()
+        right = app.call("ext-click", extension=probe, surface="url", button="right")
         titles = [i["title"] for i in right.get("menu", [])]
         app.call("ext-menu", extension=probe, select="Unpin")
         unpinned = wait_until(lambda: not action(probe).get("pinned"), timeout=5)
         app.call("ext-pin", extension=probe, pinned=True, index=0)
         pin_result("X11_context_menu", {"ok": bool(unpinned) and "Remove from Open…" in titles and "Unpin" in titles
-            and all("Chrome" not in t and "Chromium" not in t for t in titles), "titles": titles})
+            and all("Chrome" not in t and "Chromium" not in t for t in titles), "titles": titles,
+            "beforeHover":before_context,"afterHover":context_hover})
         permission_rows = []
         for answer in ("cancel", "accept"):
             opened = popup(probe)
@@ -642,7 +650,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                 app.call("peek-open", tab=blank, url=local_origin+"/find-peek")
                 app.call("wait")
             try:
-                hover()
+                fresh_hover()
                 app.call("key", key="f", modifiers=["command"], route="app")
                 app.call("key", text="extension", route="app")
                 find_state = app.call("find-state")
@@ -658,10 +666,12 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
                 app.call("mouse", action="click", x=cancel[0]+cancel[2]/2,
                     y=app.call("window-state")["frame"][3]-cancel[1]-cancel[3]/2)
                 closed = wait_until(lambda: not app.call("focus-state")["findVisible"] and app.call("focus-state")["owner"] == "page", timeout=3)
+                strip_after_close = strip("url" if surface == "peek" else surface)
+                fresh_hover()
                 find_rows.append({"surface":surface, "ok":find["visible"] and find["controls"]["closeHitMatches"] and cancel[2]>0 and bool(closed)
                     and bool(frames) and not any(overlaps(find["frame"], f) for f in frames)
                     and strip("url" if surface == "peek" else surface)["visible"],
-                    "find":find, "stripFrames":frames, "closedByNativeClick":bool(closed)})
+                    "find":find, "stripFrames":frames, "closedByNativeClick":bool(closed),"stripAfterClose":strip_after_close})
             finally:
                 if app.call("focus-state")["findVisible"]:
                     app.call("key", key="escape", route="app")
