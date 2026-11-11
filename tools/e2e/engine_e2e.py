@@ -6172,6 +6172,10 @@ def _media_idle_cpu(app, audio):
             and abs(browser["with"] - browser["without"]) <= .5
             and all(x["complete"] for v in samples.values() for x in v)
             and animations == [0] * 4 and pending == [0] * 4,
+            "reason": ("paused-card total and browser CPU floor deltas must be at most 0.5 percentage points"
+                if all(x["complete"] for v in samples.values() for x in v)
+                and animations == [0] * 4 and pending == [0] * 4
+                else "paused-card CPU sample requires complete process windows and zero animations/pending collapse"),
             "minWith": floors["with"], "minWithout": floors["without"],
             "browserMinWith": browser["with"], "browserMinWithout": browser["without"],
             "restAnimations": animations, "pendingCollapse": pending, "samples": samples}

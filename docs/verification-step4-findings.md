@@ -117,3 +117,36 @@ tracks moving the write/landing work off the main thread or splitting it
 into slices ≤8 ms. The original receipt is retained unchanged.
 
 A later valid M1 sample at `b9531ac3` passed all import assertions: maximum lag 46.919 ms, writeArchive 33.828 ms, landSidebar 13.090 ms, History 1,027.408 ms and idle 0.398%, with pre-load1 3.294/3.348. Its raw gate rejects the now-stale exact exception. Remove that active exception and re-evaluate the raw PASS rows; retain the original valid failure and #314. No product input changed and no fix is claimed. Receipt: `.re/step4-m1-b9531ac3-all/timing-import-robust/`.
+
+## Paused media CPU
+
+The valid `b9531ac3` M1 Measure sample records 0.5892% with a paused card
+and 0.0434% without, a 0.5458-point delta against the unchanged 0.5 limit.
+Pre-load1 is 3.340/3.060. A same-product focused real-App confirmation
+records 0.5922/0.0469%, delta 0.5453, pre-load1 3.369/3.299. Both slots
+were held and the ten-second quiet rule passed. Cleanup is safe, with no
+crash or dialog. All process windows are complete and all animation/pending
+collapse counts are zero. The DOM audio element is paused and its clock
+stays fixed in every sample. The browser comparison passes.
+
+The second run identifies the audio utility subtype as
+`audio.mojom.AudioService`: 0.4823/0.4098/0.4114/0.4118% in the with-card
+windows. Renderer CPU is about 0.11–0.21%. Those contributions drop after
+closing the card. This is attribution to recorded processes, not a sole
+cause or a fix. Follow-up [#316](https://github.com/SergeSerb2/open/issues/316).
+The full quiet Media stage is still required; its earlier preflight launched
+no App. Raw receipts are `.re/step4-m1-b9531ac3-all/timing-measure/` and
+`.re/step4-focused-receipts/idle-r1/`. No exception is active for these rows.
+
+## Icon readback on the 2x display
+
+A focused real-App M1 run on `b9531ac3` returns the correct selected/applied
+ID and a 1024 px picker image for all five choices, with no error. AppKit's
+application image is 2048 px on that display, including after a 300 ms wait.
+The observer's old 1024 px guard returns nil before comparing any pixels.
+The candidate observer compares at the actual native 1x/2x raster size,
+retaining exact bytes, output colour space and component precision. Each
+read-back buffer is bounded to 2048×2048 RGBA float32 (64 MiB). Functional
+product code is unchanged. The harness now retains every returned field.
+Positive qualification of this candidate is still pending. Original negative:
+`.re/step4-focused-receipts/icon-r1/`.
