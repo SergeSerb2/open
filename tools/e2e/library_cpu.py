@@ -22,12 +22,18 @@ def read(pid,flavor,arg,kind):
  if got!=ctypes.sizeof(value):raise OSError(ctypes.get_errno(),f'proc_pidinfo pid={pid} flavor={flavor} got={got}')
  return value
 def snapshot(app):
- processes={}
+ processes={};unavailable=[]
  for line in subprocess.check_output(['ps','-axo','pid=,comm='],text=True).splitlines():
   parts=line.strip().split(None,1)
   if len(parts)!=2 or not parts[1].startswith(str(app.bundle)+'/'):continue
-  pid=int(parts[0]);task=read(pid,4,0,TaskInfo)
-  command=subprocess.check_output(['ps','-p',str(pid),'-o','args='],text=True)
+  pid=int(parts[0])
+  try:
+   task=read(pid,4,0,TaskInfo)
+   command=subprocess.check_output(['ps','-p',str(pid),'-o','args='],text=True,stderr=subprocess.DEVNULL)
+  except (ProcessLookupError,FileNotFoundError,subprocess.CalledProcessError) as error:
+   if pid==app.pid:raise
+   unavailable.append({'pid':pid,'reason':'exited between enumeration and counter read','error':type(error).__name__})
+   continue
   match=re.search(r'--type=([^\s]+)',command)
   processes[str(pid)]={'role':'App' if pid==app.pid else match.group(1) if match else Path(parts[1]).name,'cpuNanoseconds':(task.user+task.system)*NANOSECONDS_PER_TICK,'machCalls':task.machCalls,'unixCalls':task.unixCalls,'contextSwitches':task.switches}
  ids=(ctypes.c_uint64*4096)();size=lib.proc_pidinfo(app.pid,6,0,ids,ctypes.sizeof(ids))
@@ -38,7 +44,7 @@ def snapshot(app):
   except OSError:continue
   threads[str(tid)]={'name':bytes(t.name).decode(errors='replace'),'cpuNanoseconds':(t.user+t.system)}
  if not threads:raise RuntimeError('No App thread counters were readable')
- return {'processes':processes,'threads':threads}
+ return {'processes':processes,'threads':threads,'unavailableProcesses':unavailable}
 def delta(before,after,seconds):
  def rows(key):
   output=[]
@@ -47,4 +53,7 @@ def delta(before,after,seconds):
    start=before[key][identity]
    output.append(dict(id=identity,**end,cpuPercent=100*(end['cpuNanoseconds']-start['cpuNanoseconds'])/1e9/seconds))
   return sorted(output,key=lambda x:x['cpuPercent'],reverse=True)
- return {'processes':rows('processes'),'threads':rows('threads')}
+ return {'processes':rows('processes'),'threads':rows('threads'),
+         'exitedProcessIDs':sorted(set(before['processes'])-set(after['processes'])),
+         'appearedProcessIDs':sorted(set(after['processes'])-set(before['processes'])),
+         'unavailableBefore':before.get('unavailableProcesses',[]),'unavailableAfter':after.get('unavailableProcesses',[])}
