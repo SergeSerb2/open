@@ -1655,7 +1655,7 @@
     /// (window base coordinates): exit to owners it left, enter to owners it reached,
     /// and move to owners whose areas track movement.
     @discardableResult
-    private func hover(_ window: NSWindow, at location: NSPoint) -> [String: [String]] {
+    private func hover(_ window: NSWindow, at location: NSPoint, exitingOnly: Bool = false) -> [String: [String]] {
       // The whole frame view, so the title bar (window buttons) is included.
       guard let content = window.contentView?.superview ?? window.contentView else { return [:] }
       // AppKit builds tracking areas lazily, once the hardware pointer has reached the
@@ -1695,11 +1695,14 @@
       }
       let move = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
         context: nil, eventNumber: Self.syntheticPointerTag, clickCount: 0, pressure: 0)
-      // The queued native motion above already reconciles AppKit tracking. Only
-      // exit owners our simulated pointer actually left. Sending exits to every
-      // unrelated area can cancel the Favorite preview that native motion just
-      // armed; its following enter then sees an unchanged pointerInside value.
-      if let exit = enterExit(.mouseExited) { for (id, owner) in hoveredOwners where inside[id] == nil { owner.mouseExited(with: exit) } }
+      // Exit before the queued native motion can enter the new target. A late
+      // synthetic SpacePageView exit would otherwise cancel the Favorite preview
+      // that native motion just armed; its duplicate enter cannot re-arm it.
+      if exitingOnly {
+        let leaving = hoveredOwners.filter { inside[$0.key] == nil }
+        if let exit = enterExit(.mouseExited) { for owner in leaving.values { owner.mouseExited(with: exit) } }
+        return ["exited": leaving.values.map { String(describing: type(of: $0)) }.sorted()]
+      }
       if let enter = enterExit(.mouseEntered) { for (id, owner) in inside where hoveredOwners[id] == nil { owner.mouseEntered(with: enter) } }
       if let move { for owner in moving.values { owner.mouseMoved(with: move) } }
       let entered = inside.filter { hoveredOwners[$0.key] == nil }.values
@@ -2098,6 +2101,7 @@
         }
         defer { if let monitor { NSEvent.removeMonitor(monitor) } }
         let location = NSPoint(x: point[0], y: target.frame.height - point[1])
+        let leaving = action == "hover" ? hover(target, at: location, exitingOnly: true) : [:]
         if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
         // The local monitor consumes motion on native dequeue. A second
         // queued move must not overtake/coalesce the leave-edge event that
@@ -2113,7 +2117,8 @@
         // that re-reads the pointer then (the window buttons' hover) must still see the old
         // point, so the enter and exit events drive the change, as real pointer motion does.
         if action == "hover" {
-          let result = hover(target, at: location)
+          var result = hover(target, at: location)
+          result["exited"] = leaving["exited"] ?? []
           BrowserWindowController.automationPointer = (number, location)
           return result
         }
@@ -2143,6 +2148,7 @@
         target.layoutIfNeeded()
         // A click also moves the simulated pointer. Reconcile tracking before
         // mouseDown, so an old Favorite enter cannot outlive a row click.
+        _ = hover(target, at: point, exitingOnly: true)
         _ = hover(target, at: point)
         if a["queued"] as? Bool == true {
           // Controls that read NSApp.currentEvent (Option-click pane Close) need
