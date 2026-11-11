@@ -12,6 +12,7 @@ import time
 from engine_e2e import Open, wait_until, new_tab
 from boost_gallery import fixture as boost_fixture
 from downloads import server
+from library_overlay import capture_window
 
 
 def run(output,bundle=None,frames=False,mockups=None):
@@ -34,7 +35,7 @@ def run(output,bundle=None,frames=False,mockups=None):
         app.call('window-focus',id=owner,activate=True)
         current=state(); current.update(extra); check(name+'_key',current['key'])
         path=output/(name+'.png')
-        subprocess.run(['/usr/sbin/screencapture','-x','-o','-l',str(current['window']),str(path)],check=True,timeout=15)
+        capture_window(current['window'],path)
         size=struct.unpack('>II',path.read_bytes()[16:24]); frame=app.call('window-state')['frame']
         check(name+'_2x',size==(int(frame[2]*2),int(frame[3]*2)),pixels=size)
         result['frames'].append(dict(name=name,path=path.name,state=current))
@@ -228,15 +229,16 @@ def run(output,bundle=None,frames=False,mockups=None):
                 app.call('capture',mode='area',rect=[30,30,240,150]);app.call('capture-action',action='cancel')
                 # Six exact fixture pairs; sidebar is captured and measured first.
                 app.call('space',space=space['id']);app.call('select',tab=tab)
-                for theme,rgb in [('peach',(.94,.49,.35)),('ocean',(.26,.53,.90)),('night',(.35,.27,.60))]:
-                    for appearance in ['light','dark']:
-                        app.call('appearance',name=appearance)
-                        app.call('theme-set',space=space['id'],style=dict(keyColor=dict(zip(['red','green','blue'],rgb),alpha=1),colorCount=3,appearance=appearance,noiseFactor=0,intensityFactor=.8))
-                        state(action='close');time.sleep(.3)
-                        sidebar=app.call('sidebar-row',node=tab)
-                        capture(theme+'-'+appearance+'-sidebar',sidebar=sidebar,themeState=app.call('theme-get',space=space['id']))
-                        state(action='open',section='downloads');time.sleep(.25)
-                        capture(theme+'-'+appearance+'-downloads',sidebar=sidebar,themeState=app.call('theme-get',space=space['id']))
+                if os.environ.get('OPEN_LIBRARY_L3_FRAMES')!='1':
+                    for theme,rgb in [('peach',(.94,.49,.35)),('ocean',(.26,.53,.90)),('night',(.35,.27,.60))]:
+                        for appearance in ['light','dark']:
+                            app.call('appearance',name=appearance)
+                            app.call('theme-set',space=space['id'],style=dict(keyColor=dict(zip(['red','green','blue'],rgb),alpha=1),colorCount=3,appearance=appearance,noiseFactor=0,intensityFactor=.8))
+                            state(action='close');time.sleep(.3)
+                            sidebar=app.call('sidebar-row',node=tab)
+                            capture(theme+'-'+appearance+'-sidebar',sidebar=sidebar,themeState=app.call('theme-get',space=space['id']))
+                            state(action='open',section='downloads');time.sleep(.25)
+                            capture(theme+'-'+appearance+'-downloads',sidebar=sidebar,themeState=app.call('theme-get',space=space['id']))
                 for width,height in [(1280,800),(900,850)]:
                     app.call('window-frame',frame=[40,50,width,height],unconstrained=True)
                     for section in ['downloads','archive','history','media','boosts','spaces']:

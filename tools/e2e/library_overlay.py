@@ -18,6 +18,17 @@ SECTIONS = ['media', 'downloads', 'spaces', 'boosts', 'archive', 'history']
 KEYS = ['libraryShowsEasels', 'open.library.lastSection', 'open.sidebar.hideHintShown']
 
 
+def capture_window(number,path):
+    launcher=Path.home()/'Applications/OpenCapture.app'
+    command=['/usr/sbin/screencapture','-x','-o','-l',str(number),str(path)]
+    if launcher.exists():
+        log=path.with_suffix('.pixels.log')
+        pixels=Path(__file__).resolve().parents[1]/'capture/pixels.sh'
+        subprocess.run(['/usr/bin/open','-n','-W',str(launcher),'--args',str(pixels),str(log),*command],timeout=15)
+        assert Path(str(log)+'.rc').read_text().strip()=='0',log.read_text()
+    else:subprocess.run(command,check=True,timeout=15)
+
+
 def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
     output.mkdir(parents=True, exist_ok=True)
     checks, shots = {}, []
@@ -56,8 +67,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
         current = state()
         # Window number comes from the owning browser's socket state.
         path = output / (name + '.png')
-        subprocess.run(['/usr/sbin/screencapture', '-x', '-o', '-l',
-                        str(current['window']), str(path)], check=True, timeout=15)
+        capture_window(current['window'],path)
         dimensions = struct.unpack('>II', path.read_bytes()[16:24])
         check(name + '_native_2x', dimensions == (width*2, height*2), pixels=dimensions)
         if current['section'] == 'spaces':
