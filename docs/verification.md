@@ -145,6 +145,19 @@ Calibration measures scheduler and local-query overhead. It does not claim that
 CPU counters measure sleeping time or that a busy host meets a quiet latency
 budget.
 
+The 2026-11-10 M5 qualification used the AW2726DM at 2560×1440 logical and
+physical pixels, scale 1, 240 Hz, ICC SHA-256
+`b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43`.
+That scale/ICC matches the retained AW references. All 12 PNGs, their hashes,
+and all sidebar colour limits remain unchanged; old/new reference ΔE00 is
+0 for mean, p95, and maximum. No reference was re-recorded. The real-window
+`chrome_dark_rings`, `traffic_light_look`, and `traffic_light_stale_hover`
+rows pass on this mode. Replaying their saved synthetic screenshots with an
+intentionally wrong ring colour fails the same pixel predicates (positive
+ΔE00 at most 0.59; wrong-colour ΔE00 16.3–36.7). This replay needs no second
+screen session and changes no reference. Raw receipts remain in the agent's
+ignored `.re/gate-health/step1/` directory.
+
 The explicit negative-proof switch only breaks checks. It cannot make a gate
 pass. `OPEN_VERIFY_BREAK=all` changes one channel of one rendered pixel by
 1/255 in each legacy check, changes one sampled URL-field fill by 6/255 in the
