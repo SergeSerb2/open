@@ -427,7 +427,10 @@ def checks(factory, results, tmp, config, harness):
         menu(other, 'Retry'); dismiss_library()
         retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['state'] == 'completed'), None))
         check('history_retry', retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
-              and Path(retried['path']).exists(), item=retried)
+              and Path(retried['path']).exists(), item=retried, items=state()['items'],
+              tabs=app.call('tabs'), sheets=state()['sheets'])
+        if not retried:
+            raise RuntimeError('historical Retry did not complete a new transfer')
         for new_tab in app.call('tabs'):
             if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
         library(); wait(lambda: bool(row(other))); menu(other, 'Move to Trash')

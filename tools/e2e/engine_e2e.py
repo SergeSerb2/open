@@ -171,12 +171,17 @@ class FocusTracker:
         # Intentional quit/SIGKILL recovery closes the owned instance before
         # recording a row or launching its replacement.
         crashed = bool(_open_crash_reports() - self.crashes_before)
-        dead = any(app.pid and not app.closed and
-                   app.process_path(app.pid) != os.path.realpath(app.executable)
-                   for app in self.apps)
+        dead = []
+        for app in self.apps:
+            if app.pid and not app.closed:
+                actual = app.process_path(app.pid)
+                expected = os.path.realpath(app.executable)
+                if actual != expected:
+                    dead.append(dict(pid=app.pid, actual=actual, expected=expected))
         if crashed or dead:
             self.fatal_app_death = True
-            raise AppDied('App death or new crash report; stopped before the next flow')
+            raise AppDied('App death or new crash report; stopped before the next flow: '
+                          + json.dumps(dict(processes=dead, newReports=sorted(_open_crash_reports() - self.crashes_before))))
 
     def loss(self):
         interruptions = []
@@ -7840,7 +7845,8 @@ def littleopen_checks(factory, results, tmp):
     domain = 'io.github.sergeserb2.open'
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
             'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
-            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection')
+            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection',
+            'open.advanced.restoreWindowsOnLaunch')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved_domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     server, port = _sleep_server()
@@ -7877,7 +7883,7 @@ def littleopen_checks(factory, results, tmp):
 
     try:
         for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-        for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True)):
+        for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True), (keys[7], True)):
             subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
         app = factory(urls=(), fresh=True, extra_env={'OPEN_AUTOMATION_EARLY_LITTLE_OPEN': '1'})
         early = sessions()

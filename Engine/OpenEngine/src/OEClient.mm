@@ -624,8 +624,9 @@ bool OEClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
   // Also cover renderer navigation, redirects and popup creation. Shell-only
   // loadURL filtering does not see these. Leave the current document intact:
   // starting a replacement here (even deferred) could override a newer load.
-  if (page && frame->IsMain() && OEIsPageBrowser(page, browser) &&
-      OEIsChromeNewTabURL(OEURL(request->GetURL()))) {
+  // Refuse NTP even before an adopted popup has attached its page. No Open
+  // client supplies the full Chrome BrowserView's NTP controller.
+  if (frame->IsMain() && OEIsChromeNewTabURL(OEURL(request->GetURL()))) {
     return true;
   }
   if (!page || !frame->IsMain() || !user_gesture || is_redirect ||
