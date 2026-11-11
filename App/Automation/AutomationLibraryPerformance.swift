@@ -11,7 +11,7 @@ extension AutomationController {
     let adapter = app.settingsPresenter
     if operation == "cpu" {
       var usage = rusage(); getrusage(RUSAGE_SELF,&usage)
-      return ["cpuSeconds":Double(usage.ru_utime.tv_sec+usage.ru_stime.tv_sec)+Double(usage.ru_utime.tv_usec+usage.ru_stime.tv_usec)/1_000_000]
+      return ["cpuSeconds":Double(usage.ru_utime.tv_sec+usage.ru_stime.tv_sec)+Double(usage.ru_utime.tv_usec+usage.ru_stime.tv_usec)/1_000_000,"counters":adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]]
     }
     let countersBefore = adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]
     var started = ProcessInfo.processInfo.systemUptime
@@ -19,7 +19,7 @@ extension AutomationController {
       guard let panel = adapter.activeLibrarySession?.panel,panel.isPresented else { throw Failure(message:"Library not open") }
       let probe = LibraryScrollProbe()
       let samples = await probe.run(panel)
-      return ["frames":samples,"counters":panel.performanceCounters]
+      return ["frames":samples.map(\.json),"counters":panel.performanceCounters]
     }
     switch operation {
     case "open":
@@ -70,14 +70,22 @@ extension AutomationController {
 #if OPEN_AUTOMATION
 /// One in-app scroll step per native display callback. The socket does not
 /// pace frames, and this display link is invalidated before the reply.
+private struct LibraryScrollFrame: Sendable {
+  let milliseconds: Double
+  let visibleRows: Int
+  let intervalMilliseconds: Double
+  let counters: [String:Double]
+  let counterDelta: [String:Double]
+  var json: [String:Any] { ["milliseconds":milliseconds,"visibleRows":visibleRows,"intervalMilliseconds":intervalMilliseconds,"counters":counters,"counterDelta":counterDelta] }
+}
 @MainActor
 private final class LibraryScrollProbe: NSObject {
   weak var panel: LibraryPanelView?
   var link: CADisplayLink?
-  var completion: CheckedContinuation<[[String:Any]],Never>?
-  var rows: [[String:Any]] = []
+  var completion: CheckedContinuation<[LibraryScrollFrame],Never>?
+  var rows: [LibraryScrollFrame] = []
   var previousTimestamp = 0.0
-  func run(_ panel:LibraryPanelView) async -> [[String:Any]] {
+  func run(_ panel:LibraryPanelView) async -> [LibraryScrollFrame] {
     self.panel = panel
     return await withCheckedContinuation { continuation in
       completion = continuation
@@ -92,9 +100,9 @@ private final class LibraryScrollProbe: NSObject {
     let before = panel.performanceCounters, start = ProcessInfo.processInfo.systemUptime
     let visible = panel.scrollToRow(Int((Double(index)/119)*Double(max(0,count-1))))
     let after = panel.performanceCounters
-    rows.append(["milliseconds":(ProcessInfo.processInfo.systemUptime-start)*1000,"visibleRows":visible,
-      "intervalMilliseconds":previousTimestamp == 0 ? 0 : (link.timestamp-previousTimestamp)*1000,
-      "counters":after,"counterDelta":after.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(before[$1.key] ?? 0) }])
+    rows.append(LibraryScrollFrame(milliseconds:(ProcessInfo.processInfo.systemUptime-start)*1000,visibleRows:visible,
+      intervalMilliseconds:previousTimestamp == 0 ? 0 : (link.timestamp-previousTimestamp)*1000,
+      counters:after,counterDelta:after.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(before[$1.key] ?? 0) }))
     previousTimestamp = link.timestamp
     if rows.count == 120 { finish() }
   }

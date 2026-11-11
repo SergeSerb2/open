@@ -375,6 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var libraryPrebuildTask: Task<Void,Never>?
   var libraryFirstSidebarDraw: Double?
   var libraryLastInput = 0.0
+  var libraryPrebuiltAt: Double?
   func scheduleLibraryPrebuildAfterFirstDraw() {
     guard libraryFirstSidebarDraw == nil else { return }
     libraryFirstSidebarDraw = ProcessInfo.processInfo.systemUptime
@@ -386,6 +387,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if libraryFirstSidebarDraw != nil { scheduleLibraryPrebuild() }
   }
   func scheduleLibraryPrebuild() {
+    #if OPEN_AUTOMATION
+    if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREBUILD_DISABLED"] == "1" { return }
+    #endif
     guard let first = libraryFirstSidebarDraw,!shutdownPrepared,!terminationRequested else { return }
     libraryPrebuildTask?.cancel()
     let deadline = max(first+3,libraryLastInput+3)
@@ -395,6 +399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       self.libraryPrebuildTask = nil
       guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller = self.frontStandardWindowController,
         controller.window?.isVisible == true,!controller.isLibraryOpen else { return }
+      self.libraryPrebuiltAt = ProcessInfo.processInfo.systemUptime
       _ = self.settingsPresenter.makeLibrarySession(controller).prepareShell()
     }
   }
