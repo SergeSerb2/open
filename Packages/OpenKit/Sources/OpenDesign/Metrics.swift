@@ -56,9 +56,6 @@ public enum URLFieldMetrics {
     public static let y: CGFloat = 46
     public static let height: CGFloat = 36
     public static let insetX: CGFloat = SpaceListMetrics.rowFillInsetX
-    /// Copy Link and Site Controls only on field hover (or while the panel is open) when true; today's rule
-    /// (any pointer over the sidebar) when false. Unsettled between two Arc captures; the lead sets it (LEAD 11:45).
-    public static let controlsOnFieldHoverOnly = false
     /// Space between the end of the host text and the first visible control (LEAD 11:45).
     public static let controlsTextGap: CGFloat = 8
     /// A long host keeps its end visible; its leading 34 pt fade to clear (Arc 23-url-loading-long).

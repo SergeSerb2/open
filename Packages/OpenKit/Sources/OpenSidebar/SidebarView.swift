@@ -753,6 +753,14 @@ extension SidebarView {
     @discardableResult public func pressSiteControls() -> Bool { urlField.siteControls.accessibilityPerformPress() }
     public func refreshExtensionsLayout() { urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded() }
     public var urlFieldVisible: Bool { !urlField.isHidden }
+    /// Diagnostics: the shown URL-field controls (frame in sidebar points) and the accessibility labels the field exposes.
+    public var urlFieldControls: (copy: CGRect?, site: CGRect?, accessibilityLabels: [String]) {
+        urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded()
+        let shown = { (b: NSView) in b.isHiddenOrHasHiddenAncestor ? nil : self.convert(b.bounds, from: b) }
+        let children = NSAccessibility.unignoredChildren(from: urlField.accessibilityChildren() ?? [])
+        let labels = children.compactMap { ($0 as? NSView)?.accessibilityLabel() }
+        return (shown(urlField.copyLink), shown(urlField.siteControls), labels)
+    }
     /// The URL field's frame in `view`'s coordinates while it shows (the inline address editor anchors here, plan D3 §2.2).
     public func urlFieldFrame(in view: NSView) -> CGRect? {
         guard !urlField.isHiddenOrHasHiddenAncestor, window != nil, urlField.window === view.window else { return nil }

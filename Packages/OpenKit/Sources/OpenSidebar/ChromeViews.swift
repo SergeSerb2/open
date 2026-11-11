@@ -187,8 +187,12 @@ final class URLFieldView: NSView {
         let style: @MainActor () -> SpaceThemeStyle = { [unowned context] in
             context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
         }
-        copyLink.tooltip = { Tooltip(title: "Copy URL", keys: ["⇧", "⌘", "C"], style: style()) }
-        siteControls.tooltip = { Tooltip(title: "Site Controls", style: style()) }
+        // The standard AppKit tooltip with Open's names (LEAD 12:12).
+        _ = style
+        copyLink.toolTip = "Copy Link"
+        siteControls.toolTip = "Site Controls"
+        copyLink.accessibleTitle = { "Copy Link" }
+        siteControls.accessibleTitle = { "Site Controls" }
         addSubview(magnifier)
         addSubview(label)
         setAccessibilityElement(true)
@@ -202,9 +206,11 @@ final class URLFieldView: NSView {
 
     /// The copy and Site Control buttons show while a page is loaded and the pointer is over the
     /// field, or while the Site Control panel is open (Arc 14c rest/hover frames; plan D3 §2.4).
+    /// Copy Link and Site Controls: not drawn and not in the accessibility tree at rest; shown while the pointer is anywhere
+    /// inside the sidebar, and while the Site Control panel is open (Arc 1.172 session 3 URL rest/hover; LEAD 12:12).
+    /// Renders count any forced hover as a pointer inside the sidebar.
     private var showsButtons: Bool {
-        URLFieldMetrics.controlsOnFieldHoverOnly ? context.forcedHover == .urlField || pointerInside
-            : context.forcedHover != nil || context.pointerInSidebar || pointerInside
+        context.forcedHover != nil || context.pointerInSidebar || pointerInside || siteControlState.isOpen
     }
 
     func fieldFill(hovered: Bool) -> DesignColor { Self.fill(context: context, hovered: hovered) }
@@ -266,7 +272,7 @@ final class URLFieldView: NSView {
         let a = URLFieldMetrics.accessorySize
         siteControls.frame = CGRect(x: bounds.width + ox - URLFieldMetrics.siteControlsTrailing - a, y: URLFieldMetrics.accessoryY - oy, width: a, height: a)
         copyLink.frame = siteControls.frame.offsetBy(dx: -URLFieldMetrics.accessoryPitch, dy: 0)
-        copyLink.isHidden = !hasPage || !(showAccessories || (URLFieldMetrics.controlsOnFieldHoverOnly && siteControlState.isOpen))
+        copyLink.isHidden = !hasPage || !showAccessories
         siteControls.isHidden = !hasPage || !siteControlsAvailable || !(showAccessories || siteControlState.isOpen)
         siteControlGlyph.frame = siteControls.bounds
         if showAccessories || siteControlState.isOpen {
