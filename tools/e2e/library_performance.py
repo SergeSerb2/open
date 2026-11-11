@@ -37,8 +37,8 @@ def cpu(exclude_bundle=None):
     return total
 
 
-def quiet():
-    attempts=[];deadline=time.monotonic()+900
+def quiet(deadline=None):
+    attempts=[];deadline=deadline if deadline is not None else time.monotonic()+900
     while time.monotonic()<deadline:
         loads=[os.getloadavg()[0]];time.sleep(10);loads.append(os.getloadavg()[0]);foreign=cpu()
         attempts.append({'loads':loads,'foreignCPU':foreign})
@@ -131,7 +131,7 @@ def main(args):
         assert 0<len(valid)<args.samples
         receipt.update(samples=valid,resumedFrom=str(args.resume_from.resolve()),baseline={'bundle':str(args.baseline_bundle),'samples':baselines})
         for index in range(len(valid)):
-            source=args.resume_from.parent/('physical-'+str(index))
+            source=args.resume_from.parent/previous['samples'][index].get('physicalDirectory','physical-'+str(index))
             if source.exists():shutil.copytree(source,output/source.name,ignore=shutil.ignore_patterns('commands'))
     active=None;frames=None
     def save(): (output/'result.json').write_text(json.dumps(receipt,indent=2))
@@ -152,18 +152,28 @@ def main(args):
             active.quit();assert active.quit_report['ok']
             receipt['earlyCold']={'loads':cold_loads,'foreignCPU':[cold_cpu,cold_end_cpu],'quietAttempts':cold_waits,'timing':early,'cleanup':active.quit_report,'limit':50,'ok':early['firstSubmittedMilliseconds']<=50 and cold_end_cpu<=200}
             active=None;save()
-            for index in range(len(receipt['samples']),args.samples):
+            attempt=0;previous_index=None;pair_deadline=None
+            while len(receipt['samples'])<args.samples:
+                index=len(receipt['samples']);attempt+=1
+                attempt_tag=str(index)+'-attempt-'+str(attempt)
+                if index!=previous_index:
+                    pair_deadline=time.monotonic()+900;previous_index=index
+                baseline_row=None
                 if args.baseline_bundle:
-                    base_loads,base_cpu,base_waits=quiet()
-                    active=launch(baseline_root,args.baseline_bundle,output,'baseline-'+str(index))
+                    base_loads,base_cpu,base_waits=quiet(pair_deadline)
+                    active=launch(baseline_root,args.baseline_bundle,output,'baseline-'+attempt_tag)
                     base_timing=active.call('timing')
                     end_base_cpu=cpu(active.bundle)
                     active.quit();assert active.quit_report['ok']
-                    receipt['baseline']['samples'].append({'index':index,'loads':base_loads,'foreignCPU':[base_cpu,end_base_cpu],'quietAttempts':base_waits,'timing':base_timing,'cleanup':active.quit_report})
-                    active=None;save()
-                    if end_base_cpu>200:raise RuntimeError('Baseline foreign CPU invalidated sample')
-                loads,foreign,quiet_attempts=quiet()
-                active=launch(root,args.bundle,output,index)
+                    baseline_row={'index':index,'attempt':attempt,'loads':base_loads,'foreignCPU':[base_cpu,end_base_cpu],'quietAttempts':base_waits,'timing':base_timing,'cleanup':active.quit_report}
+                    active=None
+                    if end_base_cpu>200:
+                        receipt.setdefault('rejectedBaselines',[]).append(baseline_row);save()
+                        print('REJECT baseline '+json.dumps({'index':index,'attempt':attempt,'foreignCPU':baseline_row['foreignCPU']}),flush=True)
+                        continue
+                    receipt['pendingBaseline']=baseline_row;save()
+                loads,foreign,quiet_attempts=quiet(pair_deadline)
+                active=launch(root,args.bundle,output,attempt_tag)
                 startup=active.call('timing')
                 assert wait_until(lambda:active.call('library',action='prebuild-state').get('ready',False),timeout=12)
                 prebuild=active.call('library',action='prebuild-state')
@@ -172,7 +182,7 @@ def main(args):
                 assert prebuild['builtAt']-prebuild['lastInput']>=3,prebuild
                 physical=None
                 if args.frame_helper:
-                    try:frames=Frames(active,args.frame_helper,output/('physical-'+str(index)))
+                    try:frames=Frames(active,args.frame_helper,output/('physical-'+attempt_tag))
                     except Exception as error:receipt.setdefault('physicalErrors',[]).append(repr(error));save()
                 action=lambda:active.call('library-performance',operation='open',section='downloads')
                 if frames:
@@ -197,13 +207,20 @@ def main(args):
                 before_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_before=cpu_snapshot(active);closed_start=time.monotonic();time.sleep(30)
                 after_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_seconds=time.monotonic()-closed_start;closed_after=cpu_snapshot(active);closed_idle=100*(after_closed-before_closed)/closed_seconds
                 end_cpu=cpu(active.bundle)
-                row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleAttribution':{'open':cpu_delta(open_before,open_after,open_seconds),'closed':cpu_delta(closed_before,closed_after,closed_seconds)},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':open_cpu['counters'],'idleCounterDelta':{k:v-before_read['counters'].get(k,0) for k,v in open_cpu['counters'].items()},'prebuild':prebuild}
+                row={'index':index,'attempt':attempt,'physicalDirectory':'physical-'+attempt_tag,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleAttribution':{'open':cpu_delta(open_before,open_after,open_seconds),'closed':cpu_delta(closed_before,closed_after,closed_seconds)},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':open_cpu['counters'],'idleCounterDelta':{k:v-before_read['counters'].get(k,0) for k,v in open_cpu['counters'].items()},'prebuild':prebuild}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
-                row['valid']=end_cpu<=200;receipt['samples'].append(row);save()
+                row['valid']=end_cpu<=200
+                if not row['valid']:
+                    receipt.setdefault('rejectedSamples',[]).append(dict(row,baseline=baseline_row));receipt.pop('pendingBaseline',None);save()
+                    print('REJECT candidate '+json.dumps({'index':index,'attempt':attempt,'foreignCPU':row['foreignCPU']}),flush=True)
+                    continue
+                receipt['samples'].append(row)
+                if baseline_row:receipt['baseline']['samples'].append(baseline_row)
+                receipt.pop('pendingBaseline',None)
+                save()
                 # Keep the full compositor signatures and cleanup receipt in
                 # result.json; console output needs only the measured summary.
                 print(json.dumps({key:value for key,value in row.items() if key not in ['physicalOpen','quietAttempts','cleanup','startup','idleAttribution']}),flush=True)
-                if not row['valid']:raise RuntimeError('foreign CPU invalidated sample')
             def verdict(values,limit):return {'values':values,'median':statistics.median(values),'limit':limit,'ok':statistics.median(values)<=limit and max(values)<=1.5*limit}
             receipt['summary']={
                 'firstSubmission':verdict([s['open']['firstSubmittedMilliseconds'] for s in receipt['samples']],8),
