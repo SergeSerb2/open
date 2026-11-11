@@ -7,6 +7,14 @@
 #import <sys/sysctl.h>
 #import <CommonCrypto/CommonDigest.h>
 
+static NSString *sha256(NSData *data) {
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+  NSMutableString *hash = [NSMutableString string];
+  for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [hash appendFormat:@"%02x", digest[i]];
+  return hash;
+}
+
 static double seconds(uint64_t ticks) {
   mach_timebase_info_data_t tb; mach_timebase_info(&tb);
   return (double)ticks * tb.numer / tb.denom / 1e9;
@@ -79,13 +87,20 @@ int main(int argc, const char **argv) { @autoreleasepool {
       CGDirectDisplayID did = number.unsignedIntValue;
       CGDisplayModeRef dm = CGDisplayCopyDisplayMode(did);
       NSData *icc = s.colorSpace.ICCProfileData;
-      unsigned char digest[CC_SHA256_DIGEST_LENGTH]; CC_SHA256(icc.bytes, (CC_LONG)icc.length, digest);
-      NSMutableString *hash = [NSMutableString string];
-      for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [hash appendFormat:@"%02x", digest[i]];
+      if (!dm || icc.length < 128 || icc.length > 4194304 || memcmp((const char *)icc.bytes + 36, "acsp", 4)) {
+        if (dm) CGDisplayModeRelease(dm);
+        fputs("perf: unsupported display mode or ICC profile\n", stderr); return 1;
+      }
+      // Same icc-header-v1 scheme as tools/verification/display-environment.swift.
+      // Exclude only creation date and profile ID; every colour tag remains.
+      NSMutableData *normalized = [icc mutableCopy];
+      [normalized resetBytesInRange:NSMakeRange(24, 12)];
+      [normalized resetBytesInRange:NSMakeRange(84, 16)];
       [screens addObject:@{@"id": number, @"width": @(s.frame.size.width), @"height": @(s.frame.size.height),
         @"scale": @(s.backingScaleFactor), @"pixels_width": @(CGDisplayModeGetPixelWidth(dm)),
         @"pixels_height": @(CGDisplayModeGetPixelHeight(dm)), @"refresh_hz": @(CGDisplayModeGetRefreshRate(dm)),
-        @"builtin": @(CGDisplayIsBuiltin(did)), @"icc_sha256": hash}];
+        @"builtin": @(CGDisplayIsBuiltin(did)), @"icc_sha256": sha256(icc),
+        @"icc_digest_scheme": @"icc-header-v1", @"icc_header_sha256": sha256(normalized)}];
       CGDisplayModeRelease(dm);
     }
     mach_timebase_info_data_t tb; mach_timebase_info(&tb);

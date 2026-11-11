@@ -171,6 +171,8 @@ tools/perf/run.sh open --phase 2 \
   --out .re/perf/phase2-replay/manifest.json
 tools/perf/run.sh open --phase 2 --samples 1 --calibrate \
   --out .re/perf/replay-calibration.json
+tools/perf/run.sh open --phase 2 --samples 5 --preflight \
+  --metrics 'fps.sidebar_scroll.*' --out .re/perf/replay-preflight.json
 tools/perf/run.sh open --phase 2 --samples 7 \
   --out .re/perf/open-phase2.json
 tools/perf/run.sh open --phase 2 --samples 5 \
@@ -188,6 +190,9 @@ changed manifests, changed snapshots and mismatched host/OS/display stop
 before launch. Inputs and outputs stay under `.re/perf`; copied temporary
 states use a short private socket path and are verified again after copying.
 Each session records and checks its current app, engine and helper hashes.
+`--preflight` validates the real private starting trees and live provenance,
+then writes an unscored receipt without capture, input, windows or a queue ticket.
+It reports whether a foreign browser is present, without touching that process.
 Replay scorecards cover selected Phase 2 rows only; they do not carry old
 Phase 1 values into a new overall. `--max-wait-seconds` bounds gate retries;
 waiting inside the shared FIFO can exceed that budget.
@@ -203,12 +208,21 @@ The scorer also refuses calibration receipts.
 Older Phase 1 entry points require the same operator check; do not run them
 for scores during a background build.
 
-An approved functional check after the M5 restart uses
-`--calibrate --allow-display-drift`. This narrow override permits changed
-ICC hashes and transient display IDs only; mode, scale, host and OS must
-still match. It records the frozen and actual display metadata and remains
-unscored. It never edits the Arc reference. The override is refused without
-`--calibrate`; scored replay still requires an exact display match.
+Display identity now uses `icc-header-v1`, as specified in
+[`docs/re/display-icc-identity.md`](../re/display-icc-identity.md): SHA-256 of
+the ICC with bytes 24–35 (creation date) and 84–99 (profile ID) zeroed.
+Every colour tag remains in the digest. The frozen reference records the
+proven old/new raw-hash mapping; measured values and recorded raw hashes
+stay unchanged. Live receipts keep `icc_sha256` as the raw digest and add
+`icc_digest_scheme` and `icc_header_sha256`. Transient CG display IDs do not
+select a reference. Mode, scale, all other display fields, host and OS must
+still match. Historical receipts without the new fields match only their
+exact recorded raw hash; there is no unknown-profile fallback.
+
+The earlier `--calibrate --allow-display-drift` flag remains accepted for
+existing commands and records both metadata sets. It no longer relaxes
+display identity: a changed colour tag, mode or scale is refused even in
+calibration. The flag remains refused without `--calibrate`.
 
 `--app-cadence` adds informative, automation-only observations during the
 sidebar trial: App display-link timestamps and native clip bounds-change
@@ -260,7 +274,8 @@ tools/perf/run.sh open --state S-empty --groups launch,disk --max-load 10 \
   try-lock; resume 4 uses the FIFO. Honor priority and hold files. Record
   load1/5/15 at entry, exit and long-workload checkpoints.
 - Record AC/battery and Low Power Mode configuration, machine, macOS and the
-  complete display metadata, including backing scale and ICC SHA-256.
+  complete display metadata, including backing scale, raw ICC SHA-256 and
+  the `icc-header-v1` digest.
   A display change stops the cohort. User decision 16:19 / LEAD 16:25 makes
   AW2726DM 2560×1440, 1×, 240 Hz the M5 reference for both phases. The older
   1920×1080, 60 Hz samples are appendix-only and never enter this reference.

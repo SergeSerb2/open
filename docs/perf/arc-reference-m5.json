@@ -28,7 +28,9 @@
           "pixels_width": 2560,
           "refresh_hz": 240,
           "scale": 1,
-          "width": 2560
+          "width": 2560,
+          "icc_digest_scheme": "icc-header-v1",
+          "icc_header_sha256": "f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56"
         }
       ]
     },
@@ -201,6 +203,15 @@
       "base_reference_sha256": "71a8dc906835fae44348b78a0456a3bed78369050b19d0bc0b3b261e65447325",
       "replay_manifest": ".re/perf/phase2-replay/manifest.json",
       "replay_manifest_sha256": "a456e6b95845630584df212a067be0b3d3444c929331abb7cba9fbe4c98c3d85"
+    },
+    "display_identity_migration": {
+      "scheme": "icc-header-v1",
+      "authorization": "LEAD 10:58; PR317 merged ccca06d0",
+      "evidence": "docs/re/display-icc-identity.md",
+      "recorded_raw_sha256": "b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43",
+      "post_restart_raw_sha256": "fc516285268a359fa7a22e8213839fc146a58ead5330af434323d824336b0885",
+      "normalized_sha256": "f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56",
+      "qualification": "Only ICC header date/profile ID and transient CG display ID are excluded; all colour tags, mode and scale remain exact. Recorded raw hashes and measurements are unchanged."
     }
   },
   "display": {
@@ -218,7 +229,9 @@
         "pixels_width": 2560,
         "refresh_hz": 240,
         "scale": 1,
-        "width": 2560
+        "width": 2560,
+        "icc_digest_scheme": "icc-header-v1",
+        "icc_header_sha256": "f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56"
       }
     ]
   },

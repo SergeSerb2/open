@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import statistics
+from display import displays_match
 
 WEIGHTS = {'Interaction latency':25, 'Smoothness':15, 'Launch':15, 'Memory':15,
            'Idle CPU/energy':15, 'Page load':5, 'Web benchmarks':5, 'Resume':3, 'Disk':2}
@@ -103,9 +104,11 @@ def compare(reference, current):
         raise ValueError('Calibration or background-build receipts are not eligible for scoring')
     if reference.get('kind')!='frozen-arc-reference':
         raise ValueError('Expected a frozen Arc reference, not a scorecard or an unqualified run')
-    for key in ('hardware','os','display'):
+    for key in ('hardware','os'):
         if reference['provenance'][key]!=current['provenance'][key]:
             raise ValueError(f'Cannot score across different {key}; record a matching Arc reference')
+    if not displays_match(reference['provenance']['display'], current['provenance']['display']):
+        raise ValueError('Cannot score across different display; record a matching Arc reference')
     arc = {(v['state'],v['id']):v for v in reference['metrics']}
     rows=[]; categories={}
     for key, b in sorted(metric_rows(current,'open').items()):
