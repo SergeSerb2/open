@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import OpenModel
 import SQLite3
 
@@ -39,11 +40,12 @@ private struct FolderArchiveDTO: Encodable, Sendable {
 
 /// SQLite archive. The sink entry point runs on the main actor and snapshots
 /// values there; every SQLite statement runs on a private serial queue.
-@MainActor
+@MainActor @Observable
 public final class ArchiveStore: ArchiveSink {
+    public private(set) var contentVersion: UInt64 = 0
     public let fileURL: URL
     private let queue = DispatchQueue(label: "open.archive", qos: .utility)
-    nonisolated(unsafe) private var db: SQLiteDB?
+    @ObservationIgnored nonisolated(unsafe) private var db: SQLiteDB?
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
@@ -86,6 +88,7 @@ public final class ArchiveStore: ArchiveSink {
     public func archiveFolder(_ entry: ArchiveFolderEntry) { archive([], folders: [entry]) }
 
     public func archive(_ entries: [ArchiveEntry], folders: [ArchiveFolderEntry]) {
+        contentVersion &+= 1
         let rows = rows(entries) + folders.map { entry in
             ArchiveRow(id: entry.folder.id.description, url: "about:blank", title: entry.folder.title,
                        spaceID: entry.spaceID?.description, profileID: entry.profileID?.description,
@@ -115,6 +118,7 @@ public final class ArchiveStore: ArchiveSink {
 
     /// Profile deletion waits for FULL-synchronous commit and surfaces all failures.
     public func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
+        contentVersion &+= 1
         let rows = rows(entries)
         guard !rows.isEmpty else { return }
         try queue.sync {
@@ -128,6 +132,7 @@ public final class ArchiveStore: ArchiveSink {
     }
 
     public func discardArchived(ids: [ItemID]) {
+        contentVersion &+= 1
         guard !ids.isEmpty else { return }
         let keys = ids.map { $0.rawValue.uuidString }
         queue.async { [weak self] in
@@ -197,6 +202,7 @@ public final class ArchiveStore: ArchiveSink {
     /// The receipt includes only inserted stable IDs. Existing Archive rows
     /// remain outside this import's Undo, including during a partial failure.
     public func importRecordsWithUndo(_ records: [ArchivedTabRecord]) async throws -> (inserted: Int, duplicates: Int, undo: [ArchivedTabRecord]) {
+        contentVersion &+= 1
         guard !records.isEmpty else { return (0, 0, []) }
         return try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
@@ -319,6 +325,7 @@ public final class ArchiveStore: ArchiveSink {
 
     public func delete(id: ItemID) async throws { try await delete(ids: [id]) }
     public func delete(ids: [ItemID]) async throws {
+        contentVersion &+= 1
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(); return }
@@ -336,6 +343,7 @@ public final class ArchiveStore: ArchiveSink {
         }
     }
     public func deleteAll() async throws {
+        contentVersion &+= 1
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(); return }
@@ -381,6 +389,7 @@ public final class ArchiveStore: ArchiveSink {
 
     /// Returns the stored record for restore and deletes the row.
     public func restore(id: ItemID) async -> ArchivedTabRecord? {
+        contentVersion &+= 1
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: nil); return }
@@ -399,6 +408,7 @@ public final class ArchiveStore: ArchiveSink {
 
     @discardableResult
     public func purge(olderThanDays days: Int) async -> Int {
+        contentVersion &+= 1
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: 0); return }

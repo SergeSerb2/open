@@ -43,6 +43,7 @@ extension LibraryPanelView {
         listView.table.scrollRowToVisible(row); submitNativeFrame()
         return listView.table.rows(in:listView.table.visibleRect).length
     }
+    public var filteredRowCount: Int { hosts[section]?.filtered.count ?? 0 }
     public var selectedRowID: String? { listView.selectedItem?.id }
     public var listFocused: Bool { window?.firstResponder === listView.table }
     public func filterDownloadProfile(_ raw:String) -> Bool {
@@ -83,11 +84,12 @@ extension LibraryPanelView {
     }
     func endContentUpdates() {
         reloadTask?.cancel(); reloadTask = nil; historyTask?.cancel(); historyTask = nil
-        for host in hosts.values { host.cancel() }
+        for host in hosts.values { host.cancel(); host.storeWatch?.cancel(); host.storeWatch = nil }
     }
     func refreshData() {
         let target = section, host = host(for:section)
         guard isPresented, !host.loaded else { renderRows(); return }
+        if target == .archive { host.storeVersion = viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(viewModel.archives[$0]!.contentVersion) }.joined(separator:",") }
         reloadTask?.cancel(); historyTask?.cancel(); reloadGeneration += 1
         let generation = reloadGeneration
         reloadTask = Task { @MainActor [weak self] in
@@ -98,8 +100,16 @@ extension LibraryPanelView {
             host.phaseMilliseconds["provider"] = (ProcessInfo.processInfo.systemUptime-started)*1000
             host.loaded = true; host.dirty = true
             self.renderRows()
-            if target == .history {
-                self.historyTask = Task { @MainActor [weak self] in await self?.viewModel.watchHistory() }
+            if target == .history, host.storeWatch == nil, let store = self.viewModel.histories[self.viewModel.historyProfileID] {
+                host.storeWatch = Task { @MainActor [weak self,weak host] in
+                    let changes = await store.changes(); var initial = true
+                    for await _ in changes {
+                        guard let self,let host,!Task.isCancelled else { return }
+                        if initial { initial = false; continue }
+                        host.loaded = false; host.dirty = true
+                        if self.isPresented,self.section == .history { self.refreshData() }
+                    }
+                }
             }
         }
     }
@@ -110,7 +120,7 @@ extension LibraryPanelView {
             withObservationTracking {
                 switch target {
                 case .downloads: _ = viewModel.downloads.downloads
-                case .archive: _ = viewModel.archiveRows
+                case .archive: _ = viewModel.archiveRows; _ = viewModel.archives.values.map(\.contentVersion)
                 case .history: _ = viewModel.historyRows
                 case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages
                 case .boosts: _ = viewModel.boostsProvider?.boosts(profileID:viewModel.historyProfileID)
@@ -120,9 +130,14 @@ extension LibraryPanelView {
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.sourceObservationArmed.remove(target)
+                    var storeChanged = false
+                    if target == .archive, let host = self.hosts[target] {
+                        let version = self.viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(self.viewModel.archives[$0]!.contentVersion) }.joined(separator:",")
+                        if version != host.storeVersion { host.storeVersion = version; host.loaded = false; storeChanged = true }
+                    }
                     self.hosts[target]?.dirty = true
                     if self.isPresented {
-                        if self.section == target { self.renderRows() }
+                        if self.section == target { if storeChanged { self.refreshData() } else { self.renderRows() } }
                         self.observeContent()
                     }
                 }
@@ -164,12 +179,15 @@ extension LibraryPanelView {
             case .boosts: host.sources = boostSources()
             default: host.sources = []
             }
+            host.sourceVersion += 1
             host.phaseMilliseconds["snapshot"] = (ProcessInfo.processInfo.systemUptime-started)*1000
         }
-        let seeds = rebuild ? host.sources.enumerated().map { LibraryRowSeed(index:$0.offset,id:$0.element.id,date:$0.element.date,text:$0.element.text) } : []
+        let prepare = host.preparedVersion != host.sourceVersion
+        let version = host.sourceVersion
+        let seeds = prepare ? host.sources.enumerated().map { LibraryRowSeed(index:$0.offset,id:$0.element.id,date:$0.element.date,text:$0.element.text) } : []
         let cached = host.prepared
         let worker = Task.detached(priority:.userInitiated) {
-            let prepared = rebuild ? prepareLibraryRows(seeds) : cached
+            let prepared = prepare ? prepareLibraryRows(seeds) : cached
             return prepared
         }
         host.worker = worker
@@ -177,7 +195,7 @@ extension LibraryPanelView {
             let prepareStart = ProcessInfo.processInfo.systemUptime
             let prepared = await worker.value
             guard let self, let host, !Task.isCancelled, host.generation == generation else { return }
-            host.prepared = prepared
+            host.prepared = prepared; host.preparedVersion = version
             host.phaseMilliseconds["prepareBackground"] = (ProcessInfo.processInfo.systemUptime-prepareStart)*1000
             let filterStart = ProcessInfo.processInfo.systemUptime
             let filter = Task.detached(priority:.userInitiated) {

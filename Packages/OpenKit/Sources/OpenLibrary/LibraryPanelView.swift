@@ -150,6 +150,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public func select(_ next: LibraryPanelSection, animated: Bool = true) {
         guard sections.contains(next) else { return }
         let changed = section != next
+        if !changed || next == .media { hosts[next]?.loaded = false }
         if changed, animated, window?.isVisible == true {
             let fade = CATransition(); fade.type = .fade; fade.duration = 0.10
             content.layer?.add(fade,forKey:"librarySection"); listView.layer?.add(fade,forKey:"librarySection")

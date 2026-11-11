@@ -35,12 +35,16 @@ final class LibraryRowSource {
 @MainActor
 final class LibrarySectionHost {
     let list = LibraryListView()
+    var storeVersion = ""
+    var storeWatch: Task<Void,Never>?
     var loaded = false
     var dirty = true
     var identity = ""
     var sources: [LibraryRowSource] = []
     var prepared: [LibraryPreparedRow] = []
     var filtered: [LibraryPreparedRow] = []
+    var sourceVersion = 0
+    var preparedVersion = -1
     var generation = 0
     var preparation: Task<Void, Never>?
     var worker: Task<[LibraryPreparedRow], Never>?

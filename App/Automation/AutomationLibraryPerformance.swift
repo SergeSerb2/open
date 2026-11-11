@@ -53,7 +53,7 @@ extension AutomationController {
     await panel.finishPendingContent(); panel.submitNativeFrame()
     let full=(ProcessInfo.processInfo.systemUptime-started)*1000
     return ["firstSubmittedMilliseconds":first,"contentSubmittedMilliseconds":full,
-      "providerRows":adapter.library?.section == .downloads ? adapter.library?.downloadItems.count ?? 0 : adapter.library?.section == .history ? adapter.library?.historyRows.count ?? 0 : adapter.library?.archiveRows.count ?? 0,
+      "providerRows":panel.filteredRowCount,
       "panelGeneration":adapter.activeLibrarySession?.panelGeneration ?? 0,
       "visibleRows":panel.listReuseState["rows"] ?? 0,"counters":panel.performanceCounters,
       "counterDelta":panel.performanceCounters.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(countersBefore[$1.key] ?? 0) }]
