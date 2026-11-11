@@ -1,5 +1,7 @@
 # Follow-ups
 
+- Public settings link scheme: not registered; decide name and consent model before adding (lead)
+
 - First onboarding frame waits for engine.start, 0.1–2.4 s observed on the same binary; final cold/repeat proof measured 2.552/2.498/2.416 s for engine.start and 3.435/3.295/3.230 s from launch to the first onboarding frame (INFO). Owner: launch budget (Section 8 item 13 / Section 16). Dyld/signature checks are a hypothesis; the attributed work is synchronous engine.start.
 - Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
   `onboarding` measures main-thread display-link intervals, not render-server
@@ -537,3 +539,12 @@ live Open Default; named Profiles still match stable import IDs only.
     - Engine side (CEF patch in the 03xx extension range): build an `extensions::ContextMenuMatcher` for the Alloy `WebContents`'s profile with the same `content::ContextMenuParams` CEF passes to `RunContextMenu`. Fill items via `AppendExtensionItems` for each enabled extension (same filter as `RenderViewContextMenu::AppendAllExtensionItems`). Execute through `MenuManager::ExecuteCommand(profile, web_contents, render_frame_host, params, item_id)`, so `contextMenus.onClicked` gets the frame/page info. Tab info is absent: the page is outside `chrome.tabs`, so pass `tab = undefined`, as Chrome does for non-tab hosts.
     - The App inserts the returned items where Chrome puts them (before Inspect / Manage Extensions) and maps clicks back to the run call.
     - Rows: an extension that registers `contexts: ["page", "link"]` shows its items in Peek, and a click fires `onClicked` with `pageUrl`/`linkUrl`.
+
+## Onboarding art review — 2026-11-10
+
+| Follow-up | Owner / status | Evidence |
+|---|---|---|
+| First-run retained resident memory at hand-off +10 s | Performance lane; unaccepted budget. Three interleaved M1/M2 pairs: median paired overhead +72.83 → +71.25 MiB. All nine weak scene probes are nil. VMMap localizes 62.5 MiB to PartitionAlloc (tag 253); it cannot distinguish live allocations from allocator caches. No engine change or production allocator purge. | Local receipts: `.re/handoff/plans/B-frames/m2/memory/receipt.json`, `allocator/receipt.json`, `vmmap/`, `partitionalloc-tag-evidence.txt` (under the shared project handoff root). |
+| Post-hand-off idle CPU remains above near-zero target | Performance lane; no art regression. Separate 30 s first-run samples: baseline 2.23118%, M2 2.23073%, both with zero animation keys. Returning Welcome idle measured 0.133 → 0.400%; these are distinct scenarios. | Local receipts: `.re/handoff/plans/B-frames/m2/first-run-idle/receipt.json` and `perf/receipt.json`. |
+| Returning Welcome idle with the final native miniature kit | Performance lane; needs attribution. The separate M3 30 s returning sample measured 0.13320 → 0.83238% App CPU, with zero animation keys at both ends; load1 was 3.60 / 2.63. This is not the first-run idle pair above and is not near-zero acceptance. | Local receipt: `.re/handoff/plans/B-frames/m3/perf-final/receipt.json`; baseline and M3 each use a copy of the same frozen synthetic profile. |
+| One setup-close process-exit failure | Unresolved one-off; track recurrence. The window closed but the App did not exit and required forced cleanup. A focused retry exited within 6 s; the complete final suite passed both setup-close gates without forced cleanup. No predicate or product fix was used. | Local receipts: `.re/handoff/plans/B-frames/m2/onboarding-m5-attempt1.json` and `.log`; successful `close-focused.json` and `onboarding.json`. |

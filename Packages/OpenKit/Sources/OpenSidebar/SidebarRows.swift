@@ -144,7 +144,7 @@ final class SidebarRowView: NSTableRowView {
             self?.invalidateFill()
         }
         CATransaction.begin()
-        CATransaction.setDisableActions(!animated)
+        CATransaction.setDisableActions(!animated || page?.context.animatesChanges == false)
         CATransaction.setAnimationDuration(isCurrent ? Motion.selectionFade : Motion.hoverFade)
         if allowsHighlight && isCurrent && isPeekSource {
             fill.backgroundColor = SidebarRole.peekSourceFill.cgColor(appearance)
@@ -314,7 +314,8 @@ class SidebarCellView: NSView {
 
     func titleColor() -> NSColor {
         guard let page else { return .labelColor }
-        return page.style.titleColor(page.contentAppearanceForSpace).nsColor
+        let color = page.style.titleColor(page.contentAppearanceForSpace).nsColor
+        return page.context.titleColorTransform?(color) ?? color
     }
 
     /// Inline title editor (double-click or "Rename…").
@@ -411,6 +412,7 @@ final class TabCellView: SidebarCellView {
     private func bind() {
         favicon.tab = tab
         favicon.context = context
+        if let font = context?.titleFontOverride { title.font = font }
         title.text = { [weak self] in self?.tab?.displayTitle ?? "" }
         title.color = { [weak self] in self?.titleColor() ?? .labelColor }
         rowStateChanged()

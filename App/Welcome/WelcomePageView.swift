@@ -1,6 +1,8 @@
 import AppKit
 import QuartzCore
 import OpenDesign
+import OpenOnboarding
+import OpenModel
 
 enum WelcomeColors {
   /// Match a white/black overlay in the content's encoded sRGB space. AppKit's
@@ -16,23 +18,28 @@ enum WelcomeColors {
 
 @MainActor
 final class WelcomePageView: NSScrollView {
-  static let duration = 8.5
-  static let cardTextHeight: CGFloat = 80
+  static let cardDurations = OnboardingMiniature.demoDurations
+  static let cardTextHeight: CGFloat = 88
   static let copy: [(String, String)] = [
     ("Open your first tab", "Click New Tab in the sidebar or press ⌘T, then type a site or a search."),
     ("Pin what matters", "Drag a tab above the line to pin it. Today's tabs tidy themselves away."),
     ("A Space for every part of life", "Spaces give you separate sidebars for work, projects, and home. Swipe with two fingers to switch."),
     ("Two tabs side by side", "Drag a tab from the sidebar onto the page to make a Split View.")
   ]
+  var themeProvider: (() -> SpaceTheme?)?
   var styleProvider: (() -> SpaceThemeStyle?)?
   var openShortcuts: (() -> Void)?
   var openSettings: (() -> Void)?
   let canvas = WelcomeCanvas()
+  private let room = OnboardingRoomView(frame: .zero)
   let heading = NSTextField(labelWithString: "You're all set.")
   let subheading = NSTextField(labelWithString: "Here are the basics.")
   private(set) var cards: [WelcomeCardView] = []
-  private let shortcuts = NSButton(title: "Learn Essential Shortcuts", target: nil, action: nil)
-  private let settings = NSButton(title: "Settings", target: nil, action: nil)
+  private let shortcuts = WelcomeFooterButton(title: "Essential Shortcuts", target: nil, action: nil)
+  private let settings = WelcomeFooterButton(title: "Settings", target: nil, action: nil)
+  func footerLabelFrame(_ button: NSButton) -> NSRect {
+    (button as? WelcomeFooterButton)?.labelRect ?? button.bounds
+  }
   var footerFrame: NSRect { shortcuts.frame.union(settings.frame) }
   #if OPEN_AUTOMATION
   var footerLinks: [NSButton] { [shortcuts, settings] }
@@ -47,11 +54,16 @@ final class WelcomePageView: NSScrollView {
   private var colorInputs: ColorInputs?
   private var completion: Timer?
   var hasCompletion: Bool { completion != nil }
-  private var nextPlaylistCard: Int? = 0
+  private var appearedAt: CFTimeInterval?
+  private var playlistEndedAt: CFTimeInterval?
+  var appearanceElapsed: Double { appearedAt.map { CACurrentMediaTime() - $0 } ?? 0 }
+  var playlistElapsed: Double { appearedAt.map { (playlistEndedAt ?? CACurrentMediaTime()) - $0 } ?? 0 }
   private var started = false
   private var closed = false
   private(set) var visible = false
-  private(set) var activeCard: Int? // zero based inside the view; automation is 1…4
+  private(set) var activeCard: Int? { // zero based inside the view; automation is 1…4
+    didSet { for card in cards { card.isActive = card.index == activeCard } }
+  }
   private(set) var playlistPlaying = false
   private(set) var animating = false
   private(set) var playedCards: [Int] = []
@@ -72,8 +84,9 @@ final class WelcomePageView: NSScrollView {
     automaticallyAdjustsContentInsets = false; contentInsets = NSEdgeInsets()
     borderType = .noBorder; documentView = canvas
     setAccessibilityLabel("Welcome to Open. Here are the basics.")
-    heading.font = .systemFont(ofSize: 34, weight: .semibold)
-    subheading.font = .systemFont(ofSize: 34, weight: .semibold)
+    room.isWelcome = true; canvas.addSubview(room)
+    heading.font = .systemFont(ofSize: 40, weight: .semibold)
+    subheading.font = .systemFont(ofSize: 40, weight: .semibold)
     canvas.addSubview(heading); canvas.addSubview(subheading)
     for (i, copy) in Self.copy.enumerated() {
       let card = WelcomeCardView(index: i, title: copy.0, detail: copy.1)
@@ -81,7 +94,7 @@ final class WelcomePageView: NSScrollView {
       cards.append(card); canvas.addSubview(card)
     }
     for (button, symbol) in [(shortcuts, "keyboard"), (settings, "gearshape")] {
-      button.isBordered = false; button.font = .systemFont(ofSize: 14)
+      button.isBordered = false; button.font = .systemFont(ofSize: 13, weight: .medium)
       button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
       button.imagePosition = .imageLeading; button.contentTintColor = .linkColor
       button.setAccessibilityLabel(button.title); canvas.addSubview(button)
@@ -131,23 +144,24 @@ final class WelcomePageView: NSScrollView {
   override func layout() {
     super.layout()
     let width = max(200, contentSize.width), height = contentSize.height
-    let column = min(960, max(180, width - 64)), x = (width - column) / 2
-    let top: CGFloat = height <= 820 ? 56 : 80
-    // At 640 pt the 76 pt header and two 80 pt text blocks leave exactly
-    // 120 pt per illustration. Add breathing room as the viewport grows.
-    let headerBlock: CGFloat = 76 + min(24, max(0, height - 640))
-    let cardWidth = (column - 20) / 2
-    let available = (height - top - headerBlock - 2 * Self.cardTextHeight - 20 - 56 - 32) / 2
-    let imageHeight = min(max(available, 120), column / 2 * 10 / 16)
-    let cardHeight = imageHeight + Self.cardTextHeight, gridTop = top + headerBlock
-    let footerTop = gridTop + 2 * cardHeight + 20 + 24
-    canvas.frame = CGRect(x: 0, y: 0, width: width, height: max(height, footerTop + 32 + 32))
-    heading.frame = CGRect(x: x, y: top, width: column, height: 38)
-    subheading.frame = CGRect(x: x, y: top + 38, width: column, height: 38)
-    for i in 0..<4 { cards[i].frame = CGRect(x: x + CGFloat(i % 2) * (cardWidth + 20),
-      y: gridTop + CGFloat(i / 2) * (cardHeight + 20), width: cardWidth, height: cardHeight) }
-    shortcuts.frame = CGRect(x: x, y: footerTop, width: 240, height: 32)
-    settings.frame = CGRect(x: x + 264, y: shortcuts.frame.minY, width: 100, height: 32)
+    let column = min(1100, max(180, width - 96)), x = (width-column)/2
+    let top: CGFloat = 48, gridTop: CGFloat = 170, gap: CGFloat = 16
+    let cardWidth = (column-gap)/2
+    let imageHeight = max(96, min(230, (height-gridTop-84-gap)/2-Self.cardTextHeight))
+    let cardHeight = imageHeight+Self.cardTextHeight
+    let footerTop = gridTop+cardHeight*2+gap+22
+    canvas.frame = CGRect(x: 0, y: 0, width: width, height: max(height, footerTop+62))
+    room.frame = canvas.bounds
+    heading.frame = CGRect(x: x, y: top, width: column-120, height: 44)
+    subheading.frame = CGRect(x: x, y: top+43, width: column-120, height: 44)
+    for label in [heading,subheading] {
+      label.attributedStringValue = NSAttributedString(string: label.stringValue, attributes: [.font: label.font!, .kern: -1.2,
+        .foregroundColor: label.textColor ?? .white])
+    }
+    for i in 0..<4 { cards[i].frame = CGRect(x: x+CGFloat(i%2)*(cardWidth+gap),
+      y: gridTop+CGFloat(i/2)*(cardHeight+gap), width: cardWidth, height: cardHeight) }
+    shortcuts.frame = CGRect(x: x, y: footerTop, width: 184, height: 32)
+    settings.frame = CGRect(x: x+194, y: footerTop, width: 112, height: 32)
     updateColors(); syncVisibility()
   }
   func updateColors() {
@@ -157,29 +171,30 @@ final class WelcomePageView: NSScrollView {
     let style = styleProvider?()
     let inputs = ColorInputs(style: style, system: system, key: window?.isKeyWindow == true)
     guard inputs != colorInputs else { return }; colorInputs = inputs
-    let appearance = style?.resolvedAppearance(system: system) ?? system
-    let palette = style?.palette(for: appearance), dark = appearance == .dark
-    let fallback = dark ? NSColor(srgbRed: 0.11, green: 0.12, blue: 0.14, alpha: 1) : .white
-    backgroundColor = WelcomeTextColors.opaque(palette?.background.nsColor ?? fallback, over: fallback)
-    let primary = palette?.foregroundPrimary.nsColor ?? (dark ? .white : .black)
-    let secondary = palette?.foregroundSecondary.nsColor ?? primary.withAlphaComponent(0.6)
-    let header = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: backgroundColor)
+    // Welcome is a view into the dark room in either system appearance.
+    let dark = true
+    backgroundColor = OnboardingTokens.Room.far
+    let primary = OnboardingTokens.Room.white
+    let secondary = primary.withAlphaComponent(0.60)
+    let header = WelcomeTextColors.pair(primary: primary, secondary: primary.withAlphaComponent(0.52), surface: OnboardingTokens.Room.lit)
     heading.textColor = header.primary; subheading.textColor = header.secondary
-    let link = WelcomeTextColors.text(.linkColor, on: backgroundColor)
-    shortcuts.contentTintColor = link; settings.contentTintColor = link
-    let fill = WelcomeColors.surface(backgroundColor, dark: dark)
-    let cardText = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: fill)
+    shortcuts.contentTintColor = primary.withAlphaComponent(0.9); settings.contentTintColor = primary.withAlphaComponent(0.9)
+    let fill = WelcomeTextColors.opaque(primary.withAlphaComponent(0.055), over: backgroundColor)
+    let cardText = WelcomeTextColors.pair(primary: primary, secondary: secondary, surface: OnboardingTokens.Room.lit)
     let tint: NSColor
     if let style {
       let field = ThemeField.Evaluator(style: style, windowSize: CGSize(width: 1000, height: 1000), isActive: true)
       let (red, green, blue) = field.color(u: 0.12, v: 0.5)
       tint = NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
-    } else { tint = NSColor(srgbRed: 0.24, green: 0.29, blue: 0.48, alpha: 1) }
+    } else { tint = OnboardingTokens.Room.space }
+    room.tint = tint
+    for card in cards { card.illustration.applyTheme(themeProvider?(),dark: style?.resolvedAppearance(system: system) == .dark) }
     for card in cards {
       card.apply(fill: fill, primary: cardText.primary, secondary: cardText.secondary,
         background: backgroundColor, sidebarTint: tint, dark: dark)
     }
   }
+
   func syncVisibility() {
     let shown = !closed && window?.isVisible == true && window?.isMiniaturized == false
       && window?.occlusionState.contains(.visible) == true && !isHiddenOrHasHiddenAncestor && !NSApp.isHidden
@@ -187,29 +202,29 @@ final class WelcomePageView: NSScrollView {
   }
   private func setVisible(_ shown: Bool) {
     guard shown != visible else { return }; visible = shown
-    if !shown { cards.forEach { $0.resetHover() }; halt(); return }
-    if reduceMotion { nextPlaylistCard = nil; cards.forEach { $0.illustration.finish() }; return }
-    if !started { started = true }
-    if let index = nextPlaylistCard { play(index, playlist: true) }
+    if !shown { cards.forEach { $0.resetHover() }; stop(); return }
+    guard !started else { return }
+    started = true; appearedAt = CACurrentMediaTime()
+    if reduceMotion { playlistEndedAt = appearedAt; cards.forEach { $0.illustration.finish() }; return }
+    play(0, playlist: true)
   }
   func replay(card index: Int) {
     guard (0..<4).contains(index), visible, !closed else { return }
-    nextPlaylistCard = nil
+    if playlistPlaying, playlistEndedAt == nil { playlistEndedAt = CACurrentMediaTime() }
     if reduceMotion { halt(); activeCard = index; cards[index].illustration.finish(); return }
     play(index, playlist: false)
   }
   private func play(_ index: Int, playlist: Bool) {
     halt(); activeCard = index; playlistPlaying = playlist; animating = true
     playedCards.append(index + 1); if playedCards.count > 32 { playedCards.removeFirst() }
-    if playlist { nextPlaylistCard = index }
-    cards[index].illustration.play(duration: Self.duration)
-    completion = Timer.scheduledTimer(withTimeInterval: Self.duration, repeats: false) { [weak self] _ in
+    cards[index].illustration.play(duration: Self.cardDurations[index])
+    completion = Timer.scheduledTimer(withTimeInterval: Self.cardDurations[index], repeats: false) { [weak self] _ in
       MainActor.assumeIsolated {
         guard let self, self.visible, self.animating, self.activeCard == index else { return }
         self.completion = nil; self.completionCount += 1
         self.cards[index].illustration.finish(); self.animating = false; self.playlistPlaying = false
-        if playlist, index < 3 { self.nextPlaylistCard = index + 1; self.play(index + 1, playlist: true) }
-        else { self.nextPlaylistCard = nil }
+        if playlist, index < 3 { self.play(index + 1, playlist: true) }
+        else if playlist { self.playlistEndedAt = CACurrentMediaTime() }
       }
     }
   }
@@ -218,7 +233,10 @@ final class WelcomePageView: NSScrollView {
     for card in cards { card.illustration.freeze() }
     animating = false; playlistPlaying = false
   }
-  func stop() { nextPlaylistCard = nil; halt() }
+  func stop() {
+    if playlistPlaying, playlistEndedAt == nil { playlistEndedAt = CACurrentMediaTime() }
+    halt()
+  }
   func close() { closed = true; visible = false; stop() }
   func activateFooter(_ link: String) {
     if link == "shortcuts" { shortcuts.performClick(nil) }
@@ -249,13 +267,19 @@ final class WelcomeCardView: NSControl {
     guard let tracking else { return 0 }
     return trackingAreas.filter { area in area === tracking }.count
   }
+  var isActive = false { didSet { updateBorder() } }
+  private var keyboardFocused = false
+  private func updateBorder() {
+    layer?.borderWidth = 1
+    layer?.borderColor = (isHovered || keyboardFocused ? OnboardingTokens.Room.sunMiddle.withAlphaComponent(0.6):NSColor.white.withAlphaComponent(0.09)).cgColor
+  }
   private(set) var isHovered = false
   init(index: Int, title: String, detail: String) {
     self.index = index; illustration = WelcomeIllustrationView(kind: index)
     heading = NSTextField(labelWithString: title); self.detail = NSTextField(wrappingLabelWithString: detail)
     super.init(frame: .zero); wantsLayer = true; layer?.cornerRadius = 16; layer?.masksToBounds = true
-    heading.font = .systemFont(ofSize: 17, weight: .semibold); self.detail.font = .systemFont(ofSize: 14)
-    addSubview(illustration); addSubview(heading); addSubview(self.detail)
+    heading.font = .systemFont(ofSize: 15, weight: .semibold); self.detail.font = .systemFont(ofSize: 12.5)
+    addSubview(illustration); addSubview(heading); addSubview(self.detail); updateBorder()
     setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel("\(title). \(detail)")
     setAccessibilityChildren([])
     setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Replay", target: self, selector: #selector(accessibilityPerformPress))])
@@ -280,28 +304,60 @@ final class WelcomeCardView: NSControl {
     // Restore the single hover area only if something removed it.
     if let tracking, !trackingAreas.contains(where: { $0 === tracking }) { addTrackingArea(tracking) }
   }
-  func resetHover() { isHovered = false }
+  func resetHover() { isHovered = false; updateBorder() }
   override func viewDidHide() { super.viewDidHide(); resetHover() }
   override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { resetHover() } }
   override func mouseEntered(with event: NSEvent) {
     guard !isHovered else { return }
-    isHovered = true; replay?()
+    isHovered = true; updateBorder(); replay?()
   }
   override func mouseExited(with event: NSEvent) { resetHover() }
-  override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); replay?() }
+  override func becomeFirstResponder() -> Bool { keyboardFocused = true; updateBorder(); return true }
+  override func resignFirstResponder() -> Bool { keyboardFocused = false; updateBorder(); return true }
+  override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); updateBorder(); replay?() }
   override func keyDown(with event: NSEvent) {
     if event.keyCode == 36 || event.keyCode == 49 { replay?() } else { super.keyDown(with: event) }
   }
   override func accessibilityPerformPress() -> Bool { replay?(); return true }
   override func layout() {
     super.layout(); let imageHeight = max(0, bounds.height - WelcomePageView.cardTextHeight)
-    illustration.frame = CGRect(x: 0, y: 0, width: bounds.width, height: imageHeight)
-    heading.frame = CGRect(x: 16, y: imageHeight + 6, width: max(0, bounds.width - 32), height: 21)
-    detail.frame = CGRect(x: 16, y: imageHeight + 29, width: max(0, bounds.width - 32), height: 51)
+    illustration.frame = CGRect(x: 12,y: 12,width: max(0,bounds.width-24),height: max(0,imageHeight-12))
+    illustration.layer?.cornerRadius = 8
+    heading.frame = CGRect(x: 18, y: imageHeight + 12, width: max(0, bounds.width - 36), height: 19)
+    detail.frame = CGRect(x: 18, y: imageHeight + 34, width: max(0, bounds.width - 36), height: 48)
   }
   func apply(fill: NSColor, primary: NSColor, secondary: NSColor,
     background: NSColor, sidebarTint: NSColor, dark: Bool) {
     layer?.backgroundColor = fill.cgColor; heading.textColor = primary; detail.textColor = secondary
     illustration.apply(background: background, sidebarTint: sidebarTint, dark: dark)
+  }
+}
+
+/// Native controls with explicit room surfaces, including an inactive-window ink.
+@MainActor private final class WelcomeFooterButton: NSButton {
+  private var hovered = false
+  override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+  required init?(coder: NSCoder) { nil }
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea)
+    addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect], owner: self))
+  }
+  override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
+  override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
+  var labelRect: CGRect {
+    let font = font ?? .systemFont(ofSize: 13,weight: .medium)
+    let size = (title as NSString).size(withAttributes: [.font:font])
+    return CGRect(x: 37,y: (bounds.height-size.height)/2,width: min(size.width,bounds.width-51),height: size.height)
+  }
+  override func draw(_ dirtyRect: NSRect) {
+    OnboardingTokens.Room.white.withAlphaComponent(hovered ? 0.14:0.08).setFill()
+    let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 10,yRadius: 10); path.fill()
+    OnboardingTokens.Room.white.withAlphaComponent(0.1).setStroke(); path.lineWidth = 1; path.stroke()
+    let ink = OnboardingTokens.Room.white.withAlphaComponent(0.9)
+    let symbol = image?.withSymbolConfiguration(.init(pointSize: 14,weight: .medium))?.withSymbolConfiguration(.init(paletteColors: [ink]))
+    symbol?.draw(in: CGRect(x: 14,y: (bounds.height-15)/2,width: 15,height: 15),from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: isFlipped,hints: nil)
+    (title as NSString).draw(in: labelRect,withAttributes: [.font:font ?? .systemFont(ofSize: 13,weight: .medium),.foregroundColor:ink])
+    if window?.firstResponder === self { ink.setStroke(); path.lineWidth = 2; path.stroke() }
+
   }
 }

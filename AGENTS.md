@@ -2,7 +2,7 @@
 
 Open is a macOS browser that replicates Arc (The Browser Company) as close to 1:1 as possible in design, sidebar features, and hotkeys. Arc is being sunset. Open has no Arc account, login, or sync. The internal architecture is our own, and the top engineering goal is a lightweight, fast, snappy app.
 
-Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engine, `ArcCore.framework`, is a Chromium 156.0.8078.48 fork.
+Installed Arc: 1.172.2 (build 90755) at `/Applications/Arc.app`. The unmodified Arc 1.170.0 (build 89123) static reference is at `~/Library/Caches/OpenRE/arc-reference/`; its engine, `ArcCore.framework`, is a Chromium 156.0.8078.48 fork.
 
 ## Locked decisions
 
@@ -13,6 +13,7 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 - Platform: macOS 26+ only. Native Swift 6 + AppKit. SwiftUI only where it is cheap and does not hurt performance. Keep Arc's look, not Liquid Glass.
 - Scope (user decision, 2026-11-10): every Arc feature. This includes the sidebar, Spaces, pinned and today tabs, favorites, folders, auto-archive, the Library overlay (Downloads, Archive, History, Media, Spaces, Boosts), command bar, all Arc hotkeys, Split View, Peek, Little Open, Profiles, Air Traffic Control, Boosts, Zap, Site Control Center, ad blocking, Import from Arc, extensions, Easels, Notes, Live Folders, Calendar preview and Join Meeting, live-data hover previews, Library folder sources, import from Safari, Chrome, and Firefox, and Widevine (if licensing allows). Out of scope for good: Arc Max AI, Arc accounts, sync.
 - Safe Browsing: off (user decision, 2026-11-10).
+- Settings uses Open’s original navigation, cards, and controls (user decision, 2026-11-10). It is an explicit exception to the Arc-parity design rule; existing settings, actions, stores, and guards remain.
 - Onboarding and the Welcome page keep Open's own identity (the doorway-and-sun mark). They must reach Arc's level of visual quality, not copy Arc's look.
 
 ## Hard rules
@@ -50,7 +51,7 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 
 The M1 builds the App against a copy of the M5's recorded engine distribution (the lead copies it after each engine distribution change). Each machine has its own heavy slots and its own on-screen lock. Both machines push to the same GitHub repo; never work on one branch from both machines at once.
 
-Display references (user decision, 2026-11-10): the built-in panel of each Mac is the reference display. Visual references use the actual window screen's backing scale and ICC profile; unknown keys fail without fallback. The external AW2726DM references are retired: record new references on the M5 built-in panel, and do not report a "display baseline" FAIL as acceptable after that. The full gate that counts for merge runs on the M5; see `docs/verification.md`.
+Display references (user decision, 2026-11-10 16:19): the M5 uses the external AW2726DM; the M1 uses its built-in 2x panel. The AW2726DM references are not retired: keep each reference whose display key still matches exactly, and record replacements for other keys. The M5's current mode is 2560×1440, 1x, 240 Hz. Check and record the mode before each M5 on-screen run. Visual references use the actual window screen's backing scale and ICC profile, with the mode recorded in the display key; unknown keys fail without fallback. The full gate that counts for merge runs on the M5. Display and strict-performance deferrals expired when the lead declared M5 panel ready; see `docs/verification.md`.
 
 ## Reverse-engineering tools
 

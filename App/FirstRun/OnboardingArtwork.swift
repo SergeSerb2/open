@@ -36,6 +36,8 @@ import ImageIO
     NSBezierPath(roundedRect: bounds, xRadius: 36, yRadius: 36).addClip()
     let gradient = NSGradient(colors: palette)
     gradient?.draw(in: bounds, angle: 35)
+    let top = NSBezierPath(); top.move(to: CGPoint(x: 36,y: 749)); top.line(to: CGPoint(x: 1164,y: 749))
+    NSColor.white.withAlphaComponent(0.28).setStroke(); top.lineWidth = 1200/rect.width; top.stroke()
     // Six deterministic patterns. No external art or random data is used.
     for index in 0..<9 {
       let seed = (index*173 + pattern*97 + 31)%997
@@ -54,9 +56,9 @@ import ImageIO
     let darkText = Self.luminance(of: gradient) > 0.55
     let nameColor = darkText ? NSColor.black.withAlphaComponent(0.82):NSColor.white
     let dateColor = darkText ? NSColor.black.withAlphaComponent(0.55):NSColor.white.withAlphaComponent(0.72)
-    ((name.isEmpty ? "Open":name) as NSString).draw(in: CGRect(x: 72, y: 130, width: 1040, height: 90), withAttributes: [.font: NSFont.systemFont(ofSize: 64, weight: .semibold), .foregroundColor: nameColor])
+    ((name.isEmpty ? "Open":name) as NSString).draw(in: CGRect(x: 72, y: 130, width: 1040, height: 90), withAttributes: [.font: NSFont.systemFont(ofSize: 22*1200/min(620,rect.width), weight: .semibold), .foregroundColor: nameColor])
     let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US"); formatter.dateFormat = "MMMM d, yyyy"
-    (("Since " + formatter.string(from: date)) as NSString).draw(at: CGPoint(x: 76, y: 100), withAttributes: [.font: NSFont.systemFont(ofSize: 17), .foregroundColor: dateColor])
+    (("Since " + formatter.string(from: date)) as NSString).draw(at: CGPoint(x: 76, y: 100), withAttributes: [.font: NSFont.systemFont(ofSize: 11.5*1200/min(620,rect.width)), .foregroundColor: dateColor])
   }
   func png() throws -> Data {
     // Largest explicitly requested bitmap: 1200 * 750 * 4 = 3,600,000 bytes.
@@ -67,228 +69,165 @@ import ImageIO
   }
 }
 
-/// Original miniature scenes. Only the two-loop link uses a CA animation.
+/// Every setup scene shares the room and the real in-memory browser miniature.
 @MainActor final class OnboardingPreview: NSView {
-  private var step = "name", name = ""
-  private var favorites: [String] = []
-  private let favoriteSidebar = OnboardingFavoriteSidebar(frame: .zero)
-  private var count = 0, report = false, blocker = true, reduced = false
-  private var scene = CALayer()
-  private let theme = ThemeBackgroundView()
-  private let miniBrowser = OnboardingMiniBrowser()
+  private var step = "name"
+  private let room = OnboardingRoomView(frame: .zero)
+  private let favoriteMiniature = OnboardingMiniature()
+  var lifetimeMiniature: OnboardingMiniature { favoriteMiniature }
+  private let progress = OnboardingProgressView(frame: .zero)
+  private let scene = CALayer()
   private let readyCard = OnboardingReadyCard()
-  private let link = CALayer()
-  private var linkStarted = false
-  private var ads: [CALayer] = []
+  private let mail = OnboardingMailChip(frame: .zero)
+  private let flyingLink = OnboardingMailChip(frame: .zero)
+  private var linkTask: Task<Void,Never>?
   override init(frame: NSRect) {
-    super.init(frame: frame); wantsLayer = true; layer?.addSublayer(scene)
-    theme.isHidden = true; theme.wantsLayer = true; theme.layer?.cornerRadius = 14; theme.layer?.masksToBounds = true
-    miniBrowser.frame = CGRect(x: 0, y: 0, width: 420, height: 280)
-    miniBrowser.autoresizingMask = [.width, .height]; theme.addSubview(miniBrowser)
-    addSubview(theme)
-    addSubview(favoriteSidebar); favoriteSidebar.isHidden = true
+    super.init(frame: frame); wantsLayer = true
+    addSubview(room); layer?.addSublayer(scene)
+    favoriteMiniature.perspective = true
+    addSubview(favoriteMiniature); addSubview(progress)
     addSubview(readyCard); readyCard.isHidden = true; readyCard.layer?.zPosition = 1
-    link.backgroundColor = NSColor.systemBlue.cgColor; link.cornerRadius = 5
-    for _ in 0..<3 { let ad = CALayer(); ad.backgroundColor = NSColor(white: 0.7, alpha: 1).cgColor; ad.cornerRadius = 5; ads.append(ad) }
-    setAccessibilityElement(true); setAccessibilityRole(.image)
+    addSubview(mail); addSubview(flyingLink); mail.isHidden = true; flyingLink.isHidden = true
+    setAccessibilityElement(true); setAccessibilityRole(.image); setAccessibilityChildren([])
   }
   required init?(coder: NSCoder) { nil }
+  isolated deinit { linkTask?.cancel() }
   override func layout() {
-    super.layout(); scene.frame = bounds
-    theme.frame = CGRect(x: bounds.midX-210, y: bounds.midY-140, width: 420, height: 280)
+    super.layout(); scene.frame = bounds; room.frame = bounds
     readyCard.frame = cardRect
-    if step == "defaultBrowser" { layoutLink() }
-    favoriteSidebar.frame = CGRect(x: bounds.midX-100, y: bounds.midY-220, width: 200, height: 440)
+    favoriteMiniature.frame = CGRect(x: 44,y: bounds.height*0.12,width: 480,height: 544)
+    progress.frame = CGRect(x: 40,y: 36,width: 104,height: 6)
+    progress.selected = ["name","import","favorites","theme","blocker","defaultBrowser","ready"].firstIndex(of: step) ?? 0
+    mail.frame = CGRect(x: 58,y: bounds.height-126,width: 184,height: 48)
+    flyingLink.frame = CGRect(x: 112,y: bounds.height-184,width: 160,height: 40)
   }
-  func update(step: String, name: String, favorites: [(String, OnboardingFavicons.Tile)], count: Int, report: Bool, blocker: Bool, card: OpenCardDrawing, reduceMotion: Bool) {
-    let changed = self.step != step
-    self.step = step; self.name = name; self.favorites = favorites.map { $0.0 }; self.count = min(8, max(0, count)); self.report = report; self.blocker = blocker; reduced = reduceMotion
-    favoriteSidebar.isHidden = step != "favorites"
-    if step == "favorites" { favoriteSidebar.update(favorites, reduceMotion: reduceMotion) }
+  func update(step: String,name: String,favorites: [(String,OnboardingFavicons.Tile)],count: Int,report: Bool,blocker: Bool,card: OpenCardDrawing,reduceMotion: Bool,source: BrowserModel) {
+    let changed = self.step != step; self.step = step
+    room.isHidden = false; favoriteMiniature.isHidden = step == "ready"
+    favoriteMiniature.reduceMotion = reduceMotion
+    if step != "import" || !report { favoriteMiniature.setName(name) }
+    let dark = effectiveAppearance.bestMatch(from: [.darkAqua,.aqua]) == .darkAqua
+    favoriteMiniature.apply(theme: card.theme,dark: dark)
+    favoriteMiniature.setFavorites(favorites,reduceMotion: reduceMotion)
+    let style = SpaceThemeStyle(theme: card.theme,system: .dark)
+    room.tint = card.theme.style == nil && card.theme.importedArcThemeJSON == nil ? nil:style.accent?.nsColor
+    readyCard.isHidden = step != "ready"; readyCard.card = card; readyCard.reduced = reduceMotion
+    mail.isHidden = step != "defaultBrowser"
+    if step != "defaultBrowser" || changed { flyingLink.isHidden = true }
+    if changed { linkTask?.cancel(); linkTask = nil; flyingLink.layer?.removeAllAnimations() }
+    if step != "blocker" { favoriteMiniature.clearBlocker() }
+    switch step {
+    case "name": favoriteMiniature.setEditorial(title: name.isEmpty ? "A place to call your own":"Welcome, \(name)",subtitle: "Make a little room for your world.")
+    case "import": favoriteMiniature.setImportedSource(source,completed: report,count: count)
+    case "favorites": favoriteMiniature.setEditorial(title: "Welcome to Open",subtitle: "Make yourself at home.")
+    case "theme": favoriteMiniature.setEditorial(title: "A Space that feels like you",subtitle: "Choose a colour. Set the mood.")
+    case "blocker":
+      favoriteMiniature.setEditorial(title: "A quieter page",subtitle: "More room for what you came to read.")
+      favoriteMiniature.setBlocker(blocker,animated: !changed)
+    case "defaultBrowser":
+      favoriteMiniature.setEditorial(title: "A home for every link",subtitle: "From a message to your next good read.")
+      if changed {
+        needsLayout = true; layoutSubtreeIfNeeded(); flyingLink.isHidden = reduceMotion
+        if reduceMotion { favoriteMiniature.receiveLink() }
+        else {
+          let start = flyingLink.layer?.position ?? .zero
+          let end = CGPoint(x: 165,y: 440)
+          flyingLink.layer?.position = end
+          let travel = CAKeyframeAnimation(keyPath: "position"); travel.values = [NSValue(point: start),NSValue(point: start),NSValue(point: end),NSValue(point: end)]
+          travel.keyTimes = [0,0.2,0.7,1]; travel.duration = 3; travel.repeatCount = 2
+          travel.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut); flyingLink.layer?.add(travel,forKey: "link-travel")
+          linkTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.1)); guard !Task.isCancelled,let self else { return }
+            favoriteMiniature.receiveLink()
+            try? await Task.sleep(for: .seconds(3.9)); guard !Task.isCancelled else { return }; flyingLink.isHidden = true
+          }
+        }
+      }
+    default: break
+    }
+    setAccessibilityLabel(step == "ready" ? "Open card for \(name.isEmpty ? "Open":name)":"\(step) preview")
     needsLayout = true
-    theme.isHidden = step != "theme"
-    readyCard.isHidden = step != "ready"; readyCard.card = card
-    if step == "theme" {
-      let style = SpaceThemeStyle(theme: card.theme, system: effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark:.light)
-      theme.style = style; theme.material = .window
-      miniBrowser.tint = style.accent?.nsColor ?? style.tintedLightAccent?.nsColor ?? .systemBlue
-    }
-    link.isHidden = step != "defaultBrowser"; if changed { linkStarted = false; link.removeAllAnimations(); link.removeFromSuperlayer(); ads.forEach { $0.removeFromSuperlayer() } }
-    if step == "defaultBrowser" && changed { scene.addSublayer(link); layoutLink() }
-    if step == "blocker" {
-      CATransaction.begin(); CATransaction.setAnimationDuration(reduceMotion || changed ? 0:0.4)
-      for (index, ad) in ads.enumerated() { if ad.superlayer == nil { scene.addSublayer(ad) }; ad.frame = CGRect(x: bounds.midX-170+CGFloat(index)*117, y: bounds.midY-70, width: 100, height: blocker ? 0:68); ad.opacity = blocker ? 0:1 }
-      CATransaction.commit()
-    }
-    setAccessibilityLabel(step == "ready" ? "Open card for \(name.isEmpty ? "Open":name)": "\(step) preview")
-    needsDisplay = true
   }
-  var favoriteState: [String: Any] { favoriteSidebar.state }
+  var favoriteState: [String:Any] { favoriteMiniature.favoriteState }
+  #if OPEN_AUTOMATION
+  var artworkState: [String:Any] {
+    ["step":step,"miniature":favoriteMiniature.demoState,"miniatureHidden":favoriteMiniature.isHidden,
+     "cardVisible":!readyCard.isHidden,"progress":progress.selected]
+  }
+  #endif
   var cardRect: CGRect {
-    let width = max(1, min(620, bounds.width-96))
-    return CGRect(x: bounds.midX-width/2, y: bounds.midY-width*0.625/2, width: width, height: width*0.625)
+    let width = max(1,min(620,bounds.width-96))
+    return CGRect(x: bounds.midX-width/2,y: bounds.midY-width*0.625/2,width: width,height: width*0.625)
   }
   func showConfetti(_ emitter: CAEmitterLayer) {
-    emitter.frame = bounds
-    emitter.emitterPosition = CGPoint(x: cardRect.midX, y: cardRect.maxY+12)
-    emitter.emitterSize = CGSize(width: cardRect.width*0.85, height: 1)
-    // The scene is below the readyCard subview's layer, including all its text.
-    scene.addSublayer(emitter)
+    emitter.frame = bounds; emitter.emitterPosition = CGPoint(x: cardRect.midX,y: cardRect.maxY+12)
+    emitter.emitterSize = CGSize(width: cardRect.width*0.85,height: 1); scene.addSublayer(emitter)
   }
   var confettiBehindCard: Bool {
     guard let emitter = scene.sublayers?.first(where: { $0 is CAEmitterLayer }) else { return false }
     return !readyCard.isHidden && emitter.superlayer === scene && scene.zPosition < (readyCard.layer?.zPosition ?? 0)
   }
-  private func layoutLink() {
-    guard link.superlayer != nil else { return }
-    let start = CGPoint(x: bounds.midX-140, y: bounds.midY+30), end = CGPoint(x: bounds.midX+125, y: bounds.midY-40)
-    link.bounds = CGRect(x: 0, y: 0, width: 36, height: 10); link.position = end
-    guard !reduced, !linkStarted else { return }; linkStarted = true
-    let motion = CAKeyframeAnimation(keyPath: "position"); motion.values = [NSValue(point: start), NSValue(point: start), NSValue(point: end), NSValue(point: end)]; motion.keyTimes = [0, 0.2, 0.7, 1]; motion.duration = 3; motion.repeatCount = 2; motion.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut); link.add(motion, forKey: "link-travel")
-  }
-  private func text(_ value: String, in rect: CGRect, size: CGFloat = 15, color: NSColor = .white) {
-    let style = NSMutableParagraphStyle(); style.alignment = .center
-    (value as NSString).draw(in: rect, withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: .medium), .foregroundColor: color, .paragraphStyle: style])
-  }
+}
+
+@MainActor private final class OnboardingMailChip: NSView {
+  override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layer?.cornerRadius = 12; layer?.backgroundColor = OnboardingTokens.Room.white.withAlphaComponent(0.95).cgColor; layer?.shadowOpacity = 0.24; layer?.shadowRadius = 18 }
+  required init?(coder: NSCoder) { nil }
   override func draw(_ dirtyRect: NSRect) {
-    let center = CGPoint(x: bounds.midX, y: bounds.midY)
-    switch step {
-    case "name":
-      OnboardingBrandMark.draw(in: CGRect(x: center.x-44, y: center.y, width: 88, height: 120))
-      text(name.isEmpty ? "Hello":"Hello, \(name)", in: CGRect(x: center.x-300, y: center.y-75, width: 600, height: 44), size: 28)
-    case "import":
-      let rect = CGRect(x: center.x-170, y: center.y-230, width: 340, height: 460)
-      NSColor.white.withAlphaComponent(0.12).setFill(); NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
-      for index in 0..<count { NSColor.white.withAlphaComponent(0.18).setFill(); NSBezierPath(roundedRect: CGRect(x: rect.minX+24, y: rect.maxY-60-CGFloat(index)*44, width: 292, height: 28), xRadius: 7, yRadius: 7).fill() }
-      if report { text("✓", in: CGRect(x: center.x-30, y: rect.minY+16, width: 60, height: 48), size: 38) }
-    case "favorites": break // The shared icons live in the miniature sidebar.
-    case "theme": break // Real ThemeBackgroundView draws the chosen Space style.
-    case "blocker":
-      NSColor.white.setFill(); NSBezierPath(roundedRect: CGRect(x: center.x-210, y: center.y-150, width: 420, height: 300), xRadius: 14, yRadius: 14).fill()
-      text("A quieter page", in: CGRect(x: center.x-180, y: center.y+70, width: 360, height: 40), size: 24, color: .darkGray)
-      for index in 0..<3 { NSColor(white: 0.9, alpha: 1).setFill(); CGRect(x: center.x-170, y: center.y+32-CGFloat(index)*22, width: 340-CGFloat(index)*28, height: 9).fill() }
-    case "defaultBrowser":
-      NSColor.white.withAlphaComponent(0.16).setFill(); NSBezierPath(roundedRect: CGRect(x: center.x-220, y: center.y-10, width: 160, height: 110), xRadius: 16, yRadius: 16).fill()
-      text("A link for you", in: CGRect(x: center.x-215, y: center.y+30, width: 150, height: 25), size: 17)
-      NSColor.white.withAlphaComponent(0.22).setFill(); NSBezierPath(roundedRect: CGRect(x: center.x+50, y: center.y-120, width: 200, height: 150), xRadius: 14, yRadius: 14).fill()
-      OnboardingBrandMark.draw(in: CGRect(x: center.x+130, y: center.y-90, width: 40, height: 60))
-    case "ready": break // Separate foreground layer keeps confetti behind the card.
-    default: break
-    }
+    let icon = NSImage(systemSymbolName: "envelope.fill",accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [OnboardingTokens.Room.space]))
+    icon?.draw(in: CGRect(x: 14,y: bounds.midY-8,width: 20,height: 16))
+    ("Mail · A link for you" as NSString).draw(at: CGPoint(x: 43,y: bounds.midY-8),withAttributes: [.font:NSFont.systemFont(ofSize: 12,weight: .medium),.foregroundColor:OnboardingTokens.Room.ink])
   }
 }
 
 @MainActor private final class OnboardingReadyCard: NSView {
   var card: OpenCardDrawing? { didSet { needsDisplay = true } }
+  var reduced = false
+  private let highlight = CAGradientLayer()
   override init(frame: NSRect) {
     super.init(frame: frame); wantsLayer = true
     layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = 0.25
-    layer?.shadowRadius = 35; layer?.shadowOffset = CGSize(width: 0, height: -12)
+    layer?.shadowRadius = 32; layer?.shadowOffset = CGSize(width: 0, height: -12)
+    highlight.type = .radial; highlight.startPoint = CGPoint(x: 0.35,y: 0.75); highlight.endPoint = CGPoint(x: 1,y: 1)
+    highlight.colors = [OnboardingTokens.Room.white.withAlphaComponent(0.23).cgColor,OnboardingTokens.Room.white.withAlphaComponent(0).cgColor]
+    layer?.addSublayer(highlight)
   }
   required init?(coder: NSCoder) { nil }
   override func layout() {
     super.layout()
     let radius = bounds.width*36/1200
     layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil)
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    highlight.frame = bounds; highlight.cornerRadius = radius
+    CATransaction.commit()
+  }
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas(); trackingAreas.forEach(removeTrackingArea)
+    addTrackingArea(NSTrackingArea(rect: bounds,options: [.mouseMoved,.mouseEnteredAndExited,.activeInKeyWindow],owner: self))
+  }
+  override func mouseMoved(with event: NSEvent) {
+    guard !reduced else { return }; let p = convert(event.locationInWindow,from: nil)
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    highlight.startPoint = CGPoint(x: p.x/max(1,bounds.width),y: p.y/max(1,bounds.height)); CATransaction.commit()
   }
   override func draw(_ dirtyRect: NSRect) { card?.draw(in: bounds) }
 }
 
-@MainActor private final class OnboardingMiniBrowser: NSView {
-  var tint = NSColor.systemBlue { didSet { needsDisplay = true } }
-  override var isFlipped: Bool { true }
-  override func draw(_ dirtyRect: NSRect) {
-    for (index, color) in [NSColor.systemRed, .systemYellow, .systemGreen].enumerated() { color.withAlphaComponent(0.8).setFill(); NSBezierPath(ovalIn: CGRect(x: 12+index*15, y: 12, width: 8, height: 8)).fill() }
-    NSColor.white.withAlphaComponent(0.9).setFill(); NSBezierPath(roundedRect: CGRect(x: 120, y: 8, width: bounds.width-128, height: bounds.height-16), xRadius: 8, yRadius: 8).fill()
-    for index in 0..<4 { tint.withAlphaComponent(index == 1 ? 0.4:0.15).setFill(); NSBezierPath(roundedRect: CGRect(x: 12, y: 52+index*34, width: 96, height: 20), xRadius: 5, yRadius: 5).fill() }
-    NSColor.gray.withAlphaComponent(0.14).setFill(); NSBezierPath(roundedRect: CGRect(x: 140, y: 18, width: 250, height: 18), xRadius: 6, yRadius: 6).fill()
-    NSColor.gray.withAlphaComponent(0.18).setFill()
-    for index in 0..<3 { NSBezierPath(roundedRect: CGRect(x: 145, y: 64+index*22, width: 220-index*20, height: 9), xRadius: 4, yRadius: 4).fill() }
-  }
-}
-
-/// A bounded miniature sidebar; the choice grid and this preview share images.
-@MainActor private final class OnboardingFavoriteSidebar: NSView {
-  private var names: [String] = []
-  private var selectedCount = 0
-  private var items: [String: OnboardingFavoritePreviewTile] = [:]
-  private var reduced = false
-  override var isFlipped: Bool { true }
+@MainActor private final class OnboardingProgressView: NSView {
   override init(frame: NSRect) {
-    super.init(frame: frame); wantsLayer = true
-    layer?.cornerRadius = 16; layer?.cornerCurve = .continuous
-    layer?.backgroundColor = NSColor.white.withAlphaComponent(0.14).cgColor
-    layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor; layer?.borderWidth = 1
-    setAccessibilityElement(false)
+    super.init(frame: frame)
+    // Keep the dots above the room's layer-backed planes.
+    wantsLayer = true; setAccessibilityElement(false)
   }
   required init?(coder: NSCoder) { nil }
-  func update(_ favorites: [(String, OnboardingFavicons.Tile)], reduceMotion: Bool) {
-    let previous = Set(names); selectedCount = favorites.count
-    // Keep the miniature's Favorites area at two rows, even for all 12 choices.
-    let visible = Array(favorites.prefix(8)); names = visible.map(\.0); reduced = reduceMotion
-    for (name, item) in items { item.isHidden = !names.contains(name) }
-    for (name, tile) in visible {
-      let item = items[name] ?? OnboardingFavoritePreviewTile(frame: .zero)
-      if item.superview == nil { addSubview(item); items[name] = item }
-      item.isHidden = false; item.icon.apply(name: name, tile: tile, animated: previous.contains(name), reduceMotion: reduceMotion)
-      if !previous.contains(name) {
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.26
-        fade.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
-        item.layer?.add(fade, forKey: "favorite-arrival-fade")
-        if !reduceMotion {
-          let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 0.8; scale.toValue = 1
-          scale.duration = 0.26; scale.timingFunction = fade.timingFunction; item.layer?.add(scale, forKey: "favorite-arrival-scale")
-        }
-      }
-    }
-    needsLayout = true; needsDisplay = true
-  }
-  override func layout() {
-    super.layout()
-    for (index, name) in names.enumerated() {
-      items[name]?.frame = NSRect(x: 8+(index%4)*48, y: 52+(index/4)*48, width: 40, height: 40)
-    }
-  }
-  var state: [String: Any] {
-    ["size": [200,440], "radius": 16, "headerHeight": 28, "columns": 4, "tileSize": [40,40], "gap": 8,
-     "selectedCount": selectedCount, "visibleCount": names.count, "emptySlots": names.isEmpty ? 8:0, "ghostRows": 6,
-     "favoritesArea": [8,52,184,88], "dividerFrame": [12,152,176,1], "ghostStartY": 165, "ghostGap": 8,
-     "arrivalDuration": 0.26, "arrivalScales": !reduced,
-     "items": names.compactMap { name -> [String: Any]? in
-       guard let item = items[name] else { return nil }
-       return ["name": name, "frame": [item.frame.minX,item.frame.minY,item.frame.width,item.frame.height]]
-     }]
-  }
-  override func draw(_ dirtyRect: NSRect) {
-    NSColor.white.withAlphaComponent(0.10).setFill()
-    NSBezierPath(roundedRect: NSRect(x: 12,y: 12,width: 176,height: 28), xRadius: 6,yRadius: 6).fill()
-    if names.isEmpty {
-      for index in 0..<8 {
-        let rect = NSRect(x: 8+(index%4)*48,y: 52+(index/4)*48,width: 40,height: 40).insetBy(dx: 0.5,dy: 0.5)
-        let path = NSBezierPath(roundedRect: rect,xRadius: 8,yRadius: 8)
-        NSColor.white.withAlphaComponent(0.08).setFill(); path.fill()
-        NSColor.white.withAlphaComponent(0.20).setStroke(); path.lineWidth = 1
-        path.setLineDash([3,3], count: 2, phase: 0); path.stroke()
-      }
-    }
-    NSColor.white.withAlphaComponent(0.14).setFill()
-    NSRect(x: 12,y: 152,width: 176,height: 1).fill()
-    NSColor.white.withAlphaComponent(0.10).setFill()
-    for index in 0..<6 {
-      NSBezierPath(roundedRect: NSRect(x: 12,y: 165+index*36,width: 176,height: 28),xRadius: 6,yRadius: 6).fill()
-    }
-  }
-}
-
-@MainActor private final class OnboardingFavoritePreviewTile: NSView {
-  let icon = OnboardingSiteIconView(frame: NSRect(x: 4,y: 4,width: 32,height: 32))
-  override init(frame: NSRect) {
-    super.init(frame: frame); wantsLayer = true
-    layer?.cornerRadius = 8; layer?.cornerCurve = .continuous
-    layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
-    addSubview(icon); setAccessibilityElement(false)
-  }
-  required init?(coder: NSCoder) { nil }
-  override var isFlipped: Bool { true }
+  var selected = 0 { didSet { if selected != oldValue { needsDisplay = true } } }
   override func hitTest(_ point: NSPoint) -> NSView? { nil }
+  override func draw(_ dirtyRect: NSRect) {
+    var x: CGFloat = 0
+    for i in 0..<7 {
+      let width: CGFloat = i == selected ? 20:6
+      OnboardingTokens.Room.white.withAlphaComponent(i == selected ? 1:0.28).setFill()
+      NSBezierPath(roundedRect: CGRect(x: x,y: 0,width: width,height: 6),xRadius: 3,yRadius: 3).fill()
+      x += width+7
+    }
+  }
 }

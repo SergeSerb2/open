@@ -170,7 +170,7 @@ public struct FirstRunView:View {
     private let embeddedImport:Bool
     public init(model:FirstRunViewModel,startsProbe:Bool=true,embeddedImport:Bool=false) {self.model=model;self.startsProbe=startsProbe;self.embeddedImport=embeddedImport}
     private var secondary:Color {Color(nsColor:SettingsTokens.secondary.nsColor)}
-    private var section:Font {Font(SettingsTokens.section.font)}
+    private var section:Font {embeddedImport ? .system(size:12):Font(SettingsTokens.section.font)}
     public var body:some View {
         Group {if embeddedImport {stepContent} else if model.step == .welcome {welcome} else {stepContent}}
             .padding(.horizontal,embeddedImport ? 0:SettingsTokens.firstRunHorizontalInset)
@@ -266,20 +266,36 @@ public struct FirstRunView:View {
     private var report:some View {VStack(alignment:.leading,spacing:10) {
         if !embeddedImport {Text("Import complete").font(.title2)}
         ScrollView {VStack(alignment:.leading,spacing:10) {
-            Text(model.reportSummary).fixedSize(horizontal:false,vertical:true)
+            Text(model.reportSummary).font(embeddedImport ? .system(size:13,weight:.medium):Font(SettingsTokens.label.font)).fixedSize(horizontal:false,vertical:true)
+            if embeddedImport {
+                VStack(spacing:0) {
+                    ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
+                        HStack {
+                            Text(ImportCountCopy.displayCategory(name));Spacer()
+                            Text(model.reportValue(name)).monospacedDigit()
+                                .foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? Color(nsColor:.tertiaryLabelColor):Color.primary)
+                        }.font(.system(size:12)).padding(.horizontal,16).frame(height:32)
+                            .overlay(alignment:.bottom) {
+                                if index != model.wizard.displayedReportCategories.count-1 {Divider().padding(.horizontal,16)}
+                            }
+                    }
+                }.background(Color(nsColor:.controlBackgroundColor),in:RoundedRectangle(cornerRadius:12))
+                    .overlay(RoundedRectangle(cornerRadius:12).strokeBorder(Color(nsColor:.separatorColor),lineWidth:1))
+            } else {
             SettingsGroup {ForEach(Array(model.wizard.displayedReportCategories.enumerated()),id:\.element) {index,name in
                 SettingsRow(height:30,divider:index != model.wizard.displayedReportCategories.count-1) {HStack {
                     Text(ImportCountCopy.displayCategory(name));Spacer();
                     Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? secondary:Color.primary)
                 }}
             }}
+            }
             ForEach(model.wizard.secretsReportLines, id: \.self) { Text($0).monospacedDigit() }
             if let failure = model.outcome?.failures["Passwords and cookies"] { Text(failure).foregroundStyle(secondary) }
             if let message = model.wizard.unfinishedSecretsImportMessage { Text(message).foregroundStyle(secondary) }
             if embeddedImport, model.outcome?.errorText != nil, !model.wizard.hasImportedData {Button("Try Again") {model.showImport()}}
             if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             ImportExtensionsSection(model:model.wizard.extensions) {Task {await model.wizard.installExtensions()}}
-            if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}
+            if let note=model.reportNote {Text(note).font(embeddedImport ? .system(size:12):section).foregroundStyle(model.reportNoteIsError ? Color.red:embeddedImport ? Color(nsColor:.tertiaryLabelColor):secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
         if !embeddedImport {HStack {Spacer();if model.errorText == FirstRunViewModel.importedSaveError {primary("Try Again"){model.actions.finishFirstRun(imported:true)}} else if model.errorText != nil && !model.wizard.hasImportedData {Button("Continue"){model.enterDefaultBrowser()};primary("Try Again"){model.showImport()}} else {primary("Continue"){model.enterDefaultBrowser()}}}.fixedSize(horizontal:false,vertical:true).disabled(model.wizard.extensions.isInstalling)}
     }}

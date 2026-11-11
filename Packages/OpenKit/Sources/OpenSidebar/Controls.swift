@@ -360,6 +360,7 @@ class PlateButton: NSView {
         glyphView.tint = { [glyphTint, inactiveTint] in dim ? inactiveTint.nsColor : glyphTint(enabled) }
         let appearance = contentAppearance
         CATransaction.begin()
+        CATransaction.setDisableActions(context?.animatesChanges == false)
         CATransaction.setAnimationDuration(Motion.hoverFade)
         plate.backgroundColor = plateColor(isPressed).cgColor(appearance)
         plate.opacity = showsHoverPlate && enabled && (hovered || isPressed) ? 1 : 0

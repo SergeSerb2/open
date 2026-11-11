@@ -1,3 +1,19 @@
+Source: 23dfb35b (before PR306); merged-source checks run again in the final M5 gate.
+ACTION chooseProfileIcon 10000000-0000-0000-0000-000000000001
+PNG profile-icons.png 1200x1200 60910 bytes sha256=8ad8807c2c2ffb0b952ebbbb030eef03203dd7f7a4deb3b1029de1d59fc7cf08
+PASS profile-icon-button
+PNG delete-profile.png 508x310 27056 bytes sha256=4ec65f7f943168badde4345430ccd0e244b9424f5f0b5709b1fa8bc89cbd17c3
+ACTION deleteProfileData CAD2EEA9-9204-460B-9F2C-D347BE17D89B
+PNG delete-unused.png 1016x720 66162 bytes sha256=304b0d9935b1695bf41d3e4e162b5d7bfd9b3402c6107ff72534f33241d41088
+ACTION deleteProfileData 327DAE4F-9A11-49B0-AA2E-39B939AD4F13
+PASS profile-delete-dialogs
+ACTION openURL host=extensions 10000000-0000-0000-0000-000000000001
+ACTION openURL host=extensions 10000000-0000-0000-0000-000000000001
+ACTION openURL host=extensions 10000000-0000-0000-0000-000000000002
+PASS extension-shortcuts
+PASS essential-shortcuts
+ACTION openEssentialShortcuts
+PASS shortcuts-callout
 adblock Personal enabled=true lists=EasyList,EasyPrivacy exclusions=example.com
 adblock Work enabled=true lists=EasyList,EasyPrivacy exclusions=
 default open.advanced.allowSitesThemeData = false
@@ -11,6 +27,14 @@ default open.advanced.restoreWindowsOnLaunch = true
 default open.advanced.showFullURLWithToolbar = false
 default open.advanced.tabSleepMode = automatic
 default open.appIcon.selectedID = openDefault
+default open.boosts.codeEditorSize = 480x588
+default open.boosts.hasDismissedInterstitial = false
+default open.boosts.hasDismissedJSNotice = false
+default open.capture.dragToCaptureEnabled = true
+default open.capture.portraitBackground = theme
+default open.capture.shortcutHintLastShown = 0.0
+default open.developer.allowJavaScriptFromAppleEvents = false
+default open.developer.modeHosts = []
 default open.general.automaticallyUpdate = false
 default open.general.previewsEnabled = true
 default open.general.previewsFolders = true
@@ -28,10 +52,13 @@ default open.pip.keepOnTop = true
 default open.settings.lastPane = general
 default open.shortcuts.defaultPriority = browser
 default open.shortcuts.includeFavoritesInTabNumbering = true
-default open.shortcuts.switchToNinthEnabled = true
+default open.shortcuts.switchToNinthEnabled = false
 default open.sidebar.autoArchiveBannerDismissed = false
 default open.sidebar.autoArchiveBannerEligible = true
 default open.sidebar.hideHintShown = false
+default open.translate.enabled = true
+default open.translate.neverTranslateHosts = []
+default open.web.colorScheme = automatic
 keybindings new-tab = Ctrl+T priority=default
 keybindings zoom-in =  priority=default
 snapshot profile Personal askWhereToSaveEachFile = false
@@ -56,9 +83,13 @@ PASS profile-archive-scope
 PASS profile-downloads
 ACTION clearBrowsingData 10000000-0000-0000-0000-000000000001 kinds=3 range=All time
 PASS clear-data
-ACTION deleteProfileData 28384AB3-3FC2-48E9-B2C2-05FA89549D43
+ACTION deleteProfileData 3D7DD5B2-BDE9-47D0-BC98-2CCE33FF4B3E
 PASS profile-guards
 PASS links-rules
+PASS links-destination-picker
+PASS links-profile-issues
+PASS links-profile-destinations
+PASS links-test-automatic
 ACTION keyBindingsDidChange
 PASS links-toggles
 ACTION keyBindingsDidChange
@@ -97,16 +128,19 @@ ACTION deleteCapture 60000000-0000-0000-0000-000000000001
 ACTION openHistoryItem
 ACTION openHistoryItem
 PASS library-captures-history
-PNG empty-archive.png 960x640 37202 bytes sha256=808588ac332247030f26ae2b3387eca6b935d35d2b794d78ef883ad521f81ad2
-PNG empty-downloads.png 960x640 34576 bytes sha256=c328d4089f6b5c1a12f7922033d2317fb67b806401c6e6c6c0c11d2824eee5f1
-PNG empty-captures.png 960x640 33357 bytes sha256=5c4b25dff7a3fc108b7d15abf3c3e3d28fe7dd9e0a3cddc9c43523eb3a6d7c9a
+PNG boosts.png 960x640 36216 bytes sha256=a2bf93b77c94523a2164ac6db6511c2dbfce5483e25482f3c1099957646d7c2d
+PNG boosts-empty.png 960x640 36896 bytes sha256=bd2f990fe5e5e3619fb70b6b49dbbcf1624483970e9421a31a3a2dd560a37142
+PASS library-boosts
+PNG empty-archive.png 960x640 38449 bytes sha256=b417f0cc2ba3b5d6c4563cf304fbf19a72ccc71bbaace4e6ede021dfa8416188
+PNG empty-downloads.png 960x640 36085 bytes sha256=6dce0a34fd577d9391aee76162e6f771608a900c10e2373cd79c827b9c60accd
+PNG empty-captures.png 960x640 34525 bytes sha256=6cde35f5785a5d13dcb1a64de137bd3135b318030a507acd6676f3e4320688c4
 PASS empty-states
 PASS archive-save-failure
 ACTION deleteArchived 50000000-0000-0000-0000-000000000001
 ACTION deleteArchived 50000000-0000-0000-0000-000000000003
 PASS archive-owner-partial
-ACTION setAdBlockExcludedDomains example.org 508FEFE3-E0F5-448E-8364-D88AFA5EAB49
-ACTION deleteProfileData 508FEFE3-E0F5-448E-8364-D88AFA5EAB49
+ACTION setAdBlockExcludedDomains example.org 7B90F010-133D-4F3D-AB55-0C0DC5C8783D
+ACTION deleteProfileData 7B90F010-133D-4F3D-AB55-0C0DC5C8783D
 PASS adblock-profile-lifecycle
 PASS suggestion-notice
 ACTION keyBindingsDidChange
@@ -116,12 +150,12 @@ ACTION keyBindingsDidChange
 PASS shortcuts-recording-admission
 PASS archive-paging
 PASS links-save-failure
-ACTION setAdBlockExcludedDomains example.org 1886AED4-2523-4E76-B89A-7634BBEF758D
-ACTION deleteProfileData 1886AED4-2523-4E76-B89A-7634BBEF758D
+ACTION setAdBlockExcludedDomains example.org 265CCFC8-9B6E-4B76-944F-E8A2CAC4E41F
+ACTION deleteProfileData 265CCFC8-9B6E-4B76-944F-E8A2CAC4E41F
 PASS adblock-readiness
 ACTION keyBindingsDidChange
 PASS settings-caches
-ACTION restoreArchived E9389773-2DA4-4DCF-B740-D80197D859C2
+ACTION restoreArchived 37E38C14-170E-4074-8537-C92B7ED17F00
 ACTION viewSpace 20000000-0000-0000-0000-000000000001
 PASS library-folder-archive
 T2 archive Gmail raw search, tidy display, custom title, and real Arc import passed
@@ -142,7 +176,7 @@ PASS first-run-actions-and-adapter-gate
 ACTION finishFirstRun imported=false
 ACTION finishFirstRun imported=false
 ACTION runImport spaces=true archive=true history=false secrets=false
-PROBE fixture spaces=2 items=4 archive=2 raw-archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=0.002780875
+PROBE fixture spaces=2 items=4 archive=2 raw-archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=0.002581083
 PASS first-run-probe
 PARITY actual-import archive=2 profiles=2 engines=2 history=3(partial) saved=4(partial)
 PASS first-run-count-parity
@@ -150,13 +184,11 @@ COPY cancelled-mid-file=true private-modes=true temp-removed=true source-unchang
 PASS probe-cancel-mid-copy
 PASS sidebar-defaults
 ACTION makeSpaceManagerView
-PNG library-spaces-check.png 960x640 26432 bytes sha256=27f3b551d1eb4ad4d43572efd1e670ecc140bc92643700cacc3353c3d9d0609a
+PNG library-spaces-check.png 960x640 27675 bytes sha256=10c6a677d102adc5f93a0d7160d142721ce5a47f3aa3b2750b5333b3702b4223
+PNG library-spaces-unavailable-check.png 960x640 29900 bytes sha256=9f4ae9b0959e7f9e04f48eba72948fa9d4341b61b23f935b77db9fe8b7c5106a
 ACTION makeSpaceManagerView
-PNG library-spaces-unavailable-check.png 960x640 28860 bytes sha256=abf7dc6dc251aae515ba24126ab6a48fea6dcc85d28abbfcd13105bf136d8abd
-ACTION makeSpaceManagerView
-ACTION makeSpaceManagerView
-PNG library-spaces-recovered-check.png 960x640 26432 bytes sha256=27f3b551d1eb4ad4d43572efd1e670ecc140bc92643700cacc3353c3d9d0609a
+PNG library-spaces-recovered-check.png 960x640 27675 bytes sha256=10c6a677d102adc5f93a0d7160d142721ce5a47f3aa3b2750b5333b3702b4223
 PASS library-spaces
 Legacy preview false/true, missing keys, explicit choices, disk writes, and repeat startup passed
 PASS previews-legacy-migration
-SUMMARY 37 checks passed, 0 failed
+SUMMARY 47 checks passed, 0 failed

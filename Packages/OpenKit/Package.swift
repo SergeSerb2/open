@@ -46,7 +46,7 @@ let package = Package(
         .target(name: "OpenSiteControl", dependencies: ["OpenModel", "OpenDesign", "OpenBoosts", "OpenAdBlock", "OpenWeb", "OpenExtensionsUI"]),
         .executableTarget(name: "sitecontrol-render", dependencies: ["OpenSiteControl", "OpenModel", "OpenDesign", "OpenBoosts", "OpenWeb", "OpenExtensionsUI"], resources: [.copy("Fixtures")]),
         .target(name: "OpenMedia", dependencies: ["OpenModel", "OpenWeb"], resources: [.copy("Resources/pip-site-rules.json")]),
-        .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport"]),
+        .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport", "OpenOnboarding"]),
         .executableTarget(name: "settings-preview", dependencies: ["OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
         .target(name: "OpenModel"),
         .target(name: "OpenFeatures", dependencies: ["OpenSiteControl", "OpenSpaceEditor", "OpenExtensionsUI", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands", "OpenCommandBar"], resources: [.copy("Resources/Sounds")]),

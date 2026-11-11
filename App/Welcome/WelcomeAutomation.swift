@@ -68,9 +68,12 @@ extension AutomationController {
       "playlist": page?.playlistPlaying == true ? "playing" : "stopped", "animating": page?.animating == true,
       "reduceMotion": page?.reduceMotion == true, "playedCards": page?.playedCards ?? [],
       "focusedCard": page.flatMap { page in page.cards.firstIndex { $0 === page.window?.firstResponder } }.map { $0 + 1 } as Any? ?? NSNull(),
-      "duration": WelcomePageView.duration, "completionCount": page?.completionCount ?? 0,
+      "cardDurations": WelcomePageView.cardDurations,
+      "playlistElapsed": page?.playlistElapsed ?? 0, "appearanceElapsed": page?.appearanceElapsed ?? 0,
+      "completionCount": page?.completionCount ?? 0,
       "pendingCompletion": page?.hasCompletion == true,
       "animationCount": all.reduce(0) { $0 + $1.cards.reduce(0) { $0 + $1.illustration.animationCount } },
+      "pendingDisplayUpdates": all.reduce(0) { $0 + $1.cards.reduce(0) { $0 + $1.illustration.pendingDisplayUpdates } },
       "hostCount": all.count, "engineContentCreationCount": factory.contentCreationCount,
       "windowState": ["id": factory.windowState.id.description,
         "appActive": NSApp.isActive, "appAppearance": NSApp.effectiveAppearance.name.rawValue,
@@ -126,6 +129,7 @@ extension AutomationController {
         "textPixels": ["title": text(card.heading), "body": text(card.detail)],
         "surface": card.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) }.map(components) ?? [],
         "windowFrame": inWindow(card),
+        "miniature": card.illustration.miniatureState as Any? ?? NSNull(),
         "labels": card.illustration.drawnLabels, "paints": card.illustration.paintColors.mapValues(components),
         "labelPixels": card.illustration.drawnLabelFrames.map { label, frame in
           ["label": label, "frame": inWindow(frame, of: card.illustration)] as [String: Any]
@@ -135,11 +139,11 @@ extension AutomationController {
     return ["viewport": [Double(page.contentSize.width), Double(page.contentSize.height)],
       "document": rect(page.canvas.frame), "scrollOrigin": [Double(page.contentView.bounds.minX), Double(page.contentView.bounds.minY)],
       "headerTop": Double(page.heading.frame.minY), "headerBottom": Double(page.subheading.frame.maxY),
-      "gridTop": Double(page.cards[0].frame.minY), "columnWidth": Double(page.cards[0].bounds.width * 2 + 20),
+      "gridTop": Double(page.cards[0].frame.minY), "columnWidth": Double(page.cards[0].bounds.width * 2 + 16),
       "footer": rect(page.footerFrame), "footerGap": Double(page.footerFrame.minY - (page.cards.map { $0.frame.maxY }.max() ?? 0)),
       "background": components(page.backgroundColor),
       "linkPixels": page.footerLinks.map { button in
-        ["label": button.title, "frame": inWindow(button.cell?.titleRect(forBounds: button.bounds) ?? button.bounds, of: button)] as [String: Any]
+        ["label": button.title, "frame": inWindow(page.footerLabelFrame(button), of: button)] as [String: Any]
       },
       "textPixels": ["heading": text(page.heading), "subheading": text(page.subheading)], "cards": cards]
   }
