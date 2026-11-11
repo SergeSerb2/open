@@ -849,6 +849,19 @@ def little_open_checks(app, results, local_origin, probe, control, extensions, w
         # Disable one action only in this Profile, then execute its probe.
         little_call("ext-manage",extension=extensions["bitwarden"],action="disable")
         changed=wait_until(lambda:(lambda s:s if extensions["bitwarden"] not in s["ids"] and probe in s["ids"] else None)(little_call("ext-strip")),timeout=10)
+        # This fresh Profile has its own first-install work. Dark Reader's
+        # delayed help tab can take key focus after the probe popup opens.
+        # Observe that actual tab, then close its fixture window so the later
+        # routing row still proves the case with no main window in Profile B.
+        profile_install=wait_until(lambda:next((t for t in app.call("tabs")
+            if t["profile"]==other_profile and t["url"].startswith("https://darkreader.org/help/")
+            and t["hasWebContent"]),None),timeout=30)
+        install_window=app.call("window-state")
+        results["X19_profile_install_ready"]={"ok":bool(profile_install)
+            and install_window["id"]!=original_main["id"] and install_window["space"]==other_space,
+            "tab":profile_install,"window":install_window["id"],"space":install_window["space"]}
+        app.call("window-close")
+        app.call("window-focus",id=original_main["id"],activate=True)
         little_call("ext-click",extension="more",select="Action Probe")
         new_popup=wait_until(lambda:(lambda p:p if p.get("visible") else None)(little_call("ext-popup-state")),timeout=15)
         new_query=app.eval(new_popup["page"],"chrome.tabs.query({active:true,currentWindow:true}).then(ts=>ts.map(t=>({id:t.id,url:t.url})))") if new_popup else []
@@ -858,7 +871,8 @@ def little_open_checks(app, results, local_origin, probe, control, extensions, w
             and rebound["retainedActionIDs"]==[]
             and rebound["retainedBrowser"]==old["browser"] and set(changed["ids"])==set(old["ids"])-{extensions["bitwarden"]}
             and new_query==[{"id":switched["chromeTabID"],"url":target_url}],
-            "old":old,"rebound":rebound,"changed":changed,"session":switched,"queried":new_query}
+            "old":old,"rebound":rebound,"changed":changed,"session":switched,"queried":new_query,
+            "popup":new_popup or little_call("ext-popup-state")}
         if new_popup: app.call("key",key="w",modifiers=["command"],window=new_popup["window"],route="app")
         # Little Open stays in B while the most recent main window returns to A.
         # There is no B main window, so routing must create one with B's Space.

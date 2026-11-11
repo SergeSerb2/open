@@ -69,6 +69,16 @@ The final M5 gate must build and exercise this fix with the affected compiler.
   Wait up to three seconds for that specific real toast before asserting its
   unchanged three-second lifetime and Pin accessory. No sleep substitutes for
   the toast predicate.
+- The new X19 Profile also starts Dark Reader's first-install help tab. The
+  focused unchanged X19 sequence failed `X19_profile_switch` once and
+  `X19_extra_tab_profile` once, with safe cleanup. Another unchanged run
+  passed when the help tab committed before the popup became visible. The
+  retained receipts are `.re/x19-sequence-bc2c577a-{negative-r1,diagnostic-r2,diagnostic-r3}/`.
+  Wait at most 30 seconds for that actual Profile-specific help tab and live
+  content, then close its fixture window before the native popup click. This
+  also restores the later routing row's intended absence of a Profile-B main
+  window. Keep the existing popup, target, routing and 15-second predicates;
+  record the final popup state if the original assertion fails.
 
 The original failed full gate is `.re/step4-full-m5-60918f9d-r1/`:
 1535 PASS, 5 FAIL, 2 DEFERRED, 2 BLOCKED, 13 NOT_RUN. The delayed Media crash
