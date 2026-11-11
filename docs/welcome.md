@@ -80,10 +80,11 @@ Automation can send `hover card=N phase=exit` before the next entered transition
 `welcome window=<window UUID>` reads an existing window without focusing it.
 `windowState` includes the raw AppKit occlusion state, key/main state, visibility,
 and minimization. The suite hides a playing window and verifies that restoring it
-restarts the current card and finishes the playlist. It also covers Welcome with
-a second owned Open window. If that cover does not change AppKit's occlusion
-state, the row records INFO with the observed state and still requires the
-playlist to finish after the cover closes. The harness moves only its own window
+leaves the page stopped until an explicit replay. The miniaturized page has no
+pending animation, completion timer, or theme display update within one second,
+and stays below 1% App CPU over five seconds in Release. The suite also covers
+Welcome with a second owned Open window. If that cover does not change AppKit's
+occlusion state, the row records INFO with the observed state. The harness moves only its own window
 away from the read-only hardware pointer position before starting the playlist.
 
 Run the real-App suite as:
