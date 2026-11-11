@@ -50,13 +50,15 @@ public enum OnboardingBrandMark {
         let radius = rect.width*1.6
         bloom.frame = CGRect(x: rect.midX-radius,y: rect.midY-radius,width: radius*2,height: radius*2)
         bloom.colors = [OnboardingTokens.Room.bloom.withAlphaComponent(0.25).cgColor,OnboardingTokens.Room.bloom.withAlphaComponent(0).cgColor]
-        bloom.startPoint = CGPoint(x: 0.5,y: 0.5); bloom.endPoint = CGPoint(x: 1,y: 0.5)
+        // Radial endPoint sets both ellipse radii. A zero vertical radius
+        // renders as a solid rectangle on the M5's native 1x compositor.
+        bloom.startPoint = CGPoint(x: 0.5,y: 0.5); bloom.endPoint = CGPoint(x: 1,y: 1)
         let sun = CALayer(); sun.bounds = CGRect(x: 0,y: 0,width: 44*scale,height: 44*scale)
         sun.position = CGPoint(x: rect.maxX-48*scale,y: flipped ? rect.minY+74*scale:rect.maxY-74*scale)
         let halo = CAGradientLayer(); halo.type = .radial
         halo.frame = sun.bounds.insetBy(dx: -88*scale,dy: -88*scale)
         halo.colors = [OnboardingTokens.Room.white.withAlphaComponent(0.4).cgColor,OnboardingTokens.Room.sunTop.withAlphaComponent(0).cgColor]
-        halo.startPoint = CGPoint(x: 0.5,y: 0.5); halo.endPoint = CGPoint(x: 1,y: 0.5)
+        halo.startPoint = CGPoint(x: 0.5,y: 0.5); halo.endPoint = CGPoint(x: 1,y: 1)
         let disc = CAGradientLayer(); disc.type = .radial; disc.frame = sun.bounds; disc.cornerRadius = 22*scale
         disc.colors = [OnboardingTokens.Room.white.cgColor,OnboardingTokens.Room.sunTop.cgColor,OnboardingTokens.Room.sunMiddle.cgColor,OnboardingTokens.Room.sunMiddle.withAlphaComponent(0).cgColor]
         disc.locations = [0,0.38,0.70,0.73]; disc.startPoint = CGPoint(x: 0.4,y: 0.38); disc.endPoint = CGPoint(x: 1,y: 1)
