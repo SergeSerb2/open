@@ -16,6 +16,10 @@ cancelled. Install and Relaunch asks Sparkle to finish the update.
 If the App delays or cancels termination, the status window restores its enabled
 Install and Relaunch button. It retains Sparkle's retry callback and can close
 while the installation stays pending. The update command restores that window.
+Installer relaunch bypasses the downloads warning, Warn before quitting, and
+page-beforeunload prompts (#283). Those prompts cannot provide a user-cancelled
+termination or a retry-button proof on this path. History and sleep shutdown
+deferrals retry themselves. The driver retains Sparkle's retry callback.
 
 The update window shows the current and offered versions. It has Download and
 Remind me Later buttons. Critical and minimum-version updates cannot be
@@ -77,3 +81,12 @@ one cycle shows at most one error toast, and later failed cycles notify again.
 
 Signed install and relaunch remain a user qualification step. An ad-hoc test
 build cannot prove the production signing, installation, or relaunch path.
+
+The updater suite's R2 uses normal quits as controls for all three prompts.
+It then pauses its prepared Sparkle installer, presses the real Install and
+Relaunch button, and requests the normal `quit-open` command. The App must exit
+without another prompt. The installer stays paused until the suite kills it;
+the disposable App binary must remain unchanged. This proves the App's update
+quit policy, not Sparkle's external quit-event delivery or an actual install.
+The former downloads-based cancelled-termination retry row is unreachable
+under #283 and is replaced, rather than counted as retry acceptance.
