@@ -713,7 +713,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if app.engineReady { markVisibleTabsLive() }
     controller.refresh(); mirror.sync(); extensions.focusChanged()
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : (isIncognito ? "Incognito" : "Open")
-    if focus {
+    // An open command bar keeps the keyboard (Cmd+Return adds a background tab, plan D3 §2.3). When the
+    // selection itself changed, contextDidChange closes the bar and its dismissal restores page focus.
+    if focus, commandBarSession?.isPresented != true {
       if let id = selectedTab?.id, let native = welcomeHosts[id] { native.focus() }
       else { selectedContent?.focusPage() }
     }
@@ -1052,6 +1054,18 @@ extension EngineWebContentHostFactory {
       if background { _ = ensureContent(for: tab) }
       else { commandBarNavigationFocus.insert(tab.id) }
     }
+  }
+  /// Option+Return in the command bar: the page opens beside the current page in Split View (Arc 11-returns,
+  /// plan D3 §2.3). A split that already has the maximum number of panes loads it in the focused pane.
+  /// Returns false when no split can be made and nothing is focused (the caller then opens it as usual).
+  @discardableResult
+  func openFromCommandBarInSplit(_ url: URL) -> Bool {
+    guard !WelcomeTab.isInternal(url), let splits = controller?.splitController, let current = splits.focusedTab else { return false }
+    guard splits.canAddPane else { navigateFromCommandBar(url, current: true); return true }
+    guard let tab = openNewTab(url: url, background: true, opener: current.id, typed: true) else { return false }
+    _ = ensureContent(for: tab)
+    splits.openInSplit(tab.id)
+    return true
   }
   private func finishCommandBarNavigation(_ page: OEWebContent) {
     guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }

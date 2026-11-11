@@ -51,6 +51,8 @@ final class CommandBarFieldEditor: NSTextView {
     var isUpdatingComposition: Bool { compositionDepth > 0 }
     var onCompositionEnded: (() -> Void)?
     var onHelp: (() -> Bool)?
+    /// Cmd+T or Cmd+L while the bar has the keyboard: the key that opened this mode closes it (plan D3 §2.3).
+    var onModeKey: ((Character) -> Bool)?
 
     // Inline completion hooks (CompletionSession, commandbar-completion §4.1.5–§4.1.6).
 
@@ -180,10 +182,15 @@ final class CommandBarFieldEditor: NSTextView {
     var onShiftDelete: ((NSEvent.ModifierFlags) -> Bool)?
     var onModifiedReturn: ((NSEvent.ModifierFlags) -> Bool)?
     private func handleHelpKey(_ event: NSEvent) -> Bool {
-        if [36, 76].contains(event.keyCode), event.modifierFlags.contains(.command), !hasMarkedText(), !isUpdatingComposition, onModifiedReturn?(event.modifierFlags) == true { return true }
+        // Cmd+Return and Option+Return carry their modifiers from this event (plan D3 §2.3).
+        if [36, 76].contains(event.keyCode), !event.modifierFlags.intersection([.command, .option]).isEmpty, !hasMarkedText(), !isUpdatingComposition,
+           onModifiedReturn?(event.modifierFlags) == true { return true }
         if !hasMarkedText(), !isUpdatingComposition,
            event.modifierFlags.intersection([.command, .option, .shift, .control]) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "i", onHelp?() == true { return true }
+        if !hasMarkedText(), !isUpdatingComposition,
+           event.modifierFlags.intersection([.command, .option, .shift, .control]) == .command,
+           let key = event.charactersIgnoringModifiers?.lowercased().first, key == "t" || key == "l", onModeKey?(key) == true { return true }
         return false
     }
 

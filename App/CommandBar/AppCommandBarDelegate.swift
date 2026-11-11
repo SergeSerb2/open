@@ -82,6 +82,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       bar.view.frame = windowController.contentView.bounds
       bar.view.autoresizingMask = [.width, .height]
       windowController.contentView.addSubview(bar.view)
+      windowController.commandBarView = bar.view
     }
     guard let bar = controller else { return }
     if WelcomeTab.matches(factory.selectedTab?.url) {
@@ -136,6 +137,8 @@ final class AppCommandBarSession: CommandBarDelegate {
     switch intent {
     case .open(let url, let destination, let modifiers),
          .search(_, let url, _, let destination, let modifiers):
+      // Option+Return: beside the current page in Split View (plan D3 §2.3).
+      if modifiers.contains(.option), !modifiers.contains(.command), factory.openFromCommandBarInSplit(url) { break }
       factory.navigateFromCommandBar(url, current: destination == .currentTab, background: modifiers.contains(.command))
     case .switchToTab(let id, let space): factory.selectTabForCommand(id, spaceID: space)
     case .runAction(let id, let space): factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)

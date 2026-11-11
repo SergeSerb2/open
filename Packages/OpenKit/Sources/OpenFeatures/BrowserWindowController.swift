@@ -74,6 +74,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
     public var isApplicationActive: (() -> Bool)?
     public var isCommandBarPresented = false
+    /// The command bar overlay (the App adds it). While the bar is open, only views inside it take the
+    /// keyboard unless a mouse click asks: a page created behind the bar (Cmd+Return) must not take it.
+    public weak var commandBarView: NSView?
     public var keyBindingOverrides = KeyBindingStore.empty
     /// The actual key only while dispatching a switcher command; menu actions have none.
     public private(set) var tabSwitcherKeyEvent: NSEvent?
@@ -266,6 +269,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         window.minSize = CGSize(width: 640, height: 480)
         window.collectionBehavior.insert(.fullScreenPrimary); window.acceptsMouseMovedEvents = true
         super.init(window: window); window.contentView = root; window.delegate = self
+        window.refusesFirstResponder = { [weak self] responder in
+            guard let self, self.isCommandBarPresented, let bar = self.commandBarView, let view = responder as? NSView else { return false }
+            if let type = NSApp.currentEvent?.type, [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type) { return false }
+            return !(view === bar || view.isDescendant(of: bar))
+        }
         container.onSadTabClose = { [weak self] id in
             guard let self else { return }
             _ = self.sidebar(self.sidebar, didRequest: .close(nodeID: id))
@@ -1256,6 +1264,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 @MainActor
 final class BrowserWindow: SpaceThemeWindow {
     var allowsActivation = true
+    var refusesFirstResponder: ((NSResponder?) -> Bool)?
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        if refusesFirstResponder?(responder) == true { return false }
+        return super.makeFirstResponder(responder)
+    }
     override var canBecomeKey: Bool { allowsActivation && super.canBecomeKey }
     override var canBecomeMain: Bool { allowsActivation && super.canBecomeMain }
     var onLayoutPass: (() -> Void)?

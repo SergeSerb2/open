@@ -8813,11 +8813,55 @@ def commandbar_checks(factory, results, tmp, config):
         results['native_field_undo_preserves_model'] = {'ok': bool(native_undone) and state()['presented'] and len(app.call('tabs')) == before_text_undo, 'before':native_before, 'after':state(), 'route':native_route}
         press('escape'); time.sleep(.25)
         counts = app.call('host-counts')['created']; selected_before = app.call('window-state')['selected']
-        bar('t'); type_query(origin + '/background'); press('return', modifiers=['cmd'])
+        bar('t'); type_query(origin + '/background'); before_return = dict(state(), focus=app.call('focus-state')); press('return', modifiers=['cmd'])
         background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/background'), None), step=.1)
         assert background, app.call('tabs')
+        # Cmd+Return keeps the bar open with the text selected (Arc 11-returns; plan D3 §2.3). Read the bar
+        # before any page call: automation waits and evaluations on the new page are not user input.
+        kept = wait_until(lambda: (lambda st: st if st['presented'] and st['range'] == [0, len(st['fieldText'])] and st['fieldText'] else None)(state()), timeout=3, step=.05)
+        kept_state = dict(state(), focus=app.call('focus-state'))
+        # A second Cmd+Return on the next entry adds a second background tab; the bar still stays.
+        type_query(origin + '/background2'); press('return', modifiers=['cmd'])
+        second = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/background2'), None), step=.1)
+        twice_state = state()
+        press('escape'); wait_until(lambda: not state()['presented'], timeout=3, step=.05)
         app.call('wait', tab=background['id'])
-        results['command_return_background'] = {'ok': app.call('window-state')['selected'] == selected_before and app.call('host-counts')['created'] == counts + 1 and app.eval(background['id'], 'document.title') == 'Shell C /background'}
+        results['command_return_background'] = {'ok': app.call('window-state')['selected'] == selected_before and app.call('host-counts')['created'] >= counts + 1
+            and app.eval(background['id'], 'document.title') == 'Shell C /background' and bool(kept), 'bar': kept_state, 'beforeReturn': before_return}
+        results['command_return_twice'] = {'ok': bool(second) and twice_state['presented'] and app.call('window-state')['selected'] == selected_before
+            and app.call('host-counts')['created'] == counts + 2, 'bar': twice_state}
+        # A second Cmd+T closes the New Tab bar; a second Cmd+L closes the address editor (Arc 06-keys, 12c).
+        bar('t', 'window'); press('t', modifiers=['cmd'], route='window')
+        closed_t = wait_until(lambda: not state()['presented'], timeout=3, step=.05)
+        results['cmd_t_twice_closes'] = {'ok': bool(closed_t), 'bar': state()}
+        edit = bar('l', 'window')
+        field = app.call('window-state').get('sidebarFrame')
+        frame = edit['panelFrame']
+        results['cmd_l_inline_anchor'] = {'ok': edit['presentation'] == 'anchored' and frame[0] == 9 and frame[1] == 45
+            and frame[2] == max(340, app.call('window-state')['sidebarWidth'] - 18), 'panelFrame': frame, 'sidebar': field}
+        press('l', modifiers=['cmd'], route='window')
+        closed_l = wait_until(lambda: not state()['presented'], timeout=3, step=.05)
+        results['cmd_l_twice_closes'] = {'ok': bool(closed_l), 'bar': state()}
+        # Option+Return opens the page beside the current page in Split View (Arc 11-returns).
+        tabs_before = len(app.call('tabs'))
+        bar('l', 'window'); type_query(origin + '/beside'); press('return', modifiers=['option'])
+        split_shown = wait_until(lambda: (lambda w: w if len(w['shownPages']) == 2 else None)(app.call('window-state')), timeout=5, step=.1)
+        beside = next((t for t in app.call('tabs') if t['url'] == origin + '/beside'), None)
+        results['option_return_split'] = {'ok': bool(split_shown) and bool(beside) and len(app.call('tabs')) == tabs_before + 1 and not state()['presented'],
+            'window': app.call('window-state')}
+        # Failure case: a split at its maximum (4 panes) cannot grow; Option+Return loads in the focused pane.
+        for i in range(2):
+            bar('l', 'window'); type_query(origin + '/pane%d' % i); press('return', modifiers=['option'])
+            wait_until(lambda: len(app.call('window-state')['shownPages']) == 3 + i, timeout=5, step=.1)
+        full = app.call('window-state'); tabs_full = len(app.call('tabs'))
+        bar('l', 'window'); type_query(origin + '/focused'); press('return', modifiers=['option'])
+        loaded = wait_until(lambda: any(t['url'] == origin + '/focused' for t in app.call('tabs')), timeout=5, step=.1)
+        results['option_return_full_split_loads_focused'] = {'ok': len(full['shownPages']) == 4 and bool(loaded) and len(app.call('tabs')) == tabs_full
+            and len(app.call('window-state')['shownPages']) == 4, 'window': app.call('window-state')}
+        for t in app.call('tabs'):
+            if t['id'] != new['id'] and (t['url'].startswith(origin + '/pane') or t['url'] in (origin + '/beside', origin + '/focused')):
+                app.call('close', tab=t['id'])
+        app.call('select', tab=new['id']); app.call('focus', tab=new['id'])
         for action, query, expected in [('pin-tab','Pin Tab','pinned'),('unpin-tab','Unpin Tab','today')]:
             bar('t'); actions = type_query(query); assert actions, state()
             index = next(i for i,r in enumerate(actions['rows']) if r['action'] == action)
