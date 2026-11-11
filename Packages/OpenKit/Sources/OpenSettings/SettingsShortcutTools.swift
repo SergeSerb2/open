@@ -39,23 +39,23 @@ struct SettingsShortcutTools: NSViewRepresentable {
         super.init(frame: .zero)
         search.isBordered = false; search.drawsBackground = false; search.focusRingType = .none
         search.font = .systemFont(ofSize: 13); search.delegate = self
-        search.setAccessibilityLabel("Find a command"); addSubview(search)
+        search.setAccessibilityLabel("Find a command"); search.setAccessibilityRole(.textField); addSubview(search)
         glass.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
         glass.setAccessibilityElement(false); addSubview(glass)
         for button in [find, found] {
             button.isBordered = false; button.font = .systemFont(ofSize: 11)
-            button.target = self; addSubview(button)
+            button.target = self; button.setAccessibilityRole(.button); addSubview(button)
         }
         find.action = #selector(findKeys); found.action = #selector(clearFound)
         for (title, id) in filters {
             let chip = SettingsShortcutFilterButton(title: title, target: self, action: #selector(selectFilter(_:)))
             chip.identifier = .init(id); chip.isBordered = false; chip.focusRingType = .none
-            chip.setAccessibilityLabel(title + " shortcuts")
+            chip.setAccessibilityLabel(title + " shortcuts"); chip.setAccessibilityRole(.button)
             chips.append(chip); addSubview(chip)
         }
         category.isBordered = false; category.autoenablesItems = false
         category.target = self; category.action = #selector(selectCategory)
-        category.setAccessibilityLabel("Shortcut category"); addSubview(category)
+        category.setAccessibilityLabel("Shortcut category"); category.setAccessibilityRole(.popUpButton); addSubview(category)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
     func update(query: String, filter: String, category selected: String, categories: [String],

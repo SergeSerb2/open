@@ -337,6 +337,18 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         c=node(role='AXStaticText',value='example.com');x,y,w,h=c['frame']
         app.call('mouse',action='hover',window=c['window'],x=x+w/2,y=y+h/2);settle()
         click('Remove example.com');check('allowed_site_removed',not app.call('profiles-shell')['adblockDomains'])
+        link('ad-blocking')
+        check('adblock_has_no_diagnostic_button',not any(c['label']=='Copy debug info' for c in ui()['controls']))
+        link('advanced/adblock-debug')
+        app.call('pasteboard-preserve')
+        try:
+            app.call('pasteboard',text='g3-synthetic-sentinel')
+            click('Copy debug info')
+            copied=app.call('pasteboard')
+            check('advanced_diagnostics_copy',bool(copied) and copied!='g3-synthetic-sentinel')
+        finally:
+            app.call('pasteboard-restore')
+        capture('advanced-diagnostics-light')
         # All fifteen sections, both appearances, plus the retained sheets.
         for mode in ['light','dark']:
             app.call('appearance',name=mode)
