@@ -1,16 +1,16 @@
 # Library validation
 
-Status: STOP before the full M5 gate and PR. All five Release pairs are valid.
-The interaction budgets and idle median pass. The 10,000-row scroll still
-fails its p95 and missed-interval limits. No further performance change or
-qualifying rerun follows this result without the lead's answer.
+Status: LEAD 11:20 scroll qualification in progress. All five Release pairs
+remain valid. Interactions and idle median pass. The old 120-callback profile
+is scroller-drag stress; its p95 and physical misses are INFO. A separate
+600-callback wheel profile now carries the normal-scroll budgets below.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
 includes `ccca06d0` and the `icc-header-v1` display-key fix. That merge changes
 no App, engine or Library runtime code. Existing reference images are retained.
 
-The Release executable SHA-256 is
+The five-pair Release executable SHA-256 is
 `7217a9f5eafdb9979f9277f291ce934090d5024573444173e7b73cb4b8c535f4`.
 The freshly linked OpenEngine bridge is
 `f4bce022c1473542e1220260bcec2a2d2c9eab83cf5bffe502feca79b4155a6d`;
@@ -95,17 +95,42 @@ Zero counters alone do not prove the cause, and the raw verdict is not rewritten
 
 ## 10,000-row scroll
 
-The fixture uses ten supported profiles with 1,000 downloads each. Loads were
+LEAD 11:20 separates two profiles on the same 10,000-row list. Both start at
+least 150 seconds after launch, on a quiet M1 in Release. Wheel input uses
+precise native scroll events with contact and momentum phases. Each profile
+requires two load1 readings at or below 3.5, ten seconds apart, while holding
+both machine slots. Other process CPU and later load remain information.
+
+| Profile | Input | Required limits |
+|---|---|---|
+| A, wheel | 600 callbacks over about 5 seconds; velocity peaks at 3 rows (168 pt) per callback, then decays | Main callback p95 ≤4 ms; maximum ≤8.3 ms; cells created 0; App-attributed physical misses ≤1 |
+| B, scroller drag | Cross the list in 120 callbacks, about 83 rows per callback | Main callback maximum ≤8.3 ms; cells created 0; p95 and physical misses INFO |
+
+The runner is `tools/e2e/library_scroll_profiles.py`. It records launch age,
+heartbeat context, nested phases and counters between callbacks. It also
+records one no-scroll control with the Library open at the old gaps' launch
+offset. An exclusion needs the same gap in that control; raw counts remain.
+The full physical capture and the active-scroll interval counts remain
+separate, so the scrollbar fade after scrolling ends is outside the budget.
+Native events have current timestamps. Contact lasts 4.5 seconds and the
+momentum tail lasts 0.5 seconds. The runner verifies actual movement during
+both phases. Precise AppKit scrolling can apply clip changes after event
+dispatch. Wheel work therefore uses the greater of direct callback wall time
+and all main-run-loop busy time in that display interval. It compares p95
+over both all callbacks and moving callbacks, using the larger value. Raw
+dispatch costs remain visible; an idle tail cannot lower the budget result.
+
+The earlier stress fixture uses ten supported profiles with 1,000 downloads each. Loads were
 1.997/2.410. It recorded 120 App callbacks and 115 physical content changes.
 Normal quit left zero owned processes. Scroll constructed zero cells while
 configuring 1,666 rows from the bounded pool.
 
 | Metric | Measured | Limit | Result |
 |---|---:|---:|---|
-| Main callback p95 | 5.486 ms | ≤4 ms | FAIL |
+| Main callback p95 | 5.486 ms | Stress profile, no p95 budget | INFO |
 | Main callback maximum | 7.158 ms | ≤8.3 ms | PASS |
 | Cells created during scroll | 0 | 0 | PASS |
-| Physical missed 120 Hz intervals | 11 | ≤1 in 120 | FAIL |
+| Physical missed 120 Hz intervals | 11 | Stress profile, no miss budget | INFO |
 | Missed intervals in first ten callbacks | 0 | 0 | PASS |
 
 The old first-callback remainder is now measured. Phases below are nested:
@@ -133,8 +158,12 @@ heartbeat and 2 ms background watchdog show two gaps:
 Neither gap qualifies for the idle-main/no-system-callback exemption. All
 11 physical misses remain unexcluded. This does not identify which App or
 engine work caused every miss. Raster counts are not part of the constant-cost
-scroll counter set; no zero-raster claim follows from their absence. The flush
-and between-callback busy work need the lead's next plan.
+scroll counter set; no zero-raster claim follows from their absence.
+
+Retained wall-clock/tick anchors put the old gaps roughly 2.94–3.39 seconds
+after launch. Those estimates have external-anchor uncertainty. They do not
+put these gaps in the known 65–96-second launch burst. New benchmark receipts
+use the App's exact launch clock; no launch-burst exclusion is assumed.
 
 ## Other evidence and next gate
 
@@ -159,6 +188,10 @@ Post-merge M5 `--only build` passes in 129 seconds. The 17 unique application-ro
 The M5 run records the exact `icc-header-v1` key, 2560×1440 points/pixels,
 scale 1 and 240 Hz. Pre-check load1 readings were 5.83/5.47 ten seconds apart.
 Both machines have zero D1 App processes, frame helpers, timing jobs or heavy
-tickets. The full M5 gate and PR remain unopened because the scroll still
-fails. The display-key hold itself is lifted. No additional performance
-optimisation or rerun has started.
+tickets at that checkpoint. The full M5 gate and PR remain unopened pending
+the two-profile qualification. The display-key hold is lifted. Only automation
+code and the runner changed for this check; product rendering is unchanged.
+If both profiles pass, no product change or new five-pair interaction run is
+needed. A wheel failure on flush permits only the lead's single-layer row
+change, followed by A/B, warm-section/search three-pair checks and touched
+suites. Any other failure returns to the lead with its phase table.

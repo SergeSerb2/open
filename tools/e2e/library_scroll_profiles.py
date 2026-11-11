@@ -2,7 +2,7 @@
 """LEAD 11:20: real Library wheel, scroller-drag and no-scroll control.
 
 Release qualification requires the M1 heavy slots and on-screen lock. Input
-goes through the App socket into NSScrollView; nothing posts desktop events.
+goes through the App socket into the owning window; nothing posts desktop events.
 The five-pair interaction/idle receipt is retained when rendering is unchanged.
 """
 import argparse
@@ -29,7 +29,19 @@ LIMITS = {
 
 def analyze(native, physical):
     rows = native['frames']
-    costs = sorted(row['milliseconds'] for row in rows)
+    dispatch_costs = sorted(row['milliseconds'] for row in rows)
+    # Precise NSScrollView events can apply their clip changes after dispatch.
+    # For wheel qualification include all run-loop busy wall time in each
+    # display interval, including that deferred work; never qualify only the
+    # cheap event-enqueue call. Keep direct callback costs separately.
+    costs = sorted(max(row['milliseconds'], row['heartbeat']['mainBusyIntervalMilliseconds'])
+                   if native['profile'] == 'wheel' else row['milliseconds'] for row in rows)
+    moving = [i for i in range(1, len(rows)) if native['profile'] == 'wheel'
+              and rows[i]['input']['offsetBefore'] != rows[i-1]['input']['offsetBefore']]
+    moving_costs = sorted(max(rows[i]['milliseconds'], rows[i]['heartbeat']['mainBusyIntervalMilliseconds']) for i in moving)
+    p95 = costs[min(len(costs)-1, int(len(costs)*.95))]
+    moving_p95 = moving_costs[min(len(moving_costs)-1, int(len(moving_costs)*.95))] if moving_costs else None
+    if moving_p95 is not None: p95 = max(p95, moving_p95)
     first, last = rows[0]['startTicks'], rows[-1]['endTicks']
     changes = physical['changes']
     # Keep the full capture, including scrollbar fade, in physical. Budget
@@ -56,8 +68,13 @@ def analyze(native, physical):
     raw = sum(gap['missedIntervals'] for gap in gaps)
     # No exclusion by assumption. Only a control reproduced at the same launch
     # offset could justify one. The early control cannot explain a >=150s gap.
-    return {'callbacks': len(rows), 'p95Milliseconds': costs[min(len(costs)-1, int(len(costs)*.95))],
+    return {'callbacks': len(rows), 'p95Milliseconds': p95,
             'maximumMilliseconds': max(costs),
+            'movingCallbacks': len(moving), 'movingP95Milliseconds': moving_p95,
+            'allCallbacksP95Milliseconds': costs[min(len(costs)-1, int(len(costs)*.95))],
+            'directCallbackP95Milliseconds': dispatch_costs[min(len(costs)-1, int(len(costs)*.95))],
+            'directCallbackMaximumMilliseconds': max(dispatch_costs),
+            'workClock': 'max(native callback wall time, complete main-run-loop busy interval)' if native['profile'] == 'wheel' else 'native callback wall time',
             'created': sum(row['counterDelta'].get('created', 0) for row in rows),
             'configured': sum(row['counterDelta'].get('configured', 0) for row in rows),
             'startLaunchMilliseconds': rows[0]['launchMilliseconds'],
@@ -131,10 +148,12 @@ def main(args):
             assert row['activePhysicalChanges'] >= (400 if profile == 'wheel' else 100), row['activePhysicalChanges']
             if profile == 'wheel':
                 inputs = [f['input'] for f in native['frames']]
-                assert all(i['precise'] == 1 and 0 < i['requestedPoints'] <= 168 for i in inputs)
-                assert [inputs[i]['phase'] for i in [0, 1, 179]] == [1, 4, 8]
-                assert [inputs[i]['momentumPhase'] for i in [180, 181, 599]] == [1, 4, 8]
-                assert max(i['offsetAfter'] for i in inputs) > inputs[0]['offsetBefore']+56
+                assert all(i['precise'] == 1 and 0 <= i['requestedPoints'] <= 168 for i in inputs)
+                assert [inputs[i]['phase'] for i in [0, 1, 539]] == [1, 4, 8]
+                assert [inputs[i]['momentumPhase'] for i in [540, 541, 599]] == [1, 4, 8]
+                assert inputs[-1]['offsetAfter'] > inputs[539]['offsetAfter'], 'momentum did not move the list'
+                assert len({i['offsetBefore'] for i in inputs}) > 500, 'wheel velocity curve did not move the list'
+                assert all(i['timestamp'] > 0 for i in inputs)
             row['ok'] = row['valid'] and row['maximumMilliseconds'] <= 8.3 and row['created'] == 0
             if profile == 'wheel':
                 row['ok'] = row['ok'] and row['p95Milliseconds'] <= 4 and row['appAttributedMissedIntervals'] <= 1

@@ -26,7 +26,7 @@ extension AutomationController {
       let probe = LibraryScrollProbe()
       let samples = await probe.run(panel,profile:profile)
       return ["profile":profile.rawValue,"frames":samples.map(\.json),"counters":panel.performanceCounters,"inputError":probe.inputError,
-        "heartbeatContexts":["0":"App main run loop outside scroll callback","1":"Library scrollToRow and submitNativeFrame","2":"NSScrollView.scrollWheel","3":"Library submitNativeFrame"]]
+        "heartbeatContexts":["0":"App main run loop outside scroll callback","1":"Library scrollToRow and submitNativeFrame","2":"NSWindow.sendEvent wheel delivery","3":"Library submitNativeFrame"]]
     }
     switch operation {
     case "open":
@@ -159,21 +159,34 @@ private final class LibraryScrollProbe: NSObject {
       let delta = index < 180 ? max(1,168*sin(min(1,Double(index)/90)*Double.pi/2)) : max(1,168*exp(-Double(index-180)/80))
       // Quartz scroll phases (1/2/4) and momentum phases (1/2/3) have
       // different encodings from NSEvent.Phase. Record the converted values.
-      let phase:Int64 = index == 0 ? 1 : index < 179 ? 2 : index == 179 ? 4 : 0
-      let momentum:Int64 = index < 180 ? 0 : index == 180 ? 1 : index == 599 ? 3 : 2
-      guard let cg = CGEvent(scrollWheelEvent2Source:nil,units:.pixel,wheelCount:1,wheel1:-Int32(delta.rounded()),wheel2:0,wheel3:0),let scroll else {
+      // Keep the decaying contact input for 4.5s; native momentum supplies
+      // the final 0.5s. A long synthetic momentum tail can outlive AppKit's
+      // own inertia and would turn most of the receipt into idle callbacks.
+      let phase:Int64 = index == 0 ? 1 : index < 539 ? 2 : index == 539 ? 4 : 0
+      let momentum:Int64 = index < 540 ? 0 : index == 540 ? 1 : index == 599 ? 3 : 2
+      let points = index == 539 || index == 599 ? 0 : delta
+      guard let cg = CGEvent(scrollWheelEvent2Source:nil,units:.pixel,wheelCount:1,wheel1:-Int32(points.rounded()),wheel2:0,wheel3:0),let scroll,let window = scroll.window else {
         inputError = "could not create native wheel event"; finish(); return
       }
       cg.setIntegerValueField(.scrollWheelEventIsContinuous,value:1)
       cg.setIntegerValueField(.scrollWheelEventScrollPhase,value:phase)
       cg.setIntegerValueField(.scrollWheelEventMomentumPhase,value:momentum)
+      cg.setIntegerValueField(.scrollWheelEventScrollCount,value:1)
+      // CreateScrollWheelEvent2 starts with timestamp 0. AppKit must see a
+      // current event time, including on the momentum part of the gesture.
+      cg.timestamp = UInt64(ProcessInfo.processInfo.systemUptime*1_000_000_000)
+      cg.flags = []
+      // CGEvent-created NSEvents have windowNumber 0. Deliver to the owning
+      // window with a window-local hit point so AppKit can latch momentum.
+      let point = scroll.convert(CGPoint(x:scroll.bounds.midX,y:scroll.bounds.midY),to:nil)
+      cg.location = CGPoint(x:point.x,y:(NSScreen.screens.first?.frame.maxY ?? 0)-point.y)
       guard let event = NSEvent(cgEvent:cg) else { inputError = "could not convert native wheel event"; finish(); return }
       let y = scroll.contentView.bounds.minY
-      heartbeat.context("NSScrollView.scrollWheel")
-      scroll.scrollWheel(with:event)
+      heartbeat.context("NSWindow.sendEvent wheel delivery")
+      window.sendEvent(event)
       heartbeat.context("Library submitNativeFrame")
       panel.submitNativeFrame()
-      input = ["requestedPoints":delta,"eventDeltaY":event.scrollingDeltaY,"precise":event.hasPreciseScrollingDeltas ? 1 : 0,"phase":Double(event.phase.rawValue),"momentumPhase":Double(event.momentumPhase.rawValue),"offsetBefore":y,"offsetAfter":scroll.contentView.bounds.minY]
+      input = ["requestedPoints":points,"eventDeltaY":event.scrollingDeltaY,"precise":event.hasPreciseScrollingDeltas ? 1 : 0,"phase":Double(event.phase.rawValue),"momentumPhase":Double(event.momentumPhase.rawValue),"windowNumber":Double(event.windowNumber),"timestamp":event.timestamp,"offsetBefore":y,"offsetAfter":scroll.contentView.bounds.minY]
       visible = 0
     case .control:
       // The no-scroll control performs no layout, display or forced commit.
@@ -205,13 +218,19 @@ private final class LibraryScrollHeartbeat: @unchecked Sendable {
   private let lock = NSLock()
   private var busy = false
   private var timestamp = ProcessInfo.processInfo.systemUptime
+  private var accountedTimestamp = ProcessInfo.processInfo.systemUptime
+  private var intervalBusyMilliseconds = 0.0
   private var maxBusy = 0.0, maxIdle = 0.0
   private var launchUptime = 0.0, busyStart = 0.0, busyEnd = 0.0
   private var entry = "App main run loop outside scroll callback", busyEntry = ""
   private var samples = 0.0
   private var timer: (any DispatchSourceTimer)?
   func beat(busy:Bool) {
-    lock.withLock { self.busy = busy; timestamp = ProcessInfo.processInfo.systemUptime }
+    lock.withLock {
+      let now = ProcessInfo.processInfo.systemUptime
+      if self.busy { intervalBusyMilliseconds += (now-accountedTimestamp)*1000 }
+      self.busy = busy; timestamp = now; accountedTimestamp = now
+    }
   }
   func context(_ entry:String) { lock.withLock { self.entry = entry } }
   func start(launchUptime:Double) {
@@ -233,14 +252,17 @@ private final class LibraryScrollHeartbeat: @unchecked Sendable {
   }
   func read() -> [String:Double] {
     lock.withLock {
+      let now = ProcessInfo.processInfo.systemUptime
+      if busy { intervalBusyMilliseconds += (now-accountedTimestamp)*1000 }
+      accountedTimestamp = now
       let context:Double = switch busyEntry {
       case "Library scrollToRow and submitNativeFrame":1
-      case "NSScrollView.scrollWheel":2
+      case "NSWindow.sendEvent wheel delivery":2
       case "Library submitNativeFrame":3
       default:0
       }
-      let result = ["maxBusyAgeMilliseconds":maxBusy,"maxIdleAgeMilliseconds":maxIdle,"watchdogSamples":samples,"busyStartLaunchMilliseconds":busyStart,"busyEndLaunchMilliseconds":busyEnd,"busyInsideCallback":context == 0 ? 0.0 : 1.0,"busyContextCode":context]
-      maxBusy = 0; maxIdle = 0; samples = 0
+      let result = ["maxBusyAgeMilliseconds":maxBusy,"maxIdleAgeMilliseconds":maxIdle,"watchdogSamples":samples,"busyStartLaunchMilliseconds":busyStart,"busyEndLaunchMilliseconds":busyEnd,"busyInsideCallback":context == 0 ? 0.0 : 1.0,"busyContextCode":context,"mainBusyIntervalMilliseconds":intervalBusyMilliseconds]
+      maxBusy = 0; maxIdle = 0; samples = 0; intervalBusyMilliseconds = 0
       return result
     }
   }
