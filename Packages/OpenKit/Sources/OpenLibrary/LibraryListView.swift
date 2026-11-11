@@ -183,8 +183,8 @@ final class LibraryListView: NSView, NSMenuDelegate {
         func display(_ view:NSView) {
             view.displayIfNeeded(); view.layer?.displayIfNeeded()
             for child in view.subviews { display(child) }
-            func display(_ layer:CALayer) { for child in layer.sublayers ?? [] { child.displayIfNeeded(); display(child) } }
-            if let layer = view.layer { display(layer) }
+            func displayLayers(_ layer:CALayer) { for child in layer.sublayers ?? [] { child.displayIfNeeded(); displayLayers(child) } }
+            if let layer = view.layer { displayLayers(layer) }
         }
         // Only first-use warming is split. Visible rows, overscan and the
         // foreground open/search paths keep their existing submission order.
