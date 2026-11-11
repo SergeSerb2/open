@@ -21,8 +21,12 @@ target_cpu = "arm64"
 treat_warnings_as_errors = false
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
-# Widevine remains disabled until a license permits distribution.
-enable_widevine = false
+# CEF requires Widevine key-system support, host verification, and storage ID.
+# Do not bundle a proprietary CDM without a distribution license.
+enable_widevine = true
+bundle_widevine_cdm = false
+# This local official build has no Widevine signing certificates.
+ignore_missing_widevine_signing_cert = true
 v8_enable_debugging_features = false
 v8_enable_pointer_compression = true
 v8_enable_pointer_compression_shared_cage = true

@@ -52,6 +52,13 @@ directory. It never aliases the dev output. dSYMs stay in the build output;
 the minimal App distribution omits them. Build and packaging acceptance still
 require a real official build.
 
+CEF requires Widevine key-system support in its build inputs. Release args
+keep that support and the required CDM host/storage plumbing enabled, but set
+`bundle_widevine_cdm=false`. This does not grant a license to distribute a
+proprietary CDM. Local official builds also allow missing Widevine signing
+certificates; DRM acceptance requires a separately licensed CDM and its signing
+requirements.
+
 Pins live only in `VERSIONS`. Status checks the real tree against them.
 `OPEN_ENGINE_ROOT` selects a different tree; the default is
 `~/Developer/open-engine`. State and logs go under that root. Help and
