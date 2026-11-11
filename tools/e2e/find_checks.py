@@ -82,6 +82,7 @@ def run(h, factory, results, tmp):
             for item in p.get('chrome', []) if not item.get('hidden', False) for rect in [p['frame'],close])
     def viewport_close(name, target=None):
         if target is not None: app.call('focus', tab=target)
+        app.call('ext-hover', inside=False)
         app.call('ext-hover', inside=True)
         key('f', ['cmd']); p=pane(target)
         strips = [app.call('ext-strip', surface=s) for s in ('url', 'pane', 'toolbar')]
@@ -95,7 +96,8 @@ def run(h, factory, results, tmp):
         closed=h.wait_until(lambda: not pane(p['tab'])['visible'] and app.call('focus-state')['owner']=='page', timeout=3, step=.05)
         after = [app.call('ext-strip', surface=s) for s in ('url', 'pane', 'toolbar')]
         # The close click moved the pointer off the hover-gated URL strip.
-        # Return through the real hover route before checking that it is usable.
+        # Return through a fresh real hover entry before checking usability.
+        app.call('ext-hover', inside=False)
         app.call('ext-hover', inside=True)
         rehovered = [app.call('ext-strip', surface=s) for s in ('url', 'pane', 'toolbar')]
         row(name, before and bool(closed) and any(s.get('visible') and s.get('ids') for s in rehovered)

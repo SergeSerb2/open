@@ -2776,6 +2776,25 @@ def wait_card(app, shown, timeout=3.0, step=0.015):
 
 
 def window_flow_checks(factory, results, tmp):
+    # Persistence requires the user's restore option to be on. Keep that
+    # explicit across all three launches, then restore even after App death.
+    key = 'open.advanced.restoreWindowsOnLaunch'
+    saved, app = {}, None
+    original_factory = factory
+    def configured(*args, **kwargs):
+        nonlocal app
+        app = original_factory(*args, **kwargs)
+        if key not in saved:
+            saved[key] = app.call('defaults', key=key, persistent=True)
+        app.call('defaults', key=key, value=True)
+        return app
+    try:
+        _window_flow_checks(configured, results, tmp)
+    finally:
+        _restore_defaults(app, saved)
+
+
+def _window_flow_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
         # OpenEngine registers a delegating malloc zone before main(), so the

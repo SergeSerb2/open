@@ -65,12 +65,15 @@ def run(factory, results, tmp, env, functional_only=False):
             # CheckedResults still audits App life, focus and crashes first;
             # retain the failed pixel predicate and every raw measurement.
             assert key in ('S11_material', 'S12_elements')
-            if not value['ok']:
+            measured = (len(value.get('probes', [])) == 4 if key == 'S11_material'
+                        else bool(value.get('elements')) and value.get('limits') == {'positionPoints': 1, 'deltaE00': 2})
+            deferred = value.get('ok') is False and measured and value.get('negativeRejected') is True
+            if deferred:
                 value['reason'] = 'S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)'
             try:
                 results[key] = value
             except env['SuiteStopped'] as stop:
-                if stop.failed_row != key or results.get(key) is not value:
+                if not deferred or stop.failed_row != key or results.get(key) is not value:
                     raise
                 env['begin_row']('after ' + key)
                 print(key + ' raw FAIL; exact S12-V deferral, continuing', flush=True)

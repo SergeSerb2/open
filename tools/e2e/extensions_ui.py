@@ -159,9 +159,11 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             capture("url-" + appearance)
         app.call("appearance", name="light")
         control = new_tab(app, "chrome-extension://" + probe + "/popup.html")
+        app.call('events')
         p = popup(probe)
         if not p:
-            results["X6_popup"] = {"ok": False, "state": app.call("ext-popup-state")}
+            results["X6_popup"] = {"ok": False, "state": app.call("ext-popup-state"),
+                "openingEvents": app.call('events'), "tabs": app.call('tabs'), "focus": app.call('native-focus-state')}
             return
         content = control
         developer = new_tab(app, "chrome://extensions")
