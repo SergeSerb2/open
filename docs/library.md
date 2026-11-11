@@ -20,6 +20,9 @@ After: the in-window panel, captured from the real app with synthetic data:
 
 ![In-window Library](library/downloads.png)
 
+[L3 correction frames](library/l3/README.md) show the approved row, Space-card,
+Boost-chip and download-badge changes.
+
 The new native panel keeps one list host per visited section. An unchanged
 warm switch shows the retained host without querying providers or configuring
 rows. The first screen uses up to 60 lazy row sources; later sources append in
@@ -57,7 +60,10 @@ new input cancels and reschedules it. It lays out and displays the hidden hierar
 into retained layers, so a ready open only shows it. Closed store changes mark the
 cache dirty and request another idle slice. Early opens use the cold path.
 The viewport uses fixed frame geometry, cached attributed text and icons,
-layer plates, and a bounded pool of native cells. It has no constraints or row-height
+layer plates, and a bounded pool of native cells. Search uses a retained plain
+text field/editor with prediction and substitution disabled; text changes start
+filtering in the same event. The idle slice also warms fonts, formatters, row kinds
+and icon raster conversions. It has no constraints or row-height
 delegate. Cheap store invalidation remains armed while closed; preparation stops;
 60 seconds later the heavy views and model image caches are released. Reopen cancels
 that release. Closing a browser window removes its session and releases its
