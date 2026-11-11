@@ -495,7 +495,7 @@ def checks(factory, results, tmp, config, harness):
         try:
             def press_delete():
                 try:
-                    app.call('profiles-shell', action='press', label='Delete Profile'); return True
+                    app.press_profile_delete(); return True
                 except RuntimeError:
                     return None
             if not wait(press_delete, 5):

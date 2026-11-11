@@ -1,5 +1,33 @@
 # Import idle CPU attribution, 2026-11-10
 
+## Resolution merged in PR #308
+
+The main-merge bisect identified `b0ebbacff879a58f49078d9972181abb4cbdf792`
+(PR #306) as the first bad merge. The same original import row passed at
+`44b19f3d` with 0.593% App CPU and failed after that merge at 3.370%, on valid
+quiet M1 samples. The responsible App work was the visible Welcome playlist
+on `CrBrowserMain`, rather than a retained onboarding scene. Chromium's
+`StackSamplingProfiler` added a separate 0.367% of one core.
+
+PR #308, merged as `6da537a8`, makes Welcome play one 19-second pass, stops
+work when hidden, and updates miniature theme fields synchronously without
+arming a display link. The App also passes the existing
+`--disable-stack-profiler` switch. The import row waits for Welcome to settle
+with a separate 30-second failure and retains its five-second, less-than-1%
+CPU limit. This is the lead-approved lifecycle fix and measurement boundary;
+the earlier completed-Welcome control below remains diagnostic only.
+
+At PR #308 head `da5d388f`, the original import flow passed all five timing
+and idle rows: 0.594% CPU, History 982.0/1400 ms, main lag 30.4/50 ms, and
+Welcome settled in 19.079 seconds. Complete Welcome passed 51/51, including
+0.387% settled idle, miniaturized shutdown within 0.665 seconds and 0.194%
+miniaturized CPU. No stack-profiler thread remained. The full M5 gate passed
+25/25. See [the bisect and repair finding](../engine-spike/idle-regression-2026-11-10.md)
+for source evidence and exact receipts. Step 3 includes that merged repair;
+its own timing qualification is recorded in the sweep inventory.
+
+## Original failure and diagnostic history
+
 The real Release `import-robust` flow failed `idle_after_import` on quiet M1
 samples at source `06f5139e286fe86d17f3a9c9533d17930401c2d6`. The limit remains
 less than 1% of one core. The engine distribution was
@@ -83,5 +111,5 @@ LEAD21:00 rules that the original valid failures are a product regression.
 The completed-Welcome control is diagnostic only. The production gate keeps
 its original flow, wait, CPU interval, and failing predicate. A proposed
 pre-import completion precondition was withdrawn before qualification.
-The next step is the requested main-merge bisection, beginning with
-`44b19f3d` and `b0ebbacf`, plus attribution of Release profiler startup.
+Those findings led to the main-merge bisection and Release-profiler attribution
+recorded in the resolution above. The original failing receipts are retained.
