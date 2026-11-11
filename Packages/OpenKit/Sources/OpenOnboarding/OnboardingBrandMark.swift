@@ -11,7 +11,7 @@ public enum OnboardingBrandMark {
         public let light: CAGradientLayer
         public let bloom: CALayer
     }
-    public static func path(in rect: CGRect, flipped: Bool = true, bottomCornerRadius: CGFloat? = nil) -> CGPath {
+    public nonisolated static func path(in rect: CGRect, flipped: Bool = true, bottomCornerRadius: CGFloat? = nil) -> CGPath {
         let w = rect.width, h = rect.height, radius = min(w / 2, h / 2)
         let bottom = min(bottomCornerRadius ?? min(w * 10 / 168, h / 8), w / 2, h / 2)
         let p = CGMutablePath()
