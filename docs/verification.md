@@ -1,8 +1,10 @@
 # Full merge verification
 
-Run the gate inside one normal FIFO build slot (three available on the M5,
-one on the M1). The coordinator keeps that slot and takes the screen lock separately for each native or real-App
-suite, including cleanup. Never wrap the entire gate in the screen lock.
+Invoke the gate through `heavy.sh` (three build slots on the M5, one on the
+M1). On the M5, the dispatcher holds no outer slot: each bounded chunk gets
+a fresh FIFO ticket. On the M1, each invocation keeps its ticket. Each native
+or real-App suite takes the screen lock separately through cleanup. Never
+wrap the entire gate in the screen lock.
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/queue.sh
@@ -19,8 +21,9 @@ suites only, using Debug; reserve Release for timing and the final artifact.
 Record final-artifact hashes/manifests once. Run the five-launch timing set
 once per PR, then repeat only after a change aimed at timing.
 
-The full qualifying gate runs unsplit on the M5. Its offscreen worker builds
-OpenKit once in Release, then runs the real release CLIs. Warnings and compiler
+The full qualifying gate is one uninterrupted M5 dispatcher invocation, with
+fresh FIFO tickets between chunks. Its workers build OpenKit in Release,
+then run the real release CLIs. Warnings and compiler
 errors fail that build. The App build uses Release by default; `--config Debug`
 is available for diagnosis. Every suite in `engine_e2e.py --only` is selected by
 default, plus both NTP styles and the real owner-death flow. The superseded
@@ -81,7 +84,8 @@ refuses `DYLD_INSERT_LIBRARIES`.
 `--only NAME[,NAME]` selects native/CLI names or `e2e-NAME`; `--only e2e`
 selects every default real-App suite. `--quick` runs the OpenKit build and three
 CLI checks. `--no-e2e`, `--only`, and `--quick` produce partial receipts and do
-not qualify a PR. `--with-arc-data` adds the read-only top-level Arc import.
+not qualify a PR on their own. The Step 4-only stage qualification below is an
+explicit lead exception. `--with-arc-data` adds the read-only top-level Arc import.
 Unknown or duplicate names fail before a build. Missing dependencies fail;
 only an absent target may SKIP. `--log-dir` or `VERIFY_LOG_DIR` must name a new
 directory. Logs, private per-suite JSON, queue/acquisition times, cleanup and
@@ -173,6 +177,15 @@ inputs, the diff, passing head, verdict and wall time. Re-run failed, NOT_RUN
 and input-invalidated stages and the build. Coordinator or shared-harness
 changes invalidate every stage that reads them. Raw interrupted/failed runs
 stay visible. One uninterrupted full gate remains required before Step 5.
+LEAD 10:30 additionally approves scoped carry across `227d2584`: the PR must
+show its diff against `278dd1c1`, the call graph limiting the settings-icon
+observer to Command Bar/App Actions, and the whole-module AST identity after
+removing only the added CPU reason field. Complete valid M1 Command Bar,
+App Actions, Measure and Media stages and a new M5 build are required on that
+candidate. Each carried stage names its tested head. No M5 stage overlapping
+09:55–10:07 on 11 Nov qualifies after the restart. The merged ICC identity
+migration retains identical colour content and reference PNGs; affected visual
+checks run again under the new key scheme.
 
 ### Display and timer portability (Section 16)
 
