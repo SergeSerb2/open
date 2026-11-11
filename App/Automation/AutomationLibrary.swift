@@ -15,7 +15,7 @@ extension AutomationController {
     }
     switch action {
     case "sessions":
-      return ["sessions":adapter.librarySessions.values.map { session in
+      return ["closedPanelAlive":adapter.lastClosedLibraryPanel != nil,"sessions":adapter.librarySessions.values.map { session in
         ["controllerAlive":session.controller != nil,"panelAlive":session.panel != nil] as [String:Any]
       }]
     case "open":

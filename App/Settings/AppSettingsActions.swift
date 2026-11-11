@@ -72,6 +72,18 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
   @ObservationIgnored var librarySessions: [WindowID: AppLibrarySession] = [:]
+  #if OPEN_AUTOMATION
+  @ObservationIgnored weak var lastClosedLibraryPanel: LibraryPanelView?
+  #endif
+  func libraryWindowClosed(_ id: WindowID) {
+    guard let session = librarySessions.removeValue(forKey: id) else { return }
+    #if OPEN_AUTOMATION
+    lastClosedLibraryPanel = session.panel
+    #endif
+    // Keep the session alive through windowDidClose. It owns native delegates
+    // and observation callbacks which must stop outside that callback stack.
+    DispatchQueue.main.async { session.dispose() }
+  }
   var activeLibrarySession: AppLibrarySession? {
     app.frontStandardWindowController.flatMap { librarySessions[$0.windowID] }
   }

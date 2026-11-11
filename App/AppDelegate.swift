@@ -548,6 +548,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func windowDidClose(_ id: WindowID) {
+    settingsPresenter.libraryWindowClosed(id)
     guard let factory = hostFactories[id] else { return }
     if let session = factory.incognitoSession {
       windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil

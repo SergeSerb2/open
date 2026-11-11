@@ -65,4 +65,13 @@ final class AppLibrarySession {
       self.controller?.releaseLibraryPanel(); self.panel = nil; self.model.releaseContentViews(); self.releaseTask = nil
     }
   }
+  /// The window-close delegate defers this until its callback has returned.
+  func dispose() {
+    releaseTask?.cancel(); releaseTask = nil
+    panel?.isPresented = false
+    controller?.dismissLibraryPanel(animated: false)
+    controller?.releaseLibraryPanel()
+    panel?.removeFromSuperview(); panel = nil
+    model.releaseContentViews()
+  }
 }

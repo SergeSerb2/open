@@ -48,7 +48,8 @@ when the last file expires. Private windows do not show the button.
 `LibraryViewModel` stay shared with their existing stores/actions. No Library
 session or view is constructed at launch. Closing stops content subscriptions;
 60 seconds later the heavy views and model image caches are released. Reopen cancels
-that release. The old `LibraryWindow`, SwiftUI section views and History feature
+that release. Closing a browser window removes its session and releases its
+panel on the next event-loop turn. The old `LibraryWindow`, SwiftUI section views and History feature
 flag have been removed.
 
 Open/close uses the 0.12/0.20-second page transition. Sections cross-fade over
