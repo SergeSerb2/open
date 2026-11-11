@@ -27,7 +27,7 @@ final class WelcomeIllustrationView: NSView {
     return state
   }
   var paintColors: [String:NSColor] { [:] }
-  var sceneScale: [CGFloat] { [miniature.bounds.width/675,miniature.bounds.width/675] }
+  var sceneScale: [CGFloat] { [miniature.renderedScale,miniature.renderedScale] }
   #endif
   init(kind: Int) {
     self.kind = kind; super.init(frame: .zero); wantsLayer = true; layer?.masksToBounds = true

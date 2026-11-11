@@ -47,6 +47,7 @@ final class OnboardingMiniature: NSView {
     private let preferences: UserDefaults
     private var designSize = CGSize(width: 675,height: 765)
     private var isDemo = false
+    var renderedScale: CGFloat { bounds.width/designSize.width }
     var animationCount: Int { (demoRunning ? 1 : 0) + Self.animationKeys(stage.layer) }
 
     init() {
@@ -122,7 +123,7 @@ final class OnboardingMiniature: NSView {
         }
         stage.layer?.transform = t
         rim.frame = stage.bounds
-        rimEdge.frame = stage.bounds; rimEdge.lineWidth = 675/max(1,bounds.width)
+        rimEdge.frame = stage.bounds; rimEdge.lineWidth = designSize.width/max(1,bounds.width)
         let edge = CGMutablePath(); let radius = OnboardingTokens.Room.miniatureRadius
         edge.move(to: CGPoint(x: radius,y: 0.7)); edge.addLine(to: CGPoint(x: designSize.width-radius,y: 0.7))
         edge.addQuadCurve(to: CGPoint(x: designSize.width-0.7,y: radius),control: CGPoint(x: designSize.width-0.7,y: 0.7))
@@ -193,7 +194,7 @@ final class OnboardingMiniature: NSView {
     #if OPEN_AUTOMATION
     var demoState: [String:Any] {
         ["realSidebar":true,"realCommandBar":command != nil,"engineContents":0,
-         "designSize":[designSize.width,designSize.height],"scale":bounds.width/675,
+         "designSize":[designSize.width,designSize.height],"scale":renderedScale,
          "pageFrame":[page.frame.minX,page.frame.minY,page.frame.width,page.frame.height],
          "pageBounds":[page.bounds.width,page.bounds.height],"stageBounds":[stage.bounds.width,stage.bounds.height],
          "todayCount":space.today.count,"running":demoRunning,
