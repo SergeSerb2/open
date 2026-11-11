@@ -45,8 +45,12 @@ and `caffeinate -dimsu`. `--target` also takes a quoted list. Distrib builds
 `"cefsimple cefclient"` (CEF's packager copies the framework out of
 `cefclient.app`) and calls `cef/tools/make_distrib.py --minimal --no-symbols`
 directly. Release uses a separate output directory and needs the exact
-published PGO profile. Release distribution stops until Step 10 resolves
-CEF's fixed dev output directory. It never packages dev as release.
+published PGO profile. CEF patch 0001 adds `--release-build-dir`, so release
+packaging reads `out/Release_Official_arm64` directly. The release path rejects
+dev args, disallows partial packaging, and adds `-official` to its distribution
+directory. It never aliases the dev output. dSYMs stay in the build output;
+the minimal App distribution omits them. Build and packaging acceptance still
+require a real official build.
 
 Pins live only in `VERSIONS`. Status checks the real tree against them.
 `OPEN_ENGINE_ROOT` selects a different tree; the default is
