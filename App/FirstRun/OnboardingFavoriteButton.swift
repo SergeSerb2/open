@@ -112,7 +112,7 @@ import QuartzCore
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
   override func draw(_ dirtyRect: NSRect) {
     let paragraph = NSMutableParagraphStyle(); paragraph.alignment = .center; paragraph.lineBreakMode = .byWordWrapping
-    let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11.5, weight: selected ? .semibold:.medium),
+    let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: selected ? .semibold:.medium),
       .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph, .kern: -0.1]
     let text = text as NSString
     let height = min(26, ceil(text.boundingRect(with: NSSize(width: 84, height: 26), options: [.usesLineFragmentOrigin], attributes: attributes).height))
