@@ -170,7 +170,9 @@ public final class SiteControlPanelView: NSView {
         material.layer?.addSublayer(spaceTint); material.layer?.addSublayer(topZone)
         topZone.mask = topZoneMask
         topZoneMask.startPoint = CGPoint(x: 0,y: 0.5); topZoneMask.endPoint = CGPoint(x: 1,y: 0.5)
-        layer?.addSublayer(fallback); addSubview(chrome); chrome.layer?.addSublayer(rim); chrome.layer?.addSublayer(separator)
+        // The offscreen harness bitmap (empty in the App) sits under the rim and separator, so the Dark separator's
+        // plus-lighter composites over it in the offscreen renderer as it does over the live material.
+        addSubview(chrome); chrome.layer?.addSublayer(fallback); chrome.layer?.addSublayer(rim); chrome.layer?.addSublayer(separator)
         let actionSpecs = [("share","Share","square.and.arrow.up"),("newBoost","New Boost",BoostGlyph.outline),("capture","Capture a portion of this page","camera"),("captureFull","Capture the full page","text.viewfinder")]
         for (id,label,symbol) in actionSpecs {
             let b = SiteControlButton(id: "action."+id,label: label,symbol: symbol,pointSize: SiteControlMetrics.actionGlyph)
