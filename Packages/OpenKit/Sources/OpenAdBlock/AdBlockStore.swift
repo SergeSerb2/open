@@ -201,18 +201,20 @@ public final class AdBlockStore {
         if scheduleUpdates {
             let scale = Double(ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE"] ?? "1") ?? 1
             guard scale.isFinite, scale > 0, scale <= 1 else { throw AdBlockError("invalid debug schedule scale") }
+            let first = states[profile].map { initialUpdateDelay($0, scale: scale) } ?? Self.minimumUpdateDelay
             schedules[profile] = Task { [weak self] in
-                var delay: TimeInterval = 60
+                var delay: TimeInterval = Self.minimumUpdateDelay
                 var failures = 0
+                var sleep = first
                 do {
                     while !Task.isCancelled {
-                        try await Task.sleep(for: .seconds(delay * scale))
+                        try await Task.sleep(for: .seconds(sleep))
                         try Task.checkCancellation()
                         guard self != nil else { return }
                         let outcome: String
                         do {
                             try await self?.updateListsNow(profile: profile)
-                            failures = 0; delay = 24 * 60 * 60; outcome = "ok"
+                            failures = 0; delay = Self.updateInterval; outcome = "ok"
                         } catch {
                             if Task.isCancelled { return }
                             outcome = (error as? AdBlockError)?.description == "profile operation is in progress" ? "busy" : "failed"
@@ -220,10 +222,37 @@ public final class AdBlockStore {
                             failures += 1
                         }
                         self?.onScheduledUpdate?(outcome, delay)
+                        sleep = delay * scale
                     }
                 } catch { /* session/profile closed */ }
             }
         }
+    }
+
+    /// The first check after launch waits at least this long, so it never competes with first paint.
+    static let minimumUpdateDelay: TimeInterval = 60
+    /// A successful check is fresh for one interval; the next one is due at `lastCheck + updateInterval`.
+    static let updateInterval: TimeInterval = 24 * 60 * 60
+
+    /// Seconds (already scaled) until the first check of an opened Profile. Due now (after the minimum
+    /// delay) for first install and bundled seeds, a recorded failure, a list without a complete
+    /// receipt for its current sources, an overdue or future-dated check. Otherwise `lastCheck +
+    /// updateInterval` of the oldest enabled list. The debug scale applies to elapsed time too, so a
+    /// scaled run sees one scaled interval.
+    private func initialUpdateDelay(_ state: AdBlockProfileState, scale: Double) -> TimeInterval {
+        let soon = Self.minimumUpdateDelay * scale
+        guard state.lastError == nil else { return soon }
+        var oldest = Date.distantFuture
+        for id in state.enabledBlockLists {
+            guard let receipt = state.lists[id], let list = try? catalog.list(id),
+                  receipt.sources.count == list.urls.count else { return soon }
+            oldest = min(oldest, receipt.lastCheck)
+        }
+        guard oldest != .distantFuture else { return soon }
+        let elapsed = Date().timeIntervalSince(oldest)
+        let interval = Self.updateInterval * scale
+        guard elapsed >= 0, elapsed < interval else { return soon }
+        return max(soon, interval - elapsed)
     }
 
     public func closeProfile(_ profile: ProfileID) throws {
