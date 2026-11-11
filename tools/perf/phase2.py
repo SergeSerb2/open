@@ -222,8 +222,10 @@ def measure_metric(b,f,out,metrics,name,roi,action,duration=1100,field='first_ch
     return row
 
 def worker(cfg):
+    from run import background_jobs
     out=Path(cfg['out']);out.mkdir(parents=True,exist_ok=False)
     open_only=cfg.get('open_only',False)
+    calibration=cfg.get('calibration_only',False)
     if open_only and cfg['browser']!='open':raise RuntimeError('Open-only replay cannot launch Arc')
     row={'date':now(),'browser':cfg['browser'],'state':'S-real','task':cfg['task'],
          'input_boundary_version':2,
@@ -231,12 +233,16 @@ def worker(cfg):
          'commit':cfg['provenance']['commit'],'app_main_sha256':cfg['provenance']['app_main_sha256'],
          'arc_version_before':None if open_only else version(False),
          'arc_core_before':None if open_only else arc_core(),'display_before':probe('metadata')}
+    row['background_jobs_before']=background_jobs()
+    row['qualification']='under load, not for scoring' if calibration else 'scored'
     atomic(out/'sample.json',row)
     if os.environ.get('OPEN_HEAVY_HELD')!='1':raise RuntimeError('Exclusive queue slot missing')
     if existing_pids(ARC) or existing_pids(OPEN):
         row['foreign_browser']=True;atomic(out/'sample.json',row);return 76
+    if row['background_jobs_before'] and not calibration:
+        row['error']='Background build invalidates score measurements';atomic(out/'sample.json',row);return 1
     max_load=cfg['provenance'].get('max_load1',10)
-    if os.getloadavg()[0]>max_load:row['gate_refused']=True;atomic(out/'sample.json',row);return 75
+    if not calibration and os.getloadavg()[0]>max_load:row['gate_refused']=True;atomic(out/'sample.json',row);return 75
     expected=cfg['provenance']
     for name,digest in expected['measurement_helpers'].items():
         if sha(ROOT/'.re/perf/bin'/name)!=digest:raise RuntimeError('Measurement helper changed: '+name)
@@ -346,7 +352,9 @@ def worker(cfg):
         row['arc_version_after']=None if open_only else version(False)
         row['arc_core_after']=None if open_only else arc_core();row['display_after']=probe('metadata')
         row['load_after']=list(os.getloadavg())
-        row['valid']=not row.get('error') and not row.get('restore_error') and row.get('cleanup') and max(row['load_before'][0],row['load_after'][0])<=max_load
+        row['background_jobs_after']=background_jobs()
+        if row['background_jobs_after'] and not calibration:row['error']='Background build invalidates score measurements'
+        row['valid']=not row.get('error') and not row.get('restore_error') and row.get('cleanup') and (calibration or max(row['load_before'][0],row['load_after'][0])<=max_load)
         for what in ('arc_version','arc_core','display'):
             if row[what+'_before']!=row[what+'_after']:row['valid']=False;row['error']=what+' changed'
         for path,k in [(OPEN/'Contents/MacOS/Open','app_main_sha256'),(OPEN/'Contents/Frameworks/OpenEngine.framework/Versions/A/OpenEngine','engine_sha256')]:

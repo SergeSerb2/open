@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 
-from run import ROOT, ARC, OPEN, atomic, existing_pids, now, provenance, sha
+from run import ROOT, ARC, OPEN, atomic, background_jobs, existing_pids, now, provenance, sha
 from score import compare
 from server import Collector
 
@@ -135,6 +135,8 @@ def main():
     a.out = private_path(a.out)
     if a.out.exists(): p.error('Preserve receipts: output already exists')
     if a.export_replay: return export(a.reference, a.export_replay, a.out)
+    if not a.calibrate and background_jobs():
+        p.error('Background build is active: score measurements are invalid; only --calibrate is allowed (under load, not for scoring)')
     if not 1 <= a.samples <= 7: p.error('Use 1–7 replay samples per task')
     if not 0 < a.max_load <= 10 or not math.isfinite(a.max_load): p.error('Load ceiling must be in (0,10]')
     if not 1 <= a.max_wait_seconds <= 86400: p.error('Wait limit must be 1–86400 seconds')
@@ -173,7 +175,8 @@ def main():
         frozen_reference_sha256=sha(a.reference), replay_manifest_sha256=sha(manifest_path),
         arc_access='Frozen reference only; no Arc launch, defaults or live data access')
     run = {'schema': 1, 'date': now(), 'provenance': current, 'samples': [], 'blocked': {},
-        'calibration_only': a.calibrate, 'selected_metrics': sorted(selected), 'gate_attempts': []}
+        'calibration_only': a.calibrate, 'selected_metrics': sorted(selected), 'gate_attempts': [],
+        'qualification': 'under load, not for scoring' if a.calibrate else 'scored replay; background jobs forbidden'}
     work = a.out.parent / (a.out.stem + '-samples'); work.mkdir(parents=True)
     collector = Collector(work / 'collector', port=manifest['port'])
     root = Path(tempfile.mkdtemp(prefix='op.')); atomic(a.out, run)
@@ -182,7 +185,8 @@ def main():
             wait_end = time.monotonic() + a.max_wait_seconds; accepted = False; attempt = 0
             while not accepted:
                 if time.monotonic() >= wait_end: raise RuntimeError('Timed out waiting for a qualified replay session')
-                if os.getloadavg()[0] > a.max_load or Path('/tmp/open-onscreen-priority').exists() or (ROOT / '.re/hold-on-screen').exists():
+                if not a.calibrate and background_jobs():raise RuntimeError('Background build started; score measurements are invalid')
+                if (not a.calibrate and os.getloadavg()[0] > a.max_load) or Path('/tmp/open-onscreen-priority').exists() or (ROOT / '.re/hold-on-screen').exists():
                     time.sleep(5); continue
                 snapshot = private_path(pair['snapshot'])
                 if tree_digest(snapshot) != pair['snapshot_sha256']: raise ValueError('Private replay state changed')
@@ -195,7 +199,7 @@ def main():
                     'origin': manifest['origin'], 'route': manifest['route'], 'provenance': current,
                     'frame': pair['frame'], 'viewport': pair['viewport'],
                     'metric_filter': sorted(selected), 'fail_after_metric': a.fail_after_metric,
-                    'app_cadence': a.app_cadence}
+                    'app_cadence': a.app_cadence, 'calibration_only': a.calibrate}
                 config = work / 'worker-config.json'; atomic(config, cfg)
                 command = [str(Path.home() / 'Library/Caches/OpenRE/scripts/heavy.sh'),
                     '/usr/bin/lockf', '-k', '-t', '30', '/tmp/open-onscreen-e2e.lock',

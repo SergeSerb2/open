@@ -189,6 +189,16 @@ Replay scorecards cover selected Phase 2 rows only; they do not carry old
 Phase 1 values into a new overall. `--max-wait-seconds` bounds gate retries;
 waiting inside the shared FIFO can exceed that budget.
 
+The engine release build can run as a slotless background job. An exclusive
+ticket does not exclude it. No M5 score measurement is valid while that
+build runs. Phase 2 replay checks live background-holder records before and
+after each session and refuses scoring. `--calibrate` may run functional
+flows under load once the user's browser is quit; it records actual load,
+skips the quiet-load gate, labels numbers **under load, not for scoring**,
+and writes no scorecard. The scorer also refuses calibration receipts.
+Older Phase 1 entry points require the same operator check; do not run them
+for scores during a background build.
+
 `--app-cadence` adds informative, automation-only observations during the
 sidebar trial: App display-link timestamps and native clip bounds-change
 timestamps, capped at 4,096 samples or ten seconds. The observer restores

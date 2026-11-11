@@ -67,6 +67,24 @@ def existing_pids(bundle):
         if path==str(executable) or (bundle==OPEN and path.endswith('.app/Contents/MacOS/Open')):
             found.append(int(parts[0]))
     return found
+def background_jobs():
+    """Live slotless heavy jobs invalidate quiet-machine score measurements."""
+    holders=Path(os.environ.get('OPEN_HEAVY_PREFIX','/tmp/open-heavy')+'-holders')
+    if not holders.is_dir():return []
+    result=[]
+    for path in holders.iterdir():
+        if not path.name.isdigit():continue
+        try:
+            if path.stat().st_size>4096:raise RuntimeError('Oversize heavy holder record')
+            fields=path.read_text().strip().split('\t')
+        except FileNotFoundError:continue  # The queued job finished during this read.
+        if fields[-1]!='background':continue
+        pid=int(path.name)
+        try:os.kill(pid,0)
+        except ProcessLookupError:continue
+        result.append({'pid':pid,'kind':'background'})
+        if len(result)>64:raise RuntimeError('Heavy holder count limit')
+    return result
 def arc_counts():
     """Counts only; schema mirrors OpenImport/ArcProbe, never emits names."""
     raw=json.loads((ARC_DATA/'StorableSidebar.json').read_text())

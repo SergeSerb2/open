@@ -99,6 +99,8 @@ def freeze(run):
             'latency_qualification':'Conditional on successful startup; failed intents are retained separately'}
 
 def compare(reference, current):
+    if current.get('calibration_only') or any(s.get('background_jobs_before') or s.get('background_jobs_after') for s in current.get('samples',[])):
+        raise ValueError('Calibration or background-build receipts are not eligible for scoring')
     if reference.get('kind')!='frozen-arc-reference':
         raise ValueError('Expected a frozen Arc reference, not a scorecard or an unqualified run')
     for key in ('hardware','os','display'):
