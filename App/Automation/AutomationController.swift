@@ -2035,12 +2035,19 @@
       guard leave ? targets == 0 : targets == 1 else { throw Failure(message: "hover needs one node or favorite, or leave") }
       let point = try leave ? NSPoint(x: controller.contentView.bounds.maxX - 80, y: controller.contentView.bounds.midY) : sidebarPoint(args, controller: controller, favorite: args["favorite"] != nil)
       try await activateForInput(target)
-      _ = try await mouse(["action": "hover", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y)], factory)
+      let tracking = try await mouse(["action": "hover", "window": target.windowNumber, "x": Double(point.x), "y": Double(point.y)], factory)
       if ms > 0 { try await Task.sleep(for: .milliseconds(ms)) }
-      return try previewState(args)
+      var result = try previewState(args)
+      result["tracking"] = tracking
+      result["point"] = [point.x, point.y]
+      let tracker = controller.context.hoverPreviews
+      result["armed"] = tracker.isArmed
+      result["scheduledShows"] = tracker.scheduledShowCount
+      result["showDeadline"] = tracker.scheduledShowDeadline.map { $0 as Any } ?? NSNull()
+      return result
     }
 
-    private func previewState(_ a: [String: Any]) throws -> Any {
+    private func previewState(_ a: [String: Any]) throws -> [String: Any] {
       let controller = try sidebarController(a)
       let preview = controller.hoverPreview
       var kind = "none", target = ""

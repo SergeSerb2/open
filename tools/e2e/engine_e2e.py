@@ -10042,7 +10042,8 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     click(background['id'])
     require('E13_sidebar_select_clears_unread', not app.tab(background['id'])['unread'] and not app.call('sidebar-row', node=background['id'])['unreadBadge'])
     hover_result = app.call('hover', favorite=favorite, ms=600); leave = app.call('hover', leave=True, ms=300)
-    require('A3_favorite_hover_wrapper', hover_result['kind'] == 'page' and hover_result['target'] == favorite and leave['kind'] == 'none', preview=hover_result, leave=leave, expected=favorite)
+    require('A3_favorite_hover_wrapper', hover_result['kind'] == 'page' and hover_result['target'] == favorite and leave['kind'] == 'none', preview=hover_result, leave=leave, expected=favorite,
+            window=state(), favorite=app.tab(favorite), preferences={key: app.call('defaults', key=key) for key in ('open.general.previewsEnabled', 'open.general.previewsPages')})
     # E15: hit the divider's actual Clear control, with Option and without.
     clear_space = fresh('Clear'); protected = opened('Clear Pinned', True)
     for i in range(4): opened('Clear Today %d' % i)
