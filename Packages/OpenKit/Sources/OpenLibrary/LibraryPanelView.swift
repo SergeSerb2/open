@@ -176,7 +176,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         let extent = CGFloat(max(0,sections.count-1))*pitch+80
         let documentHeight = max(rail.bounds.height,extent)
         railDocument.frame = CGRect(x:0,y:0,width:112,height:documentHeight)
-        let start = max(0,(documentHeight-extent)/2 - (sections.count == 6 ? 3 : 0))
+        // Lead 00:00: the tile block's center is H/2 - 5, then clamp to the
+        // 52 ... H-56 rail viewport. An overfull minimum-pitch rail scrolls.
+        let start = max(0,min(documentHeight-extent,(documentHeight-extent)/2-3))
         for (index,candidate) in sections.enumerated() { tiles[candidate]?.frame=CGRect(x:8,y:start+CGFloat(index)*pitch,width:97,height:80) }
         back.frame = CGRect(x:8,y:height-40,width:32,height:32)
         header.frame=CGRect(x:120,y:10,width:section.hasFilter ? 212 : 289,height:36)
@@ -229,7 +231,10 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         return ["section":section.rawValue,"panelFrame":[frame.minX,frame.minY,frame.width,frame.height],
             "rail":sections.compactMap { candidate -> [String:Any]? in
                 guard let tile=tiles[candidate] else { return nil }
-                return ["id":candidate.rawValue,"frame":rect(tile),"selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile]
+                let point = tile.convert(CGPoint(x:tile.bounds.midX,y:tile.bounds.midY),to:nil)
+                let hit = window?.contentView?.superview?.hitTest(point)
+                return ["id":candidate.rawValue,"frame":rect(tile),"selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile,
+                    "hitClass":hit.map { String(describing:type(of:$0)) } ?? "", "canDragWindow":tile.mouseDownCanMoveWindow]
             },
             "header":["searchFrame":section == .spaces ? [] : rect(header),"filterFrame":section.hasFilter ? rect(filter) : [],"filterOpen":filterOpen,"chips":[]] as [String:Any],
             "search":viewModel.query,"rows":[],"emptyState":["title":emptyTitle.stringValue,"body":emptyBody.stringValue,"iconFrame":rect(emptyGlyph),"buttonEnabled":emptyButton.isEnabled],

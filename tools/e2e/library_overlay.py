@@ -19,7 +19,7 @@ KEYS = ['libraryShowsEasels', 'libraryShowsHistory', 'OpenLibraryLegacyWindow',
         'open.library.lastSection', 'open.sidebar.hideHintShown']
 
 
-def run(output, frames=False, bundle=None):
+def run(output, frames=False, bundle=None, mockups=None):
     output.mkdir(parents=True, exist_ok=True)
     checks, shots = {}, []
     app = None
@@ -71,11 +71,31 @@ def run(output, frames=False, bundle=None):
                   and current['panelFrame'][2] == 417 and current['pageCardFrame'][0] == 417,
                   state=current)
             check('six_tile_rail', [x['id'] for x in current['rail']] == SECTIONS)
+            check('rail_native_hit_targets', all(tile['hitClass'] == 'LibraryControl' and not tile['canDragWindow'] for tile in current['rail']),
+                  hits=[dict(id=t['id'],hit=t['hitClass'],windowDrag=t['canDragWindow']) for t in current['rail']])
             for section in SECTIONS:
                 current = state(action='select', section=section)
                 expected = app.call('window-state')['frame'][2]-56 if section == 'spaces' else 417
                 check('section_' + section, current['section'] == section and current['panelFrame'][2] == expected,
                       panel=current['panelFrame'], page=current['pageCardFrame'])
+            state(action='select', section='downloads')
+            state(action='focus-rail')
+            key('right')
+            check('rail_right_arrow', state()['section'] == 'spaces')
+            key('left')
+            check('rail_left_arrow', state()['section'] == 'downloads')
+            target = next(tile for tile in state()['rail'] if tile['id'] == 'history')
+            x,y,w,h = target['frame']
+            app.call('mouse', action='hover', window=state()['window'], x=x+w/2, y=y+h/2)
+            check('native_tile_hover', next(t for t in state()['rail'] if t['id'] == 'history')['hovered'])
+            started = time.monotonic()
+            app.call('mouse', action='click', queued=True, window=state()['window'], x=x+w/2, y=y+h/2)
+            immediate = state()['section']
+            deadline = time.monotonic()+2
+            while state()['section'] != 'history' and time.monotonic() < deadline:
+                time.sleep(.005)
+            check('native_tile_click', state()['section'] == 'history', immediateSection=immediate,
+                  elapsedMilliseconds=(time.monotonic()-started)*1000, state=state())
             state(action='select', section='downloads')
             state(action='search', text='unmatched synthetic name')
             check('no_results_copy', state()['emptyState']['title'] == 'No matches')
@@ -83,6 +103,9 @@ def run(output, frames=False, bundle=None):
             check('escape_clears_search', state()['open'] and state()['search'] == '')
             key('f', ['cmd'])
             check('cmd_f_search', state()['firstResponder'] == 'NSTextView', state=state())
+            app.call('key', text='socket typing', route='app')
+            check('native_search_typing', state()['search'] == 'socket typing')
+            key('escape')
             key('escape')
             check('escape_closes_panel', not state()['open'])
             after = app.call('window-state')
@@ -105,6 +128,14 @@ def run(output, frames=False, bundle=None):
             check('returns_to_hidden_sidebar', app.call('window-state')['sidebarMode'] == 'hidden')
             app.call('command', id='toggle-sidebar')
 
+            app.call('defaults', key='OpenLibraryLegacyWindow', value=True)
+            app.call('command', id='view-downloads')
+            legacy = app.call('settings-state')
+            check('legacy_debug_route', legacy['library'] != owner['number'] and legacy['librarySection'] == 'downloads')
+            app.call('library-close')
+            app.call('defaults', key='OpenLibraryLegacyWindow', value=False)
+            app.call('window-focus', id=owner['id'], activate=True)
+
             state(action='open', section='downloads')
             app.call('command', id='new-window')
             other = next(w for w in app.call('shell-windows') if w['id'] != owner['id'])
@@ -126,7 +157,7 @@ def run(output, frames=False, bundle=None):
                     for appearance in ['light', 'dark']:
                         app.call('appearance', name=appearance)
                         app.call('theme-set', space=space, style=dict(
-                            keyColor=dict(zip(['red','green','blue'], rgb)), colorCount=3,
+                            keyColor=dict(zip(['red','green','blue'], rgb), alpha=1), colorCount=3,
                             appearance=appearance, noiseFactor=0, intensityFactor=0.8))
                         time.sleep(.35)
                         palette = app.call('theme-get', space=space)
@@ -134,6 +165,8 @@ def run(output, frames=False, bundle=None):
                             app.call('window-frame', frame=[40,50,width,height], unconstrained=True)
                             for section in SECTIONS:
                                 state(action='select', section=section)
+                                app.call('mouse', action='hover', window=state()['window'], x=width-30, y=height-30)
+                                app.call('mouse', action='click', window=state()['window'], x=width-30, y=height-30)
                                 time.sleep(.23)
                                 name = '%s-%s-%dx%d-%s' % (theme,appearance,width,height,section)
                                 capture(name,width,height,theme=theme,appearance=appearance,themeState=palette)
@@ -145,6 +178,24 @@ def run(output, frames=False, bundle=None):
                 check('seven_tile_flag', len(state()['rail']) == 7)
                 app.call('defaults', key='libraryShowsEasels', value=False)
                 state(action='refresh')
+                if mockups:
+                    state(action='close')
+                    time.sleep(.25)
+                    if app.call('window-state')['sidebarMode'] != 'hidden':
+                        app.call('command', id='toggle-sidebar')
+                    for source in sorted(mockups.glob('mock-*.html')):
+                        # The binding HTML is ours. Render it in the real engine
+                        # through the socket, with a page viewport of the same size.
+                        size = source.stem.split('-')[2]
+                        width,height = map(int,size.split('x'))
+                        app.call('window-frame', frame=[40,50,width+20,height+20], unconstrained=True)
+                        app.call('navigate', url=source.resolve().as_uri())
+                        app.call('wait')
+                        time.sleep(.05)
+                        destination = output / (source.stem + '.png')
+                        app.call('snapshot', page=True, path=str(destination))
+                        dimensions = struct.unpack('>II', destination.read_bytes()[16:24])
+                        check(source.stem+'_reference_2x', dimensions == (width*2,height*2),pixels=dimensions)
             result['ok'] = True
         except Exception as error:
             result.update(ok=False,error=repr(error))
@@ -174,6 +225,7 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--bundle', type=Path)
     parser.add_argument('--frames', action='store_true')
+    parser.add_argument('--mockups', type=Path)
     args = parser.parse_args()
-    answer = run(args.output.resolve(),args.frames,args.bundle)
+    answer = run(args.output.resolve(),args.frames,args.bundle,args.mockups)
     raise SystemExit(0 if answer['ok'] else 1)

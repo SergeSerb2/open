@@ -178,7 +178,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     else { showLibrary(section: section) }
   }
   func closeLibrary() {
-    if usesLegacyLibrary { legacyLibraryPresenter?.window?.performClose(nil) }
+    if usesLegacyLibrary || legacyLibraryPresenter?.window?.isVisible == true { legacyLibraryPresenter?.window?.performClose(nil) }
     else { activeLibrarySession?.close() }
     app.scheduleMenuRebuild()
   }
