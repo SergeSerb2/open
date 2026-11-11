@@ -36,7 +36,7 @@ def fixture(root):
         spaces.extend([ids[name], dict(id=ids[name], title=title, profile={'default': True},
                                       containerIDs=['pinned', ids[pinned], 'unpinned', ids[today]])])
     def write(name, obj): (root / name).write_text(json.dumps(obj))
-    write('StorableSidebar.json', {'sidebar': {'containers': ['synthetic', dict(items=items, spaces=spaces,
+    write('StorableSidebar.json', {'sidebar': {'containers': [{'global': {}}, dict(items=items, spaces=spaces,
                                                                 topAppsContainerIDs=[{'default': True}, ids['top']])]}})
     write('StorableWindows.json', {'windows': [dict(id=ids['window'], focusedSpaceID=ids['alpha'],
                                                     expandedItems=[ids['folder'], {'expanded': {}}])]})
@@ -306,7 +306,7 @@ def run(factory, results, tmp, h):
         # fallback model must not replace the unsaved first-run default model.
         zero = Path(tmp) / 'arc-zero-items'; zero.mkdir(exist_ok=True)
         (zero/'StorableSidebar.json').write_text(json.dumps(
-            {'sidebar': {'containers': ['synthetic', {'items': [], 'spaces': []}]}}))
+            {'sidebar': {'containers': [{'global': {}}, {'items': [], 'spaces': []}]}}))
         app = launch(fresh=True, directory=zero)
         app.call('defaults', key='open.firstRun.completed', value=None)
         default_spaces = app.call('spaces')

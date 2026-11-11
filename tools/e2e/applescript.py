@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 KEY = 'open.developer.allowJavaScriptFromAppleEvents'
 MODE_KEY = 'open.developer.modeHosts'
+RESTORE_KEY = 'open.advanced.restoreWindowsOnLaunch'
 OFF = 'JavaScript from Apple Events is off. Turn it on in View ▸ Developer.'
 WRITE_ONLY = ('tabs of application is write-only; make a new tab on application to create a Little Open window, '
               'or read tabs of a window or space.')
@@ -159,9 +160,12 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
     """A1–A18/R1–R3 on a new App instance; repeat after cold relaunch with stable IDs."""
     server, origin = fixture_server('AppleScript')
     app = factory(urls=(origin + '/research-pinned',), fresh=True)
-    saved = {key: app.call('defaults', key=key, persistent=True) for key in (KEY,MODE_KEY)}
+    saved = {key: app.call('defaults', key=key, persistent=True) for key in (KEY,MODE_KEY,RESTORE_KEY)}
     try:
         for key in saved: app.call('defaults', key=key, value=None)
+        # A18 verifies persisted window IDs. The user may have selected the
+        # separate, valid "new window on launch" policy; restore it in finally.
+        app.call('defaults', key=RESTORE_KEY, value=True)
         script = Scripts(app)
         results['external_osascript'] = dict(script.external, sender=script.mode)
         bundle_sdef = os.path.join(app.bundle, 'Contents/Resources/Open.sdef')
@@ -325,6 +329,9 @@ def run(factory, results, tmp, fixture_server, restore_defaults, wait_until):
             check('A17_counts','return ((count tabs of space 1 of window 1) as text) & "|" & (count spaces of window 1)','2|2')
             if not cold:
                 # Send quit by Apple event; cleanup verifies the exact owned PID exits.
+                # Warn Before Quitting is on by default. Answer its real native
+                # alert if it appears, including from the self Apple-event path.
+                app.call('quit-warning', button='quit')
                 quit_error=None
                 try: script('quit')
                 except (OSError,json.JSONDecodeError) as error: quit_error=type(error).__name__

@@ -53,8 +53,8 @@ public struct ArcProbe:Sendable {
         var liveArcIDs:Set<String>=[]
         // Read the importer's immutable parse, never a BrowserModel. The walk stays on this worker.
         if let parsed=try? ArcImporter(arcDirectory:arcDirectory).readSidebar(),
-           let sidebar=parsed.root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,
-           let holder=containers[1] as? [String:Any],let rawItems=holder["items"] as? [Any],let rawSpaces=holder["spaces"] as? [Any] {
+           let holder=try? ArcImporter.globalSidebar(in:parsed.root),
+           let rawItems=holder["items"] as? [Any],let rawSpaces=holder["spaces"] as? [Any] {
             let items=entries(rawItems),spaces=entries(rawSpaces)
             result.spaces=spaces.count
             let content=items.filter {kind($0.1) != "itemContainer"}
@@ -171,7 +171,7 @@ public extension ArcProbe {
             let fm=FileManager.default,root=fm.temporaryDirectory.appendingPathComponent("open-probe-cancel-"+UUID().uuidString)
             try fm.createDirectory(at:root.appendingPathComponent("User Data/Default"),withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
             defer {try? fm.removeItem(at:root)}
-            try JSONSerialization.data(withJSONObject:["sidebar":["containers":["fixture",["items":[],"spaces":[]]]]]).write(to:root.appendingPathComponent("StorableSidebar.json"))
+            try JSONSerialization.data(withJSONObject:["sidebar":["containers":[["global":[:]], ["items":[],"spaces":[]]]]]).write(to:root.appendingPathComponent("StorableSidebar.json"))
             let history=root.appendingPathComponent("User Data/Default/History")
             var db:OpaquePointer?
             guard sqlite3_open(history.path,&db) == SQLITE_OK else {sqlite3_close(db);throw ArcHistoryImportError.openFailed}

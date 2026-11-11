@@ -1,0 +1,50 @@
+"""Chromium NTP navigation through real shell and renderer entry points."""
+import json
+
+
+def run(factory, results, api, style):
+    aliases = ('chrome://newtab/', 'about:newtab', 'chrome://new-tab-page/',
+               'chrome://new-tab-page-third-party/')
+    app = None
+    try:
+        # Model chrome: URLs deliberately force a Chrome host, even when the
+        # shell defaults to Alloy. about:newtab reaches the actual Alloy host.
+        initial = 'about:newtab' if style == 'alloy' else aliases[0]
+        app = factory(urls=(initial,))
+        tab = app.call('tabs')[0]['id']
+        pid = app.call('ping')['pid']
+
+        def loaded(name, address, renderer_source=None):
+            app.call('wait', tab=tab)
+            state = api.wait_until(lambda: (lambda p: p if p.get('live') and not p.get('loading', True) else None)(app.page(tab)),
+                                   timeout=15, step=.05)
+            # Chromium can refuse a renderer's privileged about: navigation
+            # itself, before OnBeforeBrowse, by showing about:blank#blocked.
+            # Our callback otherwise cancels it and preserves the document.
+            allowed = ({renderer_source, 'about:blank#blocked'} if renderer_source is not None
+                       else {'about:blank'})
+            expected = sorted(allowed)
+            correct = bool(state) and state['url'] in allowed
+            results[name] = {'ok': correct and state.get('style') == style
+                             and app.call('ping')['pid'] == pid,
+                             'requested': address, 'page': state, 'expected': expected}
+
+        loaded('initial_newtab', initial)
+        for index, address in enumerate(aliases):
+            app.call('navigate', tab=tab, url=address)
+            loaded('navigate_alias_' + str(index), address)
+        # A renderer navigation bypasses OEWebContent.loadURL. The page's
+        # own script and a real DOM link must also stay out of NTP WebUI.
+        for index, address in enumerate(aliases):
+            source = app.page(tab)['url']
+            app.eval(tab, 'document.body.innerHTML = \'<a id="ntp">New tab</a>\';'
+                     'document.querySelector("a").href=' + json.dumps(address))
+            app.call('click', tab=tab, selector='#ntp')
+            loaded('link_alias_' + str(index), address, renderer_source=source)
+        # The refusal must not disable ordinary engine navigation.
+        app.call('navigate', tab=tab, url='data:text/html,<title>NTP control</title>')
+        app.call('wait', tab=tab)
+        results['ordinary_navigation'] = {'ok': app.eval(tab, 'document.title') == 'NTP control'}
+    finally:
+        if app:
+            app.quit()

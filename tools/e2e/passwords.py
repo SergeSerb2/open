@@ -870,15 +870,18 @@ def run_engine(factory, results, tmp, h, guard, engine_distribution_sha256, row_
             row('P-14', footer, ['P-13'])
 
             def popup_dismissal():
-                tab = load(urls['login']); assert popup(tab)
+                tab = load(urls['login']); assert popup(tab), 'initial password dropdown did not appear'
                 key('t', modifiers=['command'])
-                assert wait(lambda: not children(), timeout=5, step=.05); key('escape')
-                assert popup(tab); default = next(s for s in app.call('spaces') if s['focused'])
+                assert wait(lambda: not children(), timeout=5, step=.05), 'command bar did not dismiss the password dropdown'
+                key('escape')
+                assert popup(tab), 'password dropdown did not reappear after command-bar cancel'
+                default = next(s for s in app.call('spaces') if s['focused'])
                 work = app.call('space-create', title='Work', profile='Work'); identity['default'] = default['id']; identity['work'] = work
-                assert wait(lambda: not children(), timeout=5, step=.05)
-                app.call('space', space=default['id']); app.call('select', tab=tab); assert popup(tab)
+                assert wait(lambda: not children(), timeout=5, step=.05), 'Space change did not dismiss the password dropdown'
+                app.call('space', space=default['id']); app.call('select', tab=tab)
+                assert popup(tab), 'password dropdown did not reappear after returning to its Space'
                 key('s', modifiers=['command'])
-                assert wait(lambda: not children(), timeout=5, step=.05)
+                assert wait(lambda: not children(), timeout=5, step=.05), 'sidebar hide did not dismiss the password dropdown'
                 key('s', modifiers=['command'])
                 return {'commandbar': True, 'SpaceChange': True, 'sidebarHide': True}
             row('P-16', popup_dismissal, ['P-2'])

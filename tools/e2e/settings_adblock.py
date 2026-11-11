@@ -376,7 +376,7 @@ def binding(factory, results, wait):
             and bool(state_for(new_state, created['id'])['contexts'])
             and all(not c['adBlockEnabled'] for c in state_for(new_state, created['id'])['contexts']), state=new_state)
         app.call('profiles-shell', profile=created['id'], action='show')
-        app.call('profiles-shell', action='press', label='Delete Profile')
+        app.press_profile_delete()
         assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5)
         if os.environ.get('OPEN_E2E_ADBLOCK_FAIL_IN_DELETE') == '1':
             raise AssertionError('forced failure with real Profile delete sheet open')
@@ -999,7 +999,7 @@ def real_engine(factory, results, wait):
                       adblockProfile=victim['id'])['adblockProfileUpdating'], timeout=15)
         assert active, 'victim did not enter the held real list load'
         app.call('profiles-shell', profile=victim['id'], action='show')
-        app.call('profiles-shell', action='press', label='Delete Profile')
+        app.press_profile_delete()
         assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5)
         if os.environ.get('OPEN_E2E_ADBLOCK_REAL_FAIL_IN_DELETE_SHEET') == '1':
             raise AssertionError('forced failure with the real engine deletion sheet open')
@@ -1011,7 +1011,7 @@ def real_engine(factory, results, wait):
             and victim['directory'] in app.call('engine-contexts')
             and not cancelled['adblockProfileRetired'] and status(victim['id'])['engine_loaded'],
             folderPresent=folder.exists(), retired=cancelled['adblockProfileRetired'])
-        app.call('profiles-shell', action='press', label='Delete Profile')
+        app.press_profile_delete()
         assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5)
         app.call('profiles-shell', action='type-delete', text='Engine Delete')
         app.call('profiles-shell', action='press', label='Delete')

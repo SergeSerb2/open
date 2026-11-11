@@ -187,7 +187,9 @@ def checks(factory, results, tmp, harness):
         evidence = Path(harness.ROOT) / 'docs/engine-spike/incognito'; evidence.mkdir(parents=True, exist_ok=True)
         for appearance in ['light', 'dark']:
             app.call('appearance', name=appearance)
-            for scale in [int(os.environ.get('OPEN_INCOGNITO_CAPTURE_SCALE', '1'))]:
+            # Both reference machines use their built-in 2x panel. A missing
+            # physical 1x display must not stop the private-session flow.
+            for scale in [int(os.environ.get('OPEN_INCOGNITO_CAPTURE_SCALE', '2'))]:
                 display = app.call('incognito-screen', scale=scale)
                 time.sleep(.15)
                 path = evidence / ('private-%s-%dx.png' % (appearance, scale))
@@ -225,7 +227,7 @@ def checks(factory, results, tmp, harness):
         app.call('quit'); clean_exit = wait(lambda: not app.process_path(app.pid), timeout=8, step=.1)
         app.quit()
         check('quit_private_no_prompt_no_records', clean_exit and fingerprint() == quit_before)
-        if os.environ.get('OPEN_INCOGNITO_CAPTURE_SCALE', '1') != '2':
+        if os.environ.get('OPEN_INCOGNITO_CAPTURE_SCALE', '2') != '2':
             results['native_2x_captures'] = dict(status='DEFERRED', reason='This run uses 1x. Run OPEN_INCOGNITO_CAPTURE_SCALE=2 on a native 2x display; no upscaling.')
         # Exercise the product's provider, session registry and native menu path.
         # These rows use real parent Profiles and Chrome's extension opt-in.
