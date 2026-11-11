@@ -74,6 +74,13 @@ def evaluate(entries, rows, ready=False):
         if entry:
             observed.add(row['row'])
         state = row['status']
+        if (entry and entry['status'] == 'DEFERRED' and state == 'FAIL'
+                and row.get('reason') == entry['reason']):
+            # An approved product-gap row keeps its failed assertion in the
+            # raw real-App receipt and reports the explicit deferral here.
+            # Exact row AND reason are required; a repaired row becomes STALE.
+            row['observedStatus'] = state
+            state = row['status'] = 'DEFERRED'
         absent_target = (state == 'SKIP' and row['row'].startswith('cli/')
                          and row.get('reason', '').startswith('target does not exist yet: '))
         verdict = 'PASS' if state == 'PASS' else 'SKIP' if absent_target else 'FAIL'

@@ -576,8 +576,8 @@ def main():
     failed, inventory = evaluate(entries, rows, ready=True)
     receipt.update(ended=time.time(), exceptions=inventory, ok=not failed)
     write_json(directory/'gate.json',receipt)
-    lines=['| Row | Status | Policy | Reason |','|---|---|---|---|']
-    lines += ['| '+r['row']+' | '+r['status']+' | '+r['policy']+' | '+r.get('reason','').replace('|','/')+' |' for r in rows]
+    lines=['| Row | Status | Observed | Policy | Reason |','|---|---|---|---|---|']
+    lines += ['| '+r['row']+' | '+r['status']+' | '+r.get('observedStatus', r['status'])+' | '+r['policy']+' | '+r.get('reason','').replace('|','/')+' |' for r in rows]
     lines += ['', '| Exception | Verdict | Clears when |', '|---|---|---|']
     lines += ['| '+r['row']+' | '+r['verdict']+' | '+r['clearsWhen']+' |' for r in inventory]
     lines += ['', 'Logs: '+str(directory), 'Gate: '+('FAIL' if failed else 'PASS')]

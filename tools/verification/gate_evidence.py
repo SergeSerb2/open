@@ -69,6 +69,16 @@ def e2e_rows(directory, suite, identity, engine, config, style, lane):
             continue
         if not isinstance(key, str) or len(key) > 256 or not isinstance(value, dict):
             raise ValueError('invalid real-App row')
+        if key == 'suite' and value.get('ok') is False:
+            failed_row = value.get('failedRow')
+            if (isinstance(failed_row, str) and failed_row != 'suite'
+                    and value.get('error') == 'row failed: ' + failed_row
+                    and isinstance(checks.get(failed_row), dict)
+                    and checks[failed_row].get('ok') is False):
+                # CheckedResults stopped at this already-recorded assertion.
+                # The raw receipt retains the stack/error; it is one failure,
+                # not a second product predicate or an extra exception.
+                continue
         # Some passing rows also carry a payload named status (for example
         # History's toast). The explicit boolean is their acceptance predicate.
         if 'ok' in value:
