@@ -1,5 +1,7 @@
 # Follow-ups
 
+- Public settings link scheme: not registered; decide name and consent model before adding (lead)
+
 - First onboarding frame waits for engine.start, 0.1–2.4 s observed on the same binary; final cold/repeat proof measured 2.552/2.498/2.416 s for engine.start and 3.435/3.295/3.230 s from launch to the first onboarding frame (INFO). Owner: launch budget (Section 8 item 13 / Section 16). Dyld/signature checks are a hypothesis; the attributed work is synchronous engine.start.
 - Intro frame pacing (Section 17, 2026-11-08) — the `strict_120hz` row in
   `onboarding` measures main-thread display-link intervals, not render-server

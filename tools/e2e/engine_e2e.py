@@ -9746,7 +9746,7 @@ def sidebar_completion_archive_checks(app, launch, results, require, evidence, t
     app.call('archive-sweep', now=iso(activity + 13*3600))
     app.call('archive-banner-action', action='settings')
     settings = app.call('settings-state')
-    require('E16_settings_link_opens_correct_profile', settings['pane'] == 'profiles' and settings['selectedProfile'] == profile
+    require('E16_settings_link_opens_correct_profile', app.call('settings-ui')['section'] == 'tabs-archive' and settings['selectedProfile'] == profile
             and settings['settings'] > 0 and app.call('defaults', key='open.sidebar.autoArchiveBannerDismissed') is True
             and all(not app.call('archive-banner-state', window=w['id'])['visible'] for w in app.call('shell-windows')), settings=settings)
     # Close only the Settings window using Open's own window event path.

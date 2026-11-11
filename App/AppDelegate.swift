@@ -986,8 +986,8 @@ extension AppDelegate: CommandDispatcher {
     if id == "search-settings" {
       let named = payload.flatMap(UUID.init(uuidString:)).map { ProfileID(rawValue: $0) }.flatMap { model.profile(id: $0) == nil ? nil : $0 }
       let profile = named ?? frontWindowController.flatMap { hostFactories[$0.windowID]?.focusedProfile?.id }
-      if let profile, model.profile(id: profile) != nil { settingsPresenter.showProfileSettings(profileID: profile) }
-      else { settingsPresenter.show(pane: .profiles) }
+      if let profile, model.profile(id: profile) != nil { settingsPresenter.show(section: .search, profileID: profile) }
+      else { settingsPresenter.show(section: .search) }
       return
     }
     performCommand(id)
@@ -1010,14 +1010,7 @@ extension AppDelegate: CommandDispatcher {
     case "settings": if !settingsShortcutCaptured { settingsPresenter.show() }
     case "new-profile": settingsPresenter.showNewProfile()
     case "search-settings": performCommand(id, payload: nil)
-    case "air-traffic-control":
-      settingsPresenter.settings.scrollTarget = nil
-      settingsPresenter.show(pane: .links)
-      // A repeated invocation must scroll again even if Settings was left on Links.
-      Task { @MainActor [weak self] in
-        await Task.yield()
-        self?.settingsPresenter.settings.scrollTarget = "links-rules"
-      }
+    case "air-traffic-control": settingsPresenter.show(section: .links, row: "rules")
     case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
     case "set-default-browser": settingsPresenter.settings.general.setDefault()
     case "check-for-updates": settingsPresenter.checkForUpdates()

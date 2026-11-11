@@ -77,7 +77,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Section 12's read-only private-state hook (lead ruling 16:12).
   var isIncognito: Bool { incognitoSession != nil }
   func scheduleSave() { if !isIncognito { app.scheduleSave() } }
-  private lazy var privateSuggest = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
+  private lazy var privateSuggest: SuggestEngine = {
+    let engine = SuggestEngine(model: model, historyStore: { _ in nil }, actions: CommandRegistry.makeSuggestRegistry())
+    engine.providers.append(SettingsSuggestionsProvider())
+    return engine
+  }()
   func suggestEngine() -> SuggestEngine? {
     guard let profile = focusedProfile else { return nil }
     return isIncognito ? privateSuggest : app.stores.suggest(for: profile.id)

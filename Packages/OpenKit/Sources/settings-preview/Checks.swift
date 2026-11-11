@@ -137,17 +137,17 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let expected = ["Action Probe: ⇧⌘Y is used by Copy URL, so it is off.", "Search Probe: ⌘T is used by New Tab…, so it is off."]
                 try require(vm.shortcuts.extensionConflicts.map(\.notice) == expected, "extension notice copy")
                 try require(!vm.shortcuts.commands.contains { ["probe", "conflict"].contains($0.id) }, "dynamic extension commands leaked into registry")
-                try await withAccessibleHost(ShortcutsPane(model: vm.shortcuts), size: CGSize(width: 684, height: 600)) { host in
+                try await withAccessibleHost(SettingsContent(viewModel: vm), size: CGSize(width: 960, height: 660)) { host in
                     let labels = accessibilityLabels(host)
                     try require(expected.allSatisfy { labels.contains($0) }, "extension conflict lines missing from pane: \(labels)")
                     try require(pressAccessibilityElement(host, label: "Extension Shortcuts…"), "extension link missing")
                     @MainActor func menuButton(_ view: NSView) -> NSPopUpButton? {
-                        if let button = view as? NSPopUpButton, button.menu?.items.contains(where: { $0.title == "Extension Shortcuts" }) == true { return button }
+                        if let button = view as? NSPopUpButton, button.menu?.items.contains(where: { $0.title == "Extension shortcuts…" }) == true { return button }
                         return view.subviews.lazy.compactMap { menuButton($0) }.first
                     }
                     guard let menu = menuButton(host)?.menu else { throw CheckFailure(description: "Shortcuts … menu missing") }
-                    try require(menu.items.dropFirst().map(\.title) == ["Revert Unsaved Changes", "Shortcut Help", "Extension Shortcuts"], "Shortcuts … menu order")
-                    menu.performActionForItem(at: 3)
+                    try require(menu.items.dropFirst().map(\.title) == ["Import…", "Export…", "Revert…", "Shortcut help", "Extension shortcuts…"], "Shortcuts … menu order")
+                    menu.performActionForItem(at: 5)
                 }
                 try require(env.actions.openedURLs.count == 2 && env.actions.openedURLs.allSatisfy { $0.0.absoluteString == "chrome://extensions/shortcuts" && $0.1 == vm.selectedProfileID }, "extension link/menu URL or Profile")
                 vm.selectedProfileID = work
@@ -185,8 +185,8 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                                             characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13)!
                 try require(w.performKeyEquivalent(with: cmdW) && !w.isVisible, "Cmd+W did not close the EDU window")
             case "shortcuts-callout":
-                // The callout's button opens the window through the Settings action (CC-29, CC-30); the
-                // list is no longer filtered ("Start with the basics" is a label, not a filter).
+                // The learning link opens the window through the existing
+                // Settings action (CC-29, CC-30); the list includes every command.
                 vm.selectedPane = .shortcuts; vm.shortcuts.query = ""
                 try require(vm.shortcuts.commands.count == CommandRegistry.active.count, "Shortcuts list hides commands: \(vm.shortcuts.commands.count) of \(CommandRegistry.active.count)")
                 let before = env.actions.log.filter { $0 == "openEssentialShortcuts" }.count
@@ -201,7 +201,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                         if let view = node as? NSView { view.subviews.forEach(values) }
                     }
                     values(host)
-                    try require(texts.contains("Start with the basics") && texts.contains("Learn the Essential Shortcuts"), "callout text missing: \(texts.sorted().prefix(20))")
+                    try require(texts.contains("Learn the Essential Shortcuts"), "callout text missing: \(texts.sorted().prefix(20))")
                     try require(pressAccessibilityElement(host, label: "Learn the Essential Shortcuts"), "callout button not found")
                 }
                 try require(env.actions.log.filter { $0 == "openEssentialShortcuts" }.count == before + 1, "callout did not call openEssentialShortcuts")

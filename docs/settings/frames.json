@@ -1,0 +1,1277 @@
+{
+  "native": {
+    "source": "tools/e2e/settings_redesign_g2.py",
+    "binarySHA256": "378f49bed6d8b7bd5c61f300e1191f9f59e306ac029742b343fbfbc13f2b5631",
+    "checksPassed": 139,
+    "captures": 69,
+    "uniqueFrames": 66,
+    "frames": {
+      "shortcuts-conflict-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "reset-shortcuts-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "link-test-error-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "link-rule-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "routing-rule-saved-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "adblock-list-expanded-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "adblock-invalid-site-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "advanced-diagnostics-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "general-system-default-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "general-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": "Non-default browser hero; view state only, system default unchanged"
+      },
+      "appearance-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "tabs-archive-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "links-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "downloads-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "previews-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "ad-blocking-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "site-permissions-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "passwords-cards-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "browsing-data-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "profiles-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "shortcuts-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "extensions-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "advanced-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "import-empty-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "suggestions-notice-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-engines-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-engine-editor-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "clear-data-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "create-profile-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "delete-profile-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-results-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-unassigned-hover-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "general-minimum-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          800,
+          540
+        ],
+        "presentationFixture": "Non-default browser hero; view state only, system default unchanged"
+      },
+      "shortcuts-minimum-light": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          800,
+          540
+        ],
+        "presentationFixture": null
+      },
+      "general-system-default-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "general-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": "Non-default browser hero; view state only, system default unchanged"
+      },
+      "appearance-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "tabs-archive-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "links-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "downloads-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "previews-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "ad-blocking-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "site-permissions-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "passwords-cards-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "browsing-data-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "profiles-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "shortcuts-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "extensions-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "advanced-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "import-empty-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "suggestions-notice-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-engines-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-engine-editor-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "clear-data-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "create-profile-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "delete-profile-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "link-rule-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "reset-shortcuts-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-results-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-unassigned-hover-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "general-minimum-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          800,
+          540
+        ],
+        "presentationFixture": "Non-default browser hero; view state only, system default unchanged"
+      },
+      "shortcuts-minimum-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          800,
+          540
+        ],
+        "presentationFixture": null
+      },
+      "appearance-reduce-motion-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      },
+      "search-empty-dark": {
+        "scale": 2,
+        "display": {
+          "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+          "maximumFPS": 120,
+          "modeHz": 120,
+          "name": "Built-in Retina Display",
+          "pixels": [
+            3024,
+            1964
+          ],
+          "scale": 2
+        },
+        "size": [
+          960,
+          660
+        ],
+        "presentationFixture": null
+      }
+    }
+  },
+  "renderer": {
+    "source": "settings-preview render --out DIR",
+    "count": 300,
+    "scales": [
+      1,
+      2
+    ],
+    "kind": "Synthetic AppKit window rendering; @1x files are not native M5 captures. Existing compatibility filenames are retained.",
+    "checksPassed": 47,
+    "checkReceipt": "m1-preview30; final full M5 gate on the merged review-fix head"
+  },
+  "scope": "Only Settings PNGs refreshed; Library and first-run PNGs unchanged."
+}

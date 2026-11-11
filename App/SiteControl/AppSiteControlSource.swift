@@ -220,7 +220,7 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     #if OPEN_AUTOMATION
     openAdBlockSettingsCallCount += 1
     #endif
-    factory?.app.settingsPresenter.show(pane: .advanced)
+    factory?.app.settingsPresenter.show(section: .adBlocking, row: "lists", profileID: factory?.focusedProfile?.id)
   }
 
   private struct PermissionRow {
