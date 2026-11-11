@@ -262,7 +262,7 @@ def use_m1_receipt(directory, row_name, identity, config, style, lane):
         receipt = read_json(path)
         if (receipt.get('machine') == 'M1' and receipt.get('source') == identity
                 and receipt.get('config') == config
-                and receipt.get('lane') == lane):
+                and receipt.get('lane') == lane and receipt.get('partialSelectors') == []):
             stages = [stage for stage in receipt.get('stages', []) if stage.get('name') == row_name]
             if (len(stages) != 1 or stages[0].get('exit') != 0
                     or stages[0].get('style') != style):
@@ -410,9 +410,11 @@ def main():
     parser.add_argument('--m1-receipts', type=Path, help='exact-head gate receipts produced on M1')
     parser.add_argument('--log-dir', type=Path)
     options = parser.parse_args()
+    partial = [key for key, value in os.environ.items() if value and key.startswith('OPEN_')
+               and (key.endswith(('_ONLY', '_CASE', '_ROWS', '_SCOPE', '_SOURCE_APP',
+                                  '_APP_BUNDLE', '_NEGATIVE', '_NEGATIVE_APP'))
+                    or key == 'OPEN_E2E_NO_CRASH_PROBES')]
     if not options.only and not options.quick and not options.no_e2e:
-        partial = [key for key, value in os.environ.items() if value and key.startswith('OPEN_')
-                   and (key.endswith(('_ONLY', '_CASE', '_ROWS')) or key == 'OPEN_E2E_NO_CRASH_PROBES')]
         if partial:
             parser.error('full gate refuses partial-suite environment: '+', '.join(sorted(partial)))
     default_e2e = [name for name in names if name != 'passwords-probe'] + ['ntp-alloy']
@@ -454,7 +456,7 @@ def main():
     directory = directory.resolve()
     rows = []; stages = []; start = time.time()
     receipt = dict(schema=1, machine=machine(), source=source, config=options.config,
-                   style='chrome', lane=options.lane, selected=selected,
+                   style='chrome', lane=options.lane, selected=selected, partialSelectors=sorted(partial),
                    prReady=not options.only and not options.quick and not options.no_e2e and options.lane=='merge',
                    started=start, rows=rows, stages=stages)
     def cancelled(signum, _):
