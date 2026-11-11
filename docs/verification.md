@@ -83,32 +83,48 @@ Performance budgets are never retried or relaxed by the runner.
 ### Display and timer portability (Section 16)
 
 Visual references use the exact key
-`scale-<native backing scale>-icc-<SHA256>-mode-<width>x<height>-pixels-<width>x<height>-mhz-<refresh>`.
+`scale-<native backing scale>-icc-header-v1-<SHA256>-mode-<width>x<height>-pixels-<width>x<height>-mhz-<refresh>`.
 The mode records logical and physical dimensions and the refresh rate in integer
 millihertz. Unknown modes fail without fallback, even when scale and ICC match.
-The ICC digest covers the color profile of the render host's screen. The host
+The `icc-header-v1` digest covers the color profile of the render host's screen,
+with only header bytes 24–35 (creation date) and 84–99 (profile ID) zeroed.
+Every tag and every other byte remains in the digest. Primaries, white point,
+TRCs, `vcgt`, descriptions and serial tags are not excluded. The raw SHA-256
+is retained separately in display metadata. The version is part of the key;
+an old raw-profile key cannot be mistaken for a normalized key. The host
 is never ordered on screen. Its screen is explicit, so selection does not use
-the requested synthetic render scale, a hostname, or a machine name. Scale, the full profile digest, and the complete mode must match. Each renderer also checks its actual
+the requested synthetic render scale, a hostname, or a machine name. Scale, the normalized profile digest, and the complete mode must match. Each renderer also checks its actual
 host window against the selected key before drawing. A display change fails.
 An unknown key fails with its key and a
 recording instruction. There is no fallback and no automatic recording.
 
-| Display | Native scale | ICC SHA-256 | Reference |
+| Display | Native scale | ICC header-v1 SHA-256 | Reference |
 |---|---:|---|---|
-| M5 AW2726DM, 2560×1440 pixels/points, 240 Hz | 1 | `b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43` | Original PNGs and original color caps |
-| M1 built-in, 1512×982 points / 3024×1964 pixels, 120 Hz | 2 | `b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856` | New exact 2x PNGs and recorded color caps |
+| M5 AW2726DM, 2560×1440 pixels/points, 240 Hz | 1 | `f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56` | Original PNGs and original color caps |
+| M1 built-in, 1512×982 points / 3024×1964 pixels, 120 Hz | 2 | `ced527b7482d75a039b583d3a6b856fb4e3f0c26010e4258ba770e17b142e844` | Retained exact 2x PNGs and recorded color caps |
 
 The M5 reference is the external AW2726DM (user decision, 2026-11-10 16:19).
 The M5 lid stays closed. The M1 reference remains its built-in 2x panel.
 Check and record the mode before each M5 on-screen run. The temporary display
 and strict-performance deferrals expired at the lead's “M5 panel ready” ruling.
 
-Schema 2 binds the existing exact scale/ICC references to these modes. It keeps
-the PNG hashes and all color caps unchanged. `assetKey` names the retained M1
-PNG directory; it does not select a display or provide fallback. For paired
-sidebar comparisons against unchanged schema-1 main, the baseline binary gets
-its committed scale/ICC key. The parent checks the complete mode before and
-after every pair. The candidate renderer checks the complete key itself.
+Schema 3 migrates the two exact references from retained ICC bytes. It keeps
+all PNGs, PNG hashes, color caps, sample values, render scales and modes unchanged.
+`iccMigration` records the previous key, raw digest, scheme and normalized digest.
+`assetKey` names the retained M1 PNG directory; it does not select a display or
+provide fallback. For paired sidebar comparisons against schema-1/2 main,
+the parent requires that exact previous entry and identical color caps. The
+unchanged baseline renderer checks the current raw ICC key; the candidate
+checks the normalized key. The parent checks both digests and the complete mode
+before and after every pair. An unknown normalized key still fails.
+
+The M5 restart on 2026-11-11 changed only creation-date offsets 29, 31, 33 and 35.
+All 17 tag records and payloads are identical. See
+[the byte and tag evidence](re/display-icc-identity.md).
+To inspect a retained profile without installing it or qualifying a render:
+`python3 tools/verification/portable-baselines.py --check-icc FILE`.
+This uses the live display's scale and mode, computes the versioned identity,
+and requires an exact match in both committed manifests.
 
 `space-legacy` and editor P1 retain all six original PNGs. The M5 renders at
 scale 1 and requires the same exact PNG bytes. The new M1 references render at
