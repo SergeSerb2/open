@@ -7,17 +7,17 @@ final class LibraryControl: NSButton {
     var isTile = false
     var glyphSize: CGFloat?
     var isChip = false
-    var keyboardFocus = false { didSet { needsDisplay = true } }
+    var keyboardFocus = false { didSet { if keyboardFocus != oldValue { needsDisplay = true } } }
     var onKeyboardFocus: (() -> Void)?
     var showsDot = false
-    var selected = false { didSet { needsDisplay = true; setAccessibilityValue(selected ? 1 : 0) } }
-    var foreground = NSColor.labelColor { didSet { needsDisplay = true } }
-    var overlay = NSColor.labelColor { didSet { needsDisplay = true } }
+    var selected = false { didSet { if selected != oldValue { needsDisplay = true; setAccessibilityValue(selected ? 1 : 0) } } }
+    var foreground = NSColor.labelColor { didSet { if foreground != oldValue { needsDisplay = true } } }
+    var overlay = NSColor.labelColor { didSet { if overlay != oldValue { needsDisplay = true } } }
     var baseAlpha: CGFloat = 0
     var labelSize: CGFloat = 14
     var onPress: (() -> Void)?
     var onArrow: ((Int) -> Void)?
-    var hovered = false { didSet { needsDisplay = true } }
+    var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
     private var tracking: NSTrackingArea?
     override var acceptsFirstResponder: Bool { isEnabled }
     override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }

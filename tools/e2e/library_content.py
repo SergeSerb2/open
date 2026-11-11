@@ -121,7 +121,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             key('escape');check('escape_closes_filter',not state()['header']['filterOpen'] and state()['open'])
             state(action='filter',open=True);state(action='chip',id='profile:'+profile);state(action='filter',open=False)
             slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)]==['Pause','Cancel','Show in Finder']);capture('downloads-running')
-            menu(slow,'Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused'));capture('downloads-paused')
+            menu(slow,'Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused') and wait(lambda:any(m['title']=='Resume' for m in menu(slow))));capture('downloads-paused')
             menu(slow,'Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
             menu(slow,'Cancel');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
             failed=start('/fail');check('failed_real_transfer',wait(lambda:item(failed).get('state')=='failed'))

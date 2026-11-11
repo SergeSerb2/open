@@ -8,10 +8,14 @@ import OpenDesign
 
 @MainActor
 extension LibraryPanelView {
+    public var hasPendingFirstScreen: Bool {
+        guard section != .spaces, let host = hosts[section] else { return false }
+        return !host.loaded || host.dirty || host.preparation != nil
+    }
     /// The socket bench awaits the same provider task as the live panel, then
     /// submits its real native layout/drawing. This does not wait for motion.
     public func finishPendingContent() async {
-        await reloadTask?.value
+        if hosts[section]?.loaded == false { await reloadTask?.value }
         // A provider publication may cancel a superseded preparation. Await
         // the current generation, rather than replying with its old empty page.
         guard let host = hosts[section] else { return }
@@ -100,7 +104,7 @@ extension LibraryPanelView {
     }
     func refreshData() {
         let target = section, host = host(for:section)
-        guard isPresented, !host.loaded else { renderRows(); return }
+        guard isPresented, !host.loaded else { return }
         if target == .archive { host.storeVersion = viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(viewModel.archives[$0]!.contentVersion) }.joined(separator:",") }
         reloadTask?.cancel(); historyTask?.cancel(); reloadGeneration += 1
         let generation = reloadGeneration

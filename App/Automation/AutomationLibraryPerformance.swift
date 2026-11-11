@@ -54,12 +54,18 @@ extension AutomationController {
     default: throw Failure(message:"unknown Library measurement")
     }
     guard let panel=adapter.activeLibrarySession?.panel else { throw Failure(message:"Library not created") }
+    let actionMilliseconds = (ProcessInfo.processInfo.systemUptime-started)*1000
+    let pending = panel.hasPendingFirstScreen
     panel.submitNativeFrame()
     let first=(ProcessInfo.processInfo.systemUptime-started)*1000
-    await panel.finishPendingContent(); panel.submitNativeFrame()
+    let firstPhases = panel.performanceCounters.filter { $0.key.hasPrefix("last.") }
+    // An unchanged retained host is complete at its first submission. Do not
+    // add an unrelated actor hop and a second compositor flush to that clock.
+    if pending { await panel.finishPendingContent(); panel.submitNativeFrame() }
     let full=(ProcessInfo.processInfo.systemUptime-started)*1000
     return ["firstSubmittedMilliseconds":first,"contentSubmittedMilliseconds":full,
       "providerRows":panel.filteredRowCount,
+      "actionMilliseconds":actionMilliseconds,"firstSubmissionPhases":firstPhases,
       "panelGeneration":adapter.activeLibrarySession?.panelGeneration ?? 0,
       "visibleRows":panel.listReuseState["rows"] ?? 0,"counters":panel.performanceCounters,
       "counterDelta":panel.performanceCounters.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(countersBefore[$1.key] ?? 0) }]
