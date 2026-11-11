@@ -113,12 +113,14 @@ Budget rows (launch, section/key latency and idle CPU) need a valid quiet M1
 Release timing receipt. Run `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh tools/verify-all.sh
 --lane timing`; `--only timing-window` selects just the five cold/warm launch
 pairs. The lane holds the heavy and screen slots. Before each stage it waits
-at most six minutes for two load1 readings at or below 3.0, ten seconds apart.
-Foreign CPU must be at or below 200% before and immediately after the row.
-Exclude only the owned Open/harness tree and WindowServer. Retain the top five
-foreign processes and all readings. The user's CarsonLocalSTT job is tolerated
-within that limit and must not be stopped. After-run load is recorded but has
-no validity condition.
+at most six minutes for two load1 readings at or below 3.5, ten seconds apart,
+before each launch sample pair (LEAD 06:50). The top five foreign processes and
+all load readings remain recorded, but foreign CPU has no validity threshold.
+After-run load has no validity condition. Do not stop the user's background jobs.
+While any agent's timing run holds both M1 slots, no other agent runs anything
+on the M1: no builds, decodes, analyses or SSH polling loops. Check `queue.sh`
+before off-slot work. An exclusive holder or a strict-timing
+`heavy.sh … lockf …` holder reserves the machine until it ends.
 
 Launch acceptance uses five samples per cold/warm set, its median, and no
 sample over 1.5 times its existing limit (sidebar 250 ms, FCP 700 ms). Keep each

@@ -33,7 +33,7 @@ def preflight(require_quiet=False, cancelled=lambda: False):
                 raise InterruptedError('timing preflight cancelled before App launch')
             time.sleep(.25)
         readings.append(snapshot())
-        valid = all(r['load'][0] <= 3 and r['foreignCPU'] <= 200 for r in readings[-2:])
+        valid = all(r['load'][0] <= 3.5 for r in readings[-2:])
         if valid or time.monotonic() >= deadline:
             return dict(before=readings[-2:], validBefore=valid,
                         readings=readings, waitSeconds=readings[-1]['at']-readings[0]['at'])
@@ -42,5 +42,5 @@ def preflight(require_quiet=False, cancelled=lambda: False):
 def finish(sample):
     sample['after'] = snapshot()
     # After-run load includes our own work and is deliberately not a condition.
-    sample['valid'] = sample['validBefore'] and sample['after']['foreignCPU'] <= 200
+    sample['valid'] = sample['validBefore']
     return sample

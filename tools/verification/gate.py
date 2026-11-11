@@ -204,6 +204,7 @@ def run_screen(args):
                                    env=dict(os.environ, OPEN_VERIFY_EXTERNAL_SCREEN_LOCK='1',
                                        OPEN_VERIFY_GATE_SCREEN_ROOT=str(native_roots),
                                        OPEN_VERIFY_PROCESS_LEDGER=str(ledger),
+                                       OPEN_VERIFY_TIMING_REQUIRED='1' if args.timing == 'required' else '0',
                                        OPEN_VERIFY_INTENTIONAL_CRASH_LEDGER=str(fault_ledger)), start_new_session=True)
             deadline = time.monotonic() + args.timeout
             while job.poll() is None:
@@ -646,9 +647,8 @@ def main():
                         if check.get('timing') is not True:
                             continue
                         check['timingSample'] = str(sample_path)
-                        after = check.get('timingAfter', {})
                         check['sampleValid'] = bool(sample and sample.get('validBefore') is True
-                                                    and after.get('foreignCPU', float('inf')) <= 200)
+                                                    and check.get('sampleValid', True) is True)
                         if not check['sampleValid']:
                             check['observedStatus'] = check['status']
                             if check.get('functionalOK') is True:

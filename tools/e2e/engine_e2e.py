@@ -2646,9 +2646,20 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     # Local deterministic text paints without DNS, TLS, or external requests.
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
     runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
+    validity = []
+    results['launch_validity'] = validity
     results["load_average"] = list(os.getloadavg())
     results["cpu_count"] = os.cpu_count()
     for i in range(5):
+        # Each cold/warm pair has its own quiet precondition. Waiting is not
+        # an App action and does not consume that action's 120-second watchdog.
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        sample = runpy.run_path(os.path.join(ROOT, 'tools/verification/timing_sample.py'))['preflight'](
+            require_quiet=os.environ.get('OPEN_VERIFY_TIMING_REQUIRED') == '1')
+        validity.append(sample)
+        if os.environ.get('OPEN_VERIFY_TIMING_REQUIRED') == '1' and not sample['validBefore']:
+            raise RuntimeError('quiet launch-pair preflight exhausted six minutes; pair not launched')
+        begin_row('launch pair %d' % i)
         # Clear only this suite's own data root. Warm launches then restore a
         # selected tab plus an unselected tab from the real saved snapshot.
         app = app_factory(urls=(fixture,), fresh=True)
@@ -2694,6 +2705,7 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
                    if all(key in r for r in values) else None
                    for key in ("main", "modelLoaded", "windowShown", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
         results[label] = {"median_ms": medians, "samples": len(values), "timing": True,
+                          "sampleValid": len(validity) == 5 and all(s['validBefore'] for s in validity),
                           "functionalOK": len(values) == 5 and all(r.get('kernelProcessStart') is True
                               and r.get('firstFrameConfirmed') is True for r in values),
                           "limits_ms": {"sidebarDrawn": 250, "firstContentfulPaint": 700},
