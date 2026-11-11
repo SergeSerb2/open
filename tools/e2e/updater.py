@@ -335,11 +335,13 @@ def run(opts, folder, results, apps):
                     if channel == 'stable':
                         settings = app.call('settings-state')
                         settings_ax = ax(app, settings['settings'])
-                        labels = ('Automatically update Open', 'Learn more about auto-updating', 'Check for Updates…')
+                        # Settings' own navigation (2026-11-10): row title, its help link, and the
+                        # sidebar footer button's accessibility label (SettingsNavigation.swift).
+                        labels = ('Update Open automatically', 'Keep Open up to date.', 'Learn more', 'Check for Updates')
                         paths = capture_pair(app, opts, 'general', settings['settings'])
                         results['S8_general_rows'] = ({'ok': True, 'ax': settings_ax, 'paths': paths}
                             if all(t in settings_ax.get('text', []) for t in labels) else
-                            {'status': 'UNVERIFIED', 'reason': 'The in-process AX query returned only the General tab band.',
+                            {'ok': False, 'reason': 'General lacks an update row label: ' + ', '.join(t for t in labels if t not in settings_ax.get('text', [])),
                              'ax': settings_ax, 'paths': paths})
                         count = len(app.call('tabs'))
                         app.call('updater-act', action='settings-help')
