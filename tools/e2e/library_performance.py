@@ -154,6 +154,7 @@ def main(args):
                 for section in ['history','archive','downloads']:
                     warm.append(dict(section=section,**active.call('library-performance',operation='section',section=section)))
                 search=active.call('library-performance',operation='search',text='00999')
+                assert search['providerRows']==1,search
                 active.call('key',key='escape',route='app');time.sleep(2)
                 before=active.call('library-performance',operation='cpu')['cpuSeconds'];start=time.monotonic();time.sleep(10)
                 after=active.call('library-performance',operation='cpu')['cpuSeconds'];idle=100*(after-before)/(time.monotonic()-start)
