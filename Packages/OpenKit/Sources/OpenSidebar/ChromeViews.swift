@@ -138,9 +138,11 @@ final class URLFieldView: NSView {
     var siteControlState = SiteControlButtonState.rest {
         didSet {
             guard siteControlState != oldValue else { return }
-            siteControlGlyph.isOpen = siteControlState.isOpen; siteControlGlyph.isBoosted = siteControlState.isBoosted
-            siteControls.glyphView.isHidden = siteControlState != .rest
-            siteControlGlyph.isHidden = siteControlState == .rest
+            // Open: the normal glyph on the pressed fill (the field fill again; Arc 14c, plan D3 §2.4).
+            // Only a Boosted site keeps its own art.
+            siteControlGlyph.isOpen = false; siteControlGlyph.isBoosted = siteControlState.isBoosted
+            siteControls.glyphView.isHidden = siteControlState.isBoosted
+            siteControlGlyph.isHidden = !siteControlState.isBoosted
             siteControls.isLatched = siteControlState.isOpen
             needsLayout = true
         }

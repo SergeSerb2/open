@@ -554,6 +554,8 @@ final class InfoButton: NSView {
     var theme = CommandBarTheme.default { didSet { if theme != oldValue { applyFill(); needsDisplay = true } } }
     var action: (() -> Void)?
     private let circle = CALayer()
+    /// The glyph sits on its own layer above the circle (a sublayer would cover the view's own drawing).
+    private let glyph = CALayer()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -565,6 +567,8 @@ final class InfoButton: NSView {
         circle.shadowRadius = CommandCard.infoShadowRadius
         circle.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "shadowPath": NSNull()]
         layer?.addSublayer(circle)
+        glyph.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull()]
+        layer?.addSublayer(glyph)
         applyFill()
     }
 
@@ -584,6 +588,7 @@ final class InfoButton: NSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         circle.backgroundColor = theme.infoFill.cgColor
         CATransaction.commit()
+        needsLayout = true
     }
 
     override func layout() {
@@ -595,13 +600,19 @@ final class InfoButton: NSView {
         circle.shadowPath = CGPath(ellipseIn: circle.bounds, transform: nil)
         // Flipped view: positive y is down.
         circle.shadowOffset = CGSize(width: 0, height: (layer?.isGeometryFlipped ?? false) ? -CommandCard.infoShadowOffsetY : CommandCard.infoShadowOffsetY)
+        let scale = window?.backingScaleFactor ?? 2
+        if let image = SymbolCache.image(BarGlyph.infoSymbol, size: BarGlyph.infoSize, weight: BarGlyph.infoWeight, color: theme.secondaryText, scale: scale) {
+            let s = image.size
+            glyph.frame = CGRect(x: (bounds.midX - s.width / 2).rounded(), y: (bounds.midY - s.height / 2).rounded(), width: s.width, height: s.height)
+            glyph.contents = image.layerContents(forContentsScale: scale)
+            glyph.contentsScale = scale
+        }
         CATransaction.commit()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let image = SymbolCache.image(BarGlyph.infoSymbol, size: BarGlyph.infoSize, weight: BarGlyph.infoWeight, color: theme.secondaryText) else { return }
-        let s = image.size
-        image.drawFlipped(in: CGRect(x: (bounds.midX - s.width / 2).rounded(), y: (bounds.midY - s.height / 2).rounded(), width: s.width, height: s.height))
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        needsLayout = true
     }
 
     override func mouseUp(with event: NSEvent) {

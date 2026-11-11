@@ -62,8 +62,8 @@ enum SymbolCache {
     /// of the symbol at full strength, then the token color (palette configurations dim
     /// secondary layers). One bitmap per scale: an image that also held a 2x bitmap would be
     /// downsampled into a 1x context. Drawing the vector each time cost ≈ 0.6 ms per keystroke.
-    static func image(_ name: String, size: CGFloat, weight: NSFont.Weight = .regular, color: RGBA) -> NSImage? {
-        let scale = currentScale
+    static func image(_ name: String, size: CGFloat, weight: NSFont.Weight = .regular, color: RGBA, scale explicitScale: CGFloat? = nil) -> NSImage? {
+        let scale = explicitScale ?? currentScale
         let key = Key(name: name, size: size, weight: weight.rawValue, color: color, scale: scale)
         if let i = cache[key] { return i }
         guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage(systemSymbolName: "questionmark", accessibilityDescription: nil) else { return nil }

@@ -6,7 +6,8 @@ import Foundation
 ///
 /// Provisional rule (plan D3 §2.6), fitted on Arc's golden Space (sidebar `#B9A35F` → `#A8904D`,
 /// C-measurements-s2 Arc08): accent `#BBA872`, dark accent `#7F6623`.
-/// - accent = the sidebar's top colour mixed `accentWhiteMix` toward white (gold: ΔE00 1.84);
+/// - accent = the sidebar's top colour mixed `accentWhiteMix` toward white (gold: ΔE00 1.84), at most
+///   `accentMaxLightness` light;
 /// - dark accent = the top colour's hue at `darkLightness` lightness, saturation × `darkSaturationScale`
 ///   (gold: ΔE00 1.21).
 /// - Open's default theme (no stored theme, "Night") uses the lead's mock-up values `#6F66D9` / `#5148C4`:
@@ -23,6 +24,9 @@ public struct SpaceAccent: Sendable, Hashable {
     public var darkTint: RGBA
 
     public static let accentWhiteMix = 0.08
+    /// White text must stay readable on the selection: a light (pastel) sidebar's accent keeps its hue and
+    /// saturation at this HSL lightness at most. Gold (0.59) is below it and unchanged. D3 addition, not in plan §2.6.
+    public static let accentMaxLightness = 0.62
     public static let darkLightness = 0.32
     public static let darkSaturationScale = 1.4
     /// Tint colour: the accent hue at a fixed lightness, saturation scaled from the accent's.
@@ -51,7 +55,9 @@ public struct SpaceAccent: Sendable, Hashable {
     /// The provisional rule from the sidebar's top colour.
     public init(top: RGBA) {
         let m = Self.accentWhiteMix
-        let accent = RGBA(top.red + (1 - top.red) * m, top.green + (1 - top.green) * m, top.blue + (1 - top.blue) * m)
+        var accent = RGBA(top.red + (1 - top.red) * m, top.green + (1 - top.green) * m, top.blue + (1 - top.blue) * m)
+        let (ah, al, asat) = Self.hls(accent)
+        if al > Self.accentMaxLightness { accent = Self.rgb(h: ah, l: Self.accentMaxLightness, s: asat) }
         let (h, _, s) = Self.hls(top)
         let dark = Self.rgb(h: h, l: Self.darkLightness, s: min(1, s * Self.darkSaturationScale))
         self.init(accent: accent, darkAccent: dark)

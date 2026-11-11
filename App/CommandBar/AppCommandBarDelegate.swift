@@ -5,6 +5,23 @@ import OpenDesign
 import OpenModel
 import OpenSuggest
 import OpenEngine
+import OpenStore
+import Observation
+
+/// Row and input favicons from the App's stored favicon cache (the sidebar's), never a synchronous
+/// disk or network read: a miss returns nil and `loaded` runs once the cache entry fills (plan D3 §3).
+@MainActor
+final class StoredCommandBarFavicons: CommandBarFaviconSource {
+  let cache: StoredFaviconCache
+  init(cache: StoredFaviconCache) { self.cache = cache }
+  func favicon(for pageURL: URL, loaded: @escaping @MainActor (URL) -> Void) -> NSImage? {
+    var image: NSImage?
+    withObservationTracking { image = cache.image(for: pageURL) } onChange: {
+      Task { @MainActor in loaded(pageURL) }
+    }
+    return image
+  }
+}
 
 /// One lazy native command-bar controller for one standard window.
 @MainActor
@@ -13,6 +30,7 @@ final class AppCommandBarSession: CommandBarDelegate {
   private(set) var controller: CommandBarController?
   private lazy var extensionSource = EngineCommandBarSource(factory: factory)
   private var welcomeIcons: WelcomeCommandBarIcons?
+  private lazy var storedIcons: StoredCommandBarFavicons? = factory.app.stores.sidebarFavicons.map { StoredCommandBarFavicons(cache: $0) }
   private var openedAt = 0.0
   private var queryAt = 0.0
   private var queryRevision = 0
@@ -69,7 +87,7 @@ final class AppCommandBarSession: CommandBarDelegate {
     if WelcomeTab.matches(factory.selectedTab?.url) {
       if welcomeIcons == nil { welcomeIcons = WelcomeCommandBarIcons() }
       bar.favicons = welcomeIcons
-    } else { bar.favicons = nil }
+    } else { bar.favicons = factory.isIncognito ? nil : storedIcons }
     // The Space accent; Light/Dark follows the window (the bar reads its own effective appearance).
     let style = factory.focusedSpace.map { windowController.context.style(for: $0) }
     bar.theme = CommandBarTheme(style: style, isDark: ContentAppearance(bar.view.effectiveAppearance) == .dark)
