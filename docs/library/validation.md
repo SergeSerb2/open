@@ -1,9 +1,10 @@
 # Library validation
 
-Status: LEAD 11:20 scroll qualification in progress. All five Release pairs
-remain valid. Interactions and idle median pass. The old 120-callback profile
-is scroller-drag stress; its p95 and physical misses are INFO. A separate
-600-callback wheel profile now carries the normal-scroll budgets below.
+Status: STOP at LEAD 11:20's non-flush branch, before the full gate and PR.
+All five interaction/idle pairs remain valid and pass. Scroller-drag stress
+passes its maximum-work and creation limits. Wheel dispatch and flush are
+cheap, but its physical interval count and deferred work remain unqualified.
+No product drawing change or additional five-pair run was made.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -120,6 +121,65 @@ and all main-run-loop busy time in that display interval. It compares p95
 over both all callbacks and moving callbacks, using the larger value. Raw
 dispatch costs remain visible; an idle tail cannot lower the budget result.
 
+### Two-profile result
+
+The corrected benchmark source is `a81a39db`. Its Release App SHA-256 is
+`54833812ff464571b50f114f809a396b5a25cc58e06e0be3d3d7034ebf9386b3`.
+OpenEngine and CEF hashes match the accepted five-pair artifact above. All
+3,016 source hashes and the deep/strict signature were checked on the M1,
+inside D1's slots. Both samples are valid and start after 150 seconds.
+
+| Profile | Start age | Two load1 readings | Direct callback p95 / max | Cells created over whole series | Physical misses | Result |
+|---|---:|---|---|---:|---|---|
+| A, wheel, 600 callbacks | 160.843 s | 2.396 / 2.335 | 1.673 / 2.429 ms | 0 | 43 raw, none excluded | UNQUALIFIED |
+| B, scroller drag, 120 callbacks | 178.434 s | 2.388 / 2.415 | 4.003 ms INFO / 4.477 ms PASS | 0 | 2 active / 3 full capture, INFO | PASS |
+
+Wheel motion changed the native offset in 553 callbacks and produced 529
+physical content changes. Its 706 row configurations ran between callbacks;
+none ran inside direct dispatch. Creation is zero across both paths. The
+runner's broader main-run-loop busy clock has p95 4.065 ms over all callbacks
+and 4.151 ms over moving callbacks. This is broader than direct callback
+work; it is retained separately rather than presented as the same clock.
+The runner conservatively leaves all 43 physical intervals unexcluded. That
+does not prove that each interval is a missed App render. Qualification
+cannot claim the App-attributed limit of one has passed.
+
+| A phase | Maximum ms | Scope |
+|---|---:|---|
+| Direct native event callback | 2.429 | Includes explicit layout/display/flush |
+| Explicit layout / display / flush | 0.805 / 0.378 / 1.502 | Subsets of direct callback |
+| Deferred clip-bounds work | 0.656 | Between callbacks |
+| Deferred overscan reconcile | 18.284 | Includes configure/layout/display below |
+| Configure / cell layout / overscan display | 1.916 / 1.711 / 13.936 | Nested in reconcile |
+| Full main-run-loop busy interval | 21.808 | Settling work before callback 582 |
+
+The 20.734 ms continuous busy gap runs at launch age 165.683–165.704 s.
+Counters identify `LibraryTableView.scheduleSettle` →
+`LibraryListView.prepareOverscan` → overscan reconcile/display. It configures
+26 rows and creates none. The last native offset change is at 165.610 s;
+the last physical content change is at 165.626 s. This settling batch is
+ours, but occurs after motion ends and cannot explain the earlier 43 gaps.
+
+For example, physical gaps of 25.000 ms occur across callbacks 19–21 and
+297–299 while native offsets advance 446→498→553 and
+35012→35051→35090 pt. Their sampled main-thread busy ages stay below
+3.005 ms. Near the end, repeated native offsets also contribute raw physical
+gaps; they remain visible. A capture gap alone does not locate the delayed
+stage. No main-thread gap of at least 8 ms overlaps these physical gaps.
+The permitted single-layer row fix is not triggered by these flush numbers.
+
+The no-scroll control covers launch age 2.018–3.951 s. Its 49.987 ms early
+busy gap includes Library pool/overscan preparation. A second 61.854 ms gap
+at 3.186–3.248 s has no Library counter delta and reproduces an early gap
+without scrolling. It is outside the known 65–96-second burst. Neither
+control gap explains a sample at 160–166 s; no exclusion was applied.
+
+Normal quit left zero owned windows/processes. No extra product optimisation,
+main merge, full gate or PR follows this non-flush result without the lead's
+next plan. Main `3b4d4228` must be merged before the eventual staged gate.
+
+### Retained earlier scroller-drag receipt
+
 The earlier stress fixture uses ten supported profiles with 1,000 downloads each. Loads were
 1.997/2.410. It recorded 120 App callbacks and 115 physical content changes.
 Normal quit left zero owned processes. Scroll constructed zero cells while
@@ -188,10 +248,9 @@ Post-merge M5 `--only build` passes in 129 seconds. The 17 unique application-ro
 The M5 run records the exact `icc-header-v1` key, 2560×1440 points/pixels,
 scale 1 and 240 Hz. Pre-check load1 readings were 5.83/5.47 ten seconds apart.
 Both machines have zero D1 App processes, frame helpers, timing jobs or heavy
-tickets at that checkpoint. The full M5 gate and PR remain unopened pending
-the two-profile qualification. The display-key hold is lifted. Only automation
+tickets at that checkpoint. The full M5 gate and PR remain unopened after
+the two-profile result above. The display-key hold is lifted. Only automation
 code and the runner changed for this check; product rendering is unchanged.
-If both profiles pass, no product change or new five-pair interaction run is
-needed. A wheel failure on flush permits only the lead's single-layer row
-change, followed by A/B, warm-section/search three-pair checks and touched
-suites. Any other failure returns to the lead with its phase table.
+LEAD 11:20 requires a new plan for a non-flush failure. The staged gate on main
+will use its bounded tickets and exact-head M1 receipts; the old private
+exclusive gate wrapper must not be reused. No reference is re-recorded.

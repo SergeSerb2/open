@@ -65,6 +65,9 @@ def analyze(native, physical):
     phases.update({key: max(row['counterDelta'].get(key, 0) for row in rows)
                    for key in rows[-1]['counterDelta']
                    if key.startswith('scroll.') or key in ['formatting', 'listLayout', 'wake.trackingMilliseconds']})
+    deferred_phases = {key: max(row['betweenCallbackDelta'].get(key, 0) for row in rows)
+                       for key in rows[-1]['counterDelta']
+                       if key.startswith('scroll.') or key in ['formatting', 'listLayout', 'wake.trackingMilliseconds']}
     raw = sum(gap['missedIntervals'] for gap in gaps)
     # No exclusion by assumption. Only a control reproduced at the same launch
     # offset could justify one. The early control cannot explain a >=150s gap.
@@ -75,8 +78,10 @@ def analyze(native, physical):
             'directCallbackP95Milliseconds': dispatch_costs[min(len(costs)-1, int(len(costs)*.95))],
             'directCallbackMaximumMilliseconds': max(dispatch_costs),
             'workClock': 'max(native callback wall time, complete main-run-loop busy interval)' if native['profile'] == 'wheel' else 'native callback wall time',
-            'created': sum(row['counterDelta'].get('created', 0) for row in rows),
-            'configured': sum(row['counterDelta'].get('configured', 0) for row in rows),
+            'created': rows[-1]['counters']['created']-rows[0]['counters']['created']+rows[0]['counterDelta'].get('created', 0),
+            'configured': rows[-1]['counters']['configured']-rows[0]['counters']['configured']+rows[0]['counterDelta'].get('configured', 0),
+            'configuredDuringCallbacks': sum(row['counterDelta'].get('configured', 0) for row in rows),
+            'configuredBetweenCallbacks': sum(row['betweenCallbackDelta'].get('configured', 0) for row in rows),
             'startLaunchMilliseconds': rows[0]['launchMilliseconds'],
             'endLaunchMilliseconds': rows[-1]['launchMilliseconds'],
             'activePhysicalChanges': len(active), 'activePhysicalMissedIntervals': raw,
@@ -84,6 +89,7 @@ def analyze(native, physical):
             'excludedIntervals': 0, 'appAttributedMissedIntervals': raw,
             'physicalGaps': gaps, 'busyGapsAtLeast8ms': busy,
             'phaseMaximumMilliseconds': phases,
+            'deferredPhaseMaximumMilliseconds': deferred_phases,
             'physicalWindow': {'startTicks': first, 'endTicks': last,
                                'firstChangeTicks': active[0] if active else None,
                                'lastChangeTicks': active[-1] if active else None},
