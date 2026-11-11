@@ -60,6 +60,20 @@ def run(factory, results, tmp, env, functional_only=False):
         def record(key, ok, **detail):
             results[key] = dict(ok=bool(ok), load=load(), **detail)
             print(key, 'PASS' if ok else 'FAIL', flush=True)
+        def recorded_visual(key, value):
+            # LEAD 02:35 approves exactly these two S12-V rows for Step 4.
+            # CheckedResults still audits App life, focus and crashes first;
+            # retain the failed pixel predicate and every raw measurement.
+            assert key in ('S11_material', 'S12_elements')
+            if not value['ok']:
+                value['reason'] = 'S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)'
+            try:
+                results[key] = value
+            except env['SuiteStopped'] as stop:
+                if stop.failed_row != key or results.get(key) is not value:
+                    raise
+                env['begin_row']('after ' + key)
+                print(key + ' raw FAIL; exact S12-V deferral, continuing', flush=True)
         def blocked(key, reason, **detail):
             results[key] = dict(status='BLOCKED', reason=reason, load=load(), **detail)
         def refused(**args):
@@ -461,9 +475,9 @@ def run(factory, results, tmp, env, functional_only=False):
             validation=all(p['deltaE00']<=3 for p in probes[2:])
             _,_,closed_pixels=env['read_image'](closed_path,srgb=True)
             closed_fit=all(max(abs(a-b) for a,b in zip(closed_pixels(x*scale,y*scale),rgb))<=3 for x,y,rgb in targets[:2])
-            record('S11_material',fits and validation and not closed_fit,probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale,state=s)
+            recorded_visual('S11_material',dict(ok=fits and validation and not closed_fit,load=load(),probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale,state=s))
             from sitecontrol_pixels import compare_live, background_response
-            results['S12_elements']=compare_live(path, s, scale, private, env,negative_path=closed_path)
+            recorded_visual('S12_elements',compare_live(path, s, scale, private, env,negative_path=closed_path))
             response=background_response(app,tab,private,env,scale)
             # INFO has no acceptance predicate. Keep focus loss as an interruption.
             interruptions=results.tracker.loss()

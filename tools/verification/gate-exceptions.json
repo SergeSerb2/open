@@ -38,7 +38,7 @@
   {
     "row": "page/X1_apple_backend",
     "status": "BLOCKED",
-    "reason": "French → English OS translation asset is not installed",
+    "reason": "French \u2192 English OS translation asset is not installed",
     "clearsWhen": "French to English OS asset is installed and the real Apple backend row passes",
     "owner": "lead/user",
     "added": "2026-11-10",
@@ -74,7 +74,7 @@
   {
     "row": "sleep/sleep_f3_capture",
     "status": "BLOCKED",
-    "reason": "unverified: no capture fixture without a camera or microphone grant (memory-fork §11 F3 records capture as unverified, not passed)",
+    "reason": "unverified: no capture fixture without a camera or microphone grant (memory-fork \u00a711 F3 records capture as unverified, not passed)",
     "clearsWhen": "User grants camera/microphone consent and the capture sleep row passes",
     "owner": "lead/user",
     "added": "2026-11-10",
@@ -115,5 +115,23 @@
     "owner": "engine lane / lead",
     "added": "2026-11-10",
     "expires": "Engine callback-lifetime patch lands"
+  },
+  {
+    "row": "sitecontrol/S11_material",
+    "status": "DEFERRED",
+    "reason": "S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)",
+    "clearsWhen": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control",
+    "owner": "lead / design D3",
+    "added": "2026-11-11",
+    "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
+  },
+  {
+    "row": "sitecontrol/S12_elements",
+    "status": "DEFERRED",
+    "reason": "S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)",
+    "clearsWhen": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control",
+    "owner": "lead / design D3",
+    "added": "2026-11-11",
+    "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
   }
 ]

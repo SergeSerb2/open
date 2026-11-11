@@ -277,12 +277,13 @@
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return app.activationTrace.events
       case "yield-activation":
-        // CEF may expose its persistent hard link as executableURL. The peer
-        // must map this exact file; a separate copy with equal bytes is refused.
+        // Read the mapped executable from the kernel, not LaunchServices'
+        // cached executableURL. CEF may use a persistent hard link; the peer
+        // must map this exact file, never a separate copy with equal bytes.
         guard let pid = a["pid"] as? Int32, pid != getpid(),
           let target = NSRunningApplication(processIdentifier: pid),
-          let targetFile = target.executableURL,
-          let ownFile = Bundle.main.executableURL,
+          let targetFile = Self.mappedExecutableURL(pid),
+          let ownFile = Self.mappedExecutableURL(getpid()),
           let targetAttributes = try? FileManager.default.attributesOfItem(atPath: targetFile.path),
           let ownAttributes = try? FileManager.default.attributesOfItem(atPath: ownFile.path),
           let targetDevice = targetAttributes[.systemNumber] as? NSNumber,
@@ -1747,6 +1748,12 @@
       if let group = animation as? CAAnimationGroup { value["children"] = (group.animations ?? []).map(describeAnimation) }
       return value
     }
+    private static func mappedExecutableURL(_ pid: Int32) -> URL? {
+      var path = [CChar](repeating: 0, count: Int(PROC_PIDPATHINFO_MAXSIZE))
+      guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
+      return URL(fileURLWithPath: path.withUnsafeBufferPointer { String(cString: $0.baseAddress!) })
+    }
+
     private func rect(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map(Double.init) }
 
     private func legacyAX(_ object: NSObject, _ attribute: String) -> String {

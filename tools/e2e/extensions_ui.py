@@ -377,7 +377,7 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         shortcuts_tabs = []
         try:
             for _ in range(2):
-                app.call("ext-shortcuts", action="menu", select="Extension Shortcuts")
+                app.call("ext-shortcuts", action="menu", select="Extension shortcuts…")
                 selected = wait_until(lambda: next((t for t in app.call("tabs")
                     if t["url"] == "chrome://extensions/shortcuts" and t["selected"]), None), timeout=10)
                 shortcuts_tabs.append(selected)

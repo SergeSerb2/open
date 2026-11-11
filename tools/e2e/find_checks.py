@@ -94,9 +94,14 @@ def run(h, factory, results, tmp):
                      y=app.call('window-state')['frame'][3]-control[1]-control[3]/2)
         closed=h.wait_until(lambda: not pane(p['tab'])['visible'] and app.call('focus-state')['owner']=='page', timeout=3, step=.05)
         after = [app.call('ext-strip', surface=s) for s in ('url', 'pane', 'toolbar')]
-        row(name, before and bool(closed) and any(s.get('visible') and s.get('ids') for s in after),
+        # The close click moved the pointer off the hover-gated URL strip.
+        # Return through the real hover route before checking that it is usable.
+        app.call('ext-hover', inside=True)
+        rehovered = [app.call('ext-strip', surface=s) for s in ('url', 'pane', 'toolbar')]
+        row(name, before and bool(closed) and any(s.get('visible') and s.get('ids') for s in rehovered)
+            and app.call('extensions')['duplicatesDropped'] == 0,
             pane=p, closed=bool(closed), focus=app.call('focus-state'), strips=strips,
-            stripsAfterClose=after, duplicatesDropped=duplicates)
+            stripsAfterClose=after, stripsAfterHover=rehovered, duplicatesDropped=duplicates)
         key('f', ['cmd'])
     def idle_checks():
         nonlocal app

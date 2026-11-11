@@ -814,6 +814,13 @@ def extension_checks(app, style, results):
 
     # Extensions open welcome pages as new tabs (at the top of Today, like
     # Arc); use the tab the app started with.
+    # Bitwarden's asynchronous first-install handler can open its page several
+    # seconds after enumeration, dismissing whichever action popup is open.
+    # Establish that actual startup transition before testing popup lifetimes.
+    startup = wait_until(lambda: [t for t in app.call('tabs')
+        if t['url'].startswith('https://bitwarden.com/browser-start/')], timeout=30)
+    results['first_install_tabs_ready'] = {'ok': bool(startup),
+        'bitwardenWelcome': startup[0]['url'] if startup else None}
     tabs = app.call("tabs")
     results["welcome_tabs"] = [x["url"] for x in tabs if not x["url"].startswith("https://example.com")]
     t1 = [x for x in tabs if x["url"].startswith("https://example.com")][0]["id"]
@@ -874,6 +881,7 @@ def extension_checks(app, style, results):
     for name, ext_id in EXT.items():
         info = {}
         try:
+            app.call('select', tab=t1)
             app.call("events")
             if style == "chrome" and not has_popup.get(ext_id, True):
                 # No popup for this tab (chrome.action.setPopup({popup: ""});
@@ -8737,7 +8745,7 @@ def routing_checks(factory, results, tmp):
                command='open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...')
         app.call('command', id='air-traffic-control')
         settings = wait_until(lambda: (lambda row: row if row['settingsVisible'] and row['pane'] == 'links'
-                              and row['scrollTarget'] == 'links-rules' else None)(app.call('settings-state')),
+                              and row['scrollTarget'] == 'links/rules' else None)(app.call('settings-state')),
                               timeout=4, step=.05)
         record('routing_air_traffic_control_entry', bool(settings), settings=settings)
         state_after = app.call('default-browser-state')

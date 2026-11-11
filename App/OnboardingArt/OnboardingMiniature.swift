@@ -244,7 +244,7 @@ final class OnboardingMiniature: NSView {
         let surface = WelcomeTextColors.opaque(selected,over: background)
         // Tiny glyphs need headroom after scaling. Change only ink lightness,
         // retaining the actual Space field, row fill, layout and native text.
-        return WelcomeTextColors.text(seed,on: surface,minimum: 6)
+        return WelcomeTextColors.text(seed,on: surface,minimum: demoKind == 2 ? 6.4:6)
     }
     func playNewTab(duration: Double) {
         freezeDemo(); context.animatesChanges = true; demoRunning = true; prepareDemo()
