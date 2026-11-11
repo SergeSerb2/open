@@ -15,9 +15,9 @@ from downloads import server
 from library_overlay import capture_window
 
 
-def run(output,bundle=None,frames=False,mockups=None):
+def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
     output.mkdir(parents=True,exist_ok=True)
-    result = {'checks':{},'frames':[],'configuration':'Debug; functional evidence, no timing qualification'}
+    result = {'checks':{},'frames':[],'configuration':config+'; functional evidence, no timing qualification'}
     app = None
     saved = {}
     def check(name,ok,**evidence):
@@ -42,7 +42,7 @@ def run(output,bundle=None,frames=False,mockups=None):
         (output/(name+'.json')).write_text(json.dumps(current,indent=2))
     with tempfile.TemporaryDirectory(prefix='open-library-l2-') as data,server() as base,boost_fixture(data) as switches:
         try:
-            app=Open('Debug','chrome',data,switches,str(output/'app.log'),urls=(base+'/',),extra_env={'OPEN_E2E_APP_BUNDLE':str(bundle)} if bundle else {})
+            app=Open(config,'chrome',data,switches,str(output/'app.log'),urls=(base+'/',),extra_env={'OPEN_E2E_APP_BUNDLE':str(bundle)} if bundle else {})
             for name,value in [('libraryShowsEasels',False),('open.sidebar.hideHintShown',True),('open.advanced.enableBoosts',True),('open.boosts.hasDismissedInterstitial',True),('open.boosts.hasDismissedJSNotice',True)]:
                 saved[name]=app.call('defaults',key=name,persistent=True);app.call('defaults',key=name,value=value)
             owner=app.call('shell-windows')[0]['id'];tab=app.call('tabs')[0]['id'];app.call('wait',tab=tab)
@@ -62,6 +62,12 @@ def run(output,bundle=None,frames=False,mockups=None):
             check('reopen_cancels_release',state()['panelCreated'] and state()['panelGeneration']==generation)
             state(action='close');check('closed_view_released',wait(lambda:not state().get('panelCreated',True)) and not state().get('releasedPanelAlive',True),state=state())
             state(action='open',section='downloads');check('reopen_builds_fresh_panel',state()['panelGeneration']==generation+1)
+            sessions=len(state(action='sessions')['sessions'])
+            app.call('command',id='new-window');state(action='open',section='history')
+            check('second_window_owns_session',len(state(action='sessions')['sessions'])==sessions+1)
+            app.call('window-close')
+            check('closed_window_releases_panel',wait(lambda:len(state(action='sessions')['sessions'])==sessions and not state(action='sessions')['closedPanelAlive']))
+            app.call('window-focus',id=owner,activate=True)
             app.call('download-policy',recordFiles=True)
             download_dir=Path(data)/'download-files';download_dir.mkdir()
             app.call('download-settings',profile=profile,directory=str(download_dir),ask=False)
@@ -285,4 +291,4 @@ def run(output,bundle=None,frames=False,mockups=None):
     return result
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',required=True,type=Path);p.add_argument('--bundle',type=Path);p.add_argument('--frames',action='store_true');p.add_argument('--mockups',type=Path);a=p.parse_args();run(a.output,a.bundle,a.frames,a.mockups)
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True,type=Path);p.add_argument('--bundle',type=Path);p.add_argument('--frames',action='store_true');p.add_argument('--mockups',type=Path);p.add_argument('--config',choices=['Debug','Release'],default='Debug');a=p.parse_args();run(a.output,a.bundle,a.frames,a.mockups,a.config)
