@@ -134,3 +134,6 @@ command bar, Pin row, Space title and split-row labels all remain real component
 
 See [the eight-case contrast evidence](welcome-contrast.md) for the captured
 ratios, the original-color failure control, and two representative App images.
+
+[Room Welcome before/after, Light and Dark](images/welcome-room-before-after.png).
+These M3 window captures use synthetic Example data on the M1 built-in 2x panel.

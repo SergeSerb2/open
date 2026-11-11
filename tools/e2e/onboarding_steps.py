@@ -166,6 +166,11 @@ def run(factory, results, tmp, h):
         blocker_after = pending_blocker.read_bytes() if pending_blocker.exists() else None
         results['steps_pending_no_writes'] = dict(ok=not pending['snapshot'] and pending['name'] is None
             and blocker_before==blocker_after, state=pending, load=os.getloadavg())
+        # Prepare the same hidden browser used by import, then position only
+        # our window before the first Welcome frame. A real pointer hover is
+        # supposed to stop the playlist; it must not interrupt this check.
+        action('prepare-handoff')
+        h.place_away_from_cursor(app, 1280, 800)
         app.call('key', key='return')
         handoff = state(); until(lambda: not state()['active'] and not state()['dim']['exists'])
         final = state(); stored = json.loads(snapshot().read_text())

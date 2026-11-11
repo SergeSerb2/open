@@ -533,8 +533,12 @@ def design_gates(state, appearance):
         'header_inset': abs(layout['headerTop'] - 48) <= .5,
         'footer_spacing': abs(layout['footerGap'] - 22) <= .5
             and footer[1] + footer[3] <= height - 27.5,
-        'illustration_limits': len(cards) == 4 and all(95.5 <= c['illustration'][3]
-            <= layout['columnWidth']/2 * 10/16 + .5 for c in cards),
+        # The art slot keeps its 96 pt floor; the native thumbnail now has
+        # the lead's common 12 pt top/side inset inside that slot.
+        'illustration_limits': len(cards) == 4 and all(95.5 <= c['illustration'][3] + 12
+            <= layout['columnWidth']/2 * 10/16 + .5
+            and near(c['illustration'][:2], [12, 12], .5)
+            and abs(c['illustration'][2] - (c['frame'][2] - 24)) <= .5 for c in cards),
         'native_components': len(cards)==4 and all(c.get('miniature',{}).get('realSidebar')
             and c['miniature']['engineContents']==0 and c['miniature']['artWidthFraction']>=.70 for c in cards)
             and 'Weekend reading' in cards[1]['miniature']['pinnedTitles']

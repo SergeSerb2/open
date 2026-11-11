@@ -75,6 +75,7 @@ import OpenSpaceEditor
     // Target/actions keep the two page buttons in AppKit's normal key loop.
     for (button,symbol,tag) in [(previous,"chevron.left",-1),(next,"chevron.right",1)] {
       button.image = NSImage(systemSymbolName: symbol,accessibilityDescription: button.title); button.imagePosition = .imageOnly
+      button.setAccessibilityElement(true); button.setAccessibilityRole(.button); button.setAccessibilityLabel(button.title)
       button.isBordered = false; button.target = self; button.action = #selector(changePage(_:)); button.tag = tag; addSubview(button)
     }
     for swatch in swatches { swatch.target = self; swatch.action = #selector(selectColor(_:)); addSubview(swatch) }
@@ -104,6 +105,7 @@ import OpenSpaceEditor
   init(index: Int,preset: SpaceStylePreset) {
     colors = ThemeColorMath.harmony(key: ThemeColorMath.toP3(preset.style.keyColor),count: preset.style.colorCount,wheel: preset.style.wheel).map { NSColor(displayP3Red: $0.r,green: $0.g,blue: $0.b,alpha: 1) }
     super.init(frame: .zero); tag = index; isBordered = false; title = ""; setButtonType(.momentaryPushIn)
+    setAccessibilityElement(true); setAccessibilityRole(.button)
     setAccessibilityLabel("Set Space color to \(preset.name)"); toolTip = preset.name
   }
   required init?(coder: NSCoder) { nil }

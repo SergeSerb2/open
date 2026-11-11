@@ -11,7 +11,7 @@ extension AutomationController {
     let pacingRegion = IntroPacingTrace.begin("automation.onboarding")
     defer { pacingRegion?.end() }
     let action = args["action"] as? String ?? "state"
-    let allowed: [String: Set<String>] = ["state": [], "release-allocator-cache": [], "skip-intro": [], "get-started": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
+    let allowed: [String: Set<String>] = ["state": [], "release-allocator-cache": [], "skip-intro": [], "get-started": [], "prepare-handoff": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
     guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,
           let extra = allowed[action], Set(args.keys).isSubset(of: extra.union(["action"])) else {
       throw Failure(message: "unknown onboarding action or argument")
@@ -28,6 +28,11 @@ extension AutomationController {
       if let steps = controller.steps {
         guard !steps.finishing, !steps.firstRun.busy, !steps.defaultPending else { throw Failure(message: "onboarding is busy") }
         switch action {
+        case "prepare-handoff":
+          // Use the importer's real hidden-browser path so a harness can move
+          // its future window clear of the hardware pointer before Welcome.
+          guard steps.step == .ready, !controller.replay else { throw Failure(message: "not on first-run Ready") }
+          app.showFirstRunBrowser()
         case "set-appearance":
           guard let appearance = args["appearance"] as? String, ["light", "dark"].contains(appearance) else { throw Failure(message: "expected light or dark") }
           controller.window?.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua:.aqua)
