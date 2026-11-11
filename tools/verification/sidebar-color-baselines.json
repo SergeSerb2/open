@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "environments": {
-    "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43-mode-2560x1440-pixels-2560x1440-mhz-240000": {
+    "scale-1-icc-header-v1-f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56-mode-2560x1440-pixels-2560x1440-mhz-240000": {
       "original": true,
       "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
       "colorLimits": {
@@ -25,9 +25,15 @@
         "pixels": "2560x1440",
         "refreshMilliHz": 240000
       },
-      "modeQualification": "2026-11-10: exact scale/ICC references retained unchanged; mode is now required at selection and render."
+      "modeQualification": "2026-11-10: exact scale/ICC references retained unchanged; mode is now required at selection and render.",
+      "iccMigration": {
+        "scheme": "icc-header-v1",
+        "previousKey": "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43-mode-2560x1440-pixels-2560x1440-mhz-240000",
+        "rawSHA256": "b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43",
+        "normalizedSHA256": "f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56"
+      }
     },
-    "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856-mode-1512x982-pixels-3024x1964-mhz-120000": {
+    "scale-2-icc-header-v1-ced527b7482d75a039b583d3a6b856fb4e3f0c26010e4258ba770e17b142e844-mode-1512x982-pixels-3024x1964-mhz-120000": {
       "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
       "baselineBinarySHA256": "9da313a5d133b0c6e462e515a5f5d63a8e4e474d8cd29de15f7d6c7df8e06847",
       "renderScale": 1,
@@ -392,7 +398,13 @@
         "pixels": "3024x1964",
         "refreshMilliHz": 120000
       },
-      "modeQualification": "2026-11-10: exact scale/ICC references retained unchanged; mode is now required at selection and render."
+      "modeQualification": "2026-11-10: exact scale/ICC references retained unchanged; mode is now required at selection and render.",
+      "iccMigration": {
+        "scheme": "icc-header-v1",
+        "previousKey": "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856-mode-1512x982-pixels-3024x1964-mhz-120000",
+        "rawSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+        "normalizedSHA256": "ced527b7482d75a039b583d3a6b856fb4e3f0c26010e4258ba770e17b142e844"
+      }
     }
   }
 }
