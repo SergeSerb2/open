@@ -198,7 +198,7 @@ def run(output,bundle=None,frames=False,mockups=None,config='Debug'):
             menu(boost,'Turn Off');check('boost_toggle_live',wait(lambda:not app.eval(boost_tab,'getComputedStyle(document.querySelector("h1")).fontFamily').startswith('Avenir')))
             menu(boost,'Turn On');check('boost_toggle_on',wait(lambda:app.eval(boost_tab,'getComputedStyle(document.querySelector("h1")).fontFamily').startswith('Avenir')))
             state(action='boost-layout',name='Gallery');check('boost_gallery',state()['boostsLayout']=='Gallery');capture('boosts-gallery')
-            state(action='search',text='no-such-boost');check('boost_search_empty',wait(lambda:not rows()));state(action='search',text='')
+            state(action='search',text='no-such-boost');check('boost_search_empty',wait(lambda:not rows()));state(action='search',text='');assert wait(lambda:row(boost))
             menu(boost,'Edit Boost');check('boost_edit_row',wait(lambda:app.call('boost-editor').get('open')));app.call('boost-editor',action='close')
             state(action='row-action',id=boost,name='Delete');app.call('alert',window='library',button='Cancel')
             check('boost_delete_cancel',any(b['id']==boost for b in app.call('boosts',profile=profile)))
