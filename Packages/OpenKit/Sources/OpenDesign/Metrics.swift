@@ -52,10 +52,12 @@ public enum ChromeMetrics {
 
 /// Command / URL field.
 public enum URLFieldMetrics {
-    /// `[8, 46, W − 16, 36]`.
+    /// `[9, 46, W − 18, 36]` (Arc 1.172 at a 366 pt sidebar: 348 wide; plan D3 §2.4).
     public static let y: CGFloat = 46
     public static let height: CGFloat = 36
-    public static let insetX: CGFloat = 8
+    public static let insetX: CGFloat = 9
+    /// A long host keeps its end visible; its leading 34 pt fade to clear (Arc 23-url-loading-long).
+    public static let longHostFade: CGFloat = 34
     /// Same shape as favorite tiles. Fitted by the comparison loop (docs/design.md).
     public static let cornerRadius: CGFloat = 10
     /// Magnifier button `[14, 52, 24, 24]`, glyph ink 12×12.

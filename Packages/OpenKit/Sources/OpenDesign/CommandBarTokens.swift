@@ -15,7 +15,7 @@ public enum CommandBarMetrics {
         CGRect(x: width - 47, y: 19, width: 26, height: 26)
     }
     /// Outer width, border included (x 725…1490, F0049/F0063).
-    public static let panelWidth: CGFloat = 766
+    public static let panelWidth: CGFloat = 768
     /// Side margin kept when the window is narrower than the panel plus margins. guess.
     public static let minimumWindowMargin: CGFloat = 40
     /// Outer corner radius. Fitted on the corner coverage of F0063 (the edge curve spans ≈ 18 px).
@@ -292,4 +292,85 @@ public enum CommandBarRole {
     public static let footerButtonEdge = RGBA(hex: 0x6362AD)
     /// Button titles: cores #E5E5EB over the fill solve to white ≈ 0.9. fitted.
     public static let footerButtonTitle = RGBA.white(0.9)
+}
+
+// MARK: - D3 command card (plan D3 §2.1, §2.2; the mock-up CSS is the spec; Arc 1.172 capture session 2)
+
+/// Geometry of one command card size: the New Tab card (`.newTab`) or the inline address
+/// editor anchored to the sidebar URL field (`.inline`). Panel-relative points, y down.
+public struct CommandCardLayout: Sendable, Hashable {
+    public var inputRowHeight: CGFloat
+    /// Leading icon: x, size; the text starts `iconGap` after it.
+    public var inputPaddingLeft: CGFloat
+    public var inputPaddingRight: CGFloat
+    public var inputIconSize: CGFloat
+    public var inputGap: CGFloat
+    public var inputFontSize: CGFloat
+    /// List: padding top, sides, bottom; rows `rowHeight` tall every `rowPitch`.
+    public var listPaddingTop: CGFloat
+    public var listPaddingX: CGFloat
+    public var listPaddingBottom: CGFloat
+    public var rowHeight: CGFloat
+    public var rowPitch: CGFloat
+    public var rowPaddingLeft: CGFloat
+    public var rowPaddingRight: CGFloat
+    public var rowGap: CGFloat
+    public var rowFontSize: CGFloat
+    /// The selected row's white tile: 24 pt, starting `tileOffset` before the icon.
+    public var tileOffset: CGFloat
+
+    public var listTop: CGFloat { inputRowHeight + listPaddingTop }
+    public var iconSize: CGFloat { 18 }
+    /// Title x inside a row.
+    public var titleX: CGFloat { rowPaddingLeft + iconSize + rowGap }
+    public var textX: CGFloat { inputPaddingLeft + inputIconSize + inputGap }
+
+    /// Panel height for `rows` visible rows (at most five). measured: 329 at five rows (Arc08).
+    public func panelHeight(rows: Int) -> CGFloat {
+        guard rows > 0 else { return inputRowHeight }
+        return listTop + CGFloat(min(rows, CommandBarMetrics.maxVisibleRows)) * rowPitch + listPaddingBottom
+    }
+
+    /// `.big` in the mock-up: input 64 (22 / 18 padding, gap 16, 19 pt), rows 46 + 4 (13 / 9, gap 13, 15 pt).
+    public static let newTab = CommandCardLayout(inputRowHeight: 64, inputPaddingLeft: 22, inputPaddingRight: 18, inputIconSize: 18, inputGap: 16,
+                                                 inputFontSize: 19, listPaddingTop: 5, listPaddingX: 9, listPaddingBottom: 10, rowHeight: 46, rowPitch: 50,
+                                                 rowPaddingLeft: 13, rowPaddingRight: 9, rowGap: 13, rowFontSize: 15, tileOffset: 4)
+    /// `.inl` in the mock-up: input 50 (14 / 20 padding, gap 12, 15 pt, favicon 16), rows as New Tab with 9 / 9 padding, gap 11.
+    public static let inline = CommandCardLayout(inputRowHeight: 50, inputPaddingLeft: 14, inputPaddingRight: 20, inputIconSize: 16, inputGap: 12,
+                                                 inputFontSize: 15, listPaddingTop: 5, listPaddingX: 9, listPaddingBottom: 9, rowHeight: 46, rowPitch: 50,
+                                                 rowPaddingLeft: 9, rowPaddingRight: 9, rowGap: 11, rowFontSize: 15, tileOffset: 3)
+}
+
+/// Card look (plan D3 §2.1). Light/Dark follow the window's effective appearance.
+public enum CommandCard {
+    /// Card at a 1280 pt window: 768 wide at x 256 (Arc08 PNG boundary).
+    public static let width: CGFloat = 768
+    public static let cornerRadius: CGFloat = 12
+    /// Inline editor: anchored to the sidebar URL field, 1 pt above it; never narrower than this.
+    public static let inlineMinimumWidth: CGFloat = 340
+    public static let inlineTopOffset: CGFloat = -1
+    public static let body = DesignColor(light: RGBA(hex: 0xF9F9F9), dark: RGBA(hex: 0x30302E))
+    public static let text = DesignColor(light: RGBA(hex: 0x1E1E1C), dark: RGBA(hex: 0xF4F3EE))
+    public static let secondaryText = DesignColor(light: RGBA(hex: 0x1E1E1C, alpha: 0.56), dark: RGBA(hex: 0xF4F3EE, alpha: 0.56))
+    public static let separator = DesignColor(light: .black(0.08), dark: .white(0.09))
+    /// The tint reaches clear at this fraction of the card width.
+    public static let tintStop: CGFloat = 0.30
+    /// Shadow y 22, blur 70 (Gaussian σ 35), black 38 %, plus a 0.5 pt black 22 % hairline.
+    public static let shadowOffsetY: CGFloat = 22, shadowRadius: CGFloat = 35, shadowOpacity: Float = 0.38
+    public static let hairline = RGBA.black(0.22), hairlineWidth: CGFloat = 0.5
+    /// Scrim over the window content behind the New Tab card (not the inline editor).
+    public static let scrim = RGBA.black(0.10)
+    /// Round (i) button: 24 pt, Light white / Dark #1C1C1B, shadow y 1 blur 3 black 18 %.
+    public static let infoDiameter: CGFloat = 24
+    public static let infoFill = DesignColor(light: .white(1), dark: RGBA(hex: 0x1C1C1B))
+    public static let infoShadowOpacity: Float = 0.18, infoShadowRadius: CGFloat = 1.5, infoShadowOffsetY: CGFloat = 1
+    /// Rows.
+    public static let rowRadius: CGFloat = 8
+    public static let faviconRadius: CGFloat = 5
+    public static let tileSize: CGFloat = 24, tileRadius: CGFloat = 6, tileFavicon: CGFloat = 16
+    public static let selectedText = RGBA.white(1), selectedSubtitle = RGBA.white(0.8)
+    /// Trailing hint on the selected row: 13 pt semibold white, 8 pt gap, 20 pt key cap radius 5.
+    public static let hintFontSize: CGFloat = 13, hintGap: CGFloat = 8, keyCapSize: CGFloat = 20, keyCapRadius: CGFloat = 5
+    /// Input text selection: the accent at 55 %.
+    public static let textSelectionAlpha = 0.55
 }

@@ -3,58 +3,76 @@ import QuartzCore
 
 // Measured Site Control values: plan §3, Appendix A; S2 09/0010.
 public enum SiteControlMetrics {           // §3. m = measured (S2), g = guess, o = Open choice
-    public static let width: CGFloat = 236, padding: CGFloat = 10                         // m
-    public static let cornerRadius: CGFloat = 16                                           // m ≈ 16–18; lead C
+    public static let width: CGFloat = 236, padding: CGFloat = 12                         // m (Arc 1.172 14c AX 236 wide); D3 §2.5
+    public static let cornerRadius: CGFloat = 14                                           // D3 §2.5
     public static let arrowHeight: CGFloat = 10, arrowSideAngle: CGFloat = 45               // m (visible tip → body top; 2 pt/row)
     public static let arrowTipRadius: CGFloat = 7, arrowBaseWidth: CGFloat = 26             // m (fit to rows 81–90)
     public static let arrowBaseFillet: CGFloat = 2, arrowTipBelowAnchor: CGFloat = 2        // g / m
     public static let windowMargin: CGFloat = 8, contentAnchorInset: CGFloat = 12          // o
-    public static let actionButton = CGSize(width: 48, height: 32), actionGap: CGFloat = 8 // m
-    public static let actionRadius: CGFloat = 6, actionGlyph: CGFloat = 17                 // m (corner insets) / g (visual)
-    public static let gapAfterActions: CGFloat = 37, sectionGap: CGFloat = 43              // m
-    public static let labelBaselineAboveContent: CGFloat = 14, labelRowHeight: CGFloat = 24 // m / g
-    public static let extensionTile = CGSize(width: 48, height: 32), extensionColumns = 4  // m / g
-    public static let extensionRowPitch: CGFloat = 40, extensionIcon: CGFloat = 16, tileRadius: CGFloat = 6 // g / g / m
-    public static let rowIcon: CGFloat = 32, rowPitch: CGFloat = 43, rowTextX: CGFloat = 50 // m
-    public static let rowTitleBaseline: CGFloat = 13, rowSubtitleBaseline: CGFloat = 29   // m (±1)
+    /// D3 §2.5: four equal tiles, 32 tall, 7 apart: (236 − 2 × 12 − 3 × 7) / 4 = 47.75.
+    public static let actionButton = CGSize(width: 47.75, height: 32), actionGap: CGFloat = 7
+    public static let actionRadius: CGFloat = 8, actionGlyph: CGFloat = 16
+    /// Section titles 13 pt with 14 above and 8 below (line box 15.5): content starts 37.5 after the tiles,
+    /// the title baseline 11 above it (descender 3 + 8).
+    public static let gapAfterActions: CGFloat = 37.5, sectionGap: CGFloat = 37.5
+    public static let labelBaselineAboveContent: CGFloat = 11, labelRowHeight: CGFloat = 24
+    /// "Add extension" chip 46 × 28, radius 7 (D3 §2.5).
+    public static let extensionTile = CGSize(width: 46, height: 28), extensionColumns = 4
+    public static let extensionRowPitch: CGFloat = 40, extensionIcon: CGFloat = 16, tileRadius: CGFloat = 7
+    /// Setting row: 30 pt circle, 10 pt gap, title 13 semibold, state 12 at 60 % (D3 §2.5).
+    public static let rowIcon: CGFloat = 30, rowPitch: CGFloat = 41, rowTextX: CGFloat = 52
+    public static let rowTitleBaseline: CGFloat = 12, rowSubtitleBaseline: CGFloat = 27
     public static let rowGlyph: CGFloat = 15, circlePressedLevels: CGFloat = -8             // g (no row hover plate)
     public static let focusOutset: CGFloat = 2, circleFocusDiameter: CGFloat = 36          // o
-    public static let gapBeforeSeparator: CGFloat = 15, gapAfterSeparator: CGFloat = 10    // m
-    public static let footerHeight: CGFloat = 32, pillRadius: CGFloat = 8, pillPadding: CGFloat = 10 // m / g / g
+    /// Footer: hairline above, 10 pt padding, 30 pt chip and "···" (D3 §2.5). The gap before the hairline
+    /// makes the measured case 254 pt tall (Arc 14c AX group 236 × 254).
+    public static let gapBeforeSeparator: CGFloat = 24, gapAfterSeparator: CGFloat = 10
+    public static let footerHeight: CGFloat = 30, pillRadius: CGFloat = 8, pillPadding: CGFloat = 10
     public static let pillLockGlyph: CGFloat = 13, pillLockGap: CGFloat = 6                // m (ink 10 × 14)
-    public static let moreButton: CGFloat = 32                                             // m
+    public static let moreButton: CGFloat = 30                                             // D3 §2.5
     public static let reloadRowHeight: CGFloat = 32, reloadGap: CGFloat = 11, globalOffHeight: CGFloat = 28 // o
     public static let maxHeight: CGFloat = 640, inUseDot: CGFloat = 6                      // o; height = min(content, maxHeight, window room) (§3.1)
     public static let sparkleOpacity = (topRight: 1.0, topLeft: 0.35, bottomRight: 0.35)   // g (resting frame, Q15)
     public static let buttonSparkleSize: CGFloat = 4 // §3.10, approximate captured size
     public static let buttonSparkleOpacity: CGFloat = 0.45                                 // g (URL field button, Q15)
     public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 12, shadowOffsetY: CGFloat = 4 // g; shared with the theme popover
+    /// The Site Control panel's own shadow: y 18, blur 50 (σ 25), black 34 %, plus a 0.5 pt black 20 % hairline (D3 §2.5).
+    public static let panelShadowOpacity: Float = 0.34, panelShadowRadius: CGFloat = 25, panelShadowOffsetY: CGFloat = 18
+    /// The Space tint reaches clear at this fraction of the panel width.
+    public static let tintStop: CGFloat = 0.62
 }
 public enum SiteControlColors {            // macOS Dark measured (IS §20.15); Light = guess; mode = the window's (§3.2)
     // Shipped with .hudWindow: interim (lead 2026-11-06). S11/S12 remain FAIL.
     // The fitted bitmap below remains exclusive to the offscreen harness.
     public static let liveMaterialTint = DesignColor(light: .black(0), dark: RGBA(hex: 0x686881, alpha: 0.32))
+    /// D3 §2.5 body: Light rgba(250,250,246,0.94), Dark rgba(48,48,46,0.96), under the Space tint.
+    public static let body = DesignColor(light: RGBA(250.0 / 255, 250.0 / 255, 246.0 / 255, 0.94), dark: RGBA(48.0 / 255, 48.0 / 255, 46.0 / 255, 0.96))
+    public static let hairline = RGBA.black(0.20)
+    /// "Insecure" chip: red tint with red text (D3 §2.5).
+    public static let insecureFill = DesignColor(RGBA(220.0 / 255, 60.0 / 255, 40.0 / 255, 0.12))
+    public static let insecureText = DesignColor(RGBA(hex: 0xD8432C))
     public static let fallbackTint = RGBA(hex: 0x49475A), fallbackBackdropWeight: [CGFloat] = [0.28, 0.28, 0.21]
     public static let fallbackBlurSigma: CGFloat = 5                                       // fit + validation (§3.2)
-    public static let rim = DesignColor(light: .black(0.10), dark: .white(0.20))           // m (dark) / g (light)
-    public static let actionFillTop = DesignColor(light: .black(0.04), dark: RGBA(hex: 0x272727))    // m / g
-    public static let actionFillBottom = DesignColor(light: .black(0.08), dark: RGBA(hex: 0x161616)) // m / g
-    public static let actionRing = DesignColor(light: .black(0.12), dark: .black(0.30))    // m / g
-    public static let actionShadow = DesignColor(light: .black(0.10), dark: .black(0.20))  // fit (radius 1, y 1) / g
-    public static let actionHighlight = DesignColor(light: .white(0.6), dark: RGBA(hex: 0x575757))
-    public static let actionHighlightHover = DesignColor(light: .white(0.4), dark: RGBA(hex: 0x484848))
-    public static let glyph = DesignColor(light: .black(0.75), dark: .white(0.85))
-    public static let label = DesignColor(light: .black(0.80), dark: RGBA(hex: 0xDBDBDF))
-    public static let rowTitle = DesignColor(light: .black(0.85), dark: RGBA(hex: 0xDFDFE2))
-    public static let rowSubtitle = DesignColor(light: .black(0.50), dark: RGBA(hex: 0x9F9EA9))   // also hover accessory, chevron, notes
+    public static let rim = DesignColor(hairline)                                         // D3 §2.5 0.5 pt hairline
+    /// D3 §2.5 tiles: Light white with a y 1 blur 2 black 22 % shadow and a 0.5 pt black 8 % hairline; Dark #4A4A47.
+    public static let actionFillTop = DesignColor(light: .white(1), dark: RGBA(hex: 0x4A4A47))
+    public static let actionFillBottom = actionFillTop
+    public static let actionRing = DesignColor(.black(0.08))
+    public static let actionShadow = DesignColor(.black(0.22))
+    public static let actionHighlight = DesignColor(.clear)
+    public static let actionHighlightHover = DesignColor(.clear)
+    public static let glyph = DesignColor(light: RGBA(hex: 0x3A382F), dark: RGBA(hex: 0xF4F3EE))
+    public static let label = DesignColor(light: RGBA(hex: 0x26241C), dark: RGBA(hex: 0xF4F3EE))
+    public static let rowTitle = label
+    public static let rowSubtitle = DesignColor(light: RGBA(hex: 0x26241C, alpha: 0.6), dark: RGBA(hex: 0xF4F3EE, alpha: 0.6))   // also hover accessory, chevron, notes
     public static let circleOn = DesignColor(light: RGBA(hex: 0x2B2A3C), dark: RGBA(hex: 0xECEDFF))  // disc; glyph is a knock-out
     public static let circleOff = DesignColor(light: .black(0.10), dark: .white(0.28))     // disc; glyph is a knock-out
-    public static let tileFill = DesignColor(light: .black(0.05), dark: .white(0.08))
+    public static let tileFill = DesignColor(light: .black(0.07), dark: .white(0.10))      // D3 §2.5 "Add extension" chip
     /// S2 09/0010 y335: +35 sRGB levels on sidebar and page material.
     /// Dark uses plus-lighter compositing; Light remains an alpha guess.
-    public static let separator = DesignColor(light: .black(0.12), dark: RGBA(hex: 0x232323))
+    public static let separator = DesignColor(RGBA(128.0 / 255, 128.0 / 255, 128.0 / 255, 0.25)) // D3 §2.5 grey 25 %
     public static let pillFill = DesignColor(light: .black(0.04), dark: .white(0.05))
-    public static let moreFill = DesignColor(light: .black(0.10), dark: .black(0.28))
+    public static let moreFill = DesignColor(RGBA(128.0 / 255, 128.0 / 255, 128.0 / 255, 0.18))  // D3 §2.5 grey 18 %
 }
 public enum BoostGlyph {                    // one token for the Boost identity (§3.4, §3.7, §4.11, §4.13); Open's own sparkles as layers
     public static let outline = "paintbrush.pointed", fill = "paintbrush.pointed.fill"
@@ -155,7 +173,7 @@ public extension SiteControlMetrics {
     static let gearInk = CGSize(width: 13,height: 13) // S2 09/0010; 15 pt symbol optical box
     static let rowTitleTrailing: CGFloat = 16 // includes the tail-ellipsis optical inset
     static let pillLockInk = CGSize(width: 10,height: 14), moreInk = CGSize(width: 13,height: 3)
-    static let actionRingWidth: CGFloat = 1, actionHighlightHeight: CGFloat = 1
+    static let actionRingWidth: CGFloat = 0.5, actionHighlightHeight: CGFloat = 1
     static let actionShadowRadius: CGFloat = 1, actionShadowOffsetY: CGFloat = 1, actionPressedLevels: CGFloat = -6
     static let separatorHeight: CGFloat = 1
     static let openScale: CGFloat = 0.15, closeScale: CGFloat = 0.9, openSettle: CFTimeInterval = 0.30
@@ -171,8 +189,8 @@ extension Motion {
     public static let boostEditorOpenDuration: CFTimeInterval = 0.15,boostEditorCloseDuration: CFTimeInterval = 0.12,codeModeResize: CFTimeInterval = 0.20
 }
 extension Typography {
-    public static let siteControlLabel = FontToken(14, .semibold), siteControlRowTitle = FontToken(14, .semibold)
-    public static let siteControlRowSubtitle = FontToken(13, .regular), siteControlPill = FontToken(14, .medium)
+    public static let siteControlLabel = FontToken(13, .semibold), siteControlRowTitle = FontToken(13, .semibold)
+    public static let siteControlRowSubtitle = FontToken(12, .regular), siteControlPill = FontToken(13, .semibold)
     public static let siteControlSecondary = FontToken(13, .regular)
     public static let editorFontCell = FontToken(12,.regular) // measured S2 10/0030–0031
     public static let editorName = FontToken(13,.medium),editorButton = FontToken(14,.medium),editorSlider = FontToken(13,.regular)

@@ -33,6 +33,7 @@ extension BrowserWindowController {
         siteControlSpace = context.focusedSpace?.id
         let appearance = context.focusedSpace.map { context.style(for: $0).windowColorScheme } ?? context.systemAppearance
         siteControl.view.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
+        siteControl.view.panel.accent = SpaceAccent(style: context.focusedSpace.map { context.style(for: $0) })
         siteControl.view.frame = root.bounds
         siteControl.toggle(anchor: anchor, tabID: tabID)
         refreshSiteControlButtons()
@@ -54,6 +55,7 @@ extension BrowserWindowController {
         siteControlSpace = context.focusedSpace?.id; siteControl.view.frame = root.bounds
         let appearance = context.focusedSpace.map { context.style(for: $0).windowColorScheme } ?? context.systemAppearance
         siteControl.view.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
+        siteControl.view.panel.accent = SpaceAccent(style: context.focusedSpace.map { context.style(for: $0) })
         siteControl.present(anchor: anchor, tabID: id, mode: .extensionPicker)
         refreshSiteControlButtons(); return siteControl.isPresented
     }

@@ -53,6 +53,8 @@ class SiteControlRow: SiteControlButton {
     private lazy var rowFocus = CAShapeLayer()
     private var drawingLayersAttached = false
     private var tileApplied = false
+    /// The Space's dark accent for an "on" setting circle (D3 §2.5); nil keeps the token.
+    var accentDisc: RGBA? { didSet { if accentDisc != oldValue { needsDisplay = true } } }
     private var previousDisc: Any?
     var drawsDisc: Bool { true }
     var focusRect: CGRect { CGRect(x: 8,y: -2,width: 36,height: 36) }
@@ -86,7 +88,7 @@ class SiteControlRow: SiteControlButton {
         CATransaction.begin(); CATransaction.setDisableActions(true); defer { CATransaction.commit() }
         if drawsDisc {
             disc.frame = CGRect(x: m.padding,y: 0,width: m.rowIcon,height: m.rowIcon)
-            var color = (circleOn ? SiteControlColors.circleOn : SiteControlColors.circleOff).resolved(appearance).nsColor
+            var color = (circleOn ? accentDisc.map { DesignColor($0) } ?? SiteControlColors.circleOn : SiteControlColors.circleOff).resolved(appearance).nsColor
             if isHighlighted { color = SiteControlGlyphRenderer.adjust(color,levels: m.circlePressedLevels) }
             disc.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: disc.bounds.size,pointSize: m.rowGlyph,disc: color,sparkles: .none,scale: scale,phase: symbolPhase); disc.contentsScale = scale
             if let previousDisc {

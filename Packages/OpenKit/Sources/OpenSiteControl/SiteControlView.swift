@@ -23,8 +23,8 @@ public final class SiteControlView: NSView {
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
         panelShadow.shadowColor = NSColor.black.cgColor
-        panelShadow.shadowOpacity = PopoverMaterial.shadowOpacity
-        panelShadow.shadowRadius = PopoverMaterial.shadowRadius
+        panelShadow.shadowOpacity = SiteControlMetrics.panelShadowOpacity
+        panelShadow.shadowRadius = SiteControlMetrics.panelShadowRadius
         layer?.addSublayer(panelShadow); addSubview(panel)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -55,7 +55,7 @@ public final class SiteControlView: NSView {
         panel.layer?.anchorPoint = unit; panel.layer?.position = position
         panelShadow.bounds = panel.bounds; panelShadow.anchorPoint = unit; panelShadow.position = position
         panelShadow.shadowPath = panel.shape
-        panelShadow.shadowOffset = CGSize(width: 0,height: PopoverMaterial.shadowOffsetY)
+        panelShadow.shadowOffset = CGSize(width: 0,height: SiteControlMetrics.panelShadowOffsetY)
         CATransaction.commit()
     }
     public override func keyDown(with event: NSEvent) { if onKey?(event) != true { super.keyDown(with: event) } }
@@ -125,6 +125,10 @@ public final class SiteControlPanelView: NSView {
     public var offscreenMaterialFrame: CGRect? { didSet { needsLayout = true } }
     private let material = NSVisualEffectView()
     private let fallback = CALayer(), materialTint = CALayer(), surfaceMask = CAShapeLayer(), rim = CAShapeLayer(), separator = CAShapeLayer()
+    /// D3 §2.5 material: an opaque-looking body and the Space tint to 62 % of the width. Static layers.
+    private let bodyFill = CALayer(), spaceTint = CAGradientLayer()
+    /// The Space accent: the tint and the setting circle's dark accent.
+    public var accent = SpaceAccent.night { didSet { if accent != oldValue { needsLayout = true; rowButtons.values.forEach { $0.accentDisc = accent.darkAccent } } } }
     private let security = SiteControlButton(id: "security",label: "Connection",symbol: "lock.fill",pointSize: SiteControlMetrics.pillLockGlyph)
     public let more = SiteControlButton(id: "more",label: "More",symbol: "ellipsis",pointSize: SiteControlMetrics.moreGlyph,weight: .bold)
     public override var isFlipped: Bool { true }
@@ -134,6 +138,10 @@ public final class SiteControlPanelView: NSView {
         material.material = PopoverMaterial.material; material.blendingMode = PopoverMaterial.blending; material.state = .active
         material.setAccessibilityElement(false); material.wantsLayer = true; addSubview(material)
         material.layer?.addSublayer(materialTint)
+        material.isHidden = true
+        spaceTint.startPoint = CGPoint(x: 0,y: 0.5); spaceTint.endPoint = CGPoint(x: 1,y: 0.5)
+        spaceTint.locations = [0,NSNumber(value: Double(SiteControlMetrics.tintStop)),1]
+        layer?.addSublayer(bodyFill); layer?.addSublayer(spaceTint)
         layer?.addSublayer(fallback); layer?.addSublayer(rim); layer?.addSublayer(separator)
         let actionSpecs = [("share","Share","square.and.arrow.up"),("newBoost","New Boost",BoostGlyph.outline),("capture","Capture a portion of this page","camera"),("captureFull","Capture the full page","text.viewfinder")]
         for (id,label,symbol) in actionSpecs {
@@ -174,7 +182,8 @@ public final class SiteControlPanelView: NSView {
         let secure = scheme == "https" && snapshot.context.security == .secure
         security.isHidden = scheme != "https" && scheme != "http"
         security.title = secure ? "Secure" : "Insecure"; security.symbol = secure ? "lock.fill" : "lock.open.fill"
-        security.tint = secure ? SiteControlColors.label : CommandBarColors.lockInsecure
+        security.tint = secure ? SiteControlColors.label : SiteControlColors.insecureText
+        security.fillOverride = secure ? nil : SiteControlColors.insecureFill
         security.setAccessibilityLabel("Connection: "+security.title)
         security.isEnabled = snapshot.capabilities.contains(.certificateViewer); security.statusOnly = !security.isEnabled
         security.setAccessibilityRole(security.isEnabled ? .button : .staticText)
@@ -187,10 +196,15 @@ public final class SiteControlPanelView: NSView {
         material.frame = bounds; fallback.frame = bounds
         materialTint.frame = material.bounds
         materialTint.backgroundColor = SiteControlColors.liveMaterialTint.cgColor(contentAppearance)
+        let dark = contentAppearance == .dark
+        bodyFill.frame = bounds; bodyFill.backgroundColor = SiteControlColors.body.cgColor(contentAppearance)
+        bodyFill.isHidden = offscreenMaterial != nil
+        let tint = accent.tint(dark: dark)
+        spaceTint.frame = bounds; spaceTint.colors = [tint.cgColor,tint.withAlpha(0).cgColor,tint.withAlpha(0).cgColor]
+        spaceTint.isHidden = offscreenMaterial != nil
         surfaceMask.frame = bounds; surfaceMask.path = path
-        // The effect view supplies only the material. Probe/calibration is Step 3;
-        // the explicit inner rim is the one rim, shared with the fitted fallback.
-        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = SiteControlColors.rim.cgColor(contentAppearance); rim.lineWidth = 2/scale
+        // A 0.5 pt hairline: the stroke is centred on the edge and the mask keeps its inner half.
+        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = SiteControlColors.rim.cgColor(contentAppearance); rim.lineWidth = 1
         for (i,b) in actions.enumerated() { b.frame = CGRect(x: m.padding+CGFloat(i)*(m.actionButton.width+m.actionGap),y: body.minY+m.padding,width: m.actionButton.width,height: m.actionButton.height) }
         let footerY = body.maxY-m.padding-m.footerHeight
         scroll.frame = CGRect(x: 0,y: body.minY+m.padding+m.actionButton.height,width: body.width,height: max(0,footerY-m.gapAfterSeparator-m.separatorHeight-(body.minY+m.padding+m.actionButton.height)))
@@ -198,8 +212,8 @@ public final class SiteControlPanelView: NSView {
         more.frame = CGRect(x: body.maxX-m.padding-m.moreButton,y: footerY,width: m.moreButton,height: m.moreButton)
         let line = CGMutablePath(), y = footerY-m.gapAfterSeparator-1/scale/2
         line.move(to: CGPoint(x: m.padding,y: y)); line.addLine(to: CGPoint(x: body.maxX-m.padding,y: y))
-        separator.compositingFilter = contentAppearance == .dark ? "plusL" : nil
-        separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = 1/scale
+        separator.compositingFilter = nil
+        separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = 1
         CATransaction.commit()
     }
 }
@@ -265,6 +279,7 @@ extension SiteControlPanelView {
                 let row: SiteControlRow
                 if let existing = rowButtons[tile.id] { row = existing; row.apply(tile,animated: animated) }
                 else { row = SiteControlRow(tile) }
+                row.accentDisc = accent.darkAccent
                 row.frame = CGRect(x: 0,y: y,width: m.width,height: m.rowIcon)
                 row.invoke = { [weak self,weak row] in guard let row else { return }; self?.onToggle?(row.tile) }
                 body.addSubview(row); controls.append(row); nextRows[tile.id] = row; y += m.rowIcon
@@ -398,6 +413,8 @@ public class SiteControlButton: NSButton {
     public var onKey: ((NSEvent) -> Bool)?
     public private(set) var activationPoint: CGPoint?
     public var disabledOpacity: CGFloat = SiteControlMetrics.disabledAlpha
+    /// A pill's own fill (the red "Insecure" chip, D3 §2.5); nil keeps the token.
+    public var fillOverride: DesignColor? { didSet { needsDisplay = true } }
     public var statusOnly = false
     public var tooltipTitle: String?
     public var tooltipKeys: [String] = []
@@ -456,7 +473,7 @@ public class SiteControlButton: NSButton {
         }
         for item in [wellShadow,gradient,ring,highlight,text] { item.isHidden = false }
         let m = SiteControlMetrics.self, appearance = contentAppearance, scale = window?.backingScaleFactor ?? 1
-        let radius = style == .more || style == .circle ? bounds.height/2 : style == .pill ? m.pillRadius : m.actionRadius
+        let radius = style == .more || style == .circle ? bounds.height/2 : style == .pill ? m.pillRadius : style == .extensionTile ? m.tileRadius : m.actionRadius
         let path = SiteControlShape.path(in: bounds,radius: radius)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
@@ -466,7 +483,7 @@ public class SiteControlButton: NSButton {
         wellShadow.shadowOpacity = style == .action ? Float(SiteControlColors.actionShadow.resolved(appearance).alpha) : 0
         var top = NSColor.clear, bottom = NSColor.clear
         if style == .action { top = SiteControlColors.actionFillTop.resolved(appearance).nsColor; bottom = SiteControlColors.actionFillBottom.resolved(appearance).nsColor }
-        if style == .pill { top = SiteControlColors.pillFill.resolved(appearance).nsColor; bottom = top }
+        if style == .pill { top = (fillOverride ?? SiteControlColors.pillFill).resolved(appearance).nsColor; bottom = top }
         if style == .more { top = SiteControlColors.moreFill.resolved(appearance).nsColor; bottom = top }
         if style == .extensionTile { top = SiteControlColors.tileFill.resolved(appearance).nsColor; bottom = top }
         if isHighlighted && style == .action { top = SiteControlGlyphRenderer.adjust(top,levels: m.actionPressedLevels); bottom = SiteControlGlyphRenderer.adjust(bottom,levels: m.actionPressedLevels) }

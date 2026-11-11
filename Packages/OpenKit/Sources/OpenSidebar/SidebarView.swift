@@ -753,6 +753,11 @@ extension SidebarView {
     @discardableResult public func pressSiteControls() -> Bool { urlField.siteControls.accessibilityPerformPress() }
     public func refreshExtensionsLayout() { urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded() }
     public var urlFieldVisible: Bool { !urlField.isHidden }
+    /// The URL field's frame in `view`'s coordinates while it shows (the inline address editor anchors here, plan D3 §2.2).
+    public func urlFieldFrame(in view: NSView) -> CGRect? {
+        guard !urlField.isHiddenOrHasHiddenAncestor, window != nil, urlField.window === view.window else { return nil }
+        return view.convert(urlField.bounds, from: urlField)
+    }
     /// The URL field's text right now (the host, or the full URL for a Developer Mode site).
     public var urlFieldText: String { context.pageHost ?? "" }
     /// The status button under the URL field: frame in sidebar coordinates, shown, drawn title.

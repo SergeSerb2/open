@@ -143,6 +143,12 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
+    // A second Cmd+T while the New Tab bar is open, or a second Cmd+L while the address editor is
+    // open, closes it (Arc 06-keys, 12c; plan D3 §2.3).
+    if let session = commandBarSession, session.isPresented, editingPinnedTab == nil, session.pinnedEditTabID == nil,
+       mode == .newTab || mode == .editCurrentURL, session.controller?.request?.mode == mode {
+      session.dismiss(); return
+    }
     commandBarSession?.show(mode, requestedAt: requestedAt, editingPinnedTab: editingPinnedTab)
   }
   /// Edit Pinned URL confirmed in the command bar (app-shell §4.1): the pinned URL changes; a tab that

@@ -70,22 +70,26 @@ final class AppCommandBarSession: CommandBarDelegate {
       if welcomeIcons == nil { welcomeIcons = WelcomeCommandBarIcons() }
       bar.favicons = welcomeIcons
     } else { bar.favicons = nil }
+    // The Space accent; Light/Dark follows the window (the bar reads its own effective appearance).
     let style = factory.focusedSpace.map { windowController.context.style(for: $0) }
-    bar.theme = CommandBarTheme(style: style)
-    if let color = factory.hosts.values.first(where: { $0.content === factory.selectedContent })?.pageBackgroundColor?.usingColorSpace(.sRGB) {
-      let rgba = RGBA(Double(color.redComponent), Double(color.greenComponent), Double(color.blueComponent), Double(color.alphaComponent))
-      bar.backdrop = CommandBarBackdrop(color: rgba)
-    } else {
-      bar.backdrop = CommandBarBackdrop(color: style?.darkPalette?.background ?? CommandBarBackdrop.darkPage.color)
-    }
+    bar.theme = CommandBarTheme(style: style, isDark: ContentAppearance(bar.view.effectiveAppearance) == .dark)
     let peek = windowController.hasPeekController && windowController.peekController.isShown
     openingSelection = factory.selectedNodeID; openingProfile = profile.id
     openFirstResultsMilliseconds = nil; firstResultsMilliseconds = nil
+    // Cmd+L edits the address in place, in a card anchored to the sidebar URL field (plan D3 §2.2).
+    // A hidden sidebar, the content toolbar, and Edit Pinned Page keep the centred card.
+    var presentation = CommandBarPresentation.overlay
+    if mode == .editCurrentURL, pinned == nil, factory.windowState.sidebarMode == .anchored,
+       let field = windowController.sidebar.urlFieldFrame(in: bar.view) {
+      presentation = .anchored(CGRect(x: field.minX, y: field.minY + CommandCard.inlineTopOffset,
+                                      width: max(CommandCard.inlineMinimumWidth, field.width), height: 0))
+    }
     bar.present(CommandBarRequest(mode: mode, profileID: profile.id, spaceID: factory.focusedSpace?.id,
       currentTabID: pinned?.id ?? (peek ? nil : factory.selectedTab?.id),
       currentTabURL: pinned?.pinnedURL ?? (peek ? factory.selectedContent?.url : factory.selectedTab?.url),
       currentTabTitle: pinned?.displayTitle ?? (peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle),
-      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
+      allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID),
+      presentation: presentation)
   }
   func contextDidChange() {
     guard isPresented else { return }
@@ -150,7 +154,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "firstResultsMs": firstResultsMilliseconds ?? -1, "openFirstResultsMs": openFirstResultsMilliseconds ?? -1,
       "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation",
       "final": bar.isSnapshotFinal, "newTabHighlighted": factory.controller?.context.isNewTabCommandBarOpen ?? false,
-      "footer": bar.showsPrivacyFooter, "hidden": bar.view.isHidden, "animationKeys": bar.view.debugAnimationKeys,
+      "footer": bar.showsPrivacyFooter, "presentation": bar.view.presentationKind, "hidden": bar.view.isHidden, "animationKeys": bar.view.debugAnimationKeys,
       "panelOpacity": bar.view.debugPanelPresentationOpacity, "allAnimationKeys": bar.view.debugAllAnimationKeys,
       "panelFrame": { let f = bar.view.convert(bar.view.panelFrame, to: nil); let h = factory.window?.contentView?.bounds.height ?? 0
         return [f.minX, h - f.maxY, f.width, f.height] }(),

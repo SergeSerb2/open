@@ -26,11 +26,12 @@ public final class CommandBarController: NSObject {
     public var extensionIcon: (@MainActor (String) -> NSImage?)? {
         didSet { panel.results.extensionIcon = extensionIcon; panel.input.extensionIcon = extensionIcon }
     }
+    /// The Space accent; `isDark` follows the overlay's effective appearance (plan D3 §2.1).
     public var theme = CommandBarTheme.default {
-        didSet { applyScopeTheme(); panel.input.theme = theme }
+        didSet { if theme != oldValue { applyTheme() } }
     }
-    /// What lies behind the panel. Set before `present`.
-    public var backdrop = CommandBarBackdrop.darkPage { didSet { applyBackdrop() } }
+    /// Kept for callers; the D3 card body is opaque and no longer samples the backdrop.
+    public var backdrop = CommandBarBackdrop.darkPage
     /// Open's privacy page, the target of "here" in the (i) footer. Nil hides that line (no dead link).
     public var privacyURL: URL? { didSet { panel.footer.showsLearnMore = privacyURL != nil } }
     /// True while the (i) privacy footer shows (CC-42).
@@ -126,6 +127,8 @@ public final class CommandBarController: NSObject {
         super.init()
         view.isHidden = true
         view.onClickOutside = { [weak self] in self?.dismiss(reason: .clickOutside) }
+        view.onAppearanceChange = { [weak self] in self?.syncAppearance() }
+        applyTheme()
         let field = panel.input.field
         field.delegate = self
         panel.input.editor.onShiftDelete = { [weak self] flags in self?.handle(#selector(NSResponder.deleteForward(_:)), flags: flags) ?? false }
@@ -277,17 +280,25 @@ public final class CommandBarController: NSObject {
     }
 
     private func applyBackdrop() {
+        syncAppearance()
         if view.presentation.isEmbedded {
             panel.material.applySolid(LittleOpenMetrics.titleBarFill)
-            return
-        }
-        panel.backdropIsDark = backdrop.isDark
-        if let image = backdrop.image, view.bounds.width > 0 {
-            let tallest = CommandBarMetrics.panelFrame(windowSize: view.bounds.size, rows: CommandBarMetrics.maxVisibleRows)
-            panel.material.apply(image: image, imageScale: backdrop.imageScale, panelRect: tallest, fallback: backdrop.color)
         } else {
-            panel.material.apply(color: backdrop.color)
+            panel.material.apply(theme)
         }
+    }
+
+    /// Light or Dark card from the overlay's effective appearance (the window's, not the Space's).
+    private func syncAppearance() {
+        let dark = ContentAppearance(view.effectiveAppearance) == .dark
+        if theme.isDark != dark { theme.isDark = dark }
+    }
+
+    private func applyTheme() {
+        applyScopeTheme()
+        panel.input.theme = theme
+        panel.theme = theme
+        if !view.presentation.isEmbedded { panel.material.apply(theme) }
     }
 
     // MARK: Privacy footer (CC-42, D14)
@@ -476,18 +487,17 @@ public final class CommandBarController: NSObject {
         } else if r?.mode == .editCurrentURL, let current = r?.currentTabURL,
                   typed == current.absoluteString || (current.absoluteString == "open://welcome" && typed == "Welcome to Open") {
             input.leadingIcon = .favicon(current, fallback: "globe") // Cmd+L shows the page favicon (F0048)
-        } else if let top = suggestions.first {
+        } else if let top = suggestions.first, [.navigate, .history, .switchToTab].contains(top.kind) {
+            // The favicon of the top result when it is a page, else the search glyph (plan D3 §2.1).
             input.leadingIcon = rows.first.map(\.icon).map { icon in
-                if case .symbol(let name, _) = icon { return .symbol(name, plate: false) }
                 // A Split View row 1: the matched pane's icon. guess (no capture).
                 if case .split(let panes, _) = icon {
                     let i = top.split?.paneTabIDs.firstIndex { $0 == top.tabID } ?? 0
-                    if i < panes.count, case .symbol(let name, _) = panes[i] { return .symbol(name, plate: false) }
-                    return i < panes.count ? panes[i] : .symbol("globe", plate: false)
+                    return i < panes.count ? panes[i] : .symbol("magnifyingglass", plate: false)
                 }
                 return icon
             } ?? .symbol("magnifyingglass", plate: false)
-            if top.kind == .navigate, case .symbol = input.leadingIcon { input.leadingIcon = .symbol("globe", plate: false) }
+            if case .symbol = input.leadingIcon { input.leadingIcon = .symbol("magnifyingglass", plate: false) }
         }
         if let site = siteHint {
             // Never "or Space" while a completion shows (CC-5, CC-40).
