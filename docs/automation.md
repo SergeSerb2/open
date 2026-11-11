@@ -30,7 +30,7 @@ that suite's existing lock; they do not acquire it again. The lock serializes
 agents, while native-focus interruption tracking still covers user activity.
 
 Builds, `swift build`, and every `tools/verify-all.sh` invocation use the separate
-machine-wide heavy-job slot script (capacity is set by the lead):
+machine-wide FIFO build slot script (one slot per machine):
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
@@ -38,7 +38,10 @@ machine-wide heavy-job slot script (capacity is set by the lead):
 ```
 
 Do not hold the on-screen lock while waiting for a heavy-job slot. Keep the
-on-screen lock around one suite only; take the heavy slot around build steps.
+on-screen lock around one suite only. Scripts that compile helpers also take
+heavy.sh before the screen lock. The full gate keeps its build slot and takes
+the screen lock separately for each suite. Build and screen work may overlap;
+strict timing always takes heavy.sh before the screen lock.
 
 ## Updater core
 
@@ -1584,7 +1587,7 @@ that `/login` → 302 `/welcome` → immediate JavaScript `/dashboard` navigatio
 keeps the real save sheet visible until answered. The final 0808 engine must pass virtual WebAuthn create/get and native Escape cancellation with its parent alive. A blocked row is never reported as PASS.
 
 Pass `--stop-on-app-death` to a regression suite to stop all remaining flows
-on the first failed row, unexpected App exit, new Open crash report, or lost
+on the first failed row, unexpected App exit, unexpected Open crash report, or lost
 foreground. Strict runs launch Open as a direct child and verify its OS parent
 PID. They do not retry. `--row-timeout` defaults to 120 seconds (maximum 120);
 `--suite-timeout` defaults to 600 seconds. A separate supervisor stops the
@@ -1595,6 +1598,10 @@ or replies. Historical F3 hang evidence remains in `.re/s15/f3/passwords-initial
 The old HTTPS-First failure is `Open-2026-11-06-203144.ips` (2026-11-06 20:31:44
 -0700): SIGABRT in `tabs::TabDialogManager::CreateTabScopedDialog` through
 `AskBeforeHttpDialogController::ShowDialog`; see the Step 0 crash receipt.
+The Actions popup `Page.crash` is predeclared on the M1. Its exact owned
+renderer/App parent, abort stack and crash time must match the private fault
+ledger; the report remains visible in the gate's `expectedCrashes` receipt.
+This does not exempt any App crash, other renderer fault, or system dialog.
 
 Other fixture suites can load `tools/e2e/passwords.py` with `runpy.run_path`.
 `show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5)`

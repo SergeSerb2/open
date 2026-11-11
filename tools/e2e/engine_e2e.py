@@ -50,6 +50,8 @@ if sys.path[:1] != [_E2E_DIR]:
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
+_FAULT_TOOLS = runpy.run_path(os.path.join(ROOT, 'tools/verification/intentional_crash.py'))
+_EXPECTED_RENDERER_FAULTS = []
 _ACTIVE_FOCUS_TRACKER = None
 _OWNED_APPS = []
 _SUITE_CRASH_BASELINE = None
@@ -147,7 +149,7 @@ def supervise_suite(arguments):
 def check_suite_app_death(app=None):
     if _SUITE_CRASH_BASELINE is None:
         return
-    if _open_crash_reports() - _SUITE_CRASH_BASELINE:
+    if _unexpected_crash_reports(_SUITE_CRASH_BASELINE):
         raise SuiteAppDied('new Open crash report; stopped all remaining flows')
     if app and app.pid and not app.closed:
         try:
@@ -174,7 +176,7 @@ class FocusTracker:
             return
         # Intentional quit/SIGKILL recovery closes the owned instance before
         # recording a row or launching its replacement.
-        crashed = bool(_open_crash_reports() - self.crashes_before)
+        crashed = bool(_unexpected_crash_reports(self.crashes_before))
         dead = []
         for app in self.apps:
             if app.pid and not app.closed:
@@ -200,7 +202,7 @@ class FocusTracker:
         if crashed or dead:
             self.fatal_app_death = True
             raise AppDied('App death or new crash report; stopped before the next flow: '
-                          + json.dumps(dict(processes=dead, newReports=sorted(_open_crash_reports() - self.crashes_before))))
+                          + json.dumps(dict(processes=dead, newReports=sorted(_unexpected_crash_reports(self.crashes_before)))))
 
     def loss(self):
         interruptions = []
@@ -246,6 +248,8 @@ class CheckedResults(dict):
     def __setitem__(self, key, value):
         if isinstance(value, dict) and ("ok" in value or "status" in value):
             value.setdefault("load", os.getloadavg())
+        if isinstance(value, dict) and value.get('timing') is True:
+            value['timingAfter'] = runpy.run_path(os.path.join(ROOT, 'tools/verification/timing_sample.py'))['snapshot']()
         if isinstance(value, dict) and "ok" in value:
             self.tracker.check_alive()
             interruptions = self.tracker.loss()
@@ -330,6 +334,13 @@ class Open:
             extra_args = [arg for arg in extra_args if not arg.startswith("--vmodule=")]
             extra_args += ["--verbose", "--v=0", "--vmodule=" + ",".join(modules)]
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
+        ledger = os.environ.get('OPEN_VERIFY_PROCESS_LEDGER')
+        if ledger:
+            # The outer screen worker can finish cleanup after a killed harness.
+            # Record only our private profile and exact executable file identity.
+            with open(ledger, 'a') as stream:
+                stream.write(json.dumps(dict(root=user_data, bundle=self.bundle,
+                    executable=app, device=launched_file.st_dev, inode=launched_file.st_ino)) + '\n')
         self.log = open(log_path, "a")
         self.started = time.time()
         # Keep LaunchServices for delivery fixtures. Strict acceptance launches
@@ -805,6 +816,13 @@ def extension_checks(app, style, results):
 
     # Extensions open welcome pages as new tabs (at the top of Today, like
     # Arc); use the tab the app started with.
+    # Bitwarden's asynchronous first-install handler can open its page several
+    # seconds after enumeration, dismissing whichever action popup is open.
+    # Establish that actual startup transition before testing popup lifetimes.
+    startup = wait_until(lambda: [t for t in app.call('tabs')
+        if t['url'].startswith('https://bitwarden.com/browser-start/')], timeout=30)
+    results['first_install_tabs_ready'] = {'ok': bool(startup),
+        'bitwardenWelcome': startup[0]['url'] if startup else None}
     tabs = app.call("tabs")
     results["welcome_tabs"] = [x["url"] for x in tabs if not x["url"].startswith("https://example.com")]
     t1 = [x for x in tabs if x["url"].startswith("https://example.com")][0]["id"]
@@ -865,6 +883,7 @@ def extension_checks(app, style, results):
     for name, ext_id in EXT.items():
         info = {}
         try:
+            app.call('select', tab=t1)
             app.call("events")
             if style == "chrome" and not has_popup.get(ext_id, True):
                 # No popup for this tab (chrome.action.setPopup({popup: ""});
@@ -1306,6 +1325,34 @@ def _open_crash_reports():
     except OSError:
         return set()
     return {n for n in names if n.startswith(("Open", "cefsimple")) and n.endswith((".ips", ".crash"))}
+
+
+def _unexpected_crash_reports(baseline):
+    reports = _open_crash_reports() - baseline
+    return reports - _FAULT_TOOLS['expected_reports'](reports, _EXPECTED_RENDERER_FAULTS, _CRASH_DIR)
+
+
+def declare_popup_renderer_fault(app):
+    if not subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'):
+        raise RuntimeError('intentional renderer faults require the M1')
+    app.discover_owned_processes()
+    marker = dict(method='Page.crash', appPID=app.pid, started=time.time(),
+                  rendererPIDs=[pid for pid, path in app.owned_processes.items()
+                                if path.endswith('/Open Helper (Renderer)') and app.process_path(pid) == path])
+    if not marker['rendererPIDs'] or len(marker['rendererPIDs']) > 256 or len(_EXPECTED_RENDERER_FAULTS) >= 16:
+        raise RuntimeError('cannot record bounded owned renderer identities')
+    # The shared marker lets the lead identify the planned fault before it
+    # happens. The private stage ledger also survives a killed harness.
+    shared = Path('/tmp/open-intentional-crash-11.json')
+    temporary = shared.with_suffix('.tmp-%d' % os.getpid())
+    temporary.write_text(json.dumps(marker) + '\n')
+    temporary.replace(shared)
+    ledger = os.environ.get('OPEN_VERIFY_INTENTIONAL_CRASH_LEDGER')
+    if ledger:
+        with open(ledger, 'a') as stream:
+            stream.write(json.dumps(marker) + '\n')
+    _EXPECTED_RENDERER_FAULTS.append(marker)
+    return marker
 
 
 def relaunch_checks(app_factory, results, tmp):
@@ -2586,21 +2633,42 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False):
+def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False, launch_only=False, launch_continuation=None):
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
-    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
-    sidebar_resize_gesture_checks(app_factory, results, tmp)
-    window_chrome_followup_checks(app_factory, results, tmp)
-    window_material_checks(app_factory, results, tmp)
+    if not launch_only:
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
+        sidebar_resize_gesture_checks(app_factory, results, tmp)
+        window_chrome_followup_checks(app_factory, results, tmp)
+        window_material_checks(app_factory, results, tmp)
     if chrome_only: return
     # Local deterministic text paints without DNS, TLS, or external requests.
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
     runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
+    validity = []
+    if launch_continuation:
+        loader = runpy.run_path(os.path.join(ROOT, 'tools/verification/launch_sample.py'))
+        prior_gate = loader['read'](Path(launch_continuation, 'gate.json'), 16 * 1024 * 1024)
+        prior = loader['continuation'](launch_continuation, ROOT, prior_gate['source']['engineSHA256'])
+        runs, validity = prior['runs'], prior['validity']
+        results['first_launch_after_install'] = prior['warmup']
+        results['launch_continuation'] = prior['prior']
+    results['launch_validity'] = validity
     results["load_average"] = list(os.getloadavg())
     results["cpu_count"] = os.cpu_count()
-    for i in range(5):
+    # One install warm-up, then exactly five scored pairs. LEAD 07:10 permits
+    # the retained four steady-state pairs plus one replacement pair once.
+    for i in range(len(runs['cold_fresh_profile']) if launch_continuation else -1, 5):
+        # Each cold/warm pair has its own quiet precondition. Waiting is not
+        # an App action and does not consume that action's 120-second watchdog.
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        sample = runpy.run_path(os.path.join(ROOT, 'tools/verification/timing_sample.py'))['preflight'](
+            require_quiet=os.environ.get('OPEN_VERIFY_TIMING_REQUIRED') == '1')
+        validity.append(sample)
+        if os.environ.get('OPEN_VERIFY_TIMING_REQUIRED') == '1' and not sample['validBefore']:
+            raise RuntimeError('quiet launch-pair preflight exhausted six minutes; pair not launched')
+        begin_row('launch pair %d' % i)
         # Clear only this suite's own data root. Warm launches then restore a
         # selected tab plus an unselected tab from the real saved snapshot.
         app = app_factory(urls=(fixture,), fresh=True)
@@ -2639,18 +2707,33 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
                 "tabs": [{k: t[k] for k in ("title", "loaded", "selected")} for t in tabs]}
         finally:
             app.quit()
+        if i == -1:
+            results['first_launch_after_install'] = dict(status='INFO', reason='first launch after install',
+                cold=runs['cold_fresh_profile'].pop(), warm=runs['warm_existing_profile'].pop(),
+                validity=validity.pop(), owner='performance lane',
+                followup='https://github.com/SergeSerb2/open/issues/313', limit=None)
     results["launch_runs"] = runs
     results["kernel_process_start"] = {"ok": all(r.get("kernelProcessStart") is True for values in runs.values() for r in values), "samples": sum(map(len, runs.values()))}
     for label, values in runs.items():
         medians = {key: statistics.median([r[key] for r in values if key in r])
                    if all(key in r for r in values) else None
-                   for key in ("main", "modelLoaded", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
-        results[label] = {"median_ms": medians, "samples": len(values)}
+                   for key in ("main", "modelLoaded", "windowShown", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
+        results[label] = {"median_ms": medians, "samples": len(values), "timing": True,
+                          "sampleValid": len(validity) == 5 and all(s['validBefore'] for s in validity),
+                          "functionalOK": len(values) == 5 and all(r.get('kernelProcessStart') is True
+                              and r.get('firstFrameConfirmed') is True for r in values),
+                          "limits_ms": {"sidebarDrawn": 250, "firstContentfulPaint": 700},
+                          "maximumFactor": 1.5}
         if config == "Release":
-            results[label]["ok"] = medians["sidebarDrawn"] is not None and medians["sidebarDrawn"] <= 250 and medians["firstContentfulPaint"] is not None and medians["firstContentfulPaint"] <= 700
+            results[label]["ok"] = results[label]['functionalOK'] and all(
+                medians[key] is not None and medians[key] <= limit
+                and all(r.get(key, float('inf')) <= 1.5 * limit for r in values)
+                for key, limit in results[label]['limits_ms'].items())
         else:
             results[label].update(status="SKIP", reason="Release timing budgets are not evaluated in Debug")
         print(label, medians)
+    if launch_only:
+        return
     # A never-loaded pinned row must never pass through selection while
     # closing or unloading. The counter is cumulative, so create-then-drop
     # cannot look like zero retained hosts.
@@ -2731,6 +2814,25 @@ def wait_card(app, shown, timeout=3.0, step=0.015):
 
 
 def window_flow_checks(factory, results, tmp):
+    # Persistence requires the user's restore option to be on. Keep that
+    # explicit across all three launches, then restore even after App death.
+    key = 'open.advanced.restoreWindowsOnLaunch'
+    saved, app = {}, None
+    original_factory = factory
+    def configured(*args, **kwargs):
+        nonlocal app
+        app = original_factory(*args, **kwargs)
+        if key not in saved:
+            saved[key] = app.call('defaults', key=key, persistent=True)
+        app.call('defaults', key=key, value=True)
+        return app
+    try:
+        _window_flow_checks(configured, results, tmp)
+    finally:
+        _restore_defaults(app, saved)
+
+
+def _window_flow_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
         # OpenEngine registers a delegating malloc zone before main(), so the
@@ -2746,6 +2848,9 @@ def window_flow_checks(factory, results, tmp):
             "zones": zones}
         first = app.call("window-state")
         w1 = first["id"]
+        # Restoring a window constrains it to the display's visible area. Keep
+        # the fixture above the actual Dock, while retaining exact equality.
+        base_y = max(60, first["mainScreenVisibleFrame"][1] + 20)
         results["native_window"] = {
             "ok": first["titled"] and first["hiddenTitle"] and not first["peekCreated"]
                   and len(first["trafficLights"]) == 3
@@ -2758,7 +2863,7 @@ def window_flow_checks(factory, results, tmp):
         app.call("save")
         counts = app.call("frame-save-counters")
         for index in range(12):
-            app.call("window-frame", frame=[80 + index, 60 + index, 1000, 700])
+            app.call("window-frame", frame=[80 + index, base_y + index, 1000, 700])
         immediate = app.call("frame-save-counters")
         wait_until(lambda: app.call("frame-save-counters")["captures"] > counts["captures"], timeout=4, step=0.1)
         debounced = app.call("frame-save-counters")
@@ -2766,12 +2871,12 @@ def window_flow_checks(factory, results, tmp):
             with open(os.path.join(app.user_data, "State", "browser.json")) as stream:
                 row = json.load(stream)["windows"][0]
             return [row[k] for k in ("frameX", "frameY", "frameWidth", "frameHeight")]
-        saved = wait_until(lambda: saved_frame() == [91, 71, 1000, 700], timeout=4, step=0.1)
+        saved = wait_until(lambda: saved_frame() == [91, base_y + 11, 1000, 700], timeout=4, step=0.1)
         results["frame_save_debounced"] = {"ok": immediate["captures"] == counts["captures"]
             and debounced["captures"] == counts["captures"] + 1
             and immediate["treeChanges"] == counts["treeChanges"] and immediate["mirrorSyncs"] == counts["mirrorSyncs"] and bool(saved),
             "before": counts, "immediate": immediate, "debounced": debounced}
-        app.call("window-frame", frame=[80, 60, 1000, 700])
+        app.call("window-frame", frame=[80, base_y, 1000, 700])
         a = new_tab(app, fixture("Window A"))
         b = app.call("open", url=fixture("Window B"), background=True)["id"]
         results["background_lazy"] = {"ok": not app.tab(b)["loaded"] and not app.tab(b)["hasWebContent"]}
@@ -4696,7 +4801,9 @@ def sidebar_checks(factory, results, tmp):
             "scheduled": switched, "remaining_at_270ms_pt": remainder, "switcher_frame": frame,
             "travel_pt": travel,
             "selected_after_click": after_click["selected"], "shown_after_click": after_click["shownPages"]}
-        results["durable_profile_storage"] = {"status": "SKIP", "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)"}
+        results["durable_profile_storage"] = {
+            "status": "INFO", "coveredBy": "profiles/durable_second_profile",
+            "reason": "requires the real cross-launch cookie/storage assertion in the Profiles suite"}
         background = new_tab(app, fixture("Profile background"))
         app.call("select", tab=e)
         previous = app.page(e)["identifier"]
@@ -5499,6 +5606,7 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
         state = open_popup(ACTION_PROBE)
         crash["opened"] = bool(state)
         if state:
+            crash['intentionalFault'] = declare_popup_renderer_fault(app)
             try:
                 app.call("devtools", tab=state["page"]["identifier"], method="Page.crash", timeout=5)
             except Exception as e:  # the renderer dies before it answers
@@ -6059,10 +6167,15 @@ def _media_idle_cpu(app, audio):
     # Retain the existing 0.5 percentage-point tolerance and four-pair floor comparison.
     floors = {k: min(x["total_cpu_percent"] for x in v) for k, v in samples.items()}
     browser = {k: min(x["by_kind"].get("browser", 0) for x in v) for k, v in samples.items()}
-    return {"ok": abs(floors["with"] - floors["without"]) <= .5
+    return {"timing": True, "functionalOK": all(x["complete"] for v in samples.values() for x in v) and animations == [0]*4 and pending == [0]*4,
+            "ok": abs(floors["with"] - floors["without"]) <= .5
             and abs(browser["with"] - browser["without"]) <= .5
             and all(x["complete"] for v in samples.values() for x in v)
             and animations == [0] * 4 and pending == [0] * 4,
+            "reason": ("paused-card total and browser CPU floor deltas must be at most 0.5 percentage points"
+                if all(x["complete"] for v in samples.values() for x in v)
+                and animations == [0] * 4 and pending == [0] * 4
+                else "paused-card CPU sample requires complete process windows and zero animations/pending collapse"),
             "minWith": floors["with"], "minWithout": floors["without"],
             "browserMinWith": browser["with"], "browserMinWithout": browser["without"],
             "restAnimations": animations, "pendingCollapse": pending, "samples": samples}
@@ -7196,7 +7309,7 @@ def sleep_checks(factory, results, tmp, style):
             if line and line.startswith("sleep-wake destroyed"):
                 destroyed_ms.append(float(line.split("ms=")[1]))
         def pct(xs, p): return sorted(xs)[min(len(xs) - 1, int(round(p * (len(xs) - 1))))] if xs else None
-        results["sleep_f5_discard_wake"] = {"ok": len(discard_ms) == 20 and pct(discard_ms, .95) <= 700,
+        results["sleep_f5_discard_wake"] = {"timing": True, "functionalOK": len(discard_ms) == 20, "ok": len(discard_ms) == 20 and pct(discard_ms, .95) <= 700,
                                             "p50ms": pct(discard_ms, .5), "p95ms": pct(discard_ms, .95), "n": len(discard_ms),
                                             "destroyed": {"p50ms": pct(destroyed_ms, .5), "p95ms": pct(destroyed_ms, .95), "n": len(destroyed_ms)},
                                             "cache": "warm (same fixture page each wake)", "load": os.getloadavg(),
@@ -7220,7 +7333,7 @@ def sleep_checks(factory, results, tmp, style):
                                timeout=5, step=.005)
             if stamp:
                 unfreeze_ms.append(stamp - t0)
-        results["sleep_f5_unfreeze"] = {"ok": len(unfreeze_ms) == 20 and pct(unfreeze_ms, .95) <= 16,
+        results["sleep_f5_unfreeze"] = {"timing": True, "functionalOK": len(unfreeze_ms) == 20, "ok": len(unfreeze_ms) == 20 and pct(unfreeze_ms, .95) <= 16,
                                         "p50ms": pct(unfreeze_ms, .5), "p95ms": pct(unfreeze_ms, .95), "n": len(unfreeze_ms),
                                         "frozenBeforeWake": unfreeze_phases.count("frozen"), "load": os.getloadavg(),
                                         "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)"}
@@ -7905,12 +8018,17 @@ def littleopen_checks(factory, results, tmp):
     origin = 'http://127.0.0.1:%d' % port
     app = None
     probe = os.path.join(tmp, 'littleopen-idle-probe.dylib')
-    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
-                    '-DOPEN_APP_TIMER_PROBE', os.path.join(ROOT, 'tools/verification/feature-idle-probe.m'),
-                    '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True)
-    env = {'DYLD_INSERT_LIBRARIES': probe, 'OPEN_LITTLEOPEN_TIMER_PROBE': '1'}
+    if E2E_LANE != 'merge':
+        subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
+                        '-DOPEN_APP_TIMER_PROBE', os.path.join(ROOT, 'tools/verification/feature-idle-probe.m'),
+                        '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True)
+    env = {'DYLD_INSERT_LIBRARIES': probe, 'OPEN_LITTLEOPEN_TIMER_PROBE': '1'} if E2E_LANE != 'merge' else {}
 
-    def record(name, ok, **details): results[name] = dict(details, ok=bool(ok))
+    def record(name, ok, **details):
+        observer_row = name in ('sweeper_no_poll_never', 'sweeper_one_timer', 'sweeper_shared_today_timer')
+        if (E2E_LANE == 'merge' and observer_row) or (E2E_LANE == 'observers' and not observer_row):
+            return
+        results[name] = dict(details, ok=bool(ok))
     def state(): return app.call('little-open-state')
     def sessions(): return state()['sessions']
     def session(sid): return next((s for s in sessions() if s['id'] == sid), None)
@@ -8360,6 +8478,8 @@ def littleopen_checks(factory, results, tmp):
                mainOnly=main_timer, withLittleOpen=both_timer, sweep=swept)
         app.call('archive-clock', reset=True)
         app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='never', scope='profile')
+        if E2E_LANE == 'observers':
+            return
 
         # No main window: blank, bar Cmd+O, external intake, and quit/relaunch.
         for main in app.call('shell-windows'): app.call('window-close', id=main['id'])
@@ -8690,7 +8810,7 @@ def routing_checks(factory, results, tmp):
                command='open -n -a <exact built bundle> <URL> --args --user-data-dir=<suite root> ...')
         app.call('command', id='air-traffic-control')
         settings = wait_until(lambda: (lambda row: row if row['settingsVisible'] and row['pane'] == 'links'
-                              and row['scrollTarget'] == 'links-rules' else None)(app.call('settings-state')),
+                              and row['scrollTarget'] == 'links/rules' else None)(app.call('settings-state')),
                               timeout=4, step=.05)
         record('routing_air_traffic_control_entry', bool(settings), settings=settings)
         state_after = app.call('default-browser-state')
@@ -8901,7 +9021,7 @@ def commandbar_checks(factory, results, tmp, config):
         switched = wait_until(lambda: app.call('window-state') if app.call('window-state')['space'] == second_space and app.call('window-state')['selected'] == target else None, timeout=3, step=.1)
         results['switch_tab_across_spaces'] = {'ok': bool(switched) and app.eval(target, 'document.title') == 'Shell C /cross', 'state': app.call('window-state'), 'expectedSpace': second_space, 'expectedTab': target, 'rows': cross['rows'], 'barAfterReturn':state(), 'returnRouting':return_routing}
         bar('t'); timings = wait_until(lambda: state() if state().get('openFirstResultsMs', -1) >= 0 else None, step=.02)
-        results['first_results_budget'] = {'loadAverage': list(os.getloadavg()), 'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        results['first_results_budget'] = {'timing': True, 'functionalOK': bool(timings), 'loadAverage': list(os.getloadavg()), 'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
         shot(app, 'commandbar-live-%s.png' % config.lower(), window=app.call('window-state')['number'])
         press('escape'); time.sleep(.3)
         other_profile_space = app.call('space-create', title='Isolated profile', profile='Commandbar Isolated')
@@ -12017,11 +12137,10 @@ def page_notification_checks(factory, results, tmp):
                 # banner (N1_engine_display), yet Notification Center's delivered list for Open.app
                 # stays empty. Open cannot see why from inside the app (docs/followups.md); the
                 # user confirms delivery by eye (U-N1). Never counted as a pass.
-                results['N1_macos_delivered'] = blocked('U-N1: authorized, but macOS lists no delivered banner for Open.app; '
-                                                        'the user confirms delivery (followups)', delivered=listed['delivered'],
+                results['N1_macos_delivered'] = blocked('needs user-granted macOS notification consent or delivery confirmation (U-N1)', delivered=listed['delivered'],
                                                         authorization=listed['authorization'])
         else:
-            results['N1_macos_delivered'] = blocked('U-N1: macOS has not authorized Open (status %s)' % listed['authorization'],
+            results['N1_macos_delivered'] = blocked('needs user-granted macOS notification consent or delivery confirmation (U-N1)', authorization=listed['authorization'],
                                                     delivered=listed['delivered'])
         engine_titles = lambda: [n['title'] for n in app.call('notifications')['engine']]
         n1_listed = wait_until(lambda: 'Open N1 banner' in engine_titles() or None, timeout=5, step=.1)
@@ -12441,7 +12560,7 @@ def page_translate_checks(factory, results, tmp):
         # X1 on Apple's backend: only when French → English is installed (no download prompt in e2e).
         availability = app.call('translate', action='availability', source='fr', target='en')['status']
         if availability != 'installed':
-            results['X1_apple_backend'] = {'status': 'BLOCKED', 'reason': 'U-X1: French → English is %s, not installed on this Mac' % availability}
+            results['X1_apple_backend'] = {'status': 'BLOCKED', 'reason': 'French → English OS translation asset is not installed', 'availability': availability}
     finally:
         try:
             app.call('filter', block=[])
@@ -12471,12 +12590,17 @@ def page_translate_checks(factory, results, tmp):
 
 
 
+E2E_LANE = "all"
+
+
 def main():
-    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE
+    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", choices=["alloy", "chrome"],
                     help="runtime style (default: chrome for context-menus, alloy for other suites)")
     ap.add_argument("--config", default="Debug")
+    ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
+    ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
@@ -12491,9 +12615,12 @@ def main():
                     help='features: prove ignored save offers with main App code and no password delegate')
     ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
+    ap.add_argument('--window-launch-only', action='store_true', help='run only the five cold/warm real-App launch pairs')
+    ap.add_argument('--window-launch-continuation', help='LEAD 07:10: add one pair to the original five-pair M1 receipt')
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
+    ap.add_argument('--passwords-probe-dialog-free', action='store_true', help='observe safe Step 0 rows; report card, WebAuthn and HTTP Basic as BLOCKED')
     ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
     ap.add_argument('--passwords-m-only', action='store_true', help='run only the real-App save-sheet M rows')
     ap.add_argument("--keep", action="store_true",
@@ -12509,6 +12636,17 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.window_launch_only and opts.only != 'window':
+        ap.error('--window-launch-only requires --only window')
+    if opts.window_launch_continuation and not (opts.only == 'window' and opts.window_launch_only):
+        ap.error('--window-launch-continuation requires --only window --window-launch-only')
+    E2E_LANE = opts.lane
+    if opts.only == 'applescript' and subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'):
+        ap.error('M1 policy forbids external AppleScript/osascript over SSH; run this suite on the M5')
+    if opts.lane == "observers" and opts.only not in ("sitecontrol", "find", "split", "littleopen", "downloads"):
+        ap.error("selected suite has no observer lane")
+    if opts.lane == "observers" and not subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).startswith("Apple M1"):
+        ap.error("observer lane requires the M1")
     display_reader = runpy.run_path(os.path.join(ROOT, 'tools/verification/portable-baselines.py'))['display_environment']
     display_before = display_reader() if opts.expected_display_key else None
     if display_before and display_before['key'] != opts.expected_display_key:
@@ -12567,6 +12705,8 @@ def main():
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
         ap.error('--passwords-probe-rows requires passwords-probe and unique PR-1 through PR-9 ids')
+    if opts.passwords_probe_dialog_free and (opts.only != 'passwords-probe' or opts.passwords_probe_rows):
+        ap.error('--passwords-probe-dialog-free requires passwords-probe without --passwords-probe-rows')
     probe_result_name = ('results-passwords-probe-%s.json' % '-'.join(opts.passwords_probe_rows.split(','))
                          if opts.passwords_probe_rows else 'results-passwords-probe.json')
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
@@ -12669,6 +12809,8 @@ def main():
 
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
         tracker.check_alive()
+        if opts.lane == "merge" and ((extra_env or {}).get("DYLD_INSERT_LIBRARIES") or os.environ.get("DYLD_INSERT_LIBRARIES")):
+            raise RuntimeError("merge lane refuses injected libraries; use --lane observers on the M1")
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
@@ -12689,7 +12831,7 @@ def main():
             wait_until(lambda: app.call("first-run")["active"], timeout=10, step=.05)
         return app
 
-    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+    results = {"style": opts.style, "config": opts.config, "lane": opts.lane, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
                "load": os.getloadavg()}
     source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Engine", "Packages/OpenKit/Sources", "tools"], cwd=ROOT)
     results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -12789,6 +12931,7 @@ def main():
             results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
                 sys.modules[__name__], factory, results[opts.only], tmp,
                 row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None,
+                dialog_free=opts.passwords_probe_dialog_free,
                 result_name=probe_result_name,
                 engine_distribution_sha256=results['engine']['distributionSHA256'])
         elif opts.only == "secrets-import":
@@ -12915,7 +13058,8 @@ def main():
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
-                          material_only=opts.window_material_only)
+                          material_only=opts.window_material_only, launch_only=opts.window_launch_only,
+                          launch_continuation=opts.window_launch_continuation)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
@@ -13051,7 +13195,9 @@ def main():
             "results-actions-p2.json" if opts.only == "actions" else
             "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))
-    with open(os.path.join(OUT, name), "w") as f:
+    receipt_dir = os.path.abspath(opts.output_dir or OUT)
+    os.makedirs(receipt_dir, exist_ok=True)
+    with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
     for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import"):
         for k, v in results.get(group, {}).items():
@@ -13059,7 +13205,7 @@ def main():
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
-    print("wrote", os.path.join(OUT, name))
+    print("wrote", os.path.join(receipt_dir, name))
     failures = [k for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':

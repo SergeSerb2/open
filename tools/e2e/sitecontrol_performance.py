@@ -7,50 +7,55 @@ import time
 
 
 def run(factory, results, origin, tmp, env):
-    app = factory(urls=(origin + '/ads.html',))
-    saved = {}
-    try:
-        key = 'open.advanced.playSoundEffects'
-        saved[key] = app.call('defaults', key=key, persistent=True)
-        app.call('defaults', key=key, value=False)
-        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab)
-        app.call('window-focus', id=app.call('window-state')['id'], activate=True)
-        for _ in range(35):
+    lane = env.get("E2E_LANE", "all")
+    if lane != "observers":
+        app = factory(urls=(origin + '/ads.html',))
+        saved = {}
+        try:
+            key = 'open.advanced.playSoundEffects'
+            saved[key] = app.call('defaults', key=key, persistent=True)
+            app.call('defaults', key=key, value=False)
+            tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab)
+            app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+            for _ in range(35):
+                app.call('site-controls', action='open')
+                time.sleep(.3)
+                app.call('site-controls', action='close')
+            all_samples = app.call('site-controls', action='state')['firstDrawMilliseconds']
+            samples = all_samples[-30:]
+            p95 = sorted(samples)[int(.95 * (len(samples) - 1))]
+            p95_all = sorted(all_samples)[int(.95 * (len(all_samples) - 1))]
+            data = dict(timing=True, functionalOK=len(all_samples) == 35 and len(samples) == 30, milliseconds=samples, allMilliseconds=all_samples,p95=p95,p95IncludingCold=p95_all,limit=8,warmups=5,coldMilliseconds=all_samples[0],
+                        load=list(os.getloadavg()))
+            if app.config == 'Release': data['ok'] = len(all_samples) == 35 and len(samples) == 30 and p95 < 8 and p95_all < 8
+            else: data.update(status='BLOCKED', reason='Release required for first-draw budget')
+            results['P1_first_draw'] = data
+            # Review receipt through real page loads. State reads do not ask the
+            # source for panel data, so these deltas isolate native refresh work.
+            def reads(): return app.call('site-controls', action='state')['sourceReads']
+            def delta(before, after): return {key: after[key] - before[key] for key in before}
+            before = reads()
+            app.call('navigate', tab=tab, url=origin + '/heavy.html'); app.call('wait', tab=tab)
+            time.sleep(.2)
+            closed = delta(before, reads())
             app.call('site-controls', action='open')
-            time.sleep(.3)
+            before = reads()
+            app.call('navigate', tab=tab, url=origin + '/heavy.html?panel=open'); app.call('wait', tab=tab)
+            time.sleep(.2)
+            opened = delta(before, reads())
+            before = reads()
+            app.eval(tab, "for(let i=0;i<250;i++)document.title='SCC title '+i;true")
+            time.sleep(.2)
+            titles = delta(before, reads())
+            data['sourceRefresh'] = dict(fixture='heavy.html (2000 cards)', closedPageLoad=closed, openPageLoad=opened,
+                titleChanges=titles, load=list(os.getloadavg()))
             app.call('site-controls', action='close')
-        all_samples = app.call('site-controls', action='state')['firstDrawMilliseconds']
-        samples = all_samples[-30:]
-        p95 = sorted(samples)[int(.95 * (len(samples) - 1))]
-        p95_all = sorted(all_samples)[int(.95 * (len(all_samples) - 1))]
-        data = dict(milliseconds=samples, allMilliseconds=all_samples,p95=p95,p95IncludingCold=p95_all,limit=8,warmups=5,coldMilliseconds=all_samples[0],
-                    load=list(os.getloadavg()))
-        if app.config == 'Release': data['ok'] = len(all_samples) == 35 and len(samples) == 30 and p95 < 8 and p95_all < 8
-        else: data.update(status='BLOCKED', reason='Release required for first-draw budget')
-        results['P1_first_draw'] = data
-        # Review receipt through real page loads. State reads do not ask the
-        # source for panel data, so these deltas isolate native refresh work.
-        def reads(): return app.call('site-controls', action='state')['sourceReads']
-        def delta(before, after): return {key: after[key] - before[key] for key in before}
-        before = reads()
-        app.call('navigate', tab=tab, url=origin + '/heavy.html'); app.call('wait', tab=tab)
-        time.sleep(.2)
-        closed = delta(before, reads())
-        app.call('site-controls', action='open')
-        before = reads()
-        app.call('navigate', tab=tab, url=origin + '/heavy.html?panel=open'); app.call('wait', tab=tab)
-        time.sleep(.2)
-        opened = delta(before, reads())
-        before = reads()
-        app.eval(tab, "for(let i=0;i<250;i++)document.title='SCC title '+i;true")
-        time.sleep(.2)
-        titles = delta(before, reads())
-        data['sourceRefresh'] = dict(fixture='heavy.html (2000 cards)', closedPageLoad=closed, openPageLoad=opened,
-            titleChanges=titles, load=list(os.getloadavg()))
-        app.call('site-controls', action='close')
-    finally:
-        env['_restore_defaults'](app, saved)
-        app.quit()
+        finally:
+            env['_restore_defaults'](app, saved)
+            app.quit()
+
+    if lane == "merge":
+        return
 
     # Delay each native phase in a separate real-App run. Counters sampled by
     # the receipt callback exclude any AppKit work that happens after timing.
@@ -80,11 +85,8 @@ def run(factory, results, origin, tmp, env):
                 milliseconds=delayed, nativeCalls=delta[:3], nativeDelays=delta[3:], load=list(os.getloadavg())))
         finally:
             app.quit()
-    proof=results['P1_first_draw']
-    proof['nativePhaseProofs']=phase_proofs
-    proof['negativeRejected']=all(p['negativeRejected'] for p in phase_proofs)
-    proof['negativeMilliseconds']=max(p['milliseconds'] for p in phase_proofs)
-    if 'ok' in proof: proof['ok']=proof['ok'] and proof['negativeRejected']
+    results['P1_native_phase_proofs'] = dict(ok=all(p['negativeRejected'] for p in phase_proofs),
+        nativePhaseProofs=phase_proofs, negativeMilliseconds=max(p['milliseconds'] for p in phase_proofs))
 
     # Observe real view invalidation and native schedulers. The observer is
     # injected before SCC initialization; it never ships in the App.
