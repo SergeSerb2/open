@@ -22,7 +22,7 @@ from timing_sample import preflight as timing_preflight, finish as timing_finish
 ROOT = Path(__file__).resolve().parents[2]  # final location tools/verification/gate.py
 NATIVE = ('space-editor', 'settings-preview', 'features-render', 'sitecontrol-render')
 M1_NATIVE = {'features-idle'}
-TIMING_SUITES = {'window', 'import-robust', 'welcome', 'find', 'commandbar', 'app-actions', 'sitecontrol', 'split', 'media', 'sleep'}
+TIMING_SUITES = {'window', 'import-robust', 'welcome', 'find', 'commandbar', 'app-actions', 'sitecontrol', 'split', 'media', 'measure', 'sleep'}
 # Transitive observer/fault-probe flows, not only direct suite implementations.
 M1_E2E = {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwords',
           'passwords-probe', 'secrets-import', 'owner-watch', 'actions', 'incognito'}
@@ -195,7 +195,7 @@ def run_screen(args):
     timing = None
     try:
         if args.timing:
-            timing = timing_preflight(require_quiet=args.timing == 'required')
+            timing = timing_preflight(require_quiet=args.timing == 'required', cancelled=lambda: interrupted is not None)
             write_json(directory/'timing-sample.json', timing)
             if args.timing == 'required' and not timing['validBefore']:
                 raise RuntimeError('quiet timing preflight exhausted six minutes; no App launched')
@@ -331,7 +331,8 @@ def use_m1_timing(directory, row_name, identity, config):
             for row in stage.get('rows', []):
                 if (row.get('row') == row_name and row in receipt.get('rows', [])
                         and row.get('sampleValid') is True and row.get('functionalOK') is True
-                        and row.get('status') == 'PASS'):
+                        and (row.get('status') == 'PASS'
+                             or (row.get('status') == 'DEFERRED' and row.get('policy') == 'EXCEPTION'))):
                     matches.append(dict(row, evidence=str(path)))
     if len(matches) > 1:
         raise ValueError('ambiguous M1 timing receipts for '+row_name)
@@ -650,9 +651,9 @@ def main():
                                                     and after.get('foreignCPU', float('inf')) <= 200)
                         if not check['sampleValid']:
                             check['observedStatus'] = check['status']
-                            check['status'] = ('INFO' if machine() == 'M5' and check.get('functionalOK') is True
-                                               else 'INVALID_SAMPLE')
-                            check['reason'] = 'Timing sample did not meet LEAD 06:30 quiet rule; raw assertion retained'
+                            if check.get('functionalOK') is True:
+                                check['status'] = 'INFO' if machine() == 'M5' else 'INVALID_SAMPLE'
+                                check['reason'] = 'Timing sample did not meet LEAD 06:30 quiet rule; raw assertion retained'
                     if name=='ntp-alloy':
                         for check in checks: check['row']=check['row'].replace('ntp/','ntp-alloy/',1)
                 if rc and not any(r['status']=='FAIL' or r.get('observedStatus') == 'FAIL' for r in checks):
@@ -680,10 +681,13 @@ def main():
         for row in list(rows):
             if row.get('timing') is not True:
                 continue
-            imported = use_m1_timing(options.m1_receipts, row['row'], source, options.config)
-            rows.append(dict(row='timing/'+row['row'], status='PASS' if imported else 'M1_REQUIRED',
-                             reason='Quiet M1 timing lane required (LEAD 06:30)',
-                             evidence=imported['evidence'] if imported else ''))
+            name = row['row']
+            imported = use_m1_timing(options.m1_receipts, name, source, options.config)
+            # Keep the M5 observation separate from the authoritative quiet-M1
+            # row. A valid M5 miss still fails; an invalid one remains INFO.
+            row['row'] = 'm5/'+name
+            rows.append(imported if imported else dict(row=name, status='M1_REQUIRED',
+                        reason='Quiet M1 timing lane required (LEAD 06:30)', evidence=''))
     if rc and not any(row['status'] in ('FAIL', 'INTERRUPTED') or row.get('observedStatus') == 'FAIL' for row in rows):
         rows.append(dict(row='gate/worker-exit', status='FAIL', reason='worker exit ' + str(rc), evidence=str(directory)))
     failed, inventory = evaluate(entries, rows, ready=True)

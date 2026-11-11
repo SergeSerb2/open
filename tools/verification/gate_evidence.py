@@ -63,7 +63,10 @@ def e2e_rows(directory, suite, identity, engine, config, style, lane):
             raise ValueError('measurement suite has no completion predicate')
         rows.append(dict(row='measure/ok', status='PASS' if checks['ok'] else 'FAIL',
                          reason='', evidence=str(path)))
-        return rows
+        # Most values are raw measurements. Preserve the paused-media budget,
+        # which uses the same real flow as Media and has its own predicate.
+        checks = {key: value for key, value in checks.items()
+                  if isinstance(value, dict) and value.get('timing') is True}
     for key, value in checks.items():
         if key in METADATA.get(suite, set()):
             continue

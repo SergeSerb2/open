@@ -24,16 +24,19 @@ def snapshot():
                 foreignCPU=sum(p['cpu'] for p in foreign), topFiveForeign=foreign[:5])
 
 
-def preflight(require_quiet=False):
+def preflight(require_quiet=False, cancelled=lambda: False):
     deadline = time.monotonic() + (360 if require_quiet else 10)
     readings = [snapshot()]
     while True:
-        time.sleep(10)
+        for _ in range(40):
+            if cancelled():
+                raise InterruptedError('timing preflight cancelled before App launch')
+            time.sleep(.25)
         readings.append(snapshot())
         valid = all(r['load'][0] <= 3 and r['foreignCPU'] <= 200 for r in readings[-2:])
         if valid or time.monotonic() >= deadline:
             return dict(before=readings[-2:], validBefore=valid,
-                        waitSeconds=readings[-1]['at']-readings[0]['at'])
+                        readings=readings, waitSeconds=readings[-1]['at']-readings[0]['at'])
 
 
 def finish(sample):
