@@ -1,7 +1,7 @@
 {
   "native": {
     "source": "tools/e2e/settings_redesign_g2.py",
-    "binarySHA256": "53669949ffed6e76a8b770de9a7e59bf56933721bb1233c60f288c04a7fd4e3e",
+    "binarySHA256": "378f49bed6d8b7bd5c61f300e1191f9f59e306ac029742b343fbfbc13f2b5631",
     "checksPassed": 139,
     "captures": 69,
     "uniqueFrames": 66,
@@ -1271,7 +1271,7 @@
     ],
     "kind": "Synthetic AppKit window rendering; @1x files are not native M5 captures. Existing compatibility filenames are retained.",
     "checksPassed": 47,
-    "checkReceipt": "m1-preview29; final full M5 gate on the merged review-fix head"
+    "checkReceipt": "m1-preview30; final full M5 gate on the merged review-fix head"
   },
   "scope": "Only Settings PNGs refreshed; Library and first-run PNGs unchanged."
 }

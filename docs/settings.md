@@ -1,6 +1,6 @@
 # Settings
 
-Settings uses Open’s original design. The standard resizable window opens at 960 × 660 pt with an 800 × 540 pt minimum. A 232 pt navigation column stays in place while the content scrolls. The window remembers its frame. Settings is created only on first open. After that first frame, Links and Ad Blocking each get one deferred preparation slice; input, navigation or close cancels pending work. Other sections are created on first visit. The window keeps each section’s view graph. Switching sections hides the old page and lays out only the visible page. Hidden pages release their field editor and shortcut recorder.
+Settings uses Open’s original design. The standard resizable window opens at 960 × 660 pt with an 800 × 540 pt minimum. A 232 pt navigation column stays in place while the content scrolls. The window remembers its frame. Settings is created only on first open. After that first frame, Links, Ad Blocking and Shortcuts each get one deferred preparation slice; input, navigation or close cancels pending work. Other sections are created on first visit. The window keeps each section’s view graph. Switching sections hides the old page and lays out only the visible page. Hidden pages release their field editor and shortcut recorder.
 
 ## Navigation and search
 

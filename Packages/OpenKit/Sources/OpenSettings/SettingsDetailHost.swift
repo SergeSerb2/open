@@ -19,7 +19,7 @@ extension EnvironmentValues {
 }
 
 /// AppKit owns only presentation lifetime. All values/actions remain in the
-/// existing observable models. Only two measured cold pages are prepared once
+/// existing observable models. Only three measured cold pages are prepared once
 /// during idle time; retained pages otherwise lay out only when shown.
 struct SettingsDetailHost: NSViewRepresentable {
     let root: SettingsViewModel
@@ -38,7 +38,7 @@ struct SettingsDetailHost: NSViewRepresentable {
     private var active: NSView?
     private var lastArrival = -1
     private var idleWork: DispatchWorkItem?
-    private var idleSections: [SettingsSection] = [.links, .adBlocking]
+    private var idleSections: [SettingsSection] = [.links, .adBlocking, .shortcuts]
     override var isFlipped: Bool { true }
     init(root: SettingsViewModel) {
         self.root = root
