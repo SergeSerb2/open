@@ -566,3 +566,11 @@ matching mapped path/device/inode. No root cause or fix is established. Keep
 the raw failed/interrupted receipts and the strict identity check. This is a
 nonblocking written finding under LEAD 06:30. Follow-up: [#312](https://github.com/SergeSerb2/open/issues/312);
 capture both kernel identities at the actual rejection in the complete flow.
+
+## First launch after install (LEAD 07:10)
+
+The valid M1 first cold/warm pair measured sidebar 762/496 ms and FCP
+4,625/801 ms. Retain it as INFO with no limit yet. The separate steady-state
+row scores five later pairs, with its existing medians and 1.5× maxima.
+Owner: performance lane; attribute installation/system costs in
+[#313](https://github.com/SergeSerb2/open/issues/313). No launch deferral applies.

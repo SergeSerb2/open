@@ -122,9 +122,21 @@ on the M1: no builds, decodes, analyses or SSH polling loops. Check `queue.sh`
 before off-slot work. An exclusive holder or a strict-timing
 `heavy.sh … lockf …` holder reserves the machine until it ends.
 
-Launch acceptance uses five samples per cold/warm set, its median, and no
-sample over 1.5 times its existing limit (sidebar 250 ms, FCP 700 ms). Keep each
-process-start → window-shown → sidebar-drawn phase split. M5 budget rows still
+Each launch-timing row runs one warm-up cold/warm pair of the same binary
+first (LEAD 07:10). Record it separately as INFO, `first launch after install`,
+with both complete phase records and a performance-lane follow-up. It has no
+limit yet. Score the next five cold/warm pairs: median within the existing
+limit and no scored sample over 1.5 times that limit (sidebar 250 ms, FCP 700 ms).
+A slow sample inside the scored five still fails. Keep each
+process-start → window-shown → sidebar-drawn phase split. The one-time
+LEAD 07:10 continuation uses `--lane timing --only timing-window
+--launch-continuation <original-receipt-directory>`: retain original pair 1 as
+INFO, reuse scored pairs 2–5, and run one more valid pair. The coordinator
+checks unchanged product/build inputs, original exact executable device/inode
+and last-launch identity, engine, both quiet readings for every retained pair,
+and successful cleanup. It reuses the App without reinstalling it. All raw
+receipts remain intact. This is not a general missing-sample shortcut.
+M5 budget rows still
 run. Invalid M5 samples are INFO with the raw result and load ledger; they do
 not excuse a functional failure and cannot replace M1 acceptance. A miss on a
 valid M5 sample fails too. The collector keeps separate functional predicates

@@ -9,7 +9,7 @@ METADATA = {
     'tabstrip': {'events_seen', 'window_screenshot'},
     'sidebar-completion': {'manager_captures'},
     'window': {'chrome_activation_events', 'chrome_card_capture_sample', 'chrome_snapshot_files',
-               'cpu_count', 'launch_runs', 'launch_validity', 'load_average'},
+               'cpu_count', 'launch_runs', 'launch_validity', 'launch_continuation', 'load_average'},
 }
 
 
@@ -91,6 +91,16 @@ def e2e_rows(directory, suite, identity, engine, config, style, lane):
         else:
             status = value.get('status')
             if status == 'INFO':
+                if suite == 'window' and key == 'first_launch_after_install':
+                    if (value.get('reason') != 'first launch after install' or value.get('limit') is not None
+                            or any(not isinstance(value.get(label), dict)
+                                   or not all(isinstance(value[label].get(metric), (int, float))
+                                              for metric in ('windowShown', 'sidebarDrawn', 'firstContentfulPaint'))
+                                   for label in ('cold', 'warm'))):
+                        raise ValueError('invalid install warm-up observation')
+                    rows.append(dict(row='window/'+key, status='INFO', firstLaunchAfterInstall=True,
+                                     reason=value['reason'], evidence=str(path)))
+                    continue
                 if 'coveredBy' in value:
                     target = value['coveredBy']
                     if target != 'profiles/durable_second_profile' or suite != 'sidebar':

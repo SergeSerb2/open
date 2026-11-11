@@ -2633,7 +2633,7 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False, launch_only=False):
+def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False, launch_only=False, launch_continuation=None):
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
@@ -2647,10 +2647,19 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
     runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
     validity = []
+    if launch_continuation:
+        loader = runpy.run_path(os.path.join(ROOT, 'tools/verification/launch_sample.py'))
+        prior_gate = loader['read'](Path(launch_continuation, 'gate.json'), 16 * 1024 * 1024)
+        prior = loader['continuation'](launch_continuation, ROOT, prior_gate['source']['engineSHA256'])
+        runs, validity = prior['runs'], prior['validity']
+        results['first_launch_after_install'] = prior['warmup']
+        results['launch_continuation'] = prior['prior']
     results['launch_validity'] = validity
     results["load_average"] = list(os.getloadavg())
     results["cpu_count"] = os.cpu_count()
-    for i in range(5):
+    # One install warm-up, then exactly five scored pairs. LEAD 07:10 permits
+    # the retained four steady-state pairs plus one replacement pair once.
+    for i in range(len(runs['cold_fresh_profile']) if launch_continuation else -1, 5):
         # Each cold/warm pair has its own quiet precondition. Waiting is not
         # an App action and does not consume that action's 120-second watchdog.
         signal.setitimer(signal.ITIMER_REAL, 0)
@@ -2698,6 +2707,11 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
                 "tabs": [{k: t[k] for k in ("title", "loaded", "selected")} for t in tabs]}
         finally:
             app.quit()
+        if i == -1:
+            results['first_launch_after_install'] = dict(status='INFO', reason='first launch after install',
+                cold=runs['cold_fresh_profile'].pop(), warm=runs['warm_existing_profile'].pop(),
+                validity=validity.pop(), owner='performance lane',
+                followup='https://github.com/SergeSerb2/open/issues/313', limit=None)
     results["launch_runs"] = runs
     results["kernel_process_start"] = {"ok": all(r.get("kernelProcessStart") is True for values in runs.values() for r in values), "samples": sum(map(len, runs.values()))}
     for label, values in runs.items():
@@ -12554,6 +12568,7 @@ def main():
     ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
     ap.add_argument('--window-launch-only', action='store_true', help='run only the five cold/warm real-App launch pairs')
+    ap.add_argument('--window-launch-continuation', help='LEAD 07:10: add one pair to the original five-pair M1 receipt')
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
@@ -12575,6 +12590,8 @@ def main():
     opts = ap.parse_args()
     if opts.window_launch_only and opts.only != 'window':
         ap.error('--window-launch-only requires --only window')
+    if opts.window_launch_continuation and not (opts.only == 'window' and opts.window_launch_only):
+        ap.error('--window-launch-continuation requires --only window --window-launch-only')
     E2E_LANE = opts.lane
     if opts.only == 'applescript' and subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'):
         ap.error('M1 policy forbids external AppleScript/osascript over SSH; run this suite on the M5')
@@ -12993,7 +13010,8 @@ def main():
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
-                          material_only=opts.window_material_only, launch_only=opts.window_launch_only)
+                          material_only=opts.window_material_only, launch_only=opts.window_launch_only,
+                          launch_continuation=opts.window_launch_continuation)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)

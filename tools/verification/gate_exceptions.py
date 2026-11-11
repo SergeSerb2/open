@@ -84,6 +84,8 @@ def evaluate(entries, rows, ready=False):
         absent_target = (state == 'SKIP' and row['row'].startswith('cli/')
                          and row.get('reason', '').startswith('target does not exist yet: '))
         informative = state == 'INFO' and row.get('timing') is True and row.get('functionalOK') is True
+        informative = informative or (state == 'INFO' and row['row'] == 'window/first_launch_after_install'
+                                     and row.get('firstLaunchAfterInstall') is True)
         verdict = 'PASS' if state == 'PASS' else 'INFO' if informative else 'SKIP' if absent_target else 'FAIL'
         if entry:
             if ready and entry['expires'] == 'M5 panel ready':

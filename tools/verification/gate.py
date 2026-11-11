@@ -18,6 +18,7 @@ import time
 from screen_cleanup import cleanup_owned
 from intentional_crash import expected_reports, read_markers
 from timing_sample import preflight as timing_preflight, finish as timing_finish
+from launch_sample import continuation as launch_continuation
 
 ROOT = Path(__file__).resolve().parents[2]  # final location tools/verification/gate.py
 NATIVE = ('space-editor', 'settings-preview', 'features-render', 'sitecontrol-render')
@@ -465,6 +466,7 @@ def main():
     parser.add_argument('--lane', choices=('merge', 'observers', 'timing'), default='merge')
     parser.add_argument('--config', choices=('Debug', 'Release'), default='Release')
     parser.add_argument('--m1-receipts', type=Path, help='exact-head gate receipts produced on M1')
+    parser.add_argument('--launch-continuation', type=Path, help='LEAD 07:10: complete the original M1 five-pair receipt with one pair')
     parser.add_argument('--log-dir', type=Path)
     options = parser.parse_args()
     partial = [key for key, value in os.environ.items() if value and key.startswith('OPEN_')
@@ -524,6 +526,11 @@ def main():
     source = fingerprint()
     if not source['clean']:
         raise RuntimeError('commit source changes before qualifying a merge gate')
+    reused_launch = None
+    if options.launch_continuation:
+        if options.lane != 'timing' or selected != ['timing-window']:
+            parser.error('--launch-continuation requires --lane timing --only timing-window')
+        reused_launch = launch_continuation(options.launch_continuation, ROOT, source['engineSHA256'])
     exception_file = ROOT / 'tools/verification/gate-exceptions.json'
     entries = read_bounded(exception_file); assert_shrink_only(ROOT, entries)
     directory = options.log_dir or Path(os.environ.get('VERIFY_LOG_DIR') or tempfile.mkdtemp(prefix='open-gate-'))
@@ -553,13 +560,16 @@ def main():
     heavy = Path.home() / 'Library/Caches/OpenRE/scripts/heavy.sh'
     command = [str(heavy), sys.executable, str(Path(__file__).resolve()), '--heavy-worker',
                '--selection', ','.join(n for n in selected if n in CLI) or 'build', '--log', str(directory)]
-    if local_e2e:
+    if local_e2e and not reused_launch:
         command += ['--app-config', options.config]
     if options.with_arc_data:
         command.append('--arc')
     # Nested build workers keep the caller's normal slot throughout the gate.
     # The installed FIFO heavy.sh handles exclusive measurement jobs.
     rc = command_run(command, directory / 'heavy.log')
+    if reused_launch:
+        write_json(directory/'app-build.json', dict(name='app-build', result='PASS', seconds=0, exit=0,
+                   reusedUnchangedApp=reused_launch['prior']))
     cli = cli_rows(directory / 'cli/results.tsv')
     for row in cli:
         evidence = directory/'cli'/(row['name']+'.log')
@@ -627,6 +637,8 @@ def main():
                     command.append('--passwords-probe-dialog-free')
                 if launch_only:
                     command.append('--window-launch-only')
+                    if options.launch_continuation:
+                        command += ['--window-launch-continuation', str(options.launch_continuation.resolve())]
             generated = GeneratedOutputs(); generated.directory = inputs
             try:
                 with generated:

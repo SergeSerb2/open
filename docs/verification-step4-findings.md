@@ -88,3 +88,17 @@ The original failed full gate is `.re/step4-full-m5-60918f9d-r1/`:
 stopped Relaunch preflight and all remaining screen stages. It does not qualify.
 The intermittent Profiles deletion observation is recorded separately in
 `docs/followups.md`, per LEAD 04:00; its cause remains unresolved.
+
+## Welcome label contrast
+
+The selected card-3 label changed from 4.4350 to 4.8139 at AW 1x and from
+4.6293 to 4.9510 at M1 2x. The other card-3 label measures 4.5821 / 4.9139.
+All eight appearance/activity matrix states pass the unchanged 4.5 floor;
+the selected label meets the 4.7 design target. Only ink lightness changed.
+The native font, geometry and motion remain unchanged. The 2x frame is from
+`17d2a73e` and the 1x frame from `bc5b157a`; App/Packages/Engine source is
+byte-identical through the timing-policy changes.
+
+![Card 3 at AW 1x](verification/step4/welcome-card3-1x.png)
+
+![Card 3 at M1 2x](verification/step4/welcome-card3-2x.png)
