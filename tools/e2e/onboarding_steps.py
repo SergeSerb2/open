@@ -104,6 +104,9 @@ def run(factory, results, tmp, h):
         pending_blocker = Path(app.user_data,'adblock-settings.json')
         blocker_before = pending_blocker.read_bytes() if pending_blocker.exists() else None
         action('set-name', name='  Example  ')
+        named = state()
+        gate('name_live_miniature', lambda s: s['artwork']['miniature']['spaceTitles']==["Example's Space"]
+            and s['artwork']['miniature']['engineContents']==0, named, initial)
         app.call('key', key='return'); imported = screen('import'); shot('import-light')
         gate('same_window', lambda s: s['screen']=='import' and s['window']==initial['window'] and s['dim']['exists'], imported, initial)
         action('skip'); favorites = screen('favorites'); shot('favorites-empty-light')
@@ -166,6 +169,10 @@ def run(factory, results, tmp, h):
         app.call('key', key='return')
         handoff = state(); until(lambda: not state()['active'] and not state()['dim']['exists'])
         final = state(); stored = json.loads(snapshot().read_text())
+        until(lambda: 'retainedObjects' in state())
+        released = state()
+        results['steps_artwork_released'] = dict(ok=not any(released['retainedObjects'].values()),
+            retained=released['retainedObjects'],load=os.getloadavg())
         tabs = app.call('tabs'); selected_tabs = [t for t in tabs if t.get('selected')]
         welcome = app.call('welcome')
         normal_surfaces = dict(intro=normal_intro, setup=ready, welcome=welcome)
@@ -211,6 +218,10 @@ def run(factory, results, tmp, h):
         app.call('first-run', action='continue')
         until(lambda: app.call('first-run')['step']=='report')
         report = app.call('first-run'); shot('import-report-light')
+        imported_art = state()['artwork']['miniature']
+        results['steps_import_real_miniature'] = dict(ok=imported_art['spaceTitles']==['Alpha','Beta']
+            and len(imported_art['pinnedTitles'])>=1 and imported_art['engineContents']==0,
+            state=imported_art,load=os.getloadavg())
         app.call('window-reopen')
         prepared = [w for w in app.call('windows') if w['class']=='BrowserWindow']
         hidden_browser = lambda windows: bool(windows) and all((not w['visible'] or w['alpha']==0)
@@ -439,9 +450,10 @@ def run_favorite_icons(factory, results, tmp, h):
             action('set-appearance', appearance=appearance)
             time.sleep(.3)
             s = state(); path = evidence/('favorites-'+label+'-'+appearance+'.png')
-            # Window ID belongs to this owned App. -x suppresses capture sound.
-            captured = h.subprocess.run(['/usr/sbin/screencapture', '-x', '-o', '-a', '-l', str(s['window']), str(path)], capture_output=True)
-            assert captured.returncode == 0, captured.stderr.decode(errors='replace')
+            # Capture the owned window through the same WindowServer path as
+            # the other native suites, including on an SSH-driven M1.
+            captured = app.call('snapshot', window=s['window'], path=str(path))
+            assert captured['method'].startswith('windowserver'), captured
             width, height, pixel = h.read_image(str(path), srgb=True)
             scale = s['backingScale']; frames = s['frameSize']
             assert [width,height] == [round(frames[0]*scale), round(frames[1]*scale)], (width,height,frames,scale)
@@ -524,15 +536,13 @@ def run_favorite_icons(factory, results, tmp, h):
         row('selected_focused', focus['favoriteTiles'][0]['focused'] and 0 in focus['favorites'], state=focus)
         preview = focus['favoritePreview']
         empty_preview = initial['favoritePreview']
-        preview_shape = lambda p: p['size']==[200,440] and p['radius']==16 and p['headerHeight']==28 \
-            and p['columns']==4 and p['tileSize']==[40,40] and p['gap']==8 and p['ghostRows']==6 \
-            and p['favoritesArea']==[8,52,184,88] and p['dividerFrame']==[12,152,176,1] \
-            and p['ghostStartY']==165 and p['ghostGap']==8
-        row('preview', preview_shape(preview) and preview['selectedCount']==2 and preview['emptySlots']==0
-            and all(item['frame'][2:]==[40,40] for item in preview['items']), state=preview)
-        row('preview_empty', preview_shape(empty_preview) and empty_preview['emptySlots']==8 and empty_preview['selectedCount']==0,
+        preview_shape = lambda p: p['size']==[480,544] and p['realSidebar'] and p['realTiles'] \
+            and p['engineContents']==0 and p['sidebarWidth']==235 and p['ghostRows']==0
+        row('preview', preview_shape(preview) and preview['selectedCount']==2 and preview['visibleCount']==2
+            and len(preview['items'])==2 and all(item['frame'][2]>0 and item['frame'][3]>0 for item in preview['items']), state=preview)
+        row('preview_empty', preview_shape(empty_preview) and empty_preview['visibleCount']==0 and empty_preview['selectedCount']==0,
             state=empty_preview)
-        row('preview_empty_negative', not (preview['emptySlots']==8 and preview['selectedCount']==0), expected='FAIL')
+        row('preview_empty_negative', not (preview['visibleCount']==0 and preview['selectedCount']==0), expected='FAIL')
         row('tile_style', all(t['style']['tileSize']==[88,84] and t['style']['radius']==14
             and t['style']['focusOutset']==3 and t['style']['focusWidth']==3 and t['style']['focusRadius']==19
             and t['style']['badgeDiameter']==18 and t['style']['badgeOffset']==4
@@ -540,8 +550,8 @@ def run_favorite_icons(factory, results, tmp, h):
         row('selection_counter', initial['favoriteCountLabel']=='None selected' and focus['favoriteCountLabel']=='2 selected')
         for index in sorted(set(range(12)) - set(focus['favorites'])): action('toggle-favorite',index=index)
         full_preview = state()['favoritePreview']
-        row('preview_bounded', full_preview['selectedCount']==12 and full_preview['visibleCount']==8
-            and len(full_preview['items'])==8 and all(item['frame'][1]+item['frame'][3]<=140 for item in full_preview['items']),
+        row('preview_bounded', full_preview['selectedCount']==12 and full_preview['visibleCount']==12
+            and len(full_preview['items'])==12 and all(item['frame'][0]>=0 and item['frame'][2]>0 and item['frame'][3]>0 for item in full_preview['items']),
             state=full_preview)
         for index in sorted(set(range(12)) - set(focus['favorites'])): action('toggle-favorite',index=index)
         x,y,w,hgt = focus['favoriteTiles'][0]['windowFrame']
@@ -554,12 +564,16 @@ def run_favorite_icons(factory, results, tmp, h):
                 check=True, capture_output=True)
         # Move focus through the native key path. The tile interior must not
         # change: the focus indicator belongs only around its outside edge.
+        # Re-capture after the all-favorites bounds check has restored the
+        # selection. Compare only the focus action, not a second model edit
+        # and its new rasterization of the fetched icon.
+        focus_shots = capture('focus-reference')
         app.call('key', key='tab')
         unfocused = capture('network-unfocused')
         focus_checks = []
         focus_deltas = []
         for appearance in shots:
-            _,height,a = h.read_image(shots[appearance]['path'],srgb=True)
+            _,height,a = h.read_image(focus_shots[appearance]['path'],srgb=True)
             _,_,b = h.read_image(unfocused[appearance]['path'],srgb=True)
             points = [(round((x+dx)*scale),round(height-(y+dy)*scale))
                 for dx in range(10,int(w)-10) for dy in range(10,int(hgt)-10)]

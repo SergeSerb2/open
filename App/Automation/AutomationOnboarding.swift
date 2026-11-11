@@ -4,16 +4,23 @@ import AppKit
 import ObjectiveC.runtime
 import OpenDesign
 import OpenSettings
+import Darwin
 
 extension AutomationController {
   func runOnboarding(_ args: [String: Any]) async throws -> [String: Any] {
     let pacingRegion = IntroPacingTrace.begin("automation.onboarding")
     defer { pacingRegion?.end() }
     let action = args["action"] as? String ?? "state"
-    let allowed: [String: Set<String>] = ["state": [], "skip-intro": [], "get-started": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
+    let allowed: [String: Set<String>] = ["state": [], "release-allocator-cache": [], "skip-intro": [], "get-started": [], "replay-intro": [], "next": [], "back": [], "skip": [], "set-name": ["name"], "toggle-favorite": ["index"], "set-theme": ["preset"], "set-blocker": ["on"], "choose-default": ["yes"], "shuffle-card": [], "save-card": [], "card-save": ["path"], "card-cancel": [], "set-appearance": ["appearance"]]
     guard (args["action"] == nil || args["action"] is String), action.utf8.count <= 32,
           let extra = allowed[action], Set(args.keys).isSubset(of: extra.union(["action"])) else {
       throw Failure(message: "unknown onboarding action or argument")
+    }
+    if action == "release-allocator-cache" {
+      guard app.onboardingWindowController == nil, app.onboardingHandedOff else { throw Failure(message: "onboarding must finish before allocator diagnostics") }
+      let before = OnboardingWindowController.residentBytes()
+      let relieved = malloc_zone_pressure_relief(nil,0)
+      return ["before":before,"released":relieved,"after":OnboardingWindowController.residentBytes()]
     }
     if action == "replay-intro" { app.showOnboarding(replay: true) }
     else if action != "state" {
@@ -55,9 +62,15 @@ extension AutomationController {
       }
     }
     var state = app.onboardingWindowController?.state ?? app.onboardingReceipt ?? ["active": false, "screen": "done", "phase": "inactive", "dim": ["exists": false, "alpha": 0]]
+    var allocator = malloc_statistics_t()
+    malloc_zone_statistics(nil,&allocator)
+    state["allocator"] = ["inUse":allocator.size_in_use,"allocated":allocator.size_allocated,"peak":allocator.max_size_in_use]
     state["moduleActive"] = app.onboardingActivated
     state["launchTiming"] = LaunchTiming.shared.report
     state["audioPreparationPending"] = app.preparedOnboardingSound != nil
+    if app.onboardingWindowController == nil, let lifetime = app.onboardingLifetimeState {
+      state["retainedObjects"] = lifetime()
+    }
     var startup = app.onboardingStartup
     if let firstFrame = state["firstFrameHostTime"] as? Double,
        let launch = startup["launchHostTime"] as? Double {

@@ -354,8 +354,8 @@ def contrast_matrix(factory, results, tmp, api):
         app.call('welcome', action='insert')
         window = app.call('window-state')
         # Reduce Motion makes hardware hover harmless. Keep a fixed left-hand
-        # frame so the active peer fits beside the entire visible Welcome page.
-        app.call('window-frame', frame=[60, 60, 1280, 800])
+        # frame so the owned peer fits beside the entire page on a built-in panel.
+        app.call('window-frame', frame=[0, 60, 1000, 800])
         app.call('window-focus', id=window['id'], activate=True)
         assert api.wait_until(lambda: app.call('welcome')['visible'], timeout=5, step=.1)
         for theme in ('light', 'dark'):
@@ -381,9 +381,9 @@ def contrast_matrix(factory, results, tmp, api):
                         else:
                             app.call('yield-activation', pid=peer.pid)
                             peer.call('window-focus', id=peer.call('window-state')['id'], activate=True)
-                        # Keep the Welcome window uncovered, on the M5's main
-                        # 2560 pt screen, while the owned peer is active.
-                        peer.call('window-frame', frame=[1540, 70, 720, 500])
+                        # The peer remains partly visible to the right of the
+                        # 1000 pt window, including on the 1512 pt M1 panel.
+                        peer.call('window-frame', frame=[1020, 70, 480, 500])
                         peer_frame = peer.call('window-state')['frame']
                         app.accept_owned_handoff(peer)
                     time.sleep(.3)
@@ -469,8 +469,8 @@ def pixel_contrast(path, state, window, api):
     minima = dict(header=min(samples[name]['ratio'] for name in ('heading', 'subheading')),
                   title=min(samples['card%d_title' % i]['ratio'] for i in range(1, 5)),
                   body=min(samples['card%d_body' % i]['ratio'] for i in range(1, 5)))
-    labels_present = [label['label'] for card in layout['cards'] for label in card.get('labelPixels', [])] == ['+ New Tab', 'Home']
-    links_present = [link['label'] for link in layout.get('linkPixels', [])] == ['Learn Essential Shortcuts', 'Settings']
+    labels_present = [label['label'] for card in layout['cards'] for label in card.get('labelPixels', [])] == ['Lisbon in spring', 'Weekend reading', 'A slower Sunday']
+    links_present = [link['label'] for link in layout.get('linkPixels', [])] == ['Essential Shortcuts', 'Settings']
     return dict(ok=labels_present and links_present and all(s['ok'] for s in samples.values()), ratios=minima, samples=samples,
                 illustrationLabelsPresent=labels_present, footerLinksPresent=links_present,
                 pixels=[width, height], colorSpace='sRGB (embedded ICC converted by sips)')
@@ -491,7 +491,7 @@ def design_gates(state, appearance):
     document = layout['document']
     footer = layout['footer']
     cards = layout['cards']
-    dark = appearance == 'dark'
+    dark = True  # The lead's room is dark in both system appearances.
     ink = 1 if dark else 0
     contrast = .04 if dark else .06
     surface = [(1 - contrast) * c + contrast * ink for c in layout['background'][:3]] + [1]
@@ -509,6 +509,10 @@ def design_gates(state, appearance):
 
     color_ok = len(cards) == 4
     for card in cards:
+        mini = card.get('miniature')
+        if mini is not None:
+            color_ok = color_ok and mini['realSidebar'] and mini['engineContents']==0
+            continue
         paint = card['paints']
         color_ok = color_ok and near(paint.get('surface', []), surface) \
             and near(paint.get('row', []), [ink, ink, ink, .14 if dark else .10]) \
@@ -526,17 +530,23 @@ def design_gates(state, appearance):
     return {
         'fits_without_scroll': height >= 639.5 and document[3] <= height + .5
             and document[2] <= width + .5 and near(layout['scrollOrigin'], [0, 0], .5),
-        'header_inset': abs(layout['headerTop'] - (56 if height <= 820 else 80)) <= .5,
-        'footer_spacing': abs(layout['footerGap'] - 24) <= .5
-            and footer[1] + footer[3] <= height - 31.5,
-        'illustration_limits': len(cards) == 4 and all(119.5 <= c['illustration'][3]
+        'header_inset': abs(layout['headerTop'] - 48) <= .5,
+        'footer_spacing': abs(layout['footerGap'] - 22) <= .5
+            and footer[1] + footer[3] <= height - 27.5,
+        'illustration_limits': len(cards) == 4 and all(95.5 <= c['illustration'][3]
             <= layout['columnWidth']/2 * 10/16 + .5 for c in cards),
+        'native_components': len(cards)==4 and all(c.get('miniature',{}).get('realSidebar')
+            and c['miniature']['engineContents']==0 and c['miniature']['artWidthFraction']>=.70 for c in cards)
+            and 'Weekend reading' in cards[1]['miniature']['pinnedTitles']
+            and len(cards[2]['miniature']['spaceTitles'])==2 and cards[2]['miniature']['windows']==2
+            and cards[3]['miniature']['splitPaneCount']==2 and cards[3]['miniature']['splitDividerCount']==1
+            and len({tuple(c['miniature']['themeKey']) for c in cards})==4,
         'undistorted_scenes': len(cards) == 4 and all(c['scale'][0] > 0
             and abs(c['scale'][0] - c['scale'][1]) < .001 for c in cards),
         'copy_fits': len(cards) == 4 and all(c['requiredTextHeight'] <= c['detail'][3]
             and c['requiredTitleWidth'] <= c['title'][2] for c in cards),
         'contrast': bool(color_ok),
-        'only_permitted_labels': [c['labels'] for c in cards] == [['+ New Tab'], [], ['Home'], []],
+        'only_permitted_labels': [c['labels'] for c in cards] == [['Lisbon in spring'], ['Weekend reading'], ['A slower Sunday'], []],
         'static_without_pending_work': not state['animating'] and state['animationCount'] == 0
             and not state['pendingCompletion'],
     }

@@ -9,12 +9,18 @@ as `moduleActive: false` without calling into the package.
 The intro uses Open's own doorway/sun mark, procedural grain and synthesized
 score. There are no reference-app assets. All scene and playback beat times
 are in `IntroTimeline.beats`; the Python generator reads the same table.
-The lit door uses a `#FFF3DC` → `#FFC680` gradient at 0.92 opacity. The
-`#FFD9A8` spill peaks at 0.45 and settles at 0.28; it and the warm orb use
-Core Animation's `screenBlendMode`. The final text uses approximately 28 pt
-from the wordmark to the identity line, 18 pt to the first value, 22 pt value
-rows with 6 pt gaps, and 32 pt from the last value to Continue. The settled
-mark/text/button block centers at about 52.4% of the window height.
+The shared room has a Space-tinted far wall, a soft horizon, warm doorway bloom,
+a floor spill with widening penumbra and distance falloff, and an original
+128 × 128 grain tile (65,536 decoded bytes). `OnboardingTokens.Room` owns the
+palette. The doorway has a round arch, a white edge, a warm inner edge, and a
+sun halo. Its small card emblem draws directly into the current CGContext,
+so it stays vector at both backing scales.
+
+The final intro puts the doorway at 33% of the window height, the wordmark at
+64%, one supporting line near 73%, and Continue at 84%. The value lines replace
+one another; they never stack. The wordmark uses a warm-to-white fill with no
+shadow. Timeline and sound anchors are unchanged. Pointer parallax is bounded
+to six points and is disabled under Reduce Motion.
 
 | Beat | Start (s) | End (s) |
 |---|---:|---:|
@@ -161,16 +167,47 @@ Each 32-point icon frame draws a monogram immediately. Eight clear hues use OKLC
 
 Selected tiles use the existing primary button blue for tint, ring and the filled check badge; the dark ring is lightened. The badge sits four points outside the top-right corner with a panel-color knockout. Keyboard focus is a three-point outer ring, three points beyond the tile. Hover changes the surface over 120 ms; press scales to 0.97 over 100 ms. Reduce Motion removes scale motion. The right preview is a 200×440-point mini sidebar, with a header, four-column 40-point Favorites grid, eight dashed empty slots when none are selected, a fixed two-row Favorites area, a divider and six ghost tab rows. It uses the same image views. New selections fade and scale from 0.8 over 260 ms; Reduce Motion keeps only the fade.
 
-Automation `onboarding action=state` includes `favoriteTiles` with `iconState` (`monogram`, `loading`, `icon`, or `failed`), `renderedKind`, `sourceKind`, `pixelSize`, fixed frames and fade duration. Automation builds accept `--favicon-network=blocked` to fail only this prefetch before creating a session. `tools/e2e/onboarding_steps.py` verifies live downloads, blocked-network monograms, fixed geometry, Reduce Motion and the stored sidebar hand-off. Its window-only captures exclude the screen-sized dim child and include the actual window backing scale. Selected and focused close-ups and an interior pixel comparison guard against AppKit drawing a text focus band across the tile. Automation can opt into a private request/candidate trace with `OPEN_FAVICON_DIAGNOSTICS=1`; normal launches never produce it. The Notion suggestion uses its canonical `notion.com` host, so its page needs no redirect across registrable domains. Theme uses `OpenSpaceEditor`'s preset strip, color pad, state reducer and appearance bar. The selected style is applied to the focused Space at finish. Blocker uses the existing `AdBlockStore.setEnabled` global `nativeAdBlockEnabled` setting in `adblock-settings.json`, the same setting as Advanced.
+Automation `onboarding action=state` includes `favoriteTiles` with `iconState` (`monogram`, `loading`, `icon`, or `failed`), `renderedKind`, `sourceKind`, `pixelSize`, fixed frames and fade duration. Automation builds accept `--favicon-network=blocked` to fail only this prefetch before creating a session. `tools/e2e/onboarding_steps.py` verifies live downloads, blocked-network monograms, fixed geometry, Reduce Motion and the stored sidebar hand-off. Its window-only captures exclude the screen-sized dim child and include the actual window backing scale. Selected and focused close-ups and an interior pixel comparison guard against AppKit drawing a text focus band across the tile. Automation can opt into a private request/candidate trace with `OPEN_FAVICON_DIAGNOSTICS=1`; normal launches never produce it. The Notion suggestion uses its canonical `notion.com` host, so its page needs no redirect across registrable domains. Theme uses `OpenSpaceEditor`'s real color pad and state reducer, with onboarding swatches and a native segmented appearance control. The selected style is applied to the focused Space at finish. Blocker uses the existing `AdBlockStore.setEnabled` global `nativeAdBlockEnabled` setting in `adblock-settings.json`, the same setting as Settings › Ad Blocking.
 
 The icon gate runs twice with separate fresh first-launch roots. Before prefetch, each root must have no favicon records, no browser snapshot and no completed first run. Every tile must report a fetched icon, its source kind and its original dimensions within twelve seconds. In light and dark window captures, each icon's inner 24×24-point square is compared with that tile's real blocked-network monogram. Both mean CIEDE2000 ≥6 and at least 25% of samples with CIEDE2000 ≥8 are required. The blocked capture is also passed to the same detector and must fail for every tile. This distinguishes Gmail's fetched image from its colored `Gm` fallback. Gmail must also report source kind `curated`, and its light/dark pixels on both fresh launches must differ from the generic Google G fetched by the same suite's forced-curated-failure run, using the same perceptual thresholds. The miniature sidebar reserves two rows for its first eight selected icons; the counter and final hand-off retain every selection.
 
-`OnboardingBrandMark` supplies the intro's trimmed rounded doorway and sun to the intro, Name preview and both marks on the card. The Theme preview keeps its traffic lights, URL bar, four tinted sidebar rows and three neutral page bars live with the selected Space style. The second Favorite suggestion is Google Maps (`https://maps.google.com/`): its public manifest declares distinct product artwork. Gmail has the only non-nil curated `iconSourceURL`: `https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico`, Gmail's own icon on Google's static host. It is downloaded at runtime with the same byte, image, cookie, credential and redirect limits as discovered icons. A curated request has at most 1.5 seconds inside the existing six-second site budget; failure falls back to ordinary discovery. Automation-only `--favicon-curated=fail` changes that request to a missing path on the same host; the public signed-out page then declares no icon and supplies Google's generic fallback through the original chain. Once a visited page reports its own favicon, `EngineWebContentHost.confirmFaviconForDocument` sends it through `StoredFaviconCache.report`; the page-specific store record takes precedence over the prefetch's origin fallback. Live Favorites use the engine image, and unloaded Favorites use the refreshed store cache.
+Every setup scene uses one throwaway in-memory `BrowserModel`, the real
+`SidebarView`, Favorite tiles, native rows and Space material. It creates no
+engine contents. The miniature updates the Space name, imported rows, selected
+Favorites and theme. Blocker sweeps hide an illustrative ad; the default step
+moves a Mail link into a real Today row. The sample page contains an original
+landscape and short editorial text, with no skeleton bars. The miniature has a
+soft contact shadow, a warm top/right rim and at most four degrees of perspective
+(disabled under Reduce Motion). Step dots stay at the art pane's lower left.
 
-The Ready card uses one original drawing routine for the screen and 1200 × 750 PNG output. Its gradient midpoint supplies the sRGB relative luminance. Above 0.55, the name uses black at 0.82 and the date uses black at 0.55; otherwise they use white and white at 0.72. The date is 17 points in the card's design coordinates. Save opens `NSSavePanel`; Shuffle cycles six deterministic patterns. The two 32-point circle buttons sit 12 points apart, centered 16 points below the card. Their white fill changes from 0.16 to 0.24 on hover, with white glyphs at 0.9. Confetti emits above the card once for 0.6 seconds, in a separate layer below the card and its text, then removes its layer. Reduce Motion uses cross-fades and no confetti.
+The form uses an eight-point grid, 13-point descriptions with an 18-point line
+height, and a 32-point gap before controls. Name has a 36-point rounded field.
+Import results use one 12-point-radius card with tabular counts. Theme keeps the
+real color-pad input and theme math, with a bounded 400 × 280 P3 color field,
+20-point swatches and one appearance segmented control. The blocker describes
+EasyList, EasyPrivacy and site exceptions; cookie lists are not enabled by
+default. Default choices are 48-point radio cards, with Yes selected initially.
+The primary says Make default only when the request is needed. Footer positions
+are shared by every step; buttons are 32 points high and secondary text is 13.
 
-The default-browser service runs only on Next with Yes selected. Setup awaits the existing Settings request's completion, then shows its outcome for 1.2 seconds before advancing. Automation sockets always use a bounded outcome stub (`OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed`, default declined); they never invoke the system prompt.
+The second Favorite suggestion is Google Maps (`https://maps.google.com/`): its public manifest declares distinct product artwork. Gmail has the only non-nil curated `iconSourceURL`: `https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico`, Gmail's own icon on Google's static host. It is downloaded at runtime with the same byte, image, cookie, credential and redirect limits as discovered icons. A curated request has at most 1.5 seconds inside the existing six-second site budget; failure falls back to ordinary discovery. Automation-only `--favicon-curated=fail` changes that request to a missing path on the same host; the public signed-out page then declares no icon and supplies Google's generic fallback through the original chain. Once a visited page reports its own favicon, `EngineWebContentHost.confirmFaviconForDocument` sends it through `StoredFaviconCache.report`; the page-specific store record takes precedence over the prefetch's origin fallback. Live Favorites use the engine image, and unloaded Favorites use the refreshed store cache.
+
+The Ready card uses one original drawing routine for the screen and 1200 × 750 PNG output. Its gradient midpoint supplies the sRGB relative luminance. Above 0.55, the name uses black at 0.82 and the date uses black at 0.55; otherwise they use white and white at 0.72. The live name is 22 points semibold and the date is 11.5 points. The card has a one-point top highlight and a 32-point contact shadow. Save opens `NSSavePanel`; Shuffle cycles six deterministic patterns. The two 32-point circle buttons sit 12 points apart, centered 16 points below the card. Their white fill changes from 0.16 to 0.24 on hover, with white glyphs at 0.9. Confetti emits above the card once for 0.6 seconds, in a separate layer below the card and its text, then removes its layer. Reduce Motion uses cross-fades and no confetti.
+
+The default-browser service runs only on Make default with Yes selected. Setup awaits the existing Settings request's completion, then shows its outcome for 1.2 seconds before advancing. Automation sockets always use a bounded outcome stub (`OPEN_AUTOMATION_DEFAULT_BROWSER=already|success|declined|failed`, default declined); they never invoke the system prompt.
 
 Get Started applies choices and uses Section 7's `finishFirstRun`: save the choices, insert and select the ordinary Welcome tab, save again, then set completion. A failure keeps Ready open for retry without adding another Welcome tab. The importer can prepare a browser early for background History and extension installs. During setup, that browser has alpha zero, cannot become key or main, and stays below the dim overlay. Hand-off enables activation and fades its alpha to one below onboarding and above the dim overlay. Onboarding rises 24 points over 0.4 seconds and fades over 0.6 seconds; dim fades over 2.5 seconds. Reduce Motion cross-fades all three over 0.3 seconds. Music fades over 0.8 seconds if still playing. Replay uses the same screens but performs no import, model, preference or default-browser writes.
 
 The hidden-browser guard ends when the final save succeeds. A new browser window opened during the remaining dim fade starts visible and can become key. External URL requests received before Get Started stay in the existing intake queue without opening a browser or Little Open; hand-off marks the intake ready and drains them after the save.
+
+
+## Art validation (2026-11-10)
+
+Native M1 2x and M5 1x receipts and the complete synthetic frame sets are in the
+shared local handoff folder `.re/handoff/plans/B-frames/`. M3 refreshes the form
+pane after the M2 art approval. The PR includes representative before/after
+sheets. Offscreen `onboarding-render` is a separate gate from real-window frames.
+Returning launches still construct none of this scene. At hand-off, the controller
+explicitly cancels tasks and removes view/model/icon/sound ownership; all nine weak
+probes are nil. The remaining PartitionAlloc resident overhead and first-run idle
+CPU belong to the performance lane; see [follow-ups](followups.md).

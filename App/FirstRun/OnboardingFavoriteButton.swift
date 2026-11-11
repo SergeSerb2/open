@@ -64,7 +64,7 @@ import QuartzCore
     let base = dark ? NSColor(srgbRed: 46/255, green: 46/255, blue: 51/255, alpha: 1)
       : NSColor(srgbRed: 244/255, green: 244/255, blue: 246/255, alpha: 1)
     let fill: NSColor
-    if selected { fill = base.blended(withFraction: dark ? 0.16:0.07, of: blue) ?? base }
+    if selected { fill = (dark ? base:NSColor.white).blended(withFraction: dark ? 0.20:0.09, of: blue) ?? base }
     else if hovered {
       fill = dark ? base.blended(withFraction: 0.06, of: .white) ?? base
         : NSColor(srgbRed: 236/255, green: 236/255, blue: 240/255, alpha: 1)
@@ -73,9 +73,9 @@ import QuartzCore
     CATransaction.setAnimationDuration(0.12); CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
     surface.backgroundColor = fill.cgColor
     surface.borderColor = (dark ? NSColor.white.withAlphaComponent(0.09):NSColor.black.withAlphaComponent(0.06)).cgColor
-    surface.shadowColor = NSColor.black.cgColor; surface.shadowOpacity = dark ? 0:0.05
-    surface.shadowRadius = 8; surface.shadowOffset = CGSize(width: 0, height: 1)
-    selection.borderColor = (dark ? NSColor(srgbRed: 107/255, green: 124/255, blue: 1, alpha: 1):blue).cgColor
+    surface.shadowColor = (selected ? blue:NSColor.black).cgColor; surface.shadowOpacity = selected ? 0.22:(dark ? 0:0.05)
+    surface.shadowRadius = selected ? 9:8; surface.shadowOffset = CGSize(width: 0, height: selected ? 6:1)
+    selection.borderColor = blue.cgColor
     selection.opacity = selected ? 1:0
     focus.borderColor = blue.withAlphaComponent(0.45).cgColor
     focus.opacity = window?.firstResponder === self ? 1:0

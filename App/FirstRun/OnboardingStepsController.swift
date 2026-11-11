@@ -8,6 +8,7 @@ import OpenStore
 import OpenModel
 import OpenSettings
 import OpenDesign
+import OpenOnboarding
 import OpenSpaceEditor
 
 /// Presentation only. Section 7 still owns import, consent, progress and finish.
@@ -62,9 +63,11 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var favoriteCounter: NSTextField?
   private var blockerSwitch: NSSwitch?
   private var cardButtons: [OnboardingButton] = []
-  private var presetStrip: PresetStripView?
+  private var presetStrip: OnboardingPresetStrip?
   private var colorPad: OpenSpaceEditor.ColorPadView?
-  private var modeBar: AppearanceModeBar?
+  private var modeBar: NSSegmentedControl?
+  private var themeShuffle: OnboardingButton?
+  private var colorField: OnboardingColorField?
   private var statusLabel: NSTextField?
   private(set) var savePanel: NSSavePanel?
   private let started = Date()
@@ -84,6 +87,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   }
   required init?(coder: NSCoder) { nil }
   isolated deinit { tasks.forEach { $0.cancel() } }
+  func releaseArtwork() {
+    observationGeneration += 1
+    tasks.forEach { $0.cancel() }; tasks.removeAll()
+    icons.onChange = nil
+    confetti?.removeFromSuperlayer(); confetti = nil
+    host?.view.removeFromSuperview(); host = nil
+    preview.removeFromSuperview()
+  }
   override func loadView() {
     let root = OnboardingSurface()
     for surface in [root, panel, controls, footer] { surface.onEscape = { [weak self] in self?.back() } }
@@ -92,8 +103,8 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     for child in [titleLabel, descriptionLabel, controls, footer] { panel.addSubview(child) }
     titleLabel.font = .systemFont(ofSize: 32, weight: .semibold); titleLabel.maximumNumberOfLines = 3
     titleLabel.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
-    descriptionLabel.font = .systemFont(ofSize: 15); descriptionLabel.textColor = .secondaryLabelColor
-    descriptionLabel.maximumNumberOfLines = 3
+    descriptionLabel.font = .systemFont(ofSize: 13); descriptionLabel.textColor = .secondaryLabelColor
+    descriptionLabel.maximumNumberOfLines = 2
     render(direction: 0); observeImport()
   }
   func didAttach() { render(direction: 0) }
@@ -102,23 +113,42 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     super.viewDidLayout()
     let width = min(520, view.bounds.width * 0.48)
     panel.frame = NSRect(x: 0, y: 0, width: width, height: view.bounds.height)
-    titleLabel.frame = NSRect(x: 56, y: 72, width: width-112, height: 88)
+    let contentWidth = width-112
+    titleLabel.frame = NSRect(x: 56, y: 72, width: contentWidth, height: 112)
     let titleHeight = titleLabel.cell?.cellSize(forBounds: titleLabel.frame).height ?? 40
-    titleLabel.frame.size.height = min(112, titleHeight)
-    descriptionLabel.frame = NSRect(x: 56, y: titleLabel.frame.maxY+12, width: width-112, height: 66)
-    let controlsY = step == .favorites ? descriptionLabel.frame.minY + min(descriptionLabel.frame.height,
-      descriptionLabel.cell?.cellSize(forBounds: descriptionLabel.frame).height ?? 36) + 36 : descriptionLabel.frame.maxY+32
-    controls.frame = NSRect(x: 56, y: controlsY, width: width-112, height: max(40, view.bounds.height-controlsY-112))
-    footer.frame = NSRect(x: 56, y: view.bounds.height-88, width: width-112, height: 40)
-    backButton?.frame = NSRect(x: 0, y: 4, width: 32, height: 32)
-    skipButton?.frame = NSRect(x: step == .name ? 0:44, y: 0, width: 130, height: 40)
-    primary?.frame = NSRect(x: footer.bounds.width-120, y: 0, width: 120, height: 40)
+    titleLabel.frame.size.height = ceil(min(112,titleHeight)/8)*8
+    let paragraph = NSMutableParagraphStyle(); paragraph.minimumLineHeight = 18; paragraph.maximumLineHeight = 18
+    descriptionLabel.attributedStringValue = NSAttributedString(string: detail,attributes: [
+      .font:NSFont.systemFont(ofSize: 13),.foregroundColor:NSColor.secondaryLabelColor,.paragraphStyle:paragraph])
+    descriptionLabel.frame = NSRect(x: 56,y: titleLabel.frame.maxY+16,width: contentWidth,height: 40)
+    let detailHeight = descriptionLabel.cell?.cellSize(forBounds: descriptionLabel.frame).height ?? 36
+    descriptionLabel.frame.size.height = ceil(min(40,detailHeight)/8)*8
+    let controlsY = descriptionLabel.frame.maxY+32
+    controls.frame = NSRect(x: 56,y: controlsY,width: contentWidth,height: max(40,view.bounds.height-controlsY-112))
+    footer.frame = NSRect(x: 56,y: view.bounds.height-88,width: contentWidth,height: 32)
+    backButton?.frame = NSRect(x: 0,y: 2,width: 28,height: 28)
+    skipButton?.frame = NSRect(x: 40,y: 0,width: 130,height: 32)
+    let primaryWidth = max(88,ceil((primary?.title as NSString?)?.size(withAttributes: [.font:NSFont.systemFont(ofSize: 13,weight: .semibold)]).width ?? 0)+32)
+    primary?.frame = NSRect(x: contentWidth-primaryWidth,y: 0,width: primaryWidth,height: 32)
+    nameField?.frame = NSRect(x: 0,y: 0,width: contentWidth,height: 36)
+    if step == .theme {
+      presetStrip?.frame = NSRect(x: 0,y: 0,width: contentWidth,height: 32)
+      let fieldHeight = min(280,max(200,controls.bounds.height-88))
+      colorField?.frame = NSRect(x: 0,y: 48,width: contentWidth,height: fieldHeight)
+      modeBar?.frame = NSRect(x: 0,y: fieldHeight+64,width: min(230,contentWidth-96),height: 28)
+      themeShuffle?.frame = NSRect(x: contentWidth-80,y: fieldHeight+65,width: 80,height: 26)
+    }
     preview.frame = NSRect(x: width, y: 0, width: view.bounds.width-width, height: view.bounds.height)
     let cardFrame = preview.convert(preview.cardRect, to: view)
     for (index, button) in cardButtons.enumerated() {
       button.frame = NSRect(x: cardFrame.midX-38+CGFloat(index)*44,
         y: cardFrame.maxY+16, width: 32, height: 32)
     }
+    for card in controls.subviews where card is OnboardingFormCard || card is OnboardingChoiceCard {
+      card.frame.size.width = contentWidth
+      if let radio = card.subviews.first as? OnboardingChoiceRadio { radio.frame.size.width = contentWidth }
+    }
+    colorField?.apply(themeState)
     host?.view.frame = controls.bounds
     statusLabel?.frame = NSRect(x: 0, y: 150, width: controls.bounds.width, height: 90)
     preview.needsDisplay = true
@@ -155,14 +185,14 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     controls.subviews.forEach { $0.removeFromSuperview() }; footer.subviews.forEach { $0.removeFromSuperview() }
     cardButtons.forEach { $0.removeFromSuperview() }; cardButtons.removeAll()
     if step != .ready { confetti?.removeFromSuperlayer(); confetti = nil }
-    nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; favoriteButtons = []; favoriteCounter = nil; blockerSwitch = nil
+    nameField = nil; statusLabel = nil; presetStrip = nil; colorPad = nil; modeBar = nil; themeShuffle = nil; colorField = nil; favoriteButtons = []; favoriteCounter = nil; blockerSwitch = nil
     titleLabel.stringValue = stepTitle; descriptionLabel.stringValue = detail
     if step == .importData {
       let host = NSHostingController(rootView: FirstRunView(model: firstRun, startsProbe: false, embeddedImport: true))
       host.sizingOptions = []; self.host = host; controls.addSubview(host.view)
     }
     if step == .name {
-      let field = NSTextField(string: name); field.placeholderString = "Your name"; field.font = .systemFont(ofSize: 20)
+      let field = OnboardingNameField(string: name); field.isBordered = false; field.isBezeled = false; field.drawsBackground = false; field.focusRingType = .none; field.placeholderString = "Your name"; field.font = .systemFont(ofSize: 15)
       field.setAccessibilityElement(true); field.setAccessibilityRole(.textField)
       field.setAccessibilityLabel("Your name"); field.delegate = self; field.target = self; field.action = #selector(acceptName(_:))
       field.frame = NSRect(x: 0, y: 0, width: 380, height: 40); controls.addSubview(field); nameField = field
@@ -181,23 +211,30 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       counter.frame = NSRect(x: 0, y: 292, width: 388, height: 18); controls.addSubview(counter); favoriteCounter = counter
     }
     if step == .theme {
-      let strip = PresetStripView(frame: NSRect(x: 0, y: 0, width: 360, height: 32))
-      let pad = OpenSpaceEditor.ColorPadView(frame: NSRect(x: 0, y: 56, width: 360, height: 210))
-      let bar = AppearanceModeBar(frame: NSRect(x: 0, y: 282, width: 120, height: 32))
+      let strip = OnboardingPresetStrip()
+      let field = OnboardingColorField()
+      let pad = field.pad
+      let bar = NSSegmentedControl(labels: ["Auto","Light","Dark"],trackingMode: .selectOne,target: self,action: #selector(appearanceChanged(_:)))
+      bar.segmentStyle = .rounded; bar.font = .systemFont(ofSize: 13)
+      bar.setAccessibilityLabel("Appearance")
       strip.onAction = { [weak self] in self?.editTheme($0) }; pad.onAction = strip.onAction
-      bar.onSelect = { [weak self] in self?.editTheme(.setAppearance($0)) }
-      controls.addSubview(strip); controls.addSubview(pad); controls.addSubview(bar)
-      let shuffle = button("Shuffle") { [weak self] in self?.shuffleTheme() }; shuffle.frame = NSRect(x: 260, y: 282, width: 100, height: 32); controls.addSubview(shuffle)
-      presetStrip = strip; colorPad = pad; modeBar = bar; updateThemeControls()
+      controls.addSubview(strip); controls.addSubview(field); controls.addSubview(bar)
+      let shuffle = button("Shuffle") { [weak self] in self?.shuffleTheme() }; shuffle.outlined = true; controls.addSubview(shuffle)
+      presetStrip = strip; colorField = field; colorPad = pad; modeBar = bar; themeShuffle = shuffle; updateThemeControls()
     }
     if step == .blocker {
-      let label = NSTextField(labelWithString: "Block ads and trackers"); label.font = .systemFont(ofSize: 17, weight: .medium)
-      label.frame = NSRect(x: 0, y: 12, width: 300, height: 30); controls.addSubview(label)
-      let toggle = NSSwitch(frame: NSRect(x: 330, y: 8, width: 52, height: 32)); toggle.state = blocker ? .on:.off
-      toggle.setAccessibilityLabel("Block ads and trackers"); toggle.target = self; toggle.action = #selector(blockerChanged(_:)); controls.addSubview(toggle)
+      let card = OnboardingFormCard(); card.frame = NSRect(x: 0,y: 0,width: 408,height: 100); controls.addSubview(card)
+      let label = NSTextField(labelWithString: "Block ads and trackers"); label.font = .systemFont(ofSize: 13,weight: .medium)
+      label.frame = NSRect(x: 16,y: 13,width: 290,height: 18); card.addSubview(label)
+      let toggle = NSSwitch(frame: NSRect(x: 340,y: 6,width: 52,height: 32)); toggle.state = blocker ? .on:.off
+      toggle.setAccessibilityLabel("Block ads and trackers"); toggle.target = self; toggle.action = #selector(blockerChanged(_:)); card.addSubview(toggle)
       blockerSwitch = toggle
-      let note = NSTextField(wrappingLabelWithString: "You can change this later in Settings ▸ Advanced.")
-      note.font = .systemFont(ofSize: 13); note.textColor = .secondaryLabelColor; note.frame = NSRect(x: 0, y: 68, width: 380, height: 44); controls.addSubview(note)
+      let note = NSTextField(wrappingLabelWithString: "You can change this later in Settings › Ad Blocking.")
+      note.font = .systemFont(ofSize: 12); note.textColor = .secondaryLabelColor; note.frame = NSRect(x: 16,y: 52,width: 370,height: 34); card.addSubview(note)
+      for (index,text) in ["Blocks ads with EasyList","Stops trackers with EasyPrivacy","Remembers your site exceptions"].enumerated() {
+        let item = NSTextField(labelWithString: "✓  "+text); item.font = .systemFont(ofSize: 13); item.textColor = .secondaryLabelColor
+        item.frame = NSRect(x: 0,y: 124+index*32,width: 408,height: 20); controls.addSubview(item)
+      }
     }
     if step == .defaultBrowser {
       if firstRun.isDefaultBrowser {
@@ -206,10 +243,10 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
         for (index, text) in ["Yes, make Open my default.", "Not yet. I'm still looking around."].enumerated() {
           let card = OnboardingChoiceCard(selected: defaultYes == (index == 0))
           card.onEscape = { [weak self] in self?.back() }
-          card.frame = NSRect(x: 0, y: index*64, width: 395, height: 52)
-          let radio = NSButton(radioButtonWithTitle: text, target: self, action: #selector(defaultChanged(_:)))
-          radio.font = .systemFont(ofSize: 15); radio.tag = index; radio.state = defaultYes == (index == 0) ? .on:.off
-          radio.frame = NSRect(x: 16, y: 0, width: 363, height: 52)
+          card.frame = NSRect(x: 0, y: index*64, width: 408, height: 48)
+          let radio = OnboardingChoiceRadio(radioButtonWithTitle: text,target: self,action: #selector(defaultChanged(_:)))
+          radio.font = .systemFont(ofSize: 13); radio.tag = index; radio.state = defaultYes == (index == 0) ? .on:.off
+          radio.frame = NSRect(x: 0,y: 0,width: 408,height: 48)
           radio.setAccessibilityElement(true); radio.setAccessibilityRole(.radioButton); radio.setAccessibilityLabel(text)
           card.addSubview(radio); controls.addSubview(card)
         }
@@ -235,6 +272,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     if let skip { let b = button(skip) { [weak self] in self?.skip() }; footer.addSubview(b); skipButton = b; b.isEnabled = !firstRun.busy && !finishing }
     var text = "Next"
     if step == .importData { text = firstRun.step == .secretsConsent ? PasswordsImportCopy.allowButton : firstRun.step == .report ? "Next" : firstRun.step == .failed ? "Try Again" : "Import" }
+    if step == .defaultBrowser && defaultYes && !firstRun.isDefaultBrowser { text = "Make default" }
     if step == .ready { text = "Get Started" }
     let next = button(text, primary: true) { [weak self] in self?.next() }; next.keyEquivalent = "\r"; next.keyEquivalentModifierMask = []
     next.isEnabled = !firstRun.busy && !defaultPending && !finishing && (step != .importData || firstRun.step == .report || firstRun.hasSelection)
@@ -353,7 +391,15 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var defaultOutcome: String { defaultPending && !defaultResolved ? "":firstRun.errorText ?? (firstRun.defaultWasAttempted ? (firstRun.isDefaultBrowser ? "Open is your default browser.":"Open is not your default browser yet. You can set it later in Settings."):"") }
   private func resetTheme() { themeChanged = false; themeBaseline = focusedSpace?.theme ?? .init(); themeState = ThemeEditorState(style: SpaceStyle.seed(from: themeBaseline)) }
   func editTheme(_ action: ThemeEditorAction) { let old = themeState.style; themeState.apply(action); if old != themeState.style { themeChanged = true }; updateThemeControls(); updatePreview() }
-  private func updateThemeControls() { presetStrip?.apply(page: themeState.presetPage); colorPad?.apply(themeState); modeBar?.mode = themeState.appearance }
+  @objc private func appearanceChanged(_ sender: NSSegmentedControl) {
+    let modes: [SpaceStyleAppearance] = [.automatic,.light,.dark]
+    guard modes.indices.contains(sender.selectedSegment) else { return }
+    editTheme(.setAppearance(modes[sender.selectedSegment]))
+  }
+  private func updateThemeControls() {
+    presetStrip?.apply(themeState); colorPad?.apply(themeState); colorField?.apply(themeState)
+    modeBar?.selectedSegment = [.automatic,.light,.dark].firstIndex(of: themeState.appearance) ?? 0
+  }
   func shuffleTheme() { editTheme(.selectPreset(index: Int.random(in: SpaceStylePresets.all.indices))) }
   func shuffleCard() { cardPattern = (cardPattern+1)%6; updatePreview() }
   var card: OpenCardDrawing { .init(name: name, theme: themeChanged ? SpaceTheme(style: themeState.style):themeBaseline, date: started, pattern: cardPattern) }
@@ -377,7 +423,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       }
     }
     if themeChanged { app.model.updateSpace(id: space.id, theme: SpaceTheme(style: themeState.style)) }
-    // This is the same store and global setting used by Settings > Advanced.
+    // This is the same store and global setting used by Settings > Ad Blocking.
     guard let store = app.stores.adBlock else { throw CocoaError(.fileWriteUnknown) }
     try store.setEnabled(blocker)
   }
@@ -394,7 +440,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       favoriteCounter?.stringValue = countText
       if let favoriteCounter { NSAccessibility.post(element: favoriteCounter, notification: .valueChanged) }
     }
-    preview.update(step: step.rawValue, name: name, favorites: selectedFavorites.sorted().map { (Self.sites[$0].name, icons.tiles[$0]) }, count: firstRun.outcome?.importedCount("Imported tabs") ?? firstRun.probe?.sidebarItems ?? 0, report: firstRun.step == .report, blocker: blocker, card: card, reduceMotion: reduceMotion)
+    preview.update(step: step.rawValue, name: name, favorites: selectedFavorites.sorted().map { (Self.sites[$0].name, icons.tiles[$0]) }, count: firstRun.outcome?.importedCount("Imported tabs") ?? firstRun.probe?.sidebarItems ?? 0, report: firstRun.step == .report, blocker: blocker, card: card, reduceMotion: reduceMotion, source: app.model)
   }
   private func celebrate() {
     confettiPlayed = true
@@ -444,6 +490,9 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   }
   var state: [String: Any] { ["screen": step.rawValue, "favoritePreview": preview.favoriteState, "favoriteCountLabel": favoriteCounter?.stringValue ?? "", "favoriteTiles": favoriteIconState, "faviconFetch": icons.state, "backingScale": view.window?.backingScaleFactor ?? 0, "name": name, "title": stepTitle, "favorites": selectedFavorites.sorted(), "blocker": blocker, "defaultYes": defaultYes, "defaultPending": defaultPending, "defaultOutcome": defaultOutcome, "defaultAttempted": firstRun.defaultWasAttempted, "alreadyDefault": firstRun.isDefaultBrowser, "cardPattern": cardPattern, "reduceMotion": reduceMotion, "offset": reduceMotion ? 0:24, "confettiPlayed": confettiPlayed, "confettiActive": confetti != nil, "confettiBehindCard": confettiWasBehindCard, "confettiLifetime": confettiLifetime, "card": cardState, "importStep": firstRun.step.rawValue, "error": firstRun.errorText ?? "", "replay": replay, "themePresetPage": themeState.presetPage, "theme": String(describing: themeState.style), "savePanel": savePanel != nil, "focus": (view.window?.firstResponder as? NSView)?.accessibilityLabel() ?? "", "controls": accessibleControls(view)] }
   private func accessibleControls(_ root: NSView) -> [[String: String]] {
+    // Artwork is one AX image. Its native miniature controls are decorative
+    // descendants, not extra controls in the setup keyboard/VoiceOver flow.
+    if root.isAccessibilityElement(), root.accessibilityRole() == .image { return [] }
     var result: [[String: String]] = []
     if root is NSButton || root is NSSwitch || (root as? NSTextField)?.isEditable == true || root is ThemeEditorButton || root is PresetSwatchView || root is OpenSpaceEditor.ColorPadView { result.append(["role": root.accessibilityRole()?.rawValue ?? "", "label": root.accessibilityLabel() ?? (root as? NSButton)?.title ?? ""]) }
     for child in root.subviews { result += accessibleControls(child) }; return result
@@ -470,20 +519,21 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   required init?(coder: NSCoder) { nil }
   override var acceptsFirstResponder: Bool { false }
   override func draw(_ rect: NSRect) {
-    let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 10, yRadius: 10)
-    NSColor.quaternaryLabelColor.withAlphaComponent(0.08).setFill(); outline.fill()
-    (selected ? NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1):NSColor.separatorColor).setStroke()
+    let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 12, yRadius: 12)
+    NSColor.controlBackgroundColor.setFill(); outline.fill()
+    (selected ? OnboardingTokens.Room.space:NSColor.separatorColor).setStroke()
     outline.lineWidth = selected ? 2:1; outline.stroke()
   }
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
 
 @MainActor class OnboardingButton: NSButton {
-  static var primaryBlue: NSColor { NSColor(srgbRed: 26/255, green: 63/255, blue: 208/255, alpha: 1) }
+  static var primaryBlue: NSColor { OnboardingTokens.Room.space }
   let prominent: Bool
   let reduceMotion: Bool
   var usesLightInk = false
   var circular = false
+  var outlined = false
   private let press: @MainActor () -> Void
   private var hovered = false
   var interactionHoverScale: Double { 1.02 }
@@ -495,8 +545,16 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     prominent = primary; self.reduceMotion = reduceMotion; press = action
     super.init(frame: .zero); self.title = title; isBordered = false; target = self; self.action = #selector(invoke)
     setButtonType(.momentaryPushIn)
-    font = .systemFont(ofSize: 15, weight: primary ? .semibold:.regular); wantsLayer = true
+    font = .systemFont(ofSize: 13, weight: primary ? .semibold:.regular); wantsLayer = true
     setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(title)
+    if primary {
+      layer?.masksToBounds = false; layer?.shadowColor = Self.primaryBlue.cgColor
+      layer?.shadowOpacity = 0.4; layer?.shadowRadius = 11; layer?.shadowOffset = CGSize(width: 0, height: -8)
+    }
+  }
+  override func layout() {
+    super.layout()
+    if prominent { layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 16, cornerHeight: 16, transform: nil) }
   }
   required init?(coder: NSCoder) { nil }
   override var acceptsFirstResponder: Bool { true }
@@ -528,8 +586,12 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   }
   override func draw(_ dirtyRect: NSRect) {
     if circular { NSColor.white.withAlphaComponent(hovered ? 0.24:0.16).setFill(); NSBezierPath(ovalIn: bounds).fill() }
-    if prominent { Self.primaryBlue.withAlphaComponent(isEnabled ? 1:0.4).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 20, yRadius: 20).fill() }
-    if title == "Back" { NSColor.quaternaryLabelColor.withAlphaComponent(0.12).setFill(); NSBezierPath(ovalIn: bounds).fill() }
+    if prominent { Self.primaryBlue.withAlphaComponent(isEnabled ? 1:0.4).setFill(); NSBezierPath(roundedRect: bounds, xRadius: 16, yRadius: 16).fill() }
+    if title == "Back" || outlined {
+      let plate = title == "Back" ? NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5,dy: 0.5)):NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5,dy: 0.5),xRadius: 7,yRadius: 7)
+      NSColor.controlBackgroundColor.withAlphaComponent(hovered ? 0.95:0.65).setFill(); plate.fill()
+      NSColor.separatorColor.setStroke(); plate.lineWidth = 1; plate.stroke()
+    }
     if imagePosition == .imageOnly, let image {
       let tinted: NSImage
       if circular {
@@ -544,6 +606,6 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       tinted.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: (isEnabled ? 1:0.4)*(circular ? 0.9:1))
     }
     else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: prominent ? NSColor.white : NSColor.secondaryLabelColor, .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
-    if window?.firstResponder === self { NSColor.keyboardFocusIndicatorColor.setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 18, yRadius: 18); path.lineWidth = 2; path.stroke() }
+    if window?.firstResponder === self { Self.primaryBlue.withAlphaComponent(0.65).setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 18, yRadius: 18); path.lineWidth = 2; path.stroke() }
   }
 }
