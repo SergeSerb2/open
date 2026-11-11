@@ -67,10 +67,10 @@ timing-lane receipt, a suite that is not on the allowlist (display-keyed incogni
 stays M1-only), and a receipt without the rented host metadata. Timing rows inside
 a rented stage are kept as INFO only; the quiet M1 timing receipt is still
 required. A rented Mac refuses `--lane timing`.
-Limit (2026-11-11): over SSH the rented desktop refuses `NSRunningApplication`
-activation of the App child (`activate-own-app` returns `accepted:false`, also under
-`launchctl asuser`), so strict suites stop with "direct App child activation refused".
-Owner-watch, which launches no activated App, passes there.
+An idle rented desktop sleeps its display, and macOS then refuses
+`NSRunningApplication` activation of the App child ("direct App child activation
+refused"). On a rented Mac each screen stage therefore runs `caffeinate -u -t 5`
+and keeps `caffeinate -d` until its screen worker exits.
 
 Actions declares its intentional `Page.crash` before sending it on the M1.
 The shared `/tmp/open-intentional-crash-11.json` marker and private stage ledger

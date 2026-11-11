@@ -196,6 +196,13 @@ def run_screen(args):
     if dialogs:
         write_json(directory/'screen-end.json', dict(safe=False, systemWindows=dialogs, reason='system dialog present; left untouched'))
         return 2
+    if machine() == 'rented':
+        # An idle rented desktop sleeps its display; NSRunningApplication.activate
+        # of the App child is then refused (R 17:10). Declare user activity and
+        # keep the display awake until this screen worker exits.
+        subprocess.run(['/usr/bin/caffeinate', '-u', '-t', '5'], check=False)
+        subprocess.Popen(['/usr/bin/caffeinate', '-d', '-w', str(os.getpid())],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     command = json.loads(args.command)
     if not isinstance(command, list) or not all(isinstance(s, str) for s in command):
         raise RuntimeError('invalid internal screen command')
