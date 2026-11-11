@@ -167,7 +167,7 @@ def run(factory, results, tmp, h):
         # Natural returning launch: a real saved browser root, no skip switch.
         launch(fresh=False)
         returning = state()
-        gate('light_uses_screen_blend', lambda s: s.get('blendFilters')==['screenBlendMode', 'screenBlendMode'], phase2, returning)
+        gate('light_uses_screen_blend', lambda s: sorted(s.get('blendFilters', []))==['overlayBlendMode', 'screenBlendMode', 'screenBlendMode'], phase2, returning)
         gate('intro_browser_shortcuts_guarded', lambda s: s.get('intro', {}).get('active') and not s.get('browsers'), guarded, dict(intro=returning, browsers=app.call('shell-windows')))
         gate('first_launch_shows_intro', lambda s: s.get('active') and s.get('screen')=='intro' and s.get('moduleActive'), intro, returning)
         inactive = lambda s: not s.get('active') and not s.get('moduleActive') and s.get('phase')=='inactive'
@@ -189,7 +189,7 @@ def run(factory, results, tmp, h):
         gate('frame_stats_recorded', frame_pred, measured, unmeasured)
         app.call('key', key='escape')
         escaped = state()
-        final = lambda s: s.get('phase')=='sellCompleted' and s.get('ready') and s.get('buttonEnabled') and s.get('skipped') and abs(s.get('doorStrokeEnd', 0)-.88)<.001
+        final = lambda s: s.get('phase')=='sellCompleted' and s.get('ready') and s.get('buttonEnabled') and s.get('skipped') and abs(s.get('doorStrokeEnd', 0)-1)<.001
         gate('escape_skips_to_final', final, escaped, unmeasured)
         gate('silent_playback_sync', played_pred, played, skipped_launch)
         # Native default button hands off through the real key/menu responder path.
@@ -283,7 +283,7 @@ def run(factory, results, tmp, h):
         with tempfile.TemporaryDirectory(prefix='open-intro-replay-', dir='/tmp') as root:
             Path(root, 'State').mkdir()
             Path(root, 'State/browser.json').write_bytes(prior)
-            app = h.Open('Debug', 'chrome', root, ['--use-mock-keychain', '--intro-sound=silent',
+            app = h.Open(app.config, 'chrome', root, ['--use-mock-keychain', '--intro-sound=silent',
                 '--replay-onboarding', '--arc-dir='+str(source)], str(evidence/'replay-temp.log'), urls=(), first_run=True)
             app.focus_tracker = h._ACTIVE_FOCUS_TRACKER
             h._ACTIVE_FOCUS_TRACKER.apps.append(app)

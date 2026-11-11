@@ -21,13 +21,13 @@ same model tab. The native URL is never added to engine history. Back starts at
 the first web destination; use Help ▸ Open Basics to return. This is a deliberate
 limit of the small content-host hook, rather than an extra history implementation.
 
-The page uses native AppKit cards with original Core Animation drawings. Four
+The page uses native AppKit cards with real miniature Open views and original room artwork. Four
 finite 8.5-second demonstrations play in order and stop. One one-shot timer
 advances the playlist. It is invalidated while hidden and after completion. A
 hidden playlist resumes its current card when the page becomes visible. Hover,
 click, Return, Space, and the VoiceOver Replay action play one card and end the
-playlist. No display link, polling task, video, audio, downloaded image, or repeating
-animation is used. Other windows create no Welcome page or notification observers.
+playlist. No display link, polling task, video, audio, or repeating animation is used.
+Favicons use the bounded existing fetch/store path. Other windows create no Welcome page or notification observers.
 Window occlusion, minimization, application hiding, and removal from the selected
 content pane stop animations. Interrupted frames are copied from the presentation
 layers before removing the animations.
@@ -39,21 +39,26 @@ Cards form one keyboard and accessibility element each. Footer buttons open the
 existing Essential Shortcuts and Settings windows. Text can wrap within a card so
 all of the lead's exact copy remains readable in narrow windows.
 
-The centered column is at most 960 pt wide. A 76 pt header and two 80 pt card-text
-blocks leave room for both rows and the footer in a content viewport of 640 pt or
-higher. The header starts 56 pt down through 820 pt content height, then 80 pt.
-Illustrations shrink to 120 pt and grow up to the column's half-width at 16:10.
-Their scenes scale uniformly and remain centered. The footer has 24 pt above it
-and at least 32 pt below it. Shorter viewports retain native scrolling.
+The room lights the header from a small doorway at the upper right. The hero
+stays at the upper left. A centered, capped column holds four cards and two
+32-point native footer buttons. Card art has a common 12-point top/side inset and
+an eight-point radius. Miniatures fill that area; short viewports scroll.
 
-Illustrations use the content background with 4% white contrast in dark appearance
-and 6% black in light. Mock sidebars use the Space's theme tint at 55% opacity;
-plain rows use white at 14% or black at 10%. Active elements use opaque Open blue,
-starting from `#3D6BFF` and reducing only OKLab lightness to meet 4.5:1 against
-white with a 0.2 margin. They share that blue in both appearances. The `+ New Tab`
-pill and its white label stay opaque throughout the animation. Other
-mock text uses white or black at 75%. The only mock labels
-are `+ New Tab` and the second Space name, `Home`.
+`OnboardingMiniature` shares the real sidebar, Favorite grid, tab rows, command
+bar, pager and split divider. Each card has a different Space palette and
+composition: a command bar opens over New tab; Pin lifts a native row over the
+divider; Spaces swipes two real windows; Split divides the content. Spaces settles
+to one full window. The second window exists only for finite playback. Every
+miniature uses a throwaway model with no engine contents. The editorial page has
+an original landscape, a title, and at most two short text lines per block.
+
+All resting card borders are identical. Only hover or keyboard focus adds the
+one-point warm outline. Active playlist state alone does not change the border.
+The native demo rows use a local font/color override for readability at small
+scale; normal browser rows retain their own typography and theme. Descendants
+of a miniature stay out of the keyboard/VoiceOver loop: each card is one Replay
+action. At rest all native layer animations are removed, including sidebar
+material/row transitions.
 
 The Debug/automation socket command `welcome` returns `visible`, `activeCard`
 (1–4 or null), `playlist` (`playing`/`stopped`), `animating`, actual card AX labels
@@ -121,18 +126,14 @@ all eight PNGs. Run just this matrix with
 same screen lock and priority rules. The temporary old-palette build patch and
 negative receipt also stay in `.re/`; no mutation switch ships in the App.
 
-Footer links keep their system link-color seed and use the same lightness-only
-correction against the page surface. They also have 4.5:1 pixel assertions, so a
-Dark app appearance cannot leave bright, low-contrast link text on a light Space.
-
-The illustrations share one opaque active blue, derived from Open blue
-`#3D6BFF` by changing only OKLab lightness. The `+ New Tab` pill stays opaque
-throughout its animation and always has white text. A 5.2:1 model target leaves
-room for the tiny label's antialiased glyph cores to meet 4.5:1 in captures.
-`Home` keeps its original visible ink when it meets its 5.2:1 model minimum;
-otherwise the same correction includes both sidebar tints and the underlying
-heading row, with a 0.2 margin. Both illustration labels remain mandatory pixel
-assertions in every matrix row. Footer links are mandatory there as well.
+Footer button labels and native miniature row labels are mandatory pixel
+assertions in every contrast case. The checker samples their real glyph-core
+pixels after ICC-to-sRGB conversion. Title contrast correction stays local to
+the miniature: it does not change the user's real sidebar palette. The New tab
+command bar, Pin row, Space title and split-row labels all remain real components.
 
 See [the eight-case contrast evidence](welcome-contrast.md) for the captured
 ratios, the original-color failure control, and two representative App images.
+
+[Room Welcome before/after, Light and Dark](images/welcome-room-before-after.png).
+These M3 window captures use synthetic Example data on the M1 built-in 2x panel.

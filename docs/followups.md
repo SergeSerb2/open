@@ -538,4 +538,14 @@ live Open Default; named Profiles still match stable import IDs only.
     - The App inserts the returned items where Chrome puts them (before Inspect / Manage Extensions) and maps clicks back to the run call.
     - Rows: an extension that registers `contexts: ["page", "link"]` shows its items in Peek, and a click fires `onClicked` with `pageUrl`/`linkUrl`.
 
+
 - **v1 blocker, engine — historical Downloads Retry.** CEF clears the download browser association when the initial attachment tab closes, so the completed bytes never produce a terminal callback to Open. Deliver updates through a Profile-level owner that outlives the tab, with safe Profile retirement; no separate App download path. The unchanged real-App `downloads/history_retry` row remains failing under one exact temporary DEFERRED entry, which expires when the engine patch lands. [Finding and two real-App receipts](re/download-retry-callback-lifetime.md). Owner: engine lane / lead.
+
+## Onboarding art review — 2026-11-10
+
+| Follow-up | Owner / status | Evidence |
+|---|---|---|
+| First-run retained resident memory at hand-off +10 s | Performance lane; unaccepted budget. Three interleaved M1/M2 pairs: median paired overhead +72.83 → +71.25 MiB. All nine weak scene probes are nil. VMMap localizes 62.5 MiB to PartitionAlloc (tag 253); it cannot distinguish live allocations from allocator caches. No engine change or production allocator purge. | Local receipts: `.re/handoff/plans/B-frames/m2/memory/receipt.json`, `allocator/receipt.json`, `vmmap/`, `partitionalloc-tag-evidence.txt` (under the shared project handoff root). |
+| Post-hand-off idle CPU remains above near-zero target | Performance lane; no art regression. Separate 30 s first-run samples: baseline 2.23118%, M2 2.23073%, both with zero animation keys. Returning Welcome idle measured 0.133 → 0.400%; these are distinct scenarios. | Local receipts: `.re/handoff/plans/B-frames/m2/first-run-idle/receipt.json` and `perf/receipt.json`. |
+| Returning Welcome idle with the final native miniature kit | Performance lane; needs attribution. The separate M3 30 s returning sample measured 0.13320 → 0.83238% App CPU, with zero animation keys at both ends; load1 was 3.60 / 2.63. This is not the first-run idle pair above and is not near-zero acceptance. | Local receipt: `.re/handoff/plans/B-frames/m3/perf-final/receipt.json`; baseline and M3 each use a copy of the same frozen synthetic profile. |
+| One setup-close process-exit failure | Unresolved one-off; track recurrence. The window closed but the App did not exit and required forced cleanup. A focused retry exited within 6 s; the complete final suite passed both setup-close gates without forced cleanup. No predicate or product fix was used. | Local receipts: `.re/handoff/plans/B-frames/m2/onboarding-m5-attempt1.json` and `.log`; successful `close-focused.json` and `onboarding.json`. |

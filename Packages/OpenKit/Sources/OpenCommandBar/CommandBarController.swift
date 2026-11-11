@@ -17,6 +17,8 @@ public final class CommandBarController: NSObject {
     public let engine: SuggestEngine
     public weak var delegate: CommandBarDelegate?
     public let view: CommandBarView
+    /// Product artwork embeds the real panel without taking keyboard focus.
+    public var acceptsInputFocus = true
     public var favicons: CommandBarFaviconSource? {
         didSet { panel.results.favicons = favicons; panel.input.favicons = favicons }
     }
@@ -264,6 +266,7 @@ public final class CommandBarController: NSObject {
     }
 
     public func focusInput() {
+        guard acceptsInputFocus else { return }
         guard isPresented, let window = view.window else { return }
         let field = panel.input.field
         window.makeFirstResponder(field)
