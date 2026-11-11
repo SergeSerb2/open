@@ -115,7 +115,7 @@ extension SyntheticData {
         guard sqlite3_open(profileDirectory.appendingPathComponent("Login Data").path, &database) == SQLITE_OK else { sqlite3_close(database); throw CocoaError(.fileWriteUnknown) }
         defer { sqlite3_close(database) }
         guard sqlite3_exec(database, "CREATE TABLE IF NOT EXISTS logins(blacklisted_by_user INTEGER); DELETE FROM logins; INSERT INTO logins VALUES(0),(0);", nil, nil, nil) == SQLITE_OK else { throw CocoaError(.fileWriteUnknown) }
-        try JSONSerialization.data(withJSONObject: ["sidebar": ["containers": ["example", ["items": items, "spaces": spaces]]]], options: .sortedKeys).write(to: directory.appendingPathComponent("StorableSidebar.json"))
+        try JSONSerialization.data(withJSONObject: ["sidebar": ["containers": [["global": [:]], ["items": items, "spaces": spaces]]]], options: .sortedKeys).write(to: directory.appendingPathComponent("StorableSidebar.json"))
     }
     /// A real on-disk probe fixture; no profile or reader is mocked.
     public static func writeProbeFixture(to directory:URL) throws {

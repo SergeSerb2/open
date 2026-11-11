@@ -30,6 +30,14 @@ static NSHashTable *views, *layers, *displayLinks;
 static NSHashTable *splitCreatedLinks, *unownedDisplayLinks;
 static NSMutableSet *hooked;
 
+// Chromium also registers/invalidates display links on dispatch workers. The
+// weak observation tables belong to the main thread, just like watched views.
+// Preserve each callback's ownership decision before leaving its caller stack.
+static void observeOnMain(dispatch_block_t observation) {
+    if (NSThread.isMainThread) observation();
+    else dispatch_async(dispatch_get_main_queue(), observation);
+}
+
 static BOOL splitObservation(void) {
     const char *owner = getenv("OPEN_IDLE_OWNER");
     return owner && !strcmp(owner, "split");
@@ -229,7 +237,7 @@ void open_idle_watch_view(void *pointer) {
 }
 
 static void hookDisplayLinkClass(Class cls) {
-    if (!cls) return;
+    if (!cls || !NSThread.isMainThread) return;
     NSString *key = [NSString stringWithFormat:@"displaylink/%s", class_getName(cls)];
     if ([hooked containsObject:key]) return;
     [hooked addObject:key];
@@ -242,9 +250,14 @@ static void hookDisplayLinkClass(Class cls) {
             // The real App also owns framework/engine links. Attribute this channel
             // by the same call-site ownership as timers, including links made by
             // a split view and registered later by AppKit.
-            BOOL owned = !splitObservation() || [splitCreatedLinks containsObject:object] || executableTimerCaller();
-            if (owned) { [displayLinks addObject:object]; [unownedDisplayLinks removeObject:object]; events[4]++; }
-            else { [unownedDisplayLinks addObject:object]; }
+            BOOL split = splitObservation();
+            BOOL callerOwned = split && executableTimerCaller();
+            observeOnMain(^{
+                if (!armed) return;
+                BOOL owned = !split || [splitCreatedLinks containsObject:object] || callerOwned;
+                if (owned) { [displayLinks addObject:object]; [unownedDisplayLinks removeObject:object]; events[4]++; }
+                else { [unownedDisplayLinks addObject:object]; }
+            });
         }
         ((void (*)(id, SEL, id, id))old)(object, add, loop, mode);
     }), method_getTypeEncoding(m));
@@ -255,8 +268,10 @@ static void hookDisplayLinkClass(Class cls) {
     }), method_getTypeEncoding(m));
     m = class_getInstanceMethod(cls, invalidate); IMP oldInvalidate = method_getImplementation(m);
     class_replaceMethod(cls, invalidate, imp_implementationWithBlock(^(id object) {
-        [displayLinks removeObject:object];
-        [splitCreatedLinks removeObject:object]; [unownedDisplayLinks removeObject:object];
+        observeOnMain(^{
+            [displayLinks removeObject:object];
+            [splitCreatedLinks removeObject:object]; [unownedDisplayLinks removeObject:object];
+        });
         ((void (*)(id, SEL))oldInvalidate)(object, invalidate);
     }), method_getTypeEncoding(m));
 }
@@ -270,6 +285,9 @@ static void hookDisplayLinks(void) {
         IMP old = method_getImplementation(m);
         class_replaceMethod(cls, sel, imp_implementationWithBlock(^id(id object, id target, SEL action) {
             id link = ((id (*)(id, SEL, id, SEL))old)(object, sel, target, action);
+            // App-owned UI creates links on main. Background engine factories
+            // must not mutate the swizzle registry or the weak tracking tables.
+            if (!NSThread.isMainThread) return link;
             hookDisplayLinkClass(object_getClass(link));
             if (armed && splitObservation() && executableTimerCaller()) {
                 [splitCreatedLinks addObject:link];

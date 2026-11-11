@@ -286,7 +286,7 @@ def _run(factory, results, tmp, h):
                 profile_space('Default')
                 app.call('profiles-shell', action='show', profile='Work')
                 h.time.sleep(.15)  # Same Settings render settlement as profiles_shell.show.
-                app.call('profiles-shell', action='press', label='Delete Profile')
+                app.press_profile_delete()
                 assert h.wait_until(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5), 'Profile deletion sheet missing'
                 app.call('profiles-shell', action='type-delete', text='Work')
                 app.call('profiles-shell', action='press', label='Delete')

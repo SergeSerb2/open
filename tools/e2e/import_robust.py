@@ -176,6 +176,69 @@ def run(factory, results, tmp, h):
     try:
         source = root/'healthy'; fixture(source, h)
         if only != 'timing':
+            # Fully synthetic Storable identities. A Little Browser can precede
+            # the global pair in real Arc files; its own tab must stay out of
+            # both the review counts and the imported sidebar.
+            little_space = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/little-space')).upper()
+            little_tab = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/little-tab')).upper()
+            little_container = str(uuid.uuid5(uuid.NAMESPACE_URL, 'https://example.com/little-container')).upper()
+            little = dict(items=[little_container, dict(id=little_container,
+                data={'itemContainer': {}}, childrenIds=[little_tab]), little_tab,
+                dict(id=little_tab, data={'tab': {'savedURL': 'https://example.com/little-only',
+                    'savedTitle': 'Synthetic Little-only tab'}}, childrenIds=[])],
+                spaces=[little_space, dict(id=little_space, title='Synthetic Little-only Space',
+                    profile={'default': True}, containerIDs=['pinned', little_container])])
+            for little_first in (True, False):
+                directory = root/('little-first' if little_first else 'global-first')
+                shutil.copytree(source, directory)
+                path = directory/'StorableSidebar.json'
+                document = json.loads(path.read_text())
+                global_pair = document['sidebar']['containers']
+                little_pair = [{'littleBrowser': {'_0': little_space}}, little]
+                document['sidebar']['containers'] = (little_pair + global_pair if little_first
+                                                     else global_pair + little_pair)
+                path.write_text(json.dumps(document))
+                for entry in ('first-run', 'settings'):
+                    launch(directory)
+                    if entry == 'settings':
+                        app.call('first-run', action='fresh')
+                        outcome = settings_import(directory)
+                        counts, review = outcome.get('settingsOutcome', {}), outcome.get('settingsCounts', {})
+                    else:
+                        outcome = first_import()
+                        counts, review = outcome.get('outcome', {}), outcome.get('counts', {})
+                        finish_first()
+                    stored = json.loads(Path(app.call('save')).read_text())
+                    stored_spaces = {space['id'].upper() for space in stored['spaces']}
+                    row('container_identity_%s_%s' % ('little_first' if little_first else 'global_first', entry),
+                        review.get('Spaces') == 2 and counts.get('Imported Spaces') == 2
+                        and little_space not in stored_spaces
+                        and 'little-only' not in json.dumps(stored)
+                        and {'Alpha', 'Beta'} <= {space['title'] for space in stored['spaces']},
+                        reviewSpaces=review.get('Spaces'), importedSpaces=counts.get('Imported Spaces'),
+                        littleSpaceImported=little_space in stored_spaces)
+                    app.quit(); app = None
+            for case in ('global_missing', 'global_duplicate'):
+                directory = root/case
+                shutil.copytree(source, directory)
+                path = directory/'StorableSidebar.json'
+                document = json.loads(path.read_text())
+                pairs = document['sidebar']['containers']
+                document['sidebar']['containers'] = ([{'littleBrowser': {'_0': little_space}}, little]
+                    if case == 'global_missing' else pairs + pairs)
+                path.write_text(json.dumps(document))
+                launch(directory)
+                before = app.call('spaces')
+                outcome = first_import()
+                row('container_identity_' + case,
+                    outcome.get('failures', {}).get('Spaces') == 'Could not be read'
+                    and app.call('spaces') == before
+                    and not (Path(app.user_data)/'State/browser.json').exists(),
+                    failures=outcome.get('failures'), saved=(Path(app.user_data)/'State/browser.json').exists())
+                app.quit(); app = None
+            if only == 'containers':
+                return
+        if only != 'timing':
             for mode in ('settings_twice', 'first_then_settings'):
                 launch(source)
                 if mode == 'settings_twice':
@@ -330,6 +393,21 @@ def run(factory, results, tmp, h):
                     if case == 'history_wal_unreadable' and not negative: Path(str(directory/'User Data/Default/History')+'-wal').chmod(0)
                 try:
                     launch(directory); before = app.call('spaces')
+                    if case in ('folder_missing', 'sidebar_missing', 'folder_unreadable'):
+                        # Setup skips Import when discovery finds no source
+                        # (#267). Do not force the retired Import screen. The
+                        # negative fixture keeps the source readable, so this
+                        # route assertion must then fail.
+                        app.call('first-run', action='import')
+                        routed = state()
+                        row(case, routed.get('screen') == 'favorites'
+                            and routed.get('probeReady') and not routed.get('sidebarFound')
+                            and app.call('spaces') == before
+                            and not (Path(app.user_data)/'State/browser.json').exists(),
+                            screen=routed.get('screen'), probeReady=routed.get('probeReady'),
+                            sidebarFound=routed.get('sidebarFound'))
+                        app.quit(); app = None
+                        continue
                     outcome = first_import()
                     if case == 'wal_locked_snapshot':
                         row(case, outcome.get('step') == 'report' and not outcome.get('failures')
