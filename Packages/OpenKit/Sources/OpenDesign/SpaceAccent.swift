@@ -45,11 +45,15 @@ public struct SpaceAccent: Sendable, Hashable {
     /// The accent for a Space theme (nil: Open's default theme).
     public init(style: SpaceThemeStyle?) {
         guard let style, !style.isDefaultTheme else { self = .night; return }
-        let field = ThemeField.Evaluator(style: style, windowSize: CGSize(width: 1280, height: 800), isActive: true)
         // The sidebar's top: the URL field row, centred in a 366 pt sidebar.
+        self.init(top: Self.sidebarTop(style: style))
+    }
+
+    /// The sidebar colour under the URL field row (366 pt sidebar, 1280 × 800 window), for any theme.
+    public static func sidebarTop(style: SpaceThemeStyle) -> RGBA {
+        let field = ThemeField.Evaluator(style: style, windowSize: CGSize(width: 1280, height: 800), isActive: true)
         let (r, g, b) = field.color(u: 183.0 / 1280, v: 64.0 / 800)
-        let top = RGBA(min(1, max(0, r)), min(1, max(0, g)), min(1, max(0, b)))
-        self.init(top: top)
+        return RGBA(min(1, max(0, r)), min(1, max(0, g)), min(1, max(0, b)))
     }
 
     /// The provisional rule from the sidebar's top colour.
@@ -67,7 +71,7 @@ public struct SpaceAccent: Sendable, Hashable {
     public func selection(dark: Bool) -> RGBA { dark ? darkAccent : accent }
     public func tint(dark: Bool) -> RGBA { dark ? darkTint : lightTint }
 
-    static func hls(_ c: RGBA) -> (h: Double, l: Double, s: Double) {
+    public static func hls(_ c: RGBA) -> (h: Double, l: Double, s: Double) {
         let r = c.red, g = c.green, b = c.blue
         let mx = max(r, g, b), mn = min(r, g, b), l = (mx + mn) / 2
         guard mx != mn else { return (0, l, 0) }
@@ -79,7 +83,7 @@ public struct SpaceAccent: Sendable, Hashable {
         return (h, l, s)
     }
 
-    static func rgb(h: Double, l: Double, s: Double) -> RGBA {
+    public static func rgb(h: Double, l: Double, s: Double) -> RGBA {
         guard s > 0 else { return RGBA(l, l, l) }
         let q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q
         func f(_ t0: Double) -> Double {

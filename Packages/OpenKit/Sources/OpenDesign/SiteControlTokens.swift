@@ -36,25 +36,47 @@ public enum SiteControlMetrics {           // §3. m = measured (S2), g = guess,
     /// The Space tint reaches clear at this fraction of the panel width.
     public static let tintStop: CGFloat = 0.62
 }
+/// The panel material: a real backdrop blur (public `NSVisualEffectView`, `.headerView`, within-window blending, state
+/// active), a uniform overlay, and a tint over the part of the panel that lies above the sidebar (it fades out over
+/// `tintFade` points after the sidebar edge). LEAD 12:05. Chosen by measurement among the public materials that blur
+/// (the opaque ones were excluded) with each layer at most 50 % opaque, so the backdrop still shows. Fitted on Arc
+/// evidence: Dark S11 (Arc 1.170 capture, default dark Space) and Light S11-light (Arc 1.172 14c, golden Space).
+/// The tint colour follows the sidebar colour the blur sees: its hue, saturation × 2.0, lightness × 1.02.
+public struct SiteControlMaterialSpec: Sendable, Hashable {
+    public var material: NSVisualEffectView.Material
+    public var overlay: RGBA
+    /// Tint alpha over the sidebar part.
+    public var tintAlpha: Double
+    public init(material: NSVisualEffectView.Material, overlay: RGBA, tintAlpha: Double) {
+        self.material = material; self.overlay = overlay; self.tintAlpha = tintAlpha
+    }
+    public static let dark = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(168.0 / 255, 170.0 / 255, 171.0 / 255, 0.5), tintAlpha: 0.55)
+    public static let light = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(241.0 / 255, 243.0 / 255, 217.0 / 255, 0.5), tintAlpha: 0.48)
+    public static func resolved(_ appearance: ContentAppearance) -> SiteControlMaterialSpec { appearance == .dark ? dark : light }
+    /// The tint fades across the sidebar edge like a blur kernel: from `tintFade / 2` before the edge to `tintFade / 2` after it.
+    public static let tintFade: CGFloat = 40
+    public static let tintSaturationScale = 2.0, tintLightnessScale = 1.02
+    /// The tint colour for a sidebar colour.
+    public static func tint(sidebar top: RGBA) -> RGBA {
+        let (h, l, s) = SpaceAccent.hls(top)
+        return SpaceAccent.rgb(h: h, l: min(1, l * tintLightnessScale), s: min(1, s * tintSaturationScale))
+    }
+}
+
 public enum SiteControlColors {            // macOS Dark measured (IS §20.15); Light = guess; mode = the window's (§3.2)
     // Shipped with .hudWindow: interim (lead 2026-11-06). S11/S12 remain FAIL.
     // The fitted bitmap below remains exclusive to the offscreen harness.
     public static let liveMaterialTint = DesignColor(light: .black(0), dark: RGBA(hex: 0x686881, alpha: 0.32))
-    /// D3 body under the Space tint. Light: D3 §2.5. Dark: tuned against the Arc 1.170 dark capture (S11/S12).
-    public static let body = DesignColor(light: RGBA(250.0 / 255, 250.0 / 255, 246.0 / 255, 0.94), dark: RGBA(94.0 / 255, 94.0 / 255, 94.0 / 255, 0.82))
-    /// Dark tint at the left edge, clear at `darkTintStop`. Fitted with the dark `body` on the four S11 probes of the Arc 1.170
-    /// dark capture (P1 / P2 exact, P3 ΔE00 2.33, P4 exact; LEAD 11:45). D2 may derive it from the Space.
-    public static let darkTint = RGBA(15.0 / 255, 9.0 / 255, 66.0 / 255, 0.37)
-    public static let darkTintStop: CGFloat = 0.75
     /// "Insecure" chip: red tint with red text (D3 §2.5).
-    public static let insecureFill = DesignColor(RGBA(220.0 / 255, 60.0 / 255, 40.0 / 255, 0.12))
-    public static let insecureText = DesignColor(RGBA(hex: 0xD8432C))
+    /// Light: black 5 % (Arc 14c chip #E1C883 = 0.95 × the material beside it); red text #D8432C (D3). Dark: main's values.
+    public static let insecureFill = DesignColor(light: .black(0.05), dark: .white(0.05))
+    public static let insecureText = DesignColor(light: RGBA(hex: 0xD8432C), dark: CommandBarColors.lockInsecure.dark)
     public static let fallbackTint = RGBA(hex: 0x49475A), fallbackBackdropWeight: [CGFloat] = [0.28, 0.28, 0.21]
     public static let fallbackBlurSigma: CGFloat = 5                                       // fit + validation (§3.2)
     // Light: D3 §2.5 (lead-approved light look). Dark: Arc 1.170 measured values, unchanged.
     public static let rim = DesignColor(light: .black(0.20), dark: .white(0.20))
-    public static let actionFillTop = DesignColor(light: .white(1), dark: RGBA(hex: 0x272727))
-    public static let actionFillBottom = DesignColor(light: .white(1), dark: RGBA(hex: 0x161616))
+    public static let actionFillTop = DesignColor(light: RGBA(hex: 0xFAFAFA), dark: RGBA(hex: 0x272727))   // Light: Arc 14c tile
+    public static let actionFillBottom = DesignColor(light: RGBA(hex: 0xFAFAFA), dark: RGBA(hex: 0x161616))
     public static let actionRing = DesignColor(light: .black(0.08), dark: .black(0.30))
     public static let actionShadow = DesignColor(light: .black(0.22), dark: .black(0.20))
     public static let actionHighlight = DesignColor(light: .clear, dark: RGBA(hex: 0x575757))
@@ -68,7 +90,8 @@ public enum SiteControlColors {            // macOS Dark measured (IS §20.15); 
     public static let tileFill = DesignColor(light: .black(0.07), dark: .white(0.08))
     /// S2 09/0010 y335: +35 sRGB levels on sidebar and page material.
     /// Dark uses plus-lighter compositing; Light remains an alpha guess.
-    public static let separator = DesignColor(light: RGBA(128.0 / 255, 128.0 / 255, 128.0 / 255, 0.25), dark: RGBA(hex: 0x232323))
+    /// Light: black 10 % at 1 pt (Arc 14c hairline #D5BE7D on #EED796). Dark: Arc 1.170 plus-lighter #232323.
+    public static let separator = DesignColor(light: .black(0.10), dark: RGBA(hex: 0x232323))
     public static let pillFill = DesignColor(light: .black(0.04), dark: .white(0.05))
     public static let moreFill = DesignColor(light: RGBA(128.0 / 255, 128.0 / 255, 128.0 / 255, 0.18), dark: .black(0.28))
 }

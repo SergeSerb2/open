@@ -3,6 +3,7 @@ import AppKit
 import OpenFeatures
 import OpenModel
 import OpenSiteControl
+import OpenDesign
 import Darwin
 
 /// Empty unless the e2e runner injected its native draw probe. Read at the
@@ -104,6 +105,17 @@ extension AutomationController {
               owner.sidebar.pressSiteControls() else { throw Failure(message: "no visible URL anchor") }
       } else { throw Failure(message: "via must be urlField or pane") }
     case "close": scc.dismiss(reason: .escape, animated: false)
+    case "material":
+      // Measurement only: try a public material and overlay constants on the open panel (LEAD 12:05 fit).
+      func rgba(_ key: String) -> RGBA {
+        guard let v = args[key] as? [Double], v.count == 4 else { return .clear }
+        return RGBA(v[0], v[1], v[2], v[3])
+      }
+      guard let raw = args["material"] as? Int, let m = NSVisualEffectView.Material(rawValue: raw) else { throw Failure(message: "material raw value") }
+      let appearance: ContentAppearance = args["appearance"] as? String == "light" ? .light : .dark
+      scc.view.panel.materialOverride[appearance] = SiteControlMaterialSpec(material: m, overlay: rgba("overlay"),
+        tintAlpha: args["tintAlpha"] as? Double ?? 0)
+      scc.view.panel.layoutSubtreeIfNeeded()
     case "tap":
       guard scc.isPresented, let id = args["id"] as? String, id.utf8.count <= 256,
             let button = scc.view.panel.controls.first(where: { $0.controlID == (id.hasPrefix("row.") ? String(id.dropFirst(4)) : id) }),

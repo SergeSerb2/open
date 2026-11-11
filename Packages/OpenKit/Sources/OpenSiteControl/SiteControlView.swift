@@ -12,6 +12,8 @@ public final class SiteControlView: NSView {
     public var onAnchor: (() -> Void)?
     public var onKey: ((NSEvent) -> Bool)?
     public var anchorFrame: CGRect = .zero
+    /// The sidebar's right edge in this view while a sidebar lies behind the panel (the tint covers that part).
+    public var sidebarMaxX: CGFloat? { didSet { if sidebarMaxX != oldValue { needsLayout = true } } }
     let panelShadow = CALayer()
     private let shadowCut = CAShapeLayer()
     public var isActive = false
@@ -47,7 +49,11 @@ public final class SiteControlView: NSView {
         }
         if let layer { clear(layer) }
     }
-    public override func layout() { super.layout(); positionLayers() }
+    public override func layout() {
+        super.layout()
+        panel.sidebarEdge = sidebarMaxX.map { $0 - panel.frame.minX }
+        positionLayers()
+    }
     private func positionLayers() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let anchor = panel.animationAnchor
@@ -132,8 +138,15 @@ public final class SiteControlPanelView: NSView {
     private let material = NSVisualEffectView()
     private let fallback = CALayer(), materialTint = CALayer(), surfaceMask = CAShapeLayer(), rim = CAShapeLayer(), separator = CAShapeLayer()
     /// D3 §2.5 material: an opaque-looking body and the Space tint to 62 % of the width. Static layers.
-    private let bodyFill = CALayer(), spaceTint = CAGradientLayer()
-    /// The Space accent: the tint and the setting circle's dark accent.
+    private let spaceTint = CAGradientLayer()
+    /// Rim and separator sit in their own view above the blur: AppKit keeps subview layers above manual sublayers.
+    private let chrome = SiteControlChromeView()
+    /// The sidebar's right edge in panel x (nil: no sidebar behind the panel) and the sidebar colour the blur sees.
+    public var sidebarEdge: CGFloat? { didSet { if sidebarEdge != oldValue { needsLayout = true } } }
+    public var sidebarColor = RGBA(37.0 / 255, 37.0 / 255, 56.0 / 255) { didSet { if sidebarColor != oldValue { needsLayout = true } } }
+    /// Measurement only (automation): replaces the material spec for one appearance.
+    public var materialOverride: [ContentAppearance: SiteControlMaterialSpec] = [:] { didSet { needsLayout = true } }
+    /// The Space accent: the setting circle's dark accent (Light).
     public var accent = SpaceAccent.night { didSet { if accent != oldValue { needsLayout = true; rowButtons.values.forEach { $0.accentDisc = accent.darkAccent } } } }
     private let security = SiteControlButton(id: "security",label: "Connection",symbol: "lock.fill",pointSize: SiteControlMetrics.pillLockGlyph)
     public let more = SiteControlButton(id: "more",label: "More",symbol: "ellipsis",pointSize: SiteControlMetrics.moreGlyph,weight: .bold)
@@ -144,11 +157,10 @@ public final class SiteControlPanelView: NSView {
         material.material = PopoverMaterial.material; material.blendingMode = PopoverMaterial.blending; material.state = .active
         material.setAccessibilityElement(false); material.wantsLayer = true; addSubview(material)
         material.layer?.addSublayer(materialTint)
-        material.isHidden = true
         spaceTint.startPoint = CGPoint(x: 0,y: 0.5); spaceTint.endPoint = CGPoint(x: 1,y: 0.5)
         spaceTint.locations = [0,NSNumber(value: Double(SiteControlMetrics.tintStop)),1]
-        layer?.addSublayer(bodyFill); layer?.addSublayer(spaceTint)
-        layer?.addSublayer(fallback); layer?.addSublayer(rim); layer?.addSublayer(separator)
+        material.layer?.addSublayer(spaceTint)
+        layer?.addSublayer(fallback); addSubview(chrome); chrome.layer?.addSublayer(rim); chrome.layer?.addSublayer(separator)
         let actionSpecs = [("share","Share","square.and.arrow.up"),("newBoost","New Boost",BoostGlyph.outline),("capture","Capture a portion of this page","camera"),("captureFull","Capture the full page","text.viewfinder")]
         for (id,label,symbol) in actionSpecs {
             let b = SiteControlButton(id: "action."+id,label: label,symbol: symbol,pointSize: SiteControlMetrics.actionGlyph)
@@ -199,16 +211,21 @@ public final class SiteControlPanelView: NSView {
     public override func layout() {
         super.layout(); let m = SiteControlMetrics.self, body = bodyRect, scale = window?.backingScaleFactor ?? 1, path = shape
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        material.frame = bounds; fallback.frame = bounds
-        materialTint.frame = material.bounds
-        materialTint.backgroundColor = SiteControlColors.liveMaterialTint.cgColor(contentAppearance)
+        material.frame = bounds; fallback.frame = bounds; chrome.frame = bounds
         let dark = contentAppearance == .dark
-        bodyFill.frame = bounds; bodyFill.backgroundColor = SiteControlColors.body.cgColor(contentAppearance)
-        bodyFill.isHidden = offscreenMaterial != nil
-        let tint = dark ? SiteControlColors.darkTint : accent.tint(dark: false)
-        spaceTint.frame = bounds; spaceTint.colors = [tint.cgColor,tint.withAlpha(0).cgColor,tint.withAlpha(0).cgColor]
-        spaceTint.locations = [0,NSNumber(value: Double(dark ? SiteControlColors.darkTintStop : SiteControlMetrics.tintStop)),1]
-        spaceTint.isHidden = offscreenMaterial != nil
+        let spec = materialOverride[contentAppearance] ?? SiteControlMaterialSpec.resolved(contentAppearance)
+        if material.material != spec.material { material.material = spec.material }
+        materialTint.frame = material.bounds
+        materialTint.backgroundColor = spec.overlay.cgColor
+        spaceTint.frame = material.bounds
+        if let edge = sidebarEdge, edge + SiteControlMaterialSpec.tintFade / 2 > 0 {
+            let tint = SiteControlMaterialSpec.tint(sidebar: sidebarColor).withAlpha(spec.tintAlpha), w = max(1, bounds.width)
+            let half = SiteControlMaterialSpec.tintFade / 2
+            let solid = max(0, min(edge - half, w)) / w, end = min(edge + half, w) / w
+            spaceTint.colors = [tint.cgColor,tint.cgColor,tint.withAlpha(0).cgColor,tint.withAlpha(0).cgColor]
+            spaceTint.locations = [0,NSNumber(value: Double(solid)),NSNumber(value: Double(max(solid,end))),1]
+            spaceTint.isHidden = false
+        } else { spaceTint.isHidden = true }
         surfaceMask.frame = bounds; surfaceMask.path = path
         // Light: a 0.5 pt hairline (the mask keeps the inner half of a 1 pt stroke). Dark: Arc's measured 1 px white 0.20 rim.
         rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = SiteControlColors.rim.cgColor(contentAppearance); rim.lineWidth = dark ? 2/scale : 1
@@ -613,4 +630,14 @@ enum SiteControlGlyphRenderer {
         let image = canvas(size,scale: scale) { c in let line = CTLineCreateWithAttributedString(NSAttributedString(string: text,attributes: [.font: font,.foregroundColor: color])); c.textPosition = CGPoint(x: 0,y: (size.height-font.ascender-font.descender)/2); CTLineDraw(line,c) }
         if captions.count > 128 { captions.removeAll(keepingCapacity: true) }; captions[key] = image; return image
     }
+}
+
+/// Holds the rim and the footer separator above the material view; draws nothing itself and takes no clicks.
+@MainActor
+final class SiteControlChromeView: NSView {
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func isAccessibilityElement() -> Bool { false }
 }

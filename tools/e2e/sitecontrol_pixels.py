@@ -155,3 +155,87 @@ def compare_live(path, state, scale, private, env, negative_path=None):
         report['ok']=report['ok'] and report['negativeRejected']
         (Path(private)/'S12-elements.json').write_text(__import__('json').dumps(report,indent=2))
     return report
+
+
+# Arc 1.172 session 2, 14c-sidebar-url/s2-sidebar-site-control (golden Space, Light, page #F3F5EE, 1280×800, sidebar 366,
+# panel body [221,91,236,254]). Numbers only: body-relative point → sRGB (embedded ICC → sRGB, 3×3 mean at 2×).
+# Footer samples are measured from the panel's bottom edge (negative y): the fixture may show more setting rows.
+ARC_LIGHT = [('body left third', (40, 150), (237, 211, 138), 3), ('body right third', (200, 150), (246, 248, 234), 3),
+             ('tile', (14, 26), (250, 250, 250), 3), ('footer chip', (30, -18), (225, 200, 131), 3),
+             ('footer hairline', (120, -53), (213, 190, 125), None)]
+# Key #BD9C26 renders Arc's golden sidebar #B9A35F through Open's theme math.
+GOLD = {'mathVersion': 1, 'keyColor': {'red': 0xBD / 255, 'green': 0x9C / 255, 'blue': 0x26 / 255, 'alpha': 1}, 'colorCount': 1,
+        'wheel': 'analogous', 'appearance': 'automatic', 'noiseFactor': 0, 'texture': 'grain', 'intensityFactor': .8}
+
+
+def light_and_ghost(app, origin, private, env, record):
+    """S11_light: the Light material against Arc 14c. S14_no_ghost: shapes behind the panel are not recognisable in it."""
+    import time
+    wait = env['wait_until']
+    app.call('appearance', name='light')
+    app.call('window-frame', frame=[80, 60, 1280, 800])
+    state = app.call('window-state')
+    if state['sidebarWidth'] != 366:
+        app.call('mouse', **{'from': [state['sidebarWidth'], 400], 'to': [366, 400]})
+    app.call('theme-set', style=GOLD); time.sleep(.6)
+    tabs = [env['new_tab'](app, origin + '/light.html?%d' % i) for i in range(6)]
+    for t in tabs: app.call('wait', tab=t)
+    def opened():
+        if app.call('site-controls', action='state')['presented']: app.call('site-controls', action='close')
+        s = app.call('site-controls', action='open', via='urlField')
+        app.call('mouse', action='hover', x=800, y=500); time.sleep(.5)
+        return s
+    def snap(name):
+        path = str(Path(private) / name)
+        app.call('snapshot', path=path, window=app.call('window-state')['number']); return path
+    # The panel's empty material beside the Add tile: body + (70…130, 82…108) over the sidebar, + (160…225, 82…108) over the page.
+    app.call('select', tab=tabs[0]); s = opened(); bx, by = s['body'][0], s['body'][1]
+    rows = {t: app.call('sidebar-row', node=t)['frame'] for t in tabs}
+    band = (by + 82, by + 108)
+    behind = max(tabs, key=lambda t: min(rows[t][1] + rows[t][3], band[1]) - max(rows[t][1], band[0]))
+    away = min(tabs, key=lambda t: abs(rows[t][1] - (by + 300)))
+    # A: the selected row and a black page block behind the empty material. B: neither.
+    app.call('select', tab=behind)
+    app.eval(behind, "document.getElementById('ghost').style.visibility='visible';true")
+    s = opened(); a_path = snap('S14-with-shapes.png')
+    width, _, px = env['read_image'](a_path, srgb=True); scale = width / app.call('window-state')['frame'][2]
+    delta = env['chrome_delta_e']
+    probes = []
+    bh = s['body'][3]
+    at = lambda y: y if y >= 0 else bh + y
+    for name, (x, y), target, limit in ARC_LIGHT:
+        y = at(y)
+        pts = [px((bx + x + dx / 2) * scale, (by + y + dy / 2) * scale) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+        rgb = [sum(p[i] for p in pts) / 9 for i in range(3)]
+        de = delta(rgb, list(target))
+        probes.append(dict(element=name, point=[x, y], arc=list(target), open=rgb, deltaE00=round(de, 2), limit=limit,
+                           ok=limit is None or de <= limit))
+    app.call('site-controls', action='close'); time.sleep(.3)
+    # The same state without the panel: the S11_light negative and the S14 "shapes are visible" proof.
+    _, _, neg = env['read_image'](snap('S11-light-closed.png'), srgb=True)
+    closed_px = neg
+    negative = [delta(list(neg((bx + x) * scale, (by + at(y)) * scale)), list(t)) for _, (x, y), t, limit in ARC_LIGHT if limit]
+    negative_rejected = any(d > 3 for d in negative)
+    record('S11_light', all(p['ok'] for p in probes) and negative_rejected, probes=probes, negativeDeltaE00=negative,
+           negativeRejected=negative_rejected, reference='Arc 1.172 14c s2-sidebar-site-control (numbers only)', scale=scale)
+    # B: another tab selected (its row far below), the page block hidden.
+    app.call('select', tab=away)
+    for t in tabs: app.eval(t, "document.getElementById('ghost').style.visibility='hidden';true")
+    opened(); b_path = snap('S14-without-shapes.png')
+    _, _, pb = env['read_image'](b_path, srgb=True)
+    app.call('site-controls', action='close'); time.sleep(.3)
+    _, _, closed_b = env['read_image'](snap('S14-without-shapes-closed.png'), srgb=True)
+    def luminance(c):
+        f = lambda v: (v / 255) / 12.92 if v / 255 <= 0.04045 else (((v / 255) + 0.055) / 1.055) ** 2.4
+        return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2])
+    def region(p, x0, x1):
+        vals = [luminance(p(x * scale, y * scale)) for x in range(bx + x0, bx + x1, 2) for y in range(band[0], band[1], 2)]
+        return sum(vals) / len(vals)
+    areas = {'selected row': (70, 130), 'page heading': (160, 225)}
+    contrast = {k: (max(region(px, *v), region(pb, *v)) + .05) / (min(region(px, *v), region(pb, *v)) + .05) for k, v in areas.items()}
+    # Negative proof: the same shapes without the panel are plainly recognisable.
+    neg_contrast = {k: (max(region(closed_px, *v), region(closed_b, *v)) + .05) / (min(region(closed_px, *v), region(closed_b, *v)) + .05) for k, v in areas.items()}
+    record('S14_no_ghost', all(c < 1.05 for c in contrast.values()) and all(c >= 1.05 for c in neg_contrast.values()), contrast={k: round(v, 4) for k, v in contrast.items()},
+           limit=1.05, rows={'behind': rows[behind], 'band': list(band)}, snapshots=[a_path, b_path],
+           sameStateWithoutPanelContrast={k: round(v, 3) for k, v in neg_contrast.items()})
+    app.call('site-controls', action='close')

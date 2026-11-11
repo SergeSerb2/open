@@ -33,7 +33,7 @@ extension BrowserWindowController {
         siteControlSpace = context.focusedSpace?.id
         let appearance = context.focusedSpace.map { context.style(for: $0).windowColorScheme } ?? context.systemAppearance
         siteControl.view.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
-        siteControl.view.panel.accent = SpaceAccent(style: context.focusedSpace.map { context.style(for: $0) })
+        applySiteControlBackdrop(siteControl.view)
         siteControl.view.frame = root.bounds
         siteControl.toggle(anchor: anchor, tabID: tabID)
         refreshSiteControlButtons()
@@ -55,9 +55,16 @@ extension BrowserWindowController {
         siteControlSpace = context.focusedSpace?.id; siteControl.view.frame = root.bounds
         let appearance = context.focusedSpace.map { context.style(for: $0).windowColorScheme } ?? context.systemAppearance
         siteControl.view.appearance = NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
-        siteControl.view.panel.accent = SpaceAccent(style: context.focusedSpace.map { context.style(for: $0) })
+        applySiteControlBackdrop(siteControl.view)
         siteControl.present(anchor: anchor, tabID: id, mode: .extensionPicker)
         refreshSiteControlButtons(); return siteControl.isPresented
+    }
+    /// The Space accent, the sidebar colour, and the sidebar edge the panel's tint follows (LEAD 12:05).
+    func applySiteControlBackdrop(_ view: SiteControlView) {
+        let style = context.focusedSpace.map { context.style(for: $0) } ?? .defaultTheme(system: context.systemAppearance)
+        view.panel.accent = SpaceAccent(style: style)
+        view.panel.sidebarColor = SpaceAccent.sidebarTop(style: style)
+        view.sidebarMaxX = sidebar.isHidden ? nil : sidebar.convert(sidebar.bounds, to: root).maxX
     }
     public func refreshSiteControlButtons() {
         let ids = Set(container.slots.map(\.tabID) + [splitController.focusedTab?.id].compactMap { $0 })

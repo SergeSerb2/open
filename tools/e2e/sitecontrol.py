@@ -18,6 +18,11 @@ def run(factory, results, tmp, env, functional_only=False):
     with fixture_server(tmp) as origin:
         # SCC's scroll load stays local to this suite. Both Section 12 suites
         # use the same ads/Boost pages from sitecontrol_fixtures.
+        # S11_light / S14: the Arc 14c page background and a black block behind the panel's empty material.
+        (Path(tmp) / 'sitecontrol-fixtures' / 'light.html').write_text(
+            '<!doctype html><title>Light fixture</title><body style="margin:0;background:#F3F5EE">'
+            '<h1 id="ghost" style="visibility:hidden;position:absolute;left:12px;top:142px;margin:0;font:800 40px -apple-system;color:#24382c">Lisbon weather</h1>',
+            encoding='utf-8')
         (Path(tmp) / 'sitecontrol-fixtures' / 'heavy.html').write_text(
             '<!doctype html><style>body{margin:0;background:white}.card{height:70px;background:linear-gradient(90deg,#fff,#def);border-bottom:1px solid #aaa}</style>'
             + ''.join('<div class="card">%d</div>' % i for i in range(2000)),
@@ -469,7 +474,9 @@ def run(factory, results, tmp, env, functional_only=False):
             s=opened();time.sleep(.4);path=str(private/'S11-open.png');app.call('snapshot',path=path)
             width,height,pixel=env['read_image'](path,srgb=True)
             win=app.call('window-state'); scale=width/win['frame'][2]
-            targets=[(88,215,(64,62,84)),(300,140,(123,123,123)),(150,330,(69,68,89)),(260,250,(122,122,123))]
+            # P4 moved from (260,250) to (300,250), same Arc target (LEAD 12:05): (260,250) sampled the first settings
+            # row's title in Open ("Block Ads & Trackers" is longer than Arc's "Developer Mode"); a probe samples material.
+            targets=[(88,215,(64,62,84)),(300,140,(123,123,123)),(150,330,(69,68,89)),(300,250,(122,122,123))]
             probes=[dict(point=[x,y],actual=list(pixel(x*scale,y*scale)),target=list(rgb)) for x,y,rgb in targets]
             # Exact fit probes keep ±3 sRGB levels; validation uses DE00.
             delta_e = env["chrome_delta_e"]
@@ -504,6 +511,8 @@ def run(factory, results, tmp, env, functional_only=False):
             negative_rejected=not (p95(slow)<=p0+1 and drops(slow)<=d0+.01)
             record('S13_scroll',p1<=p0+1 and d1<=d0+.01 and negative_rejected,closedP95=p0,openP95=p1,closedDropped=d0,openDropped=d1,refreshMilliseconds=interval,
                    timing=True,functionalOK=negative_rejected,negativeRejected=negative_rejected,negativeP95=p95(slow),negativeDropped=drops(slow))
+            from sitecontrol_pixels import light_and_ghost
+            light_and_ghost(app, origin, private, env, record)
         finally:
             env['_restore_defaults'](app,saved)
             app.quit()
