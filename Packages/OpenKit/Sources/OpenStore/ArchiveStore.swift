@@ -390,7 +390,7 @@ public final class ArchiveStore: ArchiveSink {
     /// Returns the stored record for restore and deletes the row.
     public func restore(id: ItemID) async -> ArchivedTabRecord? {
         contentVersion &+= 1
-        await withCheckedContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: nil); return }
                 let rows = self.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload,kind FROM archived_tabs WHERE id = ?", limit: 1, likeText: nil, exactID: id.rawValue.uuidString)
@@ -409,7 +409,7 @@ public final class ArchiveStore: ArchiveSink {
     @discardableResult
     public func purge(olderThanDays days: Int) async -> Int {
         contentVersion &+= 1
-        await withCheckedContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: 0); return }
                 try? self.openOnQueue()

@@ -15,6 +15,12 @@ extension AutomationController {
     }
     let countersBefore = adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]
     var started = ProcessInfo.processInfo.systemUptime
+    if operation == "scroll-series" {
+      guard let panel = adapter.activeLibrarySession?.panel,panel.isPresented else { throw Failure(message:"Library not open") }
+      let probe = LibraryScrollProbe()
+      let samples = await probe.run(panel)
+      return ["frames":samples,"counters":panel.performanceCounters]
+    }
     switch operation {
     case "open":
       let raw = args["section"] as? String ?? "downloads"
@@ -57,6 +63,44 @@ extension AutomationController {
       "panelGeneration":adapter.activeLibrarySession?.panelGeneration ?? 0,
       "visibleRows":panel.listReuseState["rows"] ?? 0,"counters":panel.performanceCounters,
       "counterDelta":panel.performanceCounters.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(countersBefore[$1.key] ?? 0) }]
+  }
+}
+#endif
+
+#if OPEN_AUTOMATION
+/// One in-app scroll step per native display callback. The socket does not
+/// pace frames, and this display link is invalidated before the reply.
+@MainActor
+private final class LibraryScrollProbe: NSObject {
+  weak var panel: LibraryPanelView?
+  var link: CADisplayLink?
+  var completion: CheckedContinuation<[[String:Any]],Never>?
+  var rows: [[String:Any]] = []
+  var previousTimestamp = 0.0
+  func run(_ panel:LibraryPanelView) async -> [[String:Any]] {
+    self.panel = panel
+    return await withCheckedContinuation { continuation in
+      completion = continuation
+      link = panel.displayLink(target:self,selector:#selector(frame(_:)))
+      link?.preferredFrameRateRange = CAFrameRateRange(minimum:120,maximum:120,preferred:120)
+      link?.add(to:.main,forMode:.common)
+    }
+  }
+  @objc func frame(_ link:CADisplayLink) {
+    guard let panel else { finish(); return }
+    let index = rows.count, count = panel.filteredRowCount
+    let before = panel.performanceCounters, start = ProcessInfo.processInfo.systemUptime
+    let visible = panel.scrollToRow(Int((Double(index)/119)*Double(max(0,count-1))))
+    let after = panel.performanceCounters
+    rows.append(["milliseconds":(ProcessInfo.processInfo.systemUptime-start)*1000,"visibleRows":visible,
+      "intervalMilliseconds":previousTimestamp == 0 ? 0 : (link.timestamp-previousTimestamp)*1000,
+      "counters":after,"counterDelta":after.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(before[$1.key] ?? 0) }])
+    previousTimestamp = link.timestamp
+    if rows.count == 120 { finish() }
+  }
+  func finish() {
+    link?.invalidate(); link = nil
+    completion?.resume(returning:rows); completion = nil
   }
 }
 #endif

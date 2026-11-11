@@ -13,7 +13,7 @@ extension LibraryPanelView {
     public func finishPendingContent() async { await reloadTask?.value; await hosts[section]?.preparation?.value }
     public var listReuseState: [String:Int] { ["created":listView.cellsCreated,"configured":listView.cellsConfigured,"rows":listView.rowCount] }
     public var performanceCounters: [String:Double] {
-        var state: [String:Double] = ["hosts":Double(hosts.count),"created":0,"configured":0,"reloadData":0,"tableUpdates":0,"formatting":0,"listLayout":0,"tasks":0,"timers":0,"displayLinks":0]
+        var state: [String:Double] = ["hosts":Double(hosts.count),"created":0,"configured":0,"reloadData":0,"tableUpdates":0,"formatting":0,"listLayout":0,"tasks":0,"timers":0,"displayLinks":0,"animations":Double((layer?.animationKeys() ?? []).filter { $0.hasPrefix("library") }.count)]
         for host in hosts.values {
             state["created",default:0] += Double(host.list.cellsCreated)
             state["configured",default:0] += Double(host.list.cellsConfigured)
