@@ -123,6 +123,10 @@ configuration.logFile = directories.root.appendingPathComponent("State/engine.lo
 configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort
 configuration.verboseLogging = options.verboseLogging
+// CEF main_runner.cc starts Chrome's MainThreadStackSamplingProfiler even in
+// our unbranded Release build (thread_profiler_configuration.cc treats it as
+// local). Open does not use its startup or periodic sampling collections.
+configuration.additionalSwitches.append("--disable-stack-profiler")
 // No userAgentProduct: Chrome's own User-Agent, as Arc does. A non-Chrome
 // product token replaces "Chrome/156", and sites and extensions then take
 // their Safari path (Bitwarden never finished loading).
