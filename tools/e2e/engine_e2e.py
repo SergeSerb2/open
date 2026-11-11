@@ -2293,6 +2293,9 @@ def context_menu_commands(app, results, *, run_all_commands=True):
                     dismissed = app.call("dismiss") + close_new_windows()
                     if dismissed:
                         report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
+                    remaining = {window["id"] for window in app.call("shell-windows")}
+                    if not set(home_windows).issubset(remaining):
+                        raise RuntimeError("context-menu cleanup closed a fixture browser window after " + label)
                     app.call("ping")
                     r = row()
                     if r and r["crashed"]:

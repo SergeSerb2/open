@@ -1119,7 +1119,16 @@
           }
           // Chromium's own windows (DevTools, Chrome windows, Picture in
           // Picture) are Views windows.
-          let foreign = !ours.contains(ObjectIdentifier(win)) && !(win is NSPanel) && win.isVisible
+          // A Chrome-style page is a NativeWidget child of our browser
+          // window. Closing it closes the hosted tab and can close the last
+          // shell window. Only standalone Chromium windows are disposable.
+          var ancestor: NSWindow? = win
+          var belongsToBrowser = false
+          while let current = ancestor {
+            if ours.contains(ObjectIdentifier(current)) { belongsToBrowser = true; break }
+            ancestor = current.parent
+          }
+          let foreign = !belongsToBrowser && !(win is NSPanel) && win.isVisible
             && win.className.contains("NativeWidget")
           if foreign {
             dismissed.append("window:" + win.className)
