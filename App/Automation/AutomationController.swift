@@ -20,6 +20,7 @@
   /// windows and pages; nothing here sends input to other apps.
   @MainActor
   final class AutomationController {
+    var settingsPerformanceProbe: SettingsPerformanceProbe?
     struct Failure: Error { let message: String }
 
     var extensionRedrawMeasurement: ExtensionRedrawMeasurement?
@@ -333,6 +334,12 @@
           "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
           "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
       case "settings-profile": return try settingsProfile(a)
+      case "settings-ui": return try settingsUI(a)
+      case "settings-lifetime": return ["modelCreated": app.settingsPresenter.hasSettingsModel]
+      case "settings-link":
+        guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "invalid Settings URL") }
+        return ["accepted": app.settingsPresenter.showSettingsURL(url)]
+      case "settings-perf": return try settingsPerformance(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
       case "settings-adblock": return try await settingsAdBlock(a)
@@ -407,7 +414,7 @@
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] {
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
-          app.settingsPresenter.settings.preferenceRevision &+= 1
+          app.settingsPresenter.refreshPreferencesIfLoaded()
           if key == "open.advanced.tabSleepMode" { app.tabSleep.reconcileSettingsPolicy() }
           app.scheduleMenuRebuild()
         }
@@ -2240,6 +2247,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         ".": (".", 47),
+        "[": ("[", 33), "]": ("]", 30),
         "enter": ("\u{3}", 76),
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),

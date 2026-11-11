@@ -76,6 +76,7 @@ final class AppStores: ProfileDataOwner {
     currentSuggest?.cancel()
     let engine = SuggestEngine(model: app.model, historyStore: { [weak self] in self?.history(for: $0) },
       actions: CommandRegistry.makeSuggestRegistry())
+    engine.providers.append(SettingsSuggestionsProvider())
     currentProfile = profileID; currentSuggest = engine
     return engine
   }

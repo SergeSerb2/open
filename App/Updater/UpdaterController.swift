@@ -27,6 +27,11 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   /// Off builds still offer the Settings explanation. Sparkle's value is KVO forwarded.
   @objc dynamic private(set) var canCheckForUpdates = true
 
+  var settingsStatus: String? {
+    if foundVersion != nil { return "Update available" }
+    if completedChecks > 0, let lastErrorCode, lastErrorCode == SUError.noUpdateError.rawValue { return "Up to date" }
+    return nil
+  }
   var channel: String { UserDefaults.standard.string(forKey: Self.channelKey) == "beta" ? "beta" : "stable" }
   var automaticallyChecksAndDownloads: Bool {
     get { UserDefaults.standard.object(forKey: Self.automaticKey) as? Bool ?? true }
@@ -101,6 +106,7 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
     guard canCheckForUpdates else { return }
     userDriver.beginUserCheck()
     foundVersion = nil; lastErrorCode = nil
+    app.settingsPresenter.updateStatusDidChange(nil)
     updater.checkForUpdates()
   }
 
@@ -126,11 +132,13 @@ final class UpdaterController: NSObject, SPUUpdaterDelegate {
   func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
     // Bound the only appcast text the shell retains, without splitting Unicode.
     foundVersion = item.versionString.utf8.count <= 128 ? item.versionString : nil
+    app.settingsPresenter.updateStatusDidChange(settingsStatus)
   }
 
   func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
     completedChecks += 1
     lastErrorCode = (error as NSError?)?.code
+    app.settingsPresenter.updateStatusDidChange(settingsStatus)
     userDriver.didFinishUpdateCycle()
   }
 
