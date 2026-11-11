@@ -590,7 +590,11 @@ bool OEClient::OnBeforeDownload(CefRefPtr<CefBrowser> browser,
 void OEClient::OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefDownloadItem> download_item,
                                  CefRefPtr<CefDownloadItemCallback> callback) {
-  OEBrowserContext* context = view_.context ?: OEEngine.shared.defaultContext;
+  OEBrowserContext* context = download_context_;
+  if (!context) {
+    if (callback && download_item->IsInProgress()) callback->Cancel();
+    return;
+  }
   [context oe_handleDownloadUpdated:download_item webContent:view_ callback:callback];
 }
 

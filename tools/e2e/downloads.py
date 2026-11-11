@@ -428,7 +428,8 @@ def checks(factory, results, tmp, config, harness):
         retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['state'] == 'completed'), None))
         check('history_retry', retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
               and Path(retried['path']).exists(), item=retried, items=state()['items'],
-              tabs=app.call('tabs'), sheets=state()['sheets'])
+              tabs=app.call('tabs'), sheets=state()['sheets'],
+              detachedPages=state()['detachedPages'], engineEvents=app.call('events'))
         if not retried:
             raise RuntimeError('historical Retry did not complete a new transfer')
         for new_tab in app.call('tabs'):
