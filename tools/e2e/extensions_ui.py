@@ -75,6 +75,18 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         path = str(captures / (name + ".png"))
         app.call("snapshot", path=path, **({"window": window} if window else {}))
         return path
+    def action_pixels(identifier, width, height):
+        current = strip()
+        assert current['visible'] and identifier in current['ids'], current
+        slot = current['frames'][current['ids'].index(identifier)]
+        window = app.call('window-state')['frame']
+        # Captures use backing pixels/top-left; native slots use points/bottom-left.
+        sx, sy = width / window[2], height / window[3]
+        x, y, w, hh = slot
+        bounds = [round(x*sx), round((window[3]-y-hh)*sy), round((x+w)*sx), round((window[3]-y)*sy)]
+        x0, y0, x1, y1 = bounds
+        assert 0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height, bounds
+        return slot, bounds, [sx, sy]
     def anchored(state, slot):
         if not state: return False
         a = frame(state["anchor"])
@@ -199,19 +211,11 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         else:
             width, height, bp = read_image(badged); nw, nh, np = read_image(unbadged)
             assert (width, height) == (nw, nh), 'badge captures changed size'
-            badge_strip = strip()
-            slot = badge_strip["frames"][badge_strip["ids"].index(probe)]
-            # The snapshot uses backing pixels and a top-left origin; native
-            # slot geometry uses Cocoa points and a bottom-left origin.
-            window = app.call('window-state')['frame']
-            sx, sy = width / window[2], height / window[3]
-            x, y, w, hh = slot
-            pixels = [round(x*sx), round((window[3]-y-hh)*sy), round((x+w)*sx), round((window[3]-y)*sy)]
+            slot, pixels, scale = action_pixels(probe, width, height)
             x0, y0, x1, y1 = pixels
-            assert 0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height, pixels
             difference = sum(bp(xx, yy) != np(xx, yy) for xx in range(x0, x1) for yy in range(y0, y1))
             results["X4_badge_pixels"] = {"ok": bool(badge and clear) and difference > 0,
-                "changedPixels": difference, "slotPoints": slot, "pixelBounds": pixels, "scale": [sx, sy],
+                "changedPixels": difference, "slotPoints": slot, "pixelBounds": pixels, "scale": scale,
                 "badged": badged, "unbadged": unbadged}
         other = new_tab(app,"about:blank")
         other_chrome = app.call("engine-sleep")["chromeTabId"]
@@ -346,13 +350,16 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         if functional_only:
             results["X10_grayscale_pixels"]={"status":"DEFERRED", "reason":"M5 color receipt required (TANDEM §4M)"}
         else:
-            _,height,disabled_pixel = read_image(disabled_image); _,_,enabled_pixel = read_image(enabled_image)
-            slot = strip()["frames"][0]; x,y,w,hh = slot; y=height-y-hh
+            width,height,disabled_pixel = read_image(disabled_image); ew,eh,enabled_pixel = read_image(enabled_image)
+            assert (width,height) == (ew,eh), 'grayscale captures changed size'
+            slot, pixels, scale = action_pixels(probe, width, height)
+            x0,y0,x1,y1 = pixels
             def colored(pixel):
                 return sum(max(pixel(xx,yy)[:3])-min(pixel(xx,yy)[:3]) > 20
-                    for xx in range(int(x),int(x+w)) for yy in range(int(y),int(y+hh)))
+                    for xx in range(x0,x1) for yy in range(y0,y1))
             disabled_color,enabled_color=colored(disabled_pixel),colored(enabled_pixel)
-            results["X10_grayscale_pixels"]={"ok":disabled_color < enabled_color,"disabledColoredPixels":disabled_color,"enabledColoredPixels":enabled_color}
+            results["X10_grayscale_pixels"]={"ok":disabled_color < enabled_color,"disabledColoredPixels":disabled_color,"enabledColoredPixels":enabled_color,
+                "slotPoints":slot,"pixelBounds":pixels,"scale":scale,"disabled":disabled_image,"enabled":enabled_image}
         hover(); right = app.call("ext-click", extension=probe, surface="url", button="right")
         titles = [i["title"] for i in right.get("menu", [])]
         app.call("ext-menu", extension=probe, select="Unpin")
