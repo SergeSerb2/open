@@ -283,3 +283,43 @@ continuous main-busy intervals, and a no-input settling tail. Required limits
 are 4 ms per slice and 6 ms for Library-attributed busy intervals at launch and
 after motion. The accepted five-pair receipt and idle median remain separate.
 No full gate or PR is claimed by this entry.
+
+## LEAD 12:25 scoped result — STOP with valid A/B/control
+
+Native source55b507c3; Release App SHA256b376f19dece6a6fcd72eac4ca981567325e499e09bcb091292f12ed022d19444. Bridgef4bce022… andCEF1a22c4aa… unchanged. All3018tracked source hashes and deep/strict signature matched inside the ownedM1slot. No product source changed during this run. The existing receipt classification is retained separately:43raw wheel intervals become0App-attributed underLEAD12:25. The new receipt below is not a replacement for those raw facts.
+
+| Profile | Start launch age s | Two load1 readings | Callback p95 / max ms | Explicit flush max ms | Created over series and tail | Active raw / App-attributed intervals |
+| --- | --- | --- | --- | --- | --- | --- |
+| A wheel,600callbacks | 160.870 | 1.663 / 1.647 | 0.458 / 2.479 | 0.528 | 0 | 26 / 4 |
+| B drag,120callbacks | 181.003 | 1.928 / 2.092 | 3.818 / 4.045 | 2.254 | 0 | 0 / 0 |
+
+A callback budgets PASS (p95<=4,max<=8.3),creation0PASS;App-attributed missed intervals4>1FAIL. This is ONE raw gap containing4nominal120Hz intervals,not4separate gaps. The other22raw intervals are outside App,INFO. B callback max4.045<=8.3 andcreation0PASS;B p95/misses remain INFO underLEAD11:20. Its independent after-motion preparation acceptance fails below. Full capture raw counts:A26,B0. M1 built-in adaptive refresh and repeated native offsets do not create App misses by themselves.
+
+| Preparation window | Slices | Maximum slice ms /4 | Library busy ms /6 | Result |
+| --- | --- | --- | --- | --- |
+| Launch control | 91 | 6.519 | 7.045 clear Library;59.976 mixed overlap | FAIL |
+| A after motion | 41 | 4.855 | 5.321 | BusyPASS,sliceFAIL |
+| B after motion | 28 | 6.693 | 7.838 | FAIL |
+
+Each idle turn contains only one row and includes an explicit transaction flush. The measurements show that a single native row still exceeds4ms in some turns; a row-count choice alone does not prove the target. Launch preparation begins at2.761700s,after launch age2s and the input-idle guard. Control coverage2.019812–3.919829s; prelaunch loads3.475586/3.101074 pass. The control performs no synthetic scroll or forced callback commit.
+
+| Observed event | Launch age s | Busy ms | Direct callback ms | Measured Library work | Interpretation |
+| --- | --- | --- | --- | --- | --- |
+| A physical gap,callback280 | 163.194937–163.236604 | 38.201 | 0.216 | clip0.452;reconcile0.375;configure0.133;cell layout0.086;idle slices0 | App-attributed by busy/link clocks;entry0,outside callback;cause unresolved |
+| A late display-link callback280 | 163.224903 | 38.201 | 0.216 | display-link interval38.759;explicit flush0.034 | Same gap;do not count twice |
+| Launch pool slice,callback85 | 2.761700–2.768219 | 7.045 | 0.007 | one cell created;slice6.519 | Clear Library preparation exceeds6ms |
+| A overscan slice,callback688 | 166.624768–166.629624 | 5.321 | 0.012 | configure0.457;cell layout0.316;display1.571;reconcile2.654;slice4.855 | Nested phases;2.202ms outside reconcile includes flush |
+| B overscan slice,callback195 | 182.618501–182.625194 | 7.838 | 0.011 | configure0.943;cell layout0.578;display2.027;reconcile4.173;slice6.693 | Nested phases;2.520ms outside reconcile includes flush |
+| Mixed launch interval,callback139 | 3.217232–3.277207 | 59.976 | 0.005 | slices3.371 and0.230;one cell created | Conservative overlap match;does not prove all59.976ms is Library work |
+
+The older61.854ms no-Library-counter gap remains assigned toH. The new59.976ms launch interval is close in launch age but has Library slices at its edges. It stays raw and mixed; no automatic exemption or whole-interval Library cause is claimed. Even without that mixed interval,the clear7.045ms Library turn fails. The new38.201ms A busy interval lies far outside the earlier65–96s launch burst and is not excluded. No idle slice overlaps it. Existing counters do not name the remaining main-thread entry point.
+
+All41A settling slices and28B settling slices are recorded after motion in216no-input display-link ticks per profile. A last native movement165.694994s; settling coverage through167.695057s. B tail covers through183.795009s. No desktop input or prohibited attach/profiling tool ran. The native heartbeat now records the exact end of each busiest continuous interval as well as watchdog observations. App-side budget clocks and physical capture clocks remain separate.
+
+Normal quit:reply true,forced false,zero owned windows andprocesses. Frame helper closed normally before quit. All dependent D1jobs completed; queue audits show noD1holder/waiter on eitherMac. The M5 user launchd/default-profile Open session is preserved. First launcher ticket waited144s and failed BEFORE an App launch on a private Path+str error; corrected ticket waited150s,then ran this single valid measurement. No sample was discarded or repeated.
+
+STOP underLEAD12:25:more than1App-attributed missed interval,and6ms cannot be reached by this row-level slicing at launch/afterB. No further product edit or performance rerun. Three ready-open/warm/search pairs and touched suites NOT RUN;ready-open<=8ms remains unverified on this product head. No main merge,fullM5gate,push orPR. Accepted five-pair interaction/idle results remain separate historical receipts; do not relabel them as post-slicing ready-open acceptance.
+
+Receipt local:`.re/l3/l3-idle-slices-profiles-r1/result.json`; M1:`receipts/l3-idle-slices-profiles-r1/result.json`. Raw receipt SHA256854086dc1eb41fa2af7da2242b0f275003bea599baeead77c1e828e2c5bffff4. Local launcher log:`.re/l3/idle-slices-profiles-r1b.log`. The machine held all configured heavy slots(one) and the screen lock through measurement and cleanup; transfer/retrieval happened only inside the owned heavy slot.
+
+Pending question:What narrow plan should D1 follow for one A gap containing4App-attributed intervals(38.201ms main busy),and native row slices above4ms with clear Library busy turns7.045ms at launch and7.838ms afterB?
