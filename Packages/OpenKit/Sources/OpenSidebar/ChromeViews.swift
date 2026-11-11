@@ -204,6 +204,7 @@ final class URLFieldView: NSView {
         let appearance = contentAppearance
         let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true }
         CATransaction.begin()
+        CATransaction.setDisableActions(!context.animatesChanges)
         CATransaction.setAnimationDuration(Motion.hoverFade)
         fill.backgroundColor = context.isIncognito ? NSColor(white: 1, alpha: 0.15).cgColor : (hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill).cgColor(appearance)
         CATransaction.commit()

@@ -56,6 +56,8 @@ public final class SidebarContext {
     public var forcedFaviconHoverID: ItemID?
     /// Key/main state of the host window. Drives the theme underlay.
     public var isWindowActive: Bool = true
+    /// A static embedded preview uses the real rows without structural or fill motion.
+    public var animatesChanges = true
     /// macOS appearance. Only Spaces without a stored theme follow it.
     public var systemAppearance: ContentAppearance = .light
     /// True while the command bar is open for a new tab (Cmd+T). The "New Tab"
@@ -104,6 +106,13 @@ public final class SidebarContext {
 
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
+    /// Embedded product artwork can preserve readable ink at reduced scale.
+    /// Normal browser sidebars use their exact Space palette.
+    @ObservationIgnored public var titleColorTransform: (@MainActor (NSColor) -> NSColor)?
+    /// Small embedded scenes can use stronger native glyphs after scaling.
+    @ObservationIgnored public var titleFontOverride: NSFont?
+    /// Product artwork keeps fetched Favorite icons legible after scaling.
+    @ObservationIgnored public var favoriteIconFraction: CGFloat?
     @ObservationIgnored weak var sidebar: SidebarView?
 
     public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard, incognitoTitle: String? = nil) {

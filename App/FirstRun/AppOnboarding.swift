@@ -67,14 +67,27 @@ extension AppDelegate {
     }
     controller.onRelease = { [weak self, weak controller] receipt, baseline in
       guard let self, let controller, onboardingWindowController === controller else { return }
+      #if OPEN_AUTOMATION
+      let lifetime = OnboardingLifetimeProbe(controller)
+      onboardingLifetimeState = { lifetime.state }
+      #endif
       onboardingReceipt = receipt
-      onboardingWindowController?.stop(); onboardingWindowController = nil
+      controller.stop()
+      #if OPEN_AUTOMATION
+      if ProcessInfo.processInfo.environment["OPEN_ONBOARDING_TEARDOWN"] != "legacy" { controller.releaseArtwork() }
+      #else
+      controller.releaseArtwork()
+      #endif
+      onboardingWindowController = nil
       // Drop the window, bitmap backing and scene before the post-hand-off
       // resident read. Retain only a small value receipt for automation.
       Task { @MainActor [weak self] in
         try? await Task.sleep(for: .milliseconds(100))
         var final = receipt
         final["residentDeltaAfterHandoff"] = Int64(OnboardingWindowController.residentBytes())-Int64(baseline)
+        #if OPEN_AUTOMATION
+        final["retainedObjects"] = lifetime.state
+        #endif
         self?.onboardingReceipt = final
       }
     }
@@ -95,3 +108,27 @@ extension AppDelegate {
 }
 
 import OpenSettings
+
+#if OPEN_AUTOMATION
+/// Weak evidence from the real hand-off; never keeps a scene or player alive.
+@MainActor private final class OnboardingLifetimeProbe {
+  weak var controller: OnboardingWindowController?
+  weak var intro: IntroView?
+  weak var sound: IntroSound?
+  weak var steps: OnboardingStepsController?
+  weak var preview: OnboardingPreview?
+  weak var miniature: OnboardingMiniature?
+  weak var model: AnyObject?
+  weak var sidebar: NSView?
+  weak var icons: OnboardingFavicons?
+  init(_ value: OnboardingWindowController) {
+    controller = value; intro = value.intro; sound = value.sound; steps = value.steps
+    preview = value.steps?.preview; miniature = preview?.lifetimeMiniature
+    model = miniature?.model; sidebar = miniature?.sidebar; icons = value.favoriteIcons
+  }
+  var state: [String:Bool] {
+    ["controller":controller != nil,"intro":intro != nil,"sound":sound != nil,"steps":steps != nil,
+     "preview":preview != nil,"miniature":miniature != nil,"model":model != nil,"sidebar":sidebar != nil,"icons":icons != nil]
+  }
+}
+#endif

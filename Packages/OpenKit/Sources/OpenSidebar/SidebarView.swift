@@ -565,6 +565,26 @@ extension SidebarView {
     /// Favorite tiles in display order.
     public var displayedFavorites: [ItemID] { favorites.tabs.map(\.id) }
 
+    /// A composed product preview animates the actual tile, with the same
+    /// collection layout and icon provider as a normal browser window.
+    public func favoriteTileView(tabID: ItemID) -> NSView? {
+        guard let index = favorites.tabs.firstIndex(where: { $0.id == tabID }) else { return nil }
+        return favorites.collection.item(at: IndexPath(item: index, section: 0))?.view
+    }
+
+    /// A finite product demonstration lifts the same native row and cell used
+    /// by the outline, without starting a system drag session or taking focus.
+    public func liftedRow(tabID: ItemID) -> NSView? {
+        guard let page = pager.currentPage, let tab = context.model.tab(id: tabID) else { return nil }
+        let row = SidebarRowView(frame: CGRect(x: 0,y: 0,width: bounds.width,height: SpaceListMetrics.rowHeight))
+        row.page = page; row.representedItem = tab; row.isCurrent = true
+        let cell = TabCellView(frame: row.bounds); cell.page = page; cell.tab = tab
+        cell.autoresizingMask = [.width,.height]; row.addSubview(cell)
+        row.layer?.shadowColor = NSColor.black.cgColor; row.layer?.shadowOpacity = 0.35
+        row.layer?.shadowRadius = 12; row.layer?.shadowOffset = CGSize(width: 0,height: 6)
+        row.layoutSubtreeIfNeeded(); return row
+    }
+
     /// Horizontal offset of the pager strip (model value) and the focused page index.
     public var pagerOffset: CGFloat { -pager.strip.frame.minX }
 
@@ -646,6 +666,9 @@ extension SidebarView {
         }
         return find(self)
     }
+    /// Refresh a caller-owned preview icon after its provider receives an image.
+    public func refreshFavicon(tabID: ItemID) { faviconView(tabID: tabID)?.needsDisplay = true }
+
     /// Actual last row/tile draw receipts; read-only and never used on scroll.
     public func drawnFavicon(tabID: ItemID) -> NSImage? { faviconView(tabID: tabID)?.lastDrawnImage }
     public func drawnFaviconSource(tabID: ItemID) -> String? { faviconView(tabID: tabID)?.lastDrawnSource }
@@ -653,6 +676,11 @@ extension SidebarView {
     public func drawnFolderGlyph(nodeID: ItemID) -> String? { (cell(nodeID: nodeID) as? FolderCellView)?.icon.lastDrawnGlyph }
 
     public func folderIconView(nodeID: ItemID) -> NSView? { (cell(nodeID: nodeID) as? FolderCellView)?.icon }
+
+    public func drawnTitleFrame(tabID: ItemID) -> CGRect? {
+        guard let row = cell(nodeID: tabID) as? TabCellView else { return nil }
+        return convert(row.title.bounds, from: row.title)
+    }
 
     public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
 

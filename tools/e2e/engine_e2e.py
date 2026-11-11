@@ -180,6 +180,21 @@ class FocusTracker:
             if app.pid and not app.closed:
                 actual = app.process_path(app.pid)
                 expected = os.path.realpath(app.executable)
+                if not actual:
+                    # proc_pidpath can briefly omit metadata for a live App.
+                    # Recheck the exact file identity; PID existence alone is
+                    # never an ownership grant (CEF may use a hardlink path).
+                    for attempt in range(3):
+                        try:
+                            os.kill(app.pid, 0)
+                        except ProcessLookupError:
+                            break
+                        time.sleep(.02)
+                        actual = app.process_path(app.pid)
+                        if actual:
+                            print('PROCESS_IDENTITY_RECHECK pid=%d attempts=%d matched=%s' %
+                                  (app.pid, attempt + 1, app.matches_executable_path(actual)), flush=True)
+                            break
                 if not app.matches_executable_path(actual):
                     dead.append(dict(pid=app.pid, actual=actual, expected=expected))
         if crashed or dead:
