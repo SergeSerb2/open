@@ -113,7 +113,8 @@ import OpenStore
     }
     /// The app supplies its shared stores when new profiles enter the model.
     public func registerStores(archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore]) {
-        self.archives.merge(archives) { _, shared in shared }; self.histories.merge(histories) { _, shared in shared }
+        for (id,store) in archives where self.archives[id] !== store { self.archives[id] = store }
+        for (id,store) in histories where self.histories[id] !== store { self.histories[id] = store }
     }
     public func refreshProfiles() {
         let ids = Set(model.profiles.map(\.id)); histories = histories.filter { ids.contains($0.key) } // Keep injected retired-profile archives searchable.

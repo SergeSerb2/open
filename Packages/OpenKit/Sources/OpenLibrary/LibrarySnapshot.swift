@@ -51,6 +51,7 @@ final class LibrarySectionHost {
     var append: Task<Void, Never>?
     var phaseMilliseconds: [String:Double] = [:]
     func cancel() { preparation?.cancel(); worker?.cancel(); append?.cancel(); preparation = nil; worker = nil; append = nil }
+    isolated deinit { preparation?.cancel(); worker?.cancel(); append?.cancel(); storeWatch?.cancel() }
 }
 
 nonisolated func prepareLibraryRows(_ seeds: [LibraryRowSeed]) -> [LibraryPreparedRow] {

@@ -14,6 +14,10 @@ final class LibraryRailDocument: NSView {
 @MainActor
 public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public override var isFlipped: Bool { true }
+    private let railTint = CALayer()
+    private let railShadow = CAGradientLayer()
+    public override var wantsUpdateLayer: Bool { true }
+    public override func updateLayer() {}
     public let viewModel: LibraryViewModel
     public let context: SidebarContext
     public private(set) var section: LibraryPanelSection
@@ -21,8 +25,12 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public internal(set) var filterOpen = false
     public var onClose: (() -> Void)?
     public var onWidthChange: ((CGFloat) -> Void)?
+    public var onIdleRefresh: (() -> Void)?
+    public internal(set) var prebuiltReady = false
+    var preparing = false
+    var contentActive: Bool { isPresented || preparing }
     public var isPresented = false {
-        didSet { guard isPresented != oldValue else { return }; if isPresented { refresh(); observeTheme(); beginContentUpdates() } else { endContentUpdates() }; updatePointerMonitor() }
+        didSet { guard isPresented != oldValue else { return }; if isPresented { if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
     }
     public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
     let rail = NSScrollView()
@@ -30,14 +38,15 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var tiles: [LibraryPanelSection: LibraryControl] = [:]
     let back = LibraryControl(title: "", glyph: .back)
     let header = NSView()
-    public let searchField = NSTextField()
+    public let searchField: NSTextField = LibraryField()
     let searchGlyph = LibraryGlyphView()
     let filter = LibraryControl(title: "Filter", glyph: .filter)
     let content = NSView()
     let emptyGlyph = LibraryGlyphView()
-    let emptyTitle = NSTextField(labelWithString: "")
-    let emptyBody = NSTextField(wrappingLabelWithString: "")
+    let emptyTitle = LibraryField(labelWithString: "")
+    let emptyBody = LibraryField(wrappingLabelWithString: "")
     let emptyButton = LibraryControl(title: "")
+    var symbolCache: [String:NSImage] = [:]
     var foreground = NSColor.labelColor
     var overlay = NSColor.labelColor
     var observationArmed = false
@@ -61,7 +70,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     let boostsProfile = LibraryControl(title:"Profile")
     var keyboardRailNavigation = false
     private var pointerMonitor: Any?
-    let boostDisabledText = NSTextField(labelWithString:"Boosts are off.")
+    let boostDisabledText = LibraryField(labelWithString:"Boosts are off.")
     let boostTurnOn = LibraryControl(title:"Turn On")
     var manager: SpaceManagerView?
     var reloadTask: Task<Void,Never>?
@@ -73,13 +82,17 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var historyWhenChips: Set<String> = []
     var archivePageLoading = false
     var historyPageLoading = false
-    let statusLabel = NSTextField(wrappingLabelWithString:"")
+    let statusLabel = LibraryField(wrappingLabelWithString:"")
 
     public init(viewModel: LibraryViewModel, context: SidebarContext) {
         self.viewModel = viewModel; self.context = context
         section = LibraryPanelSection(viewModel.section)
         super.init(frame: .zero)
-        wantsLayer = true
+        wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay
+        railTint.backgroundColor = NSColor.black.withAlphaComponent(0.05).cgColor
+        railShadow.colors = [NSColor.black.withAlphaComponent(0.07).cgColor,NSColor.clear.cgColor]
+        railShadow.startPoint = CGPoint(x:0,y:0.5); railShadow.endPoint = CGPoint(x:1,y:0.5)
+        layer?.addSublayer(railTint); layer?.addSublayer(railShadow)
         setAccessibilityElement(false)
         rail.drawsBackground = false; rail.hasVerticalScroller = false
         rail.horizontalScrollElasticity = .none; rail.verticalScrollElasticity = .none
@@ -129,6 +142,30 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    /// Prepay first-screen native raster work without exposing the panel or
+    /// moving the page. Explicit layer display also covers hidden descendants.
+    public func prepareFirstScreen() async {
+        guard !isPresented,!prebuiltReady else { return }
+        preparing = true; prebuiltReady = false
+        refresh(); observeTheme(); observeContent(); refreshData()
+        await finishPendingContent()
+        guard !isPresented else { preparing = false; return }
+        guard !Task.isCancelled else { preparing = false; endContentUpdates(); return }
+        layoutSubtreeIfNeeded()
+        func render(_ view:NSView) {
+            guard !view.isHidden else { return }
+            view.layoutSubtreeIfNeeded(); view.displayIfNeeded()
+            view.layer?.displayIfNeeded()
+            for child in view.subviews { render(child) }
+            func display(_ layer:CALayer) { for child in layer.sublayers ?? [] { child.displayIfNeeded(); display(child) } }
+            if let layer = view.layer { display(layer) }
+        }
+        // The root is hidden, but its intended visible children are populated.
+        for child in subviews { render(child) }
+        layer?.displayIfNeeded(); CATransaction.flush()
+        preparing = false; prebuiltReady = true
+    }
+
     public func refresh() {
         let visible = LibraryPanelSection.visible(in:viewModel.defaults)
         if visible != sections {
@@ -150,7 +187,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public func select(_ next: LibraryPanelSection, animated: Bool = true) {
         guard sections.contains(next) else { return }
         let changed = section != next
-        if !changed || next == .media { hosts[next]?.loaded = false }
+        if !changed && prebuiltReady { return }
+        prebuiltReady = false
+        if (!changed && !prebuiltReady) || next == .media { hosts[next]?.loaded = false }
         if changed, animated, window?.isVisible == true {
             let fade = CATransition(); fade.type = .fade; fade.duration = 0.10
             content.layer?.add(fade,forKey:"librarySection"); listView.layer?.add(fade,forKey:"librarySection")
@@ -219,7 +258,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
     func observeTheme() {
-        guard isPresented, !observationArmed else { return }
+        guard !observationArmed else { return }
         observationArmed = true
         withObservationTracking {
             _ = context.focusedSpace?.theme; _ = context.window?.focusedSpaceID
@@ -228,7 +267,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.observationArmed = false
-                guard self.isPresented, !self.styleRefreshPending else { return }
+                guard self.isPresented else { self.prebuiltReady = false; self.onIdleRefresh?(); self.observeTheme(); return }
+                guard !self.styleRefreshPending else { return }
                 self.styleRefreshPending = true
                 self.refreshTheme(); self.updateSection()
                 self.styleRefreshPending = false; self.observeTheme()
@@ -238,6 +278,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public override func layout() {
         super.layout()
         let height = bounds.height
+        railTint.frame = CGRect(x:0,y:0,width:112,height:height)
+        railShadow.frame = CGRect(x:112,y:0,width:10,height:height)
         rail.frame = CGRect(x:0,y:52,width:112,height:max(0,height-108))
         let pitch = min(100,max(72,floor((height-108)/CGFloat(max(1,sections.count)))))
         let extent = CGFloat(max(0,sections.count-1))*pitch+80
@@ -275,10 +317,6 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         let lines = ceil(emptyBody.attributedStringValue.boundingRect(with:CGSize(width:236,height:100),options:[.usesLineFragmentOrigin,.usesFontLeading]).height)
         let buttonWidth = (emptyButton.title as NSString).size(withAttributes:[.font:NSFont.systemFont(ofSize:13,weight:.semibold)]).width+24
         emptyButton.frame=frame(centerX-buttonWidth/2,top+92+max(17,lines)+14,buttonWidth,28)
-    }
-    public override func draw(_ dirtyRect:NSRect) {
-        NSColor.black.withAlphaComponent(0.05).setFill(); CGRect(x:0,y:0,width:112,height:bounds.height).fill()
-        NSGradient(starting:NSColor.black.withAlphaComponent(0.07),ending:.clear)?.draw(in:CGRect(x:112,y:0,width:10,height:bounds.height),angle:0)
     }
     public func setSearch(_ text: String) {
         viewModel.query = text

@@ -20,6 +20,7 @@ import uuid
 from engine_e2e import Open, wait_until
 from downloads import server
 from library_frame_probe import Frames
+from library_cpu import snapshot as cpu_snapshot, delta as cpu_delta
 
 
 def cpu(exclude_bundle=None):
@@ -37,13 +38,13 @@ def cpu(exclude_bundle=None):
 
 
 def quiet():
-    attempts=[];deadline=time.monotonic()+300
+    attempts=[];deadline=time.monotonic()+900
     while time.monotonic()<deadline:
         loads=[os.getloadavg()[0]];time.sleep(10);loads.append(os.getloadavg()[0]);foreign=cpu()
         attempts.append({'loads':loads,'foreignCPU':foreign})
         if max(loads)<=3 and foreign<=200:return loads,foreign,attempts
         print('WAIT quiet prerequisites '+json.dumps(attempts[-1]),flush=True)
-    raise RuntimeError('quiet-sample prerequisites did not pass in five minutes: '+json.dumps(attempts))
+    raise RuntimeError('quiet-sample prerequisites did not pass in fifteen minutes: '+json.dumps(attempts))
 
 
 def launch(root,bundle,output,index,extra_env=None):
@@ -68,6 +69,7 @@ def seed(root,bundle,output):
             assert wait_until(lambda:bool(app.call('library')['rows']),timeout=10)
         finally:
             if app:
+                app.call('library',action='open',section='downloads')
                 app.quit();assert app.quit_report['ok'],app.quit_report
     snapshot=json.loads((root/'State/browser.json').read_text())
     profile=snapshot['profiles'][0];state=root/'Profiles'/profile['dataDirectoryName']/'State'
@@ -113,7 +115,7 @@ def scroll_fixture(root,snapshot):
 
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
-    receipt={'configuration':'Release','samples':[],'method':'Native layout, displayIfNeeded and CATransaction.flush; provider completion awaited. Search starts at native key dispatch after focus setup, without fixed harness delivery waits. No physical scan-out claim.','limits':{'firstSubmittedMilliseconds':16,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
+    receipt={'configuration':'Release','samples':[],'method':'Native layout, displayIfNeeded and CATransaction.flush; provider completion awaited. Search starts at native key dispatch after focus setup, without fixed harness delivery waits. No physical scan-out claim.','limits':{'firstSubmittedMilliseconds':8,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
     if args.resume_from:
         previous=json.loads(args.resume_from.read_text())
         assert previous['configuration']==receipt['configuration'] and previous['limits']==receipt['limits']
@@ -126,7 +128,7 @@ def main(args):
             assert max(row['loads'])<=3 and max(baseline['loads'])<=3
             assert row['search']['providerRows']==1
             valid.append(row);baselines.append(baseline)
-        assert 0<len(valid)<5
+        assert 0<len(valid)<args.samples
         receipt.update(samples=valid,resumedFrom=str(args.resume_from.resolve()),baseline={'bundle':str(args.baseline_bundle),'samples':baselines})
         for index in range(len(valid)):
             source=args.resume_from.parent/('physical-'+str(index))
@@ -150,7 +152,7 @@ def main(args):
             active.quit();assert active.quit_report['ok']
             receipt['earlyCold']={'loads':cold_loads,'foreignCPU':[cold_cpu,cold_end_cpu],'quietAttempts':cold_waits,'timing':early,'cleanup':active.quit_report,'limit':50,'ok':early['firstSubmittedMilliseconds']<=50 and cold_end_cpu<=200}
             active=None;save()
-            for index in range(len(receipt['samples']),5):
+            for index in range(len(receipt['samples']),args.samples):
                 if args.baseline_bundle:
                     base_loads,base_cpu,base_waits=quiet()
                     active=launch(baseline_root,args.baseline_bundle,output,'baseline-'+str(index))
@@ -163,8 +165,9 @@ def main(args):
                 loads,foreign,quiet_attempts=quiet()
                 active=launch(root,args.bundle,output,index)
                 startup=active.call('timing')
-                assert wait_until(lambda:active.call('library').get('panelCreated',False),timeout=8)
-                prebuild=active.call('library')['prebuild']
+                assert wait_until(lambda:active.call('library',action='prebuild-state').get('ready',False),timeout=12)
+                prebuild=active.call('library',action='prebuild-state')
+                assert prebuild['section']=='downloads',prebuild
                 assert prebuild['builtAt']-prebuild['firstSidebarDraw']>=3,prebuild
                 assert prebuild['builtAt']-prebuild['lastInput']>=3,prebuild
                 physical=None
@@ -185,24 +188,25 @@ def main(args):
                 # five-character burst would include five synchronous updates.
                 search=active.call('library-performance',operation='search',text='z')
                 assert search['providerRows']==1,search
-                active.call('key',key='escape',route='app');active.call('library',action='focus-rail');time.sleep(2)
-                before=active.call('library-performance',operation='cpu')['cpuSeconds'];start=time.monotonic();time.sleep(10)
+                active.call('key',key='escape',route='app');active.call('library',action='focus-rail');time.sleep(5.3)
+                before=active.call('library-performance',operation='cpu')['cpuSeconds'];open_before=cpu_snapshot(active);start=time.monotonic();time.sleep(30)
                 open_cpu=active.call('library-performance',operation='cpu')
-                idle=100*(open_cpu['cpuSeconds']-before)/(time.monotonic()-start)
-                active.call('library',action='close');time.sleep(2)
-                before_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_start=time.monotonic();time.sleep(10)
-                after_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_idle=100*(after_closed-before_closed)/(time.monotonic()-closed_start)
+                open_seconds=time.monotonic()-start;open_after=cpu_snapshot(active)
+                idle=100*(open_cpu['cpuSeconds']-before)/open_seconds
+                active.call('library',action='close');time.sleep(5.3)
+                before_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_before=cpu_snapshot(active);closed_start=time.monotonic();time.sleep(30)
+                after_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_seconds=time.monotonic()-closed_start;closed_after=cpu_snapshot(active);closed_idle=100*(after_closed-before_closed)/closed_seconds
                 end_cpu=cpu(active.bundle)
-                row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':open_cpu['counters'],'prebuild':prebuild}
+                row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleAttribution':{'open':cpu_delta(open_before,open_after,open_seconds),'closed':cpu_delta(closed_before,closed_after,closed_seconds)},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':open_cpu['counters'],'prebuild':prebuild}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
                 row['valid']=end_cpu<=200;receipt['samples'].append(row);save()
                 # Keep the full compositor signatures and cleanup receipt in
                 # result.json; console output needs only the measured summary.
-                print(json.dumps({key:value for key,value in row.items() if key not in ['physicalOpen','quietAttempts','cleanup','startup']}),flush=True)
+                print(json.dumps({key:value for key,value in row.items() if key not in ['physicalOpen','quietAttempts','cleanup','startup','idleAttribution']}),flush=True)
                 if not row['valid']:raise RuntimeError('foreign CPU invalidated sample')
             def verdict(values,limit):return {'values':values,'median':statistics.median(values),'limit':limit,'ok':statistics.median(values)<=limit and max(values)<=1.5*limit}
             receipt['summary']={
-                'firstSubmission':verdict([s['open']['firstSubmittedMilliseconds'] for s in receipt['samples']],16),
+                'firstSubmission':verdict([s['open']['firstSubmittedMilliseconds'] for s in receipt['samples']],8),
                 'fullyDrawnContent':verdict([s['open']['contentSubmittedMilliseconds'] for s in receipt['samples']],100),
                 'coldSection':verdict([max(r['contentSubmittedMilliseconds'] for r in s['coldSections']) for s in receipt['samples']],50),
                 'warmSection':verdict([max(r['contentSubmittedMilliseconds'] for r in s['warmSections']) for s in receipt['samples']],8.3),
@@ -214,7 +218,7 @@ def main(args):
                 candidate=[s['startup']['sidebarDrawn'] for s in receipt['samples']]
                 baseline=[s['timing']['sidebarDrawn'] for s in receipt['baseline']['samples']]
                 receipt['returningLaunch']={'status':'MEASURED','candidate':candidate,'baseline':baseline,'medianDeltaMilliseconds':statistics.median(candidate)-statistics.median(baseline),'pairedDeltaMilliseconds':[a-b for a,b in zip(candidate,baseline)]}
-            if args.frame_helper and len([s for s in receipt['samples'] if s['physicalOpen']])==5:
+            if args.frame_helper and len([s for s in receipt['samples'] if s['physicalOpen']])==args.samples:
                 receipt['physicalFirstChange']=verdict([s['physicalOpen']['first_changed_ms'] for s in receipt['samples']],16)
                 receipt['physicalFinalContent']=verdict([s['physicalOpen']['first_final_content_ms'] for s in receipt['samples']],100)
                 scroll_root=scroll_fixture(root,snapshot)
@@ -234,6 +238,8 @@ def main(args):
                 breakdown.update({key:max(c['counters'].get('last.'+key,0) for c in costs) for key in ['layout','display','flush']})
                 receipt['scroll']={'p95MainThreadMilliseconds':p95,'maxMainThreadMilliseconds':max(frame_ms),'phaseMaximumMilliseconds':breakdown,'workOver4ms':{k:v for k,v in breakdown.items() if v>4},'status':'MEASURED' ,'rows':10000,'profiles':10,'loads':scroll_loads,'foreignCPU':[scroll_cpu,end_scroll_cpu],'quietAttempts':scroll_waits,'submissions':costs,'physical':physical,'cleanup':cleanup,'ok':end_scroll_cpu<=200 and len(physical['changes'])>=100 and physical['missed120HzIntervals']==0}
             receipt['complete']=True
+            receipt['sampleCount']=args.samples
+            receipt['prQualification']=args.samples==5
             receipt['warmZeroConfiguration']=all(s['counterDelta'].get('configured',-1)==0 and s['counterDelta'].get('reloadData',-1)==0 for row in receipt['samples'] for s in row['warmSections'])
             receipt['idleCountersOK']=all(all(row['idleCounters'].get(k,-1)==0 for k in ['tasks','timers','displayLinks','animations']) for row in receipt['samples'])
             receipt['nativeBudgetsOK']=all(v['ok'] for v in receipt['summary'].values()) and receipt['warmZeroConfiguration'] and receipt['idleCountersOK'] and receipt['earlyCold']['ok']
@@ -247,5 +253,5 @@ def main(args):
     return 0 if receipt.get('ok') else 1
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bundle',required=True,type=Path);p.add_argument('--baseline-bundle',type=Path);p.add_argument('--frame-helper',type=Path);p.add_argument('--output',required=True,type=Path);p.add_argument('--resume-from',type=Path,help='Retain only the valid paired prefix of an incomplete receipt with the same artifact and fixture.')
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bundle',required=True,type=Path);p.add_argument('--baseline-bundle',type=Path);p.add_argument('--frame-helper',type=Path);p.add_argument('--output',required=True,type=Path);p.add_argument('--samples',type=int,choices=[3,5],default=5);p.add_argument('--resume-from',type=Path,help='Retain only the valid paired prefix of an incomplete receipt with the same artifact and fixture.')
     raise SystemExit(main(p.parse_args()))

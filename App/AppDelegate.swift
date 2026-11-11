@@ -373,6 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   var libraryPrebuildTask: Task<Void,Never>?
+  var libraryPrebuildGeneration = 0
   var libraryFirstSidebarDraw: Double?
   var libraryFirstSidebarDraws: [WindowID:Double] = [:]
   var libraryLastInput = 0.0
@@ -394,15 +395,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     #endif
     guard let controller = frontStandardWindowController,let first = libraryFirstSidebarDraws[controller.windowID],!shutdownPrepared,!terminationRequested else { return }
     libraryPrebuildTask?.cancel()
+    libraryPrebuildGeneration += 1
+    let generation = libraryPrebuildGeneration
     let deadline = max(first+3,libraryLastInput+3)
     libraryPrebuildTask = Task { @MainActor [weak self,weak controller] in
       try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
       guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
-      self.libraryPrebuildTask = nil
+      defer { if self.libraryPrebuildGeneration == generation { self.libraryPrebuildTask = nil } }
       guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller,self.frontStandardWindowController === controller,
         controller.window?.isVisible == true,!controller.isLibraryOpen else { return }
       self.libraryPrebuiltAt = ProcessInfo.processInfo.systemUptime
-      _ = self.settingsPresenter.makeLibrarySession(controller).prepareShell()
+      controller.onLibraryIdleRefresh = { [weak self] in self?.scheduleLibraryPrebuild() }
+      await self.settingsPresenter.makeLibrarySession(controller).prebuild()
     }
   }
 

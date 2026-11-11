@@ -3,6 +3,10 @@ import AppKit
 @MainActor
 final class LibraryControl: NSButton {
     override var isFlipped: Bool { true }
+    override var wantsUpdateLayer: Bool { true }
+    private let iconLayer = CALayer()
+    private let textLayer = LibraryText.layer()
+    private let dotLayer = CALayer()
     var glyph: LibraryGlyph?
     var isTile = false
     var glyphSize: CGFloat?
@@ -28,7 +32,10 @@ final class LibraryControl: NSButton {
         self.title = title; self.glyph = glyph; isTile = tile
         isBordered = false; focusRingType = .none
         wantsLayer = true; layer?.cornerRadius = tile ? 12 : 10
-        layer?.cornerCurve = .continuous; layer?.masksToBounds = true
+        layer?.cornerCurve = .continuous; layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.addSublayer(iconLayer); layer?.addSublayer(textLayer); layer?.addSublayer(dotLayer)
+        dotLayer.cornerRadius = 2
+        iconLayer.contentsGravity = .resizeAspect
         target = self; action = #selector(press)
         setAccessibilityLabel(title)
         if tile { setAccessibilityRole(.radioButton) }
@@ -44,6 +51,7 @@ final class LibraryControl: NSButton {
         super.keyDown(with: event)
     }
     override func updateTrackingAreas() {
+        LibraryRaster.note("trackingUpdates")
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect], owner: self)
@@ -51,31 +59,26 @@ final class LibraryControl: NSButton {
     }
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
-    override func draw(_ dirtyRect: NSRect) {
+    override func layout() { super.layout(); needsDisplay = true }
+    override func updateLayer() {
         let alpha: CGFloat = isHighlighted ? 0.14 : selected ? 0.105 : hovered ? 0.05 : baseAlpha
-        if alpha > 0 { overlay.withAlphaComponent(alpha).setFill(); bounds.fill() }
-        if selected && isChip {
-            foreground.withAlphaComponent(0.46).setStroke()
-            let ring=NSBezierPath(roundedRect:bounds.insetBy(dx:0.75,dy:0.75),xRadius:10,yRadius:10);ring.lineWidth=1.5;ring.stroke()
-        }
-        if showsDot { foreground.setFill(); NSBezierPath(ovalIn:CGRect(x:bounds.width-8,y:5,width:4,height:4)).fill() }
+        layer?.backgroundColor = overlay.withAlphaComponent(alpha).cgColor
+        let focus = keyboardFocus && window?.firstResponder === self
+        layer?.borderWidth = focus ? 2 : selected && isChip ? 1.5 : 0
+        layer?.borderColor = foreground.withAlphaComponent(focus ? 0.60 : 0.46).cgColor
+        dotLayer.isHidden = !showsDot; dotLayer.backgroundColor = foreground.cgColor
+        dotLayer.frame = CGRect(x:bounds.width-8,y:5,width:4,height:4)
         let color = foreground.withAlphaComponent(isEnabled ? selected ? 1 : 0.68 : 0.46)
-        let font = NSFont.systemFont(ofSize: isTile ? 12 : labelSize, weight: .semibold)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font,.foregroundColor: color]
-        let textSize = (title as NSString).size(withAttributes: attrs)
-        if isTile {
-            glyph?.draw(in: CGRect(x: (bounds.width-28)/2, y: 17, width:28,height:28), color: color, selected:selected)
-            (title as NSString).draw(at: CGPoint(x:(bounds.width-textSize.width)/2,y:51),withAttributes:attrs)
-        } else {
-            let iconWidth: CGFloat = glyph == nil ? 0 : glyphSize ?? (title.isEmpty ? 18 : 16)
-            let group = textSize.width + (title.isEmpty || glyph == nil ? 0 : 5) + iconWidth
-            let x = (bounds.width-group)/2
-            glyph?.draw(in: CGRect(x:x,y:(bounds.height-iconWidth)/2,width:iconWidth,height:iconWidth),color:color)
-            if !title.isEmpty { (title as NSString).draw(at: CGPoint(x:x+(glyph == nil ? 0 : iconWidth+5),y:(bounds.height-textSize.height)/2),withAttributes:attrs) }
-        }
-        if keyboardFocus && window?.firstResponder === self {
-            foreground.withAlphaComponent(0.60).setStroke()
-            let focus=NSBezierPath(roundedRect:bounds.insetBy(dx:1,dy:1),xRadius:isTile ? 12 : 10,yRadius:isTile ? 12 : 10);focus.lineWidth=2;focus.stroke()
-        }
+        let text = LibraryText.value(title,size:isTile ? 12 : labelSize,weight:.semibold,color:color)
+        let textSize = text.size()
+        if (textLayer.string as? NSAttributedString) !== text { textLayer.string = text }; textLayer.contentsScale = window?.backingScaleFactor ?? 2
+        iconLayer.isHidden = glyph == nil
+        let iconWidth: CGFloat = isTile ? 28 : glyph == nil ? 0 : glyphSize ?? (title.isEmpty ? 18 : 16)
+        let group = textSize.width + (title.isEmpty || glyph == nil ? 0 : 5) + iconWidth
+        let x = (bounds.width-group)/2
+        iconLayer.frame = CGRect(x:isTile ? (bounds.width-28)/2 : x,y:isTile ? 17 : (bounds.height-iconWidth)/2,width:iconWidth,height:iconWidth)
+        if let glyph { iconLayer.contents = glyph.image(size:iconWidth,color:color,selected:selected,scale:window?.backingScaleFactor ?? 2) }
+        textLayer.frame = CGRect(x:isTile ? (bounds.width-textSize.width)/2 : x+(glyph == nil ? 0 : iconWidth+5),y:isTile ? 51 : (bounds.height-textSize.height)/2,width:ceil(textSize.width),height:ceil(textSize.height))
+        textLayer.isHidden = title.isEmpty
     }
 }

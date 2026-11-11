@@ -45,13 +45,21 @@ final class AppLibrarySession {
       controller.presentLibraryPanel(panel,width:width)
     }
     self.panel = panel; panelGeneration += 1
+    panel.onIdleRefresh = { [weak self] in self?.controller?.onLibraryIdleRefresh?() }
     controller?.prepareLibraryPanel(panel,width:panel.section == .spaces ? max(417,(controller?.contentView.bounds.width ?? 1280)-56) : 417)
     return panel
+  }
+  func prebuild() async {
+    guard controller?.isLibraryOpen == false else { return }
+    let panel = prepareShell()
+    if let completed = controller?.context.downloadBadge?.completedAt,Date().timeIntervalSince(completed)<60,panel.section != .downloads { panel.select(.downloads,animated:false) }
+    await panel.prepareFirstScreen()
   }
   func close() {
     guard let controller, controller.isLibraryOpen else { return }
     panel?.isPresented = false
     controller.dismissLibraryPanel()
+    panel?.onIdleRefresh?()
     controller.window?.makeFirstResponder(controller.container)
     releaseTask?.cancel()
     #if OPEN_AUTOMATION

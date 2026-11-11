@@ -467,8 +467,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             // engine does not reflow into a tiny 46-point viewport.
             let pageWidth = libraryUsesWideLayout ? size.width - 427 : size.width - edge - 10
             let panel = CGRect(x: edge, y: 10, width: max(46, pageWidth), height: max(0, size.height - 20))
-            libraryPanel.frame = CGRect(x: 0, y: 0, width: edge, height: size.height)
-            libraryPanel.needsLayout = true
+            let libraryFrame = CGRect(x: 0, y: 0, width: edge, height: size.height)
+            if libraryPanel.frame != libraryFrame { libraryPanel.frame = libraryFrame; libraryPanel.needsLayout = true }
             if container.frame != panel { container.frame = panel }
             emptyPanel.frame = panel
             emptyPanelHost.frame = root.bounds
@@ -599,6 +599,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         onLayout?()
     }
     /// Delayed idle work attaches only the hidden shell; it never moves the page.
+    public var onLibraryIdleRefresh: (() -> Void)?
     public func prepareLibraryPanel(_ panel:NSView,width:CGFloat) {
         guard !isLibraryOpen else { return }
         if libraryPanel !== panel { libraryPanel?.removeFromSuperview(); libraryPanel = panel; root.addSubview(panel,positioned:.below,relativeTo:container) }

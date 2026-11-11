@@ -20,7 +20,7 @@ After: the in-window panel, captured from the real app with synthetic data:
 
 ![In-window Library](library/downloads.png)
 
-The new native panel keeps one table host per visited section. An unchanged
+The new native panel keeps one list host per visited section. An unchanged
 warm switch shows the retained host without querying providers or configuring
 rows. The first screen uses up to 60 lazy row sources; later sources append in
 idle slices. Background snapshots cache sorting, day groups and folded search
@@ -51,10 +51,14 @@ when the last file expires. Private windows do not show the button.
 `OpenLibrary` contains the AppKit panel, controls, reusable rows and filters.
 `AppLibrarySession` owns one panel and `LibraryViewModel` per browser window.
 Data providers and stores stay App-owned, with their existing actions. No Library
-session or view is constructed at launch. An idle slice prepares only the hidden
-shell at least three seconds after the first sidebar draw and the last input;
-new input cancels and reschedules it. Early opens use the same cold shell path.
-Closing stops content subscriptions;
+session or view is constructed at launch. An idle slice prepares the hidden
+shell and first visible rows at least three seconds after the first sidebar draw and the last input;
+new input cancels and reschedules it. It lays out and displays the hidden hierarchy
+into retained layers, so a ready open only shows it. Closed store changes mark the
+cache dirty and request another idle slice. Early opens use the cold path.
+The viewport uses fixed frame geometry, cached attributed text and icons,
+layer plates, and a bounded pool of native cells. It has no constraints or row-height
+delegate. Cheap store invalidation remains armed while closed; preparation stops;
 60 seconds later the heavy views and model image caches are released. Reopen cancels
 that release. Closing a browser window removes its session and releases its
 panel on the next event-loop turn. The old `LibraryWindow`, SwiftUI section views and History feature

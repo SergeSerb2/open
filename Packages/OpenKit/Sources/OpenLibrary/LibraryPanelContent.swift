@@ -39,6 +39,10 @@ extension LibraryPanelView {
             state["listLayout",default:0] += host.list.layoutMilliseconds
             state["tasks",default:0] += Double((host.preparation == nil ? 0 : 1)+(host.append == nil ? 0 : 1))
         }
+        for (key,value) in LibraryRaster.events { state["wake."+key] = value }
+        state["rasterStores"] = LibraryRaster.stores; state["rasterPixels"] = LibraryRaster.pixels
+        state["textRasters"] = LibraryRaster.text; state["glyphRasters"] = LibraryRaster.glyphs
+        state["configureMaximum"] = hosts.values.map { $0.list.configureMaximumMilliseconds }.max() ?? 0
         for (key,value) in submissionPhases { state["last."+key] = value }
         for (key,value) in hosts[section]?.phaseMilliseconds ?? [:] { state["last."+key] = value }
         return state
@@ -100,11 +104,11 @@ extension LibraryPanelView {
     }
     func endContentUpdates() {
         reloadTask?.cancel(); reloadTask = nil; historyTask?.cancel(); historyTask = nil
-        for host in hosts.values { host.cancel(); host.storeWatch?.cancel(); host.storeWatch = nil }
+        for host in hosts.values { host.cancel() }
     }
     func refreshData() {
         let target = section, host = host(for:section)
-        guard isPresented, !host.loaded else { return }
+        guard contentActive, !host.loaded else { return }
         if target == .archive { host.storeVersion = viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(viewModel.archives[$0]!.contentVersion) }.joined(separator:",") }
         reloadTask?.cancel(); historyTask?.cancel(); reloadGeneration += 1
         let generation = reloadGeneration
@@ -112,7 +116,7 @@ extension LibraryPanelView {
             guard let self else { return }
             let started = ProcessInfo.processInfo.systemUptime
             await self.viewModel.refreshExternalState()
-            guard !Task.isCancelled, self.isPresented, self.reloadGeneration == generation, self.section == target else { return }
+            guard !Task.isCancelled, self.contentActive, self.reloadGeneration == generation, self.section == target else { return }
             host.phaseMilliseconds["provider"] = (ProcessInfo.processInfo.systemUptime-started)*1000
             host.loaded = true; host.dirty = true
             self.renderRows()
@@ -123,19 +127,18 @@ extension LibraryPanelView {
                         guard let self,let host,!Task.isCancelled else { return }
                         if initial { initial = false; continue }
                         host.loaded = false; host.dirty = true
-                        if self.isPresented,self.section == .history { self.refreshData() }
+                        if self.contentActive,self.section == .history { self.refreshData() } else { self.prebuiltReady = false; self.onIdleRefresh?() }
                     }
                 }
             }
         }
     }
     func observeContent() {
-        guard isPresented else { return }
         for target in [LibraryPanelSection.downloads,.archive,.history,.media,.boosts] where !sourceObservationArmed.contains(target) {
             sourceObservationArmed.insert(target)
             withObservationTracking {
                 switch target {
-                case .downloads: _ = viewModel.downloads.downloads
+                case .downloads: _ = viewModel.downloads.downloads; _ = context.downloadBadge?.completedAt
                 case .archive: _ = viewModel.archiveRows; _ = viewModel.archives.values.map(\.contentVersion)
                 case .history: _ = viewModel.historyRows
                 case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages
@@ -152,10 +155,11 @@ extension LibraryPanelView {
                         if version != host.storeVersion { host.storeVersion = version; host.loaded = false; storeChanged = true }
                     }
                     self.hosts[target]?.dirty = true
-                    if self.isPresented {
+                    self.prebuiltReady = false
+                    if self.contentActive {
                         if self.section == target { if storeChanged { self.refreshData() } else { self.renderRows() } }
-                        self.observeContent()
-                    }
+                    } else { self.onIdleRefresh?() }
+                    self.observeContent()
                 }
             }
         }
@@ -171,7 +175,7 @@ extension LibraryPanelView {
         let host = host(for:section)
         // Header/theme/empty-state work is independent of the data snapshot.
         updateContentChrome()
-        guard isPresented else { return }
+        guard contentActive else { return }
         if section == .spaces {
             if manager == nil {
                 viewModel.refreshSpaceManagerView()
@@ -234,7 +238,7 @@ extension LibraryPanelView {
                 var count = min(60,filtered.count)
                 while count < filtered.count {
                     try? await Task.sleep(for:.milliseconds(16))
-                    guard let self,let host,!Task.isCancelled,host.generation == generation,self.isPresented else { return }
+                    guard let self,let host,!Task.isCancelled,host.generation == generation,(self.contentActive || self.prebuiltReady) else { return }
                     count = min(count+240,filtered.count)
                     self.applyPage(host,target:target,count:count)
                 }
@@ -275,7 +279,10 @@ extension LibraryPanelView {
         if filterOpen { configureFilter() }
         needsLayout = true
     }
-    func symbol(_ name:String) -> NSImage? { NSImage(systemSymbolName:name,accessibilityDescription:nil) }
+    func symbol(_ name:String) -> NSImage? {
+        if let image = symbolCache[name] { return image }
+        let image = NSImage(systemSymbolName:name,accessibilityDescription:nil); symbolCache[name] = image; return image
+    }
     func downloadSources() -> [LibraryRowSource] {
         viewModel.downloads.downloads.filter { item in
             (viewModel.downloadProfileFilter == nil || item.profileID == viewModel.downloadProfileFilter) && (viewModel.downloadStateFilter == nil || item.state == viewModel.downloadStateFilter)
@@ -437,16 +444,16 @@ extension LibraryPanelView {
             historyPageLoading = true
             Task { @MainActor [weak self] in
                 guard let self else { return }; await self.viewModel.loadNextHistoryPage(); self.historyPageLoading = false
-                if self.isPresented, self.section == .history { self.renderRows() }
+                if self.contentActive, self.section == .history { self.renderRows() }
             }
         }
     }
     func loadNextArchivePage() {
-        guard isPresented, section == .archive, viewModel.archiveHasMore, !viewModel.archiveLoading, !archivePageLoading else { return }
+        guard contentActive, section == .archive, viewModel.archiveHasMore, !viewModel.archiveLoading, !archivePageLoading else { return }
         archivePageLoading = true
         Task { @MainActor [weak self] in
             guard let self else { return }; await self.viewModel.loadNextArchivePage(); self.archivePageLoading = false
-            if self.isPresented, self.section == .archive { self.renderRows() }
+            if self.contentActive, self.section == .archive { self.renderRows() }
         }
     }
     var hasActiveFilters: Bool {

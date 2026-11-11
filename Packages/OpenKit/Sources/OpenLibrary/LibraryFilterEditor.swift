@@ -16,7 +16,7 @@ final class LibraryFilterEditor: NSView {
     var onToggle: ((String) -> Void)?
     var onClear: (() -> Void)?
     var onHeight: ((CGFloat) -> Void)?
-    private let title = NSTextField(labelWithString: "")
+    private let title = LibraryField(labelWithString: "")
     private let done = LibraryControl(title: "Done")
     private let clear = LibraryControl(title: "Clear History…")
     private var groups: [(NSTextField,[LibraryControl])] = []
@@ -38,7 +38,7 @@ final class LibraryFilterEditor: NSView {
         for (label,buttons) in self.groups { label.removeFromSuperview(); buttons.forEach { $0.removeFromSuperview() } }
         self.groups = []; chips = [:]; hasClear = clear; self.clear.isHidden = !clear
         for group in groups {
-            let label = NSTextField(labelWithString:group.title)
+            let label = LibraryField(labelWithString:group.title)
             label.font = .systemFont(ofSize:13,weight:.semibold); label.textColor = foreground.withAlphaComponent(0.68); addSubview(label)
             let buttons = group.chips.map { chip in
                 let button = LibraryControl(title:chip.title); button.labelSize = 14; button.baseAlpha = 0.045; button.isChip = true

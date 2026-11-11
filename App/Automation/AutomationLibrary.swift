@@ -14,6 +14,12 @@ extension AutomationController {
       controller.window?.makeKeyAndOrderFront(nil)
     }
     switch action {
+    case "prebuild-state":
+      let controller = app.frontStandardWindowController
+      return ["ready":adapter.activeLibrarySession?.panel?.prebuiltReady ?? false,
+        "section":adapter.activeLibrarySession?.panel?.section.rawValue ?? "",
+        "firstSidebarDraw":controller.flatMap { app.libraryFirstSidebarDraws[$0.windowID] } ?? 0,
+        "lastInput":app.libraryLastInput,"builtAt":app.libraryPrebuiltAt ?? 0]
     case "sessions":
       return ["closedPanelAlive":adapter.lastClosedLibraryPanel != nil,"sessions":adapter.librarySessions.values.map { session in
         ["controllerAlive":session.controller != nil,"panelAlive":session.panel != nil] as [String:Any]
@@ -105,6 +111,7 @@ extension AutomationController {
       return ["open":false,"created":false,"window":0,"rows":[],"rail":[]]
     }
     var state=session.panel?.automationState() ?? [:]
+    state["prebuiltReady"] = session.panel?.prebuiltReady ?? false
     state["prebuild"] = ["firstSidebarDraw":app.libraryFirstSidebarDraws[controller.windowID] ?? 0,"lastInput":app.libraryLastInput,"builtAt":app.libraryPrebuiltAt ?? 0,"pending":app.libraryPrebuildTask != nil] as [String:Any]
     state["performance"] = session.panel?.performanceCounters ?? [:]
     state["open"]=controller.isLibraryOpen

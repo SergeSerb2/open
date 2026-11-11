@@ -71,9 +71,14 @@ enum LibraryGlyph: String {
     }
 }
 
+@MainActor
 final class LibraryGlyphView: NSView {
     override var isFlipped: Bool { true }
-    var glyph: LibraryGlyph = .downloads { didSet { needsDisplay = true } }
-    var color: NSColor = .labelColor { didSet { needsDisplay = true } }
-    override func draw(_ dirtyRect: NSRect) { glyph.draw(in: bounds, color: color) }
+    override var wantsUpdateLayer: Bool { true }
+    var glyph: LibraryGlyph = .downloads { didSet { if glyph != oldValue { needsDisplay = true } } }
+    var color: NSColor = .labelColor { didSet { if color != oldValue { needsDisplay = true } } }
+    override init(frame:NSRect) { super.init(frame:frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
+    required init?(coder:NSCoder) { fatalError() }
+    override func layout() { super.layout(); needsDisplay = true }
+    override func updateLayer() { layer?.contents = glyph.image(size:bounds.width,color:color,scale:window?.backingScaleFactor ?? 2) }
 }

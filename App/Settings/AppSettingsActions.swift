@@ -145,6 +145,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       archives:archives,histories:histories,snapshot:app.snapshotStore,faviconStore:app.stores.favicons,settingsActions:self,
       historyResolver:{ [weak app] in app?.stores.history(for:$0) })
     model.boostsProvider = app.stores.boosts
+    controller.onLibraryIdleRefresh = { [weak app] in app?.scheduleLibraryPrebuild() }
     let session = AppLibrarySession(model:model,controller:controller); librarySessions[controller.windowID] = session
     return session
   }
