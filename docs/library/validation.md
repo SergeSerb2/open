@@ -1,12 +1,12 @@
 # Library validation
 
-Status: STOP at the LEAD 14:20 first-use control on `2861c764`.
-Launches 1 and 2 are valid. Launch 2's first download row has an 8.485 ms
-configure/layout turn and 9.219 ms enclosing busy interval, above the 8.3 ms
-non-first-turn limit. Launch 3 was not run. Creation and all later rows pass.
-Required ready-open remains PASS at 8.818/14.316 ms against 16/24 ms; the
-8.818 ms median is INFO against the 8 ms stretch target. No further run,
-main merge, full M5 gate, push or PR follows this hard-bound failure.
+Status: LEAD 14:50 accepts retained launches1–2 after correcting first-row
+scoring. All three turns of each first row and their busy intervals are INFO
+"first-use cost", with a16.7ms hard ceiling; later rows stay required≤8.3ms.
+The raw launch2failure is retained under its original interpretation. Only
+launch3 remains. Product code and Release artifact are unchanged. Required
+ready-open remains PASS at8.818/14.316ms against16/24ms; its8.818ms median is
+INFO against the8ms stretch target. No final M5 gate or PR has run.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -717,3 +717,32 @@ Log: `.re/l3/first-use-control-r1.log`.
 Pending lead decision: What narrow next step should D1 take for the first
 download row's second turn (configure/layout 8.485 ms, enclosing busy 9.219 ms),
 with all creation turns and all later-row turns inside their bounds?
+
+
+## LEAD 14:50 — all first-row turns are first-use cost; launch 3 only
+
+The lead clarified the scope: creation, configure/layout and display/flush of
+the FIRST row of each kind, and their enclosing busy intervals, are all INFO
+"first-use cost", with a hard ceiling of16.7ms. Every later-row slice and busy
+interval remains required at≤8.3ms. No product code changes for this ruling.
+The earlier receipt and its original FAIL/exit1 stay intact. A separate derived
+receipt reclassifies its existing clocks under the new rule; no sample is repeated.
+
+| Retained launch | First-row slice max ms, INFO | First-row busy max ms, INFO | Later-row slice max ms | Later-row busy max ms | Hard bounds |
+|---|---:|---:|---:|---:|---|
+| 1 | 5.249 | 6.552 | 6.528 | 8.299 | PASS |
+| 2 | 8.485 | 9.219 | 6.717 | 7.096 | PASS |
+
+Both launches remain valid with complete coverage and normal cleanup. Launch2's
+8.485ms configure/layout and9.219ms busy interval are inside the first-row16.7ms
+ceiling. All126later-row turns pass. Derived receipt:
+`.re/l3/first-use-r1-rescored-1450.json`, linked to raw receipt SHA-256
+`3f6d794cb65e8a509030533f365d99823ed4325f94960a91208228da48d578f0`.
+
+Only launch3 remains. The harness supports `--start-index 3 --launches 1` in one
+bounded M1 ticket. First-row eligibility derives from the recorded row kind and
+phase1/2/3, while the original native creation marker stays unchanged. This is
+scoring/harness work only: App, OpenLibrary and Engine are unchanged from2861c764.
+The candidate Release executable remainsbe01de5bb51c48726d15d4729775814656938301385807dd0a01c6c6efa957b7,
+and the Library module remainsa75273e2cb4e0adc149a9ca97905f982ea4f4d22805e62d2dcc2e11dfa78ebc1.
+No ready-open, warm/search, scroll or five-pair rerun follows this clarification.

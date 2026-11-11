@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""LEAD 14:20: three real Release launches, no scrolling or timed open.
+"""LEAD 14:50: real Release launch controls, no scrolling or timed open.
 
 Observe all idle preparation from launch through its completion. Only the
-creation turn of each first row can use the stated first-use exception.
+first row's three turns use the stated first-use exception.
 """
 import argparse
 import hashlib
@@ -27,6 +27,9 @@ def classify(trace, state):
     for row in slices:
         row['kindName'] = KINDS.get(int(row['rowKind']), 'later row')
         row['phaseName'] = PHASES[int(row['phase'])]
+        # Native firstUse labels only creation. LEAD 14:50 explicitly includes
+        # configure/layout and display/flush of that same first row too.
+        row['firstRow'] = int(row['rowKind']) in KINDS and row['phase'] in (1, 2, 3)
     labelled = [row for row in slices if row['rowKind']]
     labels_ok = len(labelled) == 21
     for kind in KINDS:
@@ -40,11 +43,11 @@ def classify(trace, state):
         group = [row for row in slices if row['startLaunchMilliseconds'] < busy['endLaunchMilliseconds']
                  and row['endLaunchMilliseconds'] > busy['startLaunchMilliseconds']]
         busy['sliceIndexes'] = [row['index'] for row in group]
-        busy['firstUse'] = bool(group) and all(row['firstUse'] for row in group)
-    first = [row for row in slices if row['firstUse']]
-    later = [row for row in slices if not row['firstUse']]
-    first_busy = [row for row in idle['overlappingBusyIntervals'] if row['firstUse']]
-    later_busy = [row for row in idle['overlappingBusyIntervals'] if not row['firstUse']]
+        busy['firstRow'] = bool(group) and all(row['firstRow'] for row in group)
+    first = [row for row in slices if row['firstRow']]
+    later = [row for row in slices if not row['firstRow']]
+    first_busy = [row for row in idle['overlappingBusyIntervals'] if row['firstRow']]
+    later_busy = [row for row in idle['overlappingBusyIntervals'] if not row['firstRow']]
     maximum = lambda rows: max((row['milliseconds'] for row in rows), default=0)
     idle.update(firstUseMaximumMilliseconds=maximum(first),
                 otherSliceMaximumMilliseconds=maximum(later),
@@ -55,6 +58,10 @@ def classify(trace, state):
     idle['allWithinFrame'] = idle['maximumSliceMilliseconds'] <= 8.3 and idle['maximumOverlappingBusyMilliseconds'] <= 8.3
     idle['closingBoundsOK'] = (maximum(first) <= 16.7 and maximum(first_busy) <= 16.7
                                and maximum(later) <= 8.3 and maximum(later_busy) <= 8.3)
+    idle['sliceLimitOK'] = maximum(first) <= 16.7 and maximum(later) <= 8.3
+    idle['allOverlappingBusyWithinLimit'] = maximum(first_busy) <= 16.7 and maximum(later_busy) <= 8.3
+    idle['firstRowPolicy'] = {'status': 'INFO', 'reason': 'first-use cost', 'hardCeilingMilliseconds': 16.7}
+    idle['laterRowPolicy'] = {'status': 'required', 'hardCeilingMilliseconds': 8.3}
     idle['ok'] = idle['coverageOK'] and labels_ok and idle['sliceCountOK'] and idle['closingBoundsOK']
     return idle
 
@@ -65,11 +72,12 @@ def run(args):
     module = Path('Packages/OpenKit/Sources/OpenLibrary')
     for path in sorted(module.rglob('*.swift')):
         digest.update(str(path.relative_to(module)).encode()+b'\0'+path.read_bytes())
-    result = {'rule': 'LEAD 14:20 (11 Nov)', 'configuration': 'Release',
+    result = {'rule': 'LEAD 14:50 (11 Nov)', 'configuration': 'Release',
               'libraryModuleSHA256': digest.hexdigest(),
               'executableSHA256': hashlib.sha256((args.bundle/'Contents/MacOS/Open').read_bytes()).hexdigest(),
               'launches': [], 'complete': False,
-              'firstUseDefinition': 'Only creation (phase 1) for each of seven first row kinds; all other phases remain required.',
+              'firstUseDefinition': 'All three turns and enclosing busy intervals of the first row of each of seven kinds are INFO, hard ceiling 16.7 ms; later rows required at 8.3 ms.',
+              'requestedLaunches': args.launches, 'startIndex': args.start_index,
               'exclusions': []}
     temporary = tempfile.TemporaryDirectory(prefix='olfu-', dir='/tmp')
     root = Path(temporary.name); app = None
@@ -81,7 +89,7 @@ def run(args):
     save()
     try:
         seed(root, args.bundle, out)
-        for index in range(3):
+        for index in range(args.start_index-1, args.start_index-1+args.launches):
             preflight = quiet(deadline=min(deadline, time.monotonic()+360))
             app = launch(root, args.bundle, out, index,
                          {'OPEN_AUTOMATION_LIBRARY_PREPARATION_TRACE': '1'})
@@ -111,8 +119,8 @@ def run(args):
             if not row['valid'] or not idle['ok']:
                 result['stoppedAtRequiredFailure'] = index+1
                 break
-        result['complete'] = len(result['launches']) == 3
-        result['usesFirstUseInfo'] = any(not row['idle']['allWithinFrame'] for row in result['launches'])
+        result['complete'] = len(result['launches']) == args.launches
+        result['usesFirstUseInfo'] = True
         result['ok'] = result['complete'] and all(row['valid'] and row['idle']['ok'] for row in result['launches'])
     except BaseException as error:
         result['error'] = repr(error); raise
@@ -130,4 +138,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bundle', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--start-index', type=int, choices=(1, 2, 3), default=1)
+    parser.add_argument('--launches', type=int, choices=(1, 2, 3), default=3)
     raise SystemExit(run(parser.parse_args()))
