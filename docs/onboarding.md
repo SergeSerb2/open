@@ -191,7 +191,9 @@ The form uses an eight-point grid, 13-point descriptions with an 18-point line
 height, and a 32-point gap before controls. Name has a 36-point rounded field.
 Import results use one 12-point-radius card with tabular counts. Theme keeps the
 real color-pad input and theme math, with a bounded 400 × 280 P3 color field,
-20-point swatches and one appearance segmented control. The blocker describes
+20-point swatches and one appearance segmented control. The selected segment and
+blocker switch use Open indigo. Shuffle is a 28-point secondary button. The
+blocker card has equal 16-point top and bottom padding. The blocker describes
 EasyList, EasyPrivacy and site exceptions; cookie lists are not enabled by
 default. Default choices are 48-point radio cards, with Yes selected initially.
 The primary says Make default only when the request is needed. Footer positions
