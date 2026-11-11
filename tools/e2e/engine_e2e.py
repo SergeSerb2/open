@@ -6185,7 +6185,9 @@ def _media_idle_cpu(app, audio):
     animations, pending = [], []
     early_start, early_end = MEDIA_IDLE_EARLY_WINDOW
     start, end = MEDIA_IDLE_WINDOW
-    for _ in range(4):
+    for pair in range(4):
+        # Each pair (about 40 s) gets its own row-watchdog period; four pairs exceed one.
+        begin_row("media_idle_cpu pair %d" % (pair + 1))
         time.sleep(early_start)
         view = players(); animations.append(view["animations"]); pending.append(view["pendingCollapse"])
         if playing_break:
