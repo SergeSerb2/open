@@ -55,6 +55,17 @@ uses a compiled read-only CoreGraphics helper, with no Apple events. The externa
 AppleScript suite runs on the M5: the M1 forbids AppleScript/osascript over SSH
 (LEAD 18:50) and reports that stage as `M5_REQUIRED`.
 
+A rented Namespace Mac (NS-MACS.md: virtual Apple M5 Max, `VirtualMac` model,
+macOS 27) records `machine: rented` and its `machineInfo`. Its merge-lane and
+observers-lane receipts can replace the M1's functional receipts: put them in the
+same `--m1-receipts` directory as the M1 timing receipts. The importer applies the
+same exact-head, clean-fingerprint, engine, config, style, lane and cleanup checks.
+It refuses, with a reason in the summary's "Refused receipt" table: a rented
+timing-lane receipt, a rented incognito stage (its native captures are keyed to the
+M1 built-in 2x display), and a receipt without the rented host metadata. Timing
+rows inside a rented stage are kept as INFO only; the quiet M1 timing receipt is
+still required. A rented Mac refuses `--lane timing` and runs incognito never.
+
 Actions declares its intentional `Page.crash` before sending it on the M1.
 The shared `/tmp/open-intentional-crash-11.json` marker and private stage ledger
 record the App PID and its live renderer PIDs. Only one renderer report with
