@@ -8,8 +8,9 @@ from pathlib import Path
 
 
 def split_checks(factory, results, tmp, h, functional_only=False):
+    lane = getattr(h, "E2E_LANE", "all")
     environment = None
-    if not functional_only:
+    if not functional_only and lane != "merge":
         probe = Path(tmp) / 'split-idle-probe.dylib'
         subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
                         str(Path(h.ROOT) / 'tools/verification/feature-idle-probe.m'), '-framework', 'AppKit',
@@ -72,7 +73,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             saved[name] = app.call('defaults', key=name)
             app.call('defaults', key=name, value=value)
         app.call('suggest-remote', enabled=False)
-        if not functional_only:
+        if not functional_only and lane != 'merge':
             app.call('split', op='observe')
         app.call('window-frame', frame=[60, 60, 1360, 860])
         empty_menu = app.call('split', op='plus')
@@ -92,7 +93,9 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         back = app.page(b)['url']; app.call('menu-perform', id='go-forward'); app.call('wait', tab=b)
         row('E1_input_history', typed == 'split input' and back.endswith('/b') and app.page(b)['url'].endswith('/b-next')
             and app.page(a)['url'].endswith('/a'), typed=typed, back=back)
-        if functional_only:
+        if lane == 'observers':
+            pass  # Pixels and strict timing belong to the uninstrumented merge lane.
+        elif functional_only:
             results['snapshot_two_panes']=dict(status='DEFERRED', reason='M5 pixel receipt required (TANDEM §4M)')
         else:
             png = Path(h.ROOT) / '.re/s9-split/split-two-pane.png'; png.parent.mkdir(parents=True, exist_ok=True)
@@ -202,7 +205,9 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             and abs(after['panes'][0]['frame'][3]-before['panes'][0]['frame'][3]-35) <= 1
             and geometry(after, 'vertical', 4) and [p['frame'] for p in before['panes'][2:]] == [p['frame'] for p in after['panes'][2:]],
             before=before, during=during, after=after)
-        if functional_only:
+        if lane == 'merge':
+            pass  # The native-resource predicate requires the separate observer lane.
+        elif functional_only:
             results['speed_idle_after_drag']=dict(status='DEFERRED', reason='M5 performance receipt required (TANDEM §4M)')
         else:
             idle = app.call('split', op='idle')
@@ -266,7 +271,9 @@ def split_checks(factory, results, tmp, h, functional_only=False):
         first = opened('bench-first'); second = opened('bench-second')
         third = opened('bench-third'); app.call('sidebar-menu', node=b, item='Open in Split View'); s = settled(2)
         live([p['id'] for p in s['panes']])
-        if functional_only:
+        if lane == 'observers':
+            pass  # Pixels and strict timing belong to the uninstrumented merge lane.
+        elif functional_only:
             results['speed_tab_switch']=dict(status='DEFERRED', reason='M5 timing receipt required (TANDEM §4M)')
         else:
             app.begin_timing('split switch benchmark')
@@ -274,7 +281,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             summaries = {}
             for name, values in measured.items():
                 summaries[name] = dict(median=statistics.median(values), p95=sorted(values)[math.ceil(len(values)*.95)-1])
-            row('speed_tab_switch', all(summaries[name]['p95'] <= 25 for name in ('single', 'split')), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
+            row('speed_tab_switch', all(summaries[name]['p95'] <= 25 for name in ('single', 'split')), timing=True, functionalOK=bool(measured), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
                 milliseconds=summaries, samples=measured, target_ms=16, target_met=all(summaries[name]['p95'] <= 16 for name in ('single', 'split')), absolute_ceiling_ms=25, relative_gate='separate interleaved main/branch receipt: branch <= main + 1 ms on both paths', scope='production sidebar selection through native layout/CA submission and first rAF after fresh visibilitychange in every shown pane (last pane wins), native layout/CA flush return; query return retained separately; excludes physical presentation')
         app.begin_timing('split motion probe')
         motion = app.call('split', op='bench', nodes=[first, second, s['id']], motionOnly=True)

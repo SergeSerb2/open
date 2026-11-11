@@ -277,12 +277,13 @@
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return app.activationTrace.events
       case "yield-activation":
-        // CEF may expose its persistent hard link as executableURL. The peer
-        // must map this exact file; a separate copy with equal bytes is refused.
+        // Read the mapped executable from the kernel, not LaunchServices'
+        // cached executableURL. CEF may use a persistent hard link; the peer
+        // must map this exact file, never a separate copy with equal bytes.
         guard let pid = a["pid"] as? Int32, pid != getpid(),
           let target = NSRunningApplication(processIdentifier: pid),
-          let targetFile = target.executableURL,
-          let ownFile = Bundle.main.executableURL,
+          let targetFile = Self.mappedExecutableURL(pid),
+          let ownFile = Self.mappedExecutableURL(getpid()),
           let targetAttributes = try? FileManager.default.attributesOfItem(atPath: targetFile.path),
           let ownAttributes = try? FileManager.default.attributesOfItem(atPath: ownFile.path),
           let targetDevice = targetAttributes[.systemNumber] as? NSNumber,
@@ -1747,6 +1748,12 @@
       if let group = animation as? CAAnimationGroup { value["children"] = (group.animations ?? []).map(describeAnimation) }
       return value
     }
+    private static func mappedExecutableURL(_ pid: Int32) -> URL? {
+      var path = [CChar](repeating: 0, count: 4096)
+      guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
+      return URL(fileURLWithPath: path.withUnsafeBufferPointer { String(cString: $0.baseAddress!) })
+    }
+
     private func rect(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map(Double.init) }
 
     private func legacyAX(_ object: NSObject, _ attribute: String) -> String {
@@ -2118,20 +2125,15 @@
             guard ContinuousClock.now < deadline else { throw Failure(message: "pointer motion was not dequeued") }
             try await Task.sleep(for: .milliseconds(5))
         }
-        // Tracking areas follow the hardware pointer, so `hover` also delivers
-        // enter, move, and exit to the owners of the areas under the point. The automation
-        // pointer moves only afterwards: `hover` first rebuilds every tracking area, and state
-        // that re-reads the pointer then (the window buttons' hover) must still see the old
-        // point, so the enter and exit events drive the change, as real pointer motion does.
+        // Native motion has now arrived. Publish its point before rebuilding
+        // tracking areas: owners that sync from the pointer during that rebuild
+        // must see the new location, or they undo the preflight exit above.
+        BrowserWindowController.automationPointer = (number, location)
         if action == "hover" {
           var result = hover(target, at: location)
           result["exited"] = leaving["exited"] ?? []
-          BrowserWindowController.automationPointer = (number, location)
           return result
         }
-        // Known at once (the move event is queued), for state that reads where the pointer
-        // is rather than waiting for an event: the window buttons' hover.
-        BrowserWindowController.automationPointer = (number, location)
         // A move delivers no enter or exit, so the owners `hover` entered before may no longer
         // hold the pointer; the next `hover` enters the owners under its point again.
         hoveredOwners = [:]

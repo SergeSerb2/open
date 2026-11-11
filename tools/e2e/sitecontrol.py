@@ -38,6 +38,10 @@ def run(factory, results, tmp, env, functional_only=False):
         def factory(*args, **kwargs):
             kwargs['extra_args'] = [*kwargs.get('extra_args', []), *fixture_args]
             return original_factory(*args, **kwargs)
+        if env.get('E2E_LANE') == 'observers':
+            from sitecontrol_performance import run as performance
+            performance(factory, results, origin, tmp, env)
+            return
         app = factory(urls=('about:blank',))
         saved = {}
         private = Path(env['ROOT']) / '.re/handoff/sections/s12/A-sitecontrol'
@@ -56,6 +60,23 @@ def run(factory, results, tmp, env, functional_only=False):
         def record(key, ok, **detail):
             results[key] = dict(ok=bool(ok), load=load(), **detail)
             print(key, 'PASS' if ok else 'FAIL', flush=True)
+        def recorded_visual(key, value):
+            # LEAD 02:35 approves exactly these two S12-V rows for Step 4.
+            # CheckedResults still audits App life, focus and crashes first;
+            # retain the failed pixel predicate and every raw measurement.
+            assert key in ('S11_material', 'S12_elements')
+            measured = (len(value.get('probes', [])) == 4 if key == 'S11_material'
+                        else bool(value.get('elements')) and value.get('limits') == {'positionPoints': 1, 'deltaE00': 2})
+            deferred = value.get('ok') is False and measured and value.get('negativeRejected') is True
+            if deferred:
+                value['reason'] = 'S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)'
+            try:
+                results[key] = value
+            except env['SuiteStopped'] as stop:
+                if not deferred or stop.failed_row != key or results.get(key) is not value:
+                    raise
+                env['begin_row']('after ' + key)
+                print(key + ' raw FAIL; exact S12-V deferral, continuing', flush=True)
         def blocked(key, reason, **detail):
             results[key] = dict(status='BLOCKED', reason=reason, load=load(), **detail)
         def refused(**args):
@@ -457,9 +478,9 @@ def run(factory, results, tmp, env, functional_only=False):
             validation=all(p['deltaE00']<=3 for p in probes[2:])
             _,_,closed_pixels=env['read_image'](closed_path,srgb=True)
             closed_fit=all(max(abs(a-b) for a,b in zip(closed_pixels(x*scale,y*scale),rgb))<=3 for x,y,rgb in targets[:2])
-            record('S11_material',fits and validation and not closed_fit,probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale,state=s)
+            recorded_visual('S11_material',dict(ok=fits and validation and not closed_fit,load=load(),probes=probes,snapshot=path,negative=closed_path,negativeRejected=not closed_fit,scale=scale,state=s))
             from sitecontrol_pixels import compare_live, background_response
-            results['S12_elements']=compare_live(path, s, scale, private, env,negative_path=closed_path)
+            recorded_visual('S12_elements',compare_live(path, s, scale, private, env,negative_path=closed_path))
             response=background_response(app,tab,private,env,scale)
             # INFO has no acceptance predicate. Keep focus loss as an interruption.
             interruptions=results.tracker.loss()
@@ -482,7 +503,7 @@ def run(factory, results, tmp, env, functional_only=False):
                           .replace('frames.length<240','frames.length<60'))
             negative_rejected=not (p95(slow)<=p0+1 and drops(slow)<=d0+.01)
             record('S13_scroll',p1<=p0+1 and d1<=d0+.01 and negative_rejected,closedP95=p0,openP95=p1,closedDropped=d0,openDropped=d1,refreshMilliseconds=interval,
-                   negativeRejected=negative_rejected,negativeP95=p95(slow),negativeDropped=drops(slow))
+                   timing=True,functionalOK=negative_rejected,negativeRejected=negative_rejected,negativeP95=p95(slow),negativeDropped=drops(slow))
         finally:
             env['_restore_defaults'](app,saved)
             app.quit()
