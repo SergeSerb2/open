@@ -61,7 +61,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
   private var nameField: NSTextField?
   private var favoriteButtons: [OnboardingFavoriteButton] = []
   private var favoriteCounter: NSTextField?
-  private var blockerSwitch: NSSwitch?
+  private var blockerSwitch: OnboardingAccentSwitch?
   private var cardButtons: [OnboardingButton] = []
   private var presetStrip: OnboardingPresetStrip?
   private var colorPad: OpenSpaceEditor.ColorPadView?
@@ -136,7 +136,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       let fieldHeight = min(280,max(200,controls.bounds.height-88))
       colorField?.frame = NSRect(x: 0,y: 48,width: contentWidth,height: fieldHeight)
       modeBar?.frame = NSRect(x: 0,y: fieldHeight+64,width: min(230,contentWidth-96),height: 28)
-      themeShuffle?.frame = NSRect(x: contentWidth-80,y: fieldHeight+65,width: 80,height: 26)
+      themeShuffle?.frame = NSRect(x: contentWidth-80,y: fieldHeight+64,width: 80,height: 28)
     }
     preview.frame = NSRect(x: width, y: 0, width: view.bounds.width-width, height: view.bounds.height)
     let cardFrame = preview.convert(preview.cardRect, to: view)
@@ -216,6 +216,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       let pad = field.pad
       let bar = NSSegmentedControl(labels: ["Auto","Light","Dark"],trackingMode: .selectOne,target: self,action: #selector(appearanceChanged(_:)))
       bar.segmentStyle = .rounded; bar.font = .systemFont(ofSize: 13)
+      bar.selectedSegmentBezelColor = OnboardingTokens.Room.space
       bar.setAccessibilityLabel("Appearance")
       strip.onAction = { [weak self] in self?.editTheme($0) }; pad.onAction = strip.onAction
       controls.addSubview(strip); controls.addSubview(field); controls.addSubview(bar)
@@ -223,17 +224,17 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       presetStrip = strip; colorField = field; colorPad = pad; modeBar = bar; themeShuffle = shuffle; updateThemeControls()
     }
     if step == .blocker {
-      let card = OnboardingFormCard(); card.frame = NSRect(x: 0,y: 0,width: 408,height: 100); controls.addSubview(card)
+      let card = OnboardingFormCard(); card.frame = NSRect(x: 0,y: 0,width: 408,height: 80); controls.addSubview(card)
       let label = NSTextField(labelWithString: "Block ads and trackers"); label.font = .systemFont(ofSize: 13,weight: .medium)
-      label.frame = NSRect(x: 16,y: 13,width: 290,height: 18); card.addSubview(label)
-      let toggle = NSSwitch(frame: NSRect(x: 340,y: 6,width: 52,height: 32)); toggle.state = blocker ? .on:.off
+      label.frame = NSRect(x: 16,y: 16,width: 290,height: 18); card.addSubview(label)
+      let toggle = OnboardingAccentSwitch(frame: NSRect(x: 340,y: 9,width: 52,height: 32)); toggle.state = blocker ? .on:.off
       toggle.setAccessibilityLabel("Block ads and trackers"); toggle.target = self; toggle.action = #selector(blockerChanged(_:)); card.addSubview(toggle)
       blockerSwitch = toggle
       let note = NSTextField(wrappingLabelWithString: "You can change this later in Settings › Ad Blocking.")
-      note.font = .systemFont(ofSize: 12); note.textColor = .secondaryLabelColor; note.frame = NSRect(x: 16,y: 52,width: 370,height: 34); card.addSubview(note)
+      note.font = .systemFont(ofSize: 12); note.textColor = .secondaryLabelColor; note.frame = NSRect(x: 16,y: 46,width: 370,height: 18); card.addSubview(note)
       for (index,text) in ["Blocks ads with EasyList","Stops trackers with EasyPrivacy","Remembers your site exceptions"].enumerated() {
         let item = NSTextField(labelWithString: "✓  "+text); item.font = .systemFont(ofSize: 13); item.textColor = .secondaryLabelColor
-        item.frame = NSRect(x: 0,y: 124+index*32,width: 408,height: 20); controls.addSubview(item)
+        item.frame = NSRect(x: 0,y: 104+index*32,width: 408,height: 20); controls.addSubview(item)
       }
     }
     if step == .defaultBrowser {
@@ -385,7 +386,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
     updatePreview()
   }
   func setBlocker(_ on: Bool) { blocker = on; blockerSwitch?.state = on ? .on:.off; updatePreview() }
-  @objc private func blockerChanged(_ sender: NSSwitch) { setBlocker(sender.state == .on) }
+  @objc private func blockerChanged(_ sender: OnboardingAccentSwitch) { setBlocker(sender.state == .on) }
   func chooseDefault(_ yes: Bool) { defaultYes = yes; render(direction: 0) }
   @objc private func defaultChanged(_ sender: NSButton) { chooseDefault(sender.tag == 0) }
   private var defaultOutcome: String { defaultPending && !defaultResolved ? "":firstRun.errorText ?? (firstRun.defaultWasAttempted ? (firstRun.isDefaultBrowser ? "Open is your default browser.":"Open is not your default browser yet. You can set it later in Settings."):"") }
@@ -605,7 +606,7 @@ final class OnboardingStepsController: NSViewController, NSTextFieldDelegate {
       } else { tinted = image.withSymbolConfiguration(.init(paletteColors: [usesLightInk || prominent ? .white:.labelColor])) ?? image }
       tinted.draw(in: NSRect(x: bounds.midX-9, y: bounds.midY-9, width: 18, height: 18), from: .zero, operation: .sourceOver, fraction: (isEnabled ? 1:0.4)*(circular ? 0.9:1))
     }
-    else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: prominent ? NSColor.white : NSColor.secondaryLabelColor, .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
+    else { let style = NSMutableParagraphStyle(); style.alignment = .center; let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 15), .foregroundColor: prominent ? NSColor.white : outlined ? NSColor.labelColor : NSColor.secondaryLabelColor, .paragraphStyle: style]; (title as NSString).draw(in: NSRect(x: 4, y: (bounds.height-20)/2, width: bounds.width-8, height: 20), withAttributes: attributes) }
     if window?.firstResponder === self { Self.primaryBlue.withAlphaComponent(0.65).setStroke(); let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 18, yRadius: 18); path.lineWidth = 2; path.stroke() }
   }
 }

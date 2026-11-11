@@ -43,9 +43,31 @@ import OpenSpaceEditor
   override func layout() {
     super.layout()
     for child in subviews {
-      if child is NSSwitch { child.frame.origin.x = bounds.width-68 }
+      if child is OnboardingAccentSwitch { child.frame.origin.x = bounds.width-68 }
       else { child.frame.size.width = max(0,bounds.width-32-(child.frame.minY < 44 ? 60:0)) }
     }
+  }
+  override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+}
+
+/// AppKit owns switch input, keyboard handling and the AXSwitch value. The
+/// bezel is drawn here because NSSwitch has no public accent-color override.
+@MainActor final class OnboardingAccentSwitch: NSButton {
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    setButtonType(.switch); title = ""; isBordered = false
+    setAccessibilityRole(.checkBox); setAccessibilitySubrole(.switch)
+  }
+  required init?(coder: NSCoder) { nil }
+  override var state: NSControl.StateValue { didSet { needsDisplay = true } }
+  override func draw(_ dirtyRect: NSRect) {
+    let track = NSRect(x: bounds.midX-20,y: bounds.midY-11,width: 40,height: 22)
+    let outline = NSBezierPath(roundedRect: track,xRadius: 11,yRadius: 11)
+    (state == .on ? OnboardingTokens.Room.space:NSColor.quaternaryLabelColor).withAlphaComponent(isEnabled ? 1:0.4).setFill()
+    outline.fill()
+    let knob = NSRect(x: state == .on ? track.maxX-20:track.minX+2,y: track.minY+2,width: 18,height: 18)
+    NSColor.white.withAlphaComponent(isEnabled ? 1:0.6).setFill(); NSBezierPath(ovalIn: knob).fill()
+    if window?.firstResponder === self { NSFocusRingPlacement.only.set(); outline.fill() }
   }
   override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
