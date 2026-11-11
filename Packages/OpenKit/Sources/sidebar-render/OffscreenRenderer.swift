@@ -14,6 +14,21 @@ import CryptoKit
 final class OffscreenRenderer {
     let device: MTLDevice
 
+    /// Exact screen mode is part of the reference key. No mode fallback.
+    static func displayKey(_ screen: NSScreen) -> String? {
+        guard [1.0, 2.0].contains(screen.backingScaleFactor),
+              let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304,
+              let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
+              let mode = CGDisplayCopyDisplayMode(number.uint32Value),
+              (1...16384).contains(mode.width), (1...16384).contains(mode.height),
+              (1...32768).contains(mode.pixelWidth), (1...32768).contains(mode.pixelHeight),
+              mode.refreshRate.isFinite, mode.refreshRate > 0, mode.refreshRate <= 1000 else { return nil }
+        let digest = SHA256.hash(data: profile).map { String(format: "%02x", $0) }.joined()
+        let refresh = Int((mode.refreshRate * 1000).rounded())
+        return "scale-\(Int(screen.backingScaleFactor))-icc-\(digest)-mode-\(mode.width)x\(mode.height)-pixels-\(mode.pixelWidth)x\(mode.pixelHeight)-mhz-\(refresh)"
+    }
+
+
     init() {
         guard let d = MTLCreateSystemDefaultDevice() else { fatalError("no Metal device") }
         device = d
@@ -45,9 +60,8 @@ final class OffscreenRenderer {
         window.isReleasedWhenClosed = false
         if verificationScreen, let expected = ProcessInfo.processInfo.environment["OPEN_VERIFY_DISPLAY_KEY"] {
             let actual: String
-            if let screen = window.screen, let profile = screen.colorSpace?.iccProfileData, profile.count <= 4_194_304 {
-                let digest = SHA256.hash(data: profile).map { String(format: "%02x", $0) }.joined()
-                actual = "scale-\(Int(screen.backingScaleFactor))-icc-\(digest)"
+            if let screen = window.screen, let key = displayKey(screen) {
+                actual = key
             } else { actual = "unavailable" }
             guard actual == expected else {
                 window.close()

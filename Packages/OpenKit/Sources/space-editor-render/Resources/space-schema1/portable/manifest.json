@@ -1,12 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "environments": {
-    "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856": {
+    "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856-mode-1512x982-pixels-3024x1964-mhz-120000": {
       "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
       "environment": {
         "backingScale": 2,
         "iccSHA256": "b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
-        "key": "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856"
+        "key": "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856-mode-1512x982-pixels-3024x1964-mhz-120000",
+        "mode": {
+          "points": "1512x982",
+          "pixels": "3024x1964",
+          "refreshMilliHz": 120000
+        }
       },
       "renderScale": 2,
       "osBuild": "26B123",
@@ -27,9 +32,16 @@
           "window-2.png": "766d09ab15bdf766daf11aec477f7801a185fe4d36b67a9913f5dbc1516b7ad7"
         }
       },
-      "reason": "Same-scale 2x render from unchanged trusted main. AppKit text and symbol rasterization follows the main backing scale and ICC profile. Existing 1x references stay byte-for-byte unchanged."
+      "reason": "Same-scale 2x render from unchanged trusted main. AppKit text and symbol rasterization follows the main backing scale and ICC profile. Existing 1x references stay byte-for-byte unchanged.",
+      "assetKey": "scale-2-icc-b33d3996c56e94d25097d38213687e26e0e8224ed0c215634a8c350ed44f6856",
+      "mode": {
+        "points": "1512x982",
+        "pixels": "3024x1964",
+        "refreshMilliHz": 120000
+      },
+      "modeQualification": "2026-11-10: exact scale/ICC references retained unchanged; mode is now required at selection and render."
     },
-    "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43": {
+    "scale-1-icc-b1e0db75fbfcbecd866fb49106037ef7f806728e9a9f2f797d3deb8d4503fc43-mode-2560x1440-pixels-2560x1440-mhz-240000": {
       "original": true,
       "renderScale": 1,
       "trustedMainCommit": "df4767ad235106863983b45b2a1ffd87c7bd1b46",
@@ -45,7 +57,13 @@
           "window-1.png": "e5756cd9be3da70fc31561f7a4e2dfb2891ce43a054f30b96a3b7f85999c6754",
           "window-2.png": "bea8d9f21317991961b89de98ef4af4356999fa42d3101f3dbb175d1f295e7d9"
         }
-      }
+      },
+      "mode": {
+        "points": "2560x1440",
+        "pixels": "2560x1440",
+        "refreshMilliHz": 240000
+      },
+      "modeQualification": "2026-11-10: exact scale/ICC references retained unchanged; mode is now required at selection and render."
     }
   }
 }
