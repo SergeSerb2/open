@@ -569,7 +569,7 @@ def pixel_contrast(path, state, window, api):
     minima = dict(header=min(samples[name]['ratio'] for name in ('heading', 'subheading')),
                   title=min(samples['card%d_title' % i]['ratio'] for i in range(1, 5)),
                   body=min(samples['card%d_body' % i]['ratio'] for i in range(1, 5)))
-    labels_present = [label['label'] for card in layout['cards'] for label in card.get('labelPixels', [])] == ['Lisbon in spring', 'Weekend reading', 'A slower Sunday']
+    labels_present = [label['label'] for card in layout['cards'] for label in card.get('labelPixels', [])] == ['Lisbon in spring', 'Weekend reading', 'A slower Sunday', 'The garden journal']
     links_present = [link['label'] for link in layout.get('linkPixels', [])] == ['Essential Shortcuts', 'Settings']
     return dict(ok=labels_present and links_present and all(s['ok'] for s in samples.values()), ratios=minima, samples=samples,
                 illustrationLabelsPresent=labels_present, footerLinksPresent=links_present,

@@ -1,4 +1,4 @@
-"""Exact, shrink-only exceptions for the real merge gate (not installed yet)."""
+"""Exact, shrink-only exceptions for the real merge gate."""
 import datetime
 import json
 import re

@@ -2812,7 +2812,7 @@ def _window_flow_checks(factory, results, tmp):
         w1 = first["id"]
         # Restoring a window constrains it to the display's visible area. Keep
         # the fixture above the actual Dock, while retaining exact equality.
-        base_y = max(60, first["mainScreenVisibleFrame"][1])
+        base_y = max(60, first["mainScreenVisibleFrame"][1] + 20)
         results["native_window"] = {
             "ok": first["titled"] and first["hiddenTitle"] and not first["peekCreated"]
                   and len(first["trafficLights"]) == 3
