@@ -176,7 +176,7 @@ class FocusTracker:
             if app.pid and not app.closed:
                 actual = app.process_path(app.pid)
                 expected = os.path.realpath(app.executable)
-                if actual != expected:
+                if not app.matches_executable_path(actual):
                     dead.append(dict(pid=app.pid, actual=actual, expected=expected))
         if crashed or dead:
             self.fatal_app_death = True
@@ -259,6 +259,8 @@ class Open:
         bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE")
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
+        launched_file = os.stat(app)
+        self.executable_file_id = (launched_file.st_dev, launched_file.st_ino)
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
         # Only disposable, uniquely owned bundle clones permit path-wide helper
         # discovery. Ordinary App bundles can serve several owned instances.
@@ -475,6 +477,18 @@ class Open:
         size = ctypes.CDLL("/usr/lib/libproc.dylib").proc_pidpath(pid, path, len(path))
         return os.path.realpath(os.fsdecode(path.value)) if size > 0 else ""
 
+    def matches_executable_path(self, path):
+        """CEF keeps a hard link in CodeSignClones. proc_pidpath may name it.
+        The device/inode must still be the exact executable file we launched;
+        identical bytes, a basename, or a path prefix never establish ownership.
+        """
+        try:
+            current = os.stat(self.executable)
+            actual = os.stat(path)
+            return (current.st_dev, current.st_ino) == self.executable_file_id == (actual.st_dev, actual.st_ino)
+        except OSError:
+            return False
+
     def discover_owned_processes(self):
         # The unique data-root argument also finds a launch that failed before
         # ping returned its PID. Do not kill by app name or bundle identifier.
@@ -483,13 +497,12 @@ class Open:
             fields = line.split()
             if len(fields) == 2:
                 rows.append((int(fields[0]), int(fields[1])))
-        root_path = os.path.realpath(self.executable)
         owned = set(self.owned_processes)
-        if self.pid and self.process_path(self.pid) == root_path:
+        if self.pid and self.matches_executable_path(self.process_path(self.pid)):
             owned.add(self.pid)
         if not self.pid:
             for pid, _ in rows:
-                if self.process_path(pid) != root_path:
+                if not self.matches_executable_path(self.process_path(pid)):
                     continue
                 args = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, timeout=5).stdout
                 if "--user-data-dir=" + self.user_data in args:
@@ -507,7 +520,7 @@ class Open:
             owned.update(pid for pid, _ in rows if self.process_path(pid).startswith(bundle))
         for pid in owned:
             path = self.process_path(pid)
-            if path == root_path or path.startswith(bundle):
+            if self.matches_executable_path(path) or path.startswith(bundle):
                 self.owned_processes[pid] = path
 
     def owned_windows(self):

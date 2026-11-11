@@ -276,9 +276,19 @@
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return app.activationTrace.events
       case "yield-activation":
+        // CEF may expose its persistent hard link as executableURL. The peer
+        // must map this exact file; a separate copy with equal bytes is refused.
         guard let pid = a["pid"] as? Int32, pid != getpid(),
           let target = NSRunningApplication(processIdentifier: pid),
-          target.executableURL?.resolvingSymlinksInPath() == Bundle.main.executableURL?.resolvingSymlinksInPath()
+          let targetFile = target.executableURL,
+          let ownFile = Bundle.main.executableURL,
+          let targetAttributes = try? FileManager.default.attributesOfItem(atPath: targetFile.path),
+          let ownAttributes = try? FileManager.default.attributesOfItem(atPath: ownFile.path),
+          let targetDevice = targetAttributes[.systemNumber] as? NSNumber,
+          let targetInode = targetAttributes[.systemFileNumber] as? NSNumber,
+          let ownDevice = ownAttributes[.systemNumber] as? NSNumber,
+          let ownInode = ownAttributes[.systemFileNumber] as? NSNumber,
+          targetDevice == ownDevice, targetInode == ownInode
         else { throw Failure(message: "activation peer must be another instance of this exact Open executable") }
         NSApp.yieldActivation(to: target); return true
       case "native-focus-state":
