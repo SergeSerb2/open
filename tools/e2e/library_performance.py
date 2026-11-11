@@ -113,7 +113,7 @@ def scroll_fixture(root,snapshot):
 
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
-    receipt={'configuration':'Release','samples':[],'method':'Native layout, displayIfNeeded and CATransaction.flush; provider completion awaited. No physical scan-out claim.','limits':{'firstSubmittedMilliseconds':16,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleCPUPercent':.2},'complete':False}
+    receipt={'configuration':'Release','samples':[],'method':'Native layout, displayIfNeeded and CATransaction.flush; provider completion awaited. Search starts at native key dispatch after focus setup, without fixed harness delivery waits. No physical scan-out claim.','limits':{'firstSubmittedMilliseconds':16,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleCPUPercent':.2},'complete':False}
     active=None;frames=None
     def save(): (output/'result.json').write_text(json.dumps(receipt,indent=2))
     save()
@@ -160,7 +160,10 @@ def main(args):
                 end_cpu=cpu(active.bundle)
                 row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleCPUPercent':idle}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
-                row['valid']=end_cpu<=200;receipt['samples'].append(row);save();print(json.dumps(row),flush=True)
+                row['valid']=end_cpu<=200;receipt['samples'].append(row);save()
+                # Keep the full compositor signatures and cleanup receipt in
+                # result.json; console output needs only the measured summary.
+                print(json.dumps({key:value for key,value in row.items() if key not in ['physicalOpen','quietAttempts','cleanup','startup']}),flush=True)
                 if not row['valid']:raise RuntimeError('foreign CPU invalidated sample')
             def verdict(values,limit):return {'values':values,'median':statistics.median(values),'limit':limit,'ok':statistics.median(values)<=limit and max(values)<=1.5*limit}
             receipt['summary']={
