@@ -180,22 +180,37 @@ final class LibraryListView: NSView, NSMenuDelegate {
         _ = bytes.string(fromByteCount:1_024_000)
         let placeholder = NSImage(systemSymbolName:"globe",accessibilityDescription:nil)
         let actions = [LibraryRowAction(title:"Delete",glyph:.trash,run:{}),LibraryRowAction(title:"Restore",glyph:.undo,run:{})]
-        func render(_ view:NSView) {
-            view.layoutSubtreeIfNeeded(); view.displayIfNeeded(); view.layer?.displayIfNeeded()
-            for child in view.subviews { render(child) }
+        func display(_ view:NSView) {
+            view.displayIfNeeded(); view.layer?.displayIfNeeded()
+            for child in view.subviews { display(child) }
             func display(_ layer:CALayer) { for child in layer.sublayers ?? [] { child.displayIfNeeded(); display(child) } }
             if let layer = view.layer { display(layer) }
         }
-        for kind in ["download","archive","history","capture","boost","boostGallery"] {
-            guard await LibraryIdleWork.perform({
-            let row = LibraryItemView(frame:CGRect(x:0,y:0,width:304,height:56))
-            row.configure(LibraryRowItem(id:"warm-"+kind,title:"Library row",subtitle:"Page · Today",kind:kind,image:placeholder,activate:{},actions:actions,hoverActions:actions),foreground:foreground,overlay:overlay,gallery:kind == "boostGallery")
-            render(row)
+        // Only first-use warming is split. Visible rows, overscan and the
+        // foreground open/search paths keep their existing submission order.
+        for (index,kind) in ["download","archive","history","capture","boost","boostGallery"].enumerated() {
+            var prepared:LibraryItemView?
+            guard await LibraryIdleWork.perform(rowKind:index+1,phase:1,firstUse:true,flush:false,{
+                prepared = LibraryItemView(frame:CGRect(x:0,y:0,width:304,height:56))
+            }),let row = prepared else { return false }
+            guard await LibraryIdleWork.perform(rowKind:index+1,phase:2,flush:false,{
+                row.configure(LibraryRowItem(id:"warm-"+kind,title:"Library row",subtitle:"Page · Today",kind:kind,image:placeholder,activate:{},actions:actions,hoverActions:actions),foreground:foreground,overlay:overlay,gallery:kind == "boostGallery")
+                row.layoutSubtreeIfNeeded()
+            }) else { return false }
+            guard await LibraryIdleWork.perform(rowKind:index+1,phase:3,{
+                display(row)
             }) else { return false }
         }
-        guard await LibraryIdleWork.perform({
-        let heading = LibraryHeadingView(frame:CGRect(x:0,y:0,width:304,height:27))
-        heading.configure("Today",color:foreground.withAlphaComponent(0.68)); render(heading)
+        var preparedHeading:LibraryHeadingView?
+        guard await LibraryIdleWork.perform(rowKind:7,phase:1,firstUse:true,flush:false,{
+            preparedHeading = LibraryHeadingView(frame:CGRect(x:0,y:0,width:304,height:27))
+        }),let heading = preparedHeading else { return false }
+        guard await LibraryIdleWork.perform(rowKind:7,phase:2,flush:false,{
+            heading.configure("Today",color:foreground.withAlphaComponent(0.68))
+            heading.layoutSubtreeIfNeeded()
+        }) else { return false }
+        guard await LibraryIdleWork.perform(rowKind:7,phase:3,{
+            display(heading)
         }) else { return false }
         return true
     }

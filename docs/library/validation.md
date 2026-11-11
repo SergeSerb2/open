@@ -1,11 +1,11 @@
 # Library validation
 
-Status: STOP after the LEAD 13:50 restored-flush check on `754cb5b5`.
-All three pairs are valid and preparation finished before every open.
-Ready-open median/max is 8.818/14.316 ms (limits 8/12); the largest idle slice
-is 12.279 ms (limit 8.0), with 13.869 ms of enclosing busy time (limit 8.3).
-Warm section and search carry by module identity. Earlier receipts and rulings
-remain below. No further rerun, main merge, full gate, push or PR was started.
+Status: LEAD 14:20 closes the ready-open row at its original 16 ms budget.
+The restored-flush median/max 8.818/14.316 ms passes the required 16/24 ms
+bounds. Its 8.818 ms median remains INFO against the 8 ms stretch target:
+"stretch target; follow-up with the performance agent". First-use row warming
+is split across three turns; the one three-launch control is pending.
+No final M5 gate or PR has run. Earlier raw results and rulings remain below.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -561,3 +561,36 @@ Launcher log: `.re/l3/explicit-flush-ready-r1.log`.
 Pending lead decision: What narrow next step should D1 take for the failed
 ready-open and preparation bounds after explicit flush was restored and all
 three opens occurred after preparation finished? No further work is queued.
+
+
+## LEAD 14:20 closing rule — first-use rows split, launch control pending
+
+Ready-open uses the plan's required median ≤16 ms and sample ceiling ≤24 ms.
+All measured sets pass. The ≤8 ms prebuilt median is a stretch target, INFO;
+the latest value is 8.818 ms, "stretch target; follow-up with the performance
+agent". The action phase is handed to that agent for per-call measurements.
+The earlier LEAD 13:50 verdicts remain historical below their original limits.
+
+Only `LibraryListView.warmRowKinds` changes product work: for the first row
+of download, archive, history, capture, boost, boostGallery and heading, creation,
+configure/layout, and display/flush run in three separate input-yielding turns.
+Creation and configure/layout do not explicitly flush; display does. Later rows
+keep one row and one explicit flush per turn. `LibraryIdleWork` adds numeric
+kind/phase/first-use labels to its existing trace; its default submission order
+is unchanged. Automation includes those labels in the full busy-interval trace.
+No open action, foreground submission, section switch, search, provider,
+scroll callback, overscan body or row drawing path changes. Ready-open,
+warm-section, search and scroll receipts carry by this explicit diff scope
+under LEAD 14:20; they are not represented as newly measured samples.
+
+One bounded M1 ticket runs three no-scroll launches with a heartbeat from
+startup, all slices and all overlapping busy intervals. Required limits are
+≤8.3 ms for slices and clear Library busy intervals. If a first creation turn
+exceeds that, it is INFO "first-use cost", with a hard ceiling of 16.7 ms;
+all other turns and intervals must still be ≤8.3 ms. Only phase 1 of each
+labelled kind can use that exception. Full raw intervals and their Library/other
+work split remain in the receipt. No interval is silently excluded.
+
+After acceptance: touched content and key suites in separate ≤15-minute tickets,
+merge main, M1 receipts limited by LEAD 14:00, one staged full M5 gate, then PR.
+If the gate refuses the partial M1 receipt set, report its exact refusal.

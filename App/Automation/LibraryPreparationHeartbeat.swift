@@ -52,7 +52,8 @@ final class LibraryPreparationHeartbeat {
       },
       "idleWorkIntervals":slices.map { row in
         ["startLaunchMilliseconds":(row["startUptime"]!-launchUptime)*1000,
-          "endLaunchMilliseconds":(row["endUptime"]!-launchUptime)*1000,"milliseconds":row["milliseconds"]!]
+          "endLaunchMilliseconds":(row["endUptime"]!-launchUptime)*1000,"milliseconds":row["milliseconds"]!,
+          "rowKind":row["rowKind"] ?? 0,"phase":row["phase"] ?? 0,"firstUse":row["firstUse"] ?? 0]
       }]
   }
 }
