@@ -2,7 +2,7 @@ import AppKit
 import OpenSettings
 
 /// Presentation order is independent of the legacy source list and its raw IDs.
-public enum LibraryPanelSection: String, CaseIterable {
+public enum LibraryPanelSection: String, CaseIterable, Sendable {
     case media, downloads, easels, spaces, boosts, archive, history
 
     public var title: String {

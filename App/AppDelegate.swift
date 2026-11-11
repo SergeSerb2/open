@@ -372,6 +372,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     LaunchTiming.shared.mark("windowShown")
   }
 
+  var libraryPrebuildTask: Task<Void,Never>?
+  var libraryFirstSidebarDraw: Double?
+  var libraryLastInput = 0.0
+  func scheduleLibraryPrebuildAfterFirstDraw() {
+    guard libraryFirstSidebarDraw == nil else { return }
+    libraryFirstSidebarDraw = ProcessInfo.processInfo.systemUptime
+    scheduleLibraryPrebuild()
+  }
+  func noteLibraryInput() {
+    libraryLastInput = ProcessInfo.processInfo.systemUptime
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
+    if libraryFirstSidebarDraw != nil { scheduleLibraryPrebuild() }
+  }
+  func scheduleLibraryPrebuild() {
+    guard let first = libraryFirstSidebarDraw,!shutdownPrepared,!terminationRequested else { return }
+    libraryPrebuildTask?.cancel()
+    let deadline = max(first+3,libraryLastInput+3)
+    libraryPrebuildTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for:.seconds(max(0,deadline-ProcessInfo.processInfo.systemUptime)))
+      guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
+      self.libraryPrebuildTask = nil
+      guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller = self.frontStandardWindowController,
+        controller.window?.isVisible == true,!controller.isLibraryOpen else { return }
+      _ = self.settingsPresenter.makeLibrarySession(controller).prepareShell()
+    }
+  }
+
   func drawWindowsBeforeEngine() {
     #if OPEN_AUTOMATION
     let pacingRegion = IntroPacingTrace.begin("browser.drawWindowsBeforeEngine")
@@ -758,6 +785,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     stores.boosts.stop()
     shutdownPrepared = true
     recordShutdownPhase("prepare")
+    libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
     afterPaintTask?.cancel(); afterPaintTask = nil
     menuRebuildTask?.cancel(); menuRebuildTask = nil
     littleOpenCoordinator?.closeAll()

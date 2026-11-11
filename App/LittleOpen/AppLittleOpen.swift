@@ -98,6 +98,7 @@ extension AppDelegate {
   }
 
   func noteLaunchWindowInput(_ window: NSWindow?) {
+    noteLibraryInput()
     guard let id = autoCreatedLaunchWindowID,
       windowControllers.contains(where: { $0.windowID == id && $0.window === window }) else { return }
     autoCreatedLaunchWindowID = nil

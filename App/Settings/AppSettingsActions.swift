@@ -127,17 +127,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     app.downloadsCenter.refreshFiles(); app.downloadsCenter.acknowledgeLibrary()
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
-    let session: AppLibrarySession
-    if let existing = librarySessions[controller.windowID] { session = existing }
-    else {
-      let model = LibraryViewModel(model: app.model, defaults: .standard, actions: self,
-        downloads: self, captures: captures, archives: archives, histories: histories,
-        snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self,
-        historyResolver: { [weak app] in app?.stores.history(for: $0) })
-      model.boostsProvider = app.stores.boosts
-      session = AppLibrarySession(model: model, controller: controller)
-      librarySessions[controller.windowID] = session
-    }
+    let session = makeLibrarySession(controller)
     session.model.registerStores(archives: archives, histories: histories)
     if section == .boosts {
       if let boostsPresentation { session.model.boostsPresentation = boostsPresentation }
@@ -146,6 +136,17 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if section == .history, !controller.isLibraryOpen, let profileID = controller.context.focusedSpace?.profileID { session.model.historyProfileID = profileID }
     session.show(section: section)
     window.makeKeyAndOrderFront(nil); NSApp.activate(); app.scheduleMenuRebuild()
+  }
+  func makeLibrarySession(_ controller:BrowserWindowController) -> AppLibrarySession {
+    if let session = librarySessions[controller.windowID] { return session }
+    let archives = Dictionary(uniqueKeysWithValues:app.model.profiles.map { ($0.id,app.archiveSink.store(for:$0.id)) })
+    let histories = Dictionary(uniqueKeysWithValues:app.model.profiles.compactMap { profile in app.stores.history(for:profile.id).map { (profile.id,$0) } })
+    let model = LibraryViewModel(model:app.model,defaults:.standard,actions:self,downloads:self,captures:captures,
+      archives:archives,histories:histories,snapshot:app.snapshotStore,faviconStore:app.stores.favicons,settingsActions:self,
+      historyResolver:{ [weak app] in app?.stores.history(for:$0) })
+    model.boostsProvider = app.stores.boosts
+    let session = AppLibrarySession(model:model,controller:controller); librarySessions[controller.windowID] = session
+    return session
   }
   func toggleLibrary(section: LibrarySection? = nil) {
     if let session = activeLibrarySession, session.controller?.isLibraryOpen == true { session.close() }

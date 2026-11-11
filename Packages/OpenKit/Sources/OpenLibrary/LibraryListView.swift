@@ -17,6 +17,7 @@ struct LibraryRowItem {
     var kind: String
     var day = ""
     var image: NSImage? = nil
+    var loadImage: ((@escaping @MainActor (NSImage?) -> Void) -> Void)? = nil
     var fileURL: URL? = nil
     var progress: Double? = nil
     var dragURL: URL? = nil
@@ -31,12 +32,17 @@ struct LibraryRowItem {
 final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     let table = LibraryTableView()
     private let scroll = NSScrollView()
-    private(set) var items: [LibraryRowItem] = []
+    private(set) var sources: [LibraryRowSource] = []
+    var rowCount: Int { sources.count }
+    private(set) var reloads = 0
+    private(set) var updates = 0
+    private(set) var formattingMilliseconds = 0.0
+    private(set) var layoutMilliseconds = 0.0
     private var entries: [Entry] = []
     private var lastSelectedRow = -1
-    private enum Entry { case heading(String), item(Int) }
-    var foreground = NSColor.labelColor { didSet { table.reloadData() } }
-    var overlay = NSColor.labelColor { didSet { table.reloadData() } }
+    private enum Entry: Equatable { case heading(String), item(Int) }
+    var foreground = NSColor.labelColor { didSet { if foreground != oldValue { reloadVisible() } } }
+    var overlay = NSColor.labelColor { didSet { if overlay != oldValue { reloadVisible() } } }
     var gallery = false { didSet { if gallery != oldValue { rebuild() } } }
     var onSelection: ((String?) -> Void)?
     var onEnd: (() -> Void)?
@@ -56,7 +62,7 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
         scroll.automaticallyAdjustsContentInsets = false
         table.style = .plain; table.headerView = nil; table.backgroundColor = .clear
         table.selectionHighlightStyle = .none; table.focusRingType = .none
-        table.intercellSpacing = .zero; table.rowHeight = 56
+        table.intercellSpacing = .zero; table.rowHeight = 56; table.usesAutomaticRowHeights = false
         table.allowsEmptySelection = true; table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         table.addTableColumn(NSTableColumn(identifier: .init("content")))
         table.delegate = self; table.dataSource = self
@@ -72,21 +78,41 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     }
     required init?(coder: NSCoder) { fatalError() }
     override func layout() {
+        let started = ProcessInfo.processInfo.systemUptime
+        defer { layoutMilliseconds += (ProcessInfo.processInfo.systemUptime-started)*1000 }
         super.layout(); scroll.frame = bounds
         table.tableColumns.first?.width = scroll.contentSize.width
     }
-    func update(_ items: [LibraryRowItem]) {
-        let selected = selectedItem?.id
-        self.items = items; rebuild()
-        if let selected, let row = entryIndex(selected) { table.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+    func reloadVisible() {
+        let range = table.rows(in:table.visibleRect)
+        guard range.length > 0 else { return }
+        reloads += 1
+        table.reloadData(forRowIndexes:IndexSet(integersIn:range.location..<(range.location+range.length)),columnIndexes:IndexSet(integer:0))
+    }
+    func update(_ sources: [LibraryRowSource]) {
+        let old = self.sources, selected = selectedItem?.id
+        if old.count == sources.count && zip(old,sources).allSatisfy({ $0 === $1 }) { return }
+        self.sources = sources; rebuild()
+        updates += 1
+        if let selected, let row = entryIndex(selected) { table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
     }
     private func rebuild() {
+        let old = entries
         entries = []; var lastDay = ""
-        for (index,item) in items.enumerated() {
-            if !item.day.isEmpty, item.day != lastDay { entries.append(.heading(item.day)); lastDay = item.day }
+        for (index,source) in sources.enumerated() {
+            if !source.day.isEmpty, source.day != lastDay { entries.append(.heading(source.day)); lastDay = source.day }
             entries.append(.item(index))
         }
-        table.reloadData()
+        // Append pages without throwing away visible cells. Replacing a query
+        // uses one native update; only rows intersecting the viewport configure.
+        if !old.isEmpty, entries.count > old.count, Array(entries.prefix(old.count)) == old {
+            table.insertRows(at:IndexSet(integersIn:old.count..<entries.count),withAnimation:[])
+        } else {
+            table.beginUpdates()
+            if !old.isEmpty { table.removeRows(at:IndexSet(integersIn:0..<old.count),withAnimation:[]) }
+            if !entries.isEmpty { table.insertRows(at:IndexSet(integersIn:0..<entries.count),withAnimation:[]) }
+            table.endUpdates()
+        }
     }
     func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
@@ -114,9 +140,12 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
             view.identifier = .init("row")
             cellsConfigured += 1
             view.onHover = nil
-            view.configure(items[index], foreground: foreground, overlay: overlay, gallery: gallery)
+            let started = ProcessInfo.processInfo.systemUptime
+            let item = sources[index].resolve()
+            view.configure(item, foreground: foreground, overlay: overlay, gallery: gallery)
+            formattingMilliseconds += (ProcessInfo.processInfo.systemUptime-started)*1000
             view.selected = row == table.selectedRow
-            view.hovered = items[index].id == hoveredID
+            view.hovered = sources[index].id == hoveredID
             view.onHover = { [weak self, weak view] hovered in
                 guard let self, let view else { return }
                 if hovered { self.hoveredID = view.item?.id } else if self.hoveredID == view.item?.id { self.hoveredID = nil }
@@ -125,7 +154,7 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
                 guard let self, let view, let id = view.item?.id, let row = self.entryIndex(id), let menu = self.menu(at: row) else { return }
                 self.activeMenu = menu; menu.popUp(positioning: nil, at: CGPoint(x: view.bounds.maxX-42,y: 40), in: view)
             }
-            if index >= items.count-8 { onEnd?() }
+            if index >= sources.count-8 { onEnd?() }
             return view
         }
     }
@@ -142,10 +171,10 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
         dragSession["ended"] = (dragSession["ended"] as? Int ?? 0)+1; dragSession["operation"] = operation.rawValue
     }
     private func item(at row: Int) -> LibraryRowItem? {
-        guard entries.indices.contains(row), case .item(let index) = entries[row] else { return nil }; return items[index]
+        guard entries.indices.contains(row), case .item(let index) = entries[row] else { return nil }; return sources[index].resolve()
     }
     var selectedItem: LibraryRowItem? { item(at: table.selectedRow) }
-    func entryIndex(_ id: String) -> Int? { entries.indices.first { item(at: $0)?.id == id } }
+    func entryIndex(_ id: String) -> Int? { entries.indices.first { row in if case .item(let index) = entries[row] { return sources[index].id == id }; return false } }
     @objc private func activateClicked() { item(at: table.clickedRow)?.activate() }
     func activateSelected() { selectedItem?.activate() }
     func deleteSelected() { guard let selectedItem else { return }; (selectedItem.hoverActions+selectedItem.actions).first(where: { ["Delete","Move to Trash","Hide from Open"].contains($0.title) && $0.enabled })?.run() }
@@ -191,7 +220,7 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
         hoveredID = value ? id : nil; row.hovered = value; return true
     }
     func perform(id: String, action: String) -> Bool {
-        guard let item = items.first(where: { $0.id == id }) else { return false }
+        guard let source = sources.first(where: { $0.id == id }) else { return false }; let item = source.resolve()
         if action == "open" { item.activate(); return true }
         guard let entry = (item.actions+item.hoverActions).first(where: { $0.title == action && $0.enabled }) else { return false }
         LibraryMenuItem(entry).invoke(); return true
@@ -265,6 +294,9 @@ private final class LibraryItemView: NSView {
         title.stringValue = item.title; subtitle.stringValue = item.subtitle
         title.textColor = foreground; subtitle.textColor = foreground.withAlphaComponent(0.68)
         icon.image = item.image; icon.contentTintColor = nil
+        item.loadImage? { [weak self] image in
+            guard let self, self.item?.id == item.id, let image else { return }; self.icon.image = image
+        }
         if let url = item.fileURL {
             icon.image = FilePreviewCache.shared.image(for:url) { [weak self] in
                 guard let self, self.item?.fileURL == url else { return }

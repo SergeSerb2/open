@@ -44,8 +44,8 @@ badge clears on Library open or expires after 60 seconds. The expiry task ends
 when the last file expires. Private windows do not show the button.
 
 `OpenLibrary` contains the AppKit panel, controls, reusable rows and filters.
-`AppLibrarySession` owns one panel per browser window. Data providers and
-`LibraryViewModel` stay shared with their existing stores/actions. No Library
+`AppLibrarySession` owns one panel and `LibraryViewModel` per browser window.
+Data providers and stores stay App-owned, with their existing actions. No Library
 session or view is constructed at launch. Closing stops content subscriptions;
 60 seconds later the heavy views and model image caches are released. Reopen cancels
 that release. Closing a browser window removes its session and releases its

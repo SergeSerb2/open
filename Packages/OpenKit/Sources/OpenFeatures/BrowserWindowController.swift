@@ -598,6 +598,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         captureStorage?.layout()
         onLayout?()
     }
+    /// Delayed idle work attaches only the hidden shell; it never moves the page.
+    public func prepareLibraryPanel(_ panel:NSView,width:CGFloat) {
+        guard !isLibraryOpen else { return }
+        if libraryPanel !== panel { libraryPanel?.removeFromSuperview(); libraryPanel = panel; root.addSubview(panel,positioned:.below,relativeTo:container) }
+        panel.isHidden = true; panel.frame = CGRect(x:0,y:0,width:width,height:contentView.bounds.height)
+        panel.layoutSubtreeIfNeeded()
+    }
     /// Transient geometry only: the saved sidebar and its live view stay intact.
     public func presentLibraryPanel(_ panel: NSView, width: CGFloat, animated: Bool = true) {
         let wasOpen = isLibraryOpen

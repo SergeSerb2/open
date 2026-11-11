@@ -13,6 +13,7 @@ extension AutomationController {
       var usage = rusage(); getrusage(RUSAGE_SELF,&usage)
       return ["cpuSeconds":Double(usage.ru_utime.tv_sec+usage.ru_stime.tv_sec)+Double(usage.ru_utime.tv_usec+usage.ru_stime.tv_usec)/1_000_000]
     }
+    let countersBefore = adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]
     var started = ProcessInfo.processInfo.systemUptime
     switch operation {
     case "open":
@@ -43,7 +44,7 @@ extension AutomationController {
       guard let panel=adapter.activeLibrarySession?.panel, panel.isPresented,
         let row=args["row"] as? Int, (0...100_000).contains(row) else { throw Failure(message:"invalid Library scroll") }
       let visible=panel.scrollToRow(row)
-      return ["milliseconds":(ProcessInfo.processInfo.systemUptime-started)*1000,"visibleRows":visible,"reuse":panel.listReuseState]
+      return ["milliseconds":(ProcessInfo.processInfo.systemUptime-started)*1000,"visibleRows":visible,"reuse":panel.listReuseState,"counters":panel.performanceCounters,"counterDelta":panel.performanceCounters.mapValues { $0 }.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(countersBefore[$1.key] ?? 0) }]
     default: throw Failure(message:"unknown Library measurement")
     }
     guard let panel=adapter.activeLibrarySession?.panel else { throw Failure(message:"Library not created") }
@@ -53,7 +54,9 @@ extension AutomationController {
     let full=(ProcessInfo.processInfo.systemUptime-started)*1000
     return ["firstSubmittedMilliseconds":first,"contentSubmittedMilliseconds":full,
       "providerRows":adapter.library?.section == .downloads ? adapter.library?.downloadItems.count ?? 0 : adapter.library?.section == .history ? adapter.library?.historyRows.count ?? 0 : adapter.library?.archiveRows.count ?? 0,
-      "panelGeneration":adapter.activeLibrarySession?.panelGeneration ?? 0]
+      "panelGeneration":adapter.activeLibrarySession?.panelGeneration ?? 0,
+      "visibleRows":panel.listReuseState["rows"] ?? 0,"counters":panel.performanceCounters,
+      "counterDelta":panel.performanceCounters.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(countersBefore[$1.key] ?? 0) }]
   }
 }
 #endif

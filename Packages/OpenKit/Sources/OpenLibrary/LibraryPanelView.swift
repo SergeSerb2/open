@@ -22,7 +22,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public var onClose: (() -> Void)?
     public var onWidthChange: ((CGFloat) -> Void)?
     public var isPresented = false {
-        didSet { if isPresented { refresh(); observeTheme(); beginContentUpdates() } else { endContentUpdates() }; updatePointerMonitor() }
+        didSet { guard isPresented != oldValue else { return }; if isPresented { refresh(); observeTheme(); beginContentUpdates() } else { endContentUpdates() }; updatePointerMonitor() }
     }
     public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
     let rail = NSScrollView()
@@ -42,7 +42,19 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var overlay = NSColor.labelColor
     var observationArmed = false
     var styleRefreshPending = false
-    let listView = LibraryListView()
+    var hosts: [LibraryPanelSection:LibrarySectionHost] = [:]
+    var listView: LibraryListView { host(for:section).list }
+    func host(for section:LibraryPanelSection) -> LibrarySectionHost {
+        if let host = hosts[section] { return host }
+        let host = LibrarySectionHost(); hosts[section] = host
+        host.list.foreground = foreground; host.list.overlay = overlay
+        host.list.onSelection = { [weak self] id in self?.viewModel.selectedIDs = id.map { [$0] } ?? [] }
+        host.list.onEnd = { [weak self] in if self?.section == section { self?.loadNextPage() } }
+        host.list.isHidden = true; addSubview(host.list)
+        return host
+    }
+    var submissionPhases: [String:Double] = [:]
+    var sourceObservationArmed: Set<LibraryPanelSection> = []
     let filterEditor = LibraryFilterEditor()
     let boostList = LibraryControl(title:"List")
     let boostGallery = LibraryControl(title:"Gallery")
@@ -88,7 +100,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         filter.baseAlpha = 0.045; addSubview(filter)
         content.wantsLayer = true; addSubview(content)
         for view in [emptyGlyph,emptyTitle,emptyBody,emptyButton] { content.addSubview(view) }
-        addSubview(listView); addSubview(filterEditor)
+        _ = listView; addSubview(filterEditor)
         filter.onPress = { [weak self] in self?.setFilterOpen(true) }
         filterEditor.onDone = { [weak self] in self?.setFilterOpen(false) }
         filterEditor.onToggle = { [weak self] id in self?.toggleChip(id) }
@@ -198,7 +210,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         boostDisabledText.textColor = foreground.withAlphaComponent(0.68); boostTurnOn.foreground = foreground; boostTurnOn.overlay = overlay
         statusLabel.textColor = foreground.withAlphaComponent(0.68)
         searchField.textColor = foreground
-        listView.foreground = foreground; listView.overlay = overlay
+        for host in hosts.values { host.list.foreground = foreground; host.list.overlay = overlay }
         searchGlyph.color = foreground.withAlphaComponent(0.68)
         header.layer?.backgroundColor = overlay.withAlphaComponent(0.09).cgColor
         emptyGlyph.color = foreground.withAlphaComponent(0.46)
@@ -242,7 +254,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         filter.frame=CGRect(x:336,y:10,width:73,height:36)
         content.frame=CGRect(x:112,y:56,width:max(0,bounds.width-112),height:max(0,height-56))
         let listTop: CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132) : 56
-        listView.frame = CGRect(x:112,y:listTop,width:304,height:max(0,height-listTop-(statusLabel.isHidden ? 0 : 42)))
+        let listFrame = CGRect(x:112,y:listTop,width:304,height:max(0,height-listTop-(statusLabel.isHidden ? 0 : 42)))
+        if listView.frame != listFrame { listView.frame = listFrame }
         statusLabel.frame = CGRect(x:124,y:height-38,width:281,height:34)
         boostDisabledText.frame = CGRect(x:124,y:99,width:190,height:20)
         boostTurnOn.frame = CGRect(x:327,y:94,width:78,height:30)
@@ -268,9 +281,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     public func setSearch(_ text: String) {
         viewModel.query = text
+        if section == .archive || section == .history { hosts[section]?.loaded = false; hosts[section]?.dirty = true; refreshData() }
         if searchField.stringValue != text { searchField.stringValue = text }
-        updateSection()
-        if isPresented { refreshData() }
+        renderRows()
     }
     public func controlTextDidChange(_ notification: Notification) { setSearch(searchField.stringValue) }
     public func handleKey(_ event: NSEvent) -> Bool {

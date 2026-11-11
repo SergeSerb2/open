@@ -10,14 +10,35 @@ import OpenDesign
 extension LibraryPanelView {
     /// The socket bench awaits the same provider task as the live panel, then
     /// submits its real native layout/drawing. This does not wait for motion.
-    public func finishPendingContent() async { await reloadTask?.value }
-    public var listReuseState: [String:Int] { ["created":listView.cellsCreated,"configured":listView.cellsConfigured,"rows":listView.items.count] }
+    public func finishPendingContent() async { await reloadTask?.value; await hosts[section]?.preparation?.value }
+    public var listReuseState: [String:Int] { ["created":listView.cellsCreated,"configured":listView.cellsConfigured,"rows":listView.rowCount] }
+    public var performanceCounters: [String:Double] {
+        var state: [String:Double] = ["hosts":Double(hosts.count),"created":0,"configured":0,"reloadData":0,"tableUpdates":0,"formatting":0,"listLayout":0,"tasks":0,"timers":0,"displayLinks":0]
+        for host in hosts.values {
+            state["created",default:0] += Double(host.list.cellsCreated)
+            state["configured",default:0] += Double(host.list.cellsConfigured)
+            state["reloadData",default:0] += Double(host.list.reloads)
+            state["tableUpdates",default:0] += Double(host.list.updates)
+            state["formatting",default:0] += host.list.formattingMilliseconds
+            state["listLayout",default:0] += host.list.layoutMilliseconds
+            state["tasks",default:0] += Double((host.preparation == nil ? 0 : 1)+(host.append == nil ? 0 : 1))
+        }
+        for (key,value) in submissionPhases { state["last."+key] = value }
+        for (key,value) in hosts[section]?.phaseMilliseconds ?? [:] { state["last."+key] = value }
+        return state
+    }
     public func submitNativeFrame() {
+        let start = ProcessInfo.processInfo.systemUptime
         window?.layoutIfNeeded(); layoutSubtreeIfNeeded()
-        window?.displayIfNeeded(); CATransaction.flush()
+        let laidOut = ProcessInfo.processInfo.systemUptime
+        window?.displayIfNeeded()
+        let drawn = ProcessInfo.processInfo.systemUptime
+        CATransaction.flush()
+        let flushed = ProcessInfo.processInfo.systemUptime
+        submissionPhases = ["layout":(laidOut-start)*1000,"display":(drawn-laidOut)*1000,"flush":(flushed-drawn)*1000]
     }
     public func scrollToRow(_ index:Int) -> Int {
-        guard !listView.items.isEmpty else { return 0 }
+        guard listView.rowCount > 0 else { return 0 }
         let row = max(0,min(index,listView.table.numberOfRows-1))
         listView.table.scrollRowToVisible(row); submitNativeFrame()
         return listView.table.rows(in:listView.table.visibleRect).length
@@ -28,7 +49,7 @@ extension LibraryPanelView {
         if raw == "all" { viewModel.downloadProfileFilter = nil }
         else if let profile = viewModel.model.profiles.first(where: { $0.id.description == raw }) { viewModel.downloadProfileFilter = profile.id }
         else { return false }
-        renderRows(); return true
+        hosts[section]?.dirty = true; renderRows(); return true
     }
     public func focusList() { listView.focus() }
     @discardableResult public func hoverRow(_ id:String,hovered:Bool) -> Bool { listView.hover(id:id,value:hovered) }
@@ -43,7 +64,7 @@ extension LibraryPanelView {
     public func setBoostLayout(_ name:String) { viewModel.boostsPresentation = name == "Gallery" ? .gallery : .list; renderRows() }
     public func setBoostProfile(_ name:String) -> Bool {
         guard let profile = viewModel.model.profiles.first(where: { $0.name == name }) else { return false }
-        viewModel.historyProfileID = profile.id; refreshData(); renderRows(); return true
+        viewModel.historyProfileID = profile.id; hosts[section]?.loaded = false; hosts[section]?.dirty = true; refreshData(); renderRows(); return true
     }
     func showBoostProfiles() {
         let menu = NSMenu(); menu.autoenablesItems = false
@@ -55,35 +76,56 @@ extension LibraryPanelView {
         }
         menu.popUp(positioning:nil,at:CGPoint(x:0,y:boostsProfile.bounds.maxY),in:boostsProfile)
     }
-    func beginContentUpdates() { observeContent(); refreshData() }
-    func endContentUpdates() { reloadTask?.cancel(); reloadTask = nil; historyTask?.cancel(); historyTask = nil }
+    func beginContentUpdates() {
+        // Reopening checks external stores once. A section switch does not.
+        for host in hosts.values { host.loaded = false }
+        observeContent(); refreshData()
+    }
+    func endContentUpdates() {
+        reloadTask?.cancel(); reloadTask = nil; historyTask?.cancel(); historyTask = nil
+        for host in hosts.values { host.cancel() }
+    }
     func refreshData() {
+        let target = section, host = host(for:section)
+        guard isPresented, !host.loaded else { renderRows(); return }
         reloadTask?.cancel(); historyTask?.cancel(); reloadGeneration += 1
         let generation = reloadGeneration
         reloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            let started = ProcessInfo.processInfo.systemUptime
             await self.viewModel.refreshExternalState()
-            guard !Task.isCancelled, self.isPresented, self.reloadGeneration == generation else { return }
+            guard !Task.isCancelled, self.isPresented, self.reloadGeneration == generation, self.section == target else { return }
+            host.phaseMilliseconds["provider"] = (ProcessInfo.processInfo.systemUptime-started)*1000
+            host.loaded = true; host.dirty = true
             self.renderRows()
-            if self.section == .media { for item in self.viewModel.captureItems.prefix(128) { guard !Task.isCancelled else { return }; await self.viewModel.loadThumbnail(item) } }
-            if self.section == .history {
+            if target == .history {
                 self.historyTask = Task { @MainActor [weak self] in await self?.viewModel.watchHistory() }
             }
         }
     }
     func observeContent() {
-        guard isPresented, !contentObservationArmed else { return }
-        contentObservationArmed = true
-        withObservationTracking {
-            _ = viewModel.downloadItems; _ = viewModel.captureItems; _ = viewModel.archiveRows
-            _ = viewModel.historyRows; _ = viewModel.boostItems; _ = viewModel.thumbnailImages
-            _ = viewModel.faviconImages; _ = viewModel.historyFaviconImages
-            _ = viewModel.statusText
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.contentObservationArmed = false
-                if self.isPresented { self.renderRows(); self.observeContent() }
+        guard isPresented else { return }
+        for target in [LibraryPanelSection.downloads,.archive,.history,.media,.boosts] where !sourceObservationArmed.contains(target) {
+            sourceObservationArmed.insert(target)
+            withObservationTracking {
+                switch target {
+                case .downloads: _ = viewModel.downloads.downloads
+                case .archive: _ = viewModel.archiveRows
+                case .history: _ = viewModel.historyRows
+                case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages
+                case .boosts: _ = viewModel.boostsProvider?.boosts(profileID:viewModel.historyProfileID)
+                default: break
+                }
+            } onChange: { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.sourceObservationArmed.remove(target)
+                    self.hosts[target]?.dirty = true
+                    if self.isPresented {
+                        if self.section == target { self.renderRows() }
+                        self.observeContent()
+                    }
+                }
             }
         }
     }
@@ -95,39 +137,94 @@ extension LibraryPanelView {
         return date.formatted(.dateTime.month(.wide).year())
     }
     func renderRows() {
-        var rows: [LibraryRowItem] = []
-        switch section {
-        case .downloads: rows = downloadRows()
-        case .archive: rows = archivedRows()
-        case .history: rows = historyRows()
-        case .boosts: rows = boostRows()
-        case .media: rows = captureRows()
-        case .spaces:
+        let host = host(for:section)
+        // Header/theme/empty-state work is independent of the data snapshot.
+        updateContentChrome()
+        guard isPresented else { return }
+        if section == .spaces {
             if manager == nil {
                 viewModel.refreshSpaceManagerView()
-                if let manager = viewModel.spaceManagerView as? SpaceManagerView {
-                    manager.libraryLayout = true; self.manager = manager; addSubview(manager)
-                }
+                if let manager = viewModel.spaceManagerView as? SpaceManagerView { manager.libraryLayout = true; self.manager = manager; addSubview(manager) }
             }
-        case .easels: break
+            updateContentChrome(); return
         }
+        let identity = "\(viewModel.query)|\(viewModel.downloadProfileFilter?.description ?? "")|\(viewModel.historyProfileID)|\(archiveReasonChips.sorted())|\(archiveSpaceChips.sorted())|\(historyWhenChips.sorted())|\(viewModel.boostsPresentation)"
+        guard host.dirty || host.identity != identity else { return }
+        host.cancel(); host.generation += 1
+        let generation = host.generation, target = section, query = viewModel.query
+        let rebuild = host.dirty
+        host.identity = identity; host.dirty = false
+        if rebuild {
+            let started = ProcessInfo.processInfo.systemUptime
+            switch target {
+            case .downloads: host.sources = downloadSources()
+            case .archive: host.sources = archivedSources()
+            case .history: host.sources = historySources()
+            case .media: host.sources = captureSources()
+            case .boosts: host.sources = boostSources()
+            default: host.sources = []
+            }
+            host.phaseMilliseconds["snapshot"] = (ProcessInfo.processInfo.systemUptime-started)*1000
+        }
+        let seeds = rebuild ? host.sources.enumerated().map { LibraryRowSeed(index:$0.offset,id:$0.element.id,date:$0.element.date,text:$0.element.text) } : []
+        let cached = host.prepared
+        let worker = Task.detached(priority:.userInitiated) {
+            let prepared = rebuild ? prepareLibraryRows(seeds) : cached
+            return prepared
+        }
+        host.worker = worker
+        host.preparation = Task { @MainActor [weak self,weak host] in
+            let prepareStart = ProcessInfo.processInfo.systemUptime
+            let prepared = await worker.value
+            guard let self, let host, !Task.isCancelled, host.generation == generation else { return }
+            host.prepared = prepared
+            host.phaseMilliseconds["prepareBackground"] = (ProcessInfo.processInfo.systemUptime-prepareStart)*1000
+            let filterStart = ProcessInfo.processInfo.systemUptime
+            let filter = Task.detached(priority:.userInitiated) {
+                let key = query.folding(options:[.caseInsensitive,.diacriticInsensitive],locale:.current)
+                return key.isEmpty ? prepared : prepared.filter { !Task.isCancelled && $0.key.contains(key) }
+            }
+            host.worker = filter
+            let filtered = await filter.value
+            guard !Task.isCancelled, host.generation == generation else { return }
+            host.filtered = filtered
+            host.phaseMilliseconds["filterBackground"] = (ProcessInfo.processInfo.systemUptime-filterStart)*1000
+            self.applyPage(host,target:target,count:min(60,filtered.count))
+            host.preparation = nil; host.worker = nil
+            // Append idle slices. They contain lazy sources, never formatted rows.
+            host.append = Task { @MainActor [weak self,weak host] in
+                var count = min(60,filtered.count)
+                while count < filtered.count {
+                    try? await Task.sleep(for:.milliseconds(16))
+                    guard let self,let host,!Task.isCancelled,host.generation == generation,self.isPresented else { return }
+                    count = min(count+240,filtered.count)
+                    self.applyPage(host,target:target,count:count)
+                }
+                host?.append = nil
+            }
+        }
+    }
+    func applyPage(_ host:LibrarySectionHost,target:LibraryPanelSection,count:Int) {
+        let started = ProcessInfo.processInfo.systemUptime
+        let sources = host.filtered.prefix(count).map { item in
+            let source = host.sources[item.index]; source.day = item.day; return source
+        }
+        host.list.gallery = target == .boosts && viewModel.boostsPresentation == .gallery
+        host.list.update(sources)
+        host.phaseMilliseconds["apply"] = (ProcessInfo.processInfo.systemUptime-started)*1000
+        if section == target { updateContentChrome() }
+    }
+    func updateContentChrome() {
+        let rowsEmpty = listView.rowCount == 0
         updateEmptyCopy()
-        if section == .media, viewModel.captures.loadFailed {
-            emptyTitle.stringValue = "Could not load media"
-            emptyBody.stringValue = "Close the Library and try again."
-        }
+        if section == .media, viewModel.captures.loadFailed { emptyTitle.stringValue = "Could not load media"; emptyBody.stringValue = "Close the Library and try again." }
         statusLabel.stringValue = section == .downloads && !viewModel.downloads.downloadHistoryError.isEmpty ? viewModel.downloads.downloadHistoryError : viewModel.statusText
         statusLabel.isHidden = statusLabel.stringValue.isEmpty || section == .spaces
-        if rows.count < 8, (section == .archive && hasActiveFilters || section == .history && !historyWhenChips.isEmpty) { loadNextPage() }
-        listView.gallery = section == .boosts && viewModel.boostsPresentation == .gallery
-        listView.update(rows)
-        listView.isHidden = rows.isEmpty || section == .spaces
-        content.isHidden = !rows.isEmpty || (section == .spaces && manager != nil)
+        for (target,host) in hosts { host.list.isHidden = target != section || host.list.rowCount == 0 || section == .spaces }
+        content.isHidden = !rowsEmpty || (section == .spaces && manager != nil)
         manager?.isHidden = section != .spaces
-        header.isHidden = section == .spaces || filterOpen
-        filter.isHidden = !section.hasFilter || filterOpen
-        filter.showsDot = hasActiveFilters
-        filterEditor.isHidden = !filterOpen
+        header.isHidden = section == .spaces || filterOpen; filter.isHidden = !section.hasFilter || filterOpen
+        filter.showsDot = hasActiveFilters; filterEditor.isHidden = !filterOpen
         boostList.isHidden = section != .boosts; boostGallery.isHidden = section != .boosts; boostsProfile.isHidden = section != .boosts
         let boostsOff = section == .boosts && !viewModel.defaults.bool(forKey:"open.advanced.enableBoosts")
         boostDisabledText.isHidden = !boostsOff; boostTurnOn.isHidden = !boostsOff
@@ -138,8 +235,11 @@ extension LibraryPanelView {
         needsLayout = true
     }
     func symbol(_ name:String) -> NSImage? { NSImage(systemSymbolName:name,accessibilityDescription:nil) }
-    func downloadRows() -> [LibraryRowItem] {
-        viewModel.downloadItems.sorted { $0.startedAt > $1.startedAt }.map { item in
+    func downloadSources() -> [LibraryRowSource] {
+        viewModel.downloads.downloads.filter { item in
+            (viewModel.downloadProfileFilter == nil || item.profileID == viewModel.downloadProfileFilter) && (viewModel.downloadStateFilter == nil || item.state == viewModel.downloadStateFilter)
+        }.map { item in
+          LibraryRowSource(id:item.id,date:item.startedAt,text:item.fileName+" "+item.sourceHost) { [unowned self] in
             let available = viewModel.fileAvailable(item)
             let progress = item.state == .inProgress || item.state == .paused
             let subtitle: String
@@ -175,18 +275,20 @@ extension LibraryPanelView {
                     .init(title:"-",run:{}),.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) }),
                     .init(title:"Move to Trash",enabled:available,run:{ actions.trashDownload(id:id) })]
             } else { menu = [.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })] }
-            return LibraryRowItem(id:id,title:item.fileName,subtitle:subtitle,kind:"download",day:dayLabel(item.startedAt),
+            return LibraryRowItem(id:id,title:item.fileName,subtitle:subtitle,kind:"download",day:"",
                 fileURL:progress ? nil : URL(fileURLWithPath:item.filePath ?? item.fileName),progress:progress ? item.progress ?? 0 : nil,
                 dragURL:available && item.state == .completed ? item.filePath.map { URL(fileURLWithPath:$0) } : nil,
                 activate:{ if available && item.state == .completed { actions.openDownload(id:id) } },actions:menu)
+          }
         }
     }
-    func archivedRows() -> [LibraryRowItem] {
+    func archivedSources() -> [LibraryRowSource] {
         viewModel.archiveRows.filter { row in
             let reason = row.reason == .autoArchived ? "auto" : "manual"
             let space = row.spaceID?.description ?? "little"
             return (archiveReasonChips.isEmpty || archiveReasonChips.contains(reason)) && (archiveSpaceChips.isEmpty || archiveSpaceChips.contains(space))
         }.map { row in
+          LibraryRowSource(id:row.id.description,date:row.archivedAt,text:row.title+" "+row.url.absoluteString) { [unowned self] in
             let id = row.id
             let restore: () -> Void = { [weak self] in
                 guard let self else { return }
@@ -201,12 +303,13 @@ extension LibraryPanelView {
                     Task { @MainActor in await self.viewModel.deleteArchiveConfirmed(); self.renderRows() }
                 }
             }
-            return LibraryRowItem(id:id.description,title:viewModel.archivedDisplayTitle(row),subtitle:row.url.absoluteString,kind:"archive",day:dayLabel(row.archivedAt),
-                image:viewModel.faviconImages[id] ?? symbol(row.kind == .folder ? "folder" : "globe"),dragURL:row.kind == .folder ? nil : row.url,activate:restore,
+            return LibraryRowItem(id:id.description,title:viewModel.archivedDisplayTitle(row),subtitle:row.url.absoluteString,kind:"archive",day:"",
+                image:symbol(row.kind == .folder ? "folder" : "globe"),loadImage:row.kind == .folder ? nil : { [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.kind == .folder ? nil : row.url,activate:restore,
                 hoverActions:[.init(title:"Delete",glyph:.trash,run:remove),.init(title:"Restore",glyph:.undo,run:restore)])
+          }
         }
     }
-    func historyRows() -> [LibraryRowItem] {
+    func historySources() -> [LibraryRowSource] {
         let profile = viewModel.historyProfileID
         return viewModel.historyRows.filter { row in
             guard !historyWhenChips.isEmpty else { return true }
@@ -216,36 +319,41 @@ extension LibraryPanelView {
                 || (historyWhenChips.contains("week") && age >= 0 && age < 7)
                 || (historyWhenChips.contains("older") && age >= 7)
         }.map { row in
+          LibraryRowSource(id:row.url.absoluteString,date:row.lastVisit,text:row.title+" "+row.url.absoluteString) { [unowned self] in
             let open: () -> Void = { [weak self] in
                 guard let self, self.viewModel.historyProfileID == profile else { return }
                 self.viewModel.actions.openHistoryItem(url:row.url); self.onClose?()
             }
             return LibraryRowItem(id:row.url.absoluteString,title:row.title.isEmpty ? row.url.host() ?? "Page" : row.title,
-                subtitle:row.url.absoluteString+" · "+row.lastVisit.formatted(date:.omitted,time:.shortened),kind:"history",day:dayLabel(row.lastVisit),
-                image:viewModel.historyFaviconImages[row.url] ?? symbol("globe"),dragURL:row.url,activate:open,
+                subtitle:row.url.absoluteString+" · "+row.lastVisit.formatted(date:.omitted,time:.shortened),kind:"history",day:"",
+                image:symbol("globe"),loadImage:{ [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.url,activate:open,
                 hoverActions:[.init(title:"Delete",glyph:.trash,run:{ [weak self] in
                     self?.confirm("Delete this history entry?") { [weak self] in
                         guard let self, self.viewModel.historyProfileID == profile else { return }
                         self.viewModel.requestDeleteHistory([row.url]); Task { @MainActor in await self.viewModel.deleteHistoryConfirmed(); self.renderRows() }
                     }
                 })])
+          }
         }
     }
-    func captureRows() -> [LibraryRowItem] {
-        viewModel.captureItems.map { item in
+    func captureSources() -> [LibraryRowSource] {
+        viewModel.captures.captures.map { item in
+          LibraryRowSource(id:item.id.uuidString,date:item.createdAt,text:(item.title ?? "")+" "+item.fileName+" "+item.sourceHost) { [unowned self] in
             let id = item.id, actions = viewModel.actions
-            return LibraryRowItem(id:id.uuidString,title:(item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!,subtitle:"Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:dayLabel(item.createdAt),
+            return LibraryRowItem(id:id.uuidString,title:(item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!,subtitle:"Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:"",
                 fileURL:viewModel.captureURL(item),dragURL:viewModel.captureURL(item),activate:{ actions.openCapture(id:id) },
                 actions:[.init(title:"Open",run:{ actions.openCapture(id:id) }),.init(title:"Copy",run:{ actions.copyCapture(id:id) }),
                     .init(title:"Show in Finder",run:{ actions.revealCapture(id:id) }),.init(title:"Save As…",run:{ [weak self] in self?.saveCapture(item) }),
                     .init(title:"-",run:{}),.init(title:"Delete",run:{ [weak self] in self?.confirm("Delete this capture?",message:"This permanently deletes the file.") { [weak self] in
                         self?.viewModel.pendingCaptureDelete = id; self?.viewModel.deleteCaptureConfirmed(); self?.renderRows()
                     } })])
+          }
         }
     }
-    func boostRows() -> [LibraryRowItem] {
+    func boostSources() -> [LibraryRowSource] {
         let profile = viewModel.historyProfileID
-        return viewModel.boostItems.map { item in
+        return (viewModel.boostsProvider?.boosts(profileID:profile) ?? []).map { item in
+          LibraryRowSource(id:item.id,text:item.domain+" "+item.name) { [unowned self] in
             let id = item.id
             let edit: () -> Void = { [weak self] in
                 guard let self else { return }
@@ -261,6 +369,7 @@ extension LibraryPanelView {
                         self.viewModel.actions.deleteBoost(id:id,profileID:profile); self.renderRows()
                     }
                 })])
+          }
         }
     }
     func confirm(_ title:String,message:String = "",action:@escaping @MainActor () -> Void) {
@@ -342,6 +451,8 @@ extension LibraryPanelView {
         case "when": toggle(parts[1],in:&historyWhenChips)
         default: return false
         }
+        hosts[section]?.dirty = true
+        if section == .history { hosts[section]?.loaded = false }
         configureFilter(); refreshData(); renderRows(); return true
     }
 }

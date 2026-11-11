@@ -26,18 +26,7 @@ final class AppLibrarySession {
     guard let controller else { return }
     let started = ProcessInfo.processInfo.systemUptime
     releaseTask?.cancel(); releaseTask = nil
-    let panel: LibraryPanelView
-    if let existing = self.panel { panel = existing }
-    else {
-      panel = LibraryPanelView(viewModel: model, context: controller.context)
-      panel.onClose = { [weak self] in self?.close() }
-      panel.onWidthChange = { [weak self] width in
-        guard let self, let controller = self.controller, controller.isLibraryOpen, let panel = self.panel else { return }
-        controller.presentLibraryPanel(panel, width: width)
-      }
-      self.panel = panel
-      panelGeneration += 1
-    }
+    let panel = prepareShell()
     if let section { panel.select(LibraryPanelSection(section), animated: false) }
     panel.isPresented = true
     // Attach before asking the panel for its Spaces width.
@@ -46,6 +35,18 @@ final class AppLibrarySession {
     panel.focusRail()
     // This is dispatch/setup cost, not first-pixel or fully-drawn evidence.
     lastShowMilliseconds = (ProcessInfo.processInfo.systemUptime-started)*1000
+  }
+  @discardableResult func prepareShell() -> LibraryPanelView {
+    if let panel { return panel }
+    let panel = LibraryPanelView(viewModel:model,context:controller!.context)
+    panel.onClose = { [weak self] in self?.close() }
+    panel.onWidthChange = { [weak self] width in
+      guard let self,let controller = self.controller,controller.isLibraryOpen,controller.libraryWidth != width,let panel = self.panel else { return }
+      controller.presentLibraryPanel(panel,width:width)
+    }
+    self.panel = panel; panelGeneration += 1
+    controller?.prepareLibraryPanel(panel,width:panel.section == .spaces ? max(417,(controller?.contentView.bounds.width ?? 1280)-56) : 417)
+    return panel
   }
   func close() {
     guard let controller, controller.isLibraryOpen else { return }

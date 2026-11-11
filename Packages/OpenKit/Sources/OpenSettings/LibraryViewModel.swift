@@ -67,7 +67,7 @@ import OpenStore
         if cachedSpaceManagerView !== view { cachedSpaceManagerView = view }
     }
     public func releaseContentViews() {
-        cachedSpaceManagerView = nil
+        cachedSpaceManagerView = nil; rowIcons.removeAll(); iconRequests.removeAll()
         thumbnails = [:]; thumbnailImages = [:]; faviconImages = [:]; historyFaviconImages = [:]
     }
     public var boostsProvider: (any BoostsProvider)?
@@ -81,6 +81,23 @@ import OpenStore
     private var archiveOwners: [ItemID: ProfileID] = [:]
     @ObservationIgnored private var archivedDisplayTitles: [ItemID: String] = [:]
     @ObservationIgnored private var archivedChildCounts: [ItemID: Int] = [:]
+    @ObservationIgnored private var rowIcons: [URL:NSImage] = [:]
+    @ObservationIgnored private var iconRequests: [URL:[@MainActor (NSImage?) -> Void]] = [:]
+    public func loadRowIcon(_ url:URL, completion:@escaping @MainActor (NSImage?) -> Void) {
+        if let cached = rowIcons[url] { completion(cached); return }
+        if iconRequests[url] != nil { if iconRequests[url]!.count < 32 { iconRequests[url]!.append(completion) }; return }
+        guard iconRequests.count < 16, let faviconStore else { return }
+        iconRequests[url] = [completion]
+        Task { @MainActor [weak self] in
+            let data = await faviconStore.icon(for:url)?.png32
+            guard let self else { return }
+            let image = data.flatMap { NSImage(data:$0) }
+            if rowIcons.count >= 512 { rowIcons.removeAll(keepingCapacity:true) }
+            if let image { rowIcons[url] = image }
+            let callbacks = iconRequests.removeValue(forKey:url) ?? []
+            for callback in callbacks { callback(image) }
+        }
+    }
     private var activeArchiveLoad = UUID()
     private var cursors: [ProfileID: Int] = [:]
     private var generation = UUID()
@@ -133,9 +150,6 @@ import OpenStore
             if row.kind == .folder { archivedChildCounts[row.id] = Self.countArchivedChildren(row) }
         }
         archiveRows += page.map(\.1); archiveHasMore = page.count == 100; archiveLoading=false
-        if let faviconStore { for (_, row) in page { let icon = await faviconStore.icon(for: row.url)?.png32; guard generation == request, !Task.isCancelled else { return }
-            if favicons[row.id] != icon { faviconImages[row.id]=icon.flatMap{NSImage(data:$0)} }
-            favicons[row.id] = icon } }
     }
     private struct ArchivedTitle: Decodable { let customTitle: String? }
     public func archivedDisplayTitle(_ row: ArchivedTabRecord) -> String { archivedDisplayTitles[row.id] ?? row.title }
@@ -288,13 +302,5 @@ import OpenStore
         if reset { historyRows = rows } else { historyRows += rows }
         historyHasMore = rows.count == 100
         if historyFaviconImages.count > 512 { historyFavicons = [:]; historyFaviconImages = [:] }
-        if let faviconStore {
-            for row in rows {
-                let data = await faviconStore.icon(for:row.url)?.png32
-                guard revision == historyLoadRevision, profile == historyProfileID, text == query, !Task.isCancelled else { return }
-                if historyFavicons[row.url] != data { historyFaviconImages[row.url] = data.flatMap { NSImage(data:$0) } }
-                historyFavicons[row.url] = data
-            }
-        }
     }
 }
