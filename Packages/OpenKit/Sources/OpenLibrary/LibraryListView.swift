@@ -43,7 +43,7 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     private enum Entry: Equatable { case heading(String), item(Int) }
     var foreground = NSColor.labelColor { didSet { if foreground != oldValue { reloadVisible() } } }
     var overlay = NSColor.labelColor { didSet { if overlay != oldValue { reloadVisible() } } }
-    var gallery = false { didSet { if gallery != oldValue { rebuild() } } }
+    var gallery = false { didSet { if gallery != oldValue { rebuild(remeasureHeights:true) } } }
     var onSelection: ((String?) -> Void)?
     var onEnd: (() -> Void)?
     private(set) var dragSession: [String:Any] = ["began":0,"ended":0]
@@ -92,27 +92,50 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     func update(_ sources: [LibraryRowSource]) {
         let old = self.sources, selected = selectedItem?.id
         if old.count == sources.count && zip(old,sources).allSatisfy({ $0 === $1 }) { return }
-        self.sources = sources; rebuild()
+        self.sources = sources; rebuild(previousSources:old)
         updates += 1
         if let selected, let row = entryIndex(selected) { table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
     }
-    private func rebuild() {
+    private func rebuild(previousSources: [LibraryRowSource]? = nil, remeasureHeights: Bool = false) {
         let old = entries
+        let previousSources = previousSources ?? sources
+        func keys(_ entries:[Entry],_ sources:[LibraryRowSource]) -> [String] {
+            entries.map { entry in
+                switch entry {
+                case .heading(let day): return "day:"+day
+                case .item(let index): return "item:"+sources[index].id
+                }
+            }
+        }
+        let oldKeys = keys(old,previousSources)
         entries = []; var lastDay = ""
         for (index,source) in sources.enumerated() {
             if !source.day.isEmpty, source.day != lastDay { entries.append(.heading(source.day)); lastDay = source.day }
             entries.append(.item(index))
         }
-        // Append pages without throwing away visible cells. Replacing a query
-        // uses one native update; only rows intersecting the viewport configure.
-        if !old.isEmpty, entries.count > old.count, Array(entries.prefix(old.count)) == old {
-            table.insertRows(at:IndexSet(integersIn:old.count..<entries.count),withAnimation:[])
-        } else {
+        let newKeys = keys(entries,sources)
+        let difference = newKeys.difference(from:oldKeys)
+        if !difference.isEmpty {
             table.beginUpdates()
-            if !old.isEmpty { table.removeRows(at:IndexSet(integersIn:0..<old.count),withAnimation:[]) }
-            if !entries.isEmpty { table.insertRows(at:IndexSet(integersIn:0..<entries.count),withAnimation:[]) }
+            let removed = IndexSet(difference.removals.map { change in if case .remove(let offset,_,_) = change { return offset }; preconditionFailure() })
+            let inserted = IndexSet(difference.insertions.map { change in if case .insert(let offset,_,_) = change { return offset }; preconditionFailure() })
+            table.removeRows(at:removed,withAnimation:[])
+            table.insertRows(at:inserted,withAnimation:[])
             table.endUpdates()
         }
+        // Keep unchanged rows and their views. A new provider version refreshes
+        // only retained visible rows; query and page diffs keep their cells.
+        let previous = Dictionary(uniqueKeysWithValues:previousSources.map { ($0.id,$0) })
+        let visible = table.rows(in:table.visibleRect)
+        let changed = IndexSet(entries.indices.filter { row in
+            guard NSLocationInRange(row,visible),case .item(let index) = entries[row],let source = previous[sources[index].id] else { return false }
+            return remeasureHeights || source !== sources[index]
+        })
+        if !changed.isEmpty {
+            reloads += 1
+            table.reloadData(forRowIndexes:changed,columnIndexes:IndexSet(integer:0))
+        }
+        if remeasureHeights { table.noteHeightOfRows(withIndexesChanged:IndexSet(entries.indices)) }
     }
     func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
