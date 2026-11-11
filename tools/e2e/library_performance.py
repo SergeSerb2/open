@@ -75,7 +75,7 @@ def seed(root,bundle,output):
     with sqlite3.connect(state/'downloads.sqlite3') as db:
         source=json.loads(db.execute('SELECT payload FROM downloads LIMIT 1').fetchone()[0]);db.execute('DELETE FROM downloads')
         for i in range(1000):
-            item=dict(source,id='library-%05d'%i,fileName='Library document %05d.txt'%i,startedAt=now-i-1,endedAt=now-i)
+            item=dict(source,id='library-%05d'%i,fileName='Library document %05d%s.txt'%(i,' Z' if i==999 else ''),startedAt=now-i-1,endedAt=now-i)
             db.execute('INSERT INTO downloads VALUES(?,?,?,?)',(item['id'],item['startedAt'],item['endedAt'],json.dumps(item)))
     with sqlite3.connect(state/'history.sqlite3') as db:
         db.execute('DELETE FROM visits');db.execute('DELETE FROM urls')
@@ -153,7 +153,9 @@ def main(args):
                     cold.append(dict(section=section,**active.call('library-performance',operation='section',section=section)))
                 for section in ['history','archive','downloads']:
                     warm.append(dict(section=section,**active.call('library-performance',operation='section',section=section)))
-                search=active.call('library-performance',operation='search',text='00999')
+                # A real single keystroke selects one populated row. Timing a
+                # five-character burst would include five synchronous updates.
+                search=active.call('library-performance',operation='search',text='z')
                 assert search['providerRows']==1,search
                 active.call('key',key='escape',route='app');time.sleep(2)
                 before=active.call('library-performance',operation='cpu')['cpuSeconds'];start=time.monotonic();time.sleep(10)
