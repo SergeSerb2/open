@@ -196,8 +196,10 @@ extension LibraryPanelView {
         return viewModel.historyRows.filter { row in
             guard !historyWhenChips.isEmpty else { return true }
             let age = Calendar.current.dateComponents([.day],from:Calendar.current.startOfDay(for:row.lastVisit),to:Calendar.current.startOfDay(for:Date())).day ?? 0
-            let key = age == 0 ? "today" : age == 1 ? "yesterday" : age < 7 ? "week" : "older"
-            return historyWhenChips.contains(key)
+            return (historyWhenChips.contains("today") && age == 0)
+                || (historyWhenChips.contains("yesterday") && age == 1)
+                || (historyWhenChips.contains("week") && age >= 0 && age < 7)
+                || (historyWhenChips.contains("older") && age >= 7)
         }.map { row in
             let open: () -> Void = { [weak self] in
                 guard let self, self.viewModel.historyProfileID == profile else { return }

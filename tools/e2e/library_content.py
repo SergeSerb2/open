@@ -14,7 +14,7 @@ from boost_gallery import fixture as boost_fixture
 from downloads import server
 
 
-def run(output,bundle=None,frames=False):
+def run(output,bundle=None,frames=False,mockups=None):
     output.mkdir(parents=True,exist_ok=True)
     result = {'checks':{},'frames':[],'configuration':'Debug; functional evidence, no timing qualification'}
     app = None
@@ -105,7 +105,8 @@ def run(output,bundle=None,frames=False):
             history=next(r for r in rows() if '/arm' in r['id']);state(action='hover-row',id=history['id']);capture('history-hover')
             payload=state(action='row-drag',id=history['id']);check('history_drag_url',payload['url']==history['id'],payload=payload)
             state(action='filter',open=True);state(action='chip',id='when:yesterday');check('history_when_empty',not rows());capture('history-filter-no-matches')
-            state(action='chip',id='when:yesterday');state(action='filter',open=False)
+            state(action='chip',id='when:yesterday');state(action='chip',id='when:week');check('history_week_includes_today',wait(lambda:bool(row(history['id']))))
+            state(action='chip',id='when:week');state(action='filter',open=False)
             history_file=app.call('history-state')['file']
             with sqlite3.connect(history_file) as db:
                 for index in range(240):
@@ -196,6 +197,16 @@ def run(output,bundle=None,frames=False):
                     for section in ['downloads','archive','history','media','boosts','spaces']:
                         state(action='select',section=section);time.sleep(.25)
                         capture('content-%dx%d-%s'%(width,height,section))
+                if mockups:
+                    state(action='close');time.sleep(.25)
+                    if app.call('window-state')['sidebarMode']!='hidden':app.call('command',id='toggle-sidebar')
+                    for source in sorted(mockups.glob('mock-*.html')):
+                        width,height=map(int,source.stem.split('-')[2].split('x'))
+                        app.call('window-frame',frame=[40,50,width+20,height+20],unconstrained=True)
+                        app.call('navigate',url=source.resolve().as_uri());app.call('wait');time.sleep(.1)
+                        path=output/(source.stem+'.png');app.call('snapshot',page=True,path=str(path))
+                        size=struct.unpack('>II',path.read_bytes()[16:24])
+                        check(source.stem+'_reference_2x',size==(width*2,height*2),pixels=size)
             result['ok']=True
         except Exception as e:
             result.update(ok=False,error=repr(e));raise
@@ -212,4 +223,4 @@ def run(output,bundle=None,frames=False):
     return result
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--output',required=True,type=Path);p.add_argument('--bundle',type=Path);p.add_argument('--frames',action='store_true');a=p.parse_args();run(a.output,a.bundle,a.frames)
+    p=argparse.ArgumentParser();p.add_argument('--output',required=True,type=Path);p.add_argument('--bundle',type=Path);p.add_argument('--frames',action='store_true');p.add_argument('--mockups',type=Path);a=p.parse_args();run(a.output,a.bundle,a.frames,a.mockups)

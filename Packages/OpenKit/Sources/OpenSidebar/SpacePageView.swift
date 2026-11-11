@@ -782,7 +782,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
         SidebarDiagnostics.countFolderWork("height-queries")
         return switch item {
-        case is SpacerItem: context.manager?.libraryLayout == true ? 0 : SpaceListMetrics.spacerRowHeight
+        // NSOutlineView requires a strictly positive height. Keep the sentinel
+        // for existing child/drop indexes, with no visible card-top spacing.
+        case is SpacerItem: context.manager?.libraryLayout == true ? 0.01 : SpaceListMetrics.spacerRowHeight
         case is DividerItem: SpaceListMetrics.dividerRowHeight
         default: SpaceListMetrics.rowHeight
         }
