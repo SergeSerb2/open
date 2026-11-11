@@ -153,8 +153,13 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         hidden = hover(False); shown = hover(True)
         results["X3_hover"] = {"ok": not hidden["visible"] and shown["visible"] and len(shown["ids"]) == 3,
                                  "away": hidden, "over": shown}
-        # Startup welcome tabs may be opened by the real store copies. Select a
-        # stable local page before capturing Open's own window.
+        # The actual Bitwarden install tab can arrive after the action list is
+        # ready and close an already-open popup. Require its committed URL,
+        # rather than racing it with another selected tab.
+        welcome = wait_until(lambda: next((t for t in app.call("tabs")
+            if t["url"].startswith("https://bitwarden.com/browser-start/") and t["hasWebContent"]), None), timeout=30)
+        results["X6_first_install_tab_ready"] = {"ok": bool(welcome), "tab": welcome}
+        # Select a stable local page before capturing Open's own window.
         blank = new_tab(app, "about:blank")
         for appearance in ("light", "dark"):
             app.call("appearance", name=appearance); hover()
