@@ -38,6 +38,10 @@ def run(factory, results, tmp, env, functional_only=False):
         def factory(*args, **kwargs):
             kwargs['extra_args'] = [*kwargs.get('extra_args', []), *fixture_args]
             return original_factory(*args, **kwargs)
+        if env.get('E2E_LANE') == 'observers':
+            from sitecontrol_performance import run as performance
+            performance(factory, results, origin, tmp, env)
+            return
         app = factory(urls=('about:blank',))
         saved = {}
         private = Path(env['ROOT']) / '.re/handoff/sections/s12/A-sitecontrol'

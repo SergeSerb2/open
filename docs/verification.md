@@ -1,84 +1,81 @@
-# Full CLI verification
+# Full merge verification
 
-Run from any directory on macOS with Swift and Python 3 installed:
+Run the gate inside the machine's one FIFO build slot. The coordinator keeps
+that slot and takes the screen lock separately for each native or real-App
+suite, including cleanup. Never wrap the entire gate in the screen lock.
 
 ```sh
-~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh
-~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --quick
-~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only route,favicons
-~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --with-arc-data --keep-logs
+~/Library/Caches/OpenRE/scripts/queue.sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --m1-receipts /path/to/m1-receipts
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only e2e-sidebar-completion
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --no-e2e --only sidebar-render,sidebar-compare
 ```
 
-The Site Control check opens native menus and acquires
-`/tmp/open-onscreen-e2e.lock` around that suite. Do not hold this lock around the
-whole runner: the release build needs no on-screen lock. Standalone native-menu
-harness commands still need the lock, per AGENTS.md rule 11.
+The full qualifying gate runs unsplit on the M5. Its offscreen worker builds
+OpenKit once in Release, then runs the real release CLIs. Warnings and compiler
+errors fail that build. The App build uses Release by default; `--config Debug`
+is available for diagnosis. Every suite in `engine_e2e.py --only` is selected by
+default, plus both NTP styles and the real owner-death flow. The superseded
+`passwords-probe` observation suite is opt-in; the newer `passwords` acceptance
+flow is required. Card, WebAuthn and HTTP Basic observation paths that can open
+system dialogs stay outside the default selection and in the exception inventory.
 
-The runner uses `/bin/bash` 3.2. It builds `Packages/OpenKit` exactly once with
-`nice -n 10 swift build -c release -j "${VERIFY_JOBS:-6}"`. The build runs in its
-own process session. A compiler error, any output line containing `warning:`,
-or a nonzero build exit stops the run. The build log records warning/error line
-counts. Checks use the resulting release executables; they never call `swift run`.
+The M1 runs the crash-capable suites: features, profiles, profiles-engine,
+passwords, secrets-import, and owner-watch. On the M5 these rows say
+`M1_REQUIRED` and fail until `--m1-receipts` supplies matching evidence. Produce
+it on a detached M1 checkout at the exact candidate commit, using its recorded
+engine distribution and the same config and lane:
 
-`--quick` selects commands-demo, suggest-check, and commands-dump after the build.
-`--only NAME[,NAME]` selects checks from the table below, preserving table order.
-The build always runs; `--only build` runs just the build. Combined with `--quick`,
-`--only` must select from the quick set. Unknown names and invalid flags exit 2.
-`VERIFY_JOBS` sets build concurrency. `VERIFY_LOG_DIR` can name a **new** log
-directory; an existing directory is refused to protect earlier evidence.
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh \
+  --only e2e-features,e2e-profiles,e2e-profiles-engine,e2e-passwords,e2e-secrets-import,e2e-owner-watch \
+  --config Release --log-dir .re/gate-m1
+```
 
-Every check runs in a fresh `mktemp -d` directory, with its own working directory
-and `TMPDIR`. Synthetic snapshot prerequisites come from commands-demo. A check
-selected alone creates that prerequisite through the real CLI. Roundtrip copies
-the demo's output before saving it. It does not change the original fixture.
+Copy that complete private receipt directory under the supplied receipt root.
+The importer checks the exact commit, clean source fingerprint, engine hash,
+config, style, lane and named stage. A failed, ambiguous, missing or interrupted
+receipt cannot pass. Each real-App receipt must include successful owned-process
+cleanup and zero remaining windows. The gate retains raw FAIL, BLOCKED, DEFERRED
+and INTERRUPTED states. System dialogs and new Open crash reports stop further
+screen launches; the dialog stays untouched for the user or lead.
 
-Each command must exit as expected **and** print its required success evidence.
-The runner records PASS, FAIL, or SKIP and elapsed whole seconds. A failed check
-does not stop later checks, except for a failed build. Exit 0 means there were no
-FAIL rows. An unavailable command or executable is SKIP, detected from openkit's
-usage tokens or `.build/release/<executable>`. A command that exists but fails,
-prints incomplete results, or misses a dependency is FAIL. Missing node or Chrome
-also makes the optional Boosts check SKIP. Checks excluded by flags have no row.
+The separate `--lane observers` runs on the M1. It covers the native
+`features-idle` observer and the injected stages of Site Control, Find, Split,
+Little Open and Downloads. The M5 merge lane runs their uninstrumented
+functional, pixel and strict timing stages. The observer lane is required for
+PRs that touch Site Control or the idle observers. Its receipt states the lane;
+it cannot replace an uninstrumented merge receipt. A merge-lane App factory
+refuses `DYLD_INSERT_LIBRARIES`.
 
-| Name | What PASS proves | Typical duration after build |
-|---|---|---|
-| `commands-demo` | Real BrowserModel commands, undo/redo, placement refusal, archive/restore, and persistence report all checks passed and zero failed. See [model.md](model.md). | <1 s |
-| `roundtrip` | A commands-demo snapshot loads, saves, and reloads with `roundtrip OK`. | <1 s |
-| `suggest-check` | The existing suggestion CLI reports N/N passed, with N > 0, including local HTTP remote-provider paths and its main-thread CPU budget. See [suggest.md](suggest.md). | 5–20 s |
-| `commands-dump` | The real headless NSMenu and keyboard registry match the reference table (`missing=0 extra=0 different=0`). Default and override bindings have no unexpected conflicts. See [commands.md](commands.md). | <1 s |
-| `route` | Runs an existing `tools/route-check.sh`, `tools/verify-routing.sh`, `tools/verify-route.sh`, release `route-check`, or `openkit route-check` runner when present. Otherwise exercises [routing.md](routing.md) A1–A10 through `openkit route`: host boundaries, containment, first-match order, source normalization, toggle, rejected scheme, stale target, and JSON/text agreement. Every accepted result has an explicit expected destination. | <2 s |
-| `favicons` | A tiny generated site served by Python http.server on loopback fetches through the release debug flags. Concurrent fetches succeed, a second process uses the cache, 32/64-pixel PNGs read back, and a page without an icon reports missing and absent readback. All requested page/icon URLs are local. See [favicons.md](favicons.md). | <2 s |
-| `sleep-demo` | The existing real model/controller/store CLI reports N checks passed and zero failed. The 5,000-tab/200-pass gate uses thread CPU p95 <2 ms; wall time is informational. Its engine boundary and policy clock remain the CLI's simulation. Expected deliberate storage errors are allowed. See [sleep.md](sleep.md). | 1–5 s |
-| `adblock-perf` | Both current budgets pass: 1,000 lookups p95 <1 ms and 40 profile opens with full integrity scanning p95 <10 ms. Open max is informational. The ten lookup groups yield exactly 5,000 matches in 10,000 lookups. Official default-list downloads may be needed. Same-session Update Now tamper recovery is separately covered by the real-App adblock scope, AD4 fallback and reseed: one reload, native generation/list count, blocked request, and clear Settings. See [adblock-lists.md](adblock-lists.md). | 5–30 s; network dependent |
-| `adblock-catalog` | Real CLI output contains all 46 catalog IDs, category counts 3/2/5/35/1, and only EasyList/EasyPrivacy enabled by default. | <1 s |
-| `profiles` | When `openkit profiles` exists, exercises the planned P-1–P-8 and P-10 flow: create, duplicate refusal, assign Space, both delete refusals with unchanged snapshot bytes, reassignment, temporary-profile deletion with retained directory, and roundtrip. Contract: [profiles plan §9.1](plans/profiles.md#91-openkit-profiles--cli-new-file-openkitprofilescliswift). | <2 s |
-| `sidebar-render` | When present, `sidebar-render check` reports N/N passed, N checks passed with zero failed, or `checks: N passed, 0 failed`. | 1–5 s |
-| `commandbar-render` | When present, `commandbar-render check` accepts the same summary formats as sidebar-render. | 1–5 s |
-| `boosts` | Headless system Chrome loads the actual Boosts harness and production scripts. A7 asserts banner highlight geometry/color, selector commit, hidden banner, and active picker. A11 asserts the precise pick, two aligned related previews, three-match replacement, and hidden posts. Saves both PNGs and rejects runtime errors. See [boosts.md](boosts.md). | 5–20 s; npm install dependent |
-| `import-arc` | Opt-in only. Read-only copies of Arc's top-level JSON files pass sidebar/archive accounting, `archive-list --limit 0`, and roundtrip. Also inspects default-profile output when profiles exists (P-9). | <2 s |
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --lane observers --log-dir .re/gate-observers
+```
 
-### Focused checks for intermediate pushes
+`--only NAME[,NAME]` selects native/CLI names or `e2e-NAME`; `--only e2e`
+selects every default real-App suite. `--quick` runs the OpenKit build and three
+CLI checks. `--no-e2e`, `--only`, and `--quick` produce partial receipts and do
+not qualify a PR. `--with-arc-data` adds the read-only top-level Arc import.
+Unknown or duplicate names fail before a build. Missing dependencies fail;
+only an absent target may SKIP. `--log-dir` or `VERIFY_LOG_DIR` must name a new
+directory. Logs, private per-suite JSON, queue/acquisition times, cleanup and
+`gate.json` remain there. `summary.md` contains the row table and the full
+exception inventory.
 
-`AGENTS.md` rule 10 asks for the full gate before a PR opens and when it is reported ready. For pushes in between, run the build plus the checks for what you changed. Shared targets (`OpenDesign`, `OpenModel`, `OpenStore`) reach many checks, so use the full gate when you change them.
+`tools/verification/gate-exceptions.json` is the single shrink-only exception
+list, approved by the lead on 2026-11-10. Entries name an exact row, original
+BLOCKED/DEFERRED status and reason, clearing condition, owner, date and expiry.
+A row that now passes makes its entry STALE and fails until that entry is
+removed. A mismatch or any unlisted non-PASS row fails. Every run prints all
+entries, including unexercised ones. No display or performance exception remains
+after the “M5 panel ready” ruling. The notification `clients.openWindow` row
+stays DEFERRED as a visible v1 product gap in `docs/followups.md`.
 
-| You changed | Run at least |
-|---|---|
-| `OpenSidebar`, `OpenMedia` sidebar views | `sidebar-render,sidebar-compare,media-demo` |
-| `OpenCommandBar`, `OpenSuggest`, `OpenCommands` | `commandbar-render,suggest-check,commands-dump` |
-| `OpenFeatures` (Split, Peek, Little Open, PiP, Site Control) | `features-render` |
-| `OpenSpaceEditor`, theme tokens | `space-editor,space-legacy` |
-| `OpenSettings` | `settings-preview,profiles` |
-| `OpenRouting` | `route` |
-| `OpenSleep` | `sleep-demo` |
-| `OpenAdBlock` | `adblock-perf,adblock-catalog` |
-| `OpenBoosts` | `boosts` |
-| `OpenWeb` favicons | `favicons` |
-| `App/` or `Engine/` | the e2e suites for the flow (`tools/e2e/engine_e2e.py --only …`) plus `build` |
-
-An initial release build usually takes 20–90 seconds. An incremental build usually
-takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads can
-increase these estimates. The final table and each log give actual times/results.
-Performance budgets are never retried or relaxed by the runner.
+The committed machine setup scripts and queue contract are in
+[tools/machine/README.md](../tools/machine/README.md). Each machine has one build
+slot and one screen slot. Build and screen work may overlap; strict timing takes
+both in that order. The full gate already holds both during each timed suite.
+Keep at most one waiting screen job per agent, and record waits over ten minutes.
 
 ### Display and timer portability (Section 16)
 

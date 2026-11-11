@@ -311,6 +311,13 @@ class Open:
             extra_args = [arg for arg in extra_args if not arg.startswith("--vmodule=")]
             extra_args += ["--verbose", "--v=0", "--vmodule=" + ",".join(modules)]
         args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + ([] if first_run else ["--skip-first-run"]) + list(urls) + extra_args
+        ledger = os.environ.get('OPEN_VERIFY_PROCESS_LEDGER')
+        if ledger:
+            # The outer screen worker can finish cleanup after a killed harness.
+            # Record only our private profile and exact executable file identity.
+            with open(ledger, 'a') as stream:
+                stream.write(json.dumps(dict(root=user_data, bundle=self.bundle,
+                    executable=app, device=launched_file.st_dev, inode=launched_file.st_ino)) + '\n')
         self.log = open(log_path, "a")
         self.started = time.time()
         # Keep LaunchServices for delivery fixtures. Strict acceptance launches
@@ -7866,12 +7873,17 @@ def littleopen_checks(factory, results, tmp):
     origin = 'http://127.0.0.1:%d' % port
     app = None
     probe = os.path.join(tmp, 'littleopen-idle-probe.dylib')
-    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
-                    '-DOPEN_APP_TIMER_PROBE', os.path.join(ROOT, 'tools/verification/feature-idle-probe.m'),
-                    '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True)
-    env = {'DYLD_INSERT_LIBRARIES': probe, 'OPEN_LITTLEOPEN_TIMER_PROBE': '1'}
+    if E2E_LANE != 'merge':
+        subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fblocks', '-fobjc-arc', '-Wno-deprecated-declarations',
+                        '-DOPEN_APP_TIMER_PROBE', os.path.join(ROOT, 'tools/verification/feature-idle-probe.m'),
+                        '-framework', 'AppKit', '-framework', 'QuartzCore', '-framework', 'CoreVideo', '-o', probe], check=True)
+    env = {'DYLD_INSERT_LIBRARIES': probe, 'OPEN_LITTLEOPEN_TIMER_PROBE': '1'} if E2E_LANE != 'merge' else {}
 
-    def record(name, ok, **details): results[name] = dict(details, ok=bool(ok))
+    def record(name, ok, **details):
+        observer_row = name in ('sweeper_no_poll_never', 'sweeper_one_timer', 'sweeper_shared_today_timer')
+        if (E2E_LANE == 'merge' and observer_row) or (E2E_LANE == 'observers' and not observer_row):
+            return
+        results[name] = dict(details, ok=bool(ok))
     def state(): return app.call('little-open-state')
     def sessions(): return state()['sessions']
     def session(sid): return next((s for s in sessions() if s['id'] == sid), None)
@@ -8321,6 +8333,8 @@ def littleopen_checks(factory, results, tmp):
                mainOnly=main_timer, withLittleOpen=both_timer, sweep=swept)
         app.call('archive-clock', reset=True)
         app.call('profile-archive-setting', profile=seed['profiles'][0]['id'], interval='never', scope='profile')
+        if E2E_LANE == 'observers':
+            return
 
         # No main window: blank, bar Cmd+O, external intake, and quit/relaunch.
         for main in app.call('shell-windows'): app.call('window-close', id=main['id'])
@@ -11931,11 +11945,10 @@ def page_notification_checks(factory, results, tmp):
                 # banner (N1_engine_display), yet Notification Center's delivered list for Open.app
                 # stays empty. Open cannot see why from inside the app (docs/followups.md); the
                 # user confirms delivery by eye (U-N1). Never counted as a pass.
-                results['N1_macos_delivered'] = blocked('U-N1: authorized, but macOS lists no delivered banner for Open.app; '
-                                                        'the user confirms delivery (followups)', delivered=listed['delivered'],
+                results['N1_macos_delivered'] = blocked('needs user-granted macOS notification consent or delivery confirmation (U-N1)', delivered=listed['delivered'],
                                                         authorization=listed['authorization'])
         else:
-            results['N1_macos_delivered'] = blocked('U-N1: macOS has not authorized Open (status %s)' % listed['authorization'],
+            results['N1_macos_delivered'] = blocked('needs user-granted macOS notification consent or delivery confirmation (U-N1)', authorization=listed['authorization'],
                                                     delivered=listed['delivered'])
         engine_titles = lambda: [n['title'] for n in app.call('notifications')['engine']]
         n1_listed = wait_until(lambda: 'Open N1 banner' in engine_titles() or None, timeout=5, step=.1)
@@ -12355,7 +12368,7 @@ def page_translate_checks(factory, results, tmp):
         # X1 on Apple's backend: only when French → English is installed (no download prompt in e2e).
         availability = app.call('translate', action='availability', source='fr', target='en')['status']
         if availability != 'installed':
-            results['X1_apple_backend'] = {'status': 'BLOCKED', 'reason': 'U-X1: French → English is %s, not installed on this Mac' % availability}
+            results['X1_apple_backend'] = {'status': 'BLOCKED', 'reason': 'French → English OS translation asset is not installed', 'availability': availability}
     finally:
         try:
             app.call('filter', block=[])
@@ -12385,12 +12398,17 @@ def page_translate_checks(factory, results, tmp):
 
 
 
+E2E_LANE = "all"
+
+
 def main():
-    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE
+    global _ACTIVE_FOCUS_TRACKER, _SUITE_CRASH_BASELINE, _ROW_TIMEOUT, _CONTINUE_ON_TIMING_FAILURE, E2E_LANE
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", choices=["alloy", "chrome"],
                     help="runtime style (default: chrome for context-menus, alloy for other suites)")
     ap.add_argument("--config", default="Debug")
+    ap.add_argument("--lane", choices=("all", "merge", "observers"), default="all", help="merge uses no injected observers; observers is the separate M1 lane")
+    ap.add_argument("--output-dir", help="private directory for this invocation's JSON receipts")
     ap.add_argument("--engine-sha256", help="require this Vendor framework SHA-256 and matching embedded code before app launch")
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
@@ -12408,6 +12426,7 @@ def main():
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
+    ap.add_argument('--passwords-probe-dialog-free', action='store_true', help='observe safe Step 0 rows; report card, WebAuthn and HTTP Basic as BLOCKED')
     ap.add_argument('--passwords-rows', help='run only named HTTPS-First lifetime rows; omit for full password acceptance')
     ap.add_argument('--passwords-m-only', action='store_true', help='run only the real-App save-sheet M rows')
     ap.add_argument("--keep", action="store_true",
@@ -12422,6 +12441,13 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    E2E_LANE = opts.lane
+    if opts.only == 'applescript' and subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'):
+        ap.error('M1 policy forbids external AppleScript/osascript over SSH; run this suite on the M5')
+    if opts.lane == "observers" and opts.only not in ("sitecontrol", "find", "split", "littleopen", "downloads"):
+        ap.error("selected suite has no observer lane")
+    if opts.lane == "observers" and not subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).startswith("Apple M1"):
+        ap.error("observer lane requires the M1")
     # Context menus assert Chrome's full model and extension contributions, as
     # used by normal Open launches. Alloy has CEF's shorter, different menu.
     if opts.style is None:
@@ -12476,6 +12502,8 @@ def main():
             not re.fullmatch(r'PR-[1-9](,PR-[1-9])*', opts.passwords_probe_rows) or
             len(set(opts.passwords_probe_rows.split(','))) != len(opts.passwords_probe_rows.split(','))):
         ap.error('--passwords-probe-rows requires passwords-probe and unique PR-1 through PR-9 ids')
+    if opts.passwords_probe_dialog_free and (opts.only != 'passwords-probe' or opts.passwords_probe_rows):
+        ap.error('--passwords-probe-dialog-free requires passwords-probe without --passwords-probe-rows')
     probe_result_name = ('results-passwords-probe-%s.json' % '-'.join(opts.passwords_probe_rows.split(','))
                          if opts.passwords_probe_rows else 'results-passwords-probe.json')
     if opts.engine_sha256 and not re.fullmatch(r"[0-9a-f]{64}", opts.engine_sha256):
@@ -12578,6 +12606,8 @@ def main():
 
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None, extra_args=None, delivery_urls=(), load_extensions=True):
         tracker.check_alive()
+        if opts.lane == "merge" and ((extra_env or {}).get("DYLD_INSERT_LIBRARIES") or os.environ.get("DYLD_INSERT_LIBRARIES")):
+            raise RuntimeError("merge lane refuses injected libraries; use --lane observers on the M1")
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
             shutil.rmtree(user_caches, ignore_errors=True)
@@ -12598,7 +12628,7 @@ def main():
             wait_until(lambda: app.call("first-run")["active"], timeout=10, step=.05)
         return app
 
-    results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+    results = {"style": opts.style, "config": opts.config, "lane": opts.lane, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
                "load": os.getloadavg()}
     source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Engine", "Packages/OpenKit/Sources", "tools"], cwd=ROOT)
     results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -12698,6 +12728,7 @@ def main():
             results['probeMetadata'] = runpy.run_path(os.path.join(ROOT, 'tools/e2e/passwords_probe.py'))['run'](
                 sys.modules[__name__], factory, results[opts.only], tmp,
                 row_ids=opts.passwords_probe_rows.split(',') if opts.passwords_probe_rows else None,
+                dialog_free=opts.passwords_probe_dialog_free,
                 result_name=probe_result_name,
                 engine_distribution_sha256=results['engine']['distributionSHA256'])
         elif opts.only == "secrets-import":
@@ -12953,7 +12984,9 @@ def main():
             "results-actions-p2.json" if opts.only == "actions" else
             "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "page", "context-menus")
                                     else opts.config.lower()))
-    with open(os.path.join(OUT, name), "w") as f:
+    receipt_dir = os.path.abspath(opts.output_dir or OUT)
+    os.makedirs(receipt_dir, exist_ok=True)
+    with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
     for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import"):
         for k, v in results.get(group, {}).items():
@@ -12961,7 +12994,7 @@ def main():
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
-    print("wrote", os.path.join(OUT, name))
+    print("wrote", os.path.join(receipt_dir, name))
     failures = [k for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':

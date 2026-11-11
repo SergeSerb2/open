@@ -30,7 +30,7 @@ that suite's existing lock; they do not acquire it again. The lock serializes
 agents, while native-focus interruption tracking still covers user activity.
 
 Builds, `swift build`, and every `tools/verify-all.sh` invocation use the separate
-machine-wide heavy-job slot script (capacity is set by the lead):
+machine-wide FIFO build slot script (one slot per machine):
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
@@ -38,7 +38,10 @@ machine-wide heavy-job slot script (capacity is set by the lead):
 ```
 
 Do not hold the on-screen lock while waiting for a heavy-job slot. Keep the
-on-screen lock around one suite only; take the heavy slot around build steps.
+on-screen lock around one suite only. Scripts that compile helpers also take
+heavy.sh before the screen lock. The full gate keeps its build slot and takes
+the screen lock separately for each suite. Build and screen work may overlap;
+strict timing always takes heavy.sh before the screen lock.
 
 ## Updater core
 

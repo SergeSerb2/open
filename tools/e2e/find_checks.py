@@ -39,11 +39,14 @@ def run(h, factory, results, tmp):
         subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fobjc-arc',
                         os.path.join(h.ROOT, 'tools/e2e/find-input-order-probe.m'),
                         '-framework', 'AppKit', '-o', input_probe], check=True, timeout=30)
+    lane = getattr(h, "E2E_LANE", "all")
     app = None
     saved = {}
     private = os.path.join(h.ROOT, '.re', 'find')
     os.makedirs(private, exist_ok=True)
     def row(name, ok, **data):
+        if lane == "observers" and not name.startswith("F31_"):
+            return
         data['display'] = state().get('display', {})
         results[name] = dict(ok=bool(ok), **data)
     def key(key=None, modifiers=(), text=None):
@@ -95,7 +98,29 @@ def run(h, factory, results, tmp):
             pane=p, closed=bool(closed), focus=app.call('focus-state'), strips=strips,
             stripsAfterClose=after, duplicatesDropped=duplicates)
         key('f', ['cmd'])
+    def idle_checks():
+        nonlocal app
+        app = factory(urls=(origin + '/index.html',), fresh=True, extra_env={'DYLD_INSERT_LIBRARIES': probe})
+        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
+        app.call('find-idle', action='begin')
+        key('f', ['cmd']); key(text='quasar'); settled(tab, '1/5')
+        app.call('focus', tab=tab); time.sleep(.5)
+        app.call('find-idle', action='watch'); app.call('find-idle', action='reset')
+        before=state(); p0=pane(tab); time.sleep(2); after=state(); p1=pane(tab)
+        observed=app.call('find-idle', action='read')
+        row('F31_idle', p1['visible'] and not before.get('pending') and not after.get('pending') and before.get('requests') == after.get('requests')
+            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values())
+            and before.get('warmup', {}).get('runs') == after.get('warmup', {}).get('runs') == 1
+            and after.get('warmup', {}).get('temporaryViewsReleased') is True,
+            before=before, after=after, observer=observed, load=subprocess.check_output(['uptime'], text=True).strip())
+        canary=app.call('find-idle', action='invalidate')
+        row('F31_observer_canary', any(canary[k] > 0 for k in ('invalidations','layout')), observer=canary)
+        app.call('find-idle', action='end')
+        return tab
     try:
+        if lane == "observers":
+            idle_checks()
+            return
         samples = []
         compare = os.environ.get('OPEN_FIND_COMPARE_PREWARM') == '1'
         for mode in (['cacheOnly', 'enabled'] * 20 if compare else ['enabled'] * 20):
@@ -339,22 +364,11 @@ def run(h, factory, results, tmp):
         # The observer is armed before the lazy Find view exists, so a leaked
         # initialization timer remains visible to the zero-resource gate.
         app.quit()
-        app = factory(urls=(origin + '/index.html',), fresh=True, extra_env={'DYLD_INSERT_LIBRARIES': probe})
-        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
-        app.call('find-idle', action='begin')
-        key('f', ['cmd']); key(text='quasar'); settled(tab, '1/5')
-        app.call('focus', tab=tab); time.sleep(.5)
-        app.call('find-idle', action='watch'); app.call('find-idle', action='reset')
-        before=state(); p0=pane(tab); time.sleep(2); after=state(); p1=pane(tab)
-        observed=app.call('find-idle', action='read')
-        row('F31_idle', p1['visible'] and not before.get('pending') and not after.get('pending') and before.get('requests') == after.get('requests')
-            and before.get('results') == after.get('results') and p0['layouts'] == p1['layouts'] and all(v == 0 for v in observed.values())
-            and before.get('warmup', {}).get('runs') == after.get('warmup', {}).get('runs') == 1
-            and after.get('warmup', {}).get('temporaryViewsReleased') is True,
-            before=before, after=after, observer=observed, load=subprocess.check_output(['uptime'], text=True).strip())
-        canary=app.call('find-idle', action='invalidate')
-        row('F31_observer_canary', any(canary[k] > 0 for k in ('invalidations','layout')), observer=canary)
-        app.call('find-idle', action='end')
+        if lane != "merge":
+            tab = idle_checks()
+        else:
+            app = factory(urls=(origin + "/index.html",), fresh=True)
+            tab = app.call("tabs")[0]["id"]; app.call("wait", tab=tab)
         # Browser keys must keep their real owners from this new field editor.
         for name, k in [('address', 'l'), ('new_tab', 't')]:
             app.call('select', tab=tab); key('f', ['cmd']); key(k, ['cmd'])
