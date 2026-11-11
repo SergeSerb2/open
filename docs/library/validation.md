@@ -1,10 +1,9 @@
 # Library validation
 
-Status: STOP at LEAD 11:20's non-flush branch, before the full gate and PR.
-All five interaction/idle pairs remain valid and pass. Scroller-drag stress
-passes its maximum-work and creation limits. Wheel dispatch and flush are
-cheap, but its physical interval count and deferred work remain unqualified.
-No product drawing change or additional five-pair run was made.
+Status: STOP after the LEAD 12:50 lean checks. All three pairs are valid,
+but ready-open median 10.882 ms exceeds its 8 ms budget. Warm section and search
+pass. The earlier scroll and idle rulings remain recorded below. No further
+rerun, main merge, full gate or PR was started after this required failure.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -364,3 +363,46 @@ exit remains part of the next three pairs and touched flows.
 
 Next checks: ready-open/warm/search three pairs and touched flows, then merge
 main and the staged full M5 gate. No gate or PR is claimed by this entry.
+
+## LEAD 12:50 lean result — STOP at ready-open with 3/3 valid pairs
+
+The three-pair Release run completed on source `af9dfbe5`, native `c7bbc5e8`,
+executable SHA-256 `668ece3d459faec9cdb7fce0fe448ef191327fead6222cc877f270d4d7aa112e`.
+All 3,019 transported source hashes, artifact hashes and the deep/strict signature matched.
+The ticket waited 2,440 seconds in the queue, then measured for about three minutes;
+it did not hold the slot throughout that queue wait. All three baseline/candidate
+pairs held both slots and passed both pre-launch load1 readings ≤3.5. Foreign CPU
+remains INFO. No valid sample was interrupted after the 13:38 scheduling instruction.
+
+| Required row | Median ms | Maximum ms | Median limit / sample ceiling ms | Result |
+|---|---:|---:|---:|---|
+| Ready-open first commit | 10.882 | 11.144 | 8 / 12 | FAIL |
+| Warm section | 4.644 | 4.845 | 8.3 / 12.45 | PASS |
+| Search | 7.151 | 8.557 | 16 / 24 | PASS |
+
+All nine warm switches configured/reloaded zero rows. Every baseline/candidate
+quit normally (`forced=false`), with zero remaining owned processes and windows.
+This verifies the fixed temporary-root teardown order.
+
+| Pair | Baseline load1 | Candidate load1 | Ready first ms | Action ms | Layout ms | Display ms | Commit flush ms | Cumulative idle-slice max at open ms |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| 1 | 3.485 / 3.103 | 3.103 / 2.926 | 10.882 | 4.402 | 0.637 | 0.351 | 5.492 | 11.665 |
+| 2 | 2.692 / 2.572 | 3.087 / 2.766 | 11.144 | 5.145 | 0.663 | 0.361 | 4.975 | 9.803 |
+| 3 | 2.864 / 2.577 | 2.577 / 2.254 | 5.183 | 1.759 | 0.360 | 0.237 | 2.827 | 8.582 |
+
+The open operation created/configured/reloaded zero rows and formatted no data.
+It rasterized one native Library search backing store (30,528 pixels), with no
+row-text/glyph raster. The explicit commit phase is 5.492/4.975/2.827 ms; that
+transaction-wide flush does not by itself prove all time belongs to the Library.
+
+The cumulative idle-slice counter also records 11.665/9.803/8.582 ms before each
+open, above the 8.0 ms bound. These are newly observed raw Library slice maxima;
+this lean runner did not capture their individual busy intervals. They are retained
+and must be ruled on; the earlier scoped no-flush/control result is not rewritten.
+There was no idle or full A/B rerun.
+
+Per LEAD 12:50, the required ready-open failure stops further work. Touched content
+and keys suites, main merge, exact-head M1 receipts, full M5 gate, push and PR remain
+NOT RUN. Both D1 machine queues are clear and no D1 App process remains. Future M1
+work uses one bounded ticket per pair or touched suite (about 15 minutes maximum
+while others wait), with receipt copying and analysis after release.
