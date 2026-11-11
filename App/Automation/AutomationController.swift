@@ -1664,7 +1664,6 @@
       prepare(content)
       var inside: [ObjectIdentifier: NSResponder] = [:]
       var moving: [ObjectIdentifier: NSResponder] = [:]
-      var owners: [ObjectIdentifier: NSResponder] = [:]
       // The point is visible in `view` when it lies inside the view and every ancestor
       // (scroll views and pages clip their content). Not `visibleRect`: views that do not
       // clip to their bounds (the macOS 14+ default) report the whole window there.
@@ -1681,7 +1680,6 @@
         let local = view.convert(location, from: nil)
         for area in view.trackingAreas {
           guard let owner = area.owner as? NSResponder else { continue }
-          if area.options.contains(.mouseEnteredAndExited) { owners[ObjectIdentifier(owner)] = owner }
           let hit = area.options.contains(.inVisibleRect) ? visible(view) : area.rect.contains(local) && visible(view)
           guard hit else { continue }
           if area.options.contains(.mouseEnteredAndExited) { inside[ObjectIdentifier(owner)] = owner }
@@ -1697,9 +1695,11 @@
       }
       let move = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
         context: nil, eventNumber: Self.syntheticPointerTag, clickCount: 0, pressure: 0)
-      // Exit goes to every owner away from the point, not only those this command entered:
-      // the hardware pointer may have entered others (its tracking areas are real).
-      if let exit = enterExit(.mouseExited) { for (id, owner) in owners where inside[id] == nil { owner.mouseExited(with: exit) } }
+      // The queued native motion above already reconciles AppKit tracking. Only
+      // exit owners our simulated pointer actually left. Sending exits to every
+      // unrelated area can cancel the Favorite preview that native motion just
+      // armed; its following enter then sees an unchanged pointerInside value.
+      if let exit = enterExit(.mouseExited) { for (id, owner) in hoveredOwners where inside[id] == nil { owner.mouseExited(with: exit) } }
       if let enter = enterExit(.mouseEntered) { for (id, owner) in inside where hoveredOwners[id] == nil { owner.mouseEntered(with: enter) } }
       if let move { for owner in moving.values { owner.mouseMoved(with: move) } }
       let entered = inside.filter { hoveredOwners[$0.key] == nil }.values
