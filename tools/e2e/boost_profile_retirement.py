@@ -51,7 +51,7 @@ def run(factory, results, tmp, env):
             app.call('library-history-state', profile=profile['id'], selectProfile=True)
             app.call('profiles-shell', action='show', profile=name)
             time.sleep(.15) # Let Settings install its real SwiftUI accessibility controls.
-            app.call('profiles-shell', action='press', label='Delete Profile')
+            app.press_profile_delete()
             assert wait(lambda: app.call('profiles-shell')['sheet'] > 0, timeout=5, step=.05)
             app.call('profiles-shell', action='type-delete', text=name)
             assert app.call('profiles-shell')['deleteEnabled']

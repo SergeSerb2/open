@@ -658,6 +658,21 @@ class Open:
     def page(self, tab_id):
         return self.tab(tab_id).get("page", {})
 
+    def press_profile_delete(self):
+        """Use the redesigned Settings row's real native Delete… menu item."""
+        self.call('settings-ui', action='link', url='open://settings/profiles/delete')
+        selected = self.call('settings-ui')['profile']
+        profile = next(p for p in self.call('profiles-shell')['profiles'] if p['id'] == selected)
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                return self.call('settings-ui', action='choice',
+                                 label='Actions for Profile ' + profile['name'], title='Delete…')
+            except RuntimeError as error:
+                if 'unknown enabled Settings choice' not in str(error) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.05)  # Wait for the real SwiftUI row to install its NSPopUpButton.
+
 
 def shot(app, name, window=None, max_px=1100):
     """PNG of one of OUR windows. The main window uses the in-app snapshot
