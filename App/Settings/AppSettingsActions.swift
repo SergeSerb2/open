@@ -10,6 +10,7 @@ import OpenSidebar
 import OpenFeatures
 import OpenTranslate
 import OpenSpaceEditor
+import OpenLibrary
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -70,8 +71,19 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
-  @ObservationIgnored private(set) var library: LibraryViewModel?
-  @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
+  @ObservationIgnored private var legacyLibrary: LibraryViewModel?
+  @ObservationIgnored private var legacyLibraryPresenter: LibraryPresenter?
+  @ObservationIgnored var librarySessions: [WindowID: AppLibrarySession] = [:]
+  var activeLibrarySession: AppLibrarySession? {
+    app.frontStandardWindowController.flatMap { librarySessions[$0.windowID] }
+  }
+  var library: LibraryViewModel? { usesLegacyLibrary || legacyLibraryPresenter?.window?.isVisible == true ? legacyLibrary : activeLibrarySession?.model }
+  var libraryPresenter: LibraryPresenter? {
+    if usesLegacyLibrary || legacyLibraryPresenter?.window?.isVisible == true { return legacyLibraryPresenter }
+    guard let session = activeLibrarySession, session.controller?.isLibraryOpen == true else { return nil }
+    return session.presenter
+  }
+  var usesLegacyLibrary: Bool { UserDefaults.standard.bool(forKey: "OpenLibraryLegacyWindow") }
   func show(pane: PaneID? = nil) {
     #if OPEN_AUTOMATION
     let started = ProcessInfo.processInfo.systemUptime
@@ -101,36 +113,74 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     settings.profiles.beginCreate(sourceSpace: sourceSpace)
     show(pane: .profiles)
   }
-  func showLibrary(section: LibrarySection? = nil, boostsPresentation: BoostsPresentation? = nil, boostsProfileID: ProfileID? = nil) {
+  private func showLegacyLibrary(section: LibrarySection? = nil, boostsPresentation: BoostsPresentation? = nil, boostsProfileID: ProfileID? = nil) {
     // Only the key Library owns its picker. Browser/editor requests use their
     // explicit Profile even when the Library is already visible on Boosts.
     // A general Library open changes neither layout nor Profile.
-    let preservesBoostsProfile = libraryPresenter?.window?.isKeyWindow == true
+    let preservesBoostsProfile = legacyLibraryPresenter?.window?.isKeyWindow == true
     app.downloadsCenter.refreshFiles()
     let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
     let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
-    if library == nil {
+    if legacyLibrary == nil {
       let vm = LibraryViewModel(model: app.model, defaults: .standard, actions: self,
         downloads: self, captures: captures, archives: archives, histories: histories,
         snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self,
         historyResolver: { [weak app] in app?.stores.history(for: $0) })
       vm.boostsProvider = app.stores.boosts
-      library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
+      legacyLibrary = vm; legacyLibraryPresenter = LibraryPresenter(viewModel: vm)
     }
-    library?.registerStores(archives: archives, histories: histories)
-    if let library, section == .boosts {
+    legacyLibrary?.registerStores(archives: archives, histories: histories)
+    if let library = legacyLibrary, section == .boosts {
       if let boostsPresentation { library.boostsPresentation = boostsPresentation }
       if !preservesBoostsProfile, let profileID = boostsProfileID ?? app.model.defaultProfile?.id,
         app.model.profile(id: profileID) != nil {
         library.historyProfileID = profileID
       }
     }
-    if let library, section == .history,
-      libraryPresenter?.window?.isVisible != true {
+    if let library = legacyLibrary, section == .history,
+      legacyLibraryPresenter?.window?.isVisible != true {
       library.historyProfileID = app.frontStandardWindowController?.context.focusedSpace?.profileID
         ?? app.model.defaultProfile?.id ?? library.historyProfileID
     }
-    libraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
+    legacyLibraryPresenter?.show(section: section); NSApp.activate(); app.scheduleMenuRebuild()
+  }
+  func showLegacyHistory() { showLegacyLibrary(section: .history) }
+  func showLibrary(section: LibrarySection? = nil, boostsPresentation: BoostsPresentation? = nil, boostsProfileID: ProfileID? = nil) {
+    if usesLegacyLibrary { showLegacyLibrary(section: section, boostsPresentation: boostsPresentation, boostsProfileID: boostsProfileID); return }
+    legacyLibraryPresenter?.window?.orderOut(nil)
+    guard let controller = app.frontStandardWindowController ?? app.makeWindow(), let window = controller.window else { return }
+    librarySessions = librarySessions.filter { $0.value.controller != nil }
+    app.downloadsCenter.refreshFiles()
+    let archives = Dictionary(uniqueKeysWithValues: app.model.profiles.map { ($0.id, app.archiveSink.store(for: $0.id)) })
+    let histories = Dictionary(uniqueKeysWithValues: app.model.profiles.compactMap { profile in app.stores.history(for: profile.id).map { (profile.id, $0) } })
+    let session: AppLibrarySession
+    if let existing = librarySessions[controller.windowID] { session = existing }
+    else {
+      let model = LibraryViewModel(model: app.model, defaults: .standard, actions: self,
+        downloads: self, captures: captures, archives: archives, histories: histories,
+        snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self,
+        historyResolver: { [weak app] in app?.stores.history(for: $0) })
+      model.boostsProvider = app.stores.boosts
+      session = AppLibrarySession(model: model, controller: controller)
+      librarySessions[controller.windowID] = session
+    }
+    session.model.registerStores(archives: archives, histories: histories)
+    if section == .boosts {
+      if let boostsPresentation { session.model.boostsPresentation = boostsPresentation }
+      if let profileID = boostsProfileID ?? controller.context.focusedSpace?.profileID { session.model.historyProfileID = profileID }
+    }
+    if section == .history, !controller.isLibraryOpen, let profileID = controller.context.focusedSpace?.profileID { session.model.historyProfileID = profileID }
+    session.show(section: section)
+    window.makeKeyAndOrderFront(nil); NSApp.activate(); app.scheduleMenuRebuild()
+  }
+  func toggleLibrary(section: LibrarySection? = nil) {
+    if !usesLegacyLibrary, let session = activeLibrarySession, session.controller?.isLibraryOpen == true { session.close() }
+    else { showLibrary(section: section) }
+  }
+  func closeLibrary() {
+    if usesLegacyLibrary { legacyLibraryPresenter?.window?.performClose(nil) }
+    else { activeLibrarySession?.close() }
+    app.scheduleMenuRebuild()
   }
   /// Use the Library button's view model and confirmation dialog unchanged.
   func requestClearArchive() {

@@ -101,6 +101,9 @@ private struct LibrarySidebar:NSViewRepresentable {
 @MainActor public final class LibraryPresenter:NSObject,NSWindowDelegate {
     public let viewModel:LibraryViewModel;public private(set) var window:NSWindow?
     public init(viewModel:LibraryViewModel){self.viewModel=viewModel;super.init()}
+    /// Compatibility target for actions and sheets hosted by the in-window Library.
+    /// The browser controller keeps its delegate and owns this window's lifetime.
+    public func attach(to browserWindow: NSWindow) { window = browserWindow }
     public func show(section:LibrarySection?=nil){if let section {viewModel.section=section};viewModel.refreshSpaceManagerView();if window == nil {window=LibraryWindow.makeWindow(viewModel:viewModel);window?.delegate=self};Task {await viewModel.refreshExternalState()};window?.makeKeyAndOrderFront(nil)}
     public func windowDidBecomeKey(_ notification:Notification){viewModel.refreshSpaceManagerView();Task {await viewModel.refreshExternalState()}}
 }

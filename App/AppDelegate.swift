@@ -1020,7 +1020,9 @@ extension AppDelegate: CommandDispatcher {
     // Media grid (Captures + Screenshots), not playback.
     case "view-media": settingsPresenter.showLibrary(section: .media)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
-    case "view-history": settingsPresenter.showLibrary(section: .history)
+    case "view-history":
+      if UserDefaults.standard.object(forKey: "libraryShowsHistory") as? Bool == false { settingsPresenter.showLegacyHistory() }
+      else { settingsPresenter.showLibrary(section: .history) }
     case "view-boosts": settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .list, boostsProfileID: boostLibraryInvokingProfileID)
     case "boost-gallery": if boostGalleryEnabled { settingsPresenter.showLibrary(section: .boosts, boostsPresentation: .gallery, boostsProfileID: boostLibraryInvokingProfileID) }
     case "keyboard-shortcuts-edu":

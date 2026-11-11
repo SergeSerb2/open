@@ -8,6 +8,7 @@
   import OpenSidebar
   import OpenCommands
   import OpenSettings
+  import OpenLibrary
   import OpenDesign
   import OpenExtensionsUI
   import OpenSpaceEditor
@@ -389,7 +390,7 @@
       case "library-open":
         let section: LibrarySection?
         if let value = a["section"] {
-          guard let raw = value as? String, let parsed = LibrarySection(rawValue: raw) else { throw Failure(message: "unknown Library section") }
+          guard let raw = value as? String, let parsed = LibrarySection(rawValue: raw == "easels" ? "media" : raw) else { throw Failure(message: "unknown Library section") }
           section = parsed
         } else { section = nil }
         switch a["entry"] as? String ?? "command" {
@@ -405,12 +406,17 @@
           menu.performActionForItem(at: index)
         default: throw Failure(message: "unknown Library entry")
         }
+        if a["section"] as? String == "easels", let panel = app.settingsPresenter.activeLibrarySession?.panel {
+          guard panel.sections.contains(.easels) else { throw Failure(message: "Easels is hidden") }
+          panel.select(.easels)
+        }
         await Task.yield()
         return spaceManagerState()
+      case "library", "library-state", "library-ui": return try libraryPanelAction(a)
       case "space-manager-state": return spaceManagerState()
       case "defaults":
         // Reads (and with `value`, writes) one Open preference in this app's own domain.
-        guard let key = a["key"] as? String, key.hasPrefix("open.") else { throw Failure(message: "defaults key must start with open.") }
+        guard let key = a["key"] as? String, key.hasPrefix("open.") || ["libraryShowsHistory", "libraryShowsEasels", "OpenLibraryLegacyWindow"].contains(key) else { throw Failure(message: "unknown defaults domain key") }
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] {
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
@@ -571,8 +577,8 @@
         let target = app.settingsPresenter.libraryPresenter?.window
         var dialogs: [Int] = []
         if let sheet = target?.attachedSheet { dialogs.append(sheet.windowNumber); target?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
-        target?.performClose(nil)
-        return ["closed": target?.isVisible != true, "dialogs": dialogs] as [String: Any]
+        app.settingsPresenter.closeLibrary()
+        return ["closed": app.settingsPresenter.libraryPresenter == nil || app.settingsPresenter.libraryPresenter?.window?.isVisible != true, "dialogs": dialogs] as [String: Any]
       case "space-manager-lifecycle": return spaceManagerLifecycle()
       case "space-manager-row-controls": return try spaceManagerRowControls(a)
       case "space-manager-scroll":

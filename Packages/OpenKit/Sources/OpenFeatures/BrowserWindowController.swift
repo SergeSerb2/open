@@ -30,6 +30,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public let sidebar: SidebarView
     public let context: SidebarContext
     public let container: WebContentContainer
+    public private(set) var libraryPanel: NSView?
+    public private(set) var isLibraryOpen = false
+    public var libraryKeyHandler: ((NSEvent) -> Bool)?
+    public var libraryWidth: CGFloat = 417
+    private var libraryMotionGeneration = 0
     public let splitController: SplitViewController
     private var boostEditorSpaceID: SpaceID?
     public var boostEditor: BoostEditorController? { didSet { boostEditorSpaceID = context.focusedSpace?.id } }
@@ -304,7 +309,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         reveal.isEnabled = { [weak self] in
             guard let self else { return false }
-            return self.spaceCreationController == nil && !self.isPageFullscreen && self.context.window?.sidebarMode == .hidden && self.peekStorage?.isShown != true
+            return !self.isLibraryOpen && self.spaceCreationController == nil && !self.isPageFullscreen && self.context.window?.sidebarMode == .hidden && self.peekStorage?.isShown != true
                 && !self.context.isNewTabCommandBarOpen && !self.resizingSidebar
         }
         reveal.onChange = { [weak self] shown in self?.setRevealCard(shown) }
@@ -451,6 +456,31 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public func layoutContent(animated: Bool = false) {
         defer { updateThemeEditorAnchor() }
+        if isLibraryOpen, let libraryPanel {
+            let size = root.bounds.size
+            if background.frame != root.bounds { background.frame = root.bounds }
+            let edge = min(libraryWidth, size.width - 56)
+            let panel = CGRect(x: edge, y: 10, width: max(46, size.width - edge - 10), height: max(0, size.height - 20))
+            libraryPanel.frame = CGRect(x: 0, y: 0, width: edge, height: size.height)
+            libraryPanel.needsLayout = true
+            if container.frame != panel { container.frame = panel }
+            emptyPanel.frame = panel
+            emptyPanelHost.frame = root.bounds
+            emptyPanelHost.isHidden = !container.isHidden
+            sidebar.isHidden = true
+            resizeHandle.isHidden = true
+            toastOverlay.frame = panel
+            if let overlay = peekStorage?.overlay {
+                overlay.backdrop.frame = root.bounds; overlay.frame = root.bounds
+                overlay.contentRect = panel; overlay.needsLayout = true
+            }
+            siteControl?.view.frame = root.bounds
+            siteControl?.layout()
+            positionTrafficLights()
+            captureStorage?.layout()
+            onLayout?()
+            return
+        }
         let size = root.bounds.size, hidden = isPageFullscreen || (spaceCreationController == nil && context.window?.sidebarMode == .hidden)
         let width = context.sidebarWidth
         let panelFrame = isPageFullscreen ? root.bounds : PanelMetrics.frame(windowSize: size, sidebarWidth: width, sidebarHidden: hidden)
@@ -561,6 +591,70 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         captureStorage?.layout()
         onLayout?()
     }
+    /// Transient geometry only: the saved sidebar and its live view stay intact.
+    public func presentLibraryPanel(_ panel: NSView, width: CGFloat, animated: Bool = true) {
+        let wasOpen = isLibraryOpen
+        let oldFrame = container.layer?.presentation()?.frame ?? container.frame
+        dismissSidebarReveal()
+        cancelSidebarResize()
+        libraryMotionGeneration += 1
+        isLibraryOpen = true; libraryWidth = width
+        if libraryPanel !== panel {
+            libraryPanel?.removeFromSuperview(); libraryPanel = panel
+            root.addSubview(panel, positioned: .below, relativeTo: container)
+        }
+        panel.isHidden = false
+        layoutContent()
+        panel.layoutSubtreeIfNeeded()
+        animateLibrary(from: oldFrame, opening: true, duration: wasOpen ? 0.20 : 0.12, animated: animated)
+        if !wasOpen, animated { fadeLibrary(panel, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : 0.12) }
+    }
+    public func dismissLibraryPanel(animated: Bool = true) {
+        guard isLibraryOpen else { return }
+        let oldFrame = container.layer?.presentation()?.frame ?? container.frame
+        libraryMotionGeneration += 1
+        let generation = libraryMotionGeneration
+        isLibraryOpen = false
+        layoutContent()
+        animateLibrary(from: oldFrame, opening: false, duration: 0.20, animated: animated)
+        guard let panel = libraryPanel else { return }
+        if animated, window?.isVisible == true {
+            let duration = Motion.reducesMotion ? 0.10 : 0.20
+            fadeLibrary(panel, from: 1, to: 0, duration: duration)
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self, weak panel] in
+                guard let self, self.libraryMotionGeneration == generation, !self.isLibraryOpen else { return }
+                panel?.isHidden = true
+            }
+        } else { panel.isHidden = true }
+    }
+    public func releaseLibraryPanel() {
+        guard !isLibraryOpen else { return }
+        libraryPanel?.removeFromSuperview(); libraryPanel = nil; libraryKeyHandler = nil
+    }
+    private func fadeLibrary(_ view: NSView, from: Float, to: Float, duration: Double) {
+        view.wantsLayer = true
+        view.layer?.removeAnimation(forKey: "libraryFade")
+        view.alphaValue = CGFloat(to)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = from; fade.toValue = to; fade.duration = duration
+        fade.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
+        view.layer?.add(fade, forKey: "libraryFade")
+    }
+    private func animateLibrary(from old: CGRect, opening: Bool, duration: Double, animated: Bool) {
+        for layer in [container.layer, Optional(emptyPanel)] {
+            layer?.removeAnimation(forKey: "libraryFrame")
+            guard animated, !Motion.reducesMotion, window?.isVisible == true, let layer else { continue }
+            let position = CABasicAnimation(keyPath: "position")
+            position.fromValue = NSValue(point: CGPoint(x: old.minX + old.width * layer.anchorPoint.x, y: old.minY + old.height * layer.anchorPoint.y))
+            position.toValue = NSValue(point: layer.position)
+            let size = CABasicAnimation(keyPath: "bounds.size")
+            size.fromValue = NSValue(size: old.size); size.toValue = NSValue(size: layer.bounds.size)
+            let group = CAAnimationGroup(); group.animations = [position, size]; group.duration = duration
+            group.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
+            layer.add(group, forKey: "libraryFrame")
+        }
+        if !opening, animated, !sidebar.isHidden { fadeLibrary(sidebar, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : duration) }
+    }
     private func frameSpring(_ key: String, from: NSValue, to: NSValue) -> CASpringAnimation {
         let spring = Motion.sidebarToggle.animation(keyPath: key)
         spring.fromValue = from; spring.toValue = to
@@ -588,7 +682,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func positionTrafficLights() {
         guard let window, !window.styleMask.contains(.fullScreen) else { return }
         observeTrafficLights(window)
-        let hidden = isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding)
+        let hidden = !isLibraryOpen && (isPageFullscreen || (spaceCreationController == nil && cardState == .off && context.window?.sidebarMode == .hidden && !anchoredSliding))
         for kind in Self.trafficLightKinds {
             guard let button = window.standardWindowButton(kind) else { continue }
             if button.isHidden != hidden { button.isHidden = hidden }
@@ -946,9 +1040,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
-    public var canExitModal: Bool { (spaceCreationController != nil && !isCommandBarPresented) || peekStorage?.isShown == true || container.maximizedTabID != nil }
+    public var canExitModal: Bool { isLibraryOpen || (spaceCreationController != nil && !isCommandBarPresented) || peekStorage?.isShown == true || container.maximizedTabID != nil }
     /// View > Exit and Esc share this priority. The App validates the key standard window.
     @discardableResult public func exitModal() -> Bool {
+        if isLibraryOpen, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53), libraryKeyHandler?(event) == true { return true }
         if !isCommandBarPresented, let creation = spaceCreationController { creation.cancel(); return true }
         if let peek = peekStorage, peek.isShown { peek.escape(); return true }
         if container.maximizedTabID != nil {
@@ -971,6 +1066,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             } else { return false }
         }
         if existingTabSwitcher?.handle(event) == true { return true }
+        if isLibraryOpen, libraryKeyHandler?(event) == true { return true }
         // Toggle before SCC's generic Command-key dismissal. Otherwise the
         // same key closes the picker here and reopens it through the menu.
         // Use the effective binding so user overrides keep the same behavior.

@@ -101,7 +101,7 @@ extension AutomationController {
       }
       return menu.items.map { ["title": $0.isSeparatorItem ? "separator" : $0.title, "enabled": $0.isEnabled] }
     case "download-library-close":
-      app.settingsPresenter.libraryPresenter?.window?.performClose(nil); return true
+      app.settingsPresenter.closeLibrary(); return true
     case "download-save":
       guard let id = args["id"] as? String, let choice = center.choices[id], choice.panel.isVisible, choice.panel.sheetParent != nil else { throw Failure(message: "no download save sheet") }
       let cancel = args["action"] as? String == "cancel"

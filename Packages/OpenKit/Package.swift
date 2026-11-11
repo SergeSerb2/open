@@ -5,6 +5,7 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenLibrary", targets: ["OpenLibrary"]),
         .library(name: "OpenOnboarding", targets: ["OpenOnboarding"]),
         .executable(name: "onboarding-render", targets: ["onboarding-render"]),
         .library(name: "OpenExtensionsUI", targets: ["OpenExtensionsUI"]),
@@ -39,6 +40,7 @@ let package = Package(
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenLibrary", dependencies: ["OpenSettings", "OpenSidebar", "OpenDesign", "OpenModel"]),
         .target(name: "OpenOnboarding", dependencies: ["OpenDesign"], resources: [.copy("Resources/Onboarding")], linkerSettings: [.linkedFramework("AVFoundation"), .linkedFramework("CoreAudio")]),
         .executableTarget(name: "onboarding-render", dependencies: ["OpenOnboarding"]),
         .target(name: "OpenExtensionsUI", dependencies: ["OpenModel", "OpenDesign", "OpenWeb"]),

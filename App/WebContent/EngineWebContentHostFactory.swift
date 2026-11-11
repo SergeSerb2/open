@@ -846,7 +846,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary:
-      app.settingsPresenter.showLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
+      app.settingsPresenter.toggleLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
     // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
     // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
