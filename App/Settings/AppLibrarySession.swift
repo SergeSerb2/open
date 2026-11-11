@@ -14,6 +14,9 @@ final class AppLibrarySession {
   private(set) var lastShowMilliseconds = 0.0
   #if OPEN_AUTOMATION
   var releaseDelay = 60.0
+  private(set) var releaseScheduledAt = 0.0
+  private(set) var releaseFiredAt = 0.0
+  var releasePending: Bool { releaseTask != nil }
   #endif
   private(set) var panelGeneration = 0
   private(set) weak var releasedPanel: LibraryPanelView?
@@ -64,12 +67,16 @@ final class AppLibrarySession {
     releaseTask?.cancel()
     #if OPEN_AUTOMATION
     let delay = releaseDelay
+    releaseScheduledAt = ProcessInfo.processInfo.systemUptime; releaseFiredAt = 0
     #else
     let delay = 60.0
     #endif
     releaseTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .seconds(delay))
       guard !Task.isCancelled, let self, self.controller?.isLibraryOpen != true else { return }
+      #if OPEN_AUTOMATION
+      self.releaseFiredAt = ProcessInfo.processInfo.systemUptime
+      #endif
       self.releasedPanel = self.panel
       self.controller?.releaseLibraryPanel(); self.panel = nil; self.model.releaseContentViews(); self.releaseTask = nil
     }

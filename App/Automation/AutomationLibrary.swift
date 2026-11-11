@@ -120,6 +120,7 @@ extension AutomationController {
     state["releasedPanelAlive"]=session.releasedPanel != nil
     state["panelGeneration"]=session.panelGeneration
     state["releaseDelay"]=session.releaseDelay
+    state["releaseClock"] = ["scheduledAt":session.releaseScheduledAt,"firedAt":session.releaseFiredAt,"pending":session.releasePending] as [String:Any]
     state["key"]=controller.window?.isKeyWindow ?? false
     state["window"]=controller.window?.windowNumber ?? 0
     state["windowID"]=controller.windowID.description
