@@ -162,6 +162,12 @@ def stop_worker(job):
 
 def main():
     global CANCELLED
+    if GATE['machine']() == 'rented' and os.environ.get('OPEN_VERIFY_CHUNK_WORKER') != '1':
+        # The installed heavy.sh routes every Apple M5 chip here. A rented Mac has
+        # one slot, like the M1: one normal ticket for the whole invocation.
+        heavy = str(Path.home()/'Library/Caches/OpenRE/scripts/heavy.sh')
+        os.execve(heavy, [heavy, str(ROOT/'tools/verify-all.sh'), *sys.argv[1:]],
+                  dict(os.environ, OPEN_VERIFY_CHUNK_WORKER='1'))
     options, selected, partial, chunks = plan()
     directory = options.log_dir or Path(os.environ.get('VERIFY_LOG_DIR') or tempfile.mkdtemp(prefix='open-gate-'))
     if options.log_dir or os.environ.get('VERIFY_LOG_DIR'):
