@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import plistlib
 from pathlib import Path
 import statistics
 import tempfile
@@ -125,6 +126,17 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         app.call('defaults',key='open.settings.lastSection',value='general')
         app.call('defaults',key='open.general.previewsEnabled',value=True)
         app.call('defaults',key='open.import.lastArcDir',value=str(Path(data)/'import-source'))
+        schemes = [scheme for entry in plistlib.loads((bundle/'Contents/Info.plist').read_bytes()).get('CFBundleURLTypes', []) for scheme in entry.get('CFBundleURLSchemes', [])]
+        check('bundle_keeps_http_without_public_settings_scheme', 'http' in schemes and 'https' in schemes and 'open' not in schemes)
+        invalid_links = [
+            ('unknown','open://settings/unknown/row'),
+            ('query','open://settings/shortcuts?ignored=1'),
+            ('fragment','open://settings/shortcuts#ignored'),
+            ('extra_path','open://settings/downloads/ask/ignored'),
+            ('oversize','open://settings/'+('x'*2049))]
+        for name, url in invalid_links:
+            accepted = app.call('settings-link',url=url)['accepted']
+            check('invalid_in_app_link_keeps_settings_lazy_'+name, not accepted and not app.call('settings-lifetime')['modelCreated'])
         before_open=app.call('settings-lifetime')
         app.call('appearance',name='light');app.call('menu-perform',id='settings');settle()
         opened=ui()
@@ -144,10 +156,12 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
             results['perf_sections']=measurement
             (out/'perf-sections.json').write_text(json.dumps(measurement,indent=2))
             check('perf_sections_completed',not measurement['running'] and measurement['missingDraws']==0, missingDraws=measurement['missingDraws'],samples=len(measurement['sections']))
-            cold=[s['firstDrawMs'] for s in measurement['sections'] if not s['phasesMs']['cached']]
+            # First user visits include pages prepared after Settings appeared.
+            # This diagnostic is separate from the five-launch quiet gate.
+            first_visits=[s['firstDrawMs'] for s in measurement['sections'][:len(sections)] if s['section']!='general']
             warm=sorted(s['firstDrawMs'] for s in measurement['sections'] if s['warm'])
             p95=warm[min(len(warm)-1,int(len(warm)*.95))]
-            check('cold_section_budget',len(cold)==len(sections)-1 and max(cold)<=50,stop=False,maxMs=max(cold),samples=len(cold),load=list(os.getloadavg()))
+            check('first_visit_section_budget',len(first_visits)==len(sections)-1 and max(first_visits)<=50,stop=False,maxMs=max(first_visits),samples=len(first_visits),load=list(os.getloadavg()))
             check('warm_section_frame_budget',p95<=1000/display['maximumFPS'],stop=False,p95Ms=p95,maxMs=max(warm),frameBudgetMs=1000/display['maximumFPS'],load=list(os.getloadavg()))
         key('2',['cmd']);check('keyboard_cmd2',settle()['section']=='appearance')
         key('[',['cmd']);check('keyboard_history_back',settle()['section']=='general')
@@ -229,18 +243,13 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         link('profiles/name');click('Rename Profile Review Profile');type_field('Profile name','Renamed Profile');key('return');settle()
         check('rename_profile_saved',saved_snapshot_matches(lambda s:any(p['name']=='Renamed Profile' for p in s['profiles'])))
         click('Rename Profile Renamed Profile');type_field('Profile name','Review Profile');key('return');settle()
-        # Validate external delegate delivery, invalid URL guard and existing commands.
-        ui(action='external-link',url='open://settings/downloads/ask');settle()
-        check('external_settings_delivery',ui()['section']=='downloads' and ui()['arrival']=='downloads/ask')
+        # Exercise the in-app presenter entry; no public OS scheme is registered.
+        accepted = app.call('settings-link',url='open://settings/downloads/ask')['accepted'];settle()
+        check('in_app_settings_link',accepted and ui()['section']=='downloads' and ui()['arrival']=='downloads/ask')
         arrival_revision=ui()['arrivalRevision']
-        for name,url in [
-                ('unknown','open://settings/unknown/row'),
-                ('query','open://settings/shortcuts?ignored=1'),
-                ('fragment','open://settings/shortcuts#ignored'),
-                ('extra_path','open://settings/downloads/ask/ignored'),
-                ('oversize','open://settings/'+('x'*2049))]:
-            ui(action='external-link',url=url);settle()
-            check('invalid_external_link_'+name,ui()['section']=='downloads' and ui()['arrivalRevision']==arrival_revision)
+        for name,url in invalid_links:
+            accepted = app.call('settings-link',url=url)['accepted'];settle()
+            check('invalid_in_app_link_'+name,not accepted and ui()['section']=='downloads' and ui()['arrivalRevision']==arrival_revision)
         app.call('command',id='search-settings');settle();check('search_command_destination',ui()['section']=='search')
         app.call('command',id='air-traffic-control');settle();check('routing_command_destination',ui()['arrival']=='links/rules')
         previous=ui()['arrivalRevision'];app.call('command',id='air-traffic-control');settle()

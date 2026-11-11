@@ -2,7 +2,6 @@ import AppKit
 import Carbon
 import OpenModel
 import OpenRouting
-import OpenSettings
 
 @MainActor
 protocol LinkDestinationExecutor: AnyObject {
@@ -103,8 +102,6 @@ extension AppDelegate {
 
   private func finishExternalLinkRestoration() {
     linkIntake.markReady()
-    let settingsLinks = pendingSettingsURLs; pendingSettingsURLs.removeAll()
-    for url in settingsLinks { _ = settingsPresenter.showSettingsURL(url) }
   }
 
   func applicationWillFinishLaunching(_ notification: Notification) {
@@ -118,7 +115,7 @@ extension AppDelegate {
       let url = URL(string: text), url.scheme != nil else {
       Self.commandLog("Ignored malformed external URL event."); return
     }
-    if !handleSettingsURL(url) { linkIntake.handle(urls: [url], source: SourceAppResolver.source(from: event)) }
+    linkIntake.handle(urls: [url], source: SourceAppResolver.source(from: event))
   }
 
   func application(_ application: NSApplication, open urls: [URL]) {
@@ -126,18 +123,8 @@ extension AppDelegate {
     // too. Give local shortcut files the same bounded reader as openFile.
     for url in urls {
       if url.isFileURL, self.application(application, openFile: url.path) { continue }
-      if !handleSettingsURL(url) { linkIntake.handle(urls: [url], source: .unknown) }
+      linkIntake.handle(urls: [url], source: .unknown)
     }
-  }
-
-  /// Consume the private scheme before HTTP routing. Queue until restoration
-  /// finishes so a cold launch never builds Settings against a temporary model.
-  @discardableResult func handleSettingsURL(_ url: URL) -> Bool {
-    guard url.scheme?.lowercased() == "open" else { return false }
-    guard SettingsSearchIndex.destination(for: url) != nil else { return true }
-    if linkIntake.ready { _ = settingsPresenter.showSettingsURL(url) }
-    else if pendingSettingsURLs.count < 16 { pendingSettingsURLs.append(url) }
-    return true
   }
 
   func application(_ sender: NSApplication, openFile filename: String) -> Bool {

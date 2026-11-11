@@ -1,6 +1,6 @@
 # Settings
 
-Settings uses Open’s original design. The standard resizable window opens at 960 × 660 pt with an 800 × 540 pt minimum. A 232 pt navigation column stays in place while the content scrolls. The window remembers its frame. Settings and its section views are created only when needed. The window keeps each visited section’s view graph. Switching sections hides the old page and lays out only the visible page. Hidden pages release their field editor and shortcut recorder.
+Settings uses Open’s original design. The standard resizable window opens at 960 × 660 pt with an 800 × 540 pt minimum. A 232 pt navigation column stays in place while the content scrolls. The window remembers its frame. Settings is created only on first open. After that first frame, Links and Ad Blocking each get one deferred preparation slice; input, navigation or close cancels pending work. Other sections are created on first visit. The window keeps each section’s view graph. Switching sections hides the old page and lays out only the visible page. Hidden pages release their field editor and shortcut recorder.
 
 ## Navigation and search
 
@@ -8,7 +8,7 @@ The sections are General, Appearance, Tabs & Archive, Search, Links, Downloads, 
 
 Command-F focuses the global search. Labels, help, aliases, and every active shortcut command are indexed. `is:changed` limits results to changed settings. Up/Down selects a result; Return opens its section and pulses the target once. Escape clears search. Command-1 through Command-9 opens the first nine sections. Command-[ and Command-] move through section history. Typing while a navigation item has focus starts search.
 
-Each row has a stable `section/row` ID. `open://settings/<section>[/<row>]` opens it through the App’s URL delivery path. Links are limited to 2 KiB before parsing. Unknown sections, rows, query strings, and fragments are refused before Settings is constructed. The launch queue holds at most 16 valid links. Existing Settings, Shortcuts, Air Traffic Control, Search Settings, New Profile and import commands keep their actions. The command bar registers the same metadata index as a suggestion provider; it does not construct Settings during launch.
+Each row has a stable `section/row` ID. In-app navigation uses `open://settings/<section>[/<row>]` through the Settings presenter. This scheme is not registered with macOS; there is no external Settings launch queue. Links are limited to 2 KiB before parsing. Unknown sections, rows, query strings, and fragments are refused before Settings is constructed. Existing Settings, Shortcuts, Air Traffic Control, Search Settings, New Profile and import commands keep their actions. The command bar registers the same metadata index as a suggestion provider; it does not construct Settings during launch.
 
 ## Profile scope and changes
 

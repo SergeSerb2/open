@@ -45,6 +45,7 @@ public struct SettingsContent: View {
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        settings.onUserInput?()
         if attachedSheet != nil || settings.isRecordingShortcut { return super.performKeyEquivalent(with: event) }
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
@@ -59,6 +60,13 @@ public struct SettingsContent: View {
         }
         return super.performKeyEquivalent(with: event)
     }
+    override func sendEvent(_ event: NSEvent) {
+        if [.keyDown, .keyUp, .flagsChanged, .mouseMoved, .leftMouseDown, .leftMouseUp,
+            .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp,
+            .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel].contains(event.type) { settings.onUserInput?() }
+        super.sendEvent(event)
+    }
+    override func close() { settings.onUserInput?(); super.close() }
     override func cancelOperation(_ sender: Any?) {
         if settings.isRecordingShortcut { settings.endShortcutCapture() }
         else if !settings.searchQuery.isEmpty { settings.searchQuery = "" }

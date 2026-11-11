@@ -336,6 +336,9 @@
       case "settings-profile": return try settingsProfile(a)
       case "settings-ui": return try settingsUI(a)
       case "settings-lifetime": return ["modelCreated": app.settingsPresenter.hasSettingsModel]
+      case "settings-link":
+        guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "invalid Settings URL") }
+        return ["accepted": app.settingsPresenter.showSettingsURL(url)]
       case "settings-perf": return try settingsPerformance(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)

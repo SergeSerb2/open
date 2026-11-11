@@ -43,9 +43,6 @@ extension AutomationController {
       adapter.show()
     case "reduce-motion":
       Motion.reduceMotionOverride = args["enabled"] as? Bool
-    case "external-link":
-      guard let raw = args["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "invalid URL") }
-      app.application(NSApp, open: [url])
     case "kit": root.showsControlsKit = args["visible"] as? Bool ?? true
     case "default-browser-presentation":
       // Visual fixture only: never calls the system default-browser service.
@@ -86,6 +83,16 @@ extension AutomationController {
     default: throw Failure(message: "unknown Settings UI action")
     }
     let window = adapter.settingsPresenter.window
+    // Timing must not walk accessibility or instantiate the Shortcuts model
+    // before that section's first real visit.
+    if args["metricsOnly"] as? Bool == true {
+      return ["window": window?.windowNumber ?? 0,
+        "section": root.selectedSection.rawValue,
+        "openActionLayoutDisplayMs": adapter.lastSettingsShowMs,
+        "openPhasesMs": adapter.settingsPresenter.lastOpenPhases,
+        "size": window.map { [$0.frame.width, $0.frame.height] } ?? [],
+        "display": settingsDisplayInfo(window?.screen)]
+    }
     let write = NSSelectorFromString("accessibilitySetValue:forAttribute:")
     if NSApp.responds(to: write) { NSApp.perform(write, with: NSNumber(value: true), with: "AXEnhancedUserInterface") }
     window?.contentView?.layoutSubtreeIfNeeded()

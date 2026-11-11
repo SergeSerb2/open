@@ -19,8 +19,8 @@ extension EnvironmentValues {
 }
 
 /// AppKit owns only presentation lifetime. All values/actions remain in the
-/// existing observable models. Hidden hosts retain their graphs and receive
-/// no layout calls until they are shown again. The cache dies with the window.
+/// existing observable models. Only two measured cold pages are prepared once
+/// during idle time; retained pages otherwise lay out only when shown.
 struct SettingsDetailHost: NSViewRepresentable {
     let root: SettingsViewModel
     let section: SettingsSection
@@ -37,6 +37,8 @@ struct SettingsDetailHost: NSViewRepresentable {
     private var search: NSView?
     private var active: NSView?
     private var lastArrival = -1
+    private var idleWork: DispatchWorkItem?
+    private var idleSections: [SettingsSection] = [.links, .adBlocking]
     override var isFlipped: Bool { true }
     init(root: SettingsViewModel) {
         self.root = root
@@ -44,10 +46,46 @@ struct SettingsDetailHost: NSViewRepresentable {
         wantsLayer = true
         root.onNavigation = { [weak self] in
             guard let self else { return }
+            cancelIdlePreparation()
             show(self.root.selectedSection, searching: !self.root.searchQuery.isEmpty)
         }
+        root.onUserInput = { [weak self] in self?.cancelIdlePreparation() }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    private func page(for section: SettingsSection) -> (NSView, SettingsPageState) {
+        if let page = pages[section] { return page }
+        let state = SettingsPageState()
+        let view = NSHostingView(rootView: SettingsDetail(root: root, sectionID: section, page: state))
+        view.sizingOptions = []; view.safeAreaRegions = []
+        let page: (NSView, SettingsPageState) = (view, state)
+        pages[section] = page
+        return page
+    }
+    private func cancelIdlePreparation() {
+        idleWork?.cancel(); idleWork = nil; idleSections.removeAll()
+    }
+    private func scheduleIdlePreparation() {
+        guard !idleSections.isEmpty else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.idleWork?.isCancelled == false else { return }
+                self.idleWork = nil
+                guard self.window?.isVisible == true else { self.cancelIdlePreparation(); return }
+                let section = self.idleSections.removeFirst()
+                if self.pages[section] == nil {
+                    let view = self.page(for: section).0
+                    view.frame = self.bounds; view.isHidden = true
+                    self.addSubview(view)
+                    view.layoutSubtreeIfNeeded(); view.displayIfNeeded()
+                }
+                self.scheduleIdlePreparation()
+            }
+        }
+        idleWork = work
+        // One page per idle slice, after the first Settings frame. Input and
+        // navigation cancel the remaining work; no idle source repeats.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
     func show(_ section: SettingsSection, searching: Bool) {
         #if DEBUG || OPEN_AUTOMATION
         let start = CACurrentMediaTime()
@@ -67,15 +105,7 @@ struct SettingsDetailHost: NSViewRepresentable {
             }
             next = search!
         } else {
-            if pages[section] == nil {
-                let state = SettingsPageState()
-                let view = NSHostingView(rootView: SettingsDetail(root: root, sectionID: section, page: state))
-                // This host is already inside the window's content frame; the
-                // design supplies its 44 pt top inset. Resolving another safe
-                // area here duplicated layout work in the cold-page profile.
-                view.sizingOptions = []; view.safeAreaRegions = []; pages[section] = (view, state)
-            }
-            next = pages[section]!.0; page = pages[section]!.1
+            (next, page) = self.page(for: section)
         }
         if let page, lastArrival != root.arrivalRevision {
             lastArrival = root.arrivalRevision
@@ -120,6 +150,7 @@ struct SettingsDetailHost: NSViewRepresentable {
         root.lastSectionPresentation = ["cached": wasCached ? 1 : 0, "constructMs": (constructed - start) * 1000, "showMs": (attached - constructed) * 1000, "layoutMs": (laidOut - attached) * 1000, "displayMs": (displayed - laidOut) * 1000]
         root.onSectionDraw?(section, displayed)
         #endif
+        if !hadContent { scheduleIdlePreparation() }
         if hadContent {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = next.layer?.animation(forKey: "settings-section-fade") == nil ? 0 : next.layer?.presentation()?.opacity ?? 0; fade.toValue = 1; fade.duration = SettingsStyle.sectionDuration

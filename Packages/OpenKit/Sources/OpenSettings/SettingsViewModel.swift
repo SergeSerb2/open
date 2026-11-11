@@ -22,6 +22,7 @@ import OpenAdBlock
     public var searchCPUMilliseconds = 0.0
     public var searchFocusRequest = 0
     @ObservationIgnored var onNavigation: (() -> Void)?
+    @ObservationIgnored var onUserInput: (() -> Void)?
     public var arrivalID: String?
     public var arrivalRevision = 0
     #if DEBUG || OPEN_AUTOMATION

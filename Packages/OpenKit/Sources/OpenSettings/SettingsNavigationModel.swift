@@ -73,7 +73,8 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
 
 @MainActor public enum SettingsSearchIndex {
     /// Private deep links are metadata IDs, never arbitrary page URLs. Before
-    /// splitting/decoding, bound one URL to 2 KiB; the App queues at most 16.
+    /// splitting/decoding, bound one in-app URL to 2 KiB. No public OS scheme
+    /// is registered for these links.
     public static func destination(for url: URL) -> (section: SettingsSection, row: String?)? {
         guard url.absoluteString.utf8.count <= 2_048,
               url.scheme == "open", url.host() == "settings", url.user == nil,
