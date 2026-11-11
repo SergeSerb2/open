@@ -130,7 +130,7 @@ def main(args):
         receipt.update(samples=valid,resumedFrom=str(args.resume_from.resolve()),baseline={'bundle':str(args.baseline_bundle),'samples':baselines})
         for index in range(len(valid)):
             source=args.resume_from.parent/('physical-'+str(index))
-            if source.exists():shutil.copytree(source,output/source.name)
+            if source.exists():shutil.copytree(source,output/source.name,ignore=shutil.ignore_patterns('commands'))
     active=None;frames=None
     def save(): (output/'result.json').write_text(json.dumps(receipt,indent=2))
     save()
