@@ -14,6 +14,10 @@ extension AutomationController {
       controller.window?.makeKeyAndOrderFront(nil)
     }
     switch action {
+    case "sessions":
+      return ["sessions":adapter.librarySessions.values.map { session in
+        ["controllerAlive":session.controller != nil,"panelAlive":session.panel != nil] as [String:Any]
+      }]
     case "open":
       var section: LibraryPanelSection?
       if let raw=args["section"] as? String {

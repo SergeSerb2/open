@@ -45,6 +45,8 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     private(set) var menuLifecycle = ["opened":0,"closed":0]
     private var escapeMenuOnOpen = false
     private(set) var hoveredID: String?
+    private(set) var cellsCreated = 0
+    private(set) var cellsConfigured = 0
     override var isFlipped: Bool { true }
 
     override init(frame: NSRect) {
@@ -106,8 +108,11 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
             wrapper.label.font = .systemFont(ofSize:13,weight:.semibold); wrapper.label.textColor = foreground.withAlphaComponent(0.68)
             return wrapper
         case .item(let index):
-            let view = table.makeView(withIdentifier: .init("row"), owner: self) as? LibraryItemView ?? LibraryItemView()
+            let view: LibraryItemView
+            if let reusable = table.makeView(withIdentifier: .init("row"), owner: self) as? LibraryItemView { view = reusable }
+            else { view = LibraryItemView(); cellsCreated += 1 }
             view.identifier = .init("row")
+            cellsConfigured += 1
             view.onHover = nil
             view.configure(items[index], foreground: foreground, overlay: overlay, gallery: gallery)
             view.selected = row == table.selectedRow
@@ -266,30 +271,36 @@ private final class LibraryItemView: NSView {
                 self.icon.image = FilePreviewCache.shared.image(for:url,onReady:{})
             }
         }
-        buttons.forEach { $0.removeFromSuperview() }; buttons = []
         var actions = item.hoverActions
         if !item.actions.isEmpty { actions.append(.init(title:"More",glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
-        for action in actions {
-            let button = LibraryControl(title:"",glyph:action.glyph)
+        // The table's reuse identifier stays "row". Item identity belongs to AX,
+        // not NSTableView's reuse pool.
+        setAccessibilityIdentifier(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")
+        let buttonCount = gallery ? 3 : actions.count
+        while buttons.count > buttonCount { buttons.removeLast().removeFromSuperview() }
+        while buttons.count < buttonCount { let button = LibraryControl(title:""); buttons.append(button); addSubview(button) }
+        for (button,action) in zip(buttons,actions) where !gallery {
+            button.title = ""; button.glyph = action.glyph; button.isChip = false; button.selected = false
+            button.identifier = nil; button.baseAlpha = 0; button.layer?.cornerRadius = 10
             button.glyphSize = 16; button.foreground = foreground; button.overlay = overlay; button.onPress = action.run
-            button.toolTip = action.title; button.setAccessibilityLabel(action.title); button.isEnabled = action.enabled
-            buttons.append(button); addSubview(button)
+            button.toolTip = action.title; button.setAccessibilityLabel(action.title); button.setAccessibilityRole(.button); button.isEnabled = action.enabled
         }
-        identifier = .init(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")
         if gallery {
-            buttons.forEach { $0.removeFromSuperview() }; buttons = []
-            for (suffix,name,label) in [("edit","Edit Boost","Edit…"),("enabled",item.subtitle.hasSuffix(" · on") ? "Turn Off" : "Turn On",item.subtitle.hasSuffix(" · on") ? "On" : "Off")] {
-                guard let action = item.actions.first(where: { $0.title == name }) else { continue }
-                let button = LibraryControl(title:label); button.labelSize = 12
-                button.foreground = foreground; button.overlay = overlay; button.baseAlpha = 0.045; button.onPress = action.run
+            for (index,choice) in [("edit","Edit Boost","Edit…"),("enabled",item.subtitle.hasSuffix(" · on") ? "Turn Off" : "Turn On",item.subtitle.hasSuffix(" · on") ? "On" : "Off")].enumerated() {
+                let (suffix,name,label) = choice, button = buttons[index]
+                let action = item.actions.first(where: { $0.title == name })
+                button.title = label; button.glyph = nil; button.labelSize = 12; button.toolTip = nil
+                button.foreground = foreground; button.overlay = overlay; button.baseAlpha = 0.045
                 button.isChip = true; button.layer?.cornerRadius = 9
                 button.identifier = .init("boosts.\(item.id).\(suffix)"); button.setAccessibilityLabel(name)
-                if suffix == "enabled" { button.setAccessibilityRole(.checkBox); button.selected = item.subtitle.hasSuffix(" · on") }
-                buttons.append(button); addSubview(button)
+                button.isEnabled = action?.enabled == true; button.onPress = action?.run
+                button.setAccessibilityRole(suffix == "enabled" ? .checkBox : .button)
+                button.selected = suffix == "enabled" && item.subtitle.hasSuffix(" · on")
             }
-            let more = LibraryControl(title:"",glyph:.dots); more.foreground = foreground; more.overlay = overlay
+            let more = buttons[2]; more.title = ""; more.glyph = .dots; more.isChip = false; more.selected = false
+            more.baseAlpha = 0; more.isEnabled = true; more.toolTip = nil; more.foreground = foreground; more.overlay = overlay
             more.setAccessibilityLabel("More options"); more.identifier = .init("boosts.\(item.id).more")
-            more.onPress = { [weak self] in self?.onMenu?() }; buttons.append(more); addSubview(more)
+            more.setAccessibilityRole(.button); more.onPress = { [weak self] in self?.onMenu?() }
         }
         setAccessibilityElement(!gallery); setAccessibilityRole(gallery ? .group : .row); setAccessibilityLabel(item.title+". "+item.subtitle)
         setAccessibilityCustomActions(item.hoverActions.map { action in NSAccessibilityCustomAction(name:action.title) { action.run(); return true } })

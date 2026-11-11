@@ -11,6 +11,7 @@ extension LibraryPanelView {
     /// The socket bench awaits the same provider task as the live panel, then
     /// submits its real native layout/drawing. This does not wait for motion.
     public func finishPendingContent() async { await reloadTask?.value }
+    public var listReuseState: [String:Int] { ["created":listView.cellsCreated,"configured":listView.cellsConfigured,"rows":listView.items.count] }
     public func submitNativeFrame() {
         window?.layoutIfNeeded(); layoutSubtreeIfNeeded()
         window?.displayIfNeeded(); CATransaction.flush()
