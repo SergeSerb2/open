@@ -38,7 +38,14 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var tiles: [LibraryPanelSection: LibraryControl] = [:]
     let back = LibraryControl(title: "", glyph: .back)
     let header = NSView()
-    public let searchField: NSTextField = LibraryField()
+    public let searchField: NSTextField = LibrarySearchField()
+    public var searchTimestamps: [String:Double] { (searchField as? LibrarySearchField)?.timestamps ?? [:] }
+    public func beginSearchMeasurement() { (searchField as? LibrarySearchField)?.beginMeasurement() }
+    public func markSearchCommit() { (searchField as? LibrarySearchField)?.timestamps["commit"] = nativeCommittedAt }
+    public internal(set) var nativeCommittedAt = 0.0
+    var switchPhases: [String:Double] = [:]
+    var lastHeaderLayoutKey = ""
+    var warmedRows = false
     let searchGlyph = LibraryGlyphView()
     let filter = LibraryControl(title: "Filter", glyph: .filter)
     let content = NSView()
@@ -150,6 +157,12 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public func prepareFirstScreen() async {
         guard !isPresented,!prebuiltReady else { return }
         preparing = true; prebuiltReady = false
+        if !warmedRows {
+            (searchField as? LibrarySearchField)?.warmEditor()
+            for name in ["globe","folder","paintbrush.pointed","doc"] { _ = symbol(name) }
+            LibraryListView.warmRowKinds(foreground:foreground,overlay:overlay)
+            warmedRows = true
+        }
         refresh(); observeTheme(); observeContent(); refreshData()
         await finishPendingContent()
         guard !isPresented else { preparing = false; return }
@@ -188,26 +201,35 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         needsLayout = true
     }
     public func select(_ next: LibraryPanelSection, animated: Bool = true) {
+        let started = ProcessInfo.processInfo.systemUptime
+        switchPhases = [:]
         guard sections.contains(next) else { return }
         let changed = section != next
         if !changed && prebuiltReady { return }
         prebuiltReady = false
         if (!changed && !prebuiltReady) || next == .media { hosts[next]?.loaded = false }
         if changed, animated, window?.isVisible == true {
-            let fade = CATransition(); fade.type = .fade; fade.duration = 0.10
-            content.layer?.add(fade,forKey:"librarySection"); listView.layer?.add(fade,forKey:"librarySection")
-            manager?.layer?.add(fade,forKey:"librarySection")
+            let fade = CABasicAnimation(keyPath:"opacity"); fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.10
+            host(for:next).list.layer?.add(fade,forKey:"librarySection")
+            content.layer?.add(fade,forKey:"librarySection"); manager?.layer?.add(fade,forKey:"librarySection")
         }
+        let animationReady = ProcessInfo.processInfo.systemUptime
         section = next
         if let mapped = next.modelSection { viewModel.section = mapped }
         filterOpen = false
         updateSection()
+        let headerReady = ProcessInfo.processInfo.systemUptime
         if isPresented { refreshData() }
+        let dataReady = ProcessInfo.processInfo.systemUptime
         onWidthChange?(desiredWidth)
-        needsLayout = true; layoutSubtreeIfNeeded()
+        layoutSubtreeIfNeeded()
+        let layoutReady = ProcessInfo.processInfo.systemUptime
         if tiles.values.contains(where: { window?.firstResponder === $0 }) { focusRail() }
         updateRailFocus()
         NSAccessibility.post(element:rail,notification:.selectedChildrenChanged)
+        let finished = ProcessInfo.processInfo.systemUptime
+        switchPhases = ["animation":(animationReady-started)*1000,"headerVisibility":(headerReady-animationReady)*1000,
+            "providerRequest":(dataReady-headerReady)*1000,"layout":(layoutReady-dataReady)*1000,"focusAX":(finished-layoutReady)*1000]
     }
     func moveRail(_ delta: Int) {
         guard let index = sections.firstIndex(of: section), !sections.isEmpty else { return }
@@ -293,10 +315,13 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         let start = max(0,min(documentHeight-extent,(documentHeight-extent)/2-3))
         for (index,candidate) in sections.enumerated() { tiles[candidate]?.frame=CGRect(x:8,y:start+CGFloat(index)*pitch,width:97,height:80) }
         back.frame = CGRect(x:8,y:height-40,width:32,height:32)
-        header.frame=CGRect(x:120,y:10,width:section.hasFilter ? 212 : 289,height:36)
+        let headerFrame = CGRect(x:120,y:10,width:section.hasFilter ? 212 : 289,height:36)
+        if header.frame != headerFrame { header.frame = headerFrame }
         // Header is an unflipped native view: its child y coordinates are symmetric.
-        searchGlyph.frame=CGRect(x:14.5,y:10.5,width:15,height:15)
-        searchField.frame=CGRect(x:44,y:8,width:header.bounds.width-53,height:20)
+        let glyphFrame = CGRect(x:14.5,y:10.5,width:15,height:15)
+        if searchGlyph.frame != glyphFrame { searchGlyph.frame = glyphFrame }
+        let searchFrame = CGRect(x:44,y:8,width:header.bounds.width-53,height:20)
+        if searchField.frame != searchFrame { searchField.frame = searchFrame }
         filter.frame=CGRect(x:336,y:10,width:73,height:36)
         content.frame=CGRect(x:112,y:56,width:max(0,bounds.width-112),height:max(0,height-56))
         let listTop: CGFloat = filterOpen ? filterEditor.contentHeight : section == .boosts ? (boostTurnOn.isHidden ? 92 : 132) : 56
@@ -327,7 +352,10 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         if searchField.stringValue != text { searchField.stringValue = text }
         renderRows()
     }
-    public func controlTextDidChange(_ notification: Notification) { setSearch(searchField.stringValue) }
+    public func controlTextDidChange(_ notification: Notification) {
+        (searchField as? LibrarySearchField)?.note("handlerEntry")
+        setSearch(searchField.stringValue)
+    }
     public func handleKey(_ event: NSEvent) -> Bool {
         if [48,123,124,125,126].contains(event.keyCode) { keyboardRailNavigation = true; updateRailFocus() }
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command), event.keyCode == 3, section != .spaces {

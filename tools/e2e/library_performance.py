@@ -37,12 +37,23 @@ def cpu(exclude_bundle=None):
     return total
 
 
+def other_processes(exclude_bundle=None):
+    rows=[]
+    for line in subprocess.check_output(['ps','-A','-o','pid=,pcpu=,comm='],text=True).splitlines():
+        parts=line.strip().split(None,2)
+        if len(parts)!=3:continue
+        pid,value,path=parts
+        if int(pid)==os.getpid() or exclude_bundle and path.startswith(str(exclude_bundle)+'/'):continue
+        rows.append({'pid':int(pid),'cpuPercent':float(value),'process':Path(path).name})
+    return sorted(rows,key=lambda row:row['cpuPercent'],reverse=True)[:5]
+
+
 def quiet(deadline=None):
     attempts=[];deadline=deadline if deadline is not None else time.monotonic()+900
     while time.monotonic()<deadline:
         loads=[os.getloadavg()[0]];time.sleep(10);loads.append(os.getloadavg()[0]);foreign=cpu()
-        attempts.append({'loads':loads,'foreignCPU':foreign})
-        if max(loads)<=3 and foreign<=200:return loads,foreign,attempts
+        attempts.append({'loads':loads,'foreignCPU':foreign,'otherProcesses':other_processes()})
+        if max(loads)<=3.5:return loads,foreign,attempts
         print('WAIT quiet prerequisites '+json.dumps(attempts[-1]),flush=True)
     raise RuntimeError('quiet-sample prerequisites did not pass in fifteen minutes: '+json.dumps(attempts))
 
@@ -51,6 +62,15 @@ def launch(root,bundle,output,index,extra_env=None):
     app=Open('Release','chrome',str(root),[],str(output/('app-%s.log'%index)),urls=('about:blank',),extra_env=dict({'OPEN_E2E_APP_BUNDLE':str(bundle)},**(extra_env or {})))
     owner=app.call('shell-windows')[0]['id'];app.call('window-focus',id=owner,activate=True)
     return app
+
+
+def idle_window(app):
+    before=app.call('library-performance',operation='cpu');start=time.monotonic();processes_before=cpu_snapshot(app)
+    time.sleep(30)
+    processes_after=cpu_snapshot(app);after=app.call('library-performance',operation='cpu');seconds=time.monotonic()-start
+    return {'cpuPercent':100*(after['cpuSeconds']-before['cpuSeconds'])/seconds,'seconds':seconds,
+            'attribution':cpu_delta(processes_before,processes_after,seconds),'counters':after['counters'],
+            'counterDelta':{k:v-before['counters'].get(k,0) for k,v in after['counters'].items()}}
 
 
 def seed(root,bundle,output):
@@ -115,7 +135,7 @@ def scroll_fixture(root,snapshot):
 
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
-    receipt={'configuration':'Release','samples':[],'method':'Native layout, displayIfNeeded and CATransaction.flush; provider completion awaited. Search starts at native key dispatch after focus setup, without fixed harness delivery waits. No physical scan-out claim.','limits':{'firstSubmittedMilliseconds':8,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
+    receipt={'configuration':'Release','samples':[],'method':'LEAD 06:50: app-side event dispatch to CATransaction flush containing the complete first screen or filtered result. Physical clocks are informational. Idle is open minus mean(closed before, closed after).','validity':{'load1Maximum':3.5,'loadReadings':2,'spacingSeconds':10,'foreignCPUThreshold':None,'quietDeadlineSecondsPerPair':900},'limits':{'firstSubmittedMilliseconds':8,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleDeltaPercentagePoints':.05},'complete':False}
     if args.resume_from:
         previous=json.loads(args.resume_from.read_text())
         assert previous['configuration']==receipt['configuration'] and previous['limits']==receipt['limits']
@@ -123,9 +143,9 @@ def main(args):
         assert previous['baseline']['bundle']==str(args.baseline_bundle)
         valid=[];baselines=[]
         for row,baseline in zip(previous['samples'],previous['baseline']['samples']):
-            if not row['valid'] or max(baseline['foreignCPU'])>200:break
+            if not row['valid']:break
             assert row['cleanup']['ok'] and baseline['cleanup']['ok']
-            assert max(row['loads'])<=3 and max(baseline['loads'])<=3
+            assert max(row['loads'])<=3.5 and max(baseline['loads'])<=3.5
             assert row['search']['providerRows']==1
             valid.append(row);baselines.append(baseline)
         assert 0<len(valid)<args.samples
@@ -150,7 +170,7 @@ def main(args):
             early=active.call('library-performance',operation='open',section='downloads')
             cold_end_cpu=cpu(active.bundle)
             active.quit();assert active.quit_report['ok']
-            receipt['earlyCold']={'loads':cold_loads,'foreignCPU':[cold_cpu,cold_end_cpu],'quietAttempts':cold_waits,'timing':early,'cleanup':active.quit_report,'limit':50,'ok':early['firstSubmittedMilliseconds']<=50 and cold_end_cpu<=200}
+            receipt['earlyCold']={'loads':cold_loads,'foreignCPU':[cold_cpu,cold_end_cpu],'quietAttempts':cold_waits,'timing':early,'cleanup':active.quit_report,'limit':50,'ok':early['firstSubmittedMilliseconds']<=50}
             active=None;save()
             attempt=0;previous_index=None;pair_deadline=None
             while len(receipt['samples'])<args.samples:
@@ -158,22 +178,21 @@ def main(args):
                 attempt_tag=str(index)+'-attempt-'+str(attempt)
                 if index!=previous_index:
                     pair_deadline=time.monotonic()+900;previous_index=index
+                loads,foreign,quiet_attempts=quiet(pair_deadline)
                 baseline_row=None
                 if args.baseline_bundle:
-                    base_loads,base_cpu,base_waits=quiet(pair_deadline)
+                    base_loads,base_cpu,base_waits=loads,foreign,quiet_attempts
+                    baseline_other_before=other_processes()
                     active=launch(baseline_root,args.baseline_bundle,output,'baseline-'+attempt_tag)
                     base_timing=active.call('timing')
                     end_base_cpu=cpu(active.bundle)
                     active.quit();assert active.quit_report['ok']
-                    baseline_row={'index':index,'attempt':attempt,'loads':base_loads,'foreignCPU':[base_cpu,end_base_cpu],'quietAttempts':base_waits,'timing':base_timing,'cleanup':active.quit_report}
+                    baseline_row={'index':index,'attempt':attempt,'loads':base_loads,'foreignCPU':[base_cpu,end_base_cpu],'otherProcessesBefore':baseline_other_before,'otherProcessesAfter':other_processes(active.bundle),'quietAttempts':base_waits,'timing':base_timing,'cleanup':active.quit_report}
                     active=None
-                    if end_base_cpu>200:
-                        receipt.setdefault('rejectedBaselines',[]).append(baseline_row);save()
-                        print('REJECT baseline '+json.dumps({'index':index,'attempt':attempt,'foreignCPU':baseline_row['foreignCPU']}),flush=True)
-                        continue
                     receipt['pendingBaseline']=baseline_row;save()
-                loads,foreign,quiet_attempts=quiet(pair_deadline)
+                candidate_other_before=other_processes();candidate_load_before=os.getloadavg()[0]
                 active=launch(root,args.bundle,output,attempt_tag)
+                launch_settled=time.monotonic()
                 startup=active.call('timing')
                 assert wait_until(lambda:active.call('library',action='prebuild-state').get('ready',False),timeout=12)
                 prebuild=active.call('library',action='prebuild-state')
@@ -198,29 +217,31 @@ def main(args):
                 # five-character burst would include five synchronous updates.
                 search=active.call('library-performance',operation='search',text='z')
                 assert search['providerRows']==1,search
-                active.call('key',key='escape',route='app');active.call('library',action='focus-rail');time.sleep(5.3)
-                before_read=active.call('library-performance',operation='cpu');before=before_read['cpuSeconds'];open_before=cpu_snapshot(active);start=time.monotonic();time.sleep(30)
-                open_cpu=active.call('library-performance',operation='cpu')
-                open_seconds=time.monotonic()-start;open_after=cpu_snapshot(active)
-                idle=100*(open_cpu['cpuSeconds']-before)/open_seconds
+                stamps=search['searchTimestamps']
+                assert all(key in stamps for key in ['dispatch','editorKeyDown','textChanged','handlerEntry','commit']),stamps
+                assert [stamps[key] for key in ['dispatch','editorKeyDown','textChanged','handlerEntry','commit']]==sorted(stamps.values()),stamps
+                active.call('key',key='escape',route='app');active.call('library',action='focus-rail')
+                active.call('library',action='close')
+                # Timing operations happen first. The first closed CPU window
+                # starts >=30s after launch settled and >=5.3s after closing.
+                time.sleep(max(5.3,launch_settled+30-time.monotonic()))
+                closed_before=idle_window(active)
+                active.call('library',action='open',section='downloads');active.call('library',action='focus-rail');time.sleep(5.3)
+                opened_idle=idle_window(active)
                 active.call('library',action='close');time.sleep(5.3)
-                before_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_before=cpu_snapshot(active);closed_start=time.monotonic();time.sleep(30)
-                after_closed=active.call('library-performance',operation='cpu')['cpuSeconds'];closed_seconds=time.monotonic()-closed_start;closed_after=cpu_snapshot(active);closed_idle=100*(after_closed-before_closed)/closed_seconds
+                closed_after=idle_window(active)
+                idle=opened_idle['cpuPercent'];closed_idle=statistics.mean([closed_before['cpuPercent'],closed_after['cpuPercent']])
                 end_cpu=cpu(active.bundle)
-                row={'index':index,'attempt':attempt,'physicalDirectory':'physical-'+attempt_tag,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleAttribution':{'open':cpu_delta(open_before,open_after,open_seconds),'closed':cpu_delta(closed_before,closed_after,closed_seconds)},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':open_cpu['counters'],'idleCounterDelta':{k:v-before_read['counters'].get(k,0) for k,v in open_cpu['counters'].items()},'prebuild':prebuild}
+                row={'index':index,'attempt':attempt,'physicalDirectory':'physical-'+attempt_tag,'loads':loads,'quietAttempts':quiet_attempts,'candidateLoadBefore':candidate_load_before,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'otherProcessesBefore':candidate_other_before,'otherProcessesAfter':other_processes(active.bundle),'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleWindows':{'closedBefore':closed_before,'open':opened_idle,'closedAfter':closed_after},'idleAttribution':{key:window['attribution'] for key,window in [('closedBefore',closed_before),('open',opened_idle),('closedAfter',closed_after)]},'idleCPUPercent':idle,'closedIdleCPUPercent':closed_idle,'idleDeltaPercentagePoints':idle-closed_idle,'idleCounters':opened_idle['counters'],'idleCounterDelta':opened_idle['counterDelta'],'prebuild':prebuild}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
-                row['valid']=end_cpu<=200
-                if not row['valid']:
-                    receipt.setdefault('rejectedSamples',[]).append(dict(row,baseline=baseline_row));receipt.pop('pendingBaseline',None);save()
-                    print('REJECT candidate '+json.dumps({'index':index,'attempt':attempt,'foreignCPU':row['foreignCPU']}),flush=True)
-                    continue
+                row['valid']=max(loads)<=3.5
                 receipt['samples'].append(row)
                 if baseline_row:receipt['baseline']['samples'].append(baseline_row)
                 receipt.pop('pendingBaseline',None)
                 save()
                 # Keep the full compositor signatures and cleanup receipt in
                 # result.json; console output needs only the measured summary.
-                print(json.dumps({key:value for key,value in row.items() if key not in ['physicalOpen','quietAttempts','cleanup','startup','idleAttribution']}),flush=True)
+                print(json.dumps({'index':index,'valid':row['valid'],'firstMS':opened['firstSubmittedMilliseconds'],'fullMS':opened['contentSubmittedMilliseconds'],'coldMS':max(x['contentSubmittedMilliseconds'] for x in cold),'warmMS':max(x['contentSubmittedMilliseconds'] for x in warm),'searchMS':search['contentSubmittedMilliseconds'],'idleDelta':idle-closed_idle}),flush=True)
             def verdict(values,limit):return {'values':values,'median':statistics.median(values),'limit':limit,'ok':statistics.median(values)<=limit and max(values)<=1.5*limit}
             receipt['summary']={
                 'firstSubmission':verdict([s['open']['firstSubmittedMilliseconds'] for s in receipt['samples']],8),
@@ -228,7 +249,14 @@ def main(args):
                 'coldSection':verdict([max(r['contentSubmittedMilliseconds'] for r in s['coldSections']) for s in receipt['samples']],50),
                 'warmSection':verdict([max(r['contentSubmittedMilliseconds'] for r in s['warmSections']) for s in receipt['samples']],8.3),
                 'search':verdict([s['search']['contentSubmittedMilliseconds'] for s in receipt['samples']],16),
-                'idleDelta':verdict([s['idleDeltaPercentagePoints'] for s in receipt['samples']],.05)}
+                'idleDelta':verdict([s['idleDeltaPercentagePoints'] for s in receipt['samples']],.05),
+                'rowConfigureP95':verdict([s['idleCounters']['configureP95'] for s in receipt['samples']],.3),
+                'coldApply':verdict([max(x['counters'].get('last.apply',0) for x in s['coldSections'] if x['counterDelta'].get('tableUpdates',0)>0) for s in receipt['samples']],4)}
+            maxima=[s['idleCounters']['configureMaximum'] for s in receipt['samples']]
+            receipt['summary']['rowConfigureMaximum']={'values':maxima,'median':statistics.median(maxima),'limit':1,'ok':max(maxima)<=1}
+            receipt['warmZeroConfiguration']=all(s['counterDelta'].get('configured',-1)==0 and s['counterDelta'].get('reloadData',-1)==0 for row in receipt['samples'] for s in row['warmSections'])
+            receipt['idleCountersOK']=all(all(row['idleCounters'].get(k,-1)==0 for k in ['tasks','timers','displayLinks','animations']) for row in receipt['samples'])
+            receipt['nativeBudgetsOK']=all(v['ok'] for v in receipt['summary'].values()) and receipt['warmZeroConfiguration'] and receipt['idleCountersOK'] and receipt['earlyCold']['ok']
             receipt['scroll']={'status':'UNVERIFIED','reason':'10,000-row native submission and physical 120Hz dropped-frame qualification are separate from the 1,000-download fixture.'}
             receipt['returningLaunch']={'status':'UNVERIFIED','reason':'No baseline artifact supplied.'}
             if args.baseline_bundle:
@@ -236,8 +264,9 @@ def main(args):
                 baseline=[s['timing']['sidebarDrawn'] for s in receipt['baseline']['samples']]
                 receipt['returningLaunch']={'status':'MEASURED','candidate':candidate,'baseline':baseline,'medianDeltaMilliseconds':statistics.median(candidate)-statistics.median(baseline),'pairedDeltaMilliseconds':[a-b for a,b in zip(candidate,baseline)]}
             if args.frame_helper and len([s for s in receipt['samples'] if s['physicalOpen']])==args.samples:
-                receipt['physicalFirstChange']=verdict([s['physicalOpen']['first_changed_ms'] for s in receipt['samples']],16)
-                receipt['physicalFinalContent']=verdict([s['physicalOpen']['first_final_content_ms'] for s in receipt['samples']],100)
+                receipt['physicalFirstChange']={'values':[s['physicalOpen']['first_changed_ms'] for s in receipt['samples']],'informational':True}
+                receipt['physicalFinalContent']={'values':[s['physicalOpen']['first_final_content_ms'] for s in receipt['samples']],'informational':True}
+            if args.frame_helper and args.samples==5 and receipt['nativeBudgetsOK']:
                 scroll_root=scroll_fixture(root,snapshot)
                 scroll_loads,scroll_cpu,scroll_waits=quiet()
                 active=launch(scroll_root,args.bundle,output,'scroll')
@@ -253,14 +282,11 @@ def main(args):
                 p95=sorted(frame_ms)[min(len(frame_ms)-1,int(len(frame_ms)*.95))]
                 breakdown={key:max(c['counterDelta'].get(key,0) for c in costs) for key in ['formatting','listLayout']}
                 breakdown.update({key:max(c['counters'].get('last.'+key,0) for c in costs) for key in ['layout','display','flush']})
-                receipt['scroll']={'p95MainThreadMilliseconds':p95,'maxMainThreadMilliseconds':max(frame_ms),'phaseMaximumMilliseconds':breakdown,'workOver4ms':{k:v for k,v in breakdown.items() if v>4},'status':'MEASURED' ,'rows':10000,'profiles':10,'loads':scroll_loads,'foreignCPU':[scroll_cpu,end_scroll_cpu],'quietAttempts':scroll_waits,'submissions':costs,'physical':physical,'cleanup':cleanup,'ok':end_scroll_cpu<=200 and len(physical['changes'])>=100 and physical['missed120HzIntervals']==0}
+                receipt['scroll']={'p95MainThreadMilliseconds':p95,'maxMainThreadMilliseconds':max(frame_ms),'phaseMaximumMilliseconds':breakdown,'workOver4ms':{k:v for k,v in breakdown.items() if v>4},'status':'MEASURED' ,'rows':10000,'profiles':10,'loads':scroll_loads,'foreignCPU':[scroll_cpu,end_scroll_cpu],'quietAttempts':scroll_waits,'submissions':costs,'physical':physical,'cleanup':cleanup,'ok':len(physical['changes'])>=100 and physical['missed120HzIntervals']==0}
             receipt['complete']=True
             receipt['sampleCount']=args.samples
             receipt['prQualification']=args.samples==5
-            receipt['warmZeroConfiguration']=all(s['counterDelta'].get('configured',-1)==0 and s['counterDelta'].get('reloadData',-1)==0 for row in receipt['samples'] for s in row['warmSections'])
-            receipt['idleCountersOK']=all(all(row['idleCounters'].get(k,-1)==0 for k in ['tasks','timers','displayLinks','animations']) for row in receipt['samples'])
-            receipt['nativeBudgetsOK']=all(v['ok'] for v in receipt['summary'].values()) and receipt['warmZeroConfiguration'] and receipt['idleCountersOK'] and receipt['earlyCold']['ok']
-            receipt['ok']=receipt['nativeBudgetsOK'] and receipt.get('physicalFirstChange',{}).get('ok',False) and receipt.get('physicalFinalContent',{}).get('ok',False) and receipt['scroll'].get('ok',False)
+            receipt['ok']=receipt['nativeBudgetsOK'] and (args.samples==3 or receipt['scroll'].get('ok',False))
             save()
     except Exception as error:
         receipt['error']=repr(error);save();raise

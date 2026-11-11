@@ -38,6 +38,7 @@ extension AutomationController {
       // Focus is setup. Time the actual in-app key dispatch, without sendKey's
       // fixed post-delivery wait, which is for asynchronous CEF page callbacks.
       started = ProcessInfo.processInfo.systemUptime
+      adapter.activeLibrarySession?.panel?.beginSearchMeasurement()
       for character in text {
         for type in [NSEvent.EventType.keyDown,.keyUp] {
           guard let event=NSEvent.keyEvent(with:type,location:.zero,modifierFlags:[],timestamp:ProcessInfo.processInfo.systemUptime,
@@ -57,15 +58,17 @@ extension AutomationController {
     let actionMilliseconds = (ProcessInfo.processInfo.systemUptime-started)*1000
     let pending = panel.hasPendingFirstScreen
     panel.submitNativeFrame()
-    let first=(ProcessInfo.processInfo.systemUptime-started)*1000
+    let first=(panel.nativeCommittedAt-started)*1000
     let firstPhases = panel.performanceCounters.filter { $0.key.hasPrefix("last.") }
     // An unchanged retained host is complete at its first submission. Do not
     // add an unrelated actor hop and a second compositor flush to that clock.
     if pending { await panel.finishPendingContent(); panel.submitNativeFrame() }
-    let full=(ProcessInfo.processInfo.systemUptime-started)*1000
+    let full=(panel.nativeCommittedAt-started)*1000
+    if operation == "search" { panel.markSearchCommit() }
     return ["firstSubmittedMilliseconds":first,"contentSubmittedMilliseconds":full,
       "providerRows":panel.filteredRowCount,
       "actionMilliseconds":actionMilliseconds,"firstSubmissionPhases":firstPhases,
+      "searchTimestamps":operation == "search" ? panel.searchTimestamps : [:],
       "panelGeneration":adapter.activeLibrarySession?.panelGeneration ?? 0,
       "visibleRows":panel.listReuseState["rows"] ?? 0,"counters":panel.performanceCounters,
       "counterDelta":panel.performanceCounters.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(countersBefore[$1.key] ?? 0) }]

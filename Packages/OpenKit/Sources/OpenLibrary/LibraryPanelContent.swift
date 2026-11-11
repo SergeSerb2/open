@@ -43,6 +43,12 @@ extension LibraryPanelView {
         state["rasterStores"] = LibraryRaster.stores; state["rasterPixels"] = LibraryRaster.pixels
         state["textRasters"] = LibraryRaster.text; state["glyphRasters"] = LibraryRaster.glyphs
         state["configureMaximum"] = hosts.values.map { $0.list.configureMaximumMilliseconds }.max() ?? 0
+        let configurations = hosts.values.flatMap { $0.list.configureSamples }.sorted()
+        for (name,fraction) in [("configureP50",0.5),("configureP95",0.95)] {
+            state[name] = configurations.isEmpty ? 0 : configurations[min(configurations.count-1,Int(Double(configurations.count-1)*fraction))]
+        }
+        state["warmupComplete"] = warmedRows ? 1 : 0
+        for (key,value) in switchPhases { state["switch."+key] = value }
         for (key,value) in submissionPhases { state["last."+key] = value }
         for (key,value) in hosts[section]?.phaseMilliseconds ?? [:] { state["last."+key] = value }
         return state
@@ -55,6 +61,7 @@ extension LibraryPanelView {
         let drawn = ProcessInfo.processInfo.systemUptime
         CATransaction.flush()
         let flushed = ProcessInfo.processInfo.systemUptime
+        nativeCommittedAt = flushed
         submissionPhases = ["layout":(laidOut-start)*1000,"display":(drawn-laidOut)*1000,"flush":(flushed-drawn)*1000]
     }
     public func scrollToRow(_ index:Int) -> Int {
@@ -277,7 +284,8 @@ extension LibraryPanelView {
         boostList.selected = viewModel.boostsPresentation == .list; boostGallery.selected = viewModel.boostsPresentation == .gallery
         boostsProfile.title = viewModel.model.profile(id:viewModel.historyProfileID)?.name ?? "Profile"
         if filterOpen { configureFilter() }
-        needsLayout = true
+        let layoutKey = "\(section == .spaces)|\(section.hasFilter)|\(filterOpen)|\(section == .boosts)|\(boostsOff)|\(statusLabel.isHidden)"
+        if lastHeaderLayoutKey != layoutKey { lastHeaderLayoutKey = layoutKey; needsLayout = true }
     }
     func symbol(_ name:String) -> NSImage? {
         if let image = symbolCache[name] { return image }

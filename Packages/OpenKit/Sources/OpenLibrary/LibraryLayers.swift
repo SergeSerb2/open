@@ -59,7 +59,7 @@ extension LibraryGlyph {
 
 /// Native field drawing is counted separately from our explicit text layers.
 @MainActor
-final class LibraryField: NSTextField {
+class LibraryField: NSTextField {
     override func draw(_ dirtyRect:NSRect) {
         LibraryRaster.stores += 1
         let scale = window?.backingScaleFactor ?? 2

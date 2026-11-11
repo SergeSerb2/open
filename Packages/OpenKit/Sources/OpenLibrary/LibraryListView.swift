@@ -39,6 +39,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
     private(set) var formattingMilliseconds = 0.0
     private(set) var layoutMilliseconds = 0.0
     private(set) var configureMaximumMilliseconds = 0.0
+    private(set) var configureSamples: [Double] = []
     private var entries: [Entry] = []
     private var lastSelectedRow = -1
     private enum Entry: Equatable { case heading(String), item(Int) }
@@ -77,6 +78,31 @@ final class LibraryListView: NSView, NSMenuDelegate {
         scroll.documentView = table; addSubview(scroll)
     }
     required init?(coder: NSCoder) { fatalError() }
+    /// First-use font, date and symbol costs belong to the idle prebuild.
+    /// These temporary rows never enter a window, take focus or start work.
+    static func warmRowKinds(foreground:NSColor,overlay:NSColor) {
+        let now = Date()
+        _ = now.formatted(date:.omitted,time:.shortened)
+        _ = now.formatted(date:.abbreviated,time:.omitted)
+        _ = now.formatted(.dateTime.month(.wide).year())
+        let bytes = ByteCountFormatter(); bytes.countStyle = .file; bytes.allowsNonnumericFormatting = false
+        _ = bytes.string(fromByteCount:1_024_000)
+        let placeholder = NSImage(systemSymbolName:"globe",accessibilityDescription:nil)
+        let actions = [LibraryRowAction(title:"Delete",glyph:.trash,run:{}),LibraryRowAction(title:"Restore",glyph:.undo,run:{})]
+        func render(_ view:NSView) {
+            view.layoutSubtreeIfNeeded(); view.displayIfNeeded(); view.layer?.displayIfNeeded()
+            for child in view.subviews { render(child) }
+            func display(_ layer:CALayer) { for child in layer.sublayers ?? [] { child.displayIfNeeded(); display(child) } }
+            if let layer = view.layer { display(layer) }
+        }
+        for kind in ["download","archive","history","capture","boost","boostGallery"] {
+            let row = LibraryItemView(frame:CGRect(x:0,y:0,width:304,height:56))
+            row.configure(LibraryRowItem(id:"warm-"+kind,title:"Library row",subtitle:"Page · Today",kind:kind,image:placeholder,activate:{},actions:actions,hoverActions:actions),foreground:foreground,overlay:overlay,gallery:kind == "boostGallery")
+            render(row)
+        }
+        let heading = LibraryHeadingView(frame:CGRect(x:0,y:0,width:304,height:27))
+        heading.configure("Today",color:foreground.withAlphaComponent(0.68)); render(heading)
+    }
     override func layout() {
         let started = ProcessInfo.processInfo.systemUptime
         defer { layoutMilliseconds += (ProcessInfo.processInfo.systemUptime-started)*1000 }
@@ -135,6 +161,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
             view.configure(item, foreground: foreground, overlay: overlay, gallery: gallery)
             let elapsed = (ProcessInfo.processInfo.systemUptime-started)*1000
             formattingMilliseconds += elapsed; configureMaximumMilliseconds = max(configureMaximumMilliseconds,elapsed)
+            if configureSamples.count < 4096 { configureSamples.append(elapsed) }
             view.selected = row == table.selectedRow
             view.hovered = sources[index].id == hoveredID
             view.onHover = { [weak self, weak view] hovered in
