@@ -139,10 +139,14 @@ miniature's theme retained one pending one-shot display link. Animations and
 the completion timer were already stopped, but resting CPU was 2.591% FAIL.
 That sample qualifies (load1 2.161 / 2.203, foreign CPU 39.7% / 32.5%). Its
 playlist took 19.061 seconds; the miniaturized row passed at 0.523%.
-The repair flushes the miniature's cached theme field after layout and theme
-application, as it already does when playback freezes. This prevents a hidden
-neighbor from waiting for a display tick it may never receive. Full lifecycle
-and original import verification must cover this additional change.
+The first flush-only attempt also fails (`welcome-fixed-r3`, 1.942% CPU,
+one pending theme link, load1 2.577 / 2.180, foreign CPU 46.0% / 56.5%).
+Parent layout and theme-application flushes do not cover later child layout or
+backing notifications. Miniature themes now opt into synchronous cached-field
+updates at every input boundary in `ThemeBackgroundView.refresh()`. They never
+arm a display link, including while hidden; ordinary browser themes keep their
+existing display-tick behavior. Full lifecycle and original import verification
+must cover this additional change.
 
 ## Profiler and visibility controls
 

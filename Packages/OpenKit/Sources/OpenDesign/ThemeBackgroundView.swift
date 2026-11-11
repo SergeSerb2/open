@@ -54,6 +54,11 @@ public final class ThemeBackgroundView: NSView {
     public var drawsPageBlur: Bool { pageBlur?.superlayer != nil }
     /// Scale used for the grain tile. Set by renderers without a window.
     public var renderScale: CGFloat? { didSet { refresh() } }
+    /// Static embedded previews must also finish updates while hidden. Rebuild
+    /// their cached field at each input change instead of arming a display link.
+    public var updatesFieldsSynchronously = false {
+        didSet { if updatesFieldsSynchronously { displayFrame() } }
+    }
     /// Editor fills blend in the destination's space (§17). `false` restores
     /// #120's precomputed Display P3 mix for the harness's A/B diagnostics.
     public var composesInDisplaySpace = true {
@@ -141,6 +146,7 @@ public final class ThemeBackgroundView: NSView {
             layer.resize(to: fieldRect.size)
         }
         CATransaction.commit()
+        if updatesFieldsSynchronously { displayFrame(); return }
         guard !inLiveResize, !resizing, displayLink == nil, bounds.width > 0, bounds.height > 0 else { return }
         let target = displayTarget ?? ThemeDisplayTarget(owner: self)
         displayTarget = target
