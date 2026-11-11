@@ -21,7 +21,7 @@ from library_performance import seed, scroll_fixture, quiet, other_processes
 PERIOD = 1000 / 120
 LIMITS = {
     'wheel': {'p95Milliseconds': 4, 'maximumMilliseconds': 8.3,
-              'created': 0, 'appAttributedMissedIntervals': 1},
+              'created': 0, 'libraryAttributedMissedIntervals': 1},
     'scroller': {'maximumMilliseconds': 8.3, 'created': 0,
                  'p95AndMisses': 'INFO: replaces the viewport each callback'},
 }
@@ -37,6 +37,7 @@ def classify_gaps(native, gaps):
     """
     rows = native['frames']
     classified = []
+    all_rows = rows+native.get('settlingFrames', [])
     for gap in gaps:
         left, right = gap['startTicks'], gap['endTicks']
         busy, late, missing_commit, ticks = [], [], [], []
@@ -55,13 +56,41 @@ def classify_gaps(native, gaps):
                 committed = any(row['counters'].get('last.'+phase, 0)>0 for phase in ['layout','display','flush'])
                 if changed and not committed: missing_commit.append(i+1)
         attributed = bool(busy or late or missing_commit)
+        # Attribute to Library only when its non-nested phases account for
+        # >=4ms of a busy interval that actually overlaps this capture gap.
+        # Callback wall time includes its own layout/display/flush; clip and
+        # reconcile counters are nested, as are reconcile and idle slices.
+        busy_windows = []
+        for number in busy:
+            row = rows[number-1]; h = row['heartbeat']
+            anchor = row['startTicks']-row['launchMilliseconds']/TICK_MS
+            busy_windows.append((anchor+h['busyStartLaunchMilliseconds']/TICK_MS,
+                                 anchor+h['busyEndLaunchMilliseconds']/TICK_MS))
+        library_ms = 0
+        for i, row in enumerate(all_rows):
+            def overlaps(begin, end):
+                return any(begin < high and end > low for low, high in busy_windows)
+            if overlaps(row['startTicks'], row['endTicks']): library_ms += row['milliseconds']
+            if i and overlaps(all_rows[i-1]['endTicks'],row['startTicks']):
+                delta = row['betweenCallbackDelta']
+                library_ms += max(delta.get('scroll.clipBounds',0),delta.get('scroll.reconcile',0))
+        # Idle slices include reconcile work, so retain the larger accounting.
+        for low, high in busy_windows:
+            anchor = rows[0]['startTicks']-rows[0]['launchMilliseconds']/TICK_MS
+            idle_ms = sum(slice['milliseconds'] for slice in native.get('idleWorkIntervals', [])
+                          if anchor+slice['startLaunchMilliseconds']/TICK_MS < high
+                          and anchor+slice['endLaunchMilliseconds']/TICK_MS > low)
+            library_ms = max(library_ms,idle_ms)
         classified.append(dict(gap, callbacks=ticks, busyCallbacks=busy,
             lateDisplayLinkCallbacks=late, changedOffsetWithoutCommitCallbacks=missing_commit,
-            appAttributed=attributed, classification='App-attributed' if attributed else
+            appAttributed=attributed, libraryPhaseMilliseconds=library_ms,
+            libraryAttributed=attributed and library_ms>=4, classification='App-attributed' if attributed else
             'outside the App (compositor or capture cadence)'))
     count = sum(gap['missedIntervals'] for gap in classified if gap['appAttributed'])
-    return {'rule':'LEAD 12:25 (11 Nov)', 'rawMissedIntervals':sum(g['missedIntervals'] for g in gaps),
-            'appAttributedMissedIntervals':count, 'outsideAppIntervals':sum(g['missedIntervals'] for g in classified if not g['appAttributed']),
+    return {'rule':'LEAD 12:50 (11 Nov)', 'rawMissedIntervals':sum(g['missedIntervals'] for g in gaps),
+            'appAttributedMissedIntervals':count,
+            'libraryAttributedMissedIntervals':sum(g['missedIntervals'] for g in classified if g['libraryAttributed']),
+            'outsideAppIntervals':sum(g['missedIntervals'] for g in classified if not g['appAttributed']),
             'gaps':classified}
 
 
@@ -81,7 +110,7 @@ def idle_work(native):
     unit_max = max((s['milliseconds'] for s in slices), default=0)
     return {'slices':slices,'libraryBusyIntervals':attributed,
             'largestLibraryBusyMilliseconds':maximum,'maximumSliceMilliseconds':unit_max,
-            'ok':maximum<=6 and unit_max<=4}
+            'ok':maximum<=8.3 and unit_max<=8}
 
 
 def analyze(native, physical):
@@ -147,6 +176,7 @@ def analyze(native, physical):
             'fullCaptureMissedIntervals': physical['missed120HzIntervals'],
             'excludedIntervals': raw-classification['appAttributedMissedIntervals'],
             'appAttributedMissedIntervals': classification['appAttributedMissedIntervals'],
+            'libraryAttributedMissedIntervals':classification['libraryAttributedMissedIntervals'],
             'physicalGapClassification': classification,
             'physicalGaps': gaps, 'busyGapsAtLeast8ms': busy,
             'phaseMaximumMilliseconds': phases,
@@ -160,7 +190,7 @@ def analyze(native, physical):
 def main(args):
     out = args.output.resolve(); out.mkdir(parents=True, exist_ok=False)
     bundle = args.bundle.resolve()
-    result = {'configuration': 'Release', 'rule': 'LEAD 12:25 (11 Nov)',
+    result = {'configuration': 'Release', 'rule': 'LEAD 12:50 (11 Nov)',
               'limits': LIMITS, 'complete': False, 'productRenderingChanged': True,
               'executableSHA256': hashlib.sha256((bundle/'Contents/MacOS/Open').read_bytes()).hexdigest(),
               'oldGapLaunchOffsetEstimateMilliseconds': [[2940, 3170], [3160, 3390]],
@@ -224,7 +254,7 @@ def main(args):
                 assert all(i['timestamp'] > 0 for i in inputs)
             row['ok'] = row['valid'] and row['maximumMilliseconds'] <= 8.3 and row['created'] == 0 and row['idlePreparation']['ok']
             if profile == 'wheel':
-                row['ok'] = row['ok'] and row['p95Milliseconds'] <= 4 and row['appAttributedMissedIntervals'] <= 1
+                row['ok'] = row['ok'] and row['p95Milliseconds'] <= 4 and row['libraryAttributedMissedIntervals'] <= 1
             print(json.dumps({key: value for key, value in row.items() if key in [
                 'callbacks', 'p95Milliseconds', 'maximumMilliseconds', 'created', 'activePhysicalMissedIntervals',
                 'appAttributedMissedIntervals', 'startLaunchMilliseconds', 'valid', 'ok']}, sort_keys=True), flush=True)

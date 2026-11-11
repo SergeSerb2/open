@@ -49,6 +49,8 @@ def run(args):
                 'controlBusyMaximumRaw':result['controlIdle']['largestLibraryBusyMilliseconds'],
                 'afterMotionSliceMaximum':result['afterMotionIdle']['maximumSliceMilliseconds'],
                 'afterMotionBusyMaximum':result['afterMotionIdle']['largestLibraryBusyMilliseconds']}),flush=True)
+            # Quit before TemporaryDirectory removes the live socket/profile.
+            app.quit();result['cleanup']=app.quit_report;app=None
     except Exception as error:
         result['error']=repr(error);raise
     finally:

@@ -323,3 +323,44 @@ STOP underLEAD12:25:more than1App-attributed missed interval,and6ms cannot be re
 Receipt local:`.re/l3/l3-idle-slices-profiles-r1/result.json`; M1:`receipts/l3-idle-slices-profiles-r1/result.json`. Raw receipt SHA256854086dc1eb41fa2af7da2242b0f275003bea599baeead77c1e828e2c5bffff4. Local launcher log:`.re/l3/idle-slices-profiles-r1b.log`. The machine held all configured heavy slots(one) and the screen lock through measurement and cleanup; transfer/retrieval happened only inside the owned heavy slot.
 
 Pending question:What narrow plan should D1 follow for one A gap containing4App-attributed intervals(38.201ms main busy),and native row slices above4ms with clear Library busy turns7.045ms at launch and7.838ms afterB?
+
+
+## LEAD 12:50 accepted bounds and no-flush comparison
+
+The lead accepts the scoped scroll/preparation result at one-frame bounds:
+idle slice ≤8.0 ms and clear Library busy interval ≤8.3 ms, with one row per
+turn and input cancellation. The measured 55b507c3 maxima pass. Scroll is
+judged on Library-attributed intervals: Library phases must account for at
+least 4 ms of the overlapping busy interval. A has 0 such intervals. The
+4 App-attributed intervals and 38.201 ms stall remain INFO:
+"App main thread, not Library; handed to the performance agent". The mixed
+59.976 ms launch interval has the same handoff. Raw counts remain unchanged.
+The lead closes the performance work and retains the accepted five-pair set.
+
+One no-flush comparison ran on c7bbc5e8, Release executable
+668ece3d459faec9cdb7fce0fe448ef191327fead6222cc877f270d4d7aa112e.
+All 3,019 tracked source hashes and the signature matched. Valid prelaunch
+load1 readings were 3.445/3.437; before the motion setup they were 2.475/2.568.
+The comparison uses the launch control and A's after-motion window only.
+The heartbeat's sleep observer runs after the implicit Core Animation commit;
+this includes work moved out of the explicit slice.
+
+| Window | Slice before / without flush | Clear busy before / without flush | Limit | Result |
+|---|---:|---:|---|---|
+| Launch preparation | 6.519 / 4.825 ms | 7.045 / 6.027 ms | Slice ≤8.0; busy ≤8.3 ms | PASS, lower |
+| A after motion | 4.855 / 3.223 ms | 5.321 / 5.218 ms | Slice ≤8.0; busy ≤8.3 ms | PASS, lower |
+
+The explicit idle-slice flush is removed. Rows still render in idle turns;
+the run loop commits them. Visible first-screen preparation and foreground
+result submission keep their existing commits. No row drawing redesign or
+second full five-pair/idle rerun follows this comparison.
+
+Experiment teardown deviation: its temporary profile left scope before quit,
+which removed the live socket. The App was alive at cleanup and required
+forced termination; zero owned windows/processes remained. This is a harness
+ordering error after completed measurements, not an App crash. The harness
+now quits before removing the profile. The comparison is not rerun; normal
+exit remains part of the next three pairs and touched flows.
+
+Next checks: ready-open/warm/search three pairs and touched flows, then merge
+main and the staged full M5 gate. No gate or PR is claimed by this entry.

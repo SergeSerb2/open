@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LEAD 12:25 scoped Release ready-open, warm section and search receipts.
+"""LEAD 12:50 scoped Release ready-open, warm section and search receipts.
 
 Three baseline/candidate pairs through real App sockets. No idle rerun.
 Requires the M1 heavy slots and screen lock for the entire invocation.
@@ -17,7 +17,7 @@ from library_performance import seed, launch, quiet, other_processes
 
 def run(args):
     out=args.output.resolve();out.mkdir(parents=True,exist_ok=False)
-    result={'rule':'LEAD 12:25 (11 Nov)','configuration':'Release','samples':[],
+    result={'rule':'LEAD 12:50 (11 Nov)','configuration':'Release','samples':[],
             'executableSHA256':hashlib.sha256((args.bundle/'Contents/MacOS/Open').read_bytes()).hexdigest(),
             'complete':False,'idleRerun':False}
     app=None
