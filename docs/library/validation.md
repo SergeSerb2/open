@@ -1,12 +1,12 @@
 # Library validation
 
-Status: STOP under LEAD 14:50 after the single valid launch-3 continuation.
-All three launches are valid with complete coverage. First-row phases pass the
-16.7 ms INFO ceiling. Every later-row slice passes 8.3 ms, but launch 3's
-slice 45 has an 8.424292 ms enclosing busy interval, above 8.3 ms (Library
-overlap 8.010792 ms; other main work 0.413500 ms). Product code and artifact are
-unchanged. The ticket is released. No touched suite, main merge, final M5 gate
-or PR follows this required failure.
+Status: LEAD 15:30 accepts all three valid launch controls and closes the
+performance work. Judge busy time on Library overlap: launch 3 slice 45 has
+8.010792 ms ≤8.3 ms. The enclosing 8.424292 ms, including 0.413500 ms of other
+main-thread work, is INFO. All later-row slices and Library overlaps pass
+8.3 ms; first-row turns and overlaps pass 16.7 ms INFO. Product code and
+artifact are unchanged. Touched suites, main merge, scoped M1 receipts, the
+one full M5 gate and PR follow. Original receipts and STOP tables are retained.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -830,3 +830,38 @@ and separate LEAD 14:50 rescoring receipt remain unchanged.
 Pending question: What narrow next step should D1 take for launch 3's later-row
 enclosing busy interval 8.424292 ms (Library overlap 8.010792 ms; other main work
 0.413500 ms), with every slice and all first-row hard ceilings passing?
+
+
+## LEAD 15:30 — PASS; Library-attributed busy time closes performance
+
+The lead accepts the three-launch set. The busy row judges the Library's
+measured overlap with a main-thread busy interval. The full enclosing interval
+and other main-thread work stay visible as INFO. This applies the same
+Library-attributed principle used for scroll. No product code, raw receipt,
+sample or clock changes. No further measurement of these performance rows.
+
+| Launch | First-row slice max ms, INFO ≤16.7 | First-row Library overlap max ms, INFO ≤16.7 | Later-row slice max ms, required ≤8.3 | Later-row Library overlap max ms, required ≤8.3 | Full later-row enclosing interval max ms, INFO | Result |
+|---|---:|---:|---:|---:|---:|---|
+| 1 | 5.249 | 5.249 | 6.528 | 6.528 | 8.299 | PASS |
+| 2 | 8.485 | 8.489 | 6.717 | 6.718 | 7.096 | PASS |
+| 3 | 8.129 | 8.129 | 8.010 | 8.011 | 8.424 | PASS |
+
+Launch 3 slice 45 passes: measured Library overlap **8.010792 ms ≤8.3 ms**.
+Its own slice is 8.010417 ms. The full enclosing interval **8.424292 ms**,
+including **0.413500 ms** of other main-thread work, is INFO. All three launches
+are valid; all 252 slices have complete coverage. All 189 later-row slices and
+Library overlaps pass 8.3 ms. All first-row phases and overlaps pass 16.7 ms.
+The old STOP tables and original receipt verdicts remain above as history.
+The separate `.re/l3/lead-1530-acceptance.json` records this accepted ruling
+without editing the retained raw receipts.
+
+The performance work is CLOSED. Required ready-open remains PASS at
+median/max 8.818/14.316 ms against 16/24 ms. Median 8.818 ms against the
+8 ms stretch target stays INFO, follow-up with the performance agent. Accepted
+warm/search, A/B scroll, interactions and idle receipts carry by the recorded
+hashes and unchanged-path rulings.
+
+Continue: touched content and keys in separate bounded M1 tickets; merge
+current origin/main; scoped final-head M1 receipts under LEAD 14:00; one full
+M5 gate with those receipts; PR with the tables and rulings; pending question
+"PR ready to merge". Stop only for a functional failure or gate refusal.
