@@ -27,7 +27,8 @@ M1 runs use its built-in 2x panel. The M5 reference is the external AW2726DM,
 | Downloads clone teardown | Harness-only lifetime error: deleting a temporary bundle before late/reparented helpers exited. | Only a uniquely owned disposable clone enables path-wide helper rescans during quit. The `116f70c3` Downloads full, clear, and history receipts all have cleanup PASS, with no new crash or system dialog. |
 | Downloads historical Retry | User-reachable engine callback-lifetime defect. A completed 131072-byte transfer loses its terminal update after its originating tab closes. | Keep the raw Retry predicate failing. Only `downloads/history_retry` has the lead-approved exact DEFERRED policy entry; the engine lane owns the repair. No App workaround. The focused `116f70c3` history run passed 24 independent rows, including clear/persistence/Profile retirement, then failed Retry plus its causal suite error. See [callback finding](download-retry-callback-lifetime.md). |
 | Downloads clear fixture cancellation | Full sequence intermittently receives an already-cancelled 0-byte `/slow` transfer before the native Cancel button exists. Root cause remains unresolved; it is not covered by the Retry deferral. | Retain the `116f70c3` full failure (62 PASS plus the assertion and causal suite error). Fresh `OPEN_DOWNLOADS_CASE=clear` passed all 11 range/validation rows with the same source. A later strict full run passed those rows and reached 113 PASS before an unrelated missing launch-log harness error. The native Cancel predicate stays unchanged. |
-| Strict launch log | Harness-only: direct-child launches created the per-launch stderr file only for world-audit runs. The newly reachable generic-quit flow read the absent file and stopped the strict full Downloads run after 113 PASS. | Create the same per-launch stderr for every direct child. Keep the aggregate log for post-quit consumers. Generic quit still reads the actual launch, so earlier launches cannot satisfy its alert-count assertions. Runtime rerun pending. |
+| Strict launch log | Harness-only: direct-child launches created the per-launch stderr file only for world-audit runs. The newly reachable generic-quit flow read the absent file and stopped the strict full Downloads run after 113 PASS. | Create the same per-launch stderr for every direct child. Keep the aggregate log for post-quit consumers. Generic quit still reads the actual launch, so earlier launches cannot satisfy its alert-count assertions. Focused strict generic-quit passed 7/7 at `68f9b47e`, including alert precedence, Stay/re-quit, harness bypass, and safe cleanup. |
+| Import idle CPU | Valid quiet M1 runs failed at 3.585% and 3.161%. OS counters identified the browser main thread; native state showed the initial Welcome playlist still active during the ten-second post-import wait. | Finish all four native Welcome completions before starting the large Settings import. Keep the post-import wait, CPU interval, and <1% limit unchanged. The real control passed at 0.395%; final committed-harness rerun pending. See [attribution and controls](import-idle-attribution-2026-11-10.md). |
 | Profiles-engine socket startup | Harness constructed a 104-byte AF_UNIX path; the server requires fewer than 104 bytes including its terminator. | Budget the actual home path, PID, style and random suffix against 103 bytes. Full profiles-engine passed 22/22 at `faabeb64`. |
 | Profiles migration probe | Harness used a normal pre-engine quit to inspect migration; that quit now legitimately saves browser state. | An automation-only layout probe exits after real migration, before windows/engine/quit saving. Normal quit is unchanged. Full Profiles passed 74/74 at `faabeb64`. |
 | AppleScript A18 | Harness inherited `restoreWindowsOnLaunch=false` and did not answer the now-default quit warning. | Save/set/restore the needed restore policy and arm the real Quit button before the event. AppleScript passed 208 rows with the two separately approved consent blocks. No Automation permission was requested. |
@@ -68,6 +69,22 @@ The both-slot M1 Release timing run at `116f70c3` measured History at
 50 ms, and total import 1112.7 ms. Its idle CPU sample was 1.19% against <1%,
 so the run failed. Start load was 4.65; it is not a quiet-machine qualification.
 The earlier 1675 ms history failure at load 13.49 remains unqualified.
+
+Quiet Release controls at `06f5139e` meet LEAD20:35: R2 History989.9/1400ms,
+main lag29.4/50ms PASS, idle3.585% FAIL. R3 repeats idle3.161% FAIL;
+`CrBrowserMain` used1.904% of a core. The active Welcome playlist explains
+much of that work. A completed-Welcome control before import passes idle
+at0.395%; its original post-import assertion is unchanged. Committed harness
+qualification remains separate from this private control. The [written
+finding](import-idle-attribution-2026-11-10.md) retains all raw misses and
+states the exact quiet boundaries.
+
+The strict `68f9b47e` Downloads run stopped at clear cancellation after66PASS;
+Retry was not reached. A separate strict generic-quit run passed7/7 and
+qualifies the per-launch stderr fix. At `06f5139e`, a reduced sequence also
+reproduced the cancelled0-byte clear fixture while its source page was live.
+Temporary destination/cancel tracing passed that sequence once and did not
+establish a cause. No Downloads predicate or exception changed.
 
 The intermittent E11, P-16, and clear-sequence failures remain recorded with
 their guards. No exception covers them. Final-head full-gate qualification and

@@ -451,12 +451,28 @@ def run(factory, results, tmp, h):
         if negative: expand(large)
         env = dict(OPEN_AUTOMATION_IMPORT_STALL_MS='80', OPEN_AUTOMATION_HISTORY_DELAY_MS='90') if negative else {}
         launch(large, **env); app.call('first-run', action='fresh')
+        # Starting fresh reveals the real Welcome playlist asynchronously.
+        # Finish that unrelated fixture work before import, so the unchanged
+        # ten-second post-import idle check measures the import's own tail.
+        # A stopped state alone can precede the first frame; require all four
+        # native completions, not an extra sleep after the measured operation.
+        def welcome_settled():
+            welcome = app.call('welcome')
+            return welcome if (welcome.get('completionCount', 0) >= 4
+                and set(welcome.get('playedCards', [])) >= {1, 2, 3, 4}
+                and not welcome.get('animating') and not welcome.get('pendingCompletion')
+                and welcome.get('playlist') == 'stopped' and welcome.get('animationCount') == 0) else None
+        fixture_started = time.monotonic()
+        settled = h.wait_until(welcome_settled, timeout=60, step=.1)
+        if not settled: raise RuntimeError('Welcome fixture did not finish before import')
+        idle_fixture = dict(welcomeCompletions=settled['completionCount'],
+            welcomeAnimations=settled['animationCount'], settleSeconds=time.monotonic()-fixture_started)
         started_load = os.getloadavg()
         outcome = settings_import(large)
         metrics = outcome.get('importMetrics', {})
         stored = inventory(app)
         row('large_fixture', stored['spaces'] == 7 and stored['archive'] == 2000 and stored['historyKeys'] == 100000,
-            counts=stored, metrics=metrics)
+            counts=stored, metrics=metrics, idleFixture=idle_fixture)
         row('timing_history_100k', metrics.get('historyMilliseconds', float('inf')) <= 1400,
             timing=True, targetMilliseconds=1400, planLimitMilliseconds=3000, metrics=metrics, startLoad=started_load)
         row('timing_main_responsive', metrics.get('maxMainLagMilliseconds', float('inf')) < 50
