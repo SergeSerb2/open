@@ -12,6 +12,22 @@
 PFX="${OPEN_HEAVY_PREFIX:-/tmp/open-heavy}"
 [ $# -gt 0 ] || { echo "usage: heavy.sh CMD [ARGS...]" >&2; exit 64; }
 
+# The M5 gate dispatches bounded stage tickets itself. Do this before taking
+# a slot: retaining an outer ticket would prevent FIFO waiters interleaving.
+# The worker marker goes back through this script and takes a real slot.
+if [ "${OPEN_VERIFY_CHUNK_WORKER:-}" != 1 ]; then
+  case "$1" in tools/verify-all.sh|./tools/verify-all.sh|/*/tools/verify-all.sh)
+    gate_root=$(cd "$(dirname "$1")/.." && pwd) || exit 1
+    case "$(/usr/sbin/sysctl -n machdep.cpu.brand_string 2>/dev/null)" in
+      'Apple M5'*)
+        if [ -f "$gate_root/tools/verification/queue_gate.py" ]; then
+          shift
+          exec python3 "$gate_root/tools/verification/queue_gate.py" "$@"
+        fi ;;
+    esac ;;
+  esac
+fi
+
 # Already inside a slot? Match an executed heavy.sh, not an argument that mentions it.
 p=$PPID
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do

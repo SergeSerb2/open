@@ -5,7 +5,10 @@ These are copies of the shared macOS queue scripts installed by the lead on
 
 ```sh
 mkdir -p ~/Library/Caches/OpenRE/scripts
-install -m 755 tools/machine/heavy.sh tools/machine/queue.sh ~/Library/Caches/OpenRE/scripts/
+for script in heavy.sh queue.sh; do
+  install -m 755 "tools/machine/$script" "$HOME/Library/Caches/OpenRE/scripts/$script.new"
+  mv -f "$HOME/Library/Caches/OpenRE/scripts/$script.new" "$HOME/Library/Caches/OpenRE/scripts/$script"
+done
 ```
 
 Check the queue before a long job:
@@ -52,8 +55,15 @@ always in this order:
 ~/Library/Caches/OpenRE/scripts/heavy.sh /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock <measurement-command>
 ```
 
-The full gate keeps one normal build slot and takes the screen lock once per
-native check or real-App suite. Release the screen lock between suites.
+On M5, `heavy.sh tools/verify-all.sh` dispatches the merge gate without an
+outer build slot. CLI checks form one ticket; each native check and real-App
+suite gets a fresh FIFO ticket, with cross-suite acceptance dependencies kept
+together. Each worker takes the screen lock only for its own suite. Queue
+waiters can run between tickets. The receipt records each ticket duration.
+When another agent waits, a ticket reaching 15 minutes is cancelled through
+the existing owned-process cleanup; its interrupted stage stays unqualified.
+Do not wrap this public command in another outer heavy ticket. M1 lanes keep
+their existing slot ownership, including the exclusive timing reservation.
 Do not hold either slot while thinking or waiting for user input. Keep the
 M1's compile cap at 6 of its 8 cores. Report queue waits over 10 minutes and
 dead-looking holders to the lead. Never stop or adopt another agent's job.

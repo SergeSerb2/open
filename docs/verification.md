@@ -93,8 +93,11 @@ list, approved by the lead on 2026-11-10. Entries name an exact row, original
 BLOCKED/DEFERRED status and reason, clearing condition, owner, date and expiry.
 A row that now passes makes its entry STALE and fails until that entry is
 removed. A mismatch or any unlisted non-PASS row fails. Every run prints all
-entries, including unexercised ones. No display or performance exception remains
-after the “M5 panel ready” ruling. The notification `clients.openWindow` row
+entries, including unexercised ones. The expired display and earlier performance exceptions were removed after
+the “M5 panel ready” ruling. LEAD 08:20 separately approves exactly
+`import-robust/timing_main_responsive` (78.070 ms against 50 ms) for the
+performance lane; [#314](https://github.com/SergeSerb2/open/issues/314) owns
+the repair. Its raw FAIL, limit, phase metrics and valid M1 receipt remain. The notification `clients.openWindow` row
 stays DEFERRED as a visible v1 product gap in `docs/followups.md`.
 
 The committed machine setup scripts and queue contract are in
@@ -106,6 +109,15 @@ exclusive automatically. A budget failure while another M5 build slot was
 occupied is void; rerun only that row exclusively, keeping both receipts
 and its unchanged budget.
 Keep at most one waiting screen job per agent, and record waits over ten minutes.
+
+The M5 merge dispatcher holds no outer build ticket (LEAD 08:00). CLI checks
+form one ticket. Each native/real-App stage, with any acceptance dependency,
+gets its own fresh FIFO `heavy.sh` ticket. Each suite retains its separate
+pathname screen lock through cleanup. Tickets re-queue between stages so
+waiting jobs can interleave. When another agent waits, a ticket at 15 minutes
+is cancelled through owned cleanup and remains unqualified. The aggregate
+receipt preserves every raw row and each ticket’s queue time and slot time;
+a partial selection is still a partial gate. No assertion or budget changes.
 
 ### Timing lane (LEAD 06:30, 2026-11-11)
 

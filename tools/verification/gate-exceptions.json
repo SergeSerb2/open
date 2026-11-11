@@ -133,5 +133,14 @@
     "owner": "lead / design D3",
     "added": "2026-11-11",
     "expires": "The lead's Site Control Center material design pass lands as part of D3: command bar, URL field, Site Control"
+  },
+  {
+    "row": "import-robust/timing_main_responsive",
+    "status": "DEFERRED",
+    "reason": "maximum import main-thread lag must be below 50 ms with watchdog samples",
+    "clearsWhen": "Unchanged 50 ms row passes on the quiet M1 timing lane; LEAD 08:20 receipt .re/step4-m1-39922990/timing/ records 78.070 ms; follow-up #314",
+    "owner": "performance lane",
+    "added": "2026-11-11",
+    "expires": "Performance lane fixes maximum import main-thread lag below 50 ms (#314)"
   }
 ]

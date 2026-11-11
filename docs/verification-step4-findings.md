@@ -102,3 +102,16 @@ byte-identical through the timing-policy changes.
 ![Card 3 at AW 1x](verification/step4/welcome-card3-1x.png)
 
 ![Card 3 at M1 2x](verification/step4/welcome-card3-2x.png)
+
+## Import main-thread lag
+
+The valid M1 timing receipt at `.re/step4-m1-39922990/timing/` records
+`import-robust/timing_main_responsive` FAIL: maximum 78.070 ms against the
+unchanged 50 ms limit. Both slots were held. Pre-load1 was 3.460/3.161,
+ten seconds apart; there is no after-run load condition. Phase maxima were
+`writeArchive` 66.249 ms, `readArchive` 49.690 ms and `landSidebar` 44.655 ms.
+History passed at 1,069.096 ms and idle passed at 0.399%. Earlier valid
+samples measured 26–51 ms. The phase values do not prove a sole cause.
+LEAD 08:20 approves this exact performance-lane deferral. [#314](https://github.com/SergeSerb2/open/issues/314)
+tracks moving the write/landing work off the main thread or splitting it
+into slices ≤8 ms. The original receipt is retained unchanged.

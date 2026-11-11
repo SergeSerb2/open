@@ -460,7 +460,9 @@ def run(factory, results, tmp, h):
         row('timing_history_100k', metrics.get('historyMilliseconds', float('inf')) <= 1400,
             timing=True, functionalOK="historyMilliseconds" in metrics, targetMilliseconds=1400, planLimitMilliseconds=3000, metrics=metrics, startLoad=started_load)
         row('timing_main_responsive', metrics.get('maxMainLagMilliseconds', float('inf')) < 50
-            and metrics.get('watchdogSamples', 0) > 0, timing=True, functionalOK=metrics.get("watchdogSamples", 0) > 0, limitMilliseconds=50, metrics=metrics, startLoad=started_load)
+            and metrics.get('watchdogSamples', 0) > 0, timing=True, functionalOK=metrics.get("watchdogSamples", 0) > 0,
+            reason='maximum import main-thread lag must be below 50 ms with watchdog samples',
+            limitMilliseconds=50, metrics=metrics, startLoad=started_load)
         # Import work has a ten-second drain. Welcome has a separate finite
         # playlist: never count its intentional motion as idle or stop it here.
         time.sleep(10)
