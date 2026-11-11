@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import SwiftUI
 import OpenDesign
+import OpenOnboarding
 
 @MainActor @Observable public final class GeneralViewModel {
     unowned let root: SettingsViewModel
@@ -80,16 +81,9 @@ struct SettingsDoorwayMark: View {
 }
 private struct SettingsDoorwayShape: Shape {
     func path(in rect: CGRect) -> Path {
-        let r = rect.width / 2, b: CGFloat = 5
-        var p = Path()
-        p.move(to: CGPoint(x: rect.minX, y: rect.maxY - b))
-        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
-        p.addArc(center: CGPoint(x: rect.midX, y: rect.minY + r), radius: r, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - b))
-        p.addQuadCurve(to: CGPoint(x: rect.maxX - b, y: rect.maxY), control: CGPoint(x: rect.maxX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.minX + b, y: rect.maxY))
-        p.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - b), control: CGPoint(x: rect.minX, y: rect.maxY))
-        p.closeSubpath(); return p
+        // The shared mark landed with PR306. Keep the approved compact
+        // Settings proportions, 5 pt lower corners and 3 pt white stroke.
+        Path(OnboardingBrandMark.path(in: rect, bottomCornerRadius: 5))
     }
 }
 
