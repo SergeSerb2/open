@@ -116,6 +116,11 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         app.call("window-frame", frame=[80, 60, 1200, 800])
         app.call("window-focus", id=app.call("window-state")["id"], activate=True)
         wait_until(lambda: len(actions()) >= 4, timeout=30)
+        # Synchronize with the one-time install in this fresh profile. Its tab
+        # need not reopen after the intentional window close and App relaunch.
+        welcome = wait_until(lambda: next((t for t in app.call("tabs")
+            if t["url"].startswith("https://bitwarden.com/browser-start/") and t["hasWebContent"]), None), timeout=30)
+        results["X6_first_install_tab_ready"] = {"ok": bool(welcome), "tab": welcome}
         probe = next(a["id"] for a in actions() if a["name"] == "Action Probe")
         ids = [extensions["ublock"], extensions["darkreader"], probe]
         for a in actions(): app.call("ext-pin", extension=a["id"], pinned=False)
@@ -170,12 +175,6 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         hidden = hover(False); shown = hover(True)
         results["X3_hover"] = {"ok": not hidden["visible"] and shown["visible"] and len(shown["ids"]) == 3,
                                  "away": hidden, "over": shown}
-        # The actual Bitwarden install tab can arrive after the action list is
-        # ready and close an already-open popup. Require its committed URL,
-        # rather than racing it with another selected tab.
-        welcome = wait_until(lambda: next((t for t in app.call("tabs")
-            if t["url"].startswith("https://bitwarden.com/browser-start/") and t["hasWebContent"]), None), timeout=30)
-        results["X6_first_install_tab_ready"] = {"ok": bool(welcome), "tab": welcome}
         # Select a stable local page before capturing Open's own window.
         blank = new_tab(app, "about:blank")
         for appearance in ("light", "dark"):

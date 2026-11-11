@@ -650,7 +650,7 @@ def design_gates(state, appearance):
         'copy_fits': len(cards) == 4 and all(c['requiredTextHeight'] <= c['detail'][3]
             and c['requiredTitleWidth'] <= c['title'][2] for c in cards),
         'contrast': bool(color_ok),
-        'only_permitted_labels': [c['labels'] for c in cards] == [['Lisbon in spring'], ['Weekend reading'], ['A slower Sunday'], []],
+        'only_permitted_labels': [c['labels'] for c in cards] == [['Lisbon in spring'], ['Weekend reading'], ['A slower Sunday', 'The garden journal'], []],
         'static_without_pending_work': not state['animating'] and state['animationCount'] == 0
             and not state['pendingCompletion'],
     }

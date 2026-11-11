@@ -1,5 +1,9 @@
 # Follow-ups
 
+- Document PiP first-session crash (Step 4): the M5 Swift 6.4 optimizer hoisted a resilient field-offset read before class metadata initialization. The App prevents initializer inlining; [finding and stack](verification-step4-findings.md#document-picture-in-picture-first-session-object-corruption). Recheck the workaround when upgrading the M5 compiler; remove it only with a cold first-session real-App open/close negative and positive on the affected toolchain.
+
+- Profiles `shell_delete_never_loaded` intermittent (Step 4, LEAD 04:00, 2026-11-11): exact-head M1 `60918f9d` merge receipt `.re/step4-m1-60918f9d/merge/` recorded `cacheGone=true, engineGone=false` once (load1 6.674). The unchanged complete public confirmation `.re/step4-m1-60918f9d/profiles-confirm/` passed 77 rows, with both directories absent (load1 11.635). Both cleanups were safe. Cause is unresolved; load does not excuse the failure and the confirmation does not establish a fix. Follow up by distinguishing deletion errors from directory recreation; the row now records the Settings error and profile/model removal alongside the original predicate and deadline. The lead ruled this written finding nonblocking for Step 4, without an exception that hides the raw failure.
+
 - Public settings link scheme: not registered; decide name and consent model before adding (lead)
 
 - First onboarding frame waits for engine.start, 0.1–2.4 s observed on the same binary; final cold/repeat proof measured 2.552/2.498/2.416 s for engine.start and 3.435/3.295/3.230 s from launch to the first onboarding frame (INFO). Owner: launch budget (Section 8 item 13 / Section 16). Dyld/signature checks are a hypothesis; the attributed work is synchronous engine.start.
