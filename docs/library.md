@@ -82,6 +82,9 @@ mouse or keyboard events. File/URL pasteboards and native source-drag start are
 verified. **Manual check:** drag a download row to Finder and a web upload field;
 foreign-app drop/end is unverified by automation.
 
+[Validation and current qualification limits](library/validation.md) record the
+five-pair timings, idle attribution and scroll result.
+
 [Shared contrast measurements](library/contrast.md) retain the known theme
 failures. The lead owns the D2 follow-up. Geometry comes from the approved Open
 mock-up and the private C capture measurements; all icons are Open's own vectors.
