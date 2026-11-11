@@ -67,9 +67,9 @@ def seed(root,bundle,output):
             app.call('download-history-flush');app.call('history-state')
             app.call('command',id='archive-tab');app.call('library',action='open',section='archive')
             assert wait_until(lambda:bool(app.call('library')['rows']),timeout=10)
+            app.call('library',action='open',section='downloads')
         finally:
             if app:
-                app.call('library',action='open',section='downloads')
                 app.quit();assert app.quit_report['ok'],app.quit_report
     snapshot=json.loads((root/'State/browser.json').read_text())
     profile=snapshot['profiles'][0];state=root/'Profiles'/profile['dataDirectoryName']/'State'

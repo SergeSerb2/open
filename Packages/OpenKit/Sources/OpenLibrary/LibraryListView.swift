@@ -320,7 +320,7 @@ private final class LibraryItemView: NSView {
         }
         setAccessibilityElement(!gallery); setAccessibilityRole(gallery ? .group : .row); setAccessibilityLabel(item.title+". "+item.subtitle)
         setAccessibilityCustomActions(item.hoverActions.map { action in NSAccessibilityCustomAction(name:action.title) { action.run(); return true } })
-        hovered = false; needsLayout = true; needsDisplay = true
+        hovered = false; buttons.forEach { $0.isHidden = !gallery }; needsLayout = true; needsDisplay = true
     }
     override func updateTrackingAreas() {
         LibraryRaster.note("trackingUpdates")
