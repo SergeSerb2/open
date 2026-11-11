@@ -22,10 +22,18 @@ from downloads import server
 from library_frame_probe import Frames
 
 
-def cpu():
-    # Exclude WindowServer, as specified by the quiet-sample rule.
-    return sum(float(line.split(None,1)[0]) for line in subprocess.check_output(['ps','-A','-o','%cpu=,comm='],text=True).splitlines()
-               if line.strip() and not line.rstrip().endswith('/WindowServer'))
+def cpu(exclude_bundle=None):
+    # Exclude the whole owned Open tree, WindowServer and this harness. Chromium
+    # helpers are part of Open; subtracting only the main PID counts them twice.
+    total=0
+    for line in subprocess.check_output(['ps','-A','-o','pid=,pcpu=,comm='],text=True).splitlines():
+        parts=line.strip().split(None,2)
+        if len(parts)!=3:continue
+        pid,value,path=parts
+        if int(pid)==os.getpid() or path.endswith('/WindowServer'):continue
+        if exclude_bundle and path.startswith(str(exclude_bundle)+'/'):continue
+        total+=float(value)
+    return total
 
 
 def quiet():
@@ -122,8 +130,7 @@ def main(args):
                     base_loads,base_cpu,base_waits=quiet()
                     active=launch(baseline_root,args.baseline_bundle,output,'baseline-'+str(index))
                     base_timing=active.call('timing')
-                    own=float(subprocess.check_output(['ps','-p',str(active.pid),'-o','%cpu='],text=True).strip() or 0)
-                    end_base_cpu=max(0,cpu()-own)
+                    end_base_cpu=cpu(active.bundle)
                     active.quit();assert active.quit_report['ok']
                     receipt['baseline']['samples'].append({'index':index,'loads':base_loads,'foreignCPU':[base_cpu,end_base_cpu],'quietAttempts':base_waits,'timing':base_timing,'cleanup':active.quit_report})
                     active=None;save()
@@ -150,9 +157,7 @@ def main(args):
                 active.call('key',key='escape',route='app');time.sleep(2)
                 before=active.call('library-performance',operation='cpu')['cpuSeconds'];start=time.monotonic();time.sleep(10)
                 after=active.call('library-performance',operation='cpu')['cpuSeconds'];idle=100*(after-before)/(time.monotonic()-start)
-                # Exclude the owned App process from the post-sample CPU total.
-                own=float(subprocess.check_output(['ps','-p',str(active.pid),'-o','%cpu='],text=True).strip() or 0)
-                end_cpu=max(0,cpu()-own)
+                end_cpu=cpu(active.bundle)
                 row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleCPUPercent':idle}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
                 row['valid']=end_cpu<=200;receipt['samples'].append(row);save();print(json.dumps(row),flush=True)
@@ -187,11 +192,13 @@ def main(args):
                         costs.append(active.call('library-performance',operation='scroll',row=round(index*9999/119)))
                     return costs
                 costs,physical=frames.measure('scroll',scroll,duration=1300);frames.close();frames=None
-                own=float(subprocess.check_output(['ps','-p',str(active.pid),'-o','%cpu='],text=True).strip() or 0)
-                end_scroll_cpu=max(0,cpu()-own)
+                end_scroll_cpu=cpu(active.bundle)
                 active.quit();cleanup=active.quit_report;assert cleanup['ok'];active=None
                 receipt['scroll']={'status':'MEASURED','rows':10000,'profiles':10,'loads':scroll_loads,'foreignCPU':[scroll_cpu,end_scroll_cpu],'quietAttempts':scroll_waits,'submissions':costs,'physical':physical,'cleanup':cleanup,'ok':end_scroll_cpu<=200 and len(physical['changes'])>=100 and physical['missed120HzIntervals']==0}
-            receipt['complete']=True;receipt['ok']=all(v['ok'] for v in receipt['summary'].values());save()
+            receipt['complete']=True
+            receipt['nativeBudgetsOK']=all(v['ok'] for v in receipt['summary'].values())
+            receipt['ok']=receipt['nativeBudgetsOK'] and receipt.get('physicalFirstChange',{}).get('ok',False) and receipt.get('physicalFinalContent',{}).get('ok',False) and receipt['scroll'].get('ok',False)
+            save()
     except Exception as error:
         receipt['error']=repr(error);save();raise
     finally:
