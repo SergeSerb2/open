@@ -29,7 +29,14 @@ def measure(frame, spec=None):
     meta = json.loads(frame.with_suffix('.meta.json').read_text()) if frame.with_suffix('.meta.json').exists() else {}
     window = meta.get('window', {}).get('bounds', {})
     origin = [window.get('X', 0), window.get('Y', 0)]
-    scale = image.width / window['Width'] if window.get('Width') else float(spec.get('scale', 1))
+    if window.get('Width') and window.get('Height'):
+        scale = image.width / window['Width']
+        if abs(image.height / window['Height'] - scale) > .01:
+            raise ValueError('PNG dimensions do not match the recorded window scale')
+    elif 'scale' in spec and float(spec['scale']) > 0:
+        scale = float(spec['scale'])
+    else:
+        raise ValueError('recorded window geometry or an explicit measured scale is required; no fallback')
     rows = []
     for i, node in enumerate(walk(tree)):
         if node.get('frame') and isinstance(node['frame'], list) and len(node['frame']) == 4:
@@ -87,24 +94,88 @@ def measure(frame, spec=None):
     return result
 
 
-def burst(directory):
+def edge_motion(originals, values, spec):
+    """Track a visually selected vertical/horizontal edge, not an app layer."""
+    roi = spec['roi_pixels']
+    axis = spec.get('axis', 'x')
+    if axis not in ('x', 'y'):
+        raise ValueError('motion edge axis must be x or y')
+    scale = float(spec['pixels_per_point'])
+    if scale <= 0 or len(roi) != 4:
+        raise ValueError('motion edge needs a positive scale and four ROI values')
+    x, y, w, h = map(int, roi)
+    samples = []
+    for source, value in zip(originals, values):
+        if x < 0 or y < 0 or w < 3 or h < 3 or x+w > source.width or y+h > source.height:
+            raise ValueError('motion edge ROI is outside a captured frame')
+        crop = source.convert('RGB').crop((x,y,x+w,y+h))
+        if axis == 'y':
+            crop = crop.transpose(Image.Transpose.TRANSPOSE)
+        columns = list(crop.resize((crop.width,1),Image.Resampling.BOX).getdata())
+        gradients = [sum(abs(a-b) for a,b in zip(columns[i],columns[i-1])) for i in range(1,len(columns))]
+        peak = max(range(len(gradients)),key=gradients.__getitem__)
+        neighborhood = range(max(0,peak-1),min(len(gradients),peak+2))
+        weight = sum(gradients[i] for i in neighborhood)
+        coordinate = (sum((i+1)*gradients[i] for i in neighborhood)/weight if weight else peak+1)
+        coordinate += x if axis == 'x' else y
+        samples.append({'seconds':value['seconds'],'position_points_guess':coordinate/scale,
+                        'edge_strength':gradients[peak]})
+    first,last = samples[0]['position_points_guess'],samples[-1]['position_points_guess']
+    travel = last-first
+    intermediate = sum(.05 < (v['position_points_guess']-first)/travel < .95 for v in samples) if abs(travel)>1 else 0
+    fits=[]
+    if intermediate >= 3:
+        first_change = next(v['seconds'] for v in samples if abs(v['position_points_guess']-first)>abs(travel)*.05)
+        for delay in [max(0,first_change-.15+i/100) for i in range(31)]:
+            for duration in [i/50 for i in range(2,76)]:
+                for curve in ('linear','ease-out-cubic','smoothstep'):
+                    errors=[]
+                    for v in samples:
+                        p=max(0,min(1,(v['seconds']-delay)/duration))
+                        p=p if curve=='linear' else 1-(1-p)**3 if curve=='ease-out-cubic' else p*p*(3-2*p)
+                        errors.append((v['position_points_guess']-(first+travel*p))**2)
+                    fits.append((math.sqrt(statistics.mean(errors)),curve,delay,duration))
+    best=min(fits) if fits else None
+    return {'qualification':'GUESS: strongest averaged pixel edge in an observed ROI; no app layer identity or opacity measurement',
+            'roi_pixels':roi,'axis':axis,'pixels_per_point':scale,'samples':samples,
+            'travel_points_guess':travel,'intermediate_samples':intermediate,
+            'fit_status':'unresolved: sparse or stationary edge' if not best else 'GUESS: poor edge fit' if best[0]>max(1,abs(travel)*.15) else 'guess: pixel edge fit',
+            'fit_guess':None if not best else {'rms_points':best[0],'curve':best[1],'delay_seconds':best[2],'duration_seconds':best[3]}}
+
+
+def burst(directory, spec=None):
     receipt = json.loads((directory / 'timestamps.json').read_text())
     frames = receipt['frames']
     if not frames:
         result = {'status': 'not captured', 'reason': 'stream has no complete image frames', 'receipt': receipt}
         (directory/'motion.measure.json').write_text(json.dumps(result,indent=2))
         return result
-    pictures = [Image.open(directory / f['frame']).convert('RGB').resize((256,144)) for f in frames]
+    originals = [Image.open(directory / f['frame']) for f in frames]
+    sizes = {im.size for im in originals}
+    pictures = [im.convert('RGB').resize((256,144)) for im in originals]
     first, last = pictures[0], pictures[-1]
     full = sum(ImageStat.Stat(ImageChops.difference(first,last)).mean)
     values = []
+    presentation = all(isinstance(f.get('presentation_seconds'), (int,float)) for f in frames)
+    clock = 'capture presentation timestamps' if presentation else 'snapshot midpoint timestamps'
+    origin = frames[0]['presentation_seconds'] if presentation else 0
     for f, picture in zip(frames,pictures):
         delta = sum(ImageStat.Stat(ImageChops.difference(first,picture)).mean)
-        values.append({'seconds':f['elapsed'], 'image_change_progress_guess':delta/full if full > .1 else None})
+        seconds = f['presentation_seconds'] - origin if presentation else f['elapsed']
+        values.append({'seconds':seconds, 'image_change_progress_guess':delta/full if full > .1 else None})
     fitted = []
-    if full > .1 and len(frames) >= 5:
-        t0 = frames[0]['elapsed']
-        for delay in [i/50 for i in range(16)]:
+    intermediate = sum(v['image_change_progress_guess'] is not None and .05 < v['image_change_progress_guess'] < .95 for v in values)
+    fit_status = 'unresolved: fewer than three intermediate change samples'
+    if len(sizes) > 1:
+        fit_status = 'unresolved: window/image size changed; this is not a single-layer animation'
+    elif full <= .1:
+        fit_status = 'not observed: captured images are static'
+    elif intermediate >= 3 and len(frames) >= 5:
+        fit_status = 'guess: image-change fit, not layer position or opacity'
+        t0 = values[0]['seconds']
+        first_change = next(v['seconds']-t0 for v in values if v['image_change_progress_guess'] > .05)
+        delays = [max(0, first_change - .15 + i/100) for i in range(31)]
+        for delay in delays:
             for duration in [i/50 for i in range(2,76)]:
                 for curve in ('linear','ease-out-cubic','smoothstep'):
                     residuals=[]
@@ -114,9 +185,20 @@ def burst(directory):
                         residuals.append((v['image_change_progress_guess']-predicted)**2)
                     fitted.append((math.sqrt(statistics.mean(residuals)),curve,delay,duration))
     best = min(fitted) if fitted else None
+    if best and best[0] > .15:
+        fit_status = 'GUESS: poor image-change fit; do not accept its duration or curve'
     result={'requested_fps':receipt['requested_fps'],'effective_fps':receipt['effective_fps'],'samples':values,
+            'fit_status':fit_status, 'intermediate_samples':intermediate,
+            'clock':clock,
             'fit_guess':None if not best else {'rms':best[0],'curve':best[1],'delay_seconds':best[2],'duration_seconds':best[3]},
             'qualification':'GUESS: image change mixes content, position and opacity. No layer opacity or physical scanout measurement. Sparse capture cannot prove spring parameters.'}
+    if spec and spec.get('motion_edge'):
+        if len(sizes)>1:
+            result['position_measurement']={'fit_status':'unresolved: frame size changed'}
+        else:
+            position=edge_motion(originals,values,spec['motion_edge'])
+            (directory/'position.measure.json').write_text(json.dumps(position,indent=2))
+            result['position_measurement']={k:v for k,v in position.items() if k!='samples'}
     (directory/'motion.measure.json').write_text(json.dumps(result,indent=2))
     return result
 
@@ -126,7 +208,8 @@ def main():
     p.add_argument('input', type=Path)
     p.add_argument('--spec',type=Path)
     args=p.parse_args()
-    result=burst(args.input) if args.input.is_dir() else measure(args.input,json.loads(args.spec.read_text()) if args.spec else None)
+    spec=json.loads(args.spec.read_text()) if args.spec else None
+    result=burst(args.input,spec) if args.input.is_dir() else measure(args.input,spec)
     print(json.dumps({k:v for k,v in result.items() if k not in ('elements','gaps','samples')}))
 
 
