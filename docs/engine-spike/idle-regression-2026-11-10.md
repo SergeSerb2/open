@@ -149,6 +149,26 @@ existing display-tick behavior. Full lifecycle and original import verification
 cover this mode through `tools/e2e/welcome.py` and `tools/e2e/import_robust.py`;
 the PR records their final receipts and the full M5 gate.
 
+With synchronous fields, `welcome-fixed-r4` and `welcome-attribution-r5`
+report zero pending links. Their first post-restoration CPU samples still fail
+(2.690% and 2.348%). The R5 libproc control measures 1.701% App CPU during the
+five-second wait, including 1.605% on `CrBrowserMain`; the native layout/AX
+state queries add further work at its boundaries. The relevant quiet interval
+qualifies (foreign CPU 32.2% / 54.5%).
+
+`welcome-attribution-r6` separates consecutive waits without state queries.
+After the initial post-restoration interval (0.795%), the next two intervals
+fall to 0.053% and 0.020% App CPU, with 0.023% and 0.014% on `CrBrowserMain`.
+Their foreign CPU boundaries are 31.4% / 33.4% and 33.4% / 58.4%.
+These are diagnostic controls, not final acceptance: a later interval exceeds
+the foreign CPU limit and the probe stops deliberately. No lasting CPU loop
+remains in the quiet controls. The final Welcome check samples immediately
+after the completed playlist, before intentionally causing window restoration
+and paint. It uses the same OS process counter as import-robust, with native
+layout/AX queries outside the sample. A separate restoration check still
+requires zero animations, completion timer and pending display updates.
+Both acceptance CPU rows retain the five-second interval and 1% limit.
+
 ## Profiler and visibility controls
 
 `post306-noprofile-isolate-r2` repeats the original row with the existing

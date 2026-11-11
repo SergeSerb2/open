@@ -42,6 +42,13 @@ def at_rest(state):
         and state.get('pendingDisplayUpdates', 0) == 0 and not state['animating']
 
 
+def process_cpu_seconds(pid):
+    # Match import-robust's process-wide counter. Keep the large native
+    # layout/AX state reply outside the idle measurement itself.
+    value = subprocess.check_output(['ps', '-p', str(pid), '-o', 'time='], text=True).strip()
+    return sum(float(v) * 60**i for i, v in enumerate(reversed(value.split(':'))))
+
+
 def run_idle_contract(factory, results, tmp, api):
     """Real launch, complete playlist, five-second rest, then hide during replay."""
     app = factory(urls=('about:blank',), fresh=True)
@@ -59,9 +66,9 @@ def run_idle_contract(factory, results, tmp, api):
         results['playlist_settles'] = dict(ok=bool(settled and final['playedCards'] == [1, 2, 3, 4]
             and final['completionCount'] == 4 and final.get('playlistElapsed', elapsed) <= 20),
             elapsedSeconds=elapsed, limitSeconds=20, settleCapSeconds=30, state=final)
-        before = app.call('welcome'); start = time.monotonic(); time.sleep(5)
-        after = app.call('welcome'); seconds = time.monotonic()-start
-        cpu = (after['appCPUSeconds']-before['appCPUSeconds'])/seconds*100
+        before = process_cpu_seconds(app.pid); start = time.monotonic(); time.sleep(5)
+        cpu_delta = process_cpu_seconds(app.pid)-before; seconds = time.monotonic()-start
+        cpu = cpu_delta/seconds*100; after = app.call('welcome')
         results['idle_after_playlist'] = dict(ok=bool(settled and at_rest(after)
             and (app.config != 'Release' or cpu < 1)), appCPUPercent=cpu, seconds=seconds,
             limitPercent=1, loadAverage=list(os.getloadavg()), state=after)
@@ -109,10 +116,10 @@ def run(factory, results, tmp, api):
         return path
 
     def cpu(label):
-        before = state()['appCPUSeconds']
+        before = process_cpu_seconds(app.pid)
         start = time.monotonic()
         time.sleep(5)
-        after = state()['appCPUSeconds']
+        after = process_cpu_seconds(app.pid)
         elapsed = time.monotonic() - start
         return dict(label=label, appPercent=(after-before)/elapsed*100,
                     seconds=elapsed, loadAverage=list(os.getloadavg()))
@@ -156,6 +163,15 @@ def run(factory, results, tmp, api):
                lastState=state(), lastWindow=app.call('window-state'), lastFocus=app.call('native-focus-state'))
         if not stopped:
             raise AssertionError('Welcome playlist did not finish in order')
+        # Sample the completed playlist here. Window lifecycle checks below
+        # deliberately cause fresh layout and paint work of their own.
+        completion_count = stopped['completionCount']
+        welcome_cpu = cpu('Welcome stopped after playlist')
+        stable = state()
+        record('W07_idle_no_pending_work', at_rest(stable)
+               and stable['completionCount'] == completion_count
+               and (app.config != 'Release' or welcome_cpu['appPercent'] < 1),
+               blank=blank_cpu, welcome=welcome_cpu, state=stable)
         resume_tab = app.call('welcome', action='insert')['tab']
         resume = pause_resume_playlist(app, api)
         record('W34_hidden_playlist_stays_stopped', **resume)
@@ -166,8 +182,6 @@ def run(factory, results, tmp, api):
         record('W35_covered_playlist_stays_stopped', **occlusion)
         app.call('close', tab=occlusion_tab)
         app.call('select', tab=welcome)
-        completion_count = stopped['completionCount']
-        welcome_cpu = cpu('Welcome stopped')
         stable = state()
         app.call('select', tab=blank)
         await_state(lambda s: not s['visible'])
@@ -175,11 +189,9 @@ def run(factory, results, tmp, api):
         warm_blank_cpu = cpu('warm blank tab after Welcome')
         app.call('select', tab=welcome)
         assert await_state(lambda s: s['visible']), 'Welcome did not return after idle comparison'
-        record('W07_idle_no_pending_work', not stable['animating'] and stable['animationCount'] == 0
-               and not stable['pendingCompletion'] and stable['pendingDisplayUpdates'] == 0
-               and stable['completionCount'] == completion_count
-               and (app.config != 'Release' or welcome_cpu['appPercent'] < 1),
-               blank=blank_cpu, warmBlank=warm_blank_cpu, welcome=welcome_cpu, state=stable)
+        record('W37_restore_no_pending_work', at_rest(stable)
+               and stable['completionCount'] == completion_count,
+               warmBlank=warm_blank_cpu, state=stable)
         screenshot('welcome-stopped')
         app.call('welcome', action='hover', card=2, phase='exit')
         before_hover = len(state()['playedCards'])
@@ -636,9 +648,9 @@ def pause_resume_playlist(app, api):
                          and all(not host['animating'] for host in s['hosts']),
                          timeout=max(0, 1-(time.monotonic()-mini_started)))
     pause_seconds = time.monotonic()-mini_started
-    before = state(); start = time.monotonic(); time.sleep(5)
-    after = state(); seconds = time.monotonic()-start
-    cpu = (after['appCPUSeconds']-before['appCPUSeconds'])/seconds*100
+    before = process_cpu_seconds(app.pid); start = time.monotonic(); time.sleep(5)
+    cpu_delta = process_cpu_seconds(app.pid)-before; seconds = time.monotonic()-start
+    cpu = cpu_delta/seconds*100; after = state()
     app.call('window-deminiaturize'); app.call('window-focus', id=window, activate=True)
     restored = await_state(lambda s: s['visible'])
     time.sleep(4.3) # More than the first card's duration: no delayed restart.
