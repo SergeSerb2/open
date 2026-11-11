@@ -380,8 +380,7 @@ private final class LibraryItemView: NSView {
         }
     }
     private func setIcon(_ image:NSImage?) {
-        var rect = CGRect(x:0,y:0,width:48,height:48)
-        icon.contents = image?.cgImage(forProposedRect:&rect,context:nil,hints:nil)
+        icon.contents = LibraryImages.value(image)
     }
     override func updateLayer() {
         plate.backgroundColor = overlay.withAlphaComponent(hovered || selected ? 0.105 : gallery ? 0.045 : 0).cgColor

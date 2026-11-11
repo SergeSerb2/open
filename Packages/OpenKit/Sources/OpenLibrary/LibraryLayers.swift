@@ -39,6 +39,24 @@ enum LibraryText {
     }
 }
 
+/// NSImage can rasterize a symbol when asked for CGImage. Reusing the native
+/// image alone does not make that conversion a cache-only row operation.
+@MainActor
+enum LibraryImages {
+    private static let cache: NSCache<NSImage,CGImage> = {
+        let cache = NSCache<NSImage,CGImage>(); cache.countLimit = 128; cache.totalCostLimit = 16*1024*1024
+        return cache
+    }()
+    static func value(_ image:NSImage?) -> CGImage? {
+        guard let image else { return nil }
+        if let cached = cache.object(forKey:image) { return cached }
+        var rect = CGRect(x:0,y:0,width:48,height:48)
+        guard let contents = image.cgImage(forProposedRect:&rect,context:nil,hints:nil) else { return nil }
+        cache.setObject(contents,forKey:image,cost:contents.bytesPerRow*contents.height)
+        return contents
+    }
+}
+
 @MainActor
 extension LibraryGlyph {
     private static var images: [String: CGImage] = [:]
