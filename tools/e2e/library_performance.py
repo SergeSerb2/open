@@ -205,6 +205,9 @@ def main(args):
             uncached_archive=active.call('library-performance',operation='section',section='archive')
             assert uncached_archive['counters']['providerWarm']==0
             cold_end_cpu=cpu(active.bundle)
+            # Keep the persisted seed selection identical to the baseline.
+            # The uncached provider probe must not select the next prebuild.
+            active.call('library',action='open',section='downloads')
             active.quit();assert active.quit_report['ok']
             receipt['earlyCold']={'loads':cold_loads,'foreignCPU':[cold_cpu,cold_end_cpu],'quietAttempts':cold_waits,'timing':early,'uncachedArchive':uncached_archive,'uncachedMethod':'First provider read in a fresh process, before idle warming. OS file cache is uncontrolled; no disk-cache purge.','cleanup':active.quit_report,'limit':50,'ok':early['firstSubmittedMilliseconds']<=50 and uncached_archive['firstSubmittedMilliseconds']<=16 and uncached_archive['contentSubmittedMilliseconds']<=150}
             active=None;save()

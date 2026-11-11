@@ -23,12 +23,12 @@ After: the in-window panel, captured from the real app with synthetic data:
 [L3 correction frames](library/l3/README.md) show the approved row, Space-card,
 Boost-chip and download-badge changes.
 
-The new native panel keeps one list host per visited section. An unchanged
+The native panel keeps a retained list host per section. An unchanged
 warm switch shows the retained host without querying providers or configuring
 rows. The first screen uses up to 60 lazy row sources; later sources append in
 idle slices. Background snapshots cache sorting, day groups and folded search
-keys. Each new query cancels the previous filter. Only requested rows format
-their text and request icons. The panel keeps reusable 56pt rows, file icons and asynchronous
+keys. Each new query cancels the previous filter. Rows format text lazily. A background prefetch prepares cached text layout
+and icons for the next two screens in the scroll direction. The panel keeps reusable 56pt rows, file icons and asynchronous
 QuickLook image/PDF thumbnails. Downloads show numeric progress with an arrow
 inside the progress ring. Archive and History retain their existing stores and
 actions. Media shows page captures with the page title, or a host-based fallback;
@@ -59,8 +59,20 @@ shell and first visible rows at least three seconds after the first sidebar draw
 new input cancels and reschedules it. It lays out and displays the hidden hierarchy
 into retained layers, so a ready open only shows it. Closed store changes mark the
 cache dirty and request another idle slice. Early opens use the cold path.
+After Library first opens, input-cancelled idle slices warm each section's
+first provider page without changing the visible section, query or filters.
+Capture reads, Archive page merging/title decoding, History SQL and Boost
+reads run off the main thread. A cold section commits its header and empty list
+container first, then applies the returned rows. Plain skeleton plates appear
+only if the provider takes more than 120 ms.
+
 The viewport uses fixed frame geometry, cached attributed text and icons,
-layer plates, and a bounded pool of native cells. Search uses a retained plain
+layer plates, and a bounded pool of native cells that stay attached. A settled
+section configures, lays out and displays one screen of overscan above and
+below. Scrolling reuses those cells. A fast scroll also prefetches the predicted
+next viewport. The scroll benchmark records nested clip/dequeue/configure/layout,
+tracking, display and flush phases. Its run-loop heartbeat and 2 ms background
+watchdog exist only during that benchmark and stop before the socket reply. Search uses a retained plain
 text field/editor with prediction and substitution disabled; text changes start
 filtering in the same event. The idle slice also warms fonts, formatters, row kinds
 and icon raster conversions. It has no constraints or row-height
