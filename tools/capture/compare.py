@@ -13,6 +13,32 @@ def observed_surface(path):
     state = meta.get('observedSurface', 'not classified')
     axfile = path.with_suffix('.ax.json')
     tree = json.loads(axfile.read_text()) if axfile.exists() else {}
+    if state == 'browser or other':
+        if tree.get('source') == 'Open automation socket':
+            number = meta.get('window',{}).get('number')
+            if any(s.get('window') == number for s in tree.get('little-open-state',{}).get('sessions',[])):
+                return 'little-browser'
+            if tree.get('commandbar-state',{}).get('presented'):
+                return 'commandbar'
+            if tree.get('peek-state',{}).get('shown'):
+                return 'peek'
+            if any(p.get('visible') for p in tree.get('find-state',{}).get('panes',[])):
+                return 'find'
+        else:
+            bounds = meta.get('window',{}).get('bounds',{})
+            expected = [bounds.get(k) for k in ('X','Y','Width','Height')]
+            windows = [n for n in walk(tree) if n.get('role') == 'AXWindow' and n.get('frame') == expected]
+            if len(windows) == 1:
+                selected = windows[0]
+                if selected.get('id','').startswith('littleBrowserWindow-'):
+                    return 'little-browser'
+                ids = {n.get('id') for n in walk(selected)}
+                if {'confirmCloseModal', 'openInSplit'} <= ids:
+                    return 'peek'
+                if 'findInPageTextField' in ids:
+                    return 'find'
+                if 'commandBarTextField' in ids and 'commandBarSuggestions' in ids:
+                    return 'commandbar'
     if state == 'library':
         sections = {'Search Media…': 'media', 'Search Downloads…': 'downloads',
                     'Search Easels…': 'easels', 'Search Boosts…': 'boosts',
@@ -68,7 +94,7 @@ def compare(arc, opened, out):
         states=[]
         for files in (a,b):
             states.append(observed_surface(files[name]) if name in files else 'not captured')
-        state_mismatch = left is not None and right is not None and states[0] != states[1] and all(s.startswith('library/') or s == 'browser or other' for s in states)
+        state_mismatch = left is not None and right is not None and states[0] != states[1]
         if state_mismatch:
             differences.append({'frame':str(name),'kind':'different captured states','arc':states[0],'open':states[1],
                                 'status':'not a same-state comparison; inspect action gaps and persisted section'})

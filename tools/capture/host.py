@@ -43,7 +43,7 @@ def remote_session(args):
     remote(['mkdir', '-p', stage, output])
     archive = io.BytesIO()
     with tarfile.open(fileobj=archive, mode='w') as bundle:
-        for name in ('session.py', 'host.py', 'native.swift', 'burst.swift', 'pixels.sh', 'decode.py'):
+        for name in ('session.py', 'host.py', 'native.swift', 'burst.swift', 'pixels.sh', 'decode.py', 'fixture.py'):
             bundle.add(HERE / name, arcname=name, recursive=False)
         for name, data in [('script.json', args.script.read_bytes()), ('lead-rulings.txt', rulings.encode())]:
             member = tarfile.TarInfo(name)
@@ -53,7 +53,12 @@ def remote_session(args):
     remote(['/usr/bin/tar', '-xf', '-', '-C', stage], input=archive.getvalue())
     heavy = Path(home) / 'Library/Caches/OpenRE/scripts/heavy.sh'
     helpers = {}
-    for name in ('native', 'burst'):
+    def needs_stream(value):
+        if isinstance(value, dict):
+            return value.get('op') == 'burst' or any(needs_stream(v) for v in value.values())
+        return isinstance(value,list) and any(needs_stream(v) for v in value)
+    names = ('native','burst') if needs_stream(json.loads(args.script.read_text())) else ('native',)
+    for name in names:
         digest = hashlib.sha256((HERE / (name + '.swift')).read_bytes() + b'Swift6-O').hexdigest()
         binary = root / 'helpers' / digest / name
         # Reuse only an identical source compiled by an earlier owned stage.
@@ -73,7 +78,7 @@ print('ready' if binary.exists() else 'compile')
             flags = ['-parse-as-library'] if name == 'burst' else []
             remote([heavy, 'xcrun', 'swiftc', '-O', '-swift-version', '6', *flags, stage / (name + '.swift'), '-o', binary])
         helpers[name] = binary
-    native, burst = helpers['native'], helpers['burst']
+    native, burst = helpers['native'], helpers.get('burst',root/'helpers/unused-burst')
     state = json.loads(remote([native, 'state'], capture_output=True, text=True).stdout)
     launcher = args.pixel_launcher or Path(home) / 'Applications/OpenCapture.app'
     probe = stage / 'pixel-permission.log'

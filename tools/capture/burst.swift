@@ -1,4 +1,4 @@
-// Window-only ScreenCaptureKit recorder. Our source, no Arc resources.
+// Own-window / own-application ScreenCaptureKit recorder. Our source only.
 import AppKit
 import ScreenCaptureKit
 import CoreImage
@@ -14,6 +14,7 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
   var errors: [String] = []
   let movie: Bool
   var recordingFinished = false
+  var stopped = false
   init(_ directory: URL, movie: Bool) { self.directory = directory; self.movie = movie }
   func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
     lock.lock(); recordingFinished = true; lock.unlock()
@@ -23,8 +24,9 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
   }
   func finished() -> Bool { lock.lock(); defer { lock.unlock() }; return recordingFinished }
   func stream(_ stream: SCStream, didStopWithError error: Error) {
-    lock.lock(); errors.append(error.localizedDescription); lock.unlock()
+    lock.lock(); errors.append(error.localizedDescription); stopped = true; lock.unlock()
   }
+  func isStopped() -> Bool { lock.lock(); defer { lock.unlock() }; return stopped }
   func stream(_ stream: SCStream, didOutputSampleBuffer sample: CMSampleBuffer, of type: SCStreamOutputType) {
     guard type == .screen, sample.isValid,
           let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
@@ -65,23 +67,35 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
 @main struct CaptureBurst {
   @MainActor static func main() async throws {
     guard #available(macOS 15.0, *) else { exit(2) }
+    // Initialize the AppKit/CG connection in the launcher's child process.
+    // This helper owns no windows and must never activate over the capture app.
+    NSApplication.shared.setActivationPolicy(.prohibited)
     let a = CommandLine.arguments
     let pid = Int32(a[1])!, number = UInt32(a[2])!, directory = URL(fileURLWithPath: a[3])
     let fps = min(120, max(1, Int(a[4])!)), duration = min(5, Double(a[5])!), scale = Double(a[6])!
     let movie = a.count > 7 && a[7] == "movie"
+    let applicationScope = a.count > 8 && a[8] == "application"
     guard CGPreflightScreenCaptureAccess(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
           ["company.thebrowser.Browser", "io.github.sergeserb2.open"].contains(NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? "") else { exit(3) }
     let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
     guard let window = content.windows.first(where: { $0.windowID == number && $0.owningApplication?.processID == pid }) else { exit(3) }
     let config = SCStreamConfiguration()
-    config.width = Int(window.frame.width * scale); config.height = Int(window.frame.height * scale)
+    var bounds = window.frame
+    let filter: SCContentFilter
+    if applicationScope {
+      guard let app = content.applications.first(where: { $0.processID == pid }),
+        let display = content.displays.max(by: { window.frame.intersection($0.frame).width * window.frame.intersection($0.frame).height < window.frame.intersection($1.frame).width * window.frame.intersection($1.frame).height }) else { exit(3) }
+      bounds = display.frame
+      filter = SCContentFilter(display:display,including:[app],exceptingWindows:[])
+    } else { filter = SCContentFilter(desktopIndependentWindow:window) }
+    config.width = Int(bounds.width * scale); config.height = Int(bounds.height * scale)
     config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(fps))
     config.queueDepth = 8; config.showsCursor = false; config.capturesAudio = false
     config.ignoreShadowsSingleWindow = true
     config.pixelFormat = kCVPixelFormatType_32BGRA
     config.colorSpaceName = CGColorSpace.sRGB
     let sink = Sink(directory, movie: movie), queue = DispatchQueue(label: "open.capture.owned-window")
-    let stream = SCStream(filter: SCContentFilter(desktopIndependentWindow: window), configuration: config, delegate: sink)
+    let stream = SCStream(filter:filter, configuration: config, delegate: sink)
     try stream.addStreamOutput(sink, type: .screen, sampleHandlerQueue: queue)
     var recording: SCRecordingOutput?
     if movie {
@@ -99,9 +113,13 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
     var interrupted = false
     while CACurrentMediaTime() - start < duration {
       if NSWorkspace.shared.frontmostApplication?.processIdentifier != pid { interrupted = true; break }
+      if sink.isStopped() { interrupted = true; break }
       try await Task.sleep(for: .milliseconds(10))
     }
-    try await stream.stopCapture()
+    if !sink.isStopped() {
+      do { try await stream.stopCapture() }
+      catch { interrupted = true; sink.stream(stream,didStopWithError:error) }
+    }
     if movie {
       let deadline = CACurrentMediaTime() + 3
       while !sink.finished() && CACurrentMediaTime() < deadline { try await Task.sleep(for: .milliseconds(10)) }
@@ -109,7 +127,10 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
     }
     withExtendedLifetime(recording) {}
     queue.sync {}
-    let receipt = sink.receipt(start, fps, duration, interrupted)
+    var receipt = sink.receipt(start, fps, duration, interrupted)
+    receipt["scope"] = applicationScope ? "owned application only" : "owned window only"
+    receipt["captureBounds"] = [bounds.minX,bounds.minY,bounds.width,bounds.height]
+    receipt["method"] = movie ? "ScreenCaptureKit movie; decode required" : "ScreenCaptureKit stream"
     try JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("timestamps.json"))
     if interrupted { exit(4) }
   }

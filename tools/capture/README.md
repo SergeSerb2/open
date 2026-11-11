@@ -117,6 +117,9 @@ negative-layer Notification Center widgets and negative-layer WindowManager /
 Window Server desktop elements. It records their IDs. Positive system windows
 still stop input. A Notification Center banner over the point permits two
 six-second waits, with a fresh AX target and ownership check after each wait.
+LEAD00:15 additionally excludes Window Server's cursor window only at layer
+2147483630 with positive dimensions at most64×64 points. Other positive-layer
+windows keep their existing blocking checks. Ignored IDs and bounds are logged.
 LEAD20:32 permits an owned drag image during our held gesture when it first
 appears within one second and its drawn content is at the pointer. The runner
 records AX/CG metadata and the transparent image bounds. Other new windows
@@ -161,7 +164,12 @@ a timestamped JSONL entry. Arc records AX before and after the PNG, and flags a
 surface change across the capture. Frame names alone never prove state. Arc
 context windows are captured separately when listed as visible. Arc bursts and
 M1 Open bursts use the own-window ScreenCaptureKit stream when the compiled
-recorder is present. Other captures use serial own-window snapshots;
+recorder is present. `scope: "application"` selects only that process's windows
+on the captured display. Use it for creating, closing or promoting a window;
+an individual window stream ends when that window closes. Stills remain window
+only. `format` is `png` or `movie`. A recorder that stops early retains an
+interrupted receipt; a movie without finalized timestamps stays unqualified.
+Other captures use serial own-window snapshots;
 requested and actual cadence, per-capture start/end and uncertainty are saved.
 Do not treat this as a high-refresh smoothness or physical scanout measurement.
 Native AX traversal has a node/depth budget and a short messaging timeout.
@@ -192,3 +200,59 @@ Derived selections can retain per-frame source actions in
 Verify changes with the real Arc capture and Open socket flows. Do not add
 unit tests or mock the apps. Session scripts and receipts can include private
 data and must remain outside this tracked directory.
+
+
+## Synthetic follow-up sessions
+
+Session2 requires `capture_scope: "session2"` and the recorded LEAD23:45 ruling.
+It retains the M1 exact-PID, CG window, system-dialog and block guards. `key`
+modifiers are arrays, for example `["cmd"]`. Unsupported modifier formats stop
+before input. The added navigation shortcuts cover New Tab, edit URL, Find,
+pin and close; callers must first establish a synthetic page context.
+
+`fixture_site` starts two owned loopback servers (default ports39171/39172).
+They serve only original synthetic HTML, SVG favicons and text attachments.
+`{{fixture}}` and `{{other}}` in subsequent steps expand to those loopback roots.
+`external_fixture` permits only those roots and uses the existing external-link
+route without changing routing preferences. Servers close during cleanup.
+The same site runs for the Open replay; Open input remains socket-only.
+
+Declare `synthetic_input_targets` from observed AX predicates and a literal
+`synthetic_inputs` list. Typing requires the actual focused native text field
+to match a declared predicate and the text to match that list. `focused_dump`
+saves that single AX element. It does not traverse page descendants. A target
+with `source: "focused"` uses the current focused element, for example a link
+reached by Tab on the fixture page. Pointer input still checks its fresh AX
+frame and the CG ownership guard; no stored page coordinates are accepted.
+Long typing uses at most96 characters per event batch, with ownership and
+focused-field checks between batches.
+
+`paste` verifies the same synthetic field/text conditions, preserves the
+clipboard privately, writes only the synthetic string, and posts Cmd+V to Arc.
+It checks the focused field consumed the paste, then immediately restores the
+clipboard if its change counter still matches our write. Cleanup retries a
+pending restore. The private preservation file is removed before transfer.
+A changed clipboard fails restoration instead of overwriting another change.
+No clipboard contents are written to the action log.
+`copy_fixture_url` takes `url`, verifies it in the actual current URL field,
+and presses the observed Copy URL menu item. It verifies only the expected
+synthetic URL, then restores the preserved clipboard under the same counter
+guard. This supports a copy-feedback movie without retaining clipboard data.
+
+The narrow LEAD00:00 ruling permits `manual_accessibility` only while the actual
+current URL field matches the owned fixture. It records and restores the
+process's AXManualAccessibility Boolean. With LEAD00:15 it records a write-only
+original as unreadable, restores false explicitly and verifies the set-call
+success; it never invents an original false value. `fixture_web` queries only the matching active AXWebArea, capped at
+3000 nodes,30 levels and3seconds. Other pages are never descended into or saved.
+`source: "fixture"` resolves a target there. A `remember` name holds only its
+same-block geometry in memory. `source: "fixture-remembered"` may reuse it with
+accessibility off only when the owned window geometry and active synthetic URL
+are unchanged. CG ownership checks still run before the click. Frames and
+movies state whether accessibility was on. Nothing changes AXEnhancedUserInterface.
+
+Scripts are bounded to256KiB,300 steps,10000 values,20 nesting levels and2048
+characters per string. Evidence names use safe short filenames. Automation
+replies are capped at8MiB. Burst measurement accepts at most1000 frames and
+20million pixels per frame, reads native frames one at a time, and retains only
+small comparison thumbnails. These are capture-tool limits, not product limits.

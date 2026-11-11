@@ -105,10 +105,12 @@ def edge_motion(originals, values, spec):
         raise ValueError('motion edge needs a positive scale and four ROI values')
     x, y, w, h = map(int, roi)
     samples = []
-    for source, value in zip(originals, values):
+    for filename, value in zip(originals, values):
+        source = Image.open(filename)
         if x < 0 or y < 0 or w < 3 or h < 3 or x+w > source.width or y+h > source.height:
             raise ValueError('motion edge ROI is outside a captured frame')
         crop = source.convert('RGB').crop((x,y,x+w,y+h))
+        source.close()
         if axis == 'y':
             crop = crop.transpose(Image.Transpose.TRANSPOSE)
         columns = list(crop.resize((crop.width,1),Image.Resampling.BOX).getdata())
@@ -150,9 +152,16 @@ def burst(directory, spec=None):
         result = {'status': 'not captured', 'reason': 'stream has no complete image frames', 'receipt': receipt}
         (directory/'motion.measure.json').write_text(json.dumps(result,indent=2))
         return result
-    originals = [Image.open(directory / f['frame']) for f in frames]
-    sizes = {im.size for im in originals}
-    pictures = [im.convert('RGB').resize((256,144)) for im in originals]
+    if len(frames) > 1000:
+        raise ValueError('burst exceeds1000 frames')
+    originals = [directory / f['frame'] for f in frames]
+    sizes, pictures = set(), []
+    for filename in originals:
+        with Image.open(filename) as im:
+            if im.width * im.height > 20000000:
+                raise ValueError('captured frame exceeds20million pixels')
+            sizes.add(im.size)
+            pictures.append(im.convert('RGB').resize((256,144)))
     first, last = pictures[0], pictures[-1]
     full = sum(ImageStat.Stat(ImageChops.difference(first,last)).mean)
     values = []

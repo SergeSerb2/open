@@ -9,6 +9,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import plistlib
@@ -92,6 +93,12 @@ class Session:
         self.restore_actions = []
         self.saved_appearance = None
         self.fixture_server = None
+        self.fixture_site = None
+        self.clipboard_expected = None
+        self.manual_original = None
+        self.manual_on = False
+        self.fixture_page = None
+        self.fixture_points = {}
         self.download_requested_at = None
         self.permission_handoff = None
         self.logfile = (out / 'session.jsonl').open('a')
@@ -275,6 +282,8 @@ class Session:
                 if not chunk:
                     break
                 buf += chunk
+                if len(buf) > 8 * 1024 * 1024:
+                    raise Stopped('automation reply exceeds8MiB')
         reply = json.loads(buf)
         if not reply.get('ok'):
             raise RuntimeError(str(reply.get('error')))
@@ -341,7 +350,7 @@ class Session:
         # These are real app-side snapshots. They do not constitute a complete
         # AX tree; retain the missing-action finding instead of inventing one.
         result = {'source': 'Open automation socket', 'windows': self.call('windows', accessibility=True), 'children': []}
-        for command in ('window-state', 'settings-state', 'space-manager-state', 'space-manager-lifecycle', 'library-captures-state', 'library-history-state', 'downloads-state'):
+        for command in ('window-state', 'settings-state', 'space-manager-state', 'space-manager-lifecycle', 'library-captures-state', 'library-history-state', 'downloads-state', 'commandbar-state', 'find-state', 'peek-state', 'little-open-state'):
             try:
                 result[command] = self.call(command)
             except RuntimeError as error:
@@ -354,6 +363,33 @@ class Session:
         return {'Media', 'Downloads', 'Easels', 'Archived Tabs'} <= descriptions
 
     def target(self, predicate, frame_required=True):
+        if predicate.get('source') in ('fixture','fixture-remembered') and self.s2_ruling() and '## LEAD 00:00' in self.rulings:
+            actual = {k:v for k,v in predicate.items() if k not in ('source','remember')}
+            if predicate['source'] == 'fixture':
+                if not self.manual_on or not self.fixture_page:
+                    raise Stopped('fixture AX target requires the recorded accessibility mode')
+                tree = json.loads(run(self.native,'fixture-web',self.pid,self.fixture_page,timeout=5))
+                nodes = [n for n in walk(tree) if matches(n,actual)]
+                if len(nodes) != 1 or (frame_required and not nodes[0].get('frame')):
+                    raise UnavailableAX('synthetic page AX target is not unique')
+                target = nodes[0]
+                if predicate.get('remember'):
+                    self.fixture_points[predicate['remember']] = {'target':target,'windows':run(self.native,'window-info',self.pid),'url':self.fixture_page}
+                return target
+            saved = self.fixture_points.get(predicate.get('remember'))
+            if not saved or self.manual_on or not matches(saved['target'],actual):
+                raise Stopped('no same-block accessibility-off fixture target')
+            before = [n.get('frame') for n in walk(json.loads(saved['windows'])) if n.get('role') == 'AXWindow' and n.get('main')]
+            after = [n.get('frame') for n in walk(json.loads(run(self.native,'window-info',self.pid))) if n.get('role') == 'AXWindow' and n.get('main')]
+            fields = [n for n in walk(self.tree()) if n.get('id') == 'contentPanelTextField' and n.get('value') == saved['url']]
+            if before != after or len(fields) != 1:
+                raise Stopped('fixture window or active URL changed after AX point resolution')
+            return saved['target']
+        if predicate.get('source') == 'focused' and self.s2_ruling():
+            node = json.loads(run(self.native,'focused',self.pid))
+            if not matches(node,{k:v for k,v in predicate.items() if k != 'source'}) or (frame_required and not node.get('frame')):
+                raise UnavailableAX('focused synthetic page control did not match')
+            return node
         menu = str(predicate.get('role','')).startswith('AXMenu')
         tree = json.loads(run(self.native, 'ax-depth', self.pid, int(predicate['depth']))) if self.backend == 'arc' and not menu and 'depth' in predicate else self.tree(include_menus=menu)
         nodes = [n for n in walk(tree) if matches(n, predicate)
@@ -377,6 +413,37 @@ class Session:
                 and '## LEAD 19:30' in self.rulings
                 and 'AX-resolved clicks are allowed on the M1 for Arc capture' in self.rulings)
 
+    def s2_ruling(self):
+        return self.m1_input_ruling() and self.script.get('capture_scope') == 'session2' and '## LEAD 23:45' in self.rulings
+
+    def synthetic_field(self, text=None):
+        focused = json.loads(run(self.native, 'focused', self.pid))
+        fields = [focused] if focused.get('focused') and focused.get('role') in ('AXTextField','AXSearchField') else []
+        predicates = self.script.get('synthetic_input_targets', [])
+        if len(fields) != 1 or not any(matches(fields[0], p) for p in predicates):
+            raise Stopped('Session2 input requires one freshly focused observed synthetic field')
+        if text is not None and (len(text) > 2048 or text not in [self.expand_fixture(v) for v in self.script.get('synthetic_inputs', [])]):
+            raise Stopped('text is absent from the declared synthetic input list')
+        return fields[0]
+
+    def expand_fixture(self, value):
+        if isinstance(value, str) and self.fixture_site:
+            return value.replace('{{fixture}}', self.fixture_site.urls[0]).replace('{{other}}', self.fixture_site.urls[1])
+        if isinstance(value, dict):
+            return {k:self.expand_fixture(v) for k,v in value.items()}
+        if isinstance(value, list):
+            return [self.expand_fixture(v) for v in value]
+        return value
+
+    def restore_clipboard(self, saved):
+        process = subprocess.run([str(self.native),'clipboard-restore',str(saved),str(self.clipboard_expected)],capture_output=True,text=True,timeout=10)
+        result = json.loads(process.stdout)
+        self.log('clipboard-restore',result=result)
+        if process.returncode or not result.get('restored'):
+            raise Stopped('clipboard restore refused: '+str(result))
+        saved.unlink()
+        self.clipboard_expected = None
+
     def input(self, *args, verified_pointer=False, target_predicate=None):
         self.guard(event=True)
         if args[0] in ('click', 'down', 'dragto', 'key', 'type'):
@@ -393,6 +460,8 @@ class Session:
                     command = [str(self.native), 'point-guard', str(self.pid), str(args[1]), str(args[2])]
                     if '## LEAD 19:52' in self.rulings:
                         command.append('lead-m1-desktop-rule')
+                    if '## LEAD 00:15' in self.rulings:
+                        command.append('lead-m1-cursor-rule')
                     result = subprocess.run(command, capture_output=True, text=True, timeout=3)
                     check = json.loads(result.stdout)
                     self.log('pointer-point-guard', attempt=attempt, result=check)
@@ -409,16 +478,32 @@ class Session:
                     self.log('pointer-target-after-banner', ax_target=fresh)
             elif args[0] == 'key':
                 key, modifiers = args[1].lower(), args[2]
-                if (key not in ('escape', 'esc', 'left', 'right', 'up', 'down', 'return', 'tab') or modifiers) and (key,modifiers) not in (('l','cmd,shift'),('j','cmd,shift'),('y','cmd'),('s','cmd')):
+                if self.s2_ruling() and ((key in ('return','tab','left','right','up','down','escape','esc') and modifiers in ('','cmd','shift','opt')) or (key,modifiers) in (('t','cmd'),('l','cmd'),('f','cmd'),('d','cmd'),('w','cmd'))):
+                    pass
+                elif self.s2_ruling() and (key,modifiers) == ('a','cmd'):
+                    self.synthetic_field()
+                elif (key not in ('escape', 'esc', 'left', 'right', 'up', 'down', 'return', 'tab') or modifiers) and (key,modifiers) not in (('l','cmd,shift'),('j','cmd,shift'),('y','cmd'),('s','cmd')):
                     raise Stopped('key is outside the approved Arc navigation shortcuts')
             else:
                 fields = [n for n in walk(self.tree()) if n.get('focused') and n.get('role') == 'AXTextField' and str(n.get('placeholder','')).startswith('Search ')]
-                if not self.arc_library_visible(self.tree()) or len(fields) != 1 or not str(args[1]).startswith('Open-capture-'):
+                if self.s2_ruling():
+                    self.synthetic_field(str(args[1]))
+                elif not self.arc_library_visible(self.tree()) or len(fields) != 1 or not str(args[1]).startswith('Open-capture-'):
                     raise Stopped('typing requires one focused Library search and a synthetic capture string')
             self.guard(event=True)
         elif args[0] not in ('move', 'scroll', 'drag', 'dragto', 'down', 'up'):
             raise Stopped('unsupported system input')
-        run(SCRIPTS / 'uidrive', *args)
+        if args[0] == 'type':
+            # uidrive posts two events per UTF-16 unit at 20 ms per unit.
+            # Bound each batch, and recheck ownership before continuing.
+            text = str(args[1])
+            for offset in range(0, len(text), 96):
+                self.guard(event=True)
+                if self.s2_ruling():
+                    self.synthetic_field()
+                run(SCRIPTS / 'uidrive', 'type', text[offset:offset+96])
+        else:
+            run(SCRIPTS / 'uidrive', *args)
 
     def ax_action(self, predicate, action='AXPress', value=None):
         self.guard(event=True)
@@ -473,6 +558,7 @@ class Session:
             metadata = self.open_pixels(path, tree)
         (self.out / (name + '.ax.json')).write_text(json.dumps(tree, indent=2))
         metadata['captureGaps'] = self.gaps
+        metadata['accessibilityOn'] = self.manual_on
         metadata['frontmostBeforeCapture'] = {k:before_state[k] for k in ('frontmostPID','frontmostBundle')}
         after_state = self.state()
         metadata['frontmostAfterCapture'] = {k:after_state[k] for k in ('frontmostPID','frontmostBundle')}
@@ -486,6 +572,10 @@ class Session:
         kwargs = {'window': self.window} if self.window is not None else {}
         metadata = {'method': 'approved launcher own-window screencapture'} if self.pixel_launcher else self.call('snapshot', path=str(path), **kwargs)
         number = self.window
+        if number is None:
+            little = [s for s in tree.get('little-open-state',{}).get('sessions',[]) if s.get('key') and s.get('visible')]
+            if len(little) == 1:
+                number = little[0]['window']
         if number == 'library':
             number = tree.get('library-captures-state', {}).get('window')
         candidates = [w for w in tree.get('windows', [])
@@ -510,16 +600,21 @@ class Session:
         return metadata
 
     def burst(self, step):
+        if step.get('format','png') not in ('png','movie'):
+            raise Stopped('burst format must be png or movie')
+        if step.get('scope','window') not in ('window','application'):
+            raise Stopped('burst scope must be window or application')
         self.shot(step['name'] + '-before')
         directory = self.out / step['name']
         directory.mkdir(exist_ok=True)
+        (directory/'capture-context.json').write_text(json.dumps({'accessibilityOn':self.manual_on,'scope':step.get('scope','window')}))
         fps = min(float(step.get('fps', 20)), 120)
         duration = min(float(step.get('duration', 1)), 5)
         stream_tool = self.burst_tool
         if (self.backend == 'arc' or self.pixel_launcher) and stream_tool.exists():
             self.guard(event=True)
             log = (directory / 'stream.log').open('a')
-            command, pixel_log = self.pixel_command([str(stream_tool), str(self.pid), str(self.active_window), str(directory), str(int(fps)), str(duration), str(self.initial['screens'][0]['scale']), step.get('format', 'png')])
+            command, pixel_log = self.pixel_command([str(stream_tool), str(self.pid), str(self.active_window), str(directory), str(int(fps)), str(duration), str(self.initial['screens'][0]['scale']), step.get('format', 'png'),step.get('scope','window')])
             process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
             try:
                 ready_deadline = time.monotonic() + 4
@@ -569,11 +664,12 @@ class Session:
 
     def step(self, step):
         self.guard()
+        step = self.expand_fixture(step)
         op = step['op']
         self.log('begin', operation=step)
         # A mapping is explicit. The same declarative script runs both apps.
         mapping = step.get('open') if self.backend == 'open' else None
-        if self.backend == 'open' and op not in ('launch', 'shot', 'axdump', 'burst', 'sleep', 'fixture_download') and mapping is None:
+        if self.backend == 'open' and op not in ('launch', 'shot', 'axdump', 'burst', 'sleep', 'fixture_download', 'fixture_site') and mapping is None:
             self.gaps.append({'step': step, 'finding': 'Open: no action'})
             self.log('no-action', operation=step, finding='Open: no action')
             return
@@ -581,6 +677,11 @@ class Session:
             for action in mapping if isinstance(mapping, list) else [mapping]:
                 self.guard(event=True)
                 args = dict(action.get('args', {}))
+                if action.get('lookup') in ('little-open-window','little-open-session'):
+                    sessions = self.call('little-open-state')['sessions']
+                    if len(sessions) != 1:
+                        raise Stopped('Open: no unique Little Open session')
+                    args['window' if action['lookup'] == 'little-open-window' else 'id'] = sessions[0]['window' if action['lookup'] == 'little-open-window' else 'id']
                 if action['cmd'] == 'appearance' and self.saved_appearance is None:
                     self.saved_appearance = self.call('space-manager-lifecycle')['appAppearance']
                     self.log('appearance-before-change', value=self.saved_appearance)
@@ -596,6 +697,95 @@ class Session:
                 self.window = step['window']
         elif op == 'launch':
             self.launch(step)
+        elif op == 'paste':
+            if not self.s2_ruling():
+                raise Stopped('paste requires the M1 Session2 ruling')
+            self.synthetic_field(step['text'])
+            saved = self.out/'clipboard-private.json'
+            if not saved.exists():
+                run(self.native,'clipboard-save',saved)
+            self.clipboard_expected = json.loads(run(self.native,'clipboard-set',step['text']))['changeCount']
+            # Read again after the short-lived writer exits. The pasteboard
+            # service can publish its final generation at that boundary.
+            published = json.loads(run(self.native,'clipboard-check',step['text']))
+            self.log('clipboard-publication', writer_count=self.clipboard_expected, published=published)
+            if not published['matchesExpected']:
+                raise Stopped('clipboard changed before the synthetic paste')
+            self.clipboard_expected = published['changeCount']
+            self.guard(event=True)
+            run(SCRIPTS/'uidrive','key','v','cmd')
+            deadline = time.monotonic()+2
+            while self.synthetic_field().get('value') != step['text']:
+                self.guard(event=True)
+                if time.monotonic() >= deadline:
+                    raise Stopped('synthetic paste was not observed within2s')
+                time.sleep(.05)
+            # Restore as soon as the target proves it consumed the paste.
+            # A later clipboard owner still wins the change-counter check.
+            self.restore_clipboard(saved)
+        elif op == 'focused_dump':
+            (self.out/(step['name']+'.focused.json')).write_text(run(self.native,'focused',self.pid))
+        elif op == 'manual_accessibility':
+            if not self.s2_ruling() or '## LEAD 00:00' not in self.rulings:
+                raise Stopped('manual accessibility needs the narrow lead ruling')
+            self.guard(event=True)
+            if self.manual_original is None:
+                original = json.loads(run(self.native,'manual-accessibility',self.pid))
+                self.manual_original = original['value']
+                if not original.get('readable'):
+                    if '## LEAD 00:15' not in self.rulings:
+                        raise Stopped('manual accessibility original is unreadable')
+                    self.manual_original = 'unreadable (write-only)'
+                self.log('manual-accessibility-original',value=self.manual_original)
+            enabled = bool(step['enabled'])
+            if enabled:
+                url = step['url']
+                if not self.fixture_site or not url.startswith(tuple(u+'/' for u in self.fixture_site.urls)) or not any(n.get('id') == 'contentPanelTextField' and n.get('value') == url for n in walk(self.tree())):
+                    raise Stopped('manual accessibility needs the actual active synthetic page')
+                self.fixture_page = url
+            result = json.loads(run(self.native,'manual-accessibility',self.pid,str(enabled).lower()))
+            if not result.get('setSucceeded') or (result.get('readable') and result['value'] != enabled):
+                raise Stopped('manual accessibility change was not verified')
+            self.manual_on = enabled
+            self.log('manual-accessibility',value=enabled,verification=result['verification'])
+        elif op == 'fixture_web':
+            if not self.manual_on or not self.fixture_page:
+                raise Stopped('fixture web query needs accessibility on')
+            (self.out/(step['name']+'.web.ax.json')).write_text(run(self.native,'fixture-web',self.pid,self.fixture_page,timeout=5))
+        elif op == 'copy_fixture_url':
+            expected = step['url']
+            if not self.s2_ruling() or not self.fixture_site or not expected.startswith(tuple(u+'/' for u in self.fixture_site.urls)):
+                raise Stopped('copy URL requires the Session2 synthetic fixture')
+            fields = [n for n in walk(self.tree()) if n.get('id') == 'contentPanelTextField' and n.get('value') == expected]
+            if len(fields) != 1:
+                raise Stopped('copy URL requires the actual current synthetic URL field')
+            saved = self.out/'clipboard-private.json'
+            if saved.exists():
+                raise Stopped('previous clipboard preservation is still pending')
+            run(self.native,'clipboard-save',saved)
+            self.ax_action({'role':'AXMenuItem','title':'Copy URL'})
+            deadline = time.monotonic()+2
+            while True:
+                self.guard(event=True)
+                check = json.loads(run(self.native,'clipboard-check',expected))
+                if check['matchesExpected']:
+                    self.clipboard_expected = check['changeCount']
+                    break
+                if time.monotonic() >= deadline:
+                    raise Stopped('copy did not produce the synthetic URL within2s')
+                time.sleep(.05)
+            self.restore_clipboard(saved)
+        elif op == 'fixture_site':
+            if self.fixture_site is not None:
+                raise Stopped('one synthetic site per block')
+            from fixture import SyntheticSite
+            self.fixture_site = SyntheticSite(int(step.get('port',39171)), int(step.get('other_port',39172)))
+            self.log('fixture-site', urls=self.fixture_site.urls)
+        elif op == 'external_fixture':
+            if not self.fixture_site or not step['url'].startswith(tuple(u+'/' for u in self.fixture_site.urls)):
+                raise Stopped('external link must use the owned synthetic fixture')
+            self.guard(event=True)
+            run('/usr/bin/open', '-a', '/Applications/Arc.app', step['url'])
         elif op == 'fixture_download':
             self.guard(event=True)
             if self.fixture_server is not None:
@@ -806,7 +996,9 @@ class Session:
                 raise Stopped('AX resize refused')
         elif op == 'type':
             # Require a real focused text field before Unicode events.
-            if not any(n.get('focused') and n.get('role') in ('AXTextField', 'AXTextArea', 'AXComboBox', 'AXSearchField') for n in walk(self.tree())):
+            if self.s2_ruling():
+                self.synthetic_field(step['text'])
+            elif not any(n.get('focused') and n.get('role') in ('AXTextField', 'AXTextArea', 'AXComboBox', 'AXSearchField') for n in walk(self.tree())):
                 raise Stopped('no verified focused text input')
             self.input('type', step['text'])
         elif op == 'wait_ax':
@@ -854,6 +1046,26 @@ class Session:
             except Exception as error:
                 self.cleanup_ok = False
                 self.log('held-drag-release-incomplete', error=str(error))
+        clipboard = self.out/'clipboard-private.json'
+        if clipboard.exists():
+            try:
+                self.restore_clipboard(clipboard)
+            except Exception as error:
+                self.cleanup_ok = False
+                self.log('clipboard-restore-incomplete',error=str(error))
+            finally:
+                clipboard.unlink(missing_ok=True)
+        if self.fixture_site is not None:
+            self.fixture_site.close()
+        if self.manual_original is not None and self.pid:
+            try:
+                desired = self.manual_original if isinstance(self.manual_original,bool) else False
+                result = json.loads(run(self.native,'manual-accessibility',self.pid,str(desired).lower()))
+                self.log('manual-accessibility-restore',result=result)
+                self.cleanup_ok = self.cleanup_ok and result.get('setSucceeded',False) and (not result.get('readable') or result['value'] == desired)
+            except Exception as error:
+                self.cleanup_ok = False
+                self.log('manual-accessibility-restore-incomplete',error=str(error))
         if self.fixture_server is not None:
             self.fixture_server.shutdown()
             self.fixture_server.server_close()
@@ -976,7 +1188,28 @@ class Session:
         self.logfile.close()
 
 
+def validate_script(script):
+    if not isinstance(script, dict) or not isinstance(script.get('steps'), list) or len(script['steps']) > 300:
+        raise ValueError('capture script needs at most300 steps')
+    pending, count = [(script,0)], 0
+    while pending:
+        value,depth = pending.pop(); count += 1
+        if count > 10000 or depth > 20:
+            raise ValueError('capture script exceeds10000 values or20 levels')
+        if isinstance(value, str) and len(value) > 2048:
+            raise ValueError('capture string exceeds2048 characters')
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError('capture numbers must be finite')
+        if isinstance(value, dict):
+            if 'op' in value and 'name' in value and not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', str(value['name'])):
+                raise ValueError('capture name must be a short safe filename')
+            pending.extend((v,depth+1) for v in value.values())
+        elif isinstance(value, list):
+            pending.extend((v,depth+1) for v in value)
+
+
 def main():
+    os.umask(0o077)
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('script', type=Path)
     p.add_argument('--out', type=Path, required=True)
@@ -990,13 +1223,16 @@ def main():
     p.add_argument('--lock-timeout', type=int, default=1800, help='Remote screen-lock wait in seconds')
     p.add_argument('--prepare-only', action='store_true', help='Stage/compile/preflight M1 without launching any app')
     args = p.parse_args()
+    if args.script.stat().st_size > 262144:
+        p.error('capture script exceeds256KiB')
+    script = json.loads(args.script.read_text())
+    validate_script(script)
     if args.host == 'm1':
         from host import remote_session
         return remote_session(args)
     if args.prepare_only:
         p.error('--prepare-only requires --host m1')
     args.out.mkdir(parents=True, exist_ok=True)
-    script = json.loads(args.script.read_text())
     (args.out / 'script.json').write_text(json.dumps(script, indent=2))
     session = Session(script, args.out, args.backend, args.native, args.burst_tool, args.rulings, args.pixel_launcher)
     def interrupted(signum, frame):
