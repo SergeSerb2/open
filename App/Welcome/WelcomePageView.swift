@@ -18,7 +18,7 @@ enum WelcomeColors {
 
 @MainActor
 final class WelcomePageView: NSScrollView {
-  static let duration = 8.5
+  static let cardDurations = OnboardingMiniature.demoDurations
   static let cardTextHeight: CGFloat = 88
   static let copy: [(String, String)] = [
     ("Open your first tab", "Click New Tab in the sidebar or press ⌘T, then type a site or a search."),
@@ -54,7 +54,10 @@ final class WelcomePageView: NSScrollView {
   private var colorInputs: ColorInputs?
   private var completion: Timer?
   var hasCompletion: Bool { completion != nil }
-  private var nextPlaylistCard: Int? = 0
+  private var appearedAt: CFTimeInterval?
+  private var playlistEndedAt: CFTimeInterval?
+  var appearanceElapsed: Double { appearedAt.map { CACurrentMediaTime() - $0 } ?? 0 }
+  var playlistElapsed: Double { appearedAt.map { (playlistEndedAt ?? CACurrentMediaTime()) - $0 } ?? 0 }
   private var started = false
   private var closed = false
   private(set) var visible = false
@@ -199,29 +202,29 @@ final class WelcomePageView: NSScrollView {
   }
   private func setVisible(_ shown: Bool) {
     guard shown != visible else { return }; visible = shown
-    if !shown { cards.forEach { $0.resetHover() }; halt(); return }
-    if reduceMotion { nextPlaylistCard = nil; cards.forEach { $0.illustration.finish() }; return }
-    if !started { started = true }
-    if let index = nextPlaylistCard { play(index, playlist: true) }
+    if !shown { cards.forEach { $0.resetHover() }; stop(); return }
+    guard !started else { return }
+    started = true; appearedAt = CACurrentMediaTime()
+    if reduceMotion { playlistEndedAt = appearedAt; cards.forEach { $0.illustration.finish() }; return }
+    play(0, playlist: true)
   }
   func replay(card index: Int) {
     guard (0..<4).contains(index), visible, !closed else { return }
-    nextPlaylistCard = nil
+    if playlistPlaying, playlistEndedAt == nil { playlistEndedAt = CACurrentMediaTime() }
     if reduceMotion { halt(); activeCard = index; cards[index].illustration.finish(); return }
     play(index, playlist: false)
   }
   private func play(_ index: Int, playlist: Bool) {
     halt(); activeCard = index; playlistPlaying = playlist; animating = true
     playedCards.append(index + 1); if playedCards.count > 32 { playedCards.removeFirst() }
-    if playlist { nextPlaylistCard = index }
-    cards[index].illustration.play(duration: Self.duration)
-    completion = Timer.scheduledTimer(withTimeInterval: Self.duration, repeats: false) { [weak self] _ in
+    cards[index].illustration.play(duration: Self.cardDurations[index])
+    completion = Timer.scheduledTimer(withTimeInterval: Self.cardDurations[index], repeats: false) { [weak self] _ in
       MainActor.assumeIsolated {
         guard let self, self.visible, self.animating, self.activeCard == index else { return }
         self.completion = nil; self.completionCount += 1
         self.cards[index].illustration.finish(); self.animating = false; self.playlistPlaying = false
-        if playlist, index < 3 { self.nextPlaylistCard = index + 1; self.play(index + 1, playlist: true) }
-        else { self.nextPlaylistCard = nil }
+        if playlist, index < 3 { self.play(index + 1, playlist: true) }
+        else if playlist { self.playlistEndedAt = CACurrentMediaTime() }
       }
     }
   }
@@ -230,7 +233,10 @@ final class WelcomePageView: NSScrollView {
     for card in cards { card.illustration.freeze() }
     animating = false; playlistPlaying = false
   }
-  func stop() { nextPlaylistCard = nil; halt() }
+  func stop() {
+    if playlistPlaying, playlistEndedAt == nil { playlistEndedAt = CACurrentMediaTime() }
+    halt()
+  }
   func close() { closed = true; visible = false; stop() }
   func activateFooter(_ link: String) {
     if link == "shortcuts" { shortcuts.performClick(nil) }

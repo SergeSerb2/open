@@ -11,6 +11,7 @@ final class WelcomeIllustrationView: NSView {
   private let miniature = OnboardingMiniature()
   private var neighbor: OnboardingMiniature?
   private(set) var running = false
+  var pendingDisplayUpdates: Int { miniature.pendingDisplayUpdates + (neighbor?.pendingDisplayUpdates ?? 0) }
   var animationCount: Int {
     miniature.animationCount + (neighbor?.animationCount ?? 0)
       + (miniature.layer?.animationKeys()?.count ?? 0) + (neighbor?.layer?.animationKeys()?.count ?? 0)
@@ -64,8 +65,9 @@ final class WelcomeIllustrationView: NSView {
       neighbor.playDemo(duration: duration)
       for (view,sign) in [(miniature,CGFloat(-1)),(neighbor,CGFloat(-1))] {
         let slide = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        slide.values = [0,0,sign*bounds.width*0.62,0]; slide.keyTimes = [0,0.25,0.65,1]
-        slide.duration = duration; slide.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut),count: 3)
+        slide.values = [0,0,sign*bounds.width*0.62,0,0]
+        slide.keyTimes = [0,NSNumber(value: 0.2/duration),NSNumber(value: 3.6/duration),NSNumber(value: 6.575/duration),1]
+        slide.duration = duration; slide.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut),count: 4)
         view.layer?.add(slide,forKey: "space-window-swipe")
       }
     }

@@ -461,8 +461,20 @@ def run(factory, results, tmp, h):
             timing=True, targetMilliseconds=1400, planLimitMilliseconds=3000, metrics=metrics, startLoad=started_load)
         row('timing_main_responsive', metrics.get('maxMainLagMilliseconds', float('inf')) < 50
             and metrics.get('watchdogSamples', 0) > 0, timing=True, limitMilliseconds=50, metrics=metrics, startLoad=started_load)
-        # Ten seconds after completion: no timer, polling or repeated import writes.
+        # Import work has a ten-second drain. Welcome has a separate finite
+        # playlist: never count its intentional motion as idle or stop it here.
         time.sleep(10)
+        welcome = app.call('welcome')
+        deadline = time.monotonic()+max(0, 30-welcome.get('appearanceElapsed', 0))
+        def settled(value):
+            return value['animationCount'] == 0 and not value['pendingCompletion'] \
+                and value.get('pendingDisplayUpdates', 0) == 0
+        while not settled(welcome) and time.monotonic() < deadline:
+            time.sleep(.1)
+            welcome = app.call('welcome')
+        playlist_settled = settled(welcome) and welcome.get('playlistElapsed', 0) <= 30
+        row('welcome_playlist_settles', playlist_settled, settleCapSeconds=30,
+            reason=None if playlist_settled else 'welcome playlist did not settle', welcome=welcome)
         files_before, counters_before = file_state(), app.call('frame-save-counters')
         cpu_before, wall_before = cpu_seconds(), time.monotonic()
         if negative:
@@ -471,7 +483,7 @@ def run(factory, results, tmp, h):
         cpu = (cpu_seconds()-cpu_before)/(time.monotonic()-wall_before)*100
         files_after, counters_after = file_state(), app.call('frame-save-counters')
         metrics_after = state().get('importMetrics', {})
-        row('idle_after_import', files_before == files_after and counters_before == counters_after
+        row('idle_after_import', playlist_settled and files_before == files_after and counters_before == counters_after
             and metrics_after.get('watchdogActive') == 0 and cpu < 1,
             timing=True, appCPUPercent=cpu, countersBefore=counters_before, countersAfter=counters_after,
             changedStoreFiles=sum(files_before.get(k) != files_after.get(k) for k in files_before.keys() | files_after.keys()),
