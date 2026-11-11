@@ -95,6 +95,9 @@ extension AutomationController {
         guard let pane = owner.container.slots.first(where: { $0.tabID == tab.id })?.paneChrome,
               pane.pressSiteControls() else { throw Failure(message: "no visible pane anchor") }
       } else if via == "urlField" {
+        // Reload can reset tracking while the tagged pointer stays at its old
+        // position. Enter from the page so the real hover path runs again.
+        _ = try await runExtensionCommand("ext-hover", ["inside": false])
         _ = try await runExtensionCommand("ext-hover", ["inside": true])
         owner.sidebar.refreshExtensionsLayout()
         guard !owner.sidebar.siteControlsAnchor.isHiddenOrHasHiddenAncestor,

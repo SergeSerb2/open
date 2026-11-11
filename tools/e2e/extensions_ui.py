@@ -188,13 +188,22 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
         if functional_only:
             results["X4_badge_pixels"] = {"status":"DEFERRED", "reason":"M5 pixel receipt required (TANDEM §4M)"}
         else:
-            _, h, bp = read_image(badged); _, _, np = read_image(unbadged)
+            width, height, bp = read_image(badged); nw, nh, np = read_image(unbadged)
+            assert (width, height) == (nw, nh), 'badge captures changed size'
             badge_strip = strip()
             slot = badge_strip["frames"][badge_strip["ids"].index(probe)]
-            # The snapshot is top-left; automation reports Cocoa window coordinates.
-            x, y, w, hh = slot; y = h - y - hh
-            difference = sum(bp(xx, yy) != np(xx, yy) for xx in range(int(x), int(x+w)) for yy in range(int(y), int(y+hh)))
-            results["X4_badge_pixels"] = {"ok": bool(badge and clear) and difference > 0, "changedPixels": difference}
+            # The snapshot uses backing pixels and a top-left origin; native
+            # slot geometry uses Cocoa points and a bottom-left origin.
+            window = app.call('window-state')['frame']
+            sx, sy = width / window[2], height / window[3]
+            x, y, w, hh = slot
+            pixels = [round(x*sx), round((window[3]-y-hh)*sy), round((x+w)*sx), round((window[3]-y)*sy)]
+            x0, y0, x1, y1 = pixels
+            assert 0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height, pixels
+            difference = sum(bp(xx, yy) != np(xx, yy) for xx in range(x0, x1) for yy in range(y0, y1))
+            results["X4_badge_pixels"] = {"ok": bool(badge and clear) and difference > 0,
+                "changedPixels": difference, "slotPoints": slot, "pixelBounds": pixels, "scale": [sx, sy],
+                "badged": badged, "unbadged": unbadged}
         other = new_tab(app,"about:blank")
         other_chrome = app.call("engine-sleep")["chromeTabId"]
         app.eval(content,"Promise.all([chrome.action.setBadgeText({tabId:"+str(active)+",text:'7'}),chrome.action.setBadgeText({tabId:"+str(other_chrome)+",text:''})]).then(()=>true)")
