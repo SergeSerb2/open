@@ -865,3 +865,32 @@ Continue: touched content and keys in separate bounded M1 tickets; merge
 current origin/main; scoped final-head M1 receipts under LEAD 14:00; one full
 M5 gate with those receipts; PR with the tables and rulings; pending question
 "PR ready to merge". Stop only for a functional failure or gate refusal.
+
+
+## LEAD 15:30 touched suites — PASS
+
+Both touched suites ran through separate bounded M1 heavy/screen tickets on
+source `437e7409`, with the unchanged Release executable `be01de5bb51c…`
+(native source `2861c764`, OpenLibrary `a75273e2…`). Each ticket verified all
+3,022 transported source files and the original artifact hashes/signature.
+Receipt copying and analysis followed release. No Library performance row
+was measured again.
+
+| Touched real-App flow | Result | Cleanup | Receipt |
+|---|---|---|---|
+| Library content, real stores/transfers/capture/Space operations | PASS 95/95 | Native drag-source case required forced cleanup; zero owned windows/processes | `.re/l3/l3-idle-slices-content-r1/result.json` |
+| Application key path in rail/search/filter/list | PASS 17/17 | Normal quit; zero owned windows/processes | `.re/l3/l3-idle-slices-keys-r1/result.json` |
+
+Content covers truthful empty state, corrupt capture index and recovery,
+provider paging, filters/search, download pause/resume/cancel/failure, native
+confirmation paths, real captures, Boosts, Space cards and lifetime checks.
+Keys cover Cmd+L/T/W and command-bar Escape through `route=app` in all four
+Library focus contexts. Native file/URL pasteboards and drag-source start
+pass; foreign-app drop/end remains manual and unverified.
+
+Content raw receipt SHA-256:
+`e260f54e4c001df3f2fdce148d06ebf25b05852307e74c422abbb3245440c2ce`.
+Keys raw receipt SHA-256:
+`b1d21a9cc84e2af668f6f77c7e2c48157aa1a2fb79b4a25d4d2b0d34d9dacb3a`.
+
+Final merge verification and exception tables are reported with the PR.
