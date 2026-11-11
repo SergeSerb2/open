@@ -53,7 +53,13 @@ kind=build; [ "$want" = "$N" ] && [ "$N" -gt 1 ] && kind=exclusive
 
 Q="$PFX-queue"; HD="$PFX-holders"; mkdir -p "$Q" "$HD"
 T="$Q/$(date +%s)-$(printf '%07d' $$)"
-line=$(printf '%s\t%s\t%s\t%s' "$$" "$(date '+%H:%M:%S')" "$PWD" "$*")
+# Queue/holder records have exactly one line per PID. Preserve the actual
+# argument vector below; flatten only the human-readable command and cwd.
+# A literal newline in python -c must not make stale-ticket cleanup delete
+# a live ticket after cut -f1 reads several lines as its PID.
+display_command=$(printf '%s' "$*" | tr '\n\r\t' '   ')
+display_directory=$(printf '%s' "$PWD" | tr '\n\r\t' '   ')
+line=$(printf '%s\t%s\t%s\t%s' "$$" "$(date '+%H:%M:%S')" "$display_directory" "$display_command")
 printf '%s\n' "$line" > "$T"
 
 # The old single-holder file stays as "all holders, one per line" for tools that read it.

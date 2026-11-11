@@ -40,6 +40,9 @@ exclusive automatically. No separate quiet lock is needed.
 `/tmp/open-heavy-holder` lists every holder on a separate tab-separated
 line: PID, clock, working directory, command, and optional kind. Per-holder
 records are also in `/tmp/open-heavy-holders/<pid>`. Read all lines.
+Only the displayed command/directory has tabs and line breaks flattened;
+the executed argument vector is unchanged. Multi-line `python -c` commands
+must still produce one ticket/holder record per PID.
 
 Every on-screen suite separately holds the screen slot, through cleanup:
 
