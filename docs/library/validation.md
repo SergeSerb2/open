@@ -1,12 +1,12 @@
 # Library validation
 
-Status: LEAD 14:50 accepts retained launches1–2 after correcting first-row
-scoring. All three turns of each first row and their busy intervals are INFO
-"first-use cost", with a16.7ms hard ceiling; later rows stay required≤8.3ms.
-The raw launch2failure is retained under its original interpretation. Only
-launch3 remains. Product code and Release artifact are unchanged. Required
-ready-open remains PASS at8.818/14.316ms against16/24ms; its8.818ms median is
-INFO against the8ms stretch target. No final M5 gate or PR has run.
+Status: STOP under LEAD 14:50 after the single valid launch-3 continuation.
+All three launches are valid with complete coverage. First-row phases pass the
+16.7 ms INFO ceiling. Every later-row slice passes 8.3 ms, but launch 3's
+slice 45 has an 8.424292 ms enclosing busy interval, above 8.3 ms (Library
+overlap 8.010792 ms; other main work 0.413500 ms). Product code and artifact are
+unchanged. The ticket is released. No touched suite, main merge, final M5 gate
+or PR follows this required failure.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -746,3 +746,87 @@ scoring/harness work only: App, OpenLibrary and Engine are unchanged from2861c76
 The candidate Release executable remainsbe01de5bb51c48726d15d4729775814656938301385807dd0a01c6c6efa957b7,
 and the Library module remainsa75273e2cb4e0adc149a9ca97905f982ea4f4d22805e62d2dcc2e11dfa78ebc1.
 No ready-open, warm/search, scroll or five-pair rerun follows this clarification.
+
+
+## LEAD 14:50 launch 3 result — STOP at later-row enclosing busy interval
+
+Launch 3 ran once as the requested continuation, with no product change. It is
+valid: Release, both pre-launch load1 readings 3.260742/2.919434 ten seconds apart.
+Foreign CPU was 24.8%, informational. All 3,022 transported source hashes match
+`6da28142`, the deep/strict signature passes, and the Release executable remains
+`be01de5bb51c48726d15d4729775814656938301385807dd0a01c6c6efa957b7`.
+Native source remains `2861c764`; OpenLibrary SHA-256 remains
+`a75273e2cb4e0adc149a9ca97905f982ea4f4d22805e62d2dcc2e11dfa78ebc1`.
+No launch 1/2, ready-open, warm/search, scroll or five-pair sample was repeated.
+
+All three turns of each first row and their enclosing busy intervals use the
+LEAD 14:50 INFO first-use ceiling of 16.7 ms. Later-row turns and their enclosing
+busy intervals remain required at 8.3 ms. The corrected three-launch set is:
+
+| Launch | First-row slice max ms, INFO | First-row busy max ms, INFO | Later-row slice max ms | Later-row busy max ms | Required result |
+|---|---:|---:|---:|---:|---|
+| 1 | 5.249 | 6.552 | 6.528 | 8.299 | PASS |
+| 2 | 8.485 | 9.219 | 6.717 | 7.096 | PASS |
+| 3 | 8.129 | 8.674 | 8.010 | 8.424 | FAIL: later-row busy |
+
+Launch 3 has 84/84 slices with complete heartbeat coverage: 21 first-row phases
+and 63 later-row turns. All seven first rows have three distinct main-loop turns.
+Every first-row slice and busy interval passes the 16.7 ms hard ceiling. Every
+later-row slice passes 8.3 ms, but one enclosing busy interval does not. The
+three-launch set has 252 covered slices; all 189 later-row slices pass, and
+188/189 later-row enclosing busy intervals pass. No interval is excluded.
+
+### Launch 3 first-row phases, INFO; hard ceiling 16.7 ms
+
+| Row kind | Creation ms | Configure/layout ms | Display/flush ms | Largest enclosing busy ms |
+|---|---:|---:|---:|---:|
+| download | 1.182 | 8.129 | 3.447 | 8.674 |
+| archive | 0.348 | 3.163 | 1.888 | 3.478 |
+| history | 0.186 | 3.958 | 0.723 | 4.436 |
+| capture | 0.113 | 1.640 | 1.790 | 4.144 |
+| boost | 0.272 | 2.840 | 1.729 | 3.640 |
+| boostGallery | 0.158 | 6.018 | 1.745 | 6.381 |
+| heading | 0.476 | 0.344 | 1.289 | 7.099 |
+
+### The single required failure
+
+| Clock | Launch-age range ms | Duration ms | Required limit ms | Result |
+|---|---|---:|---:|---|
+| Later-row slice 45 | 4766.602–4774.613 | 8.010417 | 8.3 | PASS |
+| Enclosing main-loop busy interval | 4766.543–4774.968 | 8.424292 | 8.3 | FAIL |
+| Library slice overlap inside busy interval | Same busy interval | 8.010792 | Attribution | Measured |
+| Other main-thread work inside busy interval | Same busy interval | 0.413500 | Attribution | Measured |
+
+The busy interval exceeds 8.3 ms by 0.124292 ms. Native tags are
+`rowKind=0`, `phase=0`, `firstUse=0`; this is a later-row turn, not any of the
+21 first-row turns. The receipt does not split this turn into configure, layout,
+display and flush subphases or identify its row kind. No cause is inferred from
+the source alone. It receives no first-use exception.
+
+Preparation completed at launch age 5.274281 s, with `prebuiltReady=true`,
+`prebuildTaskPending=false`, and `panelTasks=0`. This control performs no scroll
+or timed open. Required ready-open remains accepted at median/max
+8.818/14.316 ms against 16/24 ms; the 8.818 ms median remains INFO against the
+8 ms stretch target. Existing warm/search/scroll carries are unchanged.
+
+The ticket queued at 14:51:29, waited 1,664 s, then held the slot for about
+three minutes, including bounded quiet preflight. It released before receipt
+copying and analysis. Launch 3 quit normally (`reply=true`, `forced=false`),
+with zero owned windows/processes. Queue/path audits on both Macs show no D1
+holder, waiter or Open process. The user's M5 launchd/default-profile session
+was preserved.
+
+STOP under LEAD 14:50: one later-row enclosing busy interval exceeds 8.3 ms.
+No product edit, further run, touched suite, main merge, exact-head M1 lane,
+full M5 gate, push or PR follows. There is no partial-M1 gate refusal; no gate ran.
+
+Receipt: `.re/l3/l3-first-use-control-r2-launch3/result.json`; SHA-256
+`bf2d188ecbf4ef8d6307ef4e404a405ca5766645b544a2a076c9db50f6eab4b7`. M1 retained copy:
+`receipts/l3-first-use-control-r2-launch3/result.json`. Launcher log:
+`.re/l3/first-use-control-r2-launch3.log`. Combined derived summary:
+`.re/l3/first-use-three-launch-1450.json`. The original launches 1–2 receipt
+and separate LEAD 14:50 rescoring receipt remain unchanged.
+
+Pending question: What narrow next step should D1 take for launch 3's later-row
+enclosing busy interval 8.424292 ms (Library overlap 8.010792 ms; other main work
+0.413500 ms), with every slice and all first-row hard ceilings passing?
