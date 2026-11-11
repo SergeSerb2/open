@@ -222,3 +222,8 @@ CPU belong to the performance lane; see [follow-ups](followups.md).
 [Corrected seven-step sheet, Light and Dark](images/onboarding-room-steps-2x.png) ·
 [Setup before/after](images/onboarding-room-before-after-steps.png) ·
 [Intro before/after](images/onboarding-room-before-after-intro.png).
+
+[Native 1x look sheet](images/onboarding-room-native-1x.png) shows the final Intro,
+Favorites, vector Ready emblem and settled Welcome on the M5 AW2726DM.
+These 1280 × 800 pixel window captures use the same M1-built Release bundle
+as the final 2x frames; executable and whole-tree hashes match on both machines.
