@@ -216,7 +216,7 @@ for path in Path('Helper/Entitlements').glob('*.entitlements'):
 for k in ['OpenChromiumVersion','OpenCEFCommit','OpenEngineStamp','SUFeedURL','SUPublicEDKey']:
  if not p.get(k):missing.append('Step 6 Info.plist '+k)
 if not re.search(r'^\s+Sparkle:',s,re.M):missing.append('Step 7 Sparkle dependency')
-if not Path('App/UpdaterController.swift').is_file():missing.append('Step 8 updater controller')
+if not Path('App/Updater/UpdaterController.swift').is_file():missing.append('Step 8 updater controller')
 print('; '.join(missing))
 PY
 )

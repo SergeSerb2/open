@@ -556,7 +556,9 @@ def run(factory, results, tmp, api, defaults_before):
         _, _, gone = confirm('Shell Never Loaded')
         results['shell_delete_never_loaded'] = {
             'ok': not engine.exists() and not cache.exists() and not (root / 'Profiles' / never['directory']).exists()
-                  and 'Shell Never Loaded' not in gone['rows'], 'engineGone': not engine.exists(), 'cacheGone': not cache.exists()}
+                  and 'Shell Never Loaded' not in gone['rows'], 'engineGone': not engine.exists(), 'cacheGone': not cache.exists(),
+            'profileGone': not (root / 'Profiles' / never['directory']).exists(),
+            'modelGone': 'Shell Never Loaded' not in gone['rows'], 'error': gone.get('error')}
 
         # Bulk lists the captured unused set. Default and a Profile with a Space stay out.
         assigned_space = app.call('space-create', title='Assigned Space', profile='Shell Assigned')

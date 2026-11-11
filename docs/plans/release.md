@@ -963,7 +963,7 @@ chosen repository before U-5 or the first public release.
 
 ### 6.5 In-app UI hooks (small Swift addition)
 
-Step 8 adds one file, `App/UpdaterController.swift` (App target only):
+Step 8 adds one file, `App/Updater/UpdaterController.swift` (App target only):
 
 - Owns `SPUStandardUpdaterController(startingUpdater: true, updaterDelegate:
   nil, userDriverDelegate: nil)` for the whole app lifetime, created in
@@ -1358,7 +1358,7 @@ New files:
 tools/release.sh
 tools/release-locales.txt
 tools/generate-acknowledgements.py
-App/UpdaterController.swift
+App/Updater/UpdaterController.swift
 assets/release/dmg-background.png
 docs/release/licenses.md
 docs/release/licenses/MPL-2.0.txt

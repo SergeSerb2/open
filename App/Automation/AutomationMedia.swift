@@ -78,9 +78,10 @@ extension AutomationController {
       func control() -> NSView? {
         name.hasPrefix("media.") ? card.firstDescendant(identifier: name) : card.control(named: name)?.view
       }
-      // Title-row controls show only while the stack is expanded: hover the card first, as a pointer would.
-      // The volume drawer opens only on an expanded card (a pointer over the card expands it).
-      if ["title", "pip", "close", "volume", "volumeLow", "volumeHigh", "slider"].contains(target) && !card.isExpanded {
+      // Hover expands the stack before any control's final click point is read.
+      // Otherwise mouseDown reconciles hover, moves the compact Play button,
+      // and the old point can hit the title row instead.
+      if !card.isExpanded {
         let center = point(of: card, in: window)
         // A pointer that comes from elsewhere, as a real one does: an earlier hover may have left the stack
         // "entered" (the card collapsed under it since, for example when a PiP window took over), and a
@@ -88,11 +89,11 @@ extension AutomationController {
         _ = try await mouse(["action": "hover", "x": Double(window.frame.width) - 20, "y": Double(window.frame.height) / 2,
                              "window": window.windowNumber], factory)
         _ = try await mouse(["action": "hover", "x": center.x, "y": center.y, "window": window.windowNumber], factory)
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
-        while !card.isExpanded || card.layer?.animationKeys()?.isEmpty == false || control()?.isHiddenOrHasHiddenAncestor != false {
-          guard ContinuousClock.now < deadline else { throw Failure(message: "mini player did not expand") }
-          try await Task.sleep(for: .milliseconds(10)); controller.contentView.layoutSubtreeIfNeeded()
-        }
+      }
+      let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+      while !card.isExpanded || animationKeyCount(controller.sidebar.mediaControls) > 0 || control()?.isHiddenOrHasHiddenAncestor != false {
+        guard ContinuousClock.now < deadline else { throw Failure(message: "mini player did not settle with control \(target) visible") }
+        try await Task.sleep(for: .milliseconds(10)); controller.contentView.layoutSubtreeIfNeeded()
       }
       guard let view = control(), !view.isHiddenOrHasHiddenAncestor else { throw Failure(message: "control \(target) is not shown") }
       if target == "slider" {
