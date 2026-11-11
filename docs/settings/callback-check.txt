@@ -1,4 +1,4 @@
-Command: settings-preview check (Release, M1)
+Command: settings-preview check (Release, M1, source 23dfb35b before PR306)
 PASS adblock-profile-lifecycle
 SUMMARY 47 checks passed, 0 failed
 Full transcript: checks.txt

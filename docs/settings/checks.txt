@@ -1,3 +1,4 @@
+Source: 23dfb35b (before PR306); merged-source checks run again in the final M5 gate.
 ACTION chooseProfileIcon 10000000-0000-0000-0000-000000000001
 PNG profile-icons.png 1200x1200 60910 bytes sha256=8ad8807c2c2ffb0b952ebbbb030eef03203dd7f7a4deb3b1029de1d59fc7cf08
 PASS profile-icon-button
