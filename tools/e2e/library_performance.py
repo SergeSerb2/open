@@ -114,6 +114,23 @@ def scroll_fixture(root,snapshot):
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
     receipt={'configuration':'Release','samples':[],'method':'Native layout, displayIfNeeded and CATransaction.flush; provider completion awaited. Search starts at native key dispatch after focus setup, without fixed harness delivery waits. No physical scan-out claim.','limits':{'firstSubmittedMilliseconds':16,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleCPUPercent':.2},'complete':False}
+    if args.resume_from:
+        previous=json.loads(args.resume_from.read_text())
+        assert previous['configuration']==receipt['configuration'] and previous['limits']==receipt['limits']
+        assert previous['method']==receipt['method'] and not previous['complete']
+        assert previous['baseline']['bundle']==str(args.baseline_bundle)
+        valid=[];baselines=[]
+        for row,baseline in zip(previous['samples'],previous['baseline']['samples']):
+            if not row['valid'] or max(baseline['foreignCPU'])>200:break
+            assert row['cleanup']['ok'] and baseline['cleanup']['ok']
+            assert max(row['loads'])<=3 and max(baseline['loads'])<=3
+            assert row['search']['providerRows']==1
+            valid.append(row);baselines.append(baseline)
+        assert 0<len(valid)<5
+        receipt.update(samples=valid,resumedFrom=str(args.resume_from.resolve()),baseline={'bundle':str(args.baseline_bundle),'samples':baselines})
+        for index in range(len(valid)):
+            source=args.resume_from.parent/('physical-'+str(index))
+            if source.exists():shutil.copytree(source,output/source.name)
     active=None;frames=None
     def save(): (output/'result.json').write_text(json.dumps(receipt,indent=2))
     save()
@@ -124,8 +141,8 @@ def main(args):
             baseline_root=root/'baseline'
             if args.baseline_bundle:
                 shutil.copytree(root,baseline_root,ignore=shutil.ignore_patterns('baseline','automation.sock'))
-                receipt['baseline']={'bundle':str(args.baseline_bundle),'samples':[]}
-            for index in range(5):
+                receipt.setdefault('baseline',{'bundle':str(args.baseline_bundle),'samples':[]})
+            for index in range(len(receipt['samples']),5):
                 if args.baseline_bundle:
                     base_loads,base_cpu,base_waits=quiet()
                     active=launch(baseline_root,args.baseline_bundle,output,'baseline-'+str(index))
@@ -213,5 +230,5 @@ def main(args):
     return 0 if receipt.get('ok') else 1
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bundle',required=True,type=Path);p.add_argument('--baseline-bundle',type=Path);p.add_argument('--frame-helper',type=Path);p.add_argument('--output',required=True,type=Path)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bundle',required=True,type=Path);p.add_argument('--baseline-bundle',type=Path);p.add_argument('--frame-helper',type=Path);p.add_argument('--output',required=True,type=Path);p.add_argument('--resume-from',type=Path,help='Retain only the valid paired prefix of an incomplete receipt with the same artifact and fixture.')
     raise SystemExit(main(p.parse_args()))
