@@ -136,7 +136,7 @@ closing the card. This is attribution to recorded processes, not a sole
 cause or a fix. Follow-up [#316](https://github.com/SergeSerb2/open/issues/316).
 The full quiet Media stage is still required; its earlier preflight launched
 no App. Raw receipts are `.re/step4-m1-b9531ac3-all/timing-measure/` and
-`.re/step4-focused-receipts/idle-r1/`. No exception is active for these rows.
+`.re/step4-focused-receipts/idle-r1/`. LEAD 10:30 (2026-11-11) approves exactly `measure/media_idle_cpu` and `media/media_idle_cpu` as DEFERRED, tied to #316 and owned by performance/engine H. The deferral ends when the #316 fix lands. The 0.5-point limit and raw 0.5458/0.5453 values remain unchanged. Both stages must still run complete and valid; no other Media or Measure row is deferred.
 
 ## Icon readback on the 2x display
 
@@ -148,5 +148,5 @@ The candidate observer compares at the actual native 1x/2x raster size,
 retaining exact bytes, output colour space and component precision. Each
 read-back buffer is bounded to 2048×2048 RGBA float32 (64 MiB). Functional
 product code is unchanged. The harness now retains every returned field.
-Positive qualification of this candidate is still pending. Original negative:
+Complete valid M1 Command Bar and App Actions stages on `227d2584` each pass all 80 gate rows, with safe cleanup and no unexpected crash or dialog. The focused five-icon real-App confirmation also passes with the native 2048 px application readback. Original negative:
 `.re/step4-focused-receipts/icon-r1/`.
