@@ -73,7 +73,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             saved[name] = app.call('defaults', key=name)
             app.call('defaults', key=name, value=value)
         app.call('suggest-remote', enabled=False)
-        if not functional_only:
+        if not functional_only and lane != 'merge':
             app.call('split', op='observe')
         app.call('window-frame', frame=[60, 60, 1360, 860])
         empty_menu = app.call('split', op='plus')

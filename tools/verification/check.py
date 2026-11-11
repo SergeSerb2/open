@@ -85,6 +85,7 @@ def onscreen_suite(command):
     waiting_for_lock = False
     directory = job = lock_file = None
     cleanup_complete = False
+    borrowed = False
     output = ""
 
     def cleanup():
@@ -97,16 +98,26 @@ def onscreen_suite(command):
         try:
             if job is not None:
                 if job.returncode is None:
-                    with contextlib.suppress(ProcessLookupError):
-                        os.killpg(job.pid, signal.SIGTERM)
+                    if borrowed:
+                        # The outer gate owns this whole process group. Keep
+                        # the renderer inside it so a killed worker cannot
+                        # leave a renderer outside the outer cleanup boundary.
+                        job.terminate()
+                    else:
+                        with contextlib.suppress(ProcessLookupError):
+                            os.killpg(job.pid, signal.SIGTERM)
                     # Keep the leader unreaped through the TERM grace. Its PID
                     # cannot be reused before KILL reaches remaining group members.
                     time.sleep(2)
-                    groups = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="], text=True)
-                    if any(fields[0] == str(job.pid) and not fields[1].startswith("Z")
-                           for line in groups.splitlines() if len(fields := line.split()) == 2):
-                        with contextlib.suppress(ProcessLookupError):
-                            os.killpg(job.pid, signal.SIGKILL)
+                    if borrowed:
+                        if job.poll() is None:
+                            job.kill()
+                    else:
+                        groups = subprocess.check_output(["/bin/ps", "-axo", "pgid=,stat="], text=True)
+                        if any(fields[0] == str(job.pid) and not fields[1].startswith("Z")
+                               for line in groups.splitlines() if len(fields := line.split()) == 2):
+                            with contextlib.suppress(ProcessLookupError):
+                                os.killpg(job.pid, signal.SIGKILL)
                     output, _ = job.communicate(timeout=2)
                 job.wait()
             native_apps = stop_native_suite_apps(directory.name) if directory is not None else 0
@@ -158,7 +169,6 @@ def onscreen_suite(command):
         lock_path = "/tmp/open-onscreen-e2e.lock"
         # A gate stage already holds the pathname lock through our cleanup.
         # Never trust the environment marker without its live lockf ancestor.
-        borrowed = False
         if os.environ.get('OPEN_VERIFY_EXTERNAL_SCREEN_LOCK') == '1':
             parent = os.getppid()
             for _ in range(32):
@@ -216,7 +226,7 @@ def onscreen_suite(command):
         print(f"On-screen lock acquired; suite deadline=180s; worker {os.getpid()}", flush=True)
         if cancelled is None:
             job = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   text=True, env=environment, start_new_session=True)
+                                   text=True, env=environment, start_new_session=not borrowed)
             print(f"On-screen renderer {job.pid}; private temporary root={directory.name}", flush=True)
             deadline = time.monotonic() + 180
             while cancelled is None:
