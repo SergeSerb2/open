@@ -6066,7 +6066,17 @@ def profiles_checks(factory, results, tmp, config):
 
 
 def process_cpu_window(app, seconds=60):
+    """One OS CPU window of `seconds`. See process_cpu_windows."""
+    app.begin_timing('OS idle CPU window')
+    return process_cpu_windows(app, [0, seconds], [(0, seconds)])[0]
+
+
+def process_cpu_windows(app, marks, windows):
     """OS CPU time deltas, without enabling Chromium's task-manager observer.
+
+    Snapshots are taken at `marks` (seconds after the call); each (start, end)
+    pair in `windows` is reported as one window between those two snapshots,
+    so overlapping windows share one timeline.
 
     rusage_info_v0 CPU times use Mach absolute ticks (not nanoseconds).
     Convert with this host's timebase. Each PID gets its own monotonic
@@ -6114,11 +6124,16 @@ def process_cpu_window(app, seconds=60):
             raise RuntimeError('idle CPU sample could not read the Open process')
         return rows
 
-    app.begin_timing('OS idle CPU window')
-    load_start = subprocess.check_output(['sysctl', '-n', 'vm.loadavg'], text=True).strip()
-    before = snapshot()
-    time.sleep(seconds)
-    after = snapshot()
+    origin = time.monotonic()
+    shots = {}
+    for mark in sorted(set(marks)):
+        time.sleep(max(0, origin + mark - time.monotonic()))
+        shots[mark] = (subprocess.check_output(['sysctl', '-n', 'vm.loadavg'], text=True).strip(), snapshot())
+    return [_cpu_window(shots[start], shots[end], end - start, ns_per_tick, timebase) for start, end in windows]
+
+
+def _cpu_window(start, end, seconds, ns_per_tick, timebase):
+    (load_start, before), (load_end, after) = start, end
     by_process, by_kind = [], {}
     common = {pid for pid in before.keys() & after.keys() if before[pid]['start'] == after[pid]['start']}
     for pid in sorted(common):
@@ -6133,7 +6148,7 @@ def process_cpu_window(app, seconds=60):
                            'package_idle_wakeups_per_second': round((b['idle_wakeups'] - a['idle_wakeups']) / elapsed, 3),
                            'interrupt_wakeups_per_second': round((b['interrupt_wakeups'] - a['interrupt_wakeups']) / elapsed, 3)})
     return {'requested_seconds': seconds, 'mach_timebase': [timebase.numer, timebase.denom], 'load_start': load_start,
-            'load_end': subprocess.check_output(['sysctl', '-n', 'vm.loadavg'], text=True).strip(),
+            'load_end': load_end,
             'by_process': by_process, 'by_kind': {k: round(v, 4) for k, v in by_kind.items()},
             'total_cpu_percent': round(sum(by_kind.values()), 4),
             'processes_started': sorted(after.keys() - common),
@@ -6141,19 +6156,45 @@ def process_cpu_window(app, seconds=60):
             'complete': before.keys() == after.keys() == common}
 
 
+# Chromium's AudioRendererMixer keeps an empty output sink running for
+# kPauseDelay = 10 s after its last input
+# (third_party/blink/renderer/modules/media/audio/audio_renderer_mixer.cc), then
+# pauses it. The budget means "a paused card costs nothing once playback has
+# stopped" (LEAD decision, #316), so the required window starts after that delay.
+MEDIA_IDLE_WINDOW = (12, 20)        # seconds after pause; required, limit 0.5 points
+MEDIA_IDLE_EARLY_WINDOW = (6, 14)   # former window; INFO only
+MEDIA_IDLE_EARLY_REASON = "Chromium keeps the mixer output for 10 s after pause (audio_renderer_mixer.cc kPauseDelay)"
+
+
 def _media_idle_cpu(app, audio):
-    """Four interleaved paused-card/no-card pairs, with the OS sampler used by measure."""
+    """Four interleaved paused-card/no-card pairs, with the OS sampler used by measure.
+
+    Per pair: pause, then one snapshot timeline gives the required paused-card
+    window 12-20 s after pause and the former 6-14 s window (INFO). The card is
+    then closed and the no-card window starts 6 s later, as before (26-34 s
+    after the same pause, shifted by the same 6 s as the paused-card window).
+    """
     def players(): return app.call("mini-players")
     def paused(): return any(c["tab"] == audio and c["playback"] == "paused" for c in players()["cards"])
+    # Negative proof only: keep audio playing through the required window.
+    playing_break = os.environ.get("OPEN_VERIFY_BREAK") == "media-idle-playing"
     app.call("media-action", tab=audio, action="pause")
     if not wait_until(paused, timeout=3, step=.02):
         raise RuntimeError("idle CPU fixture has no paused mini player")
-    samples = {"with": [], "without": []}
+    samples = {"with": [], "without": [], "early": []}
     animations, pending = [], []
+    early_start, early_end = MEDIA_IDLE_EARLY_WINDOW
+    start, end = MEDIA_IDLE_WINDOW
     for _ in range(4):
-        time.sleep(6)
+        time.sleep(early_start)
         view = players(); animations.append(view["animations"]); pending.append(view["pendingCollapse"])
-        samples["with"].append(process_cpu_window(app, seconds=8))
+        if playing_break:
+            app.call("media-action", tab=audio, action="play")
+        offset = early_start
+        app.begin_timing('OS idle CPU window')
+        early, required = process_cpu_windows(app, [0, start - offset, early_end - offset, end - offset],
+                                              [(0, early_end - offset), (start - offset, end - offset)])
+        samples["early"].append(early); samples["with"].append(required)
         app.call("media-action", tab=audio, action="close")
         if not wait_until(lambda: not players()["cards"], timeout=3, step=.02):
             raise RuntimeError("idle CPU fixture did not remove the card")
@@ -6167,17 +6208,26 @@ def _media_idle_cpu(app, audio):
     # Retain the existing 0.5 percentage-point tolerance and four-pair floor comparison.
     floors = {k: min(x["total_cpu_percent"] for x in v) for k, v in samples.items()}
     browser = {k: min(x["by_kind"].get("browser", 0) for x in v) for k, v in samples.items()}
-    return {"timing": True, "functionalOK": all(x["complete"] for v in samples.values() for x in v) and animations == [0]*4 and pending == [0]*4,
+    complete = all(x["complete"] for k in ("with", "without") for x in samples[k])
+    rest = animations == [0] * 4 and pending == [0] * 4
+    return {"timing": True, "functionalOK": complete and rest,
             "ok": abs(floors["with"] - floors["without"]) <= .5
             and abs(browser["with"] - browser["without"]) <= .5
-            and all(x["complete"] for v in samples.values() for x in v)
-            and animations == [0] * 4 and pending == [0] * 4,
+            and complete and rest,
             "reason": ("paused-card total and browser CPU floor deltas must be at most 0.5 percentage points"
-                if all(x["complete"] for v in samples.values() for x in v)
-                and animations == [0] * 4 and pending == [0] * 4
+                if complete and rest
                 else "paused-card CPU sample requires complete process windows and zero animations/pending collapse"),
+            "windowSecondsAfterPause": list(MEDIA_IDLE_WINDOW),
             "minWith": floors["with"], "minWithout": floors["without"],
             "browserMinWith": browser["with"], "browserMinWithout": browser["without"],
+            # The former 6-14 s window is reported, never accepted or failed.
+            "early": {"status": "INFO", "windowSecondsAfterPause": list(MEDIA_IDLE_EARLY_WINDOW),
+                      "minWith": floors["early"], "minWithout": floors["without"],
+                      "delta": round(floors["early"] - floors["without"], 4),
+                      "browserDelta": round(browser["early"] - browser["without"], 4),
+                      "complete": all(x["complete"] for x in samples["early"]),
+                      "reason": MEDIA_IDLE_EARLY_REASON},
+            "verifyBreak": "media-idle-playing" if playing_break else None,
             "restAnimations": animations, "pendingCollapse": pending, "samples": samples}
 
 
