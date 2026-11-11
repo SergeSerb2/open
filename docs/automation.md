@@ -1682,3 +1682,13 @@ the bounded generic-alert receipts; `{button:"cancel"|"quit", request:true}`
 queues the real `quit-open` command, observes its native modal window, and presses
 that alert's own NSButton. This does not send desktop input. The `downloads` suite
 includes `OPEN_DOWNLOADS_CASE=generic-quit` for this focused real-App flow.
+
+The updater suite's R2 first proves normal generic, downloads and beforeunload
+prompts. It then pauses its owned prepared installer before pressing the native
+Install and Relaunch button. A normal `quit-open` request must exit without those
+prompts (#283). This request does not use harness `quit`. The suite kills the
+paused installer without resuming it and checks that the App binary is unchanged.
+`--review-only --force-failure` stops after the pause to check that failure cleanup
+also leaves no installer, App window, process or changed preference. The former
+quit-warning cancellation/retry row is no longer reachable. R2 does not claim an
+actual install, external installer quit-event delivery, or a user-cancelled retry.
