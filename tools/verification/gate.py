@@ -509,7 +509,9 @@ def main():
     if options.lane == 'timing':
         if machine() != 'M1' or options.config != 'Release':
             parser.error('timing lane requires M1 Release')
-        if os.environ.get('OPEN_HEAVY_KIND') != 'exclusive':
+        # Queue v3 labels a one-slot M1 holder "build" even when it requested
+        # all slots. Ownership is checked above; require the explicit request.
+        if os.environ.get('OPEN_HEAVY_EXCLUSIVE') != '1':
             parser.error('timing lane requires OPEN_HEAVY_EXCLUSIVE=1 heavy.sh')
         if any(n != 'timing-window' and n not in ['e2e-'+s for s in TIMING_SUITES] for n in selected):
             parser.error('selected row has no timing lane')
