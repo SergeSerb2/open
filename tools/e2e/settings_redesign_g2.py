@@ -28,14 +28,16 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         results[name] = dict(ok=bool(condition), **evidence)
         print(name + (' PASS' if condition else ' FAIL'), flush=True)
         if not condition:
+            if evidence: print(json.dumps(evidence), flush=True)
             capture('failure')
         if stop:
             assert condition, name
 
-    def node(label=None, role=None, identifier=None):
+    def node(label=None, role=None, identifier=None, value=None):
         s = settle()
         nodes = [c for c in s['controls'] if (label is None or c['label'] == label)
                  and (role is None or c['role'] == role) and (identifier is None or c['id'] == identifier)
+                 and (value is None or c['value'] == value)
                  and c['frame'][2] > 0 and c['frame'][3] > 0]
         if not nodes:
             capture('missing-control')
@@ -44,6 +46,9 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
 
     def click(label=None, role=None, identifier=None):
         c = node(label, role, identifier)
+        # Wait for this exact native window to own input. Empty text uses the
+        # socket's normal readiness gate without inserting a key or changing focus.
+        key(text='', window=c['window'])
         x,y,w,h = c['frame']
         app.call('mouse', action='click', queued=True, window=c['window'], x=x+w/2, y=y+h/2)
         return settle()
@@ -227,8 +232,15 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         # Validate external delegate delivery, invalid URL guard and existing commands.
         ui(action='external-link',url='open://settings/downloads/ask');settle()
         check('external_settings_delivery',ui()['section']=='downloads' and ui()['arrival']=='downloads/ask')
-        ui(action='external-link',url='open://settings/unknown/row');settle()
-        check('invalid_external_link_guard',ui()['section']=='downloads')
+        arrival_revision=ui()['arrivalRevision']
+        for name,url in [
+                ('unknown','open://settings/unknown/row'),
+                ('query','open://settings/shortcuts?ignored=1'),
+                ('fragment','open://settings/shortcuts#ignored'),
+                ('extra_path','open://settings/downloads/ask/ignored'),
+                ('oversize','open://settings/'+('x'*2049))]:
+            ui(action='external-link',url=url);settle()
+            check('invalid_external_link_'+name,ui()['section']=='downloads' and ui()['arrivalRevision']==arrival_revision)
         app.call('command',id='search-settings');settle();check('search_command_destination',ui()['section']=='search')
         app.call('command',id='air-traffic-control');settle();check('routing_command_destination',ui()['arrival']=='links/rules')
         previous=ui()['arrivalRevision'];app.call('command',id='air-traffic-control');settle()
@@ -258,6 +270,23 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         ui(action='filter',filter='conflicts');capture('shortcuts-conflict-light')
         ui(action='revert');ui(action='filter',filter='all');settle()
         check('shortcut_revert',ui()['conflicts']==0)
+        # Native header controls use actual own-window clicks and app-routed keys.
+        click('Changed shortcuts')
+        check('shortcut_native_changed_filter',ui()['shortcutCount']==1)
+        click('Unassigned shortcuts')
+        check('shortcut_native_unassigned_filter',ui()['shortcutCount']>0 and ui()['shortcutCount']<ui()['indexCount'])
+        click('All shortcuts')
+        type_field('Find a command','Search Actions')
+        check('shortcut_native_name_search',ui()['shortcutCount']==1)
+        type_field('Find a command','')
+        ui(action='choice',label='Shortcut category',title='Split View');settle()
+        category_count=ui()['shortcutCount']
+        check('shortcut_native_category',category_count>0 and category_count<20)
+        ui(action='choice',label='Shortcut category',title='Category');settle()
+        key('k',['cmd','option']);key('j',['cmd','shift','control','option']);settle()
+        check('shortcut_native_find_keys',ui()['shortcutCount']==1 and not ui()['findingKeys'])
+        click('Clear shortcut key filter')
+        check('shortcut_native_clear_keys',ui()['shortcutCount']>100)
         # Restoring the shipping default also exercises the retained destructive sheet.
         click('Reset All Shortcuts');capture('reset-shortcuts-light',sheet=True);click('Reset All Shortcuts',role='AXButton')
         settle();check('shortcut_reset_all',not ui()['bindings'])
@@ -305,6 +334,8 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         click('Add site');check('allowed_site_invalid_guard',not app.call('profiles-shell')['adblockDomains'])
         capture('adblock-invalid-site-light');type_field('Allowed site','review.example.com');click('Add site')
         check('allowed_site_saved','example.com' in app.call('profiles-shell')['adblockDomains'])
+        c=node(role='AXStaticText',value='example.com');x,y,w,h=c['frame']
+        app.call('mouse',action='hover',window=c['window'],x=x+w/2,y=y+h/2);settle()
         click('Remove example.com');check('allowed_site_removed',not app.call('profiles-shell')['adblockDomains'])
         # All fifteen sections, both appearances, plus the retained sheets.
         for mode in ['light','dark']:
@@ -333,7 +364,8 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
                 for _ in range(100):
                     if ui()['clearStatus']=='Done':break
                     time.sleep(.1)
-                check('clear_data_real_flow',ui()['clearStatus']=='Done')
+                clear_state=ui()
+                check('clear_data_real_flow',clear_state['clearStatus']=='Done',status=clear_state['clearStatus'],clearing=clear_state['clearing'])
                 click('Done')
             else:click('Cancel')
             link('profiles/manage');click('New Profile…');capture('create-profile-'+mode,sheet=True);click('Cancel')
@@ -369,12 +401,18 @@ def run(bundle, out, expected_scale=None, perf=False, config='Release'):
         check('keyboard_settings_close',not ui()['visible'])
         app.call('menu-perform',id='settings');settle()
         check('keyboard_settings_reopen',ui()['visible'] and ui()['window']==settings_number)
-        for shortcut in ['t','l']:
+        for shortcut in ['t']:
             ui(action='open',section='general');ui(action='blur')
             key(shortcut,['cmd']);time.sleep(.2)
             check('settings_global_cmd_'+shortcut,app.call('commandbar-state').get('presented') is True)
             bar_window=app.call('window-state')['number'];key('escape',window=bar_window)
             check('settings_global_escape_'+shortcut,not app.call('commandbar-state').get('presented'))
+        # Cmd-L belongs to a browser window. The existing app dispatcher keeps
+        # Open Command Bar disabled while Settings owns the main menu.
+        ui(action='open',section='general');ui(action='blur')
+        address_item=next(row for row in app.call('menu-state') if row['id']=='open-command-bar')
+        key('l',['cmd'])
+        check('settings_cmd_l_disabled_guard',not address_item['enabled'] and not app.call('commandbar-state').get('presented'),menu=address_item)
         ui(action='open',section='general')
         ui(action='reduce-motion',enabled=True);ui(action='open',section='appearance');settle()
         check('reduce_motion_section',ui()['reduceMotion'] and ui()['section']=='appearance')

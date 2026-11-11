@@ -16,7 +16,7 @@ public struct SettingsContent: View {
         HStack(spacing: 0) {
             SettingsNavigation(viewModel: viewModel, section: viewModel.selectedSection,
                 query: viewModel.searchQuery, results: viewModel.searchResults, updateState: viewModel.updateState,
-                focusRequest: viewModel.searchFocusRequest)
+                focusRequest: viewModel.searchFocusRequest, shortcutAttention: viewModel.shortcutsHaveConflicts)
                 .frame(width: SettingsTokens.Redesign.navigationWidth)
             Rectangle().fill(Color(nsColor: SettingsTokens.Redesign.hairline.nsColor)).frame(width: 1)
             SettingsDetailHost(root: viewModel, section: viewModel.selectedSection, searching: !viewModel.searchQuery.isEmpty)
@@ -45,7 +45,7 @@ public struct SettingsContent: View {
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
     }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if attachedSheet != nil || settings.shortcuts.recordingCommandID != nil { return super.performKeyEquivalent(with: event) }
+        if attachedSheet != nil || settings.isRecordingShortcut { return super.performKeyEquivalent(with: event) }
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
         let key = event.charactersIgnoringModifiers?.lowercased() ?? ""
         if flags == .command {
@@ -60,7 +60,7 @@ public struct SettingsContent: View {
         return super.performKeyEquivalent(with: event)
     }
     override func cancelOperation(_ sender: Any?) {
-        if settings.shortcuts.recordingCommandID != nil { settings.shortcuts.cancelRecording() }
+        if settings.isRecordingShortcut { settings.endShortcutCapture() }
         else if !settings.searchQuery.isEmpty { settings.searchQuery = "" }
         else { super.cancelOperation(sender) }
     }
@@ -72,13 +72,15 @@ public struct SettingsContent: View {
         window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
         window.backgroundColor = SettingsTokens.Redesign.background.nsColor
         window.minSize = SettingsTokens.Redesign.minimum
-        let hosting = NSHostingController(rootView: SettingsContent(viewModel: viewModel))
-        hosting.sizingOptions = []
-        window.contentViewController = hosting
+        // Resolve the final frame before attaching SwiftUI. Resizing an
+        // installed graph here forced an extra complete cold layout.
         window.setFrame(NSRect(origin: window.frame.origin, size: SettingsTokens.Redesign.window), display: false)
         window.title = viewModel.selectedSection.title; window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("OpenSettingsRedesign")
         if !window.setFrameUsingName("OpenSettingsRedesign") { window.center() }
+        let hosting = NSHostingController(rootView: SettingsContent(viewModel: viewModel))
+        hosting.sizingOptions = []; hosting.safeAreaRegions = []
+        window.contentViewController = hosting
         return window
     }
 }

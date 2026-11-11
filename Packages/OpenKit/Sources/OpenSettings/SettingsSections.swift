@@ -142,7 +142,6 @@ struct SettingsAdBlockingSection: View {
         }.id("ad-blocking/allowed-sites")
         let notice = !model.errorText.isEmpty ? model.errorText : model.lastError ?? (!model.isReady ? "Block lists are loading for this Profile. Choices will be available when they are ready." : model.hasOtherBlocker ? "More than one ad blocker is on. Blocking may break sites." : "")
         SettingsInlineMessage(text: notice).padding(.top, notice.isEmpty ? 0 : 12)
-        Button("Copy debug info") { model.copyDebug() }.id("ad-blocking/debug").padding(.top, 12)
     }
     @ViewBuilder private func categoryRows(_ category: String) -> some View {
         let all = model.store.catalog.lists.filter { $0.category.lowercased() == category && !$0.urls.isEmpty }
@@ -208,6 +207,11 @@ struct SettingsAdvancedSection: View {
             OpenSettingsRow(root: root, id: "advanced/more", title: "More browser settings") { Button("Open in tab") { root.actions.openMoreSettings() } }
             OpenSettingsRow(root: root, id: "advanced/data-folder", title: "Open data folder") { Button("Show in Finder") { root.actions.revealOpenDataFolder() } }
             OpenSettingsRow(root: root, id: "advanced/copy-info", title: "Open information", last: true) { Button("Copy info") { root.actions.copyOpenInfoToPasteboard() } }
+        }
+        OpenSettingsGroup("Diagnostics") {
+            OpenSettingsRow(root: root, id: "advanced/adblock-debug", title: "Ad blocking", help: "Diagnostics for \(root.profiles.profile?.name ?? "the selected Profile").", last: true) {
+                Button("Copy debug info") { root.adBlock?.copyDebug() }.disabled(root.adBlock?.isReady != true)
+            }
         }
         SettingsInlineMessage(text: root.advanced.statusText)
     }

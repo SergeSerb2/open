@@ -72,6 +72,17 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
 }
 
 @MainActor public enum SettingsSearchIndex {
+    /// Private deep links are metadata IDs, never arbitrary page URLs. Before
+    /// splitting/decoding, bound one URL to 2 KiB; the App queues at most 16.
+    public static func destination(for url: URL) -> (section: SettingsSection, row: String?)? {
+        guard url.absoluteString.utf8.count <= 2_048,
+              url.scheme == "open", url.host() == "settings", url.user == nil,
+              url.password == nil, url.port == nil, url.query == nil, url.fragment == nil else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count <= 2, let raw = parts.first, let section = SettingsSection(rawValue: raw) else { return nil }
+        if parts.count == 2, !entries.contains(where: { $0.id == parts.joined(separator: "/") }) { return nil }
+        return (section, parts.count == 2 ? parts[1] : nil)
+    }
     public static let entries: [SettingsSearchEntry] = {
         var rows: [SettingsSearchEntry] = [
             .init(.general, "default-browser", "Make Open your default browser", help: "Links from Mail, Messages, and other apps will open here.", synonyms: "default app"),
@@ -107,7 +118,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.adBlocking, "enabled", "Block ads, trackers, and popups", help: "The main switch applies to all Profiles."),
             .init(.adBlocking, "lists", "Block lists", help: "Choose lists, see update status, or reset list choices."),
             .init(.adBlocking, "allowed-sites", "Don't block on these sites", help: "Add or remove an allowed site."),
-            .init(.adBlocking, "debug", "Copy Ad Block Debug Info"),
+            .init(.advanced, "adblock-debug", "Copy debug info", help: "Ad blocking diagnostics for the selected Profile.", synonyms: "Copy Ad Block Debug Info"),
             .init(.sitePermissions, "privacy", "Privacy and Security"),
             .init(.sitePermissions, "notifications", "Notifications"),
             .init(.passwordsCards, "passwords", "Passwords"),
@@ -159,11 +170,8 @@ extension SettingsViewModel {
         sectionBack.append(selectedSection); selectedSection = section; searchQuery = ""; scrollTarget = nil; arrivalID = nil; onNavigation?()
     }
     @discardableResult public func openSettingsURL(_ url: URL) -> Bool {
-        guard url.scheme == "open", url.host() == "settings", url.query == nil, url.fragment == nil else { return false }
-        let parts = url.path.split(separator: "/").map(String.init)
-        guard parts.count <= 2, let raw = parts.first, let section = SettingsSection(rawValue: raw) else { return false }
-        if parts.count == 2, !SettingsSearchIndex.entries.contains(where: { $0.id == parts.joined(separator: "/") }) { return false }
-        navigate(to: section, row: parts.count == 2 ? parts[1] : nil); return true
+        guard let target = SettingsSearchIndex.destination(for: url) else { return false }
+        navigate(to: target.section, row: target.row); return true
     }
     public func updateSettingsSearch() {
         let started = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)

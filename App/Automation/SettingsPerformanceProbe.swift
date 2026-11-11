@@ -25,6 +25,7 @@ import Darwin
   private(set) var running = true
   private let targetFPS: Int
   private let sequence: [SettingsSection]
+  private var navigation: [SettingsSection: NSButton] = [:]
   init(window: NSWindow, root: SettingsViewModel, mode: String) {
     self.window = window; self.root = root; self.mode = mode
     let sections = SettingsSection.allCases
@@ -32,6 +33,15 @@ import Darwin
     sequence = Array(sections.dropFirst(next)) + Array(sections.prefix(next))
     targetFPS = window.screen?.maximumFramesPerSecond ?? 60
     super.init()
+    // Discover controls before timing. Walking all retained page graphs on
+    // every press measures harness lookup work that a native click never does.
+    if let content = window.contentView {
+      for button in descendants(content).compactMap({ $0 as? NSButton }) {
+        if let section = sections.first(where: { button.identifier?.rawValue == "settings-nav-" + $0.rawValue }) {
+          navigation[section] = button
+        }
+      }
+    }
     root.onSectionDraw = { [weak self] section, time in
       guard let self, let pending, pending.section == section, pending.draw == nil else { return }
       self.pending?.draw = time
@@ -44,8 +54,7 @@ import Darwin
   }
   private func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
   private func press(_ section: SettingsSection) {
-    guard let content = window?.contentView,
-      let button = descendants(content).compactMap({ $0 as? NSButton }).first(where: { $0.identifier?.rawValue == "settings-nav-" + section.rawValue }) else { return }
+    guard let button = navigation[section] else { return }
     button.sendAction(button.action, to: button.target)
   }
   @objc private func frame(_ display: CADisplayLink) {

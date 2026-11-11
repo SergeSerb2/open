@@ -137,17 +137,17 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let expected = ["Action Probe: ⇧⌘Y is used by Copy URL, so it is off.", "Search Probe: ⌘T is used by New Tab…, so it is off."]
                 try require(vm.shortcuts.extensionConflicts.map(\.notice) == expected, "extension notice copy")
                 try require(!vm.shortcuts.commands.contains { ["probe", "conflict"].contains($0.id) }, "dynamic extension commands leaked into registry")
-                try await withAccessibleHost(ShortcutsPane(model: vm.shortcuts), size: CGSize(width: 684, height: 600)) { host in
+                try await withAccessibleHost(SettingsContent(viewModel: vm), size: CGSize(width: 960, height: 660)) { host in
                     let labels = accessibilityLabels(host)
                     try require(expected.allSatisfy { labels.contains($0) }, "extension conflict lines missing from pane: \(labels)")
                     try require(pressAccessibilityElement(host, label: "Extension Shortcuts…"), "extension link missing")
                     @MainActor func menuButton(_ view: NSView) -> NSPopUpButton? {
-                        if let button = view as? NSPopUpButton, button.menu?.items.contains(where: { $0.title == "Extension Shortcuts" }) == true { return button }
+                        if let button = view as? NSPopUpButton, button.menu?.items.contains(where: { $0.title == "Extension shortcuts…" }) == true { return button }
                         return view.subviews.lazy.compactMap { menuButton($0) }.first
                     }
                     guard let menu = menuButton(host)?.menu else { throw CheckFailure(description: "Shortcuts … menu missing") }
-                    try require(menu.items.dropFirst().map(\.title) == ["Revert Unsaved Changes", "Shortcut Help", "Extension Shortcuts"], "Shortcuts … menu order")
-                    menu.performActionForItem(at: 3)
+                    try require(menu.items.dropFirst().map(\.title) == ["Import…", "Export…", "Revert…", "Shortcut help", "Extension shortcuts…"], "Shortcuts … menu order")
+                    menu.performActionForItem(at: 5)
                 }
                 try require(env.actions.openedURLs.count == 2 && env.actions.openedURLs.allSatisfy { $0.0.absoluteString == "chrome://extensions/shortcuts" && $0.1 == vm.selectedProfileID }, "extension link/menu URL or Profile")
                 vm.selectedProfileID = work

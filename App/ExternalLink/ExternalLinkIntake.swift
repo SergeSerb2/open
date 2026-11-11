@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import OpenModel
 import OpenRouting
+import OpenSettings
 
 @MainActor
 protocol LinkDestinationExecutor: AnyObject {
@@ -133,7 +134,7 @@ extension AppDelegate {
   /// finishes so a cold launch never builds Settings against a temporary model.
   @discardableResult func handleSettingsURL(_ url: URL) -> Bool {
     guard url.scheme?.lowercased() == "open" else { return false }
-    guard url.host() == "settings", url.query == nil, url.fragment == nil else { return true }
+    guard SettingsSearchIndex.destination(for: url) != nil else { return true }
     if linkIntake.ready { _ = settingsPresenter.showSettingsURL(url) }
     else if pendingSettingsURLs.count < 16 { pendingSettingsURLs.append(url) }
     return true

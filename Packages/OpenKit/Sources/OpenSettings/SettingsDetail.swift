@@ -45,22 +45,25 @@ struct SettingsDetail: View {
             }
         }.id("settings-header")
     }
-    @ViewBuilder private var section: some View {
+    // Each retained page has a fixed section. Erase at this boundary so the
+    // first layout reflects only that section, rather than the generic tree
+    // for every branch of the fifteen-section view builder.
+    private var section: AnyView {
         switch sectionID {
-        case .general: GeneralPane(model: root.general)
-        case .appearance: SettingsAppearance(root: root)
-        case .shortcuts: ShortcutsPane(model: root.shortcuts).padding(.top, 24)
-        case .tabsArchive: SettingsArchiveControls(root: root)
-        case .profiles: ProfilesPane(model: root.profiles)
-        case .links: LinksPane(root: root)
-        case .advanced: SettingsAdvancedSection(root: root)
-        case .previews: SettingsPreviewsSection(root: root)
-        case .search: SettingsSearchSection(root: root)
-        case .downloads: SettingsDownloadsSection(root: root)
+        case .general: AnyView(GeneralPane(model: root.general))
+        case .appearance: AnyView(SettingsAppearance(root: root))
+        case .shortcuts: AnyView(ShortcutsPane(model: root.shortcuts).padding(.top, 24))
+        case .tabsArchive: AnyView(SettingsArchiveControls(root: root))
+        case .profiles: AnyView(ProfilesPane(model: root.profiles))
+        case .links: AnyView(LinksPane(root: root))
+        case .advanced: AnyView(SettingsAdvancedSection(root: root))
+        case .previews: AnyView(SettingsPreviewsSection(root: root))
+        case .search: AnyView(SettingsSearchSection(root: root))
+        case .downloads: AnyView(SettingsDownloadsSection(root: root))
         case .adBlocking:
-            if let ad = root.adBlock { SettingsAdBlockingSection(root: root, model: ad) }
-            else { SettingsInlineMessage(text: "Ad blocking settings could not be opened.") }
-        case .sitePermissions, .passwordsCards, .browsingData, .extensions: SettingsDestinationSection(root: root, section: sectionID)
+            if let ad = root.adBlock { AnyView(SettingsAdBlockingSection(root: root, model: ad)) }
+            else { AnyView(SettingsInlineMessage(text: "Ad blocking settings could not be opened.")) }
+        case .sitePermissions, .passwordsCards, .browsingData, .extensions: AnyView(SettingsDestinationSection(root: root, section: sectionID))
         }
     }
 }

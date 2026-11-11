@@ -9,8 +9,9 @@ struct SettingsNavigation: NSViewRepresentable {
     let results: [SettingsSearchEntry]
     let updateState: String?
     let focusRequest: Int
+    let shortcutAttention: Bool
     func makeNSView(context: Context) -> SettingsNavigationView { SettingsNavigationView(model: viewModel) }
-    func updateNSView(_ view: SettingsNavigationView, context: Context) { view.update(section: section, query: query, results: results, focusRequest: focusRequest) }
+    func updateNSView(_ view: SettingsNavigationView, context: Context) { view.update(section: section, query: query, results: results, focusRequest: focusRequest, shortcutAttention: shortcutAttention) }
 }
 
 @MainActor final class SettingsNavigationView: NSView, NSTextFieldDelegate {
@@ -58,19 +59,20 @@ struct SettingsNavigation: NSViewRepresentable {
         check.setAccessibilityLabel("Check for Updates")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-    func update(section: SettingsSection, query: String, results: [SettingsSearchEntry], focusRequest: Int) {
+    func update(section: SettingsSection, query: String, results: [SettingsSearchEntry], focusRequest: Int, shortcutAttention: Bool) {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         footer.stringValue = "Open \(version)" + (model.updateState.map { " · " + $0 } ?? "")
         currentQuery = query
         if search.stringValue != query { search.stringValue = query }
         let counts = Dictionary(grouping: results, by: \.section).mapValues(\.count)
+        let accent = SettingsTokens.Redesign.accessibleAccent(model.settingsAccentSource, dark: contentAppearance == .dark)
         for button in buttons {
             button.selected = query.isEmpty && button.section == section
             button.resultCount = query.isEmpty ? nil : counts[button.section, default: 0]
             button.profileCount = button.section == .profiles ? model.model.profiles.count : 0
-            button.attention = button.section == .shortcuts && !model.shortcuts.unexpected.isEmpty
+            button.attention = button.section == .shortcuts && shortcutAttention
             button.setAccessibilitySelected(button.selected)
-            button.accent = SettingsTokens.Redesign.accessibleAccent(model.settingsAccentSource, dark: contentAppearance == .dark)
+            button.accent = accent
             button.needsDisplay = true
         }
         hint.isHidden = !query.isEmpty; clear.isHidden = query.isEmpty
@@ -119,6 +121,10 @@ struct SettingsNavigation: NSViewRepresentable {
     func controlTextDidEndEditing(_ notification: Notification) { needsDisplay = true }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
+        case #selector(NSResponder.insertTab(_:)):
+            // NSHostingView's automatic key loop otherwise stops on the host
+            // before these native navigation controls.
+            window?.makeFirstResponder(buttons.first); return true
         case #selector(NSResponder.moveDown(_:)): model.searchSelection = min(max(0, model.searchResults.count - 1), model.searchSelection + 1); return true
         case #selector(NSResponder.moveUp(_:)): model.searchSelection = max(0, model.searchSelection - 1); return true
         case #selector(NSResponder.insertNewline(_:)): model.openSearchSelection(); return true

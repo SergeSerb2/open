@@ -140,7 +140,7 @@ extension AutomationController {
       "scale": window?.backingScaleFactor ?? 0,
       "display": settingsDisplayInfo(window?.screen),
       "screen": window?.screen?.localizedName ?? "", "profile": root.selectedProfileID.description,
-      "clearStatus": root.profiles.clearStatus, "suggestNotice": root.profiles.showsSuggestNotice,
+      "clearStatus": root.profiles.clearStatus, "clearing": root.profiles.clearing, "suggestNotice": root.profiles.showsSuggestNotice,
       "allowsRemoteSuggestions": root.profiles.allowsRemoteSuggestions,
       "updateState": root.updateState ?? "", "reduceMotion": Motion.reducesMotion,
       "profileSettings": ["engine": root.profiles.searchEngineID, "suggestions": root.profiles.suggestions,

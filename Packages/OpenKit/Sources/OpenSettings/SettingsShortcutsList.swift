@@ -38,7 +38,9 @@ struct SettingsShortcutsList: NSViewRepresentable {
         let changedRows = next.map(\.id) != commands.map(\.id)
         let update = changedRows || oldStore != store || self.recording != recording || self.finding != finding
         commands = next; oldStore = store; self.recording = recording; self.finding = finding
-        if update { table.reloadData(); table.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<commands.count)) }
+        // reloadData already invalidates delegate row heights. A second full
+        // invalidation repeated the first layout and could animate recordings.
+        if update { table.reloadData() }
         if let selected = model.selectedCommandID, let index = commands.firstIndex(where: { $0.id == selected }) {
             if table.selectedRow != index { table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false); table.scrollRowToVisible(index) }
         }
@@ -94,8 +96,10 @@ struct SettingsShortcutsList: NSViewRepresentable {
     private let categoryLabel = NSTextField(labelWithString: "")
     private let detail = NSTextField(wrappingLabelWithString: "")
     private let keyButton = SettingsShortcutKeyButton()
-    private let reset = SettingsShortcutFocusButton(title: "↺", target: nil, action: nil)
-    private let resolve = NSButton(title: "Keep this", target: nil, action: nil)
+    // Most rows need neither button. Creating two hidden NSButtons per row
+    // dominated the native first-layout sample; create only needed actions.
+    private var reset: SettingsShortcutFocusButton?
+    private var resolve: NSButton?
     private weak var model: ShortcutsViewModel?
     private var command: CommandDefinition?
     private var last = false
@@ -104,14 +108,11 @@ struct SettingsShortcutsList: NSViewRepresentable {
     override var isFlipped: Bool { true }
     init() {
         super.init(frame: .zero)
-        [titleLabel, categoryLabel, detail, keyButton, reset, resolve].forEach(addSubview)
+        [titleLabel, categoryLabel, detail, keyButton].forEach(addSubview)
         titleLabel.font = .systemFont(ofSize: 13); titleLabel.lineBreakMode = .byTruncatingTail
         categoryLabel.font = .systemFont(ofSize: 11); detail.font = .systemFont(ofSize: 11.5)
         keyButton.target = self; keyButton.action = #selector(record)
-        reset.isBordered = false; reset.target = self; reset.action = #selector(resetShortcut)
-        resolve.isBordered = false; resolve.font = .systemFont(ofSize: 11); resolve.target = self; resolve.action = #selector(keepShortcut)
         keyButton.focusChanged = { [weak self] in self?.refreshAffordances() }
-        reset.focusChanged = { [weak self] in self?.refreshAffordances() }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
     func update(command: CommandDefinition, model: ShortcutsViewModel, last: Bool) {
@@ -121,14 +122,26 @@ struct SettingsShortcutsList: NSViewRepresentable {
         categoryLabel.stringValue = command.scope == .global ? "Global" : ShortcutsViewModel.category(for: command)
         let conflict = model.conflictText(for: command.id)
         detail.stringValue = conflict ?? (command.scope == .global ? "Works when Open is in the background." : "")
-        detail.isHidden = detail.stringValue.isEmpty; resolve.isHidden = conflict == nil
-        resolve.isEnabled = model.canKeepShortcut(for: command.id)
+        detail.isHidden = detail.stringValue.isEmpty
+        if changed, reset == nil {
+            let button = SettingsShortcutFocusButton(title: "↺", target: self, action: #selector(resetShortcut))
+            button.isBordered = false
+            button.focusChanged = { [weak self] in self?.refreshAffordances() }
+            reset = button; addSubview(button)
+        }
+        if conflict != nil, resolve == nil {
+            let button = NSButton(title: "Keep this", target: self, action: #selector(keepShortcut))
+            button.isBordered = false; button.font = .systemFont(ofSize: 11)
+            resolve = button; addSubview(button)
+        }
+        resolve?.isHidden = conflict == nil
+        resolve?.isEnabled = model.canKeepShortcut(for: command.id)
         keyButton.shortcuts = model.store.effectiveShortcuts(for: command)
         keyButton.recording = model.recordingCommandID == command.id
         keyButton.showAdd = hovered; keyButton.conflict = conflict != nil; keyButton.isEnabled = command.isCustomizable
         keyButton.setAccessibilityLabel((command.isCustomizable ? "Record shortcut for " : "Shortcut for ") + model.displayTitle(command))
         keyButton.setAccessibilityValue(keyButton.shortcuts.map(\.symbolDisplay).joined(separator: ", "))
-        reset.setAccessibilityLabel("Reset " + model.displayTitle(command))
+        reset?.setAccessibilityLabel("Reset " + model.displayTitle(command))
         setAccessibilityElement(false); setAccessibilityLabel(model.displayTitle(command) + (changed ? ", changed from default" : ""))
         toolTip = model.displayTitle(command) + (changed ? " · Changed from default" : "")
         refreshAffordances()
@@ -138,22 +151,23 @@ struct SettingsShortcutsList: NSViewRepresentable {
         super.layout()
         let keyWidth = keyButton.recording ? CGFloat(183) : max(80, min(225, keyButton.preferredWidth))
         keyButton.frame = .init(x: bounds.width - keyWidth - 14, y: 9, width: keyWidth, height: 26)
-        reset.frame = .init(x: keyButton.frame.minX - 25, y: 10, width: 22, height: 24)
-        let labelWidth = max(80, reset.frame.minX - 22)
+        let resetX = keyButton.frame.minX - 25
+        reset?.frame = .init(x: resetX, y: 10, width: 22, height: 24)
+        let labelWidth = max(80, resetX - 22)
         let size = (titleLabel.stringValue as NSString).size(withAttributes: [.font: titleLabel.font!])
         titleLabel.frame = .init(x: 14, y: 12, width: labelWidth, height: 20)
         let categoryX = 14 + size.width + 10
-        categoryLabel.frame = .init(x: categoryX, y: 14, width: max(0, reset.frame.minX - categoryX - 8), height: 18)
+        categoryLabel.frame = .init(x: categoryX, y: 14, width: max(0, resetX - categoryX - 8), height: 18)
         categoryLabel.isHidden = categoryLabel.frame.width < 35
-        resolve.frame = .init(x: bounds.width - 85, y: 34, width: 72, height: 19)
-        detail.frame = .init(x: 14, y: 34, width: bounds.width - (resolve.isHidden ? 28 : 108), height: 22)
+        resolve?.frame = .init(x: bounds.width - 85, y: 34, width: 72, height: 19)
+        detail.frame = .init(x: 14, y: 34, width: bounds.width - (keyButton.conflict ? 108 : 28), height: 22)
     }
     override func draw(_ dirtyRect: NSRect) {
         SettingsStyle.card.nsColor.setFill(); bounds.fill()
         if hovered { SettingsStyle.control.nsColor.withAlphaComponent(0.5).setFill(); bounds.fill() }
         titleLabel.textColor = SettingsStyle.text.nsColor; categoryLabel.textColor = SettingsStyle.secondary.nsColor
         detail.textColor = keyButton.conflict ? SettingsStyle.attentionText.nsColor : SettingsStyle.secondary.nsColor
-        reset.contentTintColor = SettingsStyle.secondary.nsColor; resolve.contentTintColor = SettingsStyle.attentionText.nsColor
+        reset?.contentTintColor = SettingsStyle.secondary.nsColor; resolve?.contentTintColor = SettingsStyle.attentionText.nsColor
         if changed {
             SettingsStyle.accessibleAccent(model?.root.settingsAccentSource, dark: contentAppearance == .dark).setFill()
             NSBezierPath(ovalIn: .init(x: 5, y: 20, width: 4, height: 4)).fill()
@@ -165,9 +179,9 @@ struct SettingsShortcutsList: NSViewRepresentable {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited], owner: self))
     }
     private func refreshAffordances() {
-        let focused = window?.firstResponder === keyButton || window?.firstResponder === reset
+        let focused = window?.firstResponder === keyButton || (reset.map { window?.firstResponder === $0 } ?? false)
         keyButton.showAdd = hovered; keyButton.needsDisplay = true
-        reset.isHidden = !changed || !(hovered || focused)
+        reset?.isHidden = !changed || !(hovered || focused)
         needsDisplay = true
     }
     override func mouseEntered(with event: NSEvent) { hovered = true; refreshAffordances() }

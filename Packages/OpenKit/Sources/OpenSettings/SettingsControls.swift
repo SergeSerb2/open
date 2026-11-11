@@ -210,7 +210,7 @@ private struct SettingsNativeChoice<Value: Hashable>: NSViewRepresentable {
     }
 }
 
-@MainActor private final class SettingsChoiceButton: NSPopUpButton {
+@MainActor final class SettingsChoiceButton: NSPopUpButton {
     var profile = false
     var accent: NSColor?
     override var isFlipped: Bool { true }

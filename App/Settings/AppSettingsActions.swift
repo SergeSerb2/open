@@ -88,7 +88,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     settings.navigate(to: section, row: row); show()
   }
   @discardableResult func showSettingsURL(_ url: URL) -> Bool {
-    guard settings.openSettingsURL(url) else { return false }
+    guard let target = SettingsSearchIndex.destination(for: url) else { return false }
+    settings.navigate(to: target.section, row: target.row)
     show(); return true
   }
   func updateStatusDidChange(_ status: String?) { settingsStorage?.updateState = status }

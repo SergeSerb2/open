@@ -1,6 +1,6 @@
 # Settings
 
-Settings uses Open’s original design. The standard resizable window opens at 960 × 660 pt with an 800 × 540 pt minimum. A 232 pt navigation column stays in place while the content scrolls. The window remembers its frame. Settings and its section views are created only when needed.
+Settings uses Open’s original design. The standard resizable window opens at 960 × 660 pt with an 800 × 540 pt minimum. A 232 pt navigation column stays in place while the content scrolls. The window remembers its frame. Settings and its section views are created only when needed. The window keeps each visited section’s view graph. Switching sections hides the old page and lays out only the visible page. Hidden pages release their field editor and shortcut recorder.
 
 ## Navigation and search
 
@@ -8,7 +8,7 @@ The sections are General, Appearance, Tabs & Archive, Search, Links, Downloads, 
 
 Command-F focuses the global search. Labels, help, aliases, and every active shortcut command are indexed. `is:changed` limits results to changed settings. Up/Down selects a result; Return opens its section and pulses the target once. Escape clears search. Command-1 through Command-9 opens the first nine sections. Command-[ and Command-] move through section history. Typing while a navigation item has focus starts search.
 
-Each row has a stable `section/row` ID. `open://settings/<section>[/<row>]` opens it through the App’s URL delivery path. Unknown sections, rows, query strings, and fragments are refused. Existing Settings, Shortcuts, Air Traffic Control, Search Settings, New Profile and import commands keep their actions. The command bar registers the same metadata index as a suggestion provider; it does not construct Settings during launch.
+Each row has a stable `section/row` ID. `open://settings/<section>[/<row>]` opens it through the App’s URL delivery path. Links are limited to 2 KiB before parsing. Unknown sections, rows, query strings, and fragments are refused before Settings is constructed. The launch queue holds at most 16 valid links. Existing Settings, Shortcuts, Air Traffic Control, Search Settings, New Profile and import commands keep their actions. The command bar registers the same metadata index as a suggestion provider; it does not construct Settings during launch.
 
 ## Profile scope and changes
 
@@ -24,7 +24,7 @@ Links validates every draft, preserves order, and rolls the model back when its 
 
 Ad-block lists keep ready, busy, and retired-Profile guards. Host-only validation uses the store’s registrable-domain rules. Failed updates keep prior lists. Global enabled state and per-Profile list/site choices retain their original action callbacks.
 
-KeyBindingStore keeps saved bindings separate from conflicting drafts. Invalid bare keys stay in recording mode and never write. Escape cancels, Delete clears, and Reset all requires confirmation. Import/export, priorities, extension conflicts and keyBindingsDidChange keep their existing semantics. Every unassigned row is blank at rest and offers Add shortcut on hover or focus.
+KeyBindingStore keeps saved bindings separate from conflicting drafts. Invalid bare keys stay in recording mode and never write. Escape cancels, Delete clears, and Reset all requires confirmation. Import/export, priorities, extension conflicts and keyBindingsDidChange keep their existing semantics. Every unassigned row is blank at rest and offers Add shortcut on hover or focus. The command search, filter chips, category menu and scrolling list use native AppKit controls. The four filter chips share one row with the category menu. The list height ends on a full row.
 
 Default-browser changes, folder pickers, file panels, and Keychain consent remain user actions. Automated verification never accepts a macOS system dialog. The import wizard retains its count-only probe, explicit consent, cancellation, partial-result and error paths. Import graph construction remains on the main actor; this change does not claim large-import performance.
 
@@ -68,7 +68,7 @@ Every former pane action is retained. The table identifies its current row and g
 | Advanced ad-block master | `ad-blocking/enabled` | Same global store and app action |
 | Ad Block sheet list search / categories / checkboxes / status / info / Reset | `ad-blocking/lists` | Inline; same list IDs, ready/busy/retired-Profile guards and async actions |
 | Ad Block allowed-site add / remove | `ad-blocking/allowed-sites` | Same host validation and per-Profile store |
-| Ad Block debug | `ad-blocking/debug` | Same clipboard action |
+| Ad Block debug | `advanced/adblock-debug` | Same selected-Profile clipboard action, under Diagnostics |
 | Shortcuts every command, recording, conflict, clear/reset, priority, import/export/revert, learning window | `shortcuts/<command-id>`, `shortcuts/priority`, `shortcuts/essential` | Same KeyBindingStore, conflict guard and keyBindingsDidChange; Reset All confirmation is an app-owned sheet |
 | Extensions destination | `extensions/manage` | Native phase-1 shell opens current extension manager |
 | Advanced sounds / haptics / window drag / quotes / PiP / theme / Boosts | `advanced/sound`, `advanced/haptics`, `advanced/window-dragging`, `advanced/shared-quotes`, `advanced/picture-in-picture`, `advanced/theme-data`, `advanced/boosts` | Same preferences |

@@ -63,14 +63,17 @@ struct SettingsDetailHost: NSViewRepresentable {
                         .padding(.top, SettingsStyle.topInset).padding(.bottom, 28)
                         .frame(maxWidth: .infinity, alignment: .top).padding(.horizontal, 24)
                 }.buttonStyle(OpenSettingsButtonStyle()))
-                view.sizingOptions = []; search = view
+                view.sizingOptions = []; view.safeAreaRegions = []; search = view
             }
             next = search!
         } else {
             if pages[section] == nil {
                 let state = SettingsPageState()
                 let view = NSHostingView(rootView: SettingsDetail(root: root, sectionID: section, page: state))
-                view.sizingOptions = []; pages[section] = (view, state)
+                // This host is already inside the window's content frame; the
+                // design supplies its 44 pt top inset. Resolving another safe
+                // area here duplicated layout work in the cold-page profile.
+                view.sizingOptions = []; view.safeAreaRegions = []; pages[section] = (view, state)
             }
             next = pages[section]!.0; page = pages[section]!.1
         }
@@ -93,7 +96,7 @@ struct SettingsDetailHost: NSViewRepresentable {
             if let view, view === active || view.isDescendant(of: active) { window?.makeFirstResponder(nil) }
         }
         root.focusedSettingID = nil
-        if searching || section != .shortcuts, root.shortcuts.recordingCommandID != nil { root.shortcuts.cancelRecording() }
+        if searching || section != .shortcuts { root.endShortcutCapture() }
         active?.isHidden = true
         if next.frame != bounds { next.frame = bounds }
         if next.superview == nil { addSubview(next) }

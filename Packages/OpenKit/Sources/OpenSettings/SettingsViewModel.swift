@@ -52,7 +52,20 @@ import OpenAdBlock
     public var linksError = ""
     public var preferenceRevision = 0
     public var adBlock: AdBlockSettingsModel?
-    @ObservationIgnored public private(set) lazy var shortcuts = ShortcutsViewModel(root: self)
+    @ObservationIgnored private var shortcutsStorage: ShortcutsViewModel?
+    public var shortcuts: ShortcutsViewModel {
+        if let shortcutsStorage { return shortcutsStorage }
+        let model = ShortcutsViewModel(root: self)
+        shortcutsStorage = model
+        return model
+    }
+    /// A navigation badge must not construct the Shortcuts model on first open.
+    var shortcutsHaveConflicts: Bool { shortcutsStorage?.unexpected.isEmpty == false }
+    var isRecordingShortcut: Bool { shortcutsStorage?.recordingCommandID != nil }
+    func endShortcutCapture() {
+        if shortcutsStorage?.recordingCommandID != nil { shortcutsStorage?.cancelRecording() }
+        shortcutsStorage?.findByKeys = false
+    }
     public func attach(adBlockStore: AdBlockStore, directoryForProfile: (@MainActor (Profile) -> URL)? = nil) {
         let directories = ProfileDirectories(root: root)
         adBlock = AdBlockSettingsModel(root: self, store: adBlockStore,
