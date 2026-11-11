@@ -2141,6 +2141,9 @@
         // Real input arrives after the display cycle has laid the window out (the window
         // buttons are placed at its end); run that pass before hit-testing.
         target.layoutIfNeeded()
+        // A click also moves the simulated pointer. Reconcile tracking before
+        // mouseDown, so an old Favorite enter cannot outlive a row click.
+        _ = hover(target, at: point)
         if a["queued"] as? Bool == true {
           // Controls that read NSApp.currentEvent (Option-click pane Close) need
           // native dequeue, not a direct sendEvent with an unrelated current event.
