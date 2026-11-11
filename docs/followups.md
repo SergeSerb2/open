@@ -578,3 +578,11 @@ The valid M1 first cold/warm pair measured sidebar 762/496 ms and FCP
 row scores five later pairs, with its existing medians and 1.5× maxima.
 Owner: performance lane; attribute installation/system costs in
 [#313](https://github.com/SergeSerb2/open/issues/313). No launch deferral applies.
+
+## Defaults domain for automation builds (lead, 2026-11-11)
+
+Automation builds should use their own defaults domain so that e2e runs cannot
+change a user's live preferences. Today the real-App suites (for example
+`tools/e2e/updater.py`) write keys such as `open.general.warnBeforeQuitting`
+in the shared `io.github.sergeserb2.open` domain and restore them in `finally`.
+A user's running Open session can see those values while a suite runs.
