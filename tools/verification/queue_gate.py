@@ -149,10 +149,15 @@ def stop_worker(job):
             os.kill(coordinators[0], signal.SIGTERM)
         except ProcessLookupError:
             pass
+        return True
     elif not holder(job.pid):
         # Still queued: no compiler or screen worker has started. A racing
         # coordinator must pass inside_heavy again before its build worker.
         job.terminate()
+        return True
+    # Acquisition can race a cancellation. Retry until the owned coordinator
+    # is visible; never treat a missed signal as successful cancellation.
+    return False
 
 
 def main():
@@ -203,17 +208,20 @@ def main():
                         acquired = time.monotonic()
                     overrun = acquired is not None and time.monotonic()-acquired >= 900 and waiters(job.pid)
                     if (CANCELLED or overrun) and not stopping:
-                        stopping = True
-                        print(name + ': stopping after owned cleanup (' + ('cancelled' if CANCELLED else '15-minute ticket cap with waiters') + ')', flush=True)
-                        stop_worker(job)
+                        stopping = stop_worker(job)
+                        if stopping:
+                            print(name + ': stopping after owned cleanup (' + ('cancelled' if CANCELLED else '15-minute ticket cap with waiters') + ')', flush=True)
                     try:
                         job.wait(.25)
                     except subprocess.TimeoutExpired:
                         pass
             finally:
-                if job.poll() is None:
+                while job.poll() is None:
                     with contextlib.suppress(Exception):
-                        stop_worker(job)
+                        if stop_worker(job):
+                            break
+                    time.sleep(.25)
+                if job.poll() is None:
                     job.wait()  # Never abandon a live check on a dispatcher error.
         rc = job.returncode
         record = dict(name=name, selected=selection, queued=queued, ended=time.time(), exit=rc,
@@ -233,8 +241,22 @@ def main():
             receipt['source'] = data['source']
         if data['source'] != receipt['source'] or data['config'] != options.config or data['lane'] != 'merge':
             raise RuntimeError('source, engine, configuration or lane differs between chunks')
+        # LEAD 08:43: this exact row measures the M5 reference display, under
+        # its existing M5/load<=12/nominal<=8.34 ms rule. It is not a quiet-M1
+        # latency/CPU budget. Keep the real M5 PASS or FAIL and discard only
+        # the legacy worker's extra M1 placeholder. Raw worker JSON is intact.
+        display_row = next((row for row in data['rows']
+                            if row['row'] == 'm5/onboarding/strict_120hz'
+                            and row.get('timing') is True
+                            and row['status'] in ('PASS', 'FAIL')), None)
         for row in copy.deepcopy(data['rows']):
             key = row['row']
+            if key == 'onboarding/strict_120hz' and row['status'] == 'M1_REQUIRED':
+                if display_row is None:
+                    raise RuntimeError('missing M5 display assertion for onboarding/strict_120hz')
+                continue
+            if key == 'm5/onboarding/strict_120hz':
+                key = row['row'] = 'onboarding/strict_120hz'
             if key == 'cli/build' or key.startswith('build/'):
                 key = 'build/'+name+'/'+key.replace('/', '-')
                 row['row'] = key

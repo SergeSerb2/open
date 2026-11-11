@@ -119,6 +119,12 @@ is cancelled through owned cleanup and remains unqualified. The aggregate
 receipt preserves every raw row and each ticket’s queue time and slot time;
 a partial selection is still a partial gate. No assertion or budget changes.
 
+The exact `onboarding/strict_120hz` row remains an M5 display qualification
+row (LEAD 08:43). Its existing M5, load1≤12 and nominal interval≤8.34 ms
+conditions, p95≤1.5×nominal and dropped intervals≤1% limits stay unchanged.
+The dispatcher retains its actual M5 PASS/FAIL and removes only the extra
+quiet-M1 receipt placeholder. This does not exempt latency or CPU budgets.
+
 ### Timing lane (LEAD 06:30, 2026-11-11)
 
 Budget rows (launch, section/key latency and idle CPU) need a valid quiet M1
