@@ -336,7 +336,10 @@ class Open:
         # The early-launcher-exit fixture must exercise open(1), not the App
         # child that stays alive until quit. Keep strict death checks for both.
         self.direct_child = _ROW_TIMEOUT is not None and not delivery_urls and not launch_without_wait
-        self.launch_output = open(self.launch_log_path, "a") if self.direct_child and self.world_audit_dir else None
+        # Every direct launch needs its own live stderr, including quit-warning
+        # and command-refusal checks. LaunchServices creates this file for its
+        # launches; Popen needs the equivalent even without a world audit.
+        self.launch_output = open(self.launch_log_path, "a") if self.direct_child else None
         self.aggregate_log = self.log if self.launch_output else None
         if self.launch_output:
             # Existing allocation checks read app.log while the App runs.
