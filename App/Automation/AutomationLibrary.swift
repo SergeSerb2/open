@@ -13,8 +13,13 @@ extension AutomationController {
     }
     switch action {
     case "open":
-      let section = (args["section"] as? String).flatMap(LibrarySection.init(rawValue:))
-      adapter.showLibrary(section:section)
+      var section: LibraryPanelSection?
+      if let raw=args["section"] as? String {
+        guard let parsed=LibraryPanelSection(rawValue:raw == "captures" ? "media" : raw), LibraryPanelSection.visible(in:.standard).contains(parsed) else { throw Failure(message:"unknown or hidden Library section") }
+        section=parsed
+      }
+      adapter.showLibrary(section:section?.modelSection ?? (section == .easels ? .media : nil))
+      if section == .easels { adapter.activeLibrarySession?.panel?.select(.easels) }
     case "close": adapter.closeLibrary()
     case "toggle": adapter.toggleLibrary()
     case "state": break

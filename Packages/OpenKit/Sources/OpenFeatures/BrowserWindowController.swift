@@ -34,6 +34,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public private(set) var isLibraryOpen = false
     public var libraryKeyHandler: ((NSEvent) -> Bool)?
     public var libraryWidth: CGFloat = 417
+    private var libraryUsesWideLayout = false
+    private var librarySidebarFadeUntil: CFTimeInterval = 0
     private var libraryMotionGeneration = 0
     public let splitController: SplitViewController
     private var boostEditorSpaceID: SpaceID?
@@ -459,7 +461,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if isLibraryOpen, let libraryPanel {
             let size = root.bounds.size
             if background.frame != root.bounds { background.frame = root.bounds }
-            let edge = min(libraryWidth, size.width - 56)
+            let edge = libraryUsesWideLayout ? size.width - 56 : min(libraryWidth, size.width - 56)
             let panel = CGRect(x: edge, y: 10, width: max(46, size.width - edge - 10), height: max(0, size.height - 20))
             libraryPanel.frame = CGRect(x: 0, y: 0, width: edge, height: size.height)
             libraryPanel.needsLayout = true
@@ -467,7 +469,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             emptyPanel.frame = panel
             emptyPanelHost.frame = root.bounds
             emptyPanelHost.isHidden = !container.isHidden
-            sidebar.isHidden = true
+            sidebar.isHidden = CACurrentMediaTime() >= librarySidebarFadeUntil
+            cardShadow.isHidden = true
             resizeHandle.isHidden = true
             toastOverlay.frame = panel
             if let overlay = peekStorage?.overlay {
@@ -594,11 +597,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Transient geometry only: the saved sidebar and its live view stay intact.
     public func presentLibraryPanel(_ panel: NSView, width: CGFloat, animated: Bool = true) {
         let wasOpen = isLibraryOpen
+        let fadesSidebar = !wasOpen && !sidebar.isHidden && animated && window?.isVisible == true
         let oldFrame = container.layer?.presentation()?.frame ?? container.frame
         dismissSidebarReveal()
         cancelSidebarResize()
         libraryMotionGeneration += 1
-        isLibraryOpen = true; libraryWidth = width
+        isLibraryOpen = true; libraryWidth = width; libraryUsesWideLayout = width > 417
+        librarySidebarFadeUntil = fadesSidebar ? CACurrentMediaTime() + (Motion.reducesMotion ? 0.10 : 0.12) : 0
         if libraryPanel !== panel {
             libraryPanel?.removeFromSuperview(); libraryPanel = panel
             root.addSubview(panel, positioned: .below, relativeTo: container)
@@ -608,6 +613,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         panel.layoutSubtreeIfNeeded()
         animateLibrary(from: oldFrame, opening: true, duration: wasOpen ? 0.20 : 0.12, animated: animated)
         if !wasOpen, animated { fadeLibrary(panel, from: 0, to: 1, duration: Motion.reducesMotion ? 0.10 : 0.12) }
+        if fadesSidebar {
+            let generation = libraryMotionGeneration
+            let duration = Motion.reducesMotion ? 0.10 : 0.12
+            fadeLibrary(sidebar, from: 1, to: 0, duration: duration)
+            DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+                guard let self, self.isLibraryOpen, self.libraryMotionGeneration == generation else { return }
+                self.sidebar.isHidden = true
+            }
+        }
     }
     public func dismissLibraryPanel(animated: Bool = true) {
         guard isLibraryOpen else { return }
@@ -686,7 +700,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         for kind in Self.trafficLightKinds {
             guard let button = window.standardWindowButton(kind) else { continue }
             if button.isHidden != hidden { button.isHidden = hidden }
+            if isLibraryOpen { button.layer?.removeAnimation(forKey: "sidebarToggle"); button.layer?.setValue(0, forKeyPath: "transform.translation.x") }
         }
+        if isLibraryOpen { dimmedLights.layer?.removeAnimation(forKey: "sidebarToggle"); dimmedLights.layer?.setValue(0, forKeyPath: "transform.translation.x") }
         placeTrafficLights()
     }
 

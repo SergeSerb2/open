@@ -9,6 +9,7 @@ final class LibraryControl: NSButton {
     var foreground = NSColor.labelColor { didSet { needsDisplay = true } }
     var overlay = NSColor.labelColor { didSet { needsDisplay = true } }
     var baseAlpha: CGFloat = 0
+    var labelSize: CGFloat = 14
     var onPress: (() -> Void)?
     var onArrow: ((Int) -> Void)?
     var hovered = false { didSet { needsDisplay = true } }
@@ -19,6 +20,8 @@ final class LibraryControl: NSButton {
         super.init(frame: .zero)
         self.title = title; self.glyph = glyph; isTile = tile
         isBordered = false; focusRingType = .none
+        wantsLayer = true; layer?.cornerRadius = tile ? 12 : 10
+        layer?.cornerCurve = .continuous; layer?.masksToBounds = true
         target = self; action = #selector(press)
         setAccessibilityLabel(title)
         if tile { setAccessibilityRole(.radioButton) }
@@ -43,9 +46,9 @@ final class LibraryControl: NSButton {
     override func mouseExited(with event: NSEvent) { hovered = false }
     override func draw(_ dirtyRect: NSRect) {
         let alpha: CGFloat = isHighlighted ? 0.14 : selected ? 0.105 : hovered ? 0.05 : baseAlpha
-        if alpha > 0 { overlay.withAlphaComponent(alpha).setFill(); NSBezierPath(roundedRect: bounds, xRadius: isTile ? 12 : 10, yRadius: isTile ? 12 : 10).fill() }
+        if alpha > 0 { overlay.withAlphaComponent(alpha).setFill(); bounds.fill() }
         let color = foreground.withAlphaComponent(isEnabled ? selected ? 1 : 0.68 : 0.46)
-        let font = NSFont.systemFont(ofSize: isTile ? 12 : 14, weight: .semibold)
+        let font = NSFont.systemFont(ofSize: isTile ? 12 : labelSize, weight: .semibold)
         let attrs: [NSAttributedString.Key: Any] = [.font: font,.foregroundColor: color]
         let textSize = (title as NSString).size(withAttributes: attrs)
         if isTile {

@@ -56,7 +56,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         addSubview(rail)
         back.setAccessibilityLabel("Back to browser")
         back.onPress = { [weak self] in self?.onClose?() }; addSubview(back)
-        header.wantsLayer = true; header.layer?.cornerRadius = 10
+        header.wantsLayer = true; header.layer?.cornerRadius = 10; header.layer?.cornerCurve = .continuous
         addSubview(header)
         searchField.isBordered = false; searchField.drawsBackground = false
         searchField.font = .systemFont(ofSize: 14); searchField.focusRingType = .none
@@ -71,7 +71,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyTitle.font = .systemFont(ofSize:17,weight:.bold); emptyTitle.alignment = .center
         emptyBody.font = .systemFont(ofSize:14); emptyBody.alignment = .center
         emptyBody.maximumNumberOfLines = 4
-        emptyButton.baseAlpha = 0.09
+        emptyButton.baseAlpha = 0.09; emptyButton.labelSize = 13
         refresh()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -96,17 +96,16 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public func select(_ next: LibraryPanelSection, animated: Bool = true) {
         guard sections.contains(next) else { return }
         let changed = section != next
+        if changed, animated, window?.isVisible == true {
+            let fade = CATransition(); fade.type = .fade; fade.duration = 0.10
+            content.layer?.add(fade,forKey:"librarySection")
+        }
         section = next
         if let mapped = next.modelSection { viewModel.section = mapped }
         filterOpen = false
         updateSection()
         onWidthChange?(desiredWidth)
         needsLayout = true; layoutSubtreeIfNeeded()
-        if changed, animated, window?.isVisible == true {
-            content.layer?.removeAnimation(forKey:"librarySection")
-            let fade = CABasicAnimation(keyPath:"opacity"); fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.10
-            content.layer?.add(fade,forKey:"librarySection")
-        }
         NSAccessibility.post(element:rail,notification:.selectedChildrenChanged)
     }
     private func moveRail(_ delta: Int) {
@@ -202,7 +201,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         NSGradient(starting:NSColor.black.withAlphaComponent(0.07),ending:.clear)?.draw(in:CGRect(x:112,y:0,width:10,height:bounds.height),angle:0)
     }
     public func setSearch(_ text: String) {
-        viewModel.query = text; searchField.stringValue = text; updateSection()
+        viewModel.query = text
+        if searchField.stringValue != text { searchField.stringValue = text }
+        updateSection()
     }
     public func controlTextDidChange(_ notification: Notification) { setSearch(searchField.stringValue) }
     public func handleKey(_ event: NSEvent) -> Bool {

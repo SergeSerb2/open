@@ -16,6 +16,7 @@ final class AppLibrarySession {
 
   init(model: LibraryViewModel, controller: BrowserWindowController) {
     self.model = model; self.controller = controller
+    model.usesLegacySpaceManager = false
     presenter = LibraryPresenter(viewModel: model)
     if let window = controller.window { presenter.attach(to: window) }
   }

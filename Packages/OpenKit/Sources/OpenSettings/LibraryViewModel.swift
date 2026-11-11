@@ -11,7 +11,7 @@ import OpenStore
     public var section: LibrarySection { didSet {
         defaults.set(section.rawValue, forKey: "open.library.lastSection")
         if oldValue != section { statusText = ""; restoredSpaceID = nil; selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
-        if section == .spaces, cachedSpaceManagerView == nil { refreshSpaceManagerView() }
+        if usesLegacySpaceManager, section == .spaces, cachedSpaceManagerView == nil { refreshSpaceManagerView() }
     } }
     private var selections: [LibrarySection: Set<String>] = [:]
     private var queries: [LibrarySection: String] = [:]
@@ -52,6 +52,8 @@ import OpenStore
     @ObservationIgnored private let settingsActions: (any SettingsActions)?
     @ObservationIgnored private let historyResolver: (@MainActor (ProfileID) -> HistoryStore?)?
     private var cachedSpaceManagerView: NSView?
+    /// The AppKit overlay owns its cards; do not build the legacy hosted grid.
+    @ObservationIgnored public var usesLegacySpaceManager = true
     /// Rendering reads the cache; section and presenter changes refresh it.
     public var spaceManagerView: NSView? { cachedSpaceManagerView }
     /// The presenter refreshes this when its browser context changes. The
