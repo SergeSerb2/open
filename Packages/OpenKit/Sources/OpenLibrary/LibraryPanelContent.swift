@@ -15,7 +15,7 @@ extension LibraryPanelView {
     /// The socket bench awaits the same provider task as the live panel, then
     /// submits its real native layout/drawing. This does not wait for motion.
     public func finishPendingContent() async {
-        if hosts[section]?.loaded == false { await reloadTask?.value }
+        if hosts[section]?.loaded == false { await hosts[section]?.provider?.value }
         // A provider publication may cancel a superseded preparation. Await
         // the current generation, rather than replying with its old empty page.
         guard let host = hosts[section] else { return }
@@ -26,18 +26,21 @@ extension LibraryPanelView {
             if generation == host.generation,host.preparation == nil,!host.dirty { return }
         }
     }
-    public var listReuseState: [String:Int] { ["created":listView.cellsCreated,"configured":listView.cellsConfigured,"rows":listView.rowCount] }
+    public var listReuseState: [String:Int] { ["created":listView.totalCellsCreated,"configured":listView.cellsConfigured,"rows":listView.rowCount] }
     public var performanceCounters: [String:Double] {
         var state: [String:Double] = ["hosts":Double(hosts.count),"created":0,"configured":0,"reloadData":0,"tableUpdates":0,"formatting":0,"listLayout":0,"tasks":0,"timers":0,"displayLinks":0,"animations":Double((layer?.animationKeys() ?? []).filter { $0.hasPrefix("library") }.count)]
+        state["tasks"] = idleWarming ? 1 : 0
         for host in hosts.values {
             state["animations",default:0] += Double((host.list.layer?.animationKeys() ?? []).filter { $0.hasPrefix("library") }.count)
-            state["created",default:0] += Double(host.list.cellsCreated)
+            state["created",default:0] += Double(host.list.totalCellsCreated)
             state["configured",default:0] += Double(host.list.cellsConfigured)
             state["reloadData",default:0] += Double(host.list.reloads)
             state["tableUpdates",default:0] += Double(host.list.updates)
             state["formatting",default:0] += host.list.formattingMilliseconds
             state["listLayout",default:0] += host.list.layoutMilliseconds
             state["tasks",default:0] += Double((host.preparation == nil ? 0 : 1)+(host.append == nil ? 0 : 1))
+            state["tasks",default:0] += Double((host.provider == nil ? 0 : 1)+host.list.pendingTasks)
+            for (key,value) in host.list.table.phases { state["scroll."+key,default:0] += value }
         }
         for (key,value) in LibraryRaster.events { state["wake."+key] = value }
         state["rasterStores"] = LibraryRaster.stores; state["rasterPixels"] = LibraryRaster.pixels
@@ -48,9 +51,20 @@ extension LibraryPanelView {
             state[name] = configurations.isEmpty ? 0 : configurations[min(configurations.count-1,Int(Double(configurations.count-1)*fraction))]
         }
         state["warmupComplete"] = warmedRows ? 1 : 0
+        state["providerWarm"] = hosts[section]?.wasWarmed == true ? 1 : 0
+        state["warmedSectionPages"] = Double(hosts.values.filter { $0.wasWarmed && $0.loaded }.count)
         for (key,value) in switchPhases { state["switch."+key] = value }
         for (key,value) in submissionPhases { state["last."+key] = value }
         for (key,value) in hosts[section]?.phaseMilliseconds ?? [:] { state["last."+key] = value }
+        return state
+    }
+    /// Constant-cost counters for the display callback. Percentile sorting and
+    /// full-host diagnostics are read outside the measured scroll series.
+    public var scrollCounters: [String:Double] {
+        var state = ["created":Double(listView.totalCellsCreated),"configured":Double(listView.cellsConfigured),"formatting":listView.formattingMilliseconds,"listLayout":listView.layoutMilliseconds]
+        for (key,value) in listView.table.phases { state["scroll."+key] = value }
+        for (key,value) in submissionPhases { state["last."+key] = value }
+        for (key,value) in LibraryRaster.events { state["wake."+key] = value }
         return state
     }
     public func submitNativeFrame() {
@@ -110,23 +124,50 @@ extension LibraryPanelView {
         observeContent(); refreshData()
     }
     func endContentUpdates() {
+        skeletonTask?.cancel(); skeletonTask = nil; loadingSkeleton.isHidden = true
         reloadTask?.cancel(); reloadTask = nil; historyTask?.cancel(); historyTask = nil
-        for host in hosts.values { host.cancel() }
+        for host in hosts.values { host.cancel(); host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1; host.list.cancelPrefetch() }
     }
     func refreshData() {
         let target = section, host = host(for:section)
         guard contentActive, !host.loaded else { return }
+        if host.provider != nil { return }
+        skeletonTask?.cancel()
+        skeletonTask = Task { @MainActor [weak self,weak host] in
+            try? await Task.sleep(for:.milliseconds(120))
+            guard let self,let host,!Task.isCancelled,self.contentActive,self.section == target,!host.loaded else { return }
+            self.loadingSkeleton.isHidden = false
+            self.skeletonTask = nil
+        }
+        startProvider(target)
+    }
+    func loadProvider(_ target:LibraryPanelSection) async {
+        let host = host(for:target)
+        if host.loaded { return }
+        startProvider(target)
+        let generation = host.providerGeneration
+        await withTaskCancellationHandler { await host.provider?.value } onCancel: {
+            Task { @MainActor [weak host] in if host?.providerGeneration == generation { host?.provider?.cancel() } }
+        }
+    }
+    func startProvider(_ target:LibraryPanelSection) {
+        let host = host(for:target)
+        guard !host.loaded,host.provider == nil,let mapped = target.modelSection else { return }
         if target == .archive { host.storeVersion = viewModel.archives.keys.sorted { $0.description < $1.description }.map { String(viewModel.archives[$0]!.contentVersion) }.joined(separator:",") }
-        reloadTask?.cancel(); historyTask?.cancel(); reloadGeneration += 1
-        let generation = reloadGeneration
-        reloadTask = Task { @MainActor [weak self] in
-            guard let self else { return }
+        host.providerGeneration += 1
+        let generation = host.providerGeneration
+        host.provider = Task { @MainActor [weak self,weak host] in
+            guard let self,let host else { return }
+            defer { if generation == host.providerGeneration { host.provider = nil } }
             let started = ProcessInfo.processInfo.systemUptime
-            await self.viewModel.refreshExternalState()
-            guard !Task.isCancelled, self.contentActive, self.reloadGeneration == generation, self.section == target else { return }
+            await self.viewModel.refreshExternalState(for:mapped)
+            guard !Task.isCancelled,host.providerGeneration == generation else { return }
             host.phaseMilliseconds["provider"] = (ProcessInfo.processInfo.systemUptime-started)*1000
             host.loaded = true; host.dirty = true
-            self.renderRows()
+            if self.section == target,self.contentActive {
+                self.skeletonTask?.cancel(); self.skeletonTask = nil; self.loadingSkeleton.isHidden = true
+                self.renderRows()
+            }
             if target == .history, host.storeWatch == nil, let store = self.viewModel.histories[self.viewModel.historyProfileID] {
                 host.storeWatch = Task { @MainActor [weak self,weak host] in
                     let changes = await store.changes(); var initial = true
@@ -149,7 +190,7 @@ extension LibraryPanelView {
                 case .archive: _ = viewModel.archiveRows; _ = viewModel.archives.values.map(\.contentVersion)
                 case .history: _ = viewModel.historyRows
                 case .media: _ = viewModel.captures.captures; _ = viewModel.thumbnailImages
-                case .boosts: _ = viewModel.boostsProvider?.boosts(profileID:viewModel.historyProfileID)
+                case .boosts: _ = viewModel.boostsProvider?.libraryBoostsVersion
                 default: break
                 }
             } onChange: { [weak self] in
@@ -162,6 +203,7 @@ extension LibraryPanelView {
                         if version != host.storeVersion { host.storeVersion = version; host.loaded = false; storeChanged = true }
                     }
                     self.hosts[target]?.dirty = true
+                    if target == .boosts { self.hosts[target]?.loaded = false; storeChanged = true }
                     self.prebuiltReady = false
                     if self.contentActive {
                         if self.section == target { if storeChanged { self.refreshData() } else { self.renderRows() } }
@@ -272,9 +314,9 @@ extension LibraryPanelView {
         if section == .media, viewModel.captures.loadFailed { emptyTitle.stringValue = "Could not load media"; emptyBody.stringValue = "Close the Library and try again." }
         statusLabel.stringValue = section == .downloads && !viewModel.downloads.downloadHistoryError.isEmpty ? viewModel.downloads.downloadHistoryError : viewModel.statusText
         statusLabel.isHidden = statusLabel.stringValue.isEmpty || section == .spaces
-        for (target,host) in hosts { host.list.isHidden = target != section || host.list.rowCount == 0 || section == .spaces }
+        for (target,host) in hosts { host.list.isHidden = target != section || (host.loaded && host.list.rowCount == 0) || section == .spaces }
         layoutActiveList()
-        content.isHidden = !rowsEmpty || (section == .spaces && manager != nil)
+        content.isHidden = !rowsEmpty || (section == .spaces && manager != nil) || (section != .spaces && hosts[section]?.loaded != true)
         manager?.isHidden = section != .spaces
         header.isHidden = section == .spaces || filterOpen; filter.isHidden = !section.hasFilter || filterOpen
         filter.showsDot = hasActiveFilters; filterEditor.isHidden = !filterOpen
@@ -296,26 +338,10 @@ extension LibraryPanelView {
         viewModel.downloads.downloads.filter { item in
             (viewModel.downloadProfileFilter == nil || item.profileID == viewModel.downloadProfileFilter) && (viewModel.downloadStateFilter == nil || item.state == viewModel.downloadStateFilter)
         }.map { item in
-          LibraryRowSource(id:item.id,date:item.startedAt,text:item.fileName+" "+item.sourceHost) { [unowned self] in
+          LibraryRowSource(id:item.id,date:item.startedAt,text:item.fileName+" "+item.sourceHost,prepareText:{ LibraryRowText(title:item.fileName,subtitle:downloadSubtitle(item)) }) { [unowned self] prepared in
             let available = viewModel.fileAvailable(item)
             let progress = item.state == .inProgress || item.state == .paused
-            let subtitle: String
-            switch item.state {
-            case .completed: subtitle = available ? "Download" : "File moved or deleted."
-            case .failed: subtitle = "Failed"
-            case .cancelled: subtitle = "Cancelled"
-            case .paused: subtitle = "Paused"
-            case .inProgress:
-                let bytes = ByteCountFormatter(); bytes.countStyle = .file; bytes.allowsNonnumericFormatting = false
-                var received = bytes.string(fromByteCount:item.receivedBytes)
-                if let total = item.totalBytes {
-                    let target = bytes.string(fromByteCount:total)
-                    if let unit = target.split(separator:" ").last, received.hasSuffix(" "+unit) { received.removeLast(unit.count+1) }
-                    received += "/"+target
-                    if item.bytesPerSecond > 0 { received += " · \(max(0,(total-item.receivedBytes)/item.bytesPerSecond))s" }
-                }
-                subtitle = received
-            }
+            let subtitle = prepared?.subtitle ?? (item.state == .completed ? (available ? "Download" : "File moved or deleted.") : downloadSubtitle(item))
             let actions = viewModel.actions, id = item.id
             var menu: [LibraryRowAction] = []
             if progress {
@@ -345,7 +371,7 @@ extension LibraryPanelView {
             let space = row.spaceID?.description ?? "little"
             return (archiveReasonChips.isEmpty || archiveReasonChips.contains(reason)) && (archiveSpaceChips.isEmpty || archiveSpaceChips.contains(space))
         }.map { row in
-          LibraryRowSource(id:row.id.description,date:row.archivedAt,text:row.title+" "+row.url.absoluteString) { [unowned self] in
+          LibraryRowSource(id:row.id.description,date:row.archivedAt,text:row.title+" "+row.url.absoluteString) { [unowned self] _ in
             let id = row.id
             let restore: () -> Void = { [weak self] in
                 guard let self else { return }
@@ -376,13 +402,13 @@ extension LibraryPanelView {
                 || (historyWhenChips.contains("week") && age >= 0 && age < 7)
                 || (historyWhenChips.contains("older") && age >= 7)
         }.map { row in
-          LibraryRowSource(id:row.url.absoluteString,date:row.lastVisit,text:row.title+" "+row.url.absoluteString) { [unowned self] in
+          LibraryRowSource(id:row.url.absoluteString,date:row.lastVisit,text:row.title+" "+row.url.absoluteString,prepareText:{ LibraryRowText(title:row.title.isEmpty ? row.url.host() ?? "Page" : row.title,subtitle:row.url.absoluteString+" · "+row.lastVisit.formatted(date:.omitted,time:.shortened)) }) { [unowned self] prepared in
             let open: () -> Void = { [weak self] in
                 guard let self, self.viewModel.historyProfileID == profile else { return }
                 self.viewModel.actions.openHistoryItem(url:row.url); self.onClose?()
             }
             return LibraryRowItem(id:row.url.absoluteString,title:row.title.isEmpty ? row.url.host() ?? "Page" : row.title,
-                subtitle:row.url.absoluteString+" · "+row.lastVisit.formatted(date:.omitted,time:.shortened),kind:"history",day:"",
+                subtitle:prepared?.subtitle ?? row.url.absoluteString+" · "+row.lastVisit.formatted(date:.omitted,time:.shortened),kind:"history",day:"",
                 image:symbol("globe"),loadImage:{ [weak self] callback in self?.viewModel.loadRowIcon(row.url,completion:callback) },dragURL:row.url,activate:open,
                 hoverActions:[.init(title:"Delete",glyph:.trash,run:{ [weak self] in
                     self?.confirm("Delete this history entry?") { [weak self] in
@@ -395,9 +421,12 @@ extension LibraryPanelView {
     }
     func captureSources() -> [LibraryRowSource] {
         viewModel.captures.captures.map { item in
-          LibraryRowSource(id:item.id.uuidString,date:item.createdAt,text:(item.title ?? "")+" "+item.fileName+" "+item.sourceHost) { [unowned self] in
+          LibraryRowSource(id:item.id.uuidString,date:item.createdAt,text:(item.title ?? "")+" "+item.fileName+" "+item.sourceHost,prepareText:{
+              let title = (item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
+              return LibraryRowText(title:title.isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : title,subtitle:"Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted))
+          }) { [unowned self] prepared in
             let id = item.id, actions = viewModel.actions
-            return LibraryRowItem(id:id.uuidString,title:(item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!,subtitle:"Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:"",
+            return LibraryRowItem(id:id.uuidString,title:(item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!,subtitle:prepared?.subtitle ?? "Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:"",
                 fileURL:viewModel.captureURL(item),dragURL:viewModel.captureURL(item),activate:{ actions.openCapture(id:id) },
                 actions:[.init(title:"Open",run:{ actions.openCapture(id:id) }),.init(title:"Copy",run:{ actions.copyCapture(id:id) }),
                     .init(title:"Show in Finder",run:{ actions.revealCapture(id:id) }),.init(title:"Save As…",run:{ [weak self] in self?.saveCapture(item) }),
@@ -409,8 +438,8 @@ extension LibraryPanelView {
     }
     func boostSources() -> [LibraryRowSource] {
         let profile = viewModel.historyProfileID
-        return (viewModel.boostsProvider?.boosts(profileID:profile) ?? []).map { item in
-          LibraryRowSource(id:item.id,text:item.domain+" "+item.name) { [unowned self] in
+        return viewModel.libraryBoostRows.map { item in
+          LibraryRowSource(id:item.id,text:item.domain+" "+item.name) { [unowned self] _ in
             let id = item.id
             let edit: () -> Void = { [weak self] in
                 guard let self else { return }
@@ -518,4 +547,23 @@ extension LibraryPanelView {
     let run: () -> Void
     init(_ run: @escaping () -> Void) { self.run = run }
     @objc func select() { run() }
+}
+
+nonisolated private func downloadSubtitle(_ item:DownloadItemSnapshot) -> String {
+    switch item.state {
+    case .completed: return item.fileExists == true ? "Download" : "File moved or deleted."
+    case .failed: return "Failed"
+    case .cancelled: return "Cancelled"
+    case .paused: return "Paused"
+    case .inProgress:
+        let bytes = ByteCountFormatter(); bytes.countStyle = .file; bytes.allowsNonnumericFormatting = false
+        var received = bytes.string(fromByteCount:item.receivedBytes)
+        if let total = item.totalBytes {
+            let target = bytes.string(fromByteCount:total)
+            if let unit = target.split(separator:" ").last,received.hasSuffix(" "+unit) { received.removeLast(unit.count+1) }
+            received += "/"+target
+            if item.bytesPerSecond>0 { received += " · \(max(0,(total-item.receivedBytes)/item.bytesPerSecond))s" }
+        }
+        return received
+    }
 }

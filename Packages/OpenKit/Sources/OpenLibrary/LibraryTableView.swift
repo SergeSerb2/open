@@ -8,7 +8,7 @@ struct LibraryTableRow {
 
 /// A frame-based, virtualized native list. Geometry is computed once per page:
 /// 56pt items, 27pt headings, or 118pt gallery cards. No constraints or height
-/// delegate run while scrolling. Only viewport cells live in the hierarchy.
+/// delegate run while scrolling. A bounded viewport/overscan pool stays attached to the hierarchy.
 @MainActor
 final class LibraryTableView: NSView, NSDraggingSource {
     var onActivate: (() -> Void)?
@@ -22,6 +22,14 @@ final class LibraryTableView: NSView, NSDraggingSource {
     var onDragBegin: ((NSDraggingSession) -> Void)?
     var onDragEnd: ((NSDraggingSession,NSDragOperation) -> Void)?
     var onScroll: (() -> Void)?
+    var onSettle: (() -> Void)?
+    var onPrefetch: ((NSRange,Int,Int) -> Void)?
+    private var previousFirstRow = 0
+    private var settleTask: Task<Void,Never>?
+    var pendingIdle: Bool { settleTask != nil }
+    private var previousY: CGFloat = 0
+    private(set) var phases: [String:Double] = [:]
+    private func record(_ name:String,_ start:Double) { phases[name,default:0] += (ProcessInfo.processInfo.systemUptime-start)*1000 }
     private var rows: [LibraryTableRow] = []
     private var offsets: [CGFloat] = [0]
     private var live: [String:(row:Int,version:ObjectIdentifier?,view:NSView)] = [:]
@@ -51,7 +59,19 @@ final class LibraryTableView: NSView, NSDraggingSource {
         if let clip = enclosingScrollView?.contentView {
             clip.postsBoundsChangedNotifications = true
             observer = NotificationCenter.default.addObserver(forName:NSView.boundsDidChangeNotification,object:clip,queue:.main) { [weak self] _ in
-                MainActor.assumeIsolated { LibraryRaster.note("clipBoundsObserver"); self?.onScroll?(); self?.reconcile() }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    let started = ProcessInfo.processInfo.systemUptime
+                    LibraryRaster.note("clipBoundsObserver")
+                    self.onScroll?(); self.reconcile()
+                    let y = self.enclosingScrollView?.contentView.bounds.minY ?? 0
+                    let range = self.rows(in:self.visibleRect)
+                    self.onPrefetch?(range,y >= self.previousY ? 1 : -1,range.location-self.previousFirstRow)
+                    self.previousFirstRow = range.location
+                    self.previousY = y
+                    self.scheduleSettle()
+                    self.record("clipBounds",started)
+                }
             }
         }
     }
@@ -66,7 +86,26 @@ final class LibraryTableView: NSView, NSDraggingSource {
         reconcile()
     }
     override func layout() { super.layout(); reconcile() }
-    func makeView(withIdentifier identifier:NSUserInterfaceItemIdentifier,owner:Any?) -> NSView? { pool[identifier]?.popLast() }
+    func makeView(withIdentifier identifier:NSUserInterfaceItemIdentifier,owner:Any?) -> NSView? {
+        let start = ProcessInfo.processInfo.systemUptime
+        defer { record("dequeue",start) }
+        return pool[identifier]?.popLast()
+    }
+    func park(_ view:NSView) {
+        view.isHidden = true
+        if view.superview !== self { addSubview(view) }
+        if let identifier = view.identifier { pool[identifier,default:[]].append(view) }
+    }
+    func scheduleSettle() {
+        settleTask?.cancel()
+        settleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for:.milliseconds(80))
+            guard let self,!Task.isCancelled else { return }
+            self.settleTask = nil; self.onSettle?()
+        }
+    }
+    func cancelIdle() { settleTask?.cancel(); settleTask = nil }
+    func prepareOverscan() { reconcile(overscan:true) }
     func view(atColumn:Int,row:Int,makeIfNecessary:Bool) -> NSView? {
         guard rows.indices.contains(row) else { return nil }
         if let view = live[rows[row].key]?.view { return view }
@@ -79,14 +118,14 @@ final class LibraryTableView: NSView, NSDraggingSource {
     }
     private func retire(_ key:String) {
         guard let entry = live.removeValue(forKey:key) else { return }
-        entry.view.removeFromSuperview()
-        if let identifier = entry.view.identifier { pool[identifier,default:[]].append(entry.view) }
+        park(entry.view)
     }
-    func reconcile() {
+    func reconcile(overscan:Bool = false) {
         guard !reconciling else { return }; reconciling = true
-        defer { reconciling = false }
+        let started = ProcessInfo.processInfo.systemUptime
+        defer { reconciling = false; record("reconcile",started) }
         let viewport = enclosingScrollView?.contentView.bounds ?? bounds
-        let range = self.rows(in:viewport)
+        let range = self.rows(in:overscan ? viewport.insetBy(dx:0,dy:-viewport.height) : viewport)
         let visible = range.length == 0 ? [] : Array(range.location..<(range.location+range.length))
         let keys = Set(visible.map { rows[$0].key })
         for key in Array(live.keys) where !keys.contains(key) { retire(key) }
@@ -96,12 +135,24 @@ final class LibraryTableView: NSView, NSDraggingSource {
             let view: NSView
             if let existing = live[descriptor.key]?.view { view = existing }
             else {
+                let start = ProcessInfo.processInfo.systemUptime
                 guard let made = makeRow?(row) else { continue }
-                view = made; addSubview(view)
+                record("configure",start)
+                view = made; if view.superview !== self { addSubview(view) }; view.isHidden = false
             }
             let rect = rect(ofRow:row)
             if view.frame != rect { view.frame = rect }
-            view.layoutSubtreeIfNeeded()
+            if view.needsLayout {
+                let start = ProcessInfo.processInfo.systemUptime
+                view.layoutSubtreeIfNeeded(); record("cellLayout",start)
+            }
+            if overscan {
+                let start = ProcessInfo.processInfo.systemUptime
+                view.displayIfNeeded()
+                func display(_ layer:CALayer) { layer.displayIfNeeded(); for child in layer.sublayers ?? [] { display(child) } }
+                if let layer = view.layer { display(layer) }
+                record("overscanDisplay",start)
+            }
             live[descriptor.key] = (row,descriptor.version,view)
         }
     }
@@ -122,7 +173,22 @@ final class LibraryTableView: NSView, NSDraggingSource {
         let first = lowerBound(rect.minY),end = min(rows.count,lowerBound(max(rect.minY,rect.maxY-0.001))+1)
         return NSRange(location:first,length:max(0,end-first))
     }
-    func scrollRowToVisible(_ row:Int) { guard rows.indices.contains(row) else { return }; scrollToVisible(rect(ofRow:row)); reconcile() }
+    func scrollRowToVisible(_ row:Int) {
+        guard rows.indices.contains(row),let scroll = enclosingScrollView else { return }
+        let start = ProcessInfo.processInfo.systemUptime
+        let rect = rect(ofRow:row),viewport = scroll.contentView.bounds
+        let y = rect.minY < viewport.minY ? rect.minY : rect.maxY > viewport.maxY ? rect.maxY-viewport.height : viewport.minY
+        if y != viewport.minY {
+            scroll.contentView.scroll(to:CGPoint(x:viewport.minX,y:max(0,y)))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+        // The synchronous clip-bounds observer already reconciles the cells.
+        record("scrollTo",start)
+    }
+    override func scrollWheel(with event:NSEvent) {
+        let start = ProcessInfo.processInfo.systemUptime
+        super.scrollWheel(with:event); record("scrollWheel",start)
+    }
     func selectRowIndexes(_ indexes:IndexSet,byExtendingSelection:Bool) {
         let row = indexes.first ?? -1
         guard row == -1 || rows.indices.contains(row) && canSelect?(row) != false else { return }
@@ -167,5 +233,5 @@ final class LibraryTableView: NSView, NSDraggingSource {
         } else { super.keyDown(with:event) }
     }
     override func menu(for event:NSEvent) -> NSMenu? { menuAtRow?(row(at:convert(event.locationInWindow,from:nil))) }
-    isolated deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+    isolated deinit { settleTask?.cancel(); if let observer { NotificationCenter.default.removeObserver(observer) } }
 }

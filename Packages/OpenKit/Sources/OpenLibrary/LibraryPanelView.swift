@@ -30,7 +30,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var preparing = false
     var contentActive: Bool { isPresented || preparing }
     public var isPresented = false {
-        didSet { guard isPresented != oldValue else { return }; if isPresented { if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
+        didSet { guard isPresented != oldValue else { return }; if isPresented { if !prebuiltReady { refresh(); beginContentUpdates() }; observeTheme(); onIdleRefresh?() } else { prebuiltReady = false; endContentUpdates(); observeContent() }; updatePointerMonitor() }
     }
     public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
     let rail = NSScrollView()
@@ -51,6 +51,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     let searchGlyph = LibraryGlyphView()
     let filter = LibraryControl(title: "Filter", glyph: .filter)
     let content = NSView()
+    let loadingSkeleton = LibrarySkeletonView()
+    var skeletonTask: Task<Void,Never>?
+    var idleWarming = false
     let emptyGlyph = LibraryGlyphView()
     let emptyTitle = LibraryField(labelWithString: "")
     let emptyBody = LibraryField(wrappingLabelWithString: "")
@@ -123,7 +126,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         filter.baseAlpha = 0.045; addSubview(filter)
         content.wantsLayer = true; addSubview(content)
         for view in [emptyGlyph,emptyTitle,emptyBody,emptyButton] { content.addSubview(view) }
-        _ = listView; addSubview(filterEditor)
+        _ = listView; loadingSkeleton.isHidden = true; addSubview(loadingSkeleton); addSubview(filterEditor)
         filter.onPress = { [weak self] in self?.setFilterOpen(true) }
         filterEditor.onDone = { [weak self] in self?.setFilterOpen(false) }
         filterEditor.onToggle = { [weak self] id in self?.toggleChip(id) }
@@ -185,6 +188,31 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         preparing = false; prebuiltReady = true
     }
 
+    /// Called by the same input-cancelled, three-second idle scheduler as the
+    /// shell prebuild. Never changes the user's section, query or filters.
+    public func warmSectionPages() async {
+        guard isPresented,!idleWarming else { return }
+        idleWarming = true
+        defer { idleWarming = false }
+        for target in sections where target != .spaces {
+            guard !Task.isCancelled,isPresented else { return }
+            let host = host(for:target)
+            if !host.loaded {
+                await loadProvider(target)
+            }
+            host.wasWarmed = host.loaded
+            guard !Task.isCancelled else { return }
+            host.list.prepareOverscan()
+            try? await Task.sleep(for:.milliseconds(32))
+        }
+    }
+    public func cancelIdleWork() {
+        for (target,host) in hosts {
+            host.list.cancelPrefetch()
+            if target != section { host.provider?.cancel(); host.provider = nil; host.providerGeneration += 1 }
+        }
+    }
+
     public func refresh() {
         let visible = LibraryPanelSection.visible(in:viewModel.defaults)
         if visible != sections {
@@ -210,6 +238,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         let changed = section != next
         if !changed && prebuiltReady { return }
         prebuiltReady = false
+        skeletonTask?.cancel(); loadingSkeleton.isHidden = true
         if (!changed && !prebuiltReady) || next == .media { hosts[next]?.loaded = false }
         if changed, animated, window?.isVisible == true {
             let fade = CABasicAnimation(keyPath:"opacity"); fade.fromValue = 0; fade.toValue = 1; fade.duration = 0.10
@@ -283,6 +312,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         header.layer?.backgroundColor = overlay.withAlphaComponent(0.09).cgColor
         emptyGlyph.color = foreground.withAlphaComponent(0.46)
         emptyTitle.textColor = foreground; emptyBody.textColor = foreground.withAlphaComponent(0.68)
+        loadingSkeleton.tint(overlay)
         needsDisplay = true
     }
     func observeTheme() {
@@ -328,6 +358,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         filter.frame=CGRect(x:336,y:10,width:73,height:36)
         content.frame=CGRect(x:112,y:56,width:max(0,bounds.width-112),height:max(0,height-56))
         layoutActiveList()
+        loadingSkeleton.frame = CGRect(x:112,y:56,width:304,height:max(0,height-56))
         statusLabel.frame = CGRect(x:124,y:height-38,width:281,height:34)
         boostDisabledText.frame = CGRect(x:124,y:99,width:190,height:20)
         boostTurnOn.frame = CGRect(x:327,y:94,width:78,height:30)
@@ -354,7 +385,11 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     public func setSearch(_ text: String) {
         viewModel.query = text
-        if section == .archive || section == .history { hosts[section]?.loaded = false; hosts[section]?.dirty = true; refreshData() }
+        if section == .archive || section == .history {
+            let host = hosts[section]
+            host?.provider?.cancel(); host?.provider = nil; host?.providerGeneration += 1
+            host?.loaded = false; host?.dirty = true; refreshData()
+        }
         if searchField.stringValue != text { searchField.stringValue = text }
         renderRows()
     }

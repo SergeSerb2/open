@@ -43,7 +43,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
     private var entries: [Entry] = []
     private var lastSelectedRow = -1
     private enum Entry: Equatable { case heading(String), item(Int) }
-    var foreground = NSColor.labelColor { didSet { if foreground != oldValue { reloadVisible() } } }
+    var foreground = NSColor.labelColor { didSet { if foreground != oldValue { cancelPrefetch(); for source in sources { source.preparedText = nil }; reloadVisible(); table.scheduleSettle() } } }
     var overlay = NSColor.labelColor { didSet { if overlay != oldValue { reloadVisible() } } }
     var gallery = false { didSet { if gallery != oldValue { rebuild(); reloadVisible() } } }
     var onSelection: ((String?) -> Void)?
@@ -54,7 +54,14 @@ final class LibraryListView: NSView, NSMenuDelegate {
     private var escapeMenuOnOpen = false
     private(set) var hoveredID: String?
     private(set) var cellsCreated = 0
+    private var headingsCreated = 0
+    var totalCellsCreated: Int { cellsCreated+headingsCreated }
     private(set) var cellsConfigured = 0
+    private var prefetch: Task<Void,Never>?
+    private var prefetchWorker: Task<[LibraryPreparedText],Never>?
+    private var prefetchGeneration = 0
+    private var prefetchRange = NSRange(location:0,length:0)
+    var pendingTasks: Int { (prefetch == nil ? 0 : 1)+(table.pendingIdle ? 1 : 0) }
     override var isFlipped: Bool { true }
 
     override init(frame: NSRect) {
@@ -71,11 +78,80 @@ final class LibraryListView: NSView, NSMenuDelegate {
         table.onDragEnd = { [weak self] session,operation in self?.dragEnded(session,operation:operation) }
         table.onActivate = { [weak self] in self?.activateSelected() }
         table.onDelete = { [weak self] in self?.deleteSelected() }
+        table.onSettle = { [weak self] in self?.prepareOverscan() }
+        table.onPrefetch = { [weak self] range,direction,stride in self?.prefetchRows(range,direction:direction,stride:stride) }
         table.menuAtRow = { [weak self] row in
             guard let self else { return nil }; let menu = self.menu(at:row); self.activeMenu = menu; return menu
         }
         table.setAccessibilityLabel("Library items")
         scroll.documentView = table; addSubview(scroll)
+    }
+    func cancelPrefetch() { prefetch?.cancel(); prefetchWorker?.cancel(); prefetch = nil; prefetchWorker = nil; table.cancelIdle(); prefetchGeneration += 1; prefetchRange.length = 0 }
+    func prepareOverscan() {
+        guard rowCount>0,bounds.height>0 else { return }
+        let range = table.rows(in:table.visibleRect)
+        // Reserve enough cells for a full viewport at either edge of a heading.
+        // Parking keeps native tracking/hierarchy setup out of scrolling.
+        let capacity = Int(ceil(bounds.height/(gallery ? 118 : 56)))*3+6
+        while cellsCreated < capacity {
+            let view = LibraryItemView(); view.identifier = .init("row"); cellsCreated += 1
+            if let first = sources.first {
+                view.frame = CGRect(x:0,y:0,width:bounds.width,height:gallery ? 118 : 56)
+                view.configure(first.resolve(),foreground:foreground,overlay:overlay,gallery:gallery,text:first.preparedText)
+                view.layoutSubtreeIfNeeded(); view.displayIfNeeded(); view.layer?.displayIfNeeded()
+            }
+            table.park(view)
+        }
+        let headingCount = entries.reduce(0) { count,entry in if case .heading = entry { return count+1 }; return count }
+        while headingsCreated < min(capacity,headingCount) {
+            let view = LibraryHeadingView(); view.identifier = .init("day"); headingsCreated += 1
+            table.park(view)
+        }
+        table.prepareOverscan()
+        prefetchRows(range,direction:1)
+    }
+    func prefetchRows(_ range:NSRange,direction:Int,stride:Int = 0) {
+        guard range.length>0 else { return }
+        let low = max(0,direction>0 ? range.location : range.location-2*range.length)
+        let high = min(entries.count,direction>0 ? range.location+3*range.length : range.location+range.length)
+        let nextRange = NSRange(location:low,length:high-low)
+        guard nextRange != prefetchRange else { return }
+        prefetchRange = nextRange
+        prefetch?.cancel(); prefetchWorker?.cancel(); prefetchGeneration += 1
+        let generation = prefetchGeneration
+        // Fast wheel/trackpad input can cross more than a screen per callback.
+        // Prefetch that next viewport as well as the adjacent two screens.
+        let predicted = max(0,min(entries.count,range.location+stride))
+        let predictedEnd = min(entries.count,predicted+range.length)
+        let indexes = Set(low..<high).union(predicted..<predictedEnd).sorted()
+        let sources = indexes.compactMap { row -> LibraryRowSource? in
+            let entry = entries[row]
+            if case .item(let index) = entry { return self.sources[index] }; return nil
+        }.filter { $0.preparedText == nil }
+        guard !sources.isEmpty else { prefetch = nil; prefetchWorker = nil; return }
+        let builders = sources.map { source -> @Sendable () -> LibraryRowText in
+            if let prepare = source.prepareText { return prepare }
+            let item = source.resolve(), text = LibraryRowText(title:item.title,subtitle:item.subtitle)
+            return { text }
+        }
+        let color = foreground.usingColorSpace(.deviceRGB) ?? .black
+        let rgba = [color.redComponent,color.greenComponent,color.blueComponent,color.alphaComponent]
+        let titleFont = NSFont.systemFont(ofSize:15,weight:.medium).fontName
+        let subtitleFont = NSFont.systemFont(ofSize:13).fontName
+        let worker = Task.detached(priority:.utility) { builders.compactMap { builder in Task.isCancelled ? nil : LibraryPreparedText(builder(),color:rgba,titleFont:titleFont,subtitleFont:subtitleFont) } }
+        prefetchWorker = worker
+        prefetch = Task { @MainActor [weak self] in
+            let text = await worker.value
+            guard let self,!Task.isCancelled,self.prefetchGeneration == generation,text.count == sources.count else { return }
+            for (source,text) in zip(sources,text) {
+                source.preparedText = text
+                let item = source.resolve()
+                if let url = item.fileURL { _ = FilePreviewCache.shared.image(for:url,onReady:{}) }
+                _ = LibraryImages.value(item.image)
+                item.loadImage? { image in _ = LibraryImages.value(image) }
+            }
+            self.prefetch = nil; self.prefetchWorker = nil
+        }
     }
     required init?(coder: NSCoder) { fatalError() }
     /// First-use font, date and symbol costs belong to the idle prebuild.
@@ -118,7 +194,9 @@ final class LibraryListView: NSView, NSMenuDelegate {
     func update(_ sources: [LibraryRowSource]) {
         let old = self.sources, selected = selectedItem?.id
         if old.count == sources.count && zip(old,sources).allSatisfy({ $0 === $1 }) { return }
+        cancelPrefetch()
         self.sources = sources; rebuild(previousSources:old)
+        table.scheduleSettle()
         updates += 1
         if let selected, let row = entryIndex(selected) { table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false) }
     }
@@ -146,7 +224,9 @@ final class LibraryListView: NSView, NSMenuDelegate {
         guard entries.indices.contains(row) else { return nil }
         switch entries[row] {
         case .heading(let text):
-            let wrapper = table.makeView(withIdentifier:.init("day"),owner:self) as? LibraryHeadingView ?? LibraryHeadingView()
+            let wrapper: LibraryHeadingView
+            if let view = table.makeView(withIdentifier:.init("day"),owner:self) as? LibraryHeadingView { wrapper = view }
+            else { wrapper = LibraryHeadingView(); headingsCreated += 1 }
             wrapper.identifier = .init("day"); wrapper.configure(text,color:foreground.withAlphaComponent(0.68))
             return wrapper
         case .item(let index):
@@ -158,7 +238,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
             view.onHover = nil
             let started = ProcessInfo.processInfo.systemUptime
             let item = sources[index].resolve()
-            view.configure(item, foreground: foreground, overlay: overlay, gallery: gallery)
+            view.configure(item, foreground: foreground, overlay: overlay, gallery: gallery, text:sources[index].preparedText)
             let elapsed = (ProcessInfo.processInfo.systemUptime-started)*1000
             formattingMilliseconds += elapsed; configureMaximumMilliseconds = max(configureMaximumMilliseconds,elapsed)
             if configureSamples.count < 4096 { configureSamples.append(elapsed) }
@@ -300,10 +380,10 @@ private final class LibraryItemView: NSView {
         ring.lineWidth = 2; progressLayer.lineWidth = 2; arrow.lineWidth = 1.7
     }
     required init?(coder:NSCoder) { fatalError() }
-    func configure(_ item:LibraryRowItem,foreground:NSColor,overlay:NSColor,gallery:Bool) {
+    func configure(_ item:LibraryRowItem,foreground:NSColor,overlay:NSColor,gallery:Bool,text:LibraryPreparedText? = nil) {
         self.item = item; self.foreground = foreground; self.overlay = overlay; self.gallery = gallery
-        title.string = LibraryText.value(item.title,size:15,weight:.medium,color:foreground)
-        subtitle.string = LibraryText.value(item.subtitle,size:13,weight:.regular,color:foreground.withAlphaComponent(0.68))
+        title.string = text?.title ?? LibraryText.value(item.title,size:15,weight:.medium,color:foreground)
+        subtitle.string = text?.subtitle ?? LibraryText.value(item.subtitle,size:13,weight:.regular,color:foreground.withAlphaComponent(0.68))
         setIcon(item.image)
         item.loadImage? { [weak self] image in
             guard let self, self.item?.id == item.id, let image else { return }; self.setIcon(image)
@@ -350,8 +430,10 @@ private final class LibraryItemView: NSView {
         hovered = false; buttons.forEach { $0.isHidden = !gallery }; needsLayout = true; needsDisplay = true
     }
     override func updateTrackingAreas() {
+        let start = ProcessInfo.processInfo.systemUptime
+        defer { LibraryRaster.events["trackingMilliseconds",default:0] += (ProcessInfo.processInfo.systemUptime-start)*1000 }
         LibraryRaster.note("trackingUpdates")
-        super.updateTrackingAreas(); if let tracking { removeTrackingArea(tracking) }
+        super.updateTrackingAreas(); guard tracking == nil else { return }
         let area = NSTrackingArea(rect:.zero,options:[.mouseEnteredAndExited,.activeInKeyWindow,.inVisibleRect],owner:self)
         addTrackingArea(area); tracking = area
     }

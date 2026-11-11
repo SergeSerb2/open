@@ -70,7 +70,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if settings.adBlock == nil, let store = app.stores.adBlock { settings.attach(adBlockStore: store, directoryForProfile: { [unowned app] in app.directories.adBlockDirectory(dataDirectoryName: $0.dataDirectoryName) }) }
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
-  @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root)
+  @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root, loadImmediately: false)
   @ObservationIgnored var librarySessions: [WindowID: AppLibrarySession] = [:]
   #if OPEN_AUTOMATION
   @ObservationIgnored weak var lastClosedLibraryPanel: LibraryPanelView?
@@ -149,6 +149,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     let session = AppLibrarySession(model:model,controller:controller); librarySessions[controller.windowID] = session
     return session
   }
+  func cancelLibraryIdleWork() { for session in librarySessions.values { session.cancelIdleWork() } }
   func toggleLibrary(section: LibrarySection? = nil) {
     if let session = activeLibrarySession, session.controller?.isLibraryOpen == true { session.close() }
     else { showLibrary(section: section) }

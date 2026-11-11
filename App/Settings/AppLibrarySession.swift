@@ -53,11 +53,12 @@ final class AppLibrarySession {
     return panel
   }
   func prebuild() async {
-    guard controller?.isLibraryOpen == false else { return }
+    if controller?.isLibraryOpen == true { await panel?.warmSectionPages(); return }
     let panel = prepareShell()
     if let completed = controller?.context.downloadBadge?.completedAt,Date().timeIntervalSince(completed)<60,panel.section != .downloads { panel.select(.downloads,animated:false) }
     await panel.prepareFirstScreen()
   }
+  func cancelIdleWork() { panel?.cancelIdleWork() }
   func close() {
     guard let controller, controller.isLibraryOpen else { return }
     panel?.isPresented = false

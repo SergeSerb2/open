@@ -80,12 +80,15 @@ extension AutomationController {
 /// One in-app scroll step per native display callback. The socket does not
 /// pace frames, and this display link is invalidated before the reply.
 private struct LibraryScrollFrame: Sendable {
+  let startTicks: UInt64
+  let endTicks: UInt64
   let milliseconds: Double
   let visibleRows: Int
   let intervalMilliseconds: Double
   let counters: [String:Double]
   let counterDelta: [String:Double]
-  var json: [String:Any] { ["milliseconds":milliseconds,"visibleRows":visibleRows,"intervalMilliseconds":intervalMilliseconds,"counters":counters,"counterDelta":counterDelta] }
+  let heartbeat: [String:Double]
+  var json: [String:Any] { ["startTicks":startTicks,"endTicks":endTicks,"milliseconds":milliseconds,"visibleRows":visibleRows,"intervalMilliseconds":intervalMilliseconds,"counters":counters,"counterDelta":counterDelta,"heartbeat":heartbeat] }
 }
 @MainActor
 private final class LibraryScrollProbe: NSObject {
@@ -94,8 +97,15 @@ private final class LibraryScrollProbe: NSObject {
   var completion: CheckedContinuation<[LibraryScrollFrame],Never>?
   var rows: [LibraryScrollFrame] = []
   var previousTimestamp = 0.0
+  let heartbeat = LibraryScrollHeartbeat()
+  var observer: CFRunLoopObserver?
   func run(_ panel:LibraryPanelView) async -> [LibraryScrollFrame] {
     self.panel = panel
+    heartbeat.start()
+    observer = CFRunLoopObserverCreateWithHandler(nil,CFRunLoopActivity.beforeWaiting.rawValue|CFRunLoopActivity.afterWaiting.rawValue,true,0) { [heartbeat] _,activity in
+      heartbeat.beat(busy:activity == .afterWaiting)
+    }
+    CFRunLoopAddObserver(CFRunLoopGetMain(),observer,.commonModes)
     return await withCheckedContinuation { continuation in
       completion = continuation
       link = panel.displayLink(target:self,selector:#selector(frame(_:)))
@@ -105,19 +115,59 @@ private final class LibraryScrollProbe: NSObject {
   }
   @objc func frame(_ link:CADisplayLink) {
     guard let panel else { finish(); return }
+    let startTicks = mach_absolute_time()
     let index = rows.count, count = panel.filteredRowCount
-    let before = panel.performanceCounters, start = ProcessInfo.processInfo.systemUptime
+    let before = panel.scrollCounters, start = ProcessInfo.processInfo.systemUptime
     let visible = panel.scrollToRow(Int((Double(index)/119)*Double(max(0,count-1))))
-    let after = panel.performanceCounters
-    rows.append(LibraryScrollFrame(milliseconds:(ProcessInfo.processInfo.systemUptime-start)*1000,visibleRows:visible,
+    let after = panel.scrollCounters
+    rows.append(LibraryScrollFrame(startTicks:startTicks,endTicks:mach_absolute_time(),milliseconds:(ProcessInfo.processInfo.systemUptime-start)*1000,visibleRows:visible,
       intervalMilliseconds:previousTimestamp == 0 ? 0 : (link.timestamp-previousTimestamp)*1000,
-      counters:after,counterDelta:after.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(before[$1.key] ?? 0) }))
+      counters:after,counterDelta:after.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(before[$1.key] ?? 0) },heartbeat:heartbeat.read()))
     previousTimestamp = link.timestamp
     if rows.count == 120 { finish() }
   }
   func finish() {
     link?.invalidate(); link = nil
+    if let observer { CFRunLoopRemoveObserver(CFRunLoopGetMain(),observer,.commonModes); self.observer = nil }
+    heartbeat.stop()
     completion?.resume(returning:rows); completion = nil
   }
+}
+#endif
+
+#if OPEN_AUTOMATION
+/// Exists only for the socket scroll benchmark. A run-loop heartbeat separates
+/// busy main-thread gaps from a sleeping main thread with no display callback.
+private final class LibraryScrollHeartbeat: @unchecked Sendable {
+  private let lock = NSLock()
+  private var busy = false
+  private var timestamp = ProcessInfo.processInfo.systemUptime
+  private var maxBusy = 0.0, maxIdle = 0.0
+  private var samples = 0.0
+  private var timer: (any DispatchSourceTimer)?
+  func beat(busy:Bool) {
+    lock.withLock { self.busy = busy; timestamp = ProcessInfo.processInfo.systemUptime }
+  }
+  func start() {
+    let timer = DispatchSource.makeTimerSource(queue:DispatchQueue(label:"open.library.scroll-watchdog",qos:.userInteractive))
+    timer.schedule(deadline:.now(),repeating:.milliseconds(2),leeway:.microseconds(100))
+    timer.setEventHandler { [weak self] in
+      guard let self else { return }
+      self.lock.withLock {
+        let age = (ProcessInfo.processInfo.systemUptime-self.timestamp)*1000
+        if self.busy { self.maxBusy = max(self.maxBusy,age) } else { self.maxIdle = max(self.maxIdle,age) }
+        self.samples += 1
+      }
+    }
+    self.timer = timer; timer.resume()
+  }
+  func read() -> [String:Double] {
+    lock.withLock {
+      let result = ["maxBusyAgeMilliseconds":maxBusy,"maxIdleAgeMilliseconds":maxIdle,"watchdogSamples":samples]
+      maxBusy = 0; maxIdle = 0; samples = 0
+      return result
+    }
+  }
+  func stop() { timer?.cancel(); timer = nil }
 }
 #endif

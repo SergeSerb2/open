@@ -387,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   func noteLibraryInput() {
     libraryLastInput = ProcessInfo.processInfo.systemUptime
     libraryPrebuildTask?.cancel(); libraryPrebuildTask = nil
+    settingsPresenter.cancelLibraryIdleWork()
     if libraryFirstSidebarDraw != nil { scheduleLibraryPrebuild() }
   }
   func scheduleLibraryPrebuild() {
@@ -403,7 +404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       guard let self,!Task.isCancelled,!self.shutdownPrepared,!self.terminationRequested else { return }
       defer { if self.libraryPrebuildGeneration == generation { self.libraryPrebuildTask = nil } }
       guard NSApp.isActive,NSApp.keyWindow?.attachedSheet == nil,let controller,self.frontStandardWindowController === controller,
-        controller.window?.isVisible == true,!controller.isLibraryOpen else { return }
+        controller.window?.isVisible == true else { return }
       self.libraryPrebuiltAt = ProcessInfo.processInfo.systemUptime
       controller.onLibraryIdleRefresh = { [weak self] in self?.scheduleLibraryPrebuild() }
       await self.settingsPresenter.makeLibrarySession(controller).prebuild()

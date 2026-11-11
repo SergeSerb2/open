@@ -16,6 +16,12 @@ public struct BoostItemSnapshot: Identifiable, Sendable {
 }
 @MainActor public protocol BoostsProvider: AnyObject {
     func boosts(profileID: ProfileID) -> [BoostItemSnapshot]
+    var libraryBoostsVersion: Int { get }
+    func libraryBoosts(profileID: ProfileID) async -> [BoostItemSnapshot]
+}
+public extension BoostsProvider {
+    var libraryBoostsVersion: Int { 0 }
+    func libraryBoosts(profileID: ProfileID) async -> [BoostItemSnapshot] { boosts(profileID:profileID) }
 }
 
 
