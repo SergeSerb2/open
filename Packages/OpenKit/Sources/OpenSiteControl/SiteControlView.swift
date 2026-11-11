@@ -219,7 +219,7 @@ public final class SiteControlPanelView: NSView {
         materialTint.backgroundColor = spec.overlay.cgColor
         spaceTint.frame = material.bounds
         if let edge = sidebarEdge, edge + SiteControlMaterialSpec.tintFade / 2 > 0 {
-            let tint = SiteControlMaterialSpec.tint(sidebar: sidebarColor).withAlpha(spec.tintAlpha), w = max(1, bounds.width)
+            let tint = SiteControlMaterialSpec.tint(sidebar: sidebarColor, dark: dark).withAlpha(spec.tintAlpha), w = max(1, bounds.width)
             let half = SiteControlMaterialSpec.tintFade / 2
             let solid = max(0, min(edge - half, w)) / w, end = min(edge + half, w) / w
             spaceTint.colors = [tint.cgColor,tint.cgColor,tint.withAlpha(0).cgColor,tint.withAlpha(0).cgColor]

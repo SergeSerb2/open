@@ -56,10 +56,13 @@ public struct SiteControlMaterialSpec: Sendable, Hashable {
     /// The tint fades across the sidebar edge like a blur kernel: from `tintFade / 2` before the edge to `tintFade / 2` after it.
     public static let tintFade: CGFloat = 40
     public static let tintSaturationScale = 2.0, tintLightnessScale = 1.02
+    /// Dark keeps white text readable over a light sidebar: the tint is at most this light (Night's 0.18 is unchanged).
+    public static let darkTintMaxLightness = 0.18
     /// The tint colour for a sidebar colour.
-    public static func tint(sidebar top: RGBA) -> RGBA {
+    public static func tint(sidebar top: RGBA, dark: Bool) -> RGBA {
         let (h, l, s) = SpaceAccent.hls(top)
-        return SpaceAccent.rgb(h: h, l: min(1, l * tintLightnessScale), s: min(1, s * tintSaturationScale))
+        let lightness = min(dark ? darkTintMaxLightness : 1, l * tintLightnessScale)
+        return SpaceAccent.rgb(h: h, l: lightness, s: min(1, s * tintSaturationScale))
     }
 }
 
