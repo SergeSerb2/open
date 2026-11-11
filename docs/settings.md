@@ -85,3 +85,16 @@ A focus ring appears only on the keyboard-focused control. Disabled dependent ro
 `tools/e2e/settings_redesign_g2.py` exercises the real App through its automation socket with a short private data root. It verifies navigation/search/deep links, store round trips, profile scope, shortcut recording and conflict guards, list/site actions, retained sheets, Reduce Motion and window bounds. Native inputs stay in Open’s process. Runs hold the machine’s on-screen lock and restore changed preferences in finally.
 
 The settings-preview product retains functional store/action checks and renders the new section layout. Library renders and checks remain separate and unchanged. Native frames in docs/settings and the lead’s G-frames/g3 review set bind the display scale and ICC profile in their receipts. Performance reports distinguish content submission and display-link pacing from WindowServer scanout.
+
+The `native-*@2x.png` references are real-window captures from the M1 built-in Retina display (3024 × 1964, 120 Hz). They include all fifteen sections in light and dark, search results and empty results, retained sheets, hover states, and minimum-window frames. [frames.json](settings/frames.json) records their display key, executable hash, and capture sizes. The older unprefixed filenames are refreshed synthetic `settings-preview` renders, including compatibility views that no longer have their own navigation entry. Their `@1x` suffix describes rendering scale; it does not mean a native M5 capture. Library and first-run images are unchanged.
+
+| Reference | Light | Dark |
+|---|---|---|
+| General | [Frame](settings/native-general-light@2x.png) | [Frame](settings/native-general-dark@2x.png) |
+| Appearance | [Frame](settings/native-appearance-light@2x.png) | [Frame](settings/native-appearance-dark@2x.png) |
+| Ad Blocking | [Frame](settings/native-ad-blocking-light@2x.png) | [Frame](settings/native-ad-blocking-dark@2x.png) |
+| Profiles | [Frame](settings/native-profiles-light@2x.png) | [Frame](settings/native-profiles-dark@2x.png) |
+| Shortcuts | [Frame](settings/native-shortcuts-light@2x.png) | [Frame](settings/native-shortcuts-dark@2x.png) |
+| Search results | [Frame](settings/native-search-results-light@2x.png) | [Frame](settings/native-search-results-dark@2x.png) |
+
+The lead approved the original Settings look at G1, G2 and G3. The static Appearance preview and phase-2 management destinations above are the approved phase-1 boundaries.

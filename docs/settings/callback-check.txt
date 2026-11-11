@@ -1,4 +1,4 @@
-ACTION setAdBlockExcludedDomains example.org A1C8BFA6-9C9C-4CCC-BAEB-78E1708A6619
-ACTION deleteProfileData A1C8BFA6-9C9C-4CCC-BAEB-78E1708A6619
+Command: settings-preview check (Release, M1)
 PASS adblock-profile-lifecycle
-SUMMARY 1 checks passed, 0 failed
+SUMMARY 47 checks passed, 0 failed
+Full transcript: checks.txt
