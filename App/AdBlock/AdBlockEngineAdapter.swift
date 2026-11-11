@@ -206,6 +206,10 @@ final class AdBlockEngineAdapter {
 
   private func apply(_ event: AdBlockEngineEvent) {
     guard app.engineReady, !app.shutdownPrepared else { return }
+    #if OPEN_AUTOMATION
+    let region = StartupMainThreadTrace.begin("adBlock.apply")
+    defer { StartupMainThreadTrace.end(region) }
+    #endif
     switch event {
     case let .configure(profile, directory, enabled, excluded):
       guard let model = app.model.profile(id: profile) else { return }

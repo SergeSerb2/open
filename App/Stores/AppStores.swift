@@ -22,9 +22,11 @@ final class AppStores: ProfileDataOwner {
     if !attemptedAdBlock {
       attemptedAdBlock = true
       let bundle = Bundle.main.resourceURL?.appendingPathComponent("AdBlock")
-      adBlockStorage = try? AdBlockStore(root: app.directories.root,
-        bundledDefaultsDirectory: bundle.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil })
-      if let adBlockStorage { app.adBlockEngineAdapter.bind(adBlockStorage) }
+      app.startupRegion("adBlock.storeInit") {
+        adBlockStorage = try? AdBlockStore(root: app.directories.root,
+          bundledDefaultsDirectory: bundle.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil })
+      }
+      if let adBlockStorage { app.startupRegion("adBlock.bind") { app.adBlockEngineAdapter.bind(adBlockStorage) } }
     }
     return adBlockStorage
   }

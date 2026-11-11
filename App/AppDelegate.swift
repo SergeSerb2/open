@@ -862,26 +862,38 @@ extension AppDelegate: CommandDispatcher {
         let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
         if painted == true {
           if !self.commandServicesPrepared {
-            self.prepareCommandServices()
-            if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+            self.startupRegion("afterPaint.commandServices") { self.prepareCommandServices() }
+            self.startupRegion("afterPaint.storesPrewarm") {
+              if let id = self.frontStandardWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+            }
           }
           // Startup T5: the sleep controller starts after first paint, never before.
-          self.tabSleep.start()
-          self.adBlockEngineAdapter.startAfterPaint()
-          FindBarPrewarm.schedule(afterPaintIn: self)
-          self.applicationIcon.restoreAfterContent()
-          self.prepareUpdaterAfterPaint()
+          self.startupRegion("afterPaint.sleep") { self.tabSleep.start() }
+          self.startupRegion("afterPaint.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
+          self.startupRegion("afterPaint.findPrewarm") { FindBarPrewarm.schedule(afterPaintIn: self) }
+          self.startupRegion("afterPaint.icon") { self.applicationIcon.restoreAfterContent() }
+          self.startupRegion("afterPaint.updater") { self.prepareUpdaterAfterPaint() }
           return
         }
         try? await Task.sleep(for: .milliseconds(50))
       }
       // A page that never reports a paint (about:blank): start sleep after the same 2 s budget.
       guard let self, self.engineReady, !self.shutdownPrepared, !self.terminationRequested, !Task.isCancelled else { return }
-      self.tabSleep.start()
-      self.adBlockEngineAdapter.startAfterPaint()
-      self.applicationIcon.restoreAfterContent()
-      self.prepareUpdaterAfterPaint()
+      self.startupRegion("fallback.sleep") { self.tabSleep.start() }
+      self.startupRegion("fallback.adBlock") { self.adBlockEngineAdapter.startAfterPaint() }
+      self.startupRegion("fallback.icon") { self.applicationIcon.restoreAfterContent() }
+      self.startupRegion("fallback.updater") { self.prepareUpdaterAfterPaint() }
     }
+  }
+  /// Automation builds record a named start-up region; product builds only run the body.
+  func startupRegion(_ name: String, _ body: () -> Void) {
+    #if OPEN_AUTOMATION
+    let region = StartupMainThreadTrace.begin(name)
+    body()
+    StartupMainThreadTrace.end(region)
+    #else
+    body()
+    #endif
   }
   private func prepareUpdaterAfterPaint() {
     guard updater == nil else { return }
