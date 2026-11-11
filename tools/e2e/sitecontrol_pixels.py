@@ -57,6 +57,14 @@ def compare_live(path, state, scale, private, env, negative_path=None):
     reference=str(frames[0])
     _,_,arc=env['read_image'](reference,srgb=True)
     _,_,ours=env['read_image'](path,srgb=True)
+    snapshot_scale = scale
+    if scale != 1:
+        # The reference is a 1x Arc capture: compare a 1x box-filtered copy of a 2x snapshot (like-for-like rasterization).
+        s, base = int(round(scale)), ours
+        def ours(x, y, s=s, base=base):
+            px = [base(int(x) * s + i + .5, int(y) * s + j + .5) for i in range(s) for j in range(s)]
+            return tuple(sum(p[c] for p in px) / len(px) for c in range(3))
+        scale = 1
     delta=env['chrome_delta_e']
     bx,by,bw,bh=state['body']
     # Same elements, with footer translated to each panel's measured bottom.
@@ -164,7 +172,7 @@ def compare_live(path, state, scale, private, env, negative_path=None):
                 excluded='Different site-setting title/glyph and HTTP Insecure pill; Developer Mode per Q14',
                 load=list(os.getloadavg()))
     if negative_path:
-        negative=compare_live(negative_path,state,scale,private,env)
+        negative=compare_live(negative_path,state,snapshot_scale,private,env)
         report['negativeRejected']=not negative['ok']
         report['negativeFailedElements']=[p['element'] for p in negative['elements'] if not p['ok']]
         report['ok']=report['ok'] and report['negativeRejected']

@@ -265,7 +265,7 @@ public final class SiteControlPanelView: NSView {
         } else { spaceTint.isHidden = true; topZone.isHidden = true }
         surfaceMask.frame = bounds; surfaceMask.path = path
         // Light: a 0.5 pt hairline (the mask keeps the inner half of a 1 pt stroke). Dark: Arc's measured 1 px white 0.20 rim.
-        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = tinted(spec.rim.map { RGBA($0.gray, $0.gray, $0.gray, $0.alpha) } ?? SiteControlColors.panelRim.resolved(contentAppearance), share: spec.rimTintShare).cgColor; rim.lineWidth = dark ? 2/scale : 1
+        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = tinted(spec.rim.map { RGBA($0.gray, $0.gray, $0.gray, $0.alpha) } ?? SiteControlColors.panelRim.resolved(contentAppearance), share: spec.rimTintShare).cgColor; rim.lineWidth = dark ? 2 : 1 // Dark: Arc's 1 pt rim at every scale
         for (i,b) in actions.enumerated() { b.frame = CGRect(x: m.padding+CGFloat(i)*(m.actionButton.width+m.actionGap),y: body.minY+m.padding,width: m.actionButton.width,height: m.actionButton.height) }
         let footerY = body.maxY-m.padding-m.footerHeight
         scroll.frame = CGRect(x: 0,y: body.minY+m.padding+m.actionButton.height,width: body.width,height: max(0,footerY-m.gapAfterSeparator-m.separatorHeight-(body.minY+m.padding+m.actionButton.height)))
