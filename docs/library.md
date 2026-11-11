@@ -16,6 +16,10 @@ Before: the original separate Library, rendered with synthetic data:
 
 ![Original Library](settings/library-downloads@1x.png)
 
+After: the in-window panel, captured from the real app with synthetic data:
+
+![In-window Library](library/downloads.png)
+
 The new native panel keeps reusable 56pt rows, file icons and asynchronous
 QuickLook image/PDF thumbnails. Downloads show numeric progress with an arrow
 inside the progress ring. Archive and History retain their existing stores and

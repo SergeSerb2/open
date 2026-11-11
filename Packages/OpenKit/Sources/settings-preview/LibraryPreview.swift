@@ -61,5 +61,10 @@ struct LibraryPreview: NSViewRepresentable {
         sidebar.systemAppearance = .dark
         return LibraryPanelView(viewModel:viewModel,context:sidebar)
     }
-    func updateNSView(_ view: LibraryPanelView, context: Context) { view.select(LibraryPanelSection(viewModel.section),animated:false); view.refresh() }
+    func updateNSView(_ view: LibraryPanelView, context: Context) {
+        let section = LibraryPanelSection(viewModel.section)
+        // A representable update must not write the same observed section back.
+        // Doing so schedules another SwiftUI update while rendering the preview.
+        if view.section != section { view.select(section,animated:false) }
+    }
 }
