@@ -1,37 +1,77 @@
 #!/bin/bash
-# heavy.sh CMD [ARGS...] — this machine's single BUILD slot, first come first served.
-# Use it for tools/verify-all.sh, tools/build.sh, swift build, xcodebuild, and for any strict
-# performance measurement that needs a quiet machine. Exactly one such job runs per machine.
-# Waits its turn, runs CMD, exits with CMD's exit code. See the queue with queue.sh.
-# Nested calls (CMD itself calls heavy.sh) run at once inside the outer slot.
+# heavy.sh CMD [ARGS...] — this machine's BUILD slots, first come first served.
+#
+# Slots: the number in ~/Library/Caches/OpenRE/heavy-slots (1..6, default 1).
+# A normal job (build, gate) takes ONE slot, so up to that many run together.
+# An EXCLUSIVE job takes EVERY slot, so nothing else builds while it runs:
+#   - OPEN_HEAVY_EXCLUSIVE=1 heavy.sh CMD          (measurements, timing rows)
+#   - heavy.sh /usr/bin/lockf -k /tmp/open-onscreen-e2e.lock CMD   (the strict-timing form)
+#   - anything started from the performance worktree (perf-arc-vs-open, tools/perf)
+# Order is strict FIFO: a waiting exclusive job is never overtaken.
+# Nested calls run inside the outer slot. See the queue with queue.sh.
 PFX="${OPEN_HEAVY_PREFIX:-/tmp/open-heavy}"
-QUIET="${OPEN_QUIET_LOCK:-/tmp/open-m5-quiet.lock}"
 [ $# -gt 0 ] || { echo "usage: heavy.sh CMD [ARGS...]" >&2; exit 64; }
 
-# Already inside a slot (new or old heavy.sh), or inside a job that holds the quiet lock?
-inside=0; have_quiet=0
+# Already inside a slot? Match an executed heavy.sh, not an argument that mentions it.
 p=$PPID
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
   [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null || break
   c=$(ps -o command= -p "$p" 2>/dev/null)
-  # Match the executed script, not a launcher argument mentioning heavy.sh.
   read -r executable script remainder <<< "$c"
   case "${executable##*/}:${script##*/}" in
-    heavy.sh:*|bash:heavy.sh|sh:heavy.sh|zsh:heavy.sh) inside=1 ;;
+    heavy.sh:*|bash:heavy.sh|sh:heavy.sh|zsh:heavy.sh) exec "$@" ;;
   esac
-  case "$c" in *"$QUIET"*) have_quiet=1 ;; esac
   p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
 done
-[ "$inside" = 1 ] && exec "$@"
 
-Q="$PFX-queue"; mkdir -p "$Q"
+N="${OPEN_HEAVY_SLOTS:-$(cat "$HOME/Library/Caches/OpenRE/heavy-slots" 2>/dev/null)}"
+case "$N" in 1|2|3|4|5|6) ;; *) N=1 ;; esac
+want=1
+[ "$OPEN_HEAVY_EXCLUSIVE" = 1 ] && want=$N
+case "${1##*/}" in lockf)   # the strict-timing form, with any lockf options before the lock file
+  i=0; for a in "$@"; do i=$((i + 1)); [ "$i" -gt 6 ] && break
+    [ "$a" = /tmp/open-onscreen-e2e.lock ] && want=$N; done ;;
+esac
+case "$PWD $*" in *perf-arc-vs-open*|*tools/perf/*) want=$N ;; esac
+kind=build; [ "$want" = "$N" ] && [ "$N" -gt 1 ] && kind=exclusive
+
+Q="$PFX-queue"; HD="$PFX-holders"; mkdir -p "$Q" "$HD"
 T="$Q/$(date +%s)-$(printf '%07d' $$)"
-printf '%s\t%s\t%s\t%s\n' "$$" "$(date '+%H:%M:%S')" "$PWD" "$*" > "$T"
-H="$PFX-holder"
-mine=0
-cleanup() { rm -f "$T"; [ "$mine" = 1 ] && rm -f "$H"; }
+line=$(printf '%s\t%s\t%s\t%s' "$$" "$(date '+%H:%M:%S')" "$PWD" "$*")
+printf '%s\n' "$line" > "$T"
+
+# The old single-holder file stays as "all holders, one per line" for tools that read it.
+sync_legacy() {
+  local tmp="$PFX-holder.tmp.$$" any=0 f fp
+  : > "$tmp"
+  for f in "$HD"/*; do
+    [ -e "$f" ] || continue
+    fp=${f##*/}
+    if kill -0 "$fp" 2>/dev/null; then cat "$f" >> "$tmp"; any=1; else rm -f "$f"; fi
+  done
+  if [ "$any" = 1 ]; then mv -f "$tmp" "$PFX-holder"; else rm -f "$tmp" "$PFX-holder"; fi
+}
+cleanup() { rm -f "$T" "$HD/$$"; sync_legacy; }
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
+
+held=""
+release() { local fd; for fd in $held; do eval "exec $fd>&-"; done; held=""; }
+try() {
+  local k fd n=0
+  held=""
+  for k in $(seq 1 "$N"); do
+    fd=$((2 + k))
+    eval "exec $fd>>\"\$PFX-$k.lock\""
+    if /usr/bin/lockf -s -t 0 "$fd" 2>/dev/null; then
+      held="$held $fd"; n=$((n + 1)); [ "$n" -ge "$want" ] && return 0
+    else
+      eval "exec $fd>&-"
+    fi
+  done
+  release; return 1
+}
+
 waited=0
 while :; do
   for f in "$Q"/*; do
@@ -40,26 +80,14 @@ while :; do
     { [ -n "$fp" ] && kill -0 "$fp" 2>/dev/null; } || rm -f "$f"
   done
   first=$(ls "$Q" 2>/dev/null | sort | head -1)
-  if [ "$Q/$first" = "$T" ]; then
-    # Locks 2 and 3 are the old script's extra slots; holding all keeps old and new callers exclusive.
-    exec 9>>"$PFX-1.lock" 8>>"$PFX-2.lock" 7>>"$PFX-3.lock"
-    ok=0
-    if /usr/bin/lockf -s -t 0 9 2>/dev/null && /usr/bin/lockf -s -t 0 8 2>/dev/null && /usr/bin/lockf -s -t 0 7 2>/dev/null; then
-      ok=1
-      if [ "$have_quiet" = 0 ]; then
-        exec 6>>"$QUIET"
-        /usr/bin/lockf -s -t 0 6 2>/dev/null || { ok=0; exec 6>&-; }
-      fi
-    fi
-    if [ "$ok" = 1 ]; then
-      mine=1
-      printf '%s\t%s\t%s\t%s\n' "$$" "$(date '+%H:%M:%S')" "$PWD" "$*" > "$H"
-      rm -f "$T"
-      [ "$waited" -gt 0 ] && echo "heavy.sh: got the build slot after ${waited}s" >&2
-      OPEN_HEAVY_HELD=1 "$@" 9>&- 8>&- 7>&- 6>&-
-      exit $?
-    fi
-    exec 9>&- 8>&- 7>&-
+  if [ "$Q/$first" = "$T" ] && try; then
+    printf '%s\t%s\n' "$line" "$kind" > "$HD/$$"
+    sync_legacy
+    rm -f "$T"
+    [ "$waited" -gt 0 ] && echo "heavy.sh: got ${want} of ${N} build slot(s) after ${waited}s" >&2
+    close=""; for fd in $held; do close="$close $fd>&-"; done
+    eval "OPEN_HEAVY_HELD=1 OPEN_HEAVY_KIND=$kind \"\$@\" $close"
+    exit $?
   fi
-  sleep 3; waited=$((waited + 3))
+  sleep 2; waited=$((waited + 2))
 done

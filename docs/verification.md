@@ -1,7 +1,7 @@
 # Full merge verification
 
-Run the gate inside the machine's one FIFO build slot. The coordinator keeps
-that slot and takes the screen lock separately for each native or real-App
+Run the gate inside one normal FIFO build slot (three available on the M5,
+one on the M1). The coordinator keeps that slot and takes the screen lock separately for each native or real-App
 suite, including cleanup. Never wrap the entire gate in the screen lock.
 
 ```sh
@@ -10,6 +10,14 @@ suite, including cleanup. Never wrap the entire gate in the screen lock.
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only e2e-sidebar-completion
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --no-e2e --only sidebar-render,sidebar-compare
 ```
+
+Run one full gate per PR on its final functional head. After a later clean
+merge of main whose changed files are disjoint from the PR, retain that full
+receipt and run `--only build` plus the PR's area checks on the merged head.
+An overlap or merge conflict requires the full gate. Iterate with touched
+suites only, using Debug; reserve Release for timing and the final artifact.
+Record final-artifact hashes/manifests once. Run the five-launch timing set
+once per PR, then repeat only after a change aimed at timing.
 
 The full qualifying gate runs unsplit on the M5. Its offscreen worker builds
 OpenKit once in Release, then runs the real release CLIs. Warnings and compiler
@@ -75,9 +83,13 @@ after the “M5 panel ready” ruling. The notification `clients.openWindow` row
 stays DEFERRED as a visible v1 product gap in `docs/followups.md`.
 
 The committed machine setup scripts and queue contract are in
-[tools/machine/README.md](../tools/machine/README.md). Each machine has one build
-slot and one screen slot. Build and screen work may overlap; strict timing takes
-both in that order. The full gate already holds both during each timed suite.
+[tools/machine/README.md](../tools/machine/README.md). The M5 has three build
+slots and the M1 has one; both keep one screen slot. Build and screen work may
+overlap. Measurements use `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh` to take every
+build slot, then the screen lock when needed. The strict-timing lockf form is
+exclusive automatically. A budget failure while another M5 build slot was
+occupied is void; rerun only that row exclusively, keeping both receipts
+and its unchanged budget.
 Keep at most one waiting screen job per agent, and record waits over ten minutes.
 
 ### Display and timer portability (Section 16)
@@ -171,8 +183,8 @@ export OPEN_ENGINE_ROOT=$HOME/Developer/open-engine-s8-main # M5 only
 ~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=all \
   tools/verify-all.sh --only space-legacy,space-editor,sidebar-compare
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
-/usr/bin/lockf -k /tmp/open-m5-quiet.lock \
-  ~/Library/Caches/OpenRE/scripts/heavy.sh env OPEN_VERIFY_BREAK=suggest \
+OPEN_HEAVY_EXCLUSIVE=1 ~/Library/Caches/OpenRE/scripts/heavy.sh \
+  env OPEN_VERIFY_BREAK=suggest \
   Packages/OpenKit/.build/release/openkit suggest-check
 ```
 
@@ -181,10 +193,10 @@ TANDEM §4M. Never commit or edit source there. The normal runner retains the
 on-screen lock and owned-window cleanup for the native editor suite. Private
 capture inputs and comparison images remain in ignored `.re/` or private
 receipt directories; the committed references use synthetic fixtures only.
-The standing lock order is quiet lock, then heavy slot, then screen lock when
-needed. Build first under `heavy.sh` alone. Time the already-built command;
-never hold the quiet lock during a build. Visual negative proofs take no
-quiet lock; only the timer proof does.
+The standing lock order is build slot, then screen lock when needed. Build
+first under normal `heavy.sh`. Time the already-built command exclusively
+with `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh`; do not acquire a private quiet lock.
+Visual negative proofs take only the screen lock when they open windows.
 
 #### Recorded controls (2026-11-07)
 

@@ -49,12 +49,16 @@ def inside_heavy():
     # A launcher may mention heavy.sh in its arguments without owning a slot.
     # Require the live FIFO holder itself in our ancestry, not that text.
     holder = Path('/tmp/open-heavy-holder')
-    if not holder.is_file() or holder.stat().st_size > 4096:
+    if not holder.is_file() or holder.stat().st_size > 64 * 1024:
         return False
-    fields = holder.read_text().split('\t', 1)
-    if not fields[0].isdigit():
-        return False
-    return any(pid == int(fields[0]) for pid, _ in ancestors())
+    # Queue v3 records every holder on its own line. The fifth field (kind)
+    # is optional so an already-running v2 holder remains recognizable.
+    holders = set()
+    for line in holder.read_text().splitlines():
+        fields = line.split('\t')
+        if len(fields) in (4, 5) and fields[0].isdigit():
+            holders.add(int(fields[0]))
+    return any(pid in holders for pid, _ in ancestors())
 
 
 def machine():
@@ -443,8 +447,8 @@ def main():
         parser.error('selected row has no observer stage')
     if options.lane == 'observers' and machine() != 'M1':
         parser.error('observer lane requires the M1; no injected launch is allowed here')
-    # The outer FIFO build slot serializes this checkout as well as other
-    # checkouts on the machine. No private second build lock is needed.
+    # The caller keeps one FIFO build slot throughout the gate.
+    # Exclusive timing reruns use every machine slot; there is no private lock.
     source = fingerprint()
     if not source['clean']:
         raise RuntimeError('commit source changes before qualifying a merge gate')
@@ -481,8 +485,8 @@ def main():
         command += ['--app-config', options.config]
     if options.with_arc_data:
         command.append('--arc')
-    # The installed FIFO heavy.sh owns quiet-lock arbitration. Nested
-    # build workers keep the caller's single slot throughout the full gate.
+    # Nested build workers keep the caller's normal slot throughout the gate.
+    # The installed FIFO heavy.sh handles exclusive measurement jobs.
     rc = command_run(command, directory / 'heavy.log')
     cli = cli_rows(directory / 'cli/results.tsv')
     for row in cli:
@@ -500,7 +504,7 @@ def main():
         if (directory/'app-build.json').is_file():
             app = read_json(directory/'app-build.json')
             rows.append(dict(row='build/app',status=app['result'],reason='',evidence=str(directory/'app-build.log')))
-        # The outer heavy.sh still owns the one build slot. Each screen
+        # The outer heavy.sh still owns its build slot. Each screen
         # worker acquires and releases the screen lock before the next suite.
         for name in native:
             if not screen_safe:
