@@ -25,7 +25,7 @@ def run(factory, results, origin, tmp, env):
             samples = all_samples[-30:]
             p95 = sorted(samples)[int(.95 * (len(samples) - 1))]
             p95_all = sorted(all_samples)[int(.95 * (len(all_samples) - 1))]
-            data = dict(milliseconds=samples, allMilliseconds=all_samples,p95=p95,p95IncludingCold=p95_all,limit=8,warmups=5,coldMilliseconds=all_samples[0],
+            data = dict(timing=True, functionalOK=len(all_samples) == 35 and len(samples) == 30, milliseconds=samples, allMilliseconds=all_samples,p95=p95,p95IncludingCold=p95_all,limit=8,warmups=5,coldMilliseconds=all_samples[0],
                         load=list(os.getloadavg()))
             if app.config == 'Release': data['ok'] = len(all_samples) == 35 and len(samples) == 30 and p95 < 8 and p95_all < 8
             else: data.update(status='BLOCKED', reason='Release required for first-draw budget')

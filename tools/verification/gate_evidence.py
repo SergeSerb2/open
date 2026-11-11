@@ -99,7 +99,7 @@ def e2e_rows(directory, suite, identity, engine, config, style, lane):
                               'UNVERIFIED', 'SKIP', 'NOT_REQUESTED'):
                 raise ValueError('row has no acceptance predicate: '+key)
         rows.append(dict(row=suite+'/'+key, status=status, reason=value.get('reason') or value.get('error') or '',
-                         evidence=str(path)))
+                         evidence=str(path), **({k: value[k] for k in ('timing', 'functionalOK', 'timingAfter') if k in value})))
     if not any(row['status'] == 'PASS' for row in rows):
         raise ValueError('suite has no passing real-App acceptance row')
     return rows

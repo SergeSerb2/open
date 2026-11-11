@@ -281,7 +281,7 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             summaries = {}
             for name, values in measured.items():
                 summaries[name] = dict(median=statistics.median(values), p95=sorted(values)[math.ceil(len(values)*.95)-1])
-            row('speed_tab_switch', all(summaries[name]['p95'] <= 25 for name in ('single', 'split')), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
+            row('speed_tab_switch', all(summaries[name]['p95'] <= 25 for name in ('single', 'split')), timing=True, functionalOK=bool(measured), loadAverage=list(os.getloadavg()), uptime=subprocess.check_output(['uptime'], text=True).strip(),
                 milliseconds=summaries, samples=measured, target_ms=16, target_met=all(summaries[name]['p95'] <= 16 for name in ('single', 'split')), absolute_ceiling_ms=25, relative_gate='separate interleaved main/branch receipt: branch <= main + 1 ms on both paths', scope='production sidebar selection through native layout/CA submission and first rAF after fresh visibilitychange in every shown pane (last pane wins), native layout/CA flush return; query return retained separately; excludes physical presentation')
         app.begin_timing('split motion probe')
         motion = app.call('split', op='bench', nodes=[first, second, s['id']], motionOnly=True)

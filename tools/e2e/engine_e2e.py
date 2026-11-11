@@ -248,6 +248,8 @@ class CheckedResults(dict):
     def __setitem__(self, key, value):
         if isinstance(value, dict) and ("ok" in value or "status" in value):
             value.setdefault("load", os.getloadavg())
+        if isinstance(value, dict) and value.get('timing') is True:
+            value['timingAfter'] = runpy.run_path(os.path.join(ROOT, 'tools/verification/timing_sample.py'))['snapshot']()
         if isinstance(value, dict) and "ok" in value:
             self.tracker.check_alive()
             interruptions = self.tracker.loss()
@@ -2631,14 +2633,15 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False):
+def window_checks(app_factory, results, tmp, config, chrome_only=False, material_only=False, launch_only=False):
     if material_only:
         window_material_checks(app_factory, results, tmp)
         return
-    runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
-    sidebar_resize_gesture_checks(app_factory, results, tmp)
-    window_chrome_followup_checks(app_factory, results, tmp)
-    window_material_checks(app_factory, results, tmp)
+    if not launch_only:
+        runpy.run_path(os.path.join(ROOT, "tools", "e2e", "engine_activation.py"))["run"](app_factory, results)
+        sidebar_resize_gesture_checks(app_factory, results, tmp)
+        window_chrome_followup_checks(app_factory, results, tmp)
+        window_material_checks(app_factory, results, tmp)
     if chrome_only: return
     # Local deterministic text paints without DNS, TLS, or external requests.
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
@@ -2689,13 +2692,22 @@ def window_checks(app_factory, results, tmp, config, chrome_only=False, material
     for label, values in runs.items():
         medians = {key: statistics.median([r[key] for r in values if key in r])
                    if all(key in r for r in values) else None
-                   for key in ("main", "modelLoaded", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
-        results[label] = {"median_ms": medians, "samples": len(values)}
+                   for key in ("main", "modelLoaded", "windowShown", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
+        results[label] = {"median_ms": medians, "samples": len(values), "timing": True,
+                          "functionalOK": len(values) == 5 and all(r.get('kernelProcessStart') is True
+                              and r.get('firstFrameConfirmed') is True for r in values),
+                          "limits_ms": {"sidebarDrawn": 250, "firstContentfulPaint": 700},
+                          "maximumFactor": 1.5}
         if config == "Release":
-            results[label]["ok"] = medians["sidebarDrawn"] is not None and medians["sidebarDrawn"] <= 250 and medians["firstContentfulPaint"] is not None and medians["firstContentfulPaint"] <= 700
+            results[label]["ok"] = results[label]['functionalOK'] and all(
+                medians[key] is not None and medians[key] <= limit
+                and all(r.get(key, float('inf')) <= 1.5 * limit for r in values)
+                for key, limit in results[label]['limits_ms'].items())
         else:
             results[label].update(status="SKIP", reason="Release timing budgets are not evaluated in Debug")
         print(label, medians)
+    if launch_only:
+        return
     # A never-loaded pinned row must never pass through selection while
     # closing or unloading. The counter is cumulative, so create-then-drop
     # cannot look like zero retained hosts.
@@ -6129,7 +6141,8 @@ def _media_idle_cpu(app, audio):
     # Retain the existing 0.5 percentage-point tolerance and four-pair floor comparison.
     floors = {k: min(x["total_cpu_percent"] for x in v) for k, v in samples.items()}
     browser = {k: min(x["by_kind"].get("browser", 0) for x in v) for k, v in samples.items()}
-    return {"ok": abs(floors["with"] - floors["without"]) <= .5
+    return {"timing": True, "functionalOK": all(x["complete"] for v in samples.values() for x in v) and animations == [0]*4 and pending == [0]*4,
+            "ok": abs(floors["with"] - floors["without"]) <= .5
             and abs(browser["with"] - browser["without"]) <= .5
             and all(x["complete"] for v in samples.values() for x in v)
             and animations == [0] * 4 and pending == [0] * 4,
@@ -7266,7 +7279,7 @@ def sleep_checks(factory, results, tmp, style):
             if line and line.startswith("sleep-wake destroyed"):
                 destroyed_ms.append(float(line.split("ms=")[1]))
         def pct(xs, p): return sorted(xs)[min(len(xs) - 1, int(round(p * (len(xs) - 1))))] if xs else None
-        results["sleep_f5_discard_wake"] = {"ok": len(discard_ms) == 20 and pct(discard_ms, .95) <= 700,
+        results["sleep_f5_discard_wake"] = {"timing": True, "functionalOK": len(discard_ms) == 20, "ok": len(discard_ms) == 20 and pct(discard_ms, .95) <= 700,
                                             "p50ms": pct(discard_ms, .5), "p95ms": pct(discard_ms, .95), "n": len(discard_ms),
                                             "destroyed": {"p50ms": pct(destroyed_ms, .5), "p95ms": pct(destroyed_ms, .95), "n": len(destroyed_ms)},
                                             "cache": "warm (same fixture page each wake)", "load": os.getloadavg(),
@@ -7290,7 +7303,7 @@ def sleep_checks(factory, results, tmp, style):
                                timeout=5, step=.005)
             if stamp:
                 unfreeze_ms.append(stamp - t0)
-        results["sleep_f5_unfreeze"] = {"ok": len(unfreeze_ms) == 20 and pct(unfreeze_ms, .95) <= 16,
+        results["sleep_f5_unfreeze"] = {"timing": True, "functionalOK": len(unfreeze_ms) == 20, "ok": len(unfreeze_ms) == 20 and pct(unfreeze_ms, .95) <= 16,
                                         "p50ms": pct(unfreeze_ms, .5), "p95ms": pct(unfreeze_ms, .95), "n": len(unfreeze_ms),
                                         "frozenBeforeWake": unfreeze_phases.count("frozen"), "load": os.getloadavg(),
                                         "measure": "select call → the page's visibilitychange to visible (includes the automation round trip)"}
@@ -8934,7 +8947,7 @@ def commandbar_checks(factory, results, tmp, config):
         switched = wait_until(lambda: app.call('window-state') if app.call('window-state')['space'] == second_space and app.call('window-state')['selected'] == target else None, timeout=3, step=.1)
         results['switch_tab_across_spaces'] = {'ok': bool(switched) and app.eval(target, 'document.title') == 'Shell C /cross', 'state': app.call('window-state'), 'expectedSpace': second_space, 'expectedTab': target, 'rows': cross['rows'], 'barAfterReturn':state(), 'returnRouting':return_routing}
         bar('t'); timings = wait_until(lambda: state() if state().get('openFirstResultsMs', -1) >= 0 else None, step=.02)
-        results['first_results_budget'] = {'loadAverage': list(os.getloadavg()), 'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        results['first_results_budget'] = {'timing': True, 'functionalOK': bool(timings), 'loadAverage': list(os.getloadavg()), 'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
         shot(app, 'commandbar-live-%s.png' % config.lower(), window=app.call('window-state')['number'])
         press('escape'); time.sleep(.3)
         other_profile_space = app.call('space-create', title='Isolated profile', profile='Commandbar Isolated')
@@ -12528,6 +12541,7 @@ def main():
                     help='features: prove ignored save offers with main App code and no password delegate')
     ap.add_argument("--firstrun-boosts-only", action="store_true", help="run only the Boost import seam and CLI lock flows in firstrun")
     ap.add_argument("--window-material-only", action="store_true", help="run only the window material real-App flows in the window suite")
+    ap.add_argument('--window-launch-only', action='store_true', help='run only the five cold/warm real-App launch pairs')
     ap.add_argument("--profiles-shell-only", action="store_true", help="run only the Section 10 real-App Profiles shell flows")
     ap.add_argument("--functional-only", action="store_true", help="defer M5 timing/pixel rows in sitecontrol, extensions-ui and split")
     ap.add_argument('--passwords-probe-rows', help='run only named Step 0 rows, e.g. PR-8,PR-9; never replay a crashed row')
@@ -12547,6 +12561,8 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    if opts.window_launch_only and opts.only != 'window':
+        ap.error('--window-launch-only requires --only window')
     E2E_LANE = opts.lane
     if opts.only == 'applescript' and subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).startswith('Apple M1'):
         ap.error('M1 policy forbids external AppleScript/osascript over SSH; run this suite on the M5')
@@ -12965,7 +12981,7 @@ def main():
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only,
-                          material_only=opts.window_material_only)
+                          material_only=opts.window_material_only, launch_only=opts.window_launch_only)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)

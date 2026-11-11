@@ -83,7 +83,8 @@ def evaluate(entries, rows, ready=False):
             state = row['status'] = 'DEFERRED'
         absent_target = (state == 'SKIP' and row['row'].startswith('cli/')
                          and row.get('reason', '').startswith('target does not exist yet: '))
-        verdict = 'PASS' if state == 'PASS' else 'SKIP' if absent_target else 'FAIL'
+        informative = state == 'INFO' and row.get('timing') is True and row.get('functionalOK') is True
+        verdict = 'PASS' if state == 'PASS' else 'INFO' if informative else 'SKIP' if absent_target else 'FAIL'
         if entry:
             if ready and entry['expires'] == 'M5 panel ready':
                 verdict = 'EXPIRED'
@@ -95,7 +96,7 @@ def evaluate(entries, rows, ready=False):
                 verdict = 'MISMATCH'
             inventory.append(dict(entry, verdict=verdict))
         row['policy'] = verdict
-        failed = failed or verdict not in ('PASS', 'SKIP', 'EXCEPTION')
+        failed = failed or verdict not in ('PASS', 'SKIP', 'EXCEPTION', 'INFO')
     for entry in entries:
         if entry['row'] not in observed:
             verdict = 'EXPIRED' if ready and entry['expires'] == 'M5 panel ready' else 'UNEXERCISED'

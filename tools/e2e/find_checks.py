@@ -170,6 +170,7 @@ def run(h, factory, results, tmp):
             return dict(median=statistics.median(values), p95=values[math.ceil(.95*len(values))-1], samples=len(values))
         first, repeat = distribution('first'), distribution('repeat')
         row('F04_one_frame', all(s['visible'] for s in samples) and first['p95'] <= deadline and repeat['p95'] <= deadline,
+            timing=True, functionalOK=all(s["visible"] for s in samples),
             firstMilliseconds=first, repeatMilliseconds=repeat, samples=samples,
             cacheOnly=dict(firstMilliseconds=distribution('first', cache_samples), repeatMilliseconds=distribution('repeat', cache_samples), samples=cache_samples) if cache_samples else {},
             scope='native key timestamp to flushed visible Find layer; first open includes lazy creation; repeat reuses the same window; twenty fresh App windows; focus completes in each action',

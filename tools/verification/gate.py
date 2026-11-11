@@ -17,10 +17,12 @@ import tempfile
 import time
 from screen_cleanup import cleanup_owned
 from intentional_crash import expected_reports, read_markers
+from timing_sample import preflight as timing_preflight, finish as timing_finish
 
 ROOT = Path(__file__).resolve().parents[2]  # final location tools/verification/gate.py
 NATIVE = ('space-editor', 'settings-preview', 'features-render', 'sitecontrol-render')
 M1_NATIVE = {'features-idle'}
+TIMING_SUITES = {'window', 'import-robust', 'welcome', 'find', 'commandbar', 'app-actions', 'sitecontrol', 'split', 'media', 'sleep'}
 # Transitive observer/fault-probe flows, not only direct suite implementations.
 M1_E2E = {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwords',
           'passwords-probe', 'secrets-import', 'owner-watch', 'actions', 'incognito'}
@@ -190,7 +192,13 @@ def run_screen(args):
     for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, cancel)
     started = time.monotonic()
+    timing = None
     try:
+        if args.timing:
+            timing = timing_preflight(require_quiet=args.timing == 'required')
+            write_json(directory/'timing-sample.json', timing)
+            if args.timing == 'required' and not timing['validBefore']:
+                raise RuntimeError('quiet timing preflight exhausted six minutes; no App launched')
         with (directory / 'output.log').open('w') as output:
             job = subprocess.Popen(command, cwd=args.cwd or ROOT, stdout=output, stderr=subprocess.STDOUT,
                                    env=dict(os.environ, OPEN_VERIFY_EXTERNAL_SCREEN_LOCK='1',
@@ -219,6 +227,8 @@ def run_screen(args):
     except Exception as error:
         errors.append(str(error))
     finally:
+        if timing is not None:
+            write_json(directory/'timing-sample.json', timing_finish(timing))
         if job and job.poll() is None:
             with contextlib.suppress(ProcessLookupError):
                 os.killpg(job.pid, signal.SIGTERM)
@@ -301,6 +311,33 @@ def collect_e2e(directory, suite, source, config, style, lane):
     return e2e_rows(directory, suite, identity, source['engineSHA256'], config, style, lane)
 
 
+def use_m1_timing(directory, row_name, identity, config):
+    if directory is None:
+        return None
+    paths = list(directory.glob('*/gate.json')) + ([directory/'gate.json'] if (directory/'gate.json').is_file() else [])
+    if len(paths) > 256:
+        raise ValueError('too many timing receipts')
+    matches = []
+    for path in paths:
+        receipt = read_json(path)
+        if (receipt.get('machine') != 'M1' or receipt.get('source') != identity
+                or receipt.get('config') != config or receipt.get('lane') != 'timing'
+                or receipt.get('partialSelectors') != []):
+            continue
+        for stage in receipt.get('stages', []):
+            sample_path = path.parent/stage['name']/'timing-sample.json'
+            if not sample_path.is_file() or read_json(sample_path).get('validBefore') is not True:
+                continue
+            for row in stage.get('rows', []):
+                if (row.get('row') == row_name and row in receipt.get('rows', [])
+                        and row.get('sampleValid') is True and row.get('functionalOK') is True
+                        and row.get('status') == 'PASS'):
+                    matches.append(dict(row, evidence=str(path)))
+    if len(matches) > 1:
+        raise ValueError('ambiguous M1 timing receipts for '+row_name)
+    return matches[0] if matches else None
+
+
 class GeneratedOutputs:
     """Restore only outputs that the real harness owns; never discard code."""
     prefixes = ('docs/engine-spike/', 'docs/profiles-shell/')
@@ -348,7 +385,7 @@ def command_run(command, log, interrupt=None):
     return child.returncode
 
 
-def screen_stage(name, command, logs, timeout, expected, cwd=None):
+def screen_stage(name, command, logs, timeout, expected, cwd=None, timing=None):
     directory = logs / name; directory.mkdir()
     queued = time.time()
     def cancel(lock):
@@ -365,6 +402,8 @@ def screen_stage(name, command, logs, timeout, expected, cwd=None):
             '--command', json.dumps(command), '--timeout', str(timeout), '--expected', json.dumps(expected)]
     if cwd is not None:
         args += ['--cwd', str(cwd)]
+    if timing:
+        args += ['--timing', timing]
     status = command_run(['/usr/bin/lockf', '-k', '/tmp/open-onscreen-e2e.lock', *args],
                          directory / 'lock.log', cancel)
     return status, directory, queued
@@ -405,6 +444,7 @@ def main():
         parser.add_argument('--timeout', type=int, required=True)
         parser.add_argument('--expected', required=True)
         parser.add_argument('--cwd')
+        parser.add_argument('--timing', choices=('required', 'informative'))
         args = parser.parse_args()
         if fingerprint() != json.loads(args.expected):
             raise RuntimeError('source/engine changed while waiting for the screen lock; rebuild required')
@@ -420,7 +460,7 @@ def main():
     parser.add_argument('--no-e2e', action='store_true', help='intermediate checks only; not a PR-ready receipt')
     parser.add_argument('--with-arc-data', action='store_true')
     parser.add_argument('--keep-logs', action='store_true')
-    parser.add_argument('--lane', choices=('merge', 'observers'), default='merge')
+    parser.add_argument('--lane', choices=('merge', 'observers', 'timing'), default='merge')
     parser.add_argument('--config', choices=('Debug', 'Release'), default='Release')
     parser.add_argument('--m1-receipts', type=Path, help='exact-head gate receipts produced on M1')
     parser.add_argument('--log-dir', type=Path)
@@ -433,7 +473,7 @@ def main():
         if partial:
             parser.error('full gate refuses partial-suite environment: '+', '.join(sorted(partial)))
     default_e2e = [name for name in names if name != 'passwords-probe'] + ['ntp-alloy']
-    all_names = ['build', *CLI, *NATIVE, *M1_NATIVE, *('e2e-' + s for s in names), 'e2e-ntp-alloy']
+    all_names = ['build', *CLI, *NATIVE, *M1_NATIVE, *('e2e-' + s for s in names), 'e2e-ntp-alloy', 'timing-window']
     if options.quick and options.lane != 'merge':
         parser.error('--quick applies to the merge lane')
     selected = ['commands-demo', 'suggest-check', 'commands-dump'] if options.quick else [*CLI, *NATIVE]
@@ -441,6 +481,8 @@ def main():
         selected += ['e2e-' + s for s in default_e2e]
     if options.lane == 'observers':
         selected = ['features-idle', *('e2e-' + s for s in sorted(OBSERVER_SUITES))]
+    if options.lane == 'timing':
+        selected = ['timing-window', *('e2e-'+s for s in sorted(TIMING_SUITES-{'window'}))]
     if options.only:
         requested = options.only.split(',')
         expanded = [name for item in requested for name in
@@ -464,6 +506,15 @@ def main():
         parser.error('selected row has no observer stage')
     if options.lane == 'observers' and machine() != 'M1':
         parser.error('observer lane requires the M1; no injected launch is allowed here')
+    if options.lane == 'timing':
+        if machine() != 'M1' or options.config != 'Release':
+            parser.error('timing lane requires M1 Release')
+        if os.environ.get('OPEN_HEAVY_KIND') != 'exclusive':
+            parser.error('timing lane requires OPEN_HEAVY_EXCLUSIVE=1 heavy.sh')
+        if any(n != 'timing-window' and n not in ['e2e-'+s for s in TIMING_SUITES] for n in selected):
+            parser.error('selected row has no timing lane')
+    if 'timing-window' in selected and options.lane != 'timing':
+        parser.error('timing-window requires --lane timing')
     # The caller keeps one FIFO build slot throughout the gate.
     # Exclusive timing reruns use every machine slot; there is no private lock.
     source = fingerprint()
@@ -490,7 +541,7 @@ def main():
     def can_continue(out):
         end = out/'screen-end.json'
         return end.is_file() and read_json(end).get('safe') is True
-    e2e = [n[4:] for n in selected if n.startswith('e2e-')]
+    e2e = [n[4:] for n in selected if n.startswith('e2e-')] + (['window'] if 'timing-window' in selected else [])
     def required_elsewhere(name):
         return ((machine() == 'M5' and (name in M1_E2E or name not in SAFE_M5))
                 or (machine() == 'M1' and name in M5_E2E))
@@ -538,7 +589,8 @@ def main():
             stages.append(dict(name=name,exit=rc,queued=queued,evidence=str(out)))
         app_ok = not local_e2e or ((directory/'app-build.json').is_file() and read_json(directory/'app-build.json')['result']=='PASS')
         for name in e2e:
-            label = 'e2e-'+name
+            launch_only = name == 'window' and 'timing-window' in selected
+            label = 'timing-window' if launch_only else 'e2e-'+name
             if required_elsewhere(name):
                 if machine() == 'M1':
                     rows.append(dict(row=label+'/receipt',status='M5_REQUIRED',
@@ -565,14 +617,17 @@ def main():
             else:
                 command = [sys.executable,str(ROOT/'tools/e2e/engine_e2e.py'),'--only',suite,'--style',style,
                            '--config',options.config,'--engine-sha256',source['engineSHA256'], '--focus-attempts','1',
-                           '--lane',options.lane, '--output-dir', str(inputs), '--stop-on-app-death',
+                           '--lane','merge' if options.lane == 'timing' else options.lane, '--output-dir', str(inputs), '--stop-on-app-death',
                            '--continue-on-timing-failure', '--suite-timeout', '3600']
                 if suite=='passwords-probe':
                     command.append('--passwords-probe-dialog-free')
+                if launch_only:
+                    command.append('--window-launch-only')
             generated = GeneratedOutputs(); generated.directory = inputs
             try:
                 with generated:
-                    rc, out, queued = screen_stage(label,command,directory,3600,source)
+                    rc, out, queued = screen_stage(label,command,directory,3600,source,
+                        timing=('required' if options.lane == 'timing' else 'informative') if suite in TIMING_SUITES else None)
                 screen_safe = can_continue(out)
                 if suite=='owner-watch':
                     values = read_json(inputs/'results/results.json')
@@ -580,10 +635,25 @@ def main():
                         raise RuntimeError('owner-watch receipt is incomplete or failed')
                     checks=[dict(row='owner-watch/owned_cleanup',status='PASS',reason='',evidence=str(inputs/'results/results.json'))]
                 else:
-                    checks = collect_e2e(inputs,suite,source,options.config,style,options.lane)
+                    checks = collect_e2e(inputs,suite,source,options.config,style,
+                                         'merge' if options.lane == 'timing' else options.lane)
+                    sample_path = out/'timing-sample.json'
+                    sample = read_json(sample_path) if sample_path.is_file() else None
+                    for check in checks:
+                        if check.get('timing') is not True:
+                            continue
+                        check['timingSample'] = str(sample_path)
+                        after = check.get('timingAfter', {})
+                        check['sampleValid'] = bool(sample and sample.get('validBefore') is True
+                                                    and after.get('foreignCPU', float('inf')) <= 200)
+                        if not check['sampleValid']:
+                            check['observedStatus'] = check['status']
+                            check['status'] = ('INFO' if machine() == 'M5' and check.get('functionalOK') is True
+                                               else 'INVALID_SAMPLE')
+                            check['reason'] = 'Timing sample did not meet LEAD 06:30 quiet rule; raw assertion retained'
                     if name=='ntp-alloy':
                         for check in checks: check['row']=check['row'].replace('ntp/','ntp-alloy/',1)
-                if rc and not any(r['status']=='FAIL' for r in checks):
+                if rc and not any(r['status']=='FAIL' or r.get('observedStatus') == 'FAIL' for r in checks):
                     checks.append(dict(row=label+'/exit',status='FAIL',reason='suite exit '+str(rc),evidence=str(out/'output.log')))
                 rows.extend(checks)
                 stages.append(dict(name=label,style=style,rows=checks,exit=rc,queued=queued,evidence=str(out)))
@@ -604,7 +674,15 @@ def main():
             row['evidence'] = target['evidence']
     if fingerprint() != source:
         rows.append(dict(row='gate/source',status='FAIL',reason='source or engine changed during the gate',evidence=''))
-    if rc and not any(row['status'] in ('FAIL', 'INTERRUPTED') for row in rows):
+    if machine() == 'M5' and options.lane == 'merge':
+        for row in list(rows):
+            if row.get('timing') is not True:
+                continue
+            imported = use_m1_timing(options.m1_receipts, row['row'], source, options.config)
+            rows.append(dict(row='timing/'+row['row'], status='PASS' if imported else 'M1_REQUIRED',
+                             reason='Quiet M1 timing lane required (LEAD 06:30)',
+                             evidence=imported['evidence'] if imported else ''))
+    if rc and not any(row['status'] in ('FAIL', 'INTERRUPTED') or row.get('observedStatus') == 'FAIL' for row in rows):
         rows.append(dict(row='gate/worker-exit', status='FAIL', reason='worker exit ' + str(rc), evidence=str(directory)))
     failed, inventory = evaluate(entries, rows, ready=True)
     receipt.update(ended=time.time(), exceptions=inventory, ok=not failed)

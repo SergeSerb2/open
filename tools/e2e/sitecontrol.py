@@ -503,7 +503,7 @@ def run(factory, results, tmp, env, functional_only=False):
                           .replace('frames.length<240','frames.length<60'))
             negative_rejected=not (p95(slow)<=p0+1 and drops(slow)<=d0+.01)
             record('S13_scroll',p1<=p0+1 and d1<=d0+.01 and negative_rejected,closedP95=p0,openP95=p1,closedDropped=d0,openDropped=d1,refreshMilliseconds=interval,
-                   negativeRejected=negative_rejected,negativeP95=p95(slow),negativeDropped=drops(slow))
+                   timing=True,functionalOK=negative_rejected,negativeRejected=negative_rejected,negativeP95=p95(slow),negativeDropped=drops(slow))
         finally:
             env['_restore_defaults'](app,saved)
             app.quit()

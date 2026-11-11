@@ -107,6 +107,36 @@ occupied is void; rerun only that row exclusively, keeping both receipts
 and its unchanged budget.
 Keep at most one waiting screen job per agent, and record waits over ten minutes.
 
+### Timing lane (LEAD 06:30, 2026-11-11)
+
+Budget rows (launch, section/key latency and idle CPU) need a valid quiet M1
+Release timing receipt. Run `OPEN_HEAVY_EXCLUSIVE=1 heavy.sh tools/verify-all.sh
+--lane timing`; `--only timing-window` selects just the five cold/warm launch
+pairs. The lane holds the heavy and screen slots. Before each stage it waits
+at most six minutes for two load1 readings at or below 3.0, ten seconds apart.
+Foreign CPU must be at or below 200% before and immediately after the row.
+Exclude only the owned Open/harness tree and WindowServer. Retain the top five
+foreign processes and all readings. The user's CarsonLocalSTT job is tolerated
+within that limit and must not be stopped. After-run load is recorded but has
+no validity condition.
+
+Launch acceptance uses five samples per cold/warm set, its median, and no
+sample over 1.5 times its existing limit (sidebar 250 ms, FCP 700 ms). Keep each
+process-start → window-shown → sidebar-drawn phase split. M5 budget rows still
+run. Invalid M5 samples are INFO with the raw result and load ledger; they do
+not excuse a functional failure and cannot replace M1 acceptance. A miss on a
+valid M5 sample fails too. The collector keeps separate functional predicates
+on mixed rows, so missing samples, active work and failed native flows still
+fail even when the timing sample is invalid.
+
+For this Step 4 PR only, LEAD 06:10 permits qualification by stages. A passing
+stage can carry from X to Y only when `git diff X..Y --name-only` is disjoint
+from every product, suite and shared harness input it reads. The PR lists those
+inputs, the diff, passing head, verdict and wall time. Re-run failed, NOT_RUN
+and input-invalidated stages and the build. Coordinator or shared-harness
+changes invalidate every stage that reads them. Raw interrupted/failed runs
+stay visible. One uninterrupted full gate remains required before Step 5.
+
 ### Display and timer portability (Section 16)
 
 Visual references use the exact key

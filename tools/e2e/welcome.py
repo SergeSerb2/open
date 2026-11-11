@@ -194,6 +194,7 @@ def run(factory, results, tmp, api):
         record('W07_idle_no_pending_work', at_rest(stable)
                and stable['completionCount'] == completion_count
                and (app.config != 'Release' or welcome_cpu['appPercent'] < 1),
+               timing=True, functionalOK=at_rest(stable) and stable["completionCount"] == completion_count,
                blank=blank_cpu, welcome=welcome_cpu, state=stable)
         resume_tab = app.call('welcome', action='insert')['tab']
         resume = pause_resume_playlist(app, api)
@@ -685,6 +686,7 @@ def pause_resume_playlist(app, api):
                         and (app.config != 'Release' or cpu < 1)),
                 initial=initial, paused=paused, restored=restored, still=still, manual=manual,
                 pauseSeconds=pause_seconds, pauseLimitSeconds=1,
+                timing=True, functionalOK=bool(initial and mini and paused and pause_seconds <= 1 and at_rest(after) and restored and at_rest(still) and still["playedCards"] == paused["playedCards"] and manual["animating"] and manual["activeCard"] == 2 and manual["playlist"] == "stopped"),
                 appCPUPercent=cpu, seconds=seconds, limitPercent=1, cpuLoadAverage=list(os.getloadavg()))
 
 
