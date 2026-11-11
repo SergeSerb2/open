@@ -1,134 +1,164 @@
 # Library validation
 
-Status: not qualified for a PR. Five valid Release pairs are complete. One
-Archive cold-switch sample exceeds its ceiling. The 10,000-row scroll also fails its zero-miss requirement. No final M5 gate or PR has been opened.
+Status: STOP before the full M5 gate and PR. All five Release pairs are valid.
+The interaction budgets and idle median pass. The 10,000-row scroll still
+fails its p95 and missed-interval limits. No further performance change or
+qualifying rerun follows this result without the lead's answer.
 
-The native source is `28dbcfa4`. The Release executable SHA-256 is
-`3d7784aea05a4137fa6193706cb39d3e1123ba1c1ba9c4a255dab08cd287fbe5`.
-Runner `93a01341` used collector `b07ef7f2`; `9d813028` corrects raw idle
-attribution under the lead's later ruling. No product code changed during
-qualification. The first two complete pairs survived a collector interruption;
-the receipt links the retained prefix and three new pairs. No performance
-sample was discarded.
+The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
+fixture selection after the uncached Archive probe. Main merge `48c378c9`
+includes `ccca06d0` and the `icc-header-v1` display-key fix. That merge changes
+no App, engine or Library runtime code. Existing reference images are retained.
 
-Every pair held all configured M1 heavy slots and the on-screen lock. Two
-load1 readings ten seconds apart were at or below 3.5. Other process CPU and
-later load are recorded without a rejection threshold. The fixture contains
-1,000 downloads, 5,000 history entries and 2,000 archived tabs. All accepted
-baseline and candidate launches quit normally with no owned process left.
+The Release executable SHA-256 is
+`7217a9f5eafdb9979f9277f291ce934090d5024573444173e7b73cb4b8c535f4`.
+The freshly linked OpenEngine bridge is
+`f4bce022c1473542e1220260bcec2a2d2c9eab83cf5bffe502feca79b4155a6d`;
+CEF remains
+`1a22c4aa1b49d7199915766efc2e7665262ec36993ab0b96e4e4200375f762c0`.
+M5/M1 hashes, the candidate signature and all 3,014 transported source files
+were verified before timing. There was no native change during qualification.
 
-Budget clocks end at the App commit that contains the complete first screen
-or filtered result. They do not wait for the open animation to end.
+Every pair held all configured M1 heavy slots and the screen lock. Two load1
+readings ten seconds apart were at or below 3.5. Other process CPU and later
+load remain information, without a rejection threshold. The fixture has
+1,000 downloads, 5,000 history entries and 2,000 archived tabs. All five
+baseline and candidate launches quit normally, with no owned process left.
+
+| Pair | Pre-pair load1 readings | Candidate load before / end (INFO) |
+|---|---|---|
+| 1 | 2.940 / 2.635 | 3.064 / 1.859 |
+| 2 | 1.859 / 1.954 | 1.954 / 1.449 |
+| 3 | 1.449 / 1.306 | 2.002 / 1.779 |
+| 4 | 1.779 / 1.899 | 1.899 / 1.256 |
+| 5 | 1.256 / 1.296 | 1.433 / 1.997 |
+
+Budget clocks end at the App commit containing the complete first screen or
+filtered result. They do not wait for the open animation to finish.
 
 | Metric | Median ms | Maximum ms | Median limit / sample ceiling ms | Result |
 |---|---:|---:|---:|---|
-| Prebuilt first commit | 6.621 | 8.944 | 8 / 12 | PASS |
-| Complete first screen | 6.621 | 8.944 | 100 / 150 | PASS |
-| Cold section | 33.013 | 138.038 | 50 / 75 | FAIL |
-| Warm section | 4.424 | 6.342 | 8.3 / 12.45 | PASS |
-| One-key search | 10.625 | 12.744 | 16 / 24 | PASS |
-| Early cold open | 32.110 | 32.110 | 50 / 75 | PASS |
+| Prebuilt first commit | 5.560 | 8.936 | 8 / 12 | PASS |
+| Complete first screen | 5.560 | 8.936 | 100 / 150 | PASS |
+| Cold-section header/container | 9.900 | 11.469 | every sample ≤16 | PASS |
+| Cold section, provider data warm | 30.285 | 33.987 | 50 / 75 | PASS |
+| Warm section | 4.574 | 5.335 | 8.3 / 12.45 | PASS |
+| One-key search | 7.495 | 9.456 | 16 / 24 | PASS |
+| Early cold open, one launch | 26.038 | 26.038 | 50 / 75 | PASS |
+| Uncached Archive header, one launch | 6.568 | 6.568 | every sample ≤16 | PASS |
+| Uncached Archive rows, one launch | 30.718 | 30.718 | every sample ≤150 | PASS |
 
-The failed Archive sample includes 108.597 ms in the awaited provider phase,
-0.287 ms in background preparation and 7.818 ms in screen apply. Its final
-layout/display/flush cost 0.050/0.006/0.023 ms. Provider elapsed time includes
-store waits and actor resumption; this is not identified CPU work. The sample
-had valid prerequisite loads 3.311/3.029. Its candidate-before load 4.388 and
-end load 6.521 remain information. The sample stays in the result.
+The uncached Archive check is the first provider read in a fresh process,
+before idle warming. The OS file cache is uncontrolled; no cache purge was
+used. First-visit hosts in the five pairs use provider pages explicitly warmed
+by the input-cancelled idle scheduler. Each sample records `providerWarm=1`.
 
-Configure p95 median 0.423 ms, maximum configure 1.081 ms and cold-apply median
-8.116 ms are diagnostic INFO. They are not budget failures. All fifteen warm
-switches configured and reloaded zero rows. Settled Library tasks, timers,
-display links and animations were zero in all five pairs.
+Configure p95 median 0.403 ms, maximum configure 1.158 ms and cold-screen apply
+median 9.148 ms remain diagnostic INFO. They are not budgets. All fifteen warm
+switches configured and reloaded zero rows. Settled tasks, timers, display
+links and animations were zero in every idle window.
+
+The ready-open flush rasterized one Library-owned native search-field backing
+store, 30,528 pixels, in every pair. It configured zero rows and rasterized no
+row text or glyphs. Physical first-change clocks were 28.671–34.420 ms; final
+signatures were 587.005–599.621 ms. These physical clocks remain INFO. Their
+socket-dispatch origin differs from the App operation clock; subtracting the
+two elapsed values does not establish commit-to-compositor delay.
 
 ## Idle attribution
 
-The five idle deltas were +1.353410, +0.005059, +1.629472, −0.004653 and
-−0.032389 percentage points. The median, +0.005059, is below 0.05. The high
-samples have main-thread deltas +0.249827/+0.240125. They need an explanation
-regardless of the larger worker deltas. Their raw main-excess FAILs remain
-in the corrected attribution table.
+Closed → open → closed uses three 30-second windows, with 5.3-second transition
+settles. The first window starts at least 30 seconds after launch settles.
+Read-only libproc process/thread counters and socket counters supply the
+measurements. No prohibited diagnostic tool ran in this pass.
 
-One extra fresh-fixture run swaps the order to open → closed → open at the
-same elapsed intervals. It uses the same executable, row/search warm work,
-30-second windows and 5.3-second transition settles. Its valid loads were
-3.117/2.710. The burst moves to the closed window:
+The five open-minus-mean(closed) deltas are +2.183718, −0.022531, +0.016578,
+−0.024914 and +0.044140 percentage points. Median +0.016578 passes 0.05.
+Pair 1's raw main-excess verdict remains FAIL in the receipt. Library activity
+is zero. Its named App threads show the same launch-burst pattern accepted
+by LEAD 09:20 after the separate order-swapped proof:
 
-| App process/thread | Open 30.125–60.271 s | Closed 65.770–95.899 s | Open 101.389–131.543 s |
+| App thread | Closed before CPU % | Open CPU % | Closed after CPU % |
 |---|---:|---:|---:|
-| App CPU % | 0.251543 | 3.755798 | 0.157033 |
-| Foreground worker % | 0.057845 | 2.682919 | 0.008646 |
-| CrBrowserMain % | 0.098700 | 0.339888 | 0.082204 |
-| Background worker % | 0.053855 | 0.182128 | 0.042836 |
-| Chrome_IOThread % | 0.006037 | 0.071281 | 0.003051 |
-| NetworkService utility % | 0.064641 | 0.276169 | 0.021666 |
+| CrBrowserMain | 0.073562 | 0.458487 | 0.098078 |
+| Foreground worker group | 0.041704 | 1.029299 | 0.014911 |
+| Background worker group | 0.073284 | 0.636636 | 0.060086 |
+| Chrome_IOThread | 0.002890 | 0.128617 | 0.004956 |
 
-This supports launch-time overlap for the observed burst pattern. The exact
-internal Chromium job is not identified. No idle-specific product change was
-made. All Library activity deltas and live gauges stayed zero. The static
-about:blank page, first responder, window occlusion and animation lists were
-stable within each window. Page-card widths stayed at 853 pt open and 1042 pt
-closed. The layout-pass difference was one per window, from the explicit
-boundary state read. There was no polling inside a CPU window.
-
-Full top-ten thread tables, each process, utility subtypes and renderer client
-IDs are retained privately. The socket does not expose renderer PID-to-page
-mapping; the record shows one live about:blank page and two renderer PIDs,
-without inventing a one-to-one mapping. Final attribution uses read-only
-libproc and socket counters. An earlier use of sample, before the diagnostic
-tool ruling arrived, is disclosed in the private L3 report; cell construction
-counters independently re-confirm the reuse fix.
-
-## Other evidence
-
-Real-app Debug content checks pass 95/95. Application-route key checks pass
-17/17 unique assertions. Native source drag start and file/URL pasteboards
-pass; dropping into Finder or a web upload field remains a manual check.
-The real 60-second release fired at 60.011958 seconds; short-delay release and
-reopen checks also pass with the final editor. L3 frames use synthetic Open
-data with the browser window key. Shared contrast findings remain in
-[contrast.md](contrast.md), with the lead owning the theme-token follow-up.
-
-Physical first/final pixel clocks are information. Their socket-dispatch
-origin differs from the native operation clock, so subtracting the elapsed
-times does not establish commit-to-compositor delay. Returning sidebar draw
-had candidate median 288 ms and baseline median 327 ms; the paired deltas
-were +9/+5/−20/−74/−267 ms. This is a five-pair observation, not proof of a
-negative launch cost.
+The prior order-swapped open → closed → open run put the burst in the closed
+65–96-second window: App CPU 3.756%, foreground worker 2.683%, main 0.340%
+and NetworkService 0.276%. The lead accepted launch-time overlap, with idle
+judged on its median. That proof is retained; it was not repeated in this pass.
+The exact Chromium job is still unidentified. Full top-ten named-thread and
+per-process tables for the new high sample remain in the private phase report.
+Zero counters alone do not prove the cause, and the raw verdict is not rewritten.
 
 ## 10,000-row scroll
 
-One supported fixture contains ten profiles with 1,000 downloads each. The
-short-root retry used valid loads 3.188/3.098. It completed 120 native display
-callbacks and quit normally. Its App main-thread cost was 5.890 ms p95 and
-17.168 ms maximum. Fourteen reusable cells handled 1,679 configurations.
+The fixture uses ten supported profiles with 1,000 downloads each. Loads were
+1.997/2.410. It recorded 120 App callbacks and 115 physical content changes.
+Normal quit left zero owned processes. Scroll constructed zero cells while
+configuring 1,666 rows from the bounded pool.
 
-The capture recorded 120 content changes and six missed 120 Hz intervals
-(gaps of 16.667, 41.667 and 16.667 ms). Three initial Library callbacks cost
-17.168, 10.476 and 8.564 ms, above an 8.333 ms frame. The later 39.880 ms
-native callback interval occurred with a 4.695 ms measured callback; the
-source of that late gap is not identified. The result does not prove zero
-Library-attributable misses. Raw scroll verdict: FAIL.
+| Metric | Measured | Limit | Result |
+|---|---:|---:|---|
+| Main callback p95 | 5.486 ms | ≤4 ms | FAIL |
+| Main callback maximum | 7.158 ms | ≤8.3 ms | PASS |
+| Cells created during scroll | 0 | 0 | PASS |
+| Physical missed 120 Hz intervals | 11 | ≤1 in 120 | FAIL |
+| Missed intervals in first ten callbacks | 0 | 0 | PASS |
 
-| Callback index | Total ms | Formatting delta ms | Layout ms | Display ms | Flush ms | Unattributed remainder ms |
-|---|---:|---:|---:|---:|---:|---:|
-| 1 | 17.168 | 2.654 | 0.156 | 1.271 | 4.360 | 8.728 |
-| 2 | 10.476 | 1.441 | 0.234 | 0.958 | 3.823 | 4.019 |
-| 3 | 8.564 | 1.040 | 0.080 | 0.594 | 3.753 | 3.096 |
-| 94 | 4.695 | 0.632 | 0.059 | 0.399 | 1.601 | 2.004 |
+The old first-callback remainder is now measured. Phases below are nested:
+clip handling includes reconcile/configure/layout; dequeue and tracking are
+subsets. Add only scroll-to, final layout, display, flush and remainder.
+Callback numbering is one-based.
 
-The remainder is elapsed work not covered by the existing phases, not a
-measured function or an inferred cause. Index 1 configured fourteen rows and
-constructed one cell. Other listed callbacks constructed none. The only
-individually measured phase above 4 ms was the 4.360 ms flush.
+| Callback | Total ms | Scroll-to ms | Clip nested ms | Configure nested ms | Cell-layout nested ms | Final layout ms | Display ms | Flush ms | Remainder ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2, maximum work | 7.158 | 3.107 | 2.751 | 1.387 | 0.742 | 0.232 | 0.318 | 3.481 | 0.019 |
+| 3 | 6.645 | 2.455 | 2.339 | 1.145 | 0.734 | 0.134 | 0.289 | 3.750 | 0.017 |
+| 77, maximum flush | 6.445 | 0.852 | 0.797 | 0.257 | 0.338 | 0.064 | 0.163 | 5.355 | 0.011 |
+| 89, after busy gap | 3.112 | 1.130 | 1.044 | 0.372 | 0.405 | 0.078 | 0.185 | 1.707 | 0.012 |
+| 114, after busy gap | 3.966 | 1.412 | 1.331 | 0.429 | 0.433 | 0.159 | 0.189 | 2.194 | 0.012 |
 
-The first independent scroll attempt stopped before measurement because its
-nested macOS temporary path exceeded the Unix socket limit. It left no owned
-app. The retry changed only that path to a short /tmp data root. The single
-order-swapped idle diagnostic was not repeated.
+Only flush exceeds 4 ms as an individually measured phase. Maximum dequeue
+is 0.013 ms and tracking update is 0.010 ms. The benchmark's main-thread
+heartbeat and 2 ms background watchdog show two gaps:
 
-Final audit: no owned App processes, timing jobs, capture helpers or D1 heavy
-tickets. The branch is current with origin/main. The full M5 gate and PR wait
-for the lead's ruling on the cold outlier and scroll. No budget was relaxed,
-no measured sample was discarded and no product optimisation followed these
-new failures.
+| Callback | Interval ms | Maximum busy age ms | Maximum idle age ms | Watchdog observations |
+|---|---:|---:|---:|---:|
+| 89 | 46.371 | 37.902 | 2.364 | 23 |
+| 114 | 16.887 | 13.881 | 2.546 | 9 |
+
+Neither gap qualifies for the idle-main/no-system-callback exemption. All
+11 physical misses remain unexcluded. This does not identify which App or
+engine work caused every miss. Raster counts are not part of the constant-cost
+scroll counter set; no zero-raster claim follows from their absence. The flush
+and between-callback busy work need the lead's next plan.
+
+## Other evidence and next gate
+
+Debug content checks pass 95/95. Application-route keys pass 17/17 unique
+assertions. The final Debug provider/10k probe passes with zero cell creation,
+zero settled activity and normal cleanup. The content drag case needed forced
+cleanup, with zero owned windows/processes left. Native drag-source start and
+file/URL pasteboards pass; dropping into Finder or a web upload field remains
+a manual check. The real 60-second release fired at 60.011958 seconds.
+
+The eight existing [L3 frames](l3/README.md) use synthetic Open data with the
+browser window key. [Shared contrast findings](contrast.md) remain owned by
+the lead. No reference was re-recorded after the ICC fix.
+
+The first fourth-pass qualification attempt stopped before pair 1 because the
+uncached Archive check changed the fixture's persisted selection. Its passing
+early-cold results and forced error cleanup with zero survivors are retained.
+Harness-only fix `62bc6e89` restored Downloads before quitting. The new run
+contains all five fresh pairs; no measured performance sample was discarded.
+
+Post-merge M5 `--only build` passes in 129 seconds. The 17 unique application-route key assertions also pass, with normal quit and zero owned processes.
+The M5 run records the exact `icc-header-v1` key, 2560×1440 points/pixels,
+scale 1 and 240 Hz. Pre-check load1 readings were 5.83/5.47 ten seconds apart.
+Both machines have zero D1 App processes, frame helpers, timing jobs or heavy
+tickets. The full M5 gate and PR remain unopened because the scroll still
+fails. The display-key hold itself is lifted. No additional performance
+optimisation or rerun has started.
