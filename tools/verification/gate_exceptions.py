@@ -86,6 +86,8 @@ def evaluate(entries, rows, ready=False):
         informative = state == 'INFO' and row.get('timing') is True and row.get('functionalOK') is True
         informative = informative or (state == 'INFO' and row['row'] == 'window/first_launch_after_install'
                                      and row.get('firstLaunchAfterInstall') is True)
+        informative = informative or (state == 'INFO' and row['row'] in ('measure/media_idle_cpu_early', 'media/media_idle_cpu_early')
+                                     and row.get('informational') is True)
         verdict = 'PASS' if state == 'PASS' else 'INFO' if informative else 'SKIP' if absent_target else 'FAIL'
         if entry:
             if ready and entry['expires'] == 'M5 panel ready':

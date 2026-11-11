@@ -119,11 +119,25 @@ exceptions were removed after the “M5 panel ready” ruling. The exact LEAD 08
 import-lag exception was removed after a later valid M1 sample passed at
 46.919 ms against 50 ms. The original 78.070 ms FAIL, phase metrics and valid
 receipt remain in [#314](https://github.com/SergeSerb2/open/issues/314); no fix
-is claimed. LEAD 10:30 approves exactly `measure/media_idle_cpu` and
-`media/media_idle_cpu` as DEFERRED until the [#316](https://github.com/SergeSerb2/open/issues/316)
-fix lands, owned by performance/engine H. The 0.5-point limit and original valid
-0.5458/0.5453-point findings remain unchanged. Both stages must still run
-complete and valid; no other Media or Measure row is deferred. The notification `clients.openWindow` row
+is claimed.
+
+Paused-media idle CPU rule ([#316](https://github.com/SergeSerb2/open/issues/316),
+lead decision 2026-11-11). `measure/media_idle_cpu` and `media/media_idle_cpu`
+mean "a paused card costs nothing once playback has stopped". After a pause,
+Chromium's `AudioRendererMixer` keeps its empty output sink running for
+`kPauseDelay` = 10 s (`third_party/blink/renderer/modules/media/audio/audio_renderer_mixer.cc`),
+then pauses it. This is upstream behavior in every Chromium browser; it avoids
+audible gaps on a quick pause and play. The required paused-card window is
+therefore 12–20 s after the pause. The no-card window still starts 6 s after
+the card closes, so it moves by the same 6 s (26–34 s after the same pause).
+The 0.5-point floor-difference limit, the browser comparison and the four pairs
+are unchanged. The former 6–14 s window is printed as the INFO row
+`<stage>/media_idle_cpu_early`, with its delta and the reason "Chromium keeps
+the mixer output for 10 s after pause (audio_renderer_mixer.cc kPauseDelay)".
+It is never accepted or failed. The original valid 6–14 s findings
+(0.5458/0.5453 points, and 0.514/0.715 in the LEAD 11:27 reruns) remain on
+record in #316. `OPEN_VERIFY_BREAK=media-idle-playing` keeps audio playing
+through the required window as a negative proof; the row must fail. The notification `clients.openWindow` row
 stays DEFERRED as a visible v1 product gap in `docs/followups.md`.
 
 The committed machine setup scripts and queue contract are in
