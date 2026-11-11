@@ -13,6 +13,8 @@ entry; adding `value` writes or removes it so a suite can reset and restore it.
 `cancel`). It exercises text/style bounds through the public engine API;
 `default` reports presence, UTF-16 lengths, and range counts, without page text.
 
+Arc capture sessions follow AGENTS.md rules 4–5 and use the assigned machine's on-screen lock. The capture permission does not change the Open test path below.
+
 Open's end-to-end tests drive the real app through a local Unix socket. There is no computer use: nothing here moves the system mouse, types on the system keyboard, or touches another app. Key and mouse events are built inside Open and go only to Open's own windows. Pixels come only from Open's own windows.
 
 Every agent command that opens Open on screen must hold the machine-wide lock

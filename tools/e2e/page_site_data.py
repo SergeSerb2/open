@@ -2,10 +2,11 @@
 from collections import Counter
 from contextlib import ExitStack
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import os
 import threading
 
 
-def run(factory, results, tmp, style, harness):
+def run(factory, results, tmp, style, harness, site_control=False):
     hits = Counter()
     mutex = threading.Lock()
 
@@ -44,7 +45,7 @@ def run(factory, results, tmp, style, harness):
     origins, cache_keys = [], []
 
     def check(name, ok, **evidence):
-        results[name + '_' + style] = dict(ok=bool(ok), **evidence)
+        results[name + '_' + style] = dict(ok=bool(ok), load=list(os.getloadavg()), **evidence)
 
     def open_page(url):
         tab = app.call('open', url=url)['id']
@@ -81,8 +82,16 @@ def run(factory, results, tmp, style, harness):
     def clear(tab, command):
         select(tab)
         before = app.eval(tab, 'window.loadID')
-        enabled = (harness._menu_row(app, command) or {}).get('enabled')
-        app.call('menu-perform', id=command)
+        if site_control:
+            if app.call('site-controls')['presented']:
+                app.call('site-controls', action='close')
+            panel = app.call('site-controls', action='open')
+            title = 'Clear Cache' if command == commands[0] else 'Clear Cookies'
+            enabled = next((i['enabled'] for i in panel['items'] if i['title'] == title), False)
+            app.call('site-controls', action='menu', item=title)
+        else:
+            enabled = (harness._menu_row(app, command) or {}).get('enabled')
+            app.call('menu-perform', id=command)
         reloaded = wait(lambda: harness._try(lambda: (lambda v: v and v != before)(
             app.eval(tab, 'window.loadID'))), timeout=10)
         return enabled is True and bool(reloaded)
@@ -166,6 +175,8 @@ def run(factory, results, tmp, style, harness):
         check('K_cookie_parent_host_only_survives', after_cookies[3] == {'parentHost': 'kept'},
               before=cookie_seed[3], after=after_cookies[3])
 
+        if site_control:
+            app.call('site-controls', action='close')
         # Hold only delivery of the real engine completion. Change the hash and
         # invoke again while the first operation is still awaiting its refresh.
         # The bounded automation barrier releases itself after ten seconds.
