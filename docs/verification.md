@@ -93,11 +93,16 @@ list, approved by the lead on 2026-11-10. Entries name an exact row, original
 BLOCKED/DEFERRED status and reason, clearing condition, owner, date and expiry.
 A row that now passes makes its entry STALE and fails until that entry is
 removed. A mismatch or any unlisted non-PASS row fails. Every run prints all
-entries, including unexercised ones. The expired display and earlier performance exceptions were removed after
-the “M5 panel ready” ruling. LEAD 08:20 separately approves exactly
-`import-robust/timing_main_responsive` (78.070 ms against 50 ms) for the
-performance lane; [#314](https://github.com/SergeSerb2/open/issues/314) owns
-the repair. Its raw FAIL, limit, phase metrics and valid M1 receipt remain. The notification `clients.openWindow` row
+entries, including unexercised ones. The expired display and earlier performance
+exceptions were removed after the “M5 panel ready” ruling. The exact LEAD 08:20
+import-lag exception was removed after a later valid M1 sample passed at
+46.919 ms against 50 ms. The original 78.070 ms FAIL, phase metrics and valid
+receipt remain in [#314](https://github.com/SergeSerb2/open/issues/314); no fix
+is claimed. LEAD 10:30 approves exactly `measure/media_idle_cpu` and
+`media/media_idle_cpu` as DEFERRED until the [#316](https://github.com/SergeSerb2/open/issues/316)
+fix lands, owned by performance/engine H. The 0.5-point limit and original valid
+0.5458/0.5453-point findings remain unchanged. Both stages must still run
+complete and valid; no other Media or Measure row is deferred. The notification `clients.openWindow` row
 stays DEFERRED as a visible v1 product gap in `docs/followups.md`.
 
 The committed machine setup scripts and queue contract are in
