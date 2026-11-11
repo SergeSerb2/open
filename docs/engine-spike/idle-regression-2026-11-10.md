@@ -69,8 +69,8 @@ An existing switch disables it without an engine build:
 are in `chrome/common/chrome_switches.h:275-278`.
 `thread_profiler_configuration.cc:222-223` checks it before enabling sampling.
 `App/LaunchOptions.swift` leaves unknown switches in the process command line.
-The switch is used only for a diagnostic comparison in this investigation.
-It has not been added to product defaults or the acceptance run.
+The diagnostic comparison below proved the switch works. The approved repair
+now adds it to App engine arguments by default, including acceptance runs.
 
 ## Scene lifetime observation
 
@@ -133,6 +133,17 @@ diagnostic switch to pass that assertion, then fails `playlist_settles` at the
 30-second cap. Both negative runs clean up successfully without a new crash or
 system window. Their complete private receipts remain beside the bisect data.
 
+The complete Welcome lifecycle run (`welcome-fixed-r2`) then found another
+case: after miniaturization, restoration, and occlusion, a neighboring
+miniature's theme retained one pending one-shot display link. Animations and
+the completion timer were already stopped, but resting CPU was 2.591% FAIL.
+That sample qualifies (load1 2.161 / 2.203, foreign CPU 39.7% / 32.5%). Its
+playlist took 19.061 seconds; the miniaturized row passed at 0.523%.
+The repair flushes the miniature's cached theme field after layout and theme
+application, as it already does when playback freezes. This prevents a hidden
+neighbor from waiting for a display tick it may never receive. Full lifecycle
+and original import verification must cover this additional change.
+
 ## Profiler and visibility controls
 
 `post306-noprofile-isolate-r2` repeats the original row with the existing
@@ -140,7 +151,8 @@ system window. Their complete private receipts remain beside the bisect data.
 1.978 / 1.747 and foreign CPU 22.1% / 34.9%. libproc lists no
 `StackSamplingProfiler` thread in the App or its helpers. This proves that the
 switch works, and that sampling overhead is not the cause of PR 306's increase.
-The default launch arguments remain unchanged.
+That diagnostic did not change the default launch arguments; the approved
+repair subsequently adds the switch by default.
 
 After that row, the same probe directly miniaturizes the browser through
 `window-miniaturize`. It verifies that the browser is miniaturized and Welcome

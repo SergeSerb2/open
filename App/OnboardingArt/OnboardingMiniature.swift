@@ -137,6 +137,9 @@ final class OnboardingMiniature: NSView {
         layer?.shadowPath = CGPath(roundedRect: bounds,cornerWidth: 14,cornerHeight: 14,transform: nil)
         if let command { command.view.frame = CGRect(x: 58,y: 88,width: designSize.width-116,height: 60) }
         CATransaction.commit()
+        // A hidden neighboring miniature may never receive a display tick.
+        // Finish its cached field now instead of leaving a display link armed.
+        theme.prepareForSnapshot()
     }
     func apply(theme value: SpaceTheme?,dark: Bool) {
         guard value != appliedTheme || dark != appliedDark else { return }
@@ -152,6 +155,7 @@ final class OnboardingMiniature: NSView {
         self.theme.style = style
         page.dark = dark; page.needsDisplay = true
         stage.appearance = NSAppearance(named: style.resolvedAppearance(system: context.systemAppearance) == .dark ? .darkAqua:.aqua)
+        theme.prepareForSnapshot()
     }
     func setName(_ name: String) { model.renameSpace(id: space.id,title: name.isEmpty ? "Your Space":"\(name)'s Space") }
 
