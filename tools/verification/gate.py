@@ -46,8 +46,15 @@ def ancestors():
 
 
 def inside_heavy():
-    return any(any(Path(word).name == 'heavy.sh' for word in args.split())
-               for _, args in ancestors())
+    # A launcher may mention heavy.sh in its arguments without owning a slot.
+    # Require the live FIFO holder itself in our ancestry, not that text.
+    holder = Path('/tmp/open-heavy-holder')
+    if not holder.is_file() or holder.stat().st_size > 4096:
+        return False
+    fields = holder.read_text().split('\t', 1)
+    if not fields[0].isdigit():
+        return False
+    return any(pid == int(fields[0]) for pid, _ in ancestors())
 
 
 def machine():

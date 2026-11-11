@@ -10,12 +10,15 @@ QUIET="${OPEN_QUIET_LOCK:-/tmp/open-m5-quiet.lock}"
 
 # Already inside a slot (new or old heavy.sh), or inside a job that holds the quiet lock?
 inside=0; have_quiet=0
-[ -n "$OPEN_HEAVY_HELD" ] && inside=1
 p=$PPID
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
   [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null || break
   c=$(ps -o command= -p "$p" 2>/dev/null)
-  case "$c" in *"heavy.sh "*) inside=1 ;; esac
+  # Match the executed script, not a launcher argument mentioning heavy.sh.
+  read -r executable script remainder <<< "$c"
+  case "${executable##*/}:${script##*/}" in
+    heavy.sh:*|bash:heavy.sh|sh:heavy.sh|zsh:heavy.sh) inside=1 ;;
+  esac
   case "$c" in *"$QUIET"*) have_quiet=1 ;; esac
   p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
 done
