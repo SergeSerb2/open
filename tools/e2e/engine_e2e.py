@@ -3204,6 +3204,8 @@ def dimmed_look(png, scale, centers, mode, ring=True):
                        for x in range(int((cx-8)*scale), int((cx+8)*scale))
                        if 6.5 <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < 7.5]
             ring_px = [statistics.mean(c[k] for c in samples) for k in range(3)]
+            if os.environ.get('OPEN_VERIFY_BREAK') in ('all', 'window'):
+                ring_px[0] = min(255, ring_px[0] + 64)
             ring_err = chrome_delta_e(ring_px, ring_expected)
             plain_err = chrome_delta_e(ring_px, bg)
             ring_ok = ring_err <= 1 if ring else plain_err < ring_err
@@ -12412,6 +12414,7 @@ def main():
     ap.add_argument('--passwords-m-only', action='store_true', help='run only the real-App save-sheet M rows')
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
+    ap.add_argument('--expected-display-key', help='require this exact scale/ICC/mode before and after the suite')
     ap.add_argument('--stop-on-app-death', action='store_true',
                     help='stop every remaining flow after an App death or new Open crash report')
     ap.add_argument('--continue-on-timing-failure', action='store_true',
@@ -12422,6 +12425,10 @@ def main():
     ap.add_argument("--focus-retry-delay-seconds", type=int, default=0,
                     help="wait between interrupted foreground attempts (0–600 seconds)")
     opts = ap.parse_args()
+    display_reader = runpy.run_path(os.path.join(ROOT, 'tools/verification/portable-baselines.py'))['display_environment']
+    display_before = display_reader() if opts.expected_display_key else None
+    if display_before and display_before['key'] != opts.expected_display_key:
+        ap.error('display key mismatch before launch: ' + display_before['key'])
     # Context menus assert Chrome's full model and extension contributions, as
     # used by normal Open launches. Alloy has CEF's shorter, different menu.
     if opts.style is None:
@@ -12945,6 +12952,10 @@ def main():
                 delay = min(30, remaining)
                 time.sleep(delay); remaining -= delay
     results["interrupted_attempts"] = interrupted_attempts
+    if display_before:
+        display_after = display_reader()
+        results.setdefault(opts.only, {})['display_mode'] = {
+            'ok': display_after == display_before, 'before': display_before, 'after': display_after}
     results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
