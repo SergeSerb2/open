@@ -12,6 +12,9 @@ import OpenFeatures
 /// web-content host, fetcher or user window belongs to this miniature.
 @MainActor
 final class OnboardingMiniature: NSView {
+    // Short holds keep the whole Welcome pass at 19 seconds. Travel durations
+    // and easing retain the original 8.5-second demonstrations' motion.
+    static let demoDurations: [Double] = [4.2, 4.0, 6.8, 4.0]
     override var isFlipped: Bool { true }
     let model: BrowserModel
     let space: Space
@@ -49,6 +52,7 @@ final class OnboardingMiniature: NSView {
     private var isDemo = false
     var renderedScale: CGFloat { bounds.width/designSize.width }
     var animationCount: Int { (demoRunning ? 1 : 0) + Self.animationKeys(stage.layer) }
+    var pendingDisplayUpdates: Int { theme.hasPendingDisplayUpdate ? 1 : 0 }
 
     init() {
         profile = Profile(name: "Preview")
@@ -247,13 +251,13 @@ final class OnboardingMiniature: NSView {
         page.title = "A little room to explore"; page.subtitle = "Start with a question. See where it takes you."
         page.needsDisplay = true; context.isNewTabCommandBarOpen = false; command?.view.isHidden = true
         needsLayout = true; layoutSubtreeIfNeeded()
-        schedule(at: duration*0.18) { [weak self] in self?.showQuery("") }
+        schedule(at: 0.3) { [weak self] in self?.showQuery("") }
         let query = "lisbon in spring"
         for count in 1...query.count {
             let text = String(query.prefix(count))
-            schedule(at: duration*(0.28+Double(count)*0.018)) { [weak self] in self?.showQuery(text) }
+            schedule(at: 0.5+Double(count)*0.153) { [weak self] in self?.showQuery(text) }
         }
-        schedule(at: duration*0.72) { [weak self] in self?.landNewTab() }
+        schedule(at: 3.3) { [weak self] in self?.landNewTab() }
         schedule(at: duration) { [weak self] in self?.finishDemo() }
     }
     private func showQuery(_ text: String) {
@@ -285,6 +289,7 @@ final class OnboardingMiniature: NSView {
         context.animatesChanges = false
         command?.dismiss(reason: .programmatic); context.isNewTabCommandBarOpen = false
         Self.removeAnimations(stage.layer)
+        theme.prepareForSnapshot() // Flush and invalidate any one-shot field display link.
     }
     func finishDemo() {
         freezeDemo(); prepareDemo()
@@ -305,20 +310,20 @@ final class OnboardingMiniature: NSView {
             let row = ensureMovingTab(title: "Weekend reading")
             _ = model.moveNode(id: row.id,to: .spaceToday(space.id),at: 0)
             page.title = "Keep a good idea close"; page.subtitle = "A place for the pages you return to."
-            schedule(at: duration*0.20) { [weak self] in self?.liftRow(toPin: true,duration: duration*0.40) }
-            schedule(at: duration*0.65) { [weak self] in self?.landPin() }
+            schedule(at: 0.2) { [weak self] in self?.liftRow(toPin: true,duration: 3.4) }
+            schedule(at: 3.65) { [weak self] in self?.landPin() }
         case 2:
             ensureAlternateSpace(); model.focusSpace(windowID: context.windowID,spaceID: space.id)
             page.title = "A little room for everything"; page.subtitle = "Separate sidebars. A clear point of view."
-            schedule(at: duration*0.35) { [weak self] in
+            schedule(at: 1.05) { [weak self] in
                 guard let self, let alternateSpace else { return }
                 model.focusSpace(windowID: context.windowID,spaceID: alternateSpace.id)
             }
         default:
             _ = ensureMovingTab(title: "Places to stay")
             page.title = "A weekend in Lisbon"; page.subtitle = "The plan and the possibilities, side by side."
-            schedule(at: duration*0.20) { [weak self] in self?.liftRow(toPin: false,duration: duration*0.38) }
-            schedule(at: duration*0.62) { [weak self] in self?.landSplit() }
+            schedule(at: 0.2) { [weak self] in self?.liftRow(toPin: false,duration: 3.23) }
+            schedule(at: 3.5) { [weak self] in self?.landSplit() }
         }
         page.needsDisplay = true; needsLayout = true
         schedule(at: duration) { [weak self] in self?.finishDemo() }

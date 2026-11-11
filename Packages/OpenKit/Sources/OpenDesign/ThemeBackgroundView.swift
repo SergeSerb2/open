@@ -69,6 +69,8 @@ public final class ThemeBackgroundView: NSView {
     private var displayTarget: ThemeDisplayTarget?
     private var resizing = false
     public private(set) var fieldRebuildCount = 0
+    /// Read-only state for native lifecycle checks; this link is always one-shot.
+    public var hasPendingDisplayUpdate: Bool { displayLink != nil }
 
     isolated deinit { displayLink?.invalidate() }
 

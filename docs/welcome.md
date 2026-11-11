@@ -22,9 +22,11 @@ the first web destination; use Help ▸ Open Basics to return. This is a deliber
 limit of the small content-host hook, rather than an extra history implementation.
 
 The page uses native AppKit cards with real miniature Open views and original room artwork. Four
-finite 8.5-second demonstrations play in order and stop. One one-shot timer
+finite demonstrations (4.2, 4.0, 6.8 and 4.0 seconds) play once in order and stop.
+The whole pass has a 20-second budget; its planned length is 19 seconds. Only
+holds are shortened; native travel durations and easing stay the same. One one-shot timer
 advances the playlist. It is invalidated while hidden and after completion. A
-hidden playlist resumes its current card when the page becomes visible. Hover,
+hidden playlist stays stopped when the page becomes visible again. Hover,
 click, Return, Space, and the VoiceOver Replay action play one card and end the
 playlist. No display link, polling task, video, audio, or repeating animation is used.
 Favicons use the bounded existing fetch/store path. Other windows create no Welcome page or notification observers.

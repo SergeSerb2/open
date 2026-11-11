@@ -4,6 +4,7 @@ Only the existing automation socket and the App's own event/menu paths are used.
 No global input or real user data. Shared preferences are restored in finally.
 """
 import json
+import ctypes
 import os
 import plistlib
 import shutil
@@ -14,7 +15,67 @@ from statistics import median
 from pathlib import Path
 
 
+def browser_thread_names(pid):
+    """Read the browser's OS thread metadata; never attach a sampler/debugger."""
+    lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+    lib.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+    class ThreadInfo(ctypes.Structure):
+        _fields_ = [('user', ctypes.c_uint64), ('system', ctypes.c_uint64)] + [
+            (key, ctypes.c_int32) for key in ('cpu', 'policy', 'state', 'flags', 'sleep', 'curpri', 'priority', 'maxpri')
+        ] + [('name', ctypes.c_char * 64)]
+    tids = (ctypes.c_uint64 * 1024)()
+    size = lib.proc_pidinfo(pid, 6, 0, tids, ctypes.sizeof(tids)) # PROC_PIDLISTTHREADS
+    if size <= 0 or size >= ctypes.sizeof(tids) or size % 8:
+        raise RuntimeError('could not enumerate browser threads within the 1024-thread limit')
+    names = []
+    for tid in list(tids)[:size // 8]:
+        info = ThreadInfo()
+        if lib.proc_pidinfo(pid, 5, tid, ctypes.byref(info), ctypes.sizeof(info)) == ctypes.sizeof(info):
+            names.append(info.name.decode(errors='replace')) # PROC_PIDTHREADINFO
+    if not names:
+        raise RuntimeError('could not read browser thread metadata')
+    return names
+
+
+def at_rest(state):
+    return state['animationCount'] == 0 and not state['pendingCompletion'] \
+        and state.get('pendingDisplayUpdates', 0) == 0 and not state['animating']
+
+
+def run_idle_contract(factory, results, tmp, api):
+    """Real launch, complete playlist, five-second rest, then hide during replay."""
+    app = factory(urls=('about:blank',), fresh=True)
+    try:
+        app.call('wait', tab=app.call('tabs')[0]['id'])
+        api.place_away_from_cursor(app, 1280, 800)
+        names = browser_thread_names(app.pid)
+        results['no_stack_sampling_after_launch'] = dict(ok='StackSamplingProfiler' not in names, threadNames=names)
+        inserted = app.call('welcome', action='insert')
+        started = time.monotonic()
+        settled = api.wait_until(lambda: (lambda s: s if at_rest(s) else None)(app.call('welcome')),
+                                 timeout=30, step=.1)
+        elapsed = time.monotonic() - started
+        final = settled or app.call('welcome')
+        results['playlist_settles'] = dict(ok=bool(settled and final['playedCards'] == [1, 2, 3, 4]
+            and final['completionCount'] == 4 and final.get('playlistElapsed', elapsed) <= 20),
+            elapsedSeconds=elapsed, limitSeconds=20, settleCapSeconds=30, state=final)
+        before = app.call('welcome'); start = time.monotonic(); time.sleep(5)
+        after = app.call('welcome'); seconds = time.monotonic()-start
+        cpu = (after['appCPUSeconds']-before['appCPUSeconds'])/seconds*100
+        results['idle_after_playlist'] = dict(ok=bool(settled and at_rest(after)
+            and (app.config != 'Release' or cpu < 1)), appCPUPercent=cpu, seconds=seconds,
+            limitPercent=1, loadAverage=list(os.getloadavg()), state=after)
+        # A new page gives the hidden-window check a live automatic pass.
+        app.call('close', tab=inserted['tab'])
+        app.call('welcome', action='insert')
+        results['miniaturized_idle'] = pause_resume_playlist(app, api)
+    finally:
+        app.quit()
+
+
 def run(factory, results, tmp, api):
+    if os.environ.get('OPEN_E2E_WELCOME_IDLE_ONLY') == '1':
+        return run_idle_contract(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_CONTRAST_ONLY') == '1':
         return contrast_matrix(factory, results, tmp, api)
     if os.environ.get('OPEN_E2E_WELCOME_NEGATIVE') == '1':
@@ -50,7 +111,7 @@ def run(factory, results, tmp, api):
     def cpu(label):
         before = state()['appCPUSeconds']
         start = time.monotonic()
-        time.sleep(8)
+        time.sleep(5)
         after = state()['appCPUSeconds']
         elapsed = time.monotonic() - start
         return dict(label=label, appPercent=(after-before)/elapsed*100,
@@ -60,6 +121,8 @@ def run(factory, results, tmp, api):
         app = factory(urls=('about:blank',), fresh=True)
         blank = app.call('tabs')[0]['id']
         app.call('wait', tab=blank)
+        names = browser_thread_names(app.pid)
+        record('W00_no_stack_sampling_after_launch', 'StackSamplingProfiler' not in names, threadNames=names)
         # Tracking areas use the hardware pointer. Move only our window, as the
         # window suite does, so a resting pointer cannot cancel the playlist.
         api.place_away_from_cursor(app, 1280, 800)
@@ -86,21 +149,21 @@ def run(factory, results, tmp, api):
         record('W05_address_label', state()['urlField'] == 'Welcome to Open', state=state())
         screenshot('welcome-playing')
         stopped = await_state(lambda s: s['playedCards'] == [1, 2, 3, 4]
-                              and s['playlist'] == 'stopped' and not s['animating'], timeout=38)
+                              and s['playlist'] == 'stopped' and not s['animating'], timeout=30)
         record('W06_finite_playlist_1_to_4', stopped and stopped['activeCard'] == 4
-               and stopped['duration'] == 8.5 and stopped['completionCount'] == 4
-               and stopped['animationCount'] == 0 and not stopped['pendingCompletion'], state=stopped,
+               and sum(stopped['cardDurations']) <= 20 and stopped['playlistElapsed'] <= 20
+               and stopped['completionCount'] == 4 and at_rest(stopped), state=stopped,
                lastState=state(), lastWindow=app.call('window-state'), lastFocus=app.call('native-focus-state'))
         if not stopped:
             raise AssertionError('Welcome playlist did not finish in order')
         resume_tab = app.call('welcome', action='insert')['tab']
         resume = pause_resume_playlist(app, api)
-        record('W34_hidden_playlist_resumes', **resume)
+        record('W34_hidden_playlist_stays_stopped', **resume)
         app.call('close', tab=resume_tab)
         app.call('select', tab=welcome)
         occlusion_tab = app.call('welcome', action='insert')['tab']
         occlusion = occlude_resume_playlist(app, api)
-        record('W35_covered_playlist_resumes', **occlusion)
+        record('W35_covered_playlist_stays_stopped', **occlusion)
         app.call('close', tab=occlusion_tab)
         app.call('select', tab=welcome)
         completion_count = stopped['completionCount']
@@ -113,7 +176,9 @@ def run(factory, results, tmp, api):
         app.call('select', tab=welcome)
         assert await_state(lambda s: s['visible']), 'Welcome did not return after idle comparison'
         record('W07_idle_no_pending_work', not stable['animating'] and stable['animationCount'] == 0
-               and not stable['pendingCompletion'] and stable['completionCount'] == completion_count,
+               and not stable['pendingCompletion'] and stable['pendingDisplayUpdates'] == 0
+               and stable['completionCount'] == completion_count
+               and (app.config != 'Release' or welcome_cpu['appPercent'] < 1),
                blank=blank_cpu, warmBlank=warm_blank_cpu, welcome=welcome_cpu, state=stable)
         screenshot('welcome-stopped')
         app.call('welcome', action='hover', card=2, phase='exit')
@@ -557,26 +622,30 @@ def design_gates(state, appearance):
 
 
 def pause_resume_playlist(app, api):
-    """Hide and restore the actual window while its native playlist is playing."""
+    """Hide a playing page, prove idle, then restore without automatic replay."""
     def state(): return app.call('welcome')
     def await_state(predicate, timeout=5):
-        return api.wait_until(lambda: (lambda s: s if predicate(s) else None)(state()), timeout=timeout, step=.1)
-    initial = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
-                          and s['activeCard'] == 1 and s['animating'])
+        return api.wait_until(lambda: (lambda s: s if predicate(s) else None)(state()), timeout=timeout, step=.05)
+    initial = await_state(lambda s: s['visible'] and s['playlist'] == 'playing' and s['animating'])
     window = app.call('window-state')['id']
-    app.call('command', id='minimize-window')
-    mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=4, step=.1)
-    paused = await_state(lambda s: not s['visible'] and s['animationCount'] == 0
-                         and not s['pendingCompletion'] and all(not host['animating'] for host in s['hosts']))
-    app.call('window-deminiaturize')
-    app.call('window-focus', id=window, activate=True)
-    resumed = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
-                          and s['activeCard'] == 1 and s['animating'] and s['pendingCompletion'])
-    ended = await_state(lambda s: s['playedCards'] == [1, 1, 2, 3, 4] and not s['animating']
-                        and s['playlist'] == 'stopped', timeout=38) if resumed else None
-    return dict(ok=bool(initial and mini and paused and resumed and ended and ended['completionCount'] == 4
-                        and ended['animationCount'] == 0 and not ended['pendingCompletion']),
-                initial=initial, paused=paused, resumed=resumed, ended=ended, lastState=state())
+    app.call('window-miniaturize')
+    mini = api.wait_until(lambda: app.call('window-state')['miniaturized'], timeout=1, step=.05)
+    paused = await_state(lambda s: not s['visible'] and at_rest(s)
+                         and all(not host['animating'] for host in s['hosts']), timeout=1)
+    before = state(); start = time.monotonic(); time.sleep(5)
+    after = state(); seconds = time.monotonic()-start
+    cpu = (after['appCPUSeconds']-before['appCPUSeconds'])/seconds*100
+    app.call('window-deminiaturize'); app.call('window-focus', id=window, activate=True)
+    restored = await_state(lambda s: s['visible'])
+    time.sleep(4.3) # More than the first card's duration: no delayed restart.
+    still = state()
+    manual = app.call('welcome', action='replay', card=2)
+    return dict(ok=bool(initial and mini and paused and at_rest(after) and restored and at_rest(still)
+                        and still['playedCards'] == paused['playedCards']
+                        and manual['animating'] and manual['activeCard'] == 2 and manual['playlist'] == 'stopped'
+                        and (app.config != 'Release' or cpu < 1)),
+                initial=initial, paused=paused, restored=restored, still=still, manual=manual,
+                appCPUPercent=cpu, seconds=seconds, limitPercent=1, loadAverage=list(os.getloadavg()))
 
 
 def occlude_resume_playlist(app, api):
@@ -614,22 +683,19 @@ def occlude_resume_playlist(app, api):
             app.call('window-focus', id=cover['id'], activate=True)
             app.call('window-close')
         app.call('window-focus', id=window, activate=True)
-    resumed = await_state(lambda s: s['visible'] and s['playlist'] == 'playing'
-                          and s['animating'] and s['pendingCompletion'])
-    expected = (observed['playedCards'] + list(range(observed['activeCard'], 5))) if observed else [1, 2, 3, 4]
-    ended = await_state(lambda s: s['playedCards'] == expected and s['playlist'] == 'stopped'
-                        and not s['animating'], timeout=38) if resumed else None
+    restored = await_state(lambda s: s['visible'])
+    time.sleep(4.3)
+    still = state()
     cx, cy, cw, ch = covered['frame']
     bx, by, bw, bh = base['frame']
     full_cover = cx <= bx and cy <= by and cx+cw >= bx+bw and cy+ch >= by+bh
-    ok = bool(initial and full_cover and ended and ended['completionCount'] == 4
-              and ended['animationCount'] == 0 and not ended['pendingCompletion']
-              and (not observed or paused))
+    ok = bool(initial and full_cover and restored and (not observed or (paused and at_rest(still)
+              and still['playedCards'] == paused['playedCards'])))
     return dict(ok=ok, status='observed' if observed else 'INFO',
                 reason=None if observed else 'Open cover did not change NSWindow.occlusionState on this setup',
                 initial=initial, baseWindow=base, coverWindow=covered, fullyCovered=full_cover,
                 coveredState=covered_state, occlusionObserved=bool(observed), paused=paused,
-                resumed=resumed, ended=ended, lastState=state())
+                restored=restored, still=still)
 
 
 def negative_gates(factory, results, tmp, api):
@@ -697,15 +763,15 @@ def negative_gates(factory, results, tmp, api):
                     record('N_minimize_stops', mini and hidden['animating'] and hidden['animationCount'] > 0, state=hidden)
                 elif mutation == 'resume':
                     resume = pause_resume_playlist(app, api)
-                    record('N_hidden_playlist_resumes', not resume['ok'] and resume['paused']
-                           and not resume['resumed'], **{k: v for k, v in resume.items() if k != 'ok'})
+                    record('N_hidden_playlist_stays_stopped', not resume['ok'] and resume['paused']
+                           and resume['still']['animating'], **{k: v for k, v in resume.items() if k != 'ok'})
                     app.call('welcome', action='insert'); visible()
                     occlusion = occlude_resume_playlist(app, api)
                     if occlusion['occlusionObserved']:
-                        record('N_covered_playlist_resumes', not occlusion['ok'] and occlusion['paused']
-                               and not occlusion['resumed'], **{k: v for k, v in occlusion.items() if k != 'ok'})
+                        record('N_covered_playlist_stays_stopped', not occlusion['ok'] and occlusion['paused']
+                               and occlusion['still']['animating'], **{k: v for k, v in occlusion.items() if k != 'ok'})
                     else:
-                        results['N_covered_playlist_resumes'] = dict(ok=True, status='INFO',
+                        results['N_covered_playlist_stays_stopped'] = dict(ok=True, status='INFO',
                             reason='Setup did not report occlusion; no negative resume acceptance claimed',
                             loadAverage=list(os.getloadavg()), state=occlusion)
                 elif mutation == 'reduce':
