@@ -4,6 +4,7 @@ import AppKit
 import ObjectiveC.runtime
 import OpenDesign
 import OpenSettings
+import OpenFeatures
 import Darwin
 
 extension AutomationController {
@@ -29,10 +30,17 @@ extension AutomationController {
         guard !steps.finishing, !steps.firstRun.busy, !steps.defaultPending else { throw Failure(message: "onboarding is busy") }
         switch action {
         case "prepare-handoff":
-          // Use the importer's real hidden-browser path so a harness can move
-          // its future window clear of the hardware pointer before Welcome.
+          // Position only the pending window. The pointer will be over the
+          // header, clear of card tracking areas, when Welcome first appears.
+          // Keep visible content on screen; do not create a browser early.
           guard steps.step == .ready, !controller.replay else { throw Failure(message: "not on first-run Ready") }
-          app.showFirstRunBrowser()
+          BrowserWindowController.constrainsFramesToScreen = false
+          let pointer = NSEvent.mouseLocation
+          let left = controller.window?.screen?.frame.minX ?? 0
+          for window in app.model.windows {
+            window.frameX = left; window.frameY = pointer.y + 100 - 800
+            window.frameWidth = 1280; window.frameHeight = 800
+          }
         case "set-appearance":
           guard let appearance = args["appearance"] as? String, ["light", "dark"].contains(appearance) else { throw Failure(message: "expected light or dark") }
           controller.window?.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua:.aqua)
