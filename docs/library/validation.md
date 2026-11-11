@@ -1,11 +1,12 @@
 # Library validation
 
-Status: LEAD 14:20 closes the ready-open row at its original 16 ms budget.
-The restored-flush median/max 8.818/14.316 ms passes the required 16/24 ms
-bounds. Its 8.818 ms median remains INFO against the 8 ms stretch target:
-"stretch target; follow-up with the performance agent". First-use row warming
-is split across three turns; the one three-launch control is pending.
-No final M5 gate or PR has run. Earlier raw results and rulings remain below.
+Status: STOP at the LEAD 14:20 first-use control on `2861c764`.
+Launches 1 and 2 are valid. Launch 2's first download row has an 8.485 ms
+configure/layout turn and 9.219 ms enclosing busy interval, above the 8.3 ms
+non-first-turn limit. Launch 3 was not run. Creation and all later rows pass.
+Required ready-open remains PASS at 8.818/14.316 ms against 16/24 ms; the
+8.818 ms median is INFO against the 8 ms stretch target. No further run,
+main merge, full M5 gate, push or PR follows this hard-bound failure.
 
 The fourth-pass native source is `c9a2e305`. Harness fix `62bc6e89` restores the
 fixture selection after the uncached Archive probe. Main merge `48c378c9`
@@ -594,3 +595,125 @@ work split remain in the receipt. No interval is silently excluded.
 After acceptance: touched content and key suites in separate ≤15-minute tickets,
 merge main, M1 receipts limited by LEAD 14:00, one staged full M5 gate, then PR.
 If the gate refuses the partial M1 receipt set, report its exact refusal.
+
+
+## LEAD 14:20 first-use control — STOP at launch 2 configure/layout
+
+The bounded no-scroll launch control ran on `2861c7648e367e4033156e2461dd253ec44b40ec`,
+Release executable SHA-256
+`be01de5bb51c48726d15d4729775814656938301385807dd0a01c6c6efa957b7`.
+Both completed launches are valid. The second launch breaks a required
+non-first-turn limit, so the runner stops before launch 3 under LEAD 14:20.
+No sample was discarded or repeated. The planned three-launch set is incomplete;
+this is a retained required failure, not acceptance of a two-launch set.
+
+| Launch | Pre-launch load1 | Preparation complete at launch age s | Max creation slice ms | Max other slice ms | Max creation busy ms | Max other busy ms | Result |
+|---|---|---:|---:|---:|---:|---:|---|
+| 1 | 3.300 / 3.099 | 5.428 | 0.449 | 6.528 | 1.347 | 8.299 | PASS |
+| 2 | 3.130 / 3.116 | 5.230 | 0.941 | 8.485 | 1.309 | 9.219 | FAIL |
+
+The failing turn is **slice 2, download configure + layout**, the second turn
+of the first download row. Its slice is 8.485 ms (>8.3), and its enclosing
+main-loop busy interval is 9.219 ms (>8.3). The receipt reserves the 16.7 ms
+INFO "first-use cost" exception for each kind's first creation turn (phase 1).
+It does not extend that exception to configure/layout (phase 2) or display/flush
+(phase 3). Creation itself is below 1 ms in both launches.
+
+| Launch 2 failing interval | Start launch age ms | End launch age ms | Duration ms |
+|---|---:|---:|---:|
+| Download configure/layout slice 2 | 3970.425 | 3978.914 | 8.485 |
+| Full main-loop busy interval | 3970.340 | 3979.559 | 9.219 |
+| Library slice overlap inside busy interval | — | — | 8.489 |
+| Other main-thread work inside busy interval | — | — | 0.730 |
+
+The Library overlap uses start/end timestamps; the slice duration is recorded
+just before the end timestamp. The raw clocks differ by 0.004 ms in this turn.
+The interval is dominated by the measured Library phase. Configure and layout
+are one measured phase; there is no per-call attribution within it. There is
+no explicit transaction flush in this turn. Display plus explicit flush occurs
+in the next, separate turn (3.519 ms in launch 2).
+
+### First-row phase table
+
+All seven first row kinds have creation, configure/layout and display/flush in
+three distinct main-loop busy intervals. The trace includes implicit commits.
+Each completed launch records 84 slices: 21 labelled first-row turns and 63
+later-row turns. All 168 slices have complete coverage; no overflow occurred.
+No intervals are excluded.
+
+Launch 1 (milliseconds):
+
+| First row kind | Creation | Configure + layout | Display + flush | Largest enclosing busy interval |
+|---|---:|---:|---:|---:|
+| download | 0.449 | 5.218 | 3.613 | 5.824 |
+| archive | 0.317 | 2.560 | 1.654 | 3.296 |
+| history | 0.213 | 2.790 | 1.700 | 3.113 |
+| capture | 0.209 | 3.038 | 0.464 | 6.552 |
+| boost | 0.205 | 2.883 | 1.576 | 3.299 |
+| boostGallery | 0.339 | 5.249 | 2.235 | 5.715 |
+| heading | 0.135 | 0.080 | 1.012 | 3.207 |
+
+Launch 2 (milliseconds):
+
+| First row kind | Creation | Configure + layout | Display + flush | Largest enclosing busy interval |
+|---|---:|---:|---:|---:|
+| download | 0.941 | 8.485 | 3.519 | 9.219 |
+| archive | 0.233 | 3.309 | 2.113 | 3.652 |
+| history | 0.234 | 4.665 | 0.721 | 5.054 |
+| capture | 0.272 | 1.218 | 0.572 | 1.362 |
+| boost | 0.120 | 1.366 | 0.500 | 1.511 |
+| boostGallery | 0.090 | 4.068 | 2.479 | 4.520 |
+| heading | 0.395 | 0.283 | 1.105 | 5.338 |
+
+| Later rows only | Maximum slice ms | Maximum enclosing busy interval ms | Limit ms | Result |
+|---|---:|---:|---:|---|
+| Launch 1, 63 turns | 6.528 | 8.299 | ≤8.3 | PASS |
+| Launch 2, 63 turns | 6.717 | 7.096 | ≤8.3 | PASS |
+
+Only launch 2's download configure/layout turn and its enclosing interval
+exceed 8.3 ms. It is the second turn of the first row; the later rows pass.
+The first-use INFO fallback cannot qualify this required phase under the
+receipt's stated first-creation-only interpretation.
+
+### Identity, carried rows and cleanup
+
+The split changes only `LibraryListView.warmRowKinds` and idle trace labels.
+The default one-row idle submission order is unchanged. The open action,
+foreground submission, warm-section, search, scroll callback and overscan bodies
+are unchanged versus `55b507c3`. Their accepted receipts carry by the explicit
+LEAD 14:20 diff-scope ruling; this control did not remeasure them. Required
+ready-open remains PASS at median/max 8.818/14.316 ms against 16/24 ms.
+Its 8.818 ms median is INFO against the 8 ms stretch target:
+"stretch target; follow-up with the performance agent".
+
+OpenLibrary source-content SHA-256:
+`a75273e2cb4e0adc149a9ca97905f982ea4f4d22805e62d2dcc2e11dfa78ebc1`;
+Git tree `9e8403c595277a81f0f95e8007b7d7180e4642b5`.
+The Release build passes. An initial compile failure from two display helpers
+sharing a name was fixed before the successful build; its log is retained at
+`.re/l3/first-use-build-r1.log`. No timing launch used the failed build.
+All 3,022 transported source hashes, artifact hashes and the deep/strict
+signature matched. OpenEngine `f4bce022c1473542e1220260bcec2a2d2c9eab83cf5bffe502feca79b4155a6d`
+and CEF `1a22c4aa1b49d7199915766efc2e7665262ec36993ab0b96e4e4200375f762c0` remain unchanged.
+
+The M1 ticket queued at 14:14:04 and acquired after 980 seconds. Slot time was
+about two minutes, including quiet preflight; receipt copying and analysis
+occurred after release. Both measured launches quit normally (`forced=false`),
+with zero remaining owned windows/processes. Both queues and executable paths
+were audited after completion: no D1 job, holder, waiter or Open process remains.
+The user's M5 launchd/default-profile session is preserved. Foreign CPU is INFO;
+only the two pre-launch load1 readings judge quiet validity.
+
+No third launch, further product change, touched-suite rerun, main merge,
+exact-head M1 lane, full M5 gate, push or PR follows this hard-bound failure.
+`origin/main` is fetched at `bac09a36` but remains unmerged. There is no gate
+receipt refusal to report. LEAD 14:00 lean scope remains planned for later.
+
+Receipt: `.re/l3/l3-first-use-control-r1/result.json`;
+SHA-256 `3f6d794cb65e8a509030533f365d99823ed4325f94960a91208228da48d578f0`.
+M1 receipt: `receipts/l3-first-use-control-r1/result.json`.
+Log: `.re/l3/first-use-control-r1.log`.
+
+Pending lead decision: What narrow next step should D1 take for the first
+download row's second turn (configure/layout 8.485 ms, enclosing busy 9.219 ms),
+with all creation turns and all later-row turns inside their bounds?
