@@ -261,10 +261,11 @@ def use_m1_receipt(directory, row_name, identity, config, style, lane):
     for path in paths:
         receipt = read_json(path)
         if (receipt.get('machine') == 'M1' and receipt.get('source') == identity
-                and receipt.get('config') == config and receipt.get('style') == style
+                and receipt.get('config') == config
                 and receipt.get('lane') == lane):
             stages = [stage for stage in receipt.get('stages', []) if stage.get('name') == row_name]
-            if len(stages) != 1 or stages[0].get('exit') != 0:
+            if (len(stages) != 1 or stages[0].get('exit') != 0
+                    or stages[0].get('style') != style):
                 continue
             stage = stages[0]
             checks = stage.get('rows')
@@ -562,7 +563,7 @@ def main():
                 if rc and not any(r['status']=='FAIL' for r in checks):
                     checks.append(dict(row=label+'/exit',status='FAIL',reason='suite exit '+str(rc),evidence=str(out/'output.log')))
                 rows.extend(checks)
-                stages.append(dict(name=label,rows=checks,exit=rc,queued=queued,evidence=str(out)))
+                stages.append(dict(name=label,style=style,rows=checks,exit=rc,queued=queued,evidence=str(out)))
             except Exception as error:
                 rows.append(dict(row=label+'/evidence',status='FAIL',reason=str(error),evidence=str(inputs)))
                 screen_safe = False
