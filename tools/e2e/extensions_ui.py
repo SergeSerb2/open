@@ -590,7 +590,10 @@ def run(factory, results, tmp, root, wait_until, new_tab, frame, read_image, ext
             installs.append({"ok": bool(installed) and prompt["sheetVisible"] and prompt["sheetClass"] == "ExtensionPromptSheet"
                 and prompt["title"] == "Add Open action probe extension to Open?" and prompt["buttons"] == ["Cancel","Add Extension"], "prompt":prompt})
         results["prompt_install_cancel_add"] = {"ok": all(p["ok"] for p in installs), "rows": installs}
-        toasts = app.call("toasts")
+        # The engine registry changes before didInstall's queued App toast.
+        # Require the actual matching toast before reading its lifetime/Pin.
+        toasts = wait_until(lambda: (lambda s: s if any(t["title"] == "Added Open action probe"
+            for t in s["toasts"]) else None)(app.call("toasts")), timeout=3, step=.02) or app.call("toasts")
         toast = next((t for t in toasts["toasts"] if t["title"]=="Added Open action probe"),{})
         results["install_toast"] = {"ok":toast.get("lifetime")==3,"state":toasts}
         if toast.get("accessory")=="pin":

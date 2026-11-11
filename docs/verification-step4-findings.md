@@ -64,6 +64,12 @@ The final M5 gate must build and exercise this fix with the affected compiler.
   installation, before window-close flows. Retain the 30-second bound and all
   popup assertions.
 
+- The installed-extension registry precedes `didInstall`'s queued App toast.
+  An M1 confirmation observed the installed extension with zero shown toasts.
+  Wait up to three seconds for that specific real toast before asserting its
+  unchanged three-second lifetime and Pin accessory. No sleep substitutes for
+  the toast predicate.
+
 The original failed full gate is `.re/step4-full-m5-60918f9d-r1/`:
 1535 PASS, 5 FAIL, 2 DEFERRED, 2 BLOCKED, 13 NOT_RUN. The delayed Media crash
 stopped Relaunch preflight and all remaining screen stages. It does not qualify.
