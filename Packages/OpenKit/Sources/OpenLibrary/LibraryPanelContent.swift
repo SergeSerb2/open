@@ -179,6 +179,10 @@ extension LibraryPanelView {
             }
             updateContentChrome(); return
         }
+        // External providers publish during refresh. Wait for that refresh's
+        // completed snapshot instead of preparing both its intermediate value
+        // and its final value (and configuring the first screen twice).
+        guard host.loaded else { return }
         let identity = "\(viewModel.query)|\(viewModel.downloadProfileFilter?.description ?? "")|\(viewModel.historyProfileID)|\(archiveReasonChips.sorted())|\(archiveSpaceChips.sorted())|\(historyWhenChips.sorted())|\(viewModel.boostsPresentation)"
         guard host.dirty || host.identity != identity else { return }
         host.cancel(); host.generation += 1
