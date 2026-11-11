@@ -462,7 +462,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             let size = root.bounds.size
             if background.frame != root.bounds { background.frame = root.bounds }
             let edge = libraryUsesWideLayout ? size.width - 56 : min(libraryWidth, size.width - 56)
-            let panel = CGRect(x: edge, y: 10, width: max(46, size.width - edge - 10), height: max(0, size.height - 20))
+            // Spaces pushes the ordinary Library page past the window's right
+            // edge. Keep its width: exactly 56 points remain visible, and the
+            // engine does not reflow into a tiny 46-point viewport.
+            let pageWidth = libraryUsesWideLayout ? size.width - 427 : size.width - edge - 10
+            let panel = CGRect(x: edge, y: 10, width: max(46, pageWidth), height: max(0, size.height - 20))
             libraryPanel.frame = CGRect(x: 0, y: 0, width: edge, height: size.height)
             libraryPanel.needsLayout = true
             if container.frame != panel { container.frame = panel }

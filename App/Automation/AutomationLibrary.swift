@@ -57,6 +57,19 @@ extension AutomationController {
     state["showSetupMilliseconds"]=session.lastShowMilliseconds
     state["sidebarWidth"]=controller.context.sidebarWidth
     state["sidebarMode"]=controller.context.window?.sidebarMode.rawValue ?? ""
+    func motion(_ layer: CALayer?) -> [String:Any] {
+      guard let layer else { return [:] }
+      func rect(_ value: CGRect) -> [CGFloat] { [value.minX,value.minY,value.width,value.height] }
+      return ["frame":rect(layer.frame),"presentation":rect(layer.presentation()?.frame ?? layer.frame),
+        "localTime":layer.convertTime(CACurrentMediaTime(),from:nil),"speed":layer.speed,
+        "animations":(layer.animationKeys() ?? []).compactMap { key -> [String:Any]? in
+          guard let animation=layer.animation(forKey:key) else { return nil }
+          return ["key":key,"duration":animation.duration,"beginTime":animation.beginTime,
+            "speed":animation.speed,"repeatCount":animation.repeatCount,"removedOnCompletion":animation.isRemovedOnCompletion]
+        }]
+    }
+    state["motion"]=["page":motion(controller.container.layer),"panel":motion(session.panel?.layer),
+      "sidebar":motion(controller.sidebar.layer),"occlusion":controller.window?.occlusionState.rawValue ?? 0] as [String:Any]
     return state
   }
   /// Read the real Library and its hosted grid. The only focus setup is the

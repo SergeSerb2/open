@@ -19,7 +19,7 @@ KEYS = ['libraryShowsEasels', 'libraryShowsHistory', 'OpenLibraryLegacyWindow',
         'open.library.lastSection', 'open.sidebar.hideHintShown']
 
 
-def run(output, frames=False, bundle=None, mockups=None):
+def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
     output.mkdir(parents=True, exist_ok=True)
     checks, shots = {}, []
     app = None
@@ -39,6 +39,20 @@ def run(output, frames=False, bundle=None, mockups=None):
     def key(value, modifiers=()):
         return app.call('key', key=value, modifiers=list(modifiers), route='app')
 
+    def settled(motion):
+        # AppKit may retain an expired key until the next event/transaction.
+        # Read presentation geometry and layer time to test actual movement.
+        for name in ['page', 'panel', 'sidebar']:
+            layer = motion[name]
+            if any(abs(a-b) > .01 for a,b in zip(layer['frame'],layer['presentation'])):
+                return False
+            for animation in layer['animations']:
+                if 'library' in animation['key'].lower() and (
+                    animation['repeatCount'] != 0 or
+                    layer['localTime'] < animation['beginTime'] + animation['duration']):
+                    return False
+        return True
+
     def capture(name, width, height, **extra):
         current = state()
         # Window number comes from the owning browser's socket state.
@@ -47,6 +61,10 @@ def run(output, frames=False, bundle=None, mockups=None):
                         str(current['window']), str(path)], check=True, timeout=15)
         dimensions = struct.unpack('>II', path.read_bytes()[16:24])
         check(name + '_native_2x', dimensions == (width*2, height*2), pixels=dimensions)
+        if current['section'] == 'spaces':
+            page = current['pageCardFrame']
+            check(name + '_page_strip', page[0] == width-56 and page[2] == width-427,
+                  page=page, visibleWidth=width-page[0])
         metadata = dict(current, path=path.name, pixelSize=dimensions, **extra)
         (output / (name + '.json')).write_text(json.dumps(metadata, indent=2))
         shots.append(metadata)
@@ -64,6 +82,8 @@ def run(output, frames=False, bundle=None, mockups=None):
             check('lazy_at_launch', state()['created'] is False)
             owner = app.call('shell-windows')[0]
             before = app.call('window-state')
+            result['display'] = {name: before[name] for name in
+                                 ['screenFrame', 'mainScreenName', 'mainScreenScale']}
             current = state(action='open', section='downloads')
             time.sleep(.22)
             current = state()
@@ -78,6 +98,11 @@ def run(output, frames=False, bundle=None, mockups=None):
                 expected = app.call('window-state')['frame'][2]-56 if section == 'spaces' else 417
                 check('section_' + section, current['section'] == section and current['panelFrame'][2] == expected,
                       panel=current['panelFrame'], page=current['pageCardFrame'])
+                if section == 'spaces':
+                    window_width = app.call('window-state')['frame'][2]
+                    check('spaces_pushes_full_page_card', current['pageCardFrame'][0] == window_width-56
+                          and current['pageCardFrame'][2] == window_width-427,
+                          page=current['pageCardFrame'],windowWidth=window_width)
             state(action='select', section='downloads')
             state(action='focus-rail')
             key('right')
@@ -149,6 +174,32 @@ def run(output, frames=False, bundle=None, mockups=None):
             app.call('window-close')
             app.call('window-focus', id=owner['id'], activate=True)
 
+            state(action='close')
+            time.sleep(.25)
+            app.call('window-motion', reduced=False)
+            state(action='open', section='downloads')
+            motion = app.call('window-motion')
+            check('open_moves_page', 'libraryFrame' in motion['active']['panel'], motion=motion)
+            time.sleep(.25)
+            motion = state()['motion']
+            check('open_motion_settles', settled(motion), motion=motion)
+            state(action='select', section='spaces')
+            check('spaces_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
+            time.sleep(.25)
+            state(action='close')
+            check('close_moves_page', 'libraryFrame' in app.call('window-motion')['active']['panel'])
+            time.sleep(.25)
+            motion = state()['motion']
+            check('closed_motion_stops', settled(motion), motion=motion)
+            app.call('window-motion', reduced=True)
+            state(action='open', section='downloads')
+            check('reduced_motion_no_page_move', 'libraryFrame' not in app.call('window-motion')['active']['panel'])
+            time.sleep(.12)
+            state(action='close')
+            time.sleep(.12)
+            app.call('window-motion', reduced=False)
+            state(action='open', section='downloads')
+
             if frames:
                 colors = {'peach': (0.94, 0.49, 0.35), 'ocean': (0.26, 0.53, 0.90),
                           'night': (0.35, 0.27, 0.60)}
@@ -164,20 +215,22 @@ def run(output, frames=False, bundle=None, mockups=None):
                         for width, height in [(1280,800),(900,850)]:
                             app.call('window-frame', frame=[40,50,width,height], unconstrained=True)
                             for section in SECTIONS:
+                                if capture_sections and section not in capture_sections: continue
                                 state(action='select', section=section)
                                 app.call('mouse', action='hover', window=state()['window'], x=width-30, y=height-30)
                                 app.call('mouse', action='click', window=state()['window'], x=width-30, y=height-30)
                                 time.sleep(.23)
                                 name = '%s-%s-%dx%d-%s' % (theme,appearance,width,height,section)
                                 capture(name,width,height,theme=theme,appearance=appearance,themeState=palette)
-                app.call('defaults', key='libraryShowsEasels', value=True)
-                state(action='refresh')
-                state(action='select', section='easels')
-                time.sleep(.22)
-                capture('easels-flag-seven-tiles',900,850)
-                check('seven_tile_flag', len(state()['rail']) == 7)
-                app.call('defaults', key='libraryShowsEasels', value=False)
-                state(action='refresh')
+                if not capture_sections:
+                    app.call('defaults', key='libraryShowsEasels', value=True)
+                    state(action='refresh')
+                    state(action='select', section='easels')
+                    time.sleep(.22)
+                    capture('easels-flag-seven-tiles',900,850)
+                    check('seven_tile_flag', len(state()['rail']) == 7)
+                    app.call('defaults', key='libraryShowsEasels', value=False)
+                    state(action='refresh')
                 if mockups:
                     state(action='close')
                     time.sleep(.25)
@@ -226,6 +279,7 @@ if __name__ == '__main__':
     parser.add_argument('--bundle', type=Path)
     parser.add_argument('--frames', action='store_true')
     parser.add_argument('--mockups', type=Path)
+    parser.add_argument('--sections', nargs='+', choices=SECTIONS)
     args = parser.parse_args()
-    answer = run(args.output.resolve(),args.frames,args.bundle,args.mockups)
+    answer = run(args.output.resolve(),args.frames,args.bundle,args.mockups,args.sections)
     raise SystemExit(0 if answer['ok'] else 1)
