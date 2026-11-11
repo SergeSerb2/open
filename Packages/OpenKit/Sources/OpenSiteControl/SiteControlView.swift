@@ -144,7 +144,9 @@ public final class SiteControlPanelView: NSView {
     /// The sidebar's content appearance (the URL-field plate token follows it, not the window's).
     public var sidebarContent = ContentAppearance.dark { didSet { if sidebarContent != oldValue { needsLayout = true } } }
     /// The tint colour and spec in use (rims, tile rings and the More circle take a share of its hue).
-    private(set) var panelTint: (RGBA, SiteControlMaterialSpec)? { didSet { controls.forEach { $0.panelTint = panelTint.map { ($0.0, $0.1.ringTintShare, $0.1.moreTintShare) } } } }
+    private(set) var panelTint: (RGBA, SiteControlMaterialSpec)? {
+        didSet { controls.forEach { $0.panelTint = panelTint.map { ($0.0, $0.1.ringTintShare, $0.1.moreTintShare) }; $0.ringOverride = panelTint?.1.ring } }
+    }
     func tinted(_ c: RGBA, share: Double?) -> RGBA {
         guard let share, share > 0, let t = panelTint?.0 else { return c }
         return RGBA(c.red + (t.red - c.red) * share, c.green + (t.green - c.green) * share, c.blue + (t.blue - c.blue) * share, c.alpha)
@@ -242,8 +244,10 @@ public final class SiteControlPanelView: NSView {
             spaceTint.isHidden = false
             // Top zone: the URL-field plate composited over the sidebar colour, over the sidebar part only.
             let plate = SidebarRole.fieldFill.resolved(sidebarContent), base = sidebarColor
-            let top = RGBA(base.red + (plate.red - base.red) * plate.alpha, base.green + (plate.green - base.green) * plate.alpha,
-                           base.blue + (plate.blue - base.blue) * plate.alpha)
+            let field = RGBA(base.red + (plate.red - base.red) * plate.alpha, base.green + (plate.green - base.green) * plate.alpha,
+                             base.blue + (plate.blue - base.blue) * plate.alpha)
+            let k = spec.topWhiteMix
+            let top = RGBA(field.red + (1 - field.red) * k, field.green + (1 - field.green) * k, field.blue + (1 - field.blue) * k)
             // The effect view is not flipped: its layer's y grows up, so the top zone sits at the top of its bounds.
             let zone = body.minY + spec.topExtent, flipped = false
             topZone.frame = CGRect(x: 0, y: flipped ? 0 : bounds.height - zone, width: w, height: zone)
@@ -256,7 +260,7 @@ public final class SiteControlPanelView: NSView {
         } else { spaceTint.isHidden = true; topZone.isHidden = true }
         surfaceMask.frame = bounds; surfaceMask.path = path
         // Light: a 0.5 pt hairline (the mask keeps the inner half of a 1 pt stroke). Dark: Arc's measured 1 px white 0.20 rim.
-        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = tinted(SiteControlColors.panelRim.resolved(contentAppearance), share: panelTint?.1.rimTintShare).cgColor; rim.lineWidth = dark ? 2/scale : 1
+        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = tinted(spec.rim.map { RGBA($0.gray, $0.gray, $0.gray, $0.alpha) } ?? SiteControlColors.panelRim.resolved(contentAppearance), share: spec.rimTintShare).cgColor; rim.lineWidth = dark ? 2/scale : 1
         for (i,b) in actions.enumerated() { b.frame = CGRect(x: m.padding+CGFloat(i)*(m.actionButton.width+m.actionGap),y: body.minY+m.padding,width: m.actionButton.width,height: m.actionButton.height) }
         let footerY = body.maxY-m.padding-m.footerHeight
         scroll.frame = CGRect(x: 0,y: body.minY+m.padding+m.actionButton.height,width: body.width,height: max(0,footerY-m.gapAfterSeparator-m.separatorHeight-(body.minY+m.padding+m.actionButton.height)))
@@ -469,6 +473,8 @@ public class SiteControlButton: NSButton {
     public var fillOverride: DesignColor? { didSet { needsDisplay = true } }
     /// The panel tint and the shares of its hue for the ring (action tiles) and the More circle fill.
     var panelTint: (RGBA, Double, Double)? { didSet { needsDisplay = true } }
+    /// The tile ring as grey level and alpha from the panel's material spec (nil: the token).
+    var ringOverride: (gray: Double, alpha: Double)? { didSet { needsDisplay = true } }
     private func mixed(_ c: NSColor, share: Double?) -> NSColor {
         guard let share, share > 0, let t = panelTint?.0, let s = c.usingColorSpace(.sRGB) else { return c }
         return NSColor(srgbRed: s.redComponent + (t.red - s.redComponent) * share, green: s.greenComponent + (t.green - s.greenComponent) * share,
@@ -547,7 +553,8 @@ public class SiteControlButton: NSButton {
         if style == .extensionTile { top = SiteControlColors.tileFill.resolved(appearance).nsColor; bottom = top }
         if isHighlighted && style == .action { top = SiteControlGlyphRenderer.adjust(top,levels: m.actionPressedLevels); bottom = SiteControlGlyphRenderer.adjust(bottom,levels: m.actionPressedLevels) }
         gradient.colors = [top.cgColor,bottom.cgColor]; gradient.startPoint = CGPoint(x: 0.5,y: 0); gradient.endPoint = CGPoint(x: 0.5,y: 1)
-        ring.strokeColor = style == .action ? mixed(SiteControlColors.actionRing.resolved(appearance).nsColor, share: panelTint?.1).cgColor : nil
+        let ringBase = ringOverride.map { NSColor(srgbRed: $0.gray, green: $0.gray, blue: $0.gray, alpha: $0.alpha) } ?? SiteControlColors.actionRing.resolved(appearance).nsColor
+        ring.strokeColor = style == .action ? mixed(ringBase, share: panelTint?.1).cgColor : nil
         let line = CGMutablePath(); line.move(to: CGPoint(x: radius,y: m.actionHighlightHeight/2)); line.addLine(to: CGPoint(x: bounds.width-radius,y: m.actionHighlightHeight/2))
         highlight.path = line; highlight.lineWidth = m.actionHighlightHeight
         let highlightColor = style == .action ? (hovered && isEnabled ? SiteControlColors.actionHighlightHover : SiteControlColors.actionHighlight).cgColor(appearance) : nil

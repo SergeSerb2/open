@@ -118,7 +118,8 @@ extension AutomationController {
       scc.view.panel.materialOverride[appearance] = SiteControlMaterialSpec(material: m, overlay: rgba("overlay"),
         tintAlpha: d("tintAlpha"), tailShare: d("tailShare"), tailLength: CGFloat(args["tailLength"] as? Double ?? 120),
         topAlpha: d("topAlpha"), topExtent: CGFloat(args["topExtent"] as? Double ?? 48),
-        rimTintShare: d("rimShare"), ringTintShare: d("ringShare"), moreTintShare: d("moreShare"))
+        rimTintShare: d("rimShare"), ringTintShare: d("ringShare"), moreTintShare: d("moreShare"), topWhiteMix: d("topWhite"),
+        rim: args["rimAlpha"] == nil ? nil : (d("rimGray"), d("rimAlpha")), ring: args["ringAlpha"] == nil ? nil : (d("ringGray"), d("ringAlpha")))
       scc.view.panel.layoutSubtreeIfNeeded()
     case "tap":
       guard scc.isPresented, let id = args["id"] as? String, id.utf8.count <= 256,

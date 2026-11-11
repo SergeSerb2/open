@@ -57,14 +57,28 @@ public struct SiteControlMaterialSpec: Sendable, Hashable {
     public var topExtent: CGFloat
     /// Shares of the tint hue in the rim, the tile rings and the More circle (one constant each, LEAD 12:20).
     public var rimTintShare: Double, ringTintShare: Double, moreTintShare: Double
+    /// The top-zone colour mixes the plate-over-sidebar colour this far toward white (LEAD 12:40; theme-derived).
+    public var topWhiteMix: Double
+    /// Our own strokes: the panel rim and the action-tile rings as grey level and alpha (nil: the token). LEAD 12:40.
+    public var rim: (gray: Double, alpha: Double)?, ring: (gray: Double, alpha: Double)?
     public init(material: NSVisualEffectView.Material, overlay: RGBA, tintAlpha: Double, tailShare: Double = 0, tailLength: CGFloat = 120,
-                topAlpha: Double = 0, topExtent: CGFloat = 48, rimTintShare: Double = 0, ringTintShare: Double = 0, moreTintShare: Double = 0) {
+                topAlpha: Double = 0, topExtent: CGFloat = 48, rimTintShare: Double = 0, ringTintShare: Double = 0, moreTintShare: Double = 0,
+                topWhiteMix: Double = 0, rim: (gray: Double, alpha: Double)? = nil, ring: (gray: Double, alpha: Double)? = nil) {
         self.material = material; self.overlay = overlay; self.tintAlpha = tintAlpha; self.tailShare = tailShare; self.tailLength = tailLength
         self.topAlpha = topAlpha; self.topExtent = topExtent
         self.rimTintShare = rimTintShare; self.ringTintShare = ringTintShare; self.moreTintShare = moreTintShare
+        self.topWhiteMix = topWhiteMix; self.rim = rim; self.ring = ring
     }
+    public static func == (a: Self, b: Self) -> Bool {
+        a.material == b.material && a.overlay == b.overlay && a.tintAlpha == b.tintAlpha && a.tailShare == b.tailShare && a.tailLength == b.tailLength
+            && a.topAlpha == b.topAlpha && a.topExtent == b.topExtent && a.rimTintShare == b.rimTintShare && a.ringTintShare == b.ringTintShare
+            && a.moreTintShare == b.moreTintShare && a.topWhiteMix == b.topWhiteMix && a.rim?.gray == b.rim?.gray && a.rim?.alpha == b.rim?.alpha
+            && a.ring?.gray == b.ring?.gray && a.ring?.alpha == b.ring?.alpha
+    }
+    public func hash(into h: inout Hasher) { h.combine(material); h.combine(overlay); h.combine(tintAlpha); h.combine(topAlpha); h.combine(topWhiteMix) }
+    /// Top zone (Dark): the plate over the sidebar, 30 % toward white, α 0.5 over the top 48 pt (LEAD 12:40 tuning session).
     public static let dark = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(168.0 / 255, 170.0 / 255, 171.0 / 255, 0.5), tintAlpha: 0.55,
-                                                     moreTintShare: 0.4)
+                                                     topAlpha: 0.5, topExtent: 48, moreTintShare: 0.4, topWhiteMix: 0.3)
     /// Light overlay: near-neutral; its slight warmth only restores the page tone the material removes (Night on #F3F5EE:
     /// b* 2.51 against the page's 3.25, LEAD 12:20 S11_light_neutral). The gold seen on the right comes from the tint's tail.
     public static let light = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(246.0 / 255, 246.0 / 255, 232.0 / 255, 0.4), tintAlpha: 0.56,

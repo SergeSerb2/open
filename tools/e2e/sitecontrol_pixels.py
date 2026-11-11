@@ -40,9 +40,13 @@ def background_response(app, tab, private, env, scale):
 # LEAD 12:20 (2026-11-11) approves ΔE00 ≤ 4 for exactly these rows, all others keep ΔE00 ≤ 2. Reason: "Arc's backdrop
 # kernel is wider than any public material; values at the panel's edges cannot be reproduced exactly".
 EDGE_LIMIT = 4
-EDGE_ELEMENTS = frozenset(['Arrow row %d' % i for i in range(10)] + ['Top rim', 'Share ring', 'New Boost ring', 'Capture ring',
-                                                                    'Bottom rim', 'More circle'])
-def color_limit(name): return EDGE_LIMIT if name in EDGE_ELEMENTS else 2
+EDGE_ELEMENTS = frozenset(['Arrow row %d' % i for i in range(1, 10)] + ['Share ring', 'New Boost ring', 'More circle'])
+# LEAD 12:40 closing rule: rows that still miss ΔE00 ≤ 4 after the last tuning session are INFO rows. They print the Arc
+# target, Open's value and ΔE00, and still fail above ΔE00 10 or a position change over 1 pt.
+INFO_ELEMENTS = frozenset(['Arrow row 0', 'Capture ring', 'Top rim', 'Bottom rim'])
+INFO_LIMIT = 10
+INFO_REASON = "edge value of Arc's backdrop blur; not reproducible with a public material (lead ruling 2026-11-11)"
+def color_limit(name): return INFO_LIMIT if name in INFO_ELEMENTS else EDGE_LIMIT if name in EDGE_ELEMENTS else 2
 
 
 def compare_live(path, state, scale, private, env, negative_path=None):
@@ -67,7 +71,8 @@ def compare_live(path, state, scale, private, env, negative_path=None):
             return [statistics.mean(p[i] for p in points) for i in range(3)]
         ac,oc=mean(arc,a,1),mean(ours,o,scale)
         de=delta(ac,oc)
-        probes.append(dict(element=name,arcRGB=ac,openRGB=oc,deltaE00=de,limit=color_limit(name),ok=de<=color_limit(name)))
+        probes.append(dict(element=name,arcRGB=ac,openRGB=oc,deltaE00=de,limit=color_limit(name),ok=de<=color_limit(name),
+                           **({'status':'INFO','reason':INFO_REASON} if name in INFO_ELEMENTS else {})))
     def add(name, a, o, text=False, arrow=False):
         def plane(px, rect, factor):
             x,y,w,h=rect
@@ -129,7 +134,8 @@ def compare_live(path, state, scale, private, env, negative_path=None):
         else:error=None
         de=delta(ac,oc) if ac and oc else None
         probes.append(dict(element=name,arcBox=ab,openBox=ob,positionError=error,deltaE00=de,
-                           limit=color_limit(name),ok=error is not None and error<=1 and (text or de is not None and de<=color_limit(name))))
+                           limit=color_limit(name),ok=error is not None and error<=1 and (text or de is not None and de<=color_limit(name)),
+                           **({'status':'INFO','reason':INFO_REASON} if name in INFO_ELEMENTS else {})))
     for row in range(10):
         add('Arrow row '+str(row),[183,81+row,36,1],[state['tip'][0]-18,state['tip'][1]+row,36,1],arrow=True)
     for i,name in enumerate(['Share','New Boost','Capture','Capture Full Page']):
@@ -153,7 +159,8 @@ def compare_live(path, state, scale, private, env, negative_path=None):
     fill('Top rim',[120,91,1,1],[bx+37,by,1,1])
     fill('Bottom rim',[120,387,1,1],[bx+37,by+bh-1,1,1])
     report=dict(ok=all(p['ok'] for p in probes),elements=probes,capture=reference,snapshot=path,
-                limits={'positionPoints':1,'deltaE00':2,'edgeDeltaE00':EDGE_LIMIT,'edgeElements':sorted(EDGE_ELEMENTS)},
+                limits={'positionPoints':1,'deltaE00':2,'edgeDeltaE00':EDGE_LIMIT,'edgeElements':sorted(EDGE_ELEMENTS),
+                        'infoDeltaE00':INFO_LIMIT,'infoElements':sorted(INFO_ELEMENTS),'infoReason':INFO_REASON},
                 excluded='Different site-setting title/glyph and HTTP Insecure pill; Developer Mode per Q14',
                 load=list(os.getloadavg()))
     if negative_path:
