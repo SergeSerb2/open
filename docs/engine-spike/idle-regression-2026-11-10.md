@@ -115,6 +115,24 @@ and checks that only explicit replay starts motion. A fresh-launch OS thread
 enumeration rejects `StackSamplingProfiler`. Open passes the existing disable
 switch in its engine configuration in both ordinary and automation builds.
 
+## Repair verification
+
+Release candidate `e28eef3d` passes the original import flow under the revised
+settle contract on the M1 (`fixed-import-r1`). Its automatic pass takes
+19.065 seconds and plays cards 1–4 once. Welcome remains visible at the end,
+with zero animations, no completion timer, and zero pending theme display
+updates. App idle is 0.592% over the existing five-second sample. History takes
+977.6 ms and main-thread lag is 18.8 ms. Pre-load1 is 1.942 / 1.803, and foreign
+CPU is 27.3% before / 33.9% after the idle row. Cleanup passes with no new
+crash or system window. OS counters list zero `StackSamplingProfiler` threads
+in the App and helpers without a diagnostic CLI override.
+
+The same new real-App contract rejects the old binary. `old-welcome-contract`
+fails `no_stack_sampling_after_launch`. `old-playlist-contract` uses the
+diagnostic switch to pass that assertion, then fails `playlist_settles` at the
+30-second cap. Both negative runs clean up successfully without a new crash or
+system window. Their complete private receipts remain beside the bisect data.
+
 ## Profiler and visibility controls
 
 `post306-noprofile-isolate-r2` repeats the original row with the existing
