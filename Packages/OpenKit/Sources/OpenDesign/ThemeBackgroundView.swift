@@ -136,7 +136,8 @@ public final class ThemeBackgroundView: NSView {
     }
 
     private func refresh() {
-        // Stretch the existing field while resizing. Rebuild only on a display tick.
+        // Stretch the existing field while resizing. Ordinary windows coalesce
+        // field rebuilds on a display tick; static previews finish them below.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         themeHost.frame = bounds

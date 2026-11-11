@@ -146,7 +146,8 @@ backing notifications. Miniature themes now opt into synchronous cached-field
 updates at every input boundary in `ThemeBackgroundView.refresh()`. They never
 arm a display link, including while hidden; ordinary browser themes keep their
 existing display-tick behavior. Full lifecycle and original import verification
-must cover this additional change.
+cover this mode through `tools/e2e/welcome.py` and `tools/e2e/import_robust.py`;
+the PR records their final receipts and the full M5 gate.
 
 ## Profiler and visibility controls
 
