@@ -11,9 +11,9 @@ def read_manifest(path):
     if path.stat().st_size > 1_048_576:
         raise ValueError("oversized portable baseline metadata")
     value = json.loads(path.read_text())
-    if (set(value) != {"schemaVersion", "environments"} or value["schemaVersion"] != 1
+    if (set(value) != {"schemaVersion", "environments"} or value["schemaVersion"] != 2
             or not isinstance(value["environments"], dict) or len(value["environments"]) > 16
-            or any(not re.fullmatch(r"scale-[12]-icc-[0-9a-f]{64}", key)
+            or any(not re.fullmatch(r"scale-[12]-icc-[0-9a-f]{64}-mode-[0-9]{1,5}x[0-9]{1,5}-pixels-[0-9]{1,5}x[0-9]{1,5}-mhz-[0-9]{1,7}", key)
                    for key in value["environments"])):
         raise ValueError("invalid portable baseline manifest")
     return value
@@ -25,9 +25,14 @@ def display_environment():
     if len(result.stdout) > 2048:
         raise ValueError("oversized display metadata")
     value = json.loads(result.stdout)
-    if (set(value) != {"key", "backingScale", "iccSHA256"} or value["backingScale"] not in (1, 2)
+    mode = value.get("mode", {})
+    if (set(mode) != {"points", "pixels", "refreshMilliHz"}
+            or any(not isinstance(mode[k], str) or not re.fullmatch(r"[0-9]{1,5}x[0-9]{1,5}", mode[k]) for k in ("points", "pixels"))
+            or not isinstance(mode["refreshMilliHz"], int) or not 0 < mode["refreshMilliHz"] <= 1_000_000):
+        raise ValueError("invalid display mode")
+    if (set(value) != {"key", "backingScale", "iccSHA256", "mode"} or value["backingScale"] not in (1, 2)
             or not re.fullmatch(r"[0-9a-f]{64}", value["iccSHA256"])
-            or value["key"] != f"scale-{value['backingScale']}-icc-{value['iccSHA256']}"):
+            or value["key"] != f"scale-{value['backingScale']}-icc-{value['iccSHA256']}-mode-{mode['points']}-pixels-{mode['pixels']}-mhz-{mode['refreshMilliHz']}"):
         raise ValueError("invalid display metadata")
     return value
 
@@ -41,7 +46,10 @@ def legacy_baseline(root):
         raise ValueError(f"unknown legacy display key {environment['key']}; record a new trusted-main reference; no fallback")
     if entry["renderScale"] != environment["backingScale"] or not re.fullmatch(r"[0-9a-f]{40}", entry["trustedMainCommit"]):
         raise ValueError("invalid trusted legacy baseline metadata")
-    directory = root / "Packages/OpenKit/Fixtures/space-schema1" if entry.get("original") else resources / environment["key"] / "legacy"
+    asset_key = entry.get("assetKey", environment["key"])
+    if not entry.get("original") and not re.fullmatch(r"scale-[12]-icc-[0-9a-f]{64}(?:-mode-[0-9]{1,5}x[0-9]{1,5}-pixels-[0-9]{1,5}x[0-9]{1,5}-mhz-[0-9]{1,7})?", asset_key):
+        raise ValueError("invalid legacy asset key")
+    directory = root / "Packages/OpenKit/Fixtures/space-schema1" if entry.get("original") else resources / asset_key / "legacy"
     for space in range(3):
         name = f"window-{space}.png"
         path = directory / name
