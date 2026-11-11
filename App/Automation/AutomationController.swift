@@ -423,6 +423,7 @@
         await Task.yield()
         return spaceManagerState()
       case "library", "library-state", "library-ui": return try libraryPanelAction(a)
+      case "library-performance": return try await libraryPerformance(a)
       case "space-manager-state": return spaceManagerState()
       case "defaults":
         // Reads (and with `value`, writes) one Open preference in this app's own domain.

@@ -8,6 +8,19 @@ import OpenDesign
 
 @MainActor
 extension LibraryPanelView {
+    /// The socket bench awaits the same provider task as the live panel, then
+    /// submits its real native layout/drawing. This does not wait for motion.
+    public func finishPendingContent() async { await reloadTask?.value }
+    public func submitNativeFrame() {
+        window?.layoutIfNeeded(); layoutSubtreeIfNeeded()
+        window?.displayIfNeeded(); CATransaction.flush()
+    }
+    public func scrollToRow(_ index:Int) -> Int {
+        guard !listView.items.isEmpty else { return 0 }
+        let row = max(0,min(index,listView.table.numberOfRows-1))
+        listView.table.scrollRowToVisible(row); submitNativeFrame()
+        return listView.table.rows(in:listView.table.visibleRect).length
+    }
     public var selectedRowID: String? { listView.selectedItem?.id }
     public var listFocused: Bool { window?.firstResponder === listView.table }
     public func filterDownloadProfile(_ raw:String) -> Bool {
