@@ -314,6 +314,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       }
       guard accepted else { return }
       restoreKeyboardFocus()
+      if case .deleteSpace = intent, let panel = self.activeLibrarySession?.panel, panel.isPresented { panel.focusRail() }
       self.app.scheduleSave(); self.app.scheduleMenuRebuild()
       if folders > 0 {
         self.app.hostFactories[context.windowID]?.controller?.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))

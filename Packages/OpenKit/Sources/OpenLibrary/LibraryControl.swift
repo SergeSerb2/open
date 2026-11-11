@@ -18,6 +18,7 @@ final class LibraryControl: NSButton {
     var hovered = false { didSet { needsDisplay = true } }
     private var tracking: NSTrackingArea?
     override var acceptsFirstResponder: Bool { isEnabled }
+    override var canBecomeKeyView: Bool { isEnabled && !isHiddenOrHasHiddenAncestor }
     override var mouseDownCanMoveWindow: Bool { false }
 
     init(title: String, glyph: LibraryGlyph? = nil, tile: Bool = false) {

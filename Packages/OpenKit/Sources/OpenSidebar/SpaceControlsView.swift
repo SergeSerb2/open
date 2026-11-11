@@ -109,9 +109,11 @@ public final class SpaceControlsView: NSView {
         field.textColor = context.style(for:space).titleColor(context.appearance(for:space)).nsColor
         let id = space.id
         field.onEnd = { [weak self,weak field] value in
+            let owner = field?.window
             field?.removeFromSuperview(); self?.title.isHidden = false
             self?.context.suppressPreviews(.rename,false)
             if let value { self?.context.send(.renameSpace(id,title:value)) }
+            if let outline = self?.context.manager?.outline(spaceID:id) { owner?.makeFirstResponder(outline) }
         }
         title.isHidden = true; addSubview(field); window?.makeFirstResponder(field); field.currentEditor()?.selectAll(nil)
     }
