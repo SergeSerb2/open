@@ -11,15 +11,22 @@ extension AutomationController {
     let adapter = app.settingsPresenter
     if operation == "cpu" {
       var usage = rusage(); getrusage(RUSAGE_SELF,&usage)
-      return ["cpuSeconds":Double(usage.ru_utime.tv_sec+usage.ru_stime.tv_sec)+Double(usage.ru_utime.tv_usec+usage.ru_stime.tv_usec)/1_000_000,"counters":adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]]
+      return ["cpuSeconds":Double(usage.ru_utime.tv_sec+usage.ru_stime.tv_sec)+Double(usage.ru_utime.tv_usec+usage.ru_stime.tv_usec)/1_000_000,"launchElapsedMilliseconds":LaunchTiming.shared.elapsedMilliseconds,"counters":adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]]
     }
     let countersBefore = adapter.activeLibrarySession?.panel?.performanceCounters ?? [:]
     var started = ProcessInfo.processInfo.systemUptime
     if operation == "scroll-series" {
       guard let panel = adapter.activeLibrarySession?.panel,panel.isPresented else { throw Failure(message:"Library not open") }
+      guard let profile = LibraryScrollProfile(rawValue:args["profile"] as? String ?? "scroller") else { throw Failure(message:"unknown Library scroll profile") }
+      let beginAt = args["beginAtLaunchMilliseconds"] as? Double ?? 0
+      guard beginAt.isFinite,(0...300_000).contains(beginAt) else { throw Failure(message:"invalid Library scroll start") }
+      if beginAt > LaunchTiming.shared.elapsedMilliseconds {
+        try await Task.sleep(for:.milliseconds(beginAt-LaunchTiming.shared.elapsedMilliseconds))
+      }
       let probe = LibraryScrollProbe()
-      let samples = await probe.run(panel)
-      return ["frames":samples.map(\.json),"counters":panel.performanceCounters]
+      let samples = await probe.run(panel,profile:profile)
+      return ["profile":profile.rawValue,"frames":samples.map(\.json),"counters":panel.performanceCounters,"inputError":probe.inputError,
+        "heartbeatContexts":["0":"App main run loop outside scroll callback","1":"Library scrollToRow and submitNativeFrame","2":"NSScrollView.scrollWheel","3":"Library submitNativeFrame"]]
     }
     switch operation {
     case "open":
@@ -85,10 +92,17 @@ private struct LibraryScrollFrame: Sendable {
   let milliseconds: Double
   let visibleRows: Int
   let intervalMilliseconds: Double
+  let launchMilliseconds: Double
+  let input: [String:Double]
   let counters: [String:Double]
   let counterDelta: [String:Double]
   let heartbeat: [String:Double]
-  var json: [String:Any] { ["startTicks":startTicks,"endTicks":endTicks,"milliseconds":milliseconds,"visibleRows":visibleRows,"intervalMilliseconds":intervalMilliseconds,"counters":counters,"counterDelta":counterDelta,"heartbeat":heartbeat] }
+  let betweenCallbackDelta: [String:Double]
+  var json: [String:Any] { ["startTicks":startTicks,"endTicks":endTicks,"milliseconds":milliseconds,"visibleRows":visibleRows,"intervalMilliseconds":intervalMilliseconds,"launchMilliseconds":launchMilliseconds,"input":input,"counters":counters,"counterDelta":counterDelta,"betweenCallbackDelta":betweenCallbackDelta,"heartbeat":heartbeat] }
+}
+private enum LibraryScrollProfile: String {
+  case wheel, scroller, control
+  var callbacks: Int { switch self { case .wheel:600; case .scroller:120; case .control:216 } }
 }
 @MainActor
 private final class LibraryScrollProbe: NSObject {
@@ -97,11 +111,25 @@ private final class LibraryScrollProbe: NSObject {
   var completion: CheckedContinuation<[LibraryScrollFrame],Never>?
   var rows: [LibraryScrollFrame] = []
   var previousTimestamp = 0.0
+  var previousCounters: [String:Double] = [:]
+  var profile = LibraryScrollProfile.scroller
+  weak var scroll: NSScrollView?
+  var inputError = ""
   let heartbeat = LibraryScrollHeartbeat()
   var observer: CFRunLoopObserver?
-  func run(_ panel:LibraryPanelView) async -> [LibraryScrollFrame] {
+  func run(_ panel:LibraryPanelView,profile:LibraryScrollProfile) async -> [LibraryScrollFrame] {
     self.panel = panel
-    heartbeat.start()
+    self.profile = profile
+    func find(_ view:NSView) -> NSScrollView? {
+      if let candidate = view as? NSScrollView,!candidate.isHiddenOrHasHiddenAncestor,
+        candidate.documentView?.accessibilityRole() == .table { return candidate }
+      for child in view.subviews { if let found = find(child) { return found } }
+      return nil
+    }
+    scroll = find(panel)
+    guard scroll != nil else { inputError = "visible Library scroll view not found"; return [] }
+    rows.reserveCapacity(profile.callbacks)
+    heartbeat.start(launchUptime:ProcessInfo.processInfo.systemUptime-LaunchTiming.shared.elapsedMilliseconds/1000)
     observer = CFRunLoopObserverCreateWithHandler(nil,CFRunLoopActivity.beforeWaiting.rawValue|CFRunLoopActivity.afterWaiting.rawValue,true,0) { [heartbeat] _,activity in
       heartbeat.beat(busy:activity == .afterWaiting)
     }
@@ -118,13 +146,48 @@ private final class LibraryScrollProbe: NSObject {
     let startTicks = mach_absolute_time()
     let index = rows.count, count = panel.filteredRowCount
     let before = panel.scrollCounters, start = ProcessInfo.processInfo.systemUptime
-    let visible = panel.scrollToRow(Int((Double(index)/119)*Double(max(0,count-1))))
+    let launchMilliseconds = LaunchTiming.shared.elapsedMilliseconds
+    var input: [String:Double] = [:]
+    let visible: Int
+    switch profile {
+    case .scroller:
+      heartbeat.context("Library scrollToRow and submitNativeFrame")
+      visible = panel.scrollToRow(Int((Double(index)/119)*Double(max(0,count-1))))
+    case .wheel:
+      // One precise-pixel native event per display callback. Contact ramps to
+      // three 56pt rows, followed by decaying momentum. Nothing posts to macOS.
+      let delta = index < 180 ? max(1,168*sin(min(1,Double(index)/90)*Double.pi/2)) : max(1,168*exp(-Double(index-180)/80))
+      // Quartz scroll phases (1/2/4) and momentum phases (1/2/3) have
+      // different encodings from NSEvent.Phase. Record the converted values.
+      let phase:Int64 = index == 0 ? 1 : index < 179 ? 2 : index == 179 ? 4 : 0
+      let momentum:Int64 = index < 180 ? 0 : index == 180 ? 1 : index == 599 ? 3 : 2
+      guard let cg = CGEvent(scrollWheelEvent2Source:nil,units:.pixel,wheelCount:1,wheel1:-Int32(delta.rounded()),wheel2:0,wheel3:0),let scroll else {
+        inputError = "could not create native wheel event"; finish(); return
+      }
+      cg.setIntegerValueField(.scrollWheelEventIsContinuous,value:1)
+      cg.setIntegerValueField(.scrollWheelEventScrollPhase,value:phase)
+      cg.setIntegerValueField(.scrollWheelEventMomentumPhase,value:momentum)
+      guard let event = NSEvent(cgEvent:cg) else { inputError = "could not convert native wheel event"; finish(); return }
+      let y = scroll.contentView.bounds.minY
+      heartbeat.context("NSScrollView.scrollWheel")
+      scroll.scrollWheel(with:event)
+      heartbeat.context("Library submitNativeFrame")
+      panel.submitNativeFrame()
+      input = ["requestedPoints":delta,"eventDeltaY":event.scrollingDeltaY,"precise":event.hasPreciseScrollingDeltas ? 1 : 0,"phase":Double(event.phase.rawValue),"momentumPhase":Double(event.momentumPhase.rawValue),"offsetBefore":y,"offsetAfter":scroll.contentView.bounds.minY]
+      visible = 0
+    case .control:
+      // The no-scroll control performs no layout, display or forced commit.
+      visible = 0
+    }
     let after = panel.scrollCounters
     rows.append(LibraryScrollFrame(startTicks:startTicks,endTicks:mach_absolute_time(),milliseconds:(ProcessInfo.processInfo.systemUptime-start)*1000,visibleRows:visible,
-      intervalMilliseconds:previousTimestamp == 0 ? 0 : (link.timestamp-previousTimestamp)*1000,
-      counters:after,counterDelta:after.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(before[$1.key] ?? 0) },heartbeat:heartbeat.read()))
+      intervalMilliseconds:previousTimestamp == 0 ? 0 : (link.timestamp-previousTimestamp)*1000,launchMilliseconds:launchMilliseconds,input:input,
+      counters:after,counterDelta:after.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(before[$1.key] ?? 0) },heartbeat:heartbeat.read(),
+      betweenCallbackDelta:previousCounters.isEmpty ? [:] : before.reduce(into:[String:Double]()) { $0[$1.key] = $1.value-(previousCounters[$1.key] ?? 0) }))
+    heartbeat.context("App main run loop outside scroll callback")
+    previousCounters = after
     previousTimestamp = link.timestamp
-    if rows.count == 120 { finish() }
+    if rows.count == profile.callbacks { finish() }
   }
   func finish() {
     link?.invalidate(); link = nil
@@ -143,19 +206,26 @@ private final class LibraryScrollHeartbeat: @unchecked Sendable {
   private var busy = false
   private var timestamp = ProcessInfo.processInfo.systemUptime
   private var maxBusy = 0.0, maxIdle = 0.0
+  private var launchUptime = 0.0, busyStart = 0.0, busyEnd = 0.0
+  private var entry = "App main run loop outside scroll callback", busyEntry = ""
   private var samples = 0.0
   private var timer: (any DispatchSourceTimer)?
   func beat(busy:Bool) {
     lock.withLock { self.busy = busy; timestamp = ProcessInfo.processInfo.systemUptime }
   }
-  func start() {
+  func context(_ entry:String) { lock.withLock { self.entry = entry } }
+  func start(launchUptime:Double) {
+    self.launchUptime = launchUptime
     let timer = DispatchSource.makeTimerSource(queue:DispatchQueue(label:"open.library.scroll-watchdog",qos:.userInteractive))
     timer.schedule(deadline:.now(),repeating:.milliseconds(2),leeway:.microseconds(100))
     timer.setEventHandler { [weak self] in
       guard let self else { return }
       self.lock.withLock {
         let age = (ProcessInfo.processInfo.systemUptime-self.timestamp)*1000
-        if self.busy { self.maxBusy = max(self.maxBusy,age) } else { self.maxIdle = max(self.maxIdle,age) }
+        if self.busy,age > self.maxBusy {
+          self.maxBusy = age; self.busyStart = (self.timestamp-self.launchUptime)*1000
+          self.busyEnd = (ProcessInfo.processInfo.systemUptime-self.launchUptime)*1000; self.busyEntry = self.entry
+        } else if !self.busy { self.maxIdle = max(self.maxIdle,age) }
         self.samples += 1
       }
     }
@@ -163,7 +233,13 @@ private final class LibraryScrollHeartbeat: @unchecked Sendable {
   }
   func read() -> [String:Double] {
     lock.withLock {
-      let result = ["maxBusyAgeMilliseconds":maxBusy,"maxIdleAgeMilliseconds":maxIdle,"watchdogSamples":samples]
+      let context:Double = switch busyEntry {
+      case "Library scrollToRow and submitNativeFrame":1
+      case "NSScrollView.scrollWheel":2
+      case "Library submitNativeFrame":3
+      default:0
+      }
+      let result = ["maxBusyAgeMilliseconds":maxBusy,"maxIdleAgeMilliseconds":maxIdle,"watchdogSamples":samples,"busyStartLaunchMilliseconds":busyStart,"busyEndLaunchMilliseconds":busyEnd,"busyInsideCallback":context == 0 ? 0.0 : 1.0,"busyContextCode":context]
       maxBusy = 0; maxIdle = 0; samples = 0
       return result
     }
