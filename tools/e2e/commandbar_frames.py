@@ -25,7 +25,8 @@ PAGES = {'lisbon': ('Lisbon weather', (63, 122, 92)), 'lemon': ('Lemon pasta', (
 LONG_HOST = 'long-synthetic-host-name-for-url-truncation.localhost'
 THEMES = {
     'night': None,  # Open's default theme
-    'gold': {'mathVersion': 1, 'keyColor': {'red': 0xB9 / 255, 'green': 0xA3 / 255, 'blue': 0x5F / 255, 'alpha': 1}, 'colorCount': 1,
+    # Key #BD9C26 renders Arc's measured golden sidebar #B9A35F through Open's theme math (C-measurements-s2).
+    'gold': {'mathVersion': 1, 'keyColor': {'red': 0xBD / 255, 'green': 0x9C / 255, 'blue': 0x26 / 255, 'alpha': 1}, 'colorCount': 1,
              'wheel': 'analogous', 'appearance': 'automatic', 'noiseFactor': 0, 'texture': 'grain', 'intensityFactor': .8},
     'pastel': {'mathVersion': 1, 'keyColor': {'red': 0xFA / 255, 'green': 0xE1 / 255, 'blue': 0xD5 / 255, 'alpha': 1}, 'colorCount': 1,
                'wheel': 'analogous', 'appearance': 'automatic', 'noiseFactor': 0, 'texture': 'grain', 'intensityFactor': .8},
