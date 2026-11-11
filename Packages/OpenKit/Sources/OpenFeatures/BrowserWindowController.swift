@@ -1060,10 +1060,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
 
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
-    public var canExitModal: Bool { isLibraryOpen || (spaceCreationController != nil && !isCommandBarPresented) || peekStorage?.isShown == true || container.maximizedTabID != nil }
+    public var canExitModal: Bool { (isLibraryOpen && !isCommandBarPresented) || (spaceCreationController != nil && !isCommandBarPresented) || peekStorage?.isShown == true || container.maximizedTabID != nil }
     /// View > Exit and Esc share this priority. The App validates the key standard window.
     @discardableResult public func exitModal() -> Bool {
-        if isLibraryOpen, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53), libraryKeyHandler?(event) == true { return true }
+        if isLibraryOpen, !isCommandBarPresented, let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window?.windowNumber ?? 0, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53), libraryKeyHandler?(event) == true { return true }
         if !isCommandBarPresented, let creation = spaceCreationController { creation.cancel(); return true }
         if let peek = peekStorage, peek.isShown { peek.escape(); return true }
         if container.maximizedTabID != nil {
@@ -1086,7 +1086,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             } else { return false }
         }
         if existingTabSwitcher?.handle(event) == true { return true }
-        if isLibraryOpen, libraryKeyHandler?(event) == true { return true }
+        // A command bar opened above Library owns its keys until it dismisses.
+        if isLibraryOpen, !isCommandBarPresented, libraryKeyHandler?(event) == true { return true }
         // Toggle before SCC's generic Command-key dismissal. Otherwise the
         // same key closes the picker here and reopens it through the menu.
         // Use the effective binding so user overrides keep the same behavior.

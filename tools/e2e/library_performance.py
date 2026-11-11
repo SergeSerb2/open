@@ -19,10 +19,23 @@ import time
 import uuid
 from engine_e2e import Open, wait_until
 from downloads import server
+from library_frame_probe import Frames
 
 
 def cpu():
-    return sum(float(line) for line in subprocess.check_output(['ps','-A','-o','%cpu='],text=True).splitlines() if line.strip())
+    # Exclude WindowServer, as specified by the quiet-sample rule.
+    return sum(float(line.split(None,1)[0]) for line in subprocess.check_output(['ps','-A','-o','%cpu=,comm='],text=True).splitlines()
+               if line.strip() and not line.rstrip().endswith('/WindowServer'))
+
+
+def quiet():
+    attempts=[];deadline=time.monotonic()+300
+    while time.monotonic()<deadline:
+        loads=[os.getloadavg()[0]];time.sleep(10);loads.append(os.getloadavg()[0]);foreign=cpu()
+        attempts.append({'loads':loads,'foreignCPU':foreign})
+        if max(loads)<=3 and foreign<=200:return loads,foreign,attempts
+        print('WAIT quiet prerequisites '+json.dumps(attempts[-1]),flush=True)
+    raise RuntimeError('quiet-sample prerequisites did not pass in five minutes: '+json.dumps(attempts))
 
 
 def launch(root,bundle,output,index):
@@ -70,24 +83,64 @@ def seed(root,bundle,output):
     return snapshot
 
 
+def scroll_fixture(root,snapshot):
+    """Ten supported 1,000-row stores, never bypassing the per-Profile cap."""
+    destination=root/'scroll'
+    shutil.copytree(root,destination,ignore=shutil.ignore_patterns('baseline','scroll','automation.sock'))
+    model=copy.deepcopy(snapshot);original=model['profiles'][0]
+    source=root/'Profiles'/original['dataDirectoryName']/'State/downloads.sqlite3'
+    for number in range(1,10):
+        profile=dict(original,id=str(uuid.uuid4()).upper(),name='Library Scroll '+str(number),dataDirectoryName='LibraryScroll'+str(number))
+        model['profiles'].append(profile)
+        state=destination/'Profiles'/profile['dataDirectoryName']/'State';state.mkdir(parents=True)
+        shutil.copyfile(source,state/'downloads.sqlite3')
+        with sqlite3.connect(state/'downloads.sqlite3') as db:
+            records=[json.loads(row[0]) for row in db.execute('SELECT payload FROM downloads')];db.execute('DELETE FROM downloads')
+            for item in records:
+                item.update(id=item['id']+'-profile-'+str(number),profileID=profile['id'])
+                db.execute('INSERT INTO downloads VALUES(?,?,?,?)',(item['id'],item['startedAt'],item['endedAt'],json.dumps(item)))
+    (destination/'State/browser.json').write_text(json.dumps(model))
+    return destination
+
+
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
     receipt={'configuration':'Release','samples':[],'method':'Native layout, displayIfNeeded and CATransaction.flush; provider completion awaited. No physical scan-out claim.','limits':{'firstSubmittedMilliseconds':16,'contentSubmittedMilliseconds':100,'coldSectionMilliseconds':50,'warmSectionMilliseconds':8.3,'searchMilliseconds':16,'idleCPUPercent':.2},'complete':False}
-    active=None
+    active=None;frames=None
     def save(): (output/'result.json').write_text(json.dumps(receipt,indent=2))
     save()
     try:
         with tempfile.TemporaryDirectory(prefix='open-library-perf-') as directory:
             root=Path(directory);snapshot=seed(root,args.bundle,output)
             receipt['fixture']={'downloads':1000,'history':5000,'archive':2000}
+            baseline_root=root/'baseline'
+            if args.baseline_bundle:
+                shutil.copytree(root,baseline_root,ignore=shutil.ignore_patterns('baseline','automation.sock'))
+                receipt['baseline']={'bundle':str(args.baseline_bundle),'samples':[]}
             for index in range(5):
-                loads=[os.getloadavg()[0]];time.sleep(10);loads.append(os.getloadavg()[0]);foreign=cpu()
-                if max(loads)>3 or foreign>200:
-                    receipt['invalidSample']={'index':index,'loads':loads,'foreignCPU':foreign};save();raise RuntimeError('quiet-sample prerequisites failed; no timing verdict')
+                if args.baseline_bundle:
+                    base_loads,base_cpu,base_waits=quiet()
+                    active=launch(baseline_root,args.baseline_bundle,output,'baseline-'+str(index))
+                    base_timing=active.call('timing')
+                    own=float(subprocess.check_output(['ps','-p',str(active.pid),'-o','%cpu='],text=True).strip() or 0)
+                    end_base_cpu=max(0,cpu()-own)
+                    active.quit();assert active.quit_report['ok']
+                    receipt['baseline']['samples'].append({'index':index,'loads':base_loads,'foreignCPU':[base_cpu,end_base_cpu],'quietAttempts':base_waits,'timing':base_timing,'cleanup':active.quit_report})
+                    active=None;save()
+                    if end_base_cpu>200:raise RuntimeError('Baseline foreign CPU invalidated sample')
+                loads,foreign,quiet_attempts=quiet()
                 active=launch(root,args.bundle,output,index)
                 assert active.call('library')['created'] is False
-                startup=active.call('startup')
-                opened=active.call('library-performance',operation='open',section='downloads')
+                startup=active.call('timing')
+                physical=None
+                if args.frame_helper:
+                    try:frames=Frames(active,args.frame_helper,output/('physical-'+str(index)))
+                    except Exception as error:receipt.setdefault('physicalErrors',[]).append(repr(error));save()
+                action=lambda:active.call('library-performance',operation='open',section='downloads')
+                if frames:
+                    opened,physical=frames.measure('open',action);frames.close();frames=None
+                else:opened=action()
+                assert opened['providerRows']==1000,opened
                 cold=[];warm=[]
                 for section in ['history','archive','downloads']:
                     cold.append(dict(section=section,**active.call('library-performance',operation='section',section=section)))
@@ -100,7 +153,7 @@ def main(args):
                 # Exclude the owned App process from the post-sample CPU total.
                 own=float(subprocess.check_output(['ps','-p',str(active.pid),'-o','%cpu='],text=True).strip() or 0)
                 end_cpu=max(0,cpu()-own)
-                row={'index':index,'loads':loads,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'coldSections':cold,'warmSections':warm,'search':search,'idleCPUPercent':idle}
+                row={'index':index,'loads':loads,'quietAttempts':quiet_attempts,'endLoad':os.getloadavg()[0],'foreignCPU':[foreign,end_cpu],'startup':startup,'open':opened,'physicalOpen':physical,'coldSections':cold,'warmSections':warm,'search':search,'idleCPUPercent':idle}
                 active.quit();row['cleanup']=active.quit_report;assert row['cleanup']['ok'];active=None
                 row['valid']=end_cpu<=200;receipt['samples'].append(row);save();print(json.dumps(row),flush=True)
                 if not row['valid']:raise RuntimeError('foreign CPU invalidated sample')
@@ -113,14 +166,39 @@ def main(args):
                 'search':verdict([s['search']['contentSubmittedMilliseconds'] for s in receipt['samples']],16),
                 'idle':verdict([s['idleCPUPercent'] for s in receipt['samples']],.2)}
             receipt['scroll']={'status':'UNVERIFIED','reason':'10,000-row native submission and physical 120Hz dropped-frame qualification are separate from the 1,000-download fixture.'}
-            receipt['returningLaunch']={'status':'UNVERIFIED','reason':'Five startup receipts retained; no same-head main artifact comparison in this run.'}
+            receipt['returningLaunch']={'status':'UNVERIFIED','reason':'No baseline artifact supplied.'}
+            if args.baseline_bundle:
+                candidate=[s['startup']['sidebarDrawn'] for s in receipt['samples']]
+                baseline=[s['timing']['sidebarDrawn'] for s in receipt['baseline']['samples']]
+                receipt['returningLaunch']={'status':'MEASURED','candidate':candidate,'baseline':baseline,'medianDeltaMilliseconds':statistics.median(candidate)-statistics.median(baseline),'pairedDeltaMilliseconds':[a-b for a,b in zip(candidate,baseline)]}
+            if args.frame_helper and len([s for s in receipt['samples'] if s['physicalOpen']])==5:
+                receipt['physicalFirstChange']=verdict([s['physicalOpen']['first_changed_ms'] for s in receipt['samples']],16)
+                receipt['physicalFinalContent']=verdict([s['physicalOpen']['first_final_content_ms'] for s in receipt['samples']],100)
+                scroll_root=scroll_fixture(root,snapshot)
+                scroll_loads,scroll_cpu,scroll_waits=quiet()
+                active=launch(scroll_root,args.bundle,output,'scroll')
+                opened=active.call('library-performance',operation='open',section='downloads')
+                assert opened['providerRows']==10000,opened
+                time.sleep(.4);frames=Frames(active,args.frame_helper,output/'physical-scroll')
+                def scroll():
+                    costs=[];start=time.monotonic()
+                    for index in range(120):
+                        time.sleep(max(0,start+index/120-time.monotonic()))
+                        costs.append(active.call('library-performance',operation='scroll',row=round(index*9999/119)))
+                    return costs
+                costs,physical=frames.measure('scroll',scroll,duration=1300);frames.close();frames=None
+                own=float(subprocess.check_output(['ps','-p',str(active.pid),'-o','%cpu='],text=True).strip() or 0)
+                end_scroll_cpu=max(0,cpu()-own)
+                active.quit();cleanup=active.quit_report;assert cleanup['ok'];active=None
+                receipt['scroll']={'status':'MEASURED','rows':10000,'profiles':10,'loads':scroll_loads,'foreignCPU':[scroll_cpu,end_scroll_cpu],'quietAttempts':scroll_waits,'submissions':costs,'physical':physical,'cleanup':cleanup,'ok':end_scroll_cpu<=200 and len(physical['changes'])>=100 and physical['missed120HzIntervals']==0}
             receipt['complete']=True;receipt['ok']=all(v['ok'] for v in receipt['summary'].values());save()
     except Exception as error:
         receipt['error']=repr(error);save();raise
     finally:
+        if frames:frames.close()
         if active:active.quit();receipt['lastCleanup']=active.quit_report;save()
     return 0 if receipt.get('ok') else 1
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bundle',required=True,type=Path);p.add_argument('--output',required=True,type=Path)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bundle',required=True,type=Path);p.add_argument('--baseline-bundle',type=Path);p.add_argument('--frame-helper',type=Path);p.add_argument('--output',required=True,type=Path)
     raise SystemExit(main(p.parse_args()))
