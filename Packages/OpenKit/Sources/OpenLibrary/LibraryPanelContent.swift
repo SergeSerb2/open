@@ -10,11 +10,23 @@ import OpenDesign
 extension LibraryPanelView {
     /// The socket bench awaits the same provider task as the live panel, then
     /// submits its real native layout/drawing. This does not wait for motion.
-    public func finishPendingContent() async { await reloadTask?.value; await hosts[section]?.preparation?.value }
+    public func finishPendingContent() async {
+        await reloadTask?.value
+        // A provider publication may cancel a superseded preparation. Await
+        // the current generation, rather than replying with its old empty page.
+        guard let host = hosts[section] else { return }
+        for _ in 0..<32 {
+            let generation = host.generation
+            await host.preparation?.value
+            await Task.yield()
+            if generation == host.generation,host.preparation == nil,!host.dirty { return }
+        }
+    }
     public var listReuseState: [String:Int] { ["created":listView.cellsCreated,"configured":listView.cellsConfigured,"rows":listView.rowCount] }
     public var performanceCounters: [String:Double] {
         var state: [String:Double] = ["hosts":Double(hosts.count),"created":0,"configured":0,"reloadData":0,"tableUpdates":0,"formatting":0,"listLayout":0,"tasks":0,"timers":0,"displayLinks":0,"animations":Double((layer?.animationKeys() ?? []).filter { $0.hasPrefix("library") }.count)]
         for host in hosts.values {
+            state["animations",default:0] += Double((host.list.layer?.animationKeys() ?? []).filter { $0.hasPrefix("library") }.count)
             state["created",default:0] += Double(host.list.cellsCreated)
             state["configured",default:0] += Double(host.list.cellsConfigured)
             state["reloadData",default:0] += Double(host.list.reloads)
@@ -230,7 +242,10 @@ extension LibraryPanelView {
         host.list.gallery = target == .boosts && viewModel.boostsPresentation == .gallery
         host.list.update(sources)
         host.phaseMilliseconds["apply"] = (ProcessInfo.processInfo.systemUptime-started)*1000
-        if section == target { updateContentChrome() }
+        if section == target {
+            updateContentChrome()
+            if count < 8, (target == .archive || target == .history), hasActiveFilters { loadNextPage() }
+        }
     }
     func updateContentChrome() {
         let rowsEmpty = listView.rowCount == 0

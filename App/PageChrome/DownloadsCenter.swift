@@ -534,7 +534,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       }
   }
   func refreshDownloads() async {
-    if let historyLoadTask { await historyLoadTask.value; refreshFiles(); return }
+    if let historyLoadTask { await historyLoadTask.value; refreshFiles(); await finishPublication(); return }
     let task = Task { @MainActor [weak self] in
       guard let self else { return }
       downloadHistoryError = ""
@@ -571,6 +571,11 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     await task.value
     historyLoadTask = nil
     clearedHistoryDuringLoad.removeAll()
+    await finishPublication()
+  }
+  private func finishPublication() async {
+    guard publishQueued else { return }
+    await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
   }
   var historyLoaded: Bool { app.model.profiles.allSatisfy { loadedHistory.contains($0.id) } }
   func flushHistory() async {

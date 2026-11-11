@@ -116,7 +116,8 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     }
     func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        if case .heading = entries[row] { return 27 }; return gallery ? 118 : 56
+        // Fixed constants only: no text measurement or automatic row sizing.
+        if entries.indices.contains(row), case .heading = entries[row] { return 27 }; return gallery ? 118 : 56
     }
     func tableViewSelectionDidChange(_ notification:Notification) {
         for row in Set([lastSelectedRow,table.selectedRow]) where entries.indices.contains(row) && row < table.numberOfRows {
@@ -127,6 +128,7 @@ final class LibraryListView: NSView, NSTableViewDataSource, NSTableViewDelegate,
     }
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { item(at: row) != nil }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard entries.indices.contains(row) else { return nil }
         switch entries[row] {
         case .heading(let text):
             let wrapper = table.makeView(withIdentifier:.init("day"),owner:self) as? LibraryHeadingView ?? LibraryHeadingView(label:NSTextField(labelWithString:""))

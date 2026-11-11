@@ -65,7 +65,7 @@ extension AppDelegate {
     }
     media.visibility.littleOpenCoordinator = coordinator
     observeLittleOpenArchivePolicies()
-    initialWindowInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]) { [weak self] event in
+    initialWindowInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .mouseMoved, .leftMouseDragged, .rightMouseDragged, .flagsChanged]) { [weak self] event in
       MainActor.assumeIsolated { self?.noteLaunchWindowInput(event.window ?? NSApp.keyWindow) }
       return event
     }

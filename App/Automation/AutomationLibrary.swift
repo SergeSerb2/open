@@ -105,7 +105,7 @@ extension AutomationController {
       return ["open":false,"created":false,"window":0,"rows":[],"rail":[]]
     }
     var state=session.panel?.automationState() ?? [:]
-    state["prebuild"] = ["firstSidebarDraw":app.libraryFirstSidebarDraw ?? 0,"lastInput":app.libraryLastInput,"builtAt":app.libraryPrebuiltAt ?? 0,"pending":app.libraryPrebuildTask != nil] as [String:Any]
+    state["prebuild"] = ["firstSidebarDraw":app.libraryFirstSidebarDraws[controller.windowID] ?? 0,"lastInput":app.libraryLastInput,"builtAt":app.libraryPrebuiltAt ?? 0,"pending":app.libraryPrebuildTask != nil] as [String:Any]
     state["performance"] = session.panel?.performanceCounters ?? [:]
     state["open"]=controller.isLibraryOpen
     state["created"]=true
