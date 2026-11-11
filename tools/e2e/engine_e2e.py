@@ -171,12 +171,17 @@ class FocusTracker:
         # Intentional quit/SIGKILL recovery closes the owned instance before
         # recording a row or launching its replacement.
         crashed = bool(_open_crash_reports() - self.crashes_before)
-        dead = any(app.pid and not app.closed and
-                   app.process_path(app.pid) != os.path.realpath(app.executable)
-                   for app in self.apps)
+        dead = []
+        for app in self.apps:
+            if app.pid and not app.closed:
+                actual = app.process_path(app.pid)
+                expected = os.path.realpath(app.executable)
+                if not app.matches_executable_path(actual):
+                    dead.append(dict(pid=app.pid, actual=actual, expected=expected))
         if crashed or dead:
             self.fatal_app_death = True
-            raise AppDied('App death or new crash report; stopped before the next flow')
+            raise AppDied('App death or new crash report; stopped before the next flow: '
+                          + json.dumps(dict(processes=dead, newReports=sorted(_open_crash_reports() - self.crashes_before))))
 
     def loss(self):
         interruptions = []
@@ -254,7 +259,12 @@ class Open:
         bundle_override = (extra_env or {}).get("OPEN_E2E_APP_BUNDLE")
         app = os.path.join(bundle_override or os.path.join(ROOT, "build", config, "Open.app"), "Contents", "MacOS", "Open")
         self.executable = app
+        launched_file = os.stat(app)
+        self.executable_file_id = (launched_file.st_dev, launched_file.st_ino)
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
+        # Only disposable, uniquely owned bundle clones permit path-wide helper
+        # discovery. Ordinary App bundles can serve several owned instances.
+        self.exclusive_bundle = False
         # Screen launches are serialized. Keep a private receipt of the real
         # executable identity so first-after-build/install costs stay visible
         # without treating them as same-binary repeat-launch budgets.
@@ -467,6 +477,18 @@ class Open:
         size = ctypes.CDLL("/usr/lib/libproc.dylib").proc_pidpath(pid, path, len(path))
         return os.path.realpath(os.fsdecode(path.value)) if size > 0 else ""
 
+    def matches_executable_path(self, path):
+        """CEF keeps a hard link in CodeSignClones. proc_pidpath may name it.
+        The device/inode must still be the exact executable file we launched;
+        identical bytes, a basename, or a path prefix never establish ownership.
+        """
+        try:
+            current = os.stat(self.executable)
+            actual = os.stat(path)
+            return (current.st_dev, current.st_ino) == self.executable_file_id == (actual.st_dev, actual.st_ino)
+        except OSError:
+            return False
+
     def discover_owned_processes(self):
         # The unique data-root argument also finds a launch that failed before
         # ping returned its PID. Do not kill by app name or bundle identifier.
@@ -475,13 +497,12 @@ class Open:
             fields = line.split()
             if len(fields) == 2:
                 rows.append((int(fields[0]), int(fields[1])))
-        root_path = os.path.realpath(self.executable)
         owned = set(self.owned_processes)
-        if self.pid and self.process_path(self.pid) == root_path:
+        if self.pid and self.matches_executable_path(self.process_path(self.pid)):
             owned.add(self.pid)
         if not self.pid:
             for pid, _ in rows:
-                if self.process_path(pid) != root_path:
+                if not self.matches_executable_path(self.process_path(pid)):
                     continue
                 args = subprocess.run(["ps", "-p", str(pid), "-o", "args="], capture_output=True, text=True, timeout=5).stdout
                 if "--user-data-dir=" + self.user_data in args:
@@ -493,9 +514,13 @@ class Open:
                 break
             owned.update(found)
         bundle = os.path.realpath(self.bundle) + os.sep
+        if self.exclusive_bundle:
+            # Helpers can be reparented before quit, or start after the initial
+            # descendant snapshot. Keep the clone until all of them exit.
+            owned.update(pid for pid, _ in rows if self.process_path(pid).startswith(bundle))
         for pid in owned:
             path = self.process_path(pid)
-            if path == root_path or path.startswith(bundle):
+            if self.matches_executable_path(path) or path.startswith(bundle):
                 self.owned_processes[pid] = path
 
     def owned_windows(self):
@@ -538,6 +563,8 @@ class Open:
                 self.quit_report["error"] = str(error)
         finally:
             def living():
+                if self.exclusive_bundle:
+                    self.discover_owned_processes()
                 return [pid for pid, path in self.owned_processes.items() if path and self.process_path(pid) == path]
             deadline = time.monotonic() + 10
             while living() and time.monotonic() < deadline:
@@ -2272,9 +2299,21 @@ def context_menu_commands(app, results, *, run_all_commands=True):
                     if app.proc.poll() is not None:
                         crashed = "%s: %s" % (target, label)
                         break
+                    if menu_key(command['title']) == menu_key('Print…'):
+                        # Chromium's preview uses the hosted browser's own
+                        # Views window. Closing that window closes its tabs.
+                        # Cancel the preview through its real App key path.
+                        preview = [window for window in app.call('windows')
+                                   if window['visible'] and 'NativeWidget' in window['class']]
+                        for window in preview:
+                            app.call('key', key='escape', window=window['number'], route='app')
+                        report['printPreviewWindows'] = [window['number'] for window in preview]
                     dismissed = app.call("dismiss") + close_new_windows()
                     if dismissed:
                         report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
+                    remaining = {window["id"] for window in app.call("shell-windows")}
+                    if not set(home_windows).issubset(remaining):
+                        raise RuntimeError("context-menu cleanup closed a fixture browser window after " + label)
                     app.call("ping")
                     r = row()
                     if r and r["crashed"]:
@@ -2350,7 +2389,17 @@ def context_menu_commands(app, results, *, run_all_commands=True):
         subprocess.run(["pbcopy"], input=clipboard)
         shutil.rmtree(root, ignore_errors=True)
         if app.proc.poll() is None:
-            app.call("policy", contextMenu="record")
+            try:
+                # A tested command may close the last browser window. The
+                # per-window menu policy then has no owner to restore. Always
+                # retain the real command report instead of masking it here.
+                if app.call("shell-windows"):
+                    app.call("policy", contextMenu="record")
+                    report["policyRestore"] = "restored"
+                else:
+                    report["policyRestore"] = "no browser window"
+            except Exception as error:
+                report["failures"].append("policy cleanup: %s" % error)
     report["crashed"] = crashed
     report["video"] = video
     report["scope"] = "all_commands" if run_all_commands else "models_and_refusals"
@@ -4483,7 +4532,7 @@ def page_zoom_rows(app, results, origin):
     reset = wait_until(lambda: abs(app.eval(tab, "visualViewport.scale") - 1) < 0.01, timeout=5, step=0.1)
     results["Z2_pinch_then_actual_size"] = {"ok": bool(pinched) and held > 1.5 and bool(reset), "pinched": pinched, "heldAfter1s": held,
         "after": app.eval(tab, "visualViewport.scale")}
-    results["Z3_smart_zoom"] = {"status": "DEFERRED", "reason": "no synthetic smart-zoom path; user check U-S1"}
+    results["Z3_smart_zoom"] = {"status": "BLOCKED", "reason": "needs a physical trackpad gesture check by the user (U-S1)"}
     # Z2 on a Peek page (an Alloy page in a Chrome-style window): Actual Size targets the top Peek page.
     app.call("pin", tab=tab)
     app.call("peek-open", tab=tab, url=origin + "/zoom.html#peek")
@@ -5705,7 +5754,8 @@ def profiles_checks(factory, results, tmp, config):
         """The launch's layout step alone: the app exits before the engine
         starts, so the moved files are exactly what was on disk."""
         before = open(browser_json, "rb").read()
-        code, text = run_binary(label, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1")
+        code, text = run_binary(label, OPEN_AUTOMATION_LAYOUT_ONLY="1")
+        assert code == 0 and "Open: automation layout-only complete" in text, (code, text[-1000:])
         return code, text, open(browser_json, "rb").read() == before
 
     def migrated_layout():
@@ -7613,9 +7663,44 @@ def capture_checks(factory, results, tmp):
         app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={})
         emulated[0] = False
 
-        # C7 needs incognito windows (app-shell 4.8, not built yet); features-render C3/C7 covers the ephemeral path.
-        results['capture_c7_incognito'] = {'status': 'BLOCKED', 'reason': 'no incognito window in Open yet (app-shell 4.8); the ephemeral-context path is covered offscreen (features-render C3/C7)'}
         results['capture_shortcut_hint_once'] = {'ok': state()['hintShows'] == 1, 'hintShows': state()['hintShows']}
+        # C7: use the native private-window command and real capture pipeline.
+        # The normal Library remains byte-for-byte unchanged, including files.
+        normal_window = app.call('window-state')['id']
+        before_windows = {w['id'] for w in app.call('incognito-state')['windows']}
+        before_rows = rows()
+        capture_index = app.call('captures')
+        capture_directory = Path(capture_index['directory'])
+        index_path = Path(capture_index['index'])
+        index_before = index_path.read_bytes()
+        before_files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                        for p in capture_directory.iterdir() if p.is_file()}
+        app.call('menu-perform', id='new-incognito-window')
+        private_window = wait_until(lambda: next((w for w in app.call('incognito-state')['windows']
+            if w['private'] and w['id'] not in before_windows), None), timeout=5, step=.05)
+        assert private_window, 'private capture window did not open'
+        try:
+            app.call('window-focus', id=private_window['id'], activate=True)
+            private_tab = app.call('open', url=origin + '/long.html')['id']
+            app.call('wait', tab=private_tab)
+            private_state = app.call('incognito-state', private=True)
+            private_capture = app.call('capture', mode='area', rect=[100, 100, 300, 200])['state']
+            captured = private_capture.get('result', {})
+            after_files = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                           for p in capture_directory.iterdir() if p.is_file()}
+            results['capture_c7_incognito'] = {'ok': private_state.get('private') is True
+                and private_state.get('ephemeral') is True and captured.get('bytes', 0) > 0
+                and captured.get('kind') == 'area' and captured.get('saved') == ''
+                and 'library' not in private_capture.get('card', {}).get('actions', [])
+                and rows() == before_rows and before_files == after_files and index_path.read_bytes() == index_before,
+                'private': private_state.get('private'), 'ephemeral': private_state.get('ephemeral'),
+                'capture': captured, 'libraryUnchanged': rows() == before_rows and before_files == after_files
+                    and index_path.read_bytes() == index_before}
+            close_card()
+        finally:
+            app.call('window-focus', id=private_window['id'], activate=True)
+            app.call('window-close')
+            app.call('window-focus', id=normal_window, activate=True)
     finally:
         for cmd, kw in (('dismiss', {}), ('capture-action', {'action': 'cancel'})):
             try:
@@ -7773,7 +7858,8 @@ def littleopen_checks(factory, results, tmp):
     domain = 'io.github.sergeserb2.open'
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
             'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
-            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection')
+            'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection',
+            'open.advanced.restoreWindowsOnLaunch')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved_domain = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     server, port = _sleep_server()
@@ -7810,7 +7896,7 @@ def littleopen_checks(factory, results, tmp):
 
     try:
         for key in keys: subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
-        for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True)):
+        for key, value in ((keys[0], True), (keys[1], True), (keys[3], True), (keys[5], True), (keys[7], True)):
             subprocess.run(['defaults', 'write', domain, key, '-bool', str(value).lower()], check=True)
         app = factory(urls=(), fresh=True, extra_env={'OPEN_AUTOMATION_EARLY_LITTLE_OPEN': '1'})
         early = sessions()
@@ -11999,7 +12085,7 @@ def page_notification_checks(factory, results, tmp):
             # but clients.openWindow() creates no page Open hosts (2026-11-02: no OEWebContent, no
             # tab-strip request). page-platform §2.2 assumed P1 handles it; it does not
             # (docs/followups.md, "Notifications (clients.openWindow)"). Never counted as a pass.
-            n6 = dict(n6, status='BLOCKED', reason='P1: clients.openWindow from a service worker opens no page in Open (followups)')
+            n6 = dict(n6, status='DEFERRED', reason='product gap')
             n6.pop('ok')
         results['N6_click_opens_tab'] = n6
         for t in opened6 or []:
@@ -12309,7 +12395,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -12401,13 +12487,16 @@ def main():
     # data root stays under Application Support so Chromium's cache rule
     # applies as for users (~/Library/Caches/<root name>, docs/plans/profiles.md);
     # its name is unique per run, so the cache root is too.
-    # Keep AF_UNIX's 104-byte sun_path limit with this suite's longer name.
-    root_kind = "sidebarc" if opts.only == "sidebar-completion" else opts.only
-    if opts.only == 'passwords-probe':
-        root_kind = 'pwprobe'  # Leave room for automation.sock in macOS sun_path.
-    if opts.only == 'secrets-import':
-        root_kind = 'secrets'
-    run_name = "Open-E2E-%s-%s-%d-%s" % (root_kind, opts.style, os.getpid(), os.urandom(4).hex())
+    # AF_UNIX sun_path has 104 bytes including its terminator. Budget against
+    # the actual home path and PID width: profiles-engine reached exactly 104
+    # on the M1, so its App could never create the automation socket.
+    support = os.path.expanduser('~/Library/Application Support/')
+    suffix = '-%s-%d-%s' % (opts.style, os.getpid(), os.urandom(4).hex())
+    budget = 103 - len((support + 'Open-E2E-' + suffix + '/automation.sock').encode())
+    if budget < 1:
+        sys.exit('home path leaves no room for the macOS automation socket (103-byte maximum)')
+    root_kind = re.sub('[^a-z]', '', opts.only or 'all')[:min(8, budget)]
+    run_name = 'Open-E2E-' + root_kind + suffix
     sweep_stale_runs()
     user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
     # Chromium keeps profile caches in ~/Library/Caches/<root name>.
@@ -12511,7 +12600,7 @@ def main():
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
                "load": os.getloadavg()}
-    source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Packages/OpenKit/Sources", "tools/e2e"], cwd=ROOT)
+    source_diff = subprocess.check_output(["git", "diff", "HEAD", "--", "App", "Engine", "Packages/OpenKit/Sources", "tools"], cwd=ROOT)
     results["source"] = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                          "clean": not source_diff, "diffSHA256": hashlib.sha256(source_diff).hexdigest()}
     def framework_uuid(path):
@@ -12588,7 +12677,11 @@ def main():
         print(json.dumps(results['engine'], sort_keys=True), flush=True)
         return
     def execute():
-        if opts.only == "sitecontrol":
+        if opts.only == "ntp":
+            import ntp
+            results['ntp'] = CheckedResults(tracker)
+            ntp.run(factory, results['ntp'], sys.modules[__name__], opts.style)
+        elif opts.only == "sitecontrol":
             results["sitecontrol"] = CheckedResults(tracker)
             if opts.sitecontrol_final_only:
                 import sitecontrol_final
@@ -12862,14 +12955,14 @@ def main():
                                     else opts.config.lower()))
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import"):
+    for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]

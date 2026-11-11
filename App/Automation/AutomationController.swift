@@ -276,9 +276,19 @@
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return app.activationTrace.events
       case "yield-activation":
+        // CEF may expose its persistent hard link as executableURL. The peer
+        // must map this exact file; a separate copy with equal bytes is refused.
         guard let pid = a["pid"] as? Int32, pid != getpid(),
           let target = NSRunningApplication(processIdentifier: pid),
-          target.executableURL?.resolvingSymlinksInPath() == Bundle.main.executableURL?.resolvingSymlinksInPath()
+          let targetFile = target.executableURL,
+          let ownFile = Bundle.main.executableURL,
+          let targetAttributes = try? FileManager.default.attributesOfItem(atPath: targetFile.path),
+          let ownAttributes = try? FileManager.default.attributesOfItem(atPath: ownFile.path),
+          let targetDevice = targetAttributes[.systemNumber] as? NSNumber,
+          let targetInode = targetAttributes[.systemFileNumber] as? NSNumber,
+          let ownDevice = ownAttributes[.systemNumber] as? NSNumber,
+          let ownInode = ownAttributes[.systemFileNumber] as? NSNumber,
+          targetDevice == ownDevice, targetInode == ownInode
         else { throw Failure(message: "activation peer must be another instance of this exact Open executable") }
         NSApp.yieldActivation(to: target); return true
       case "native-focus-state":
@@ -1119,7 +1129,16 @@
           }
           // Chromium's own windows (DevTools, Chrome windows, Picture in
           // Picture) are Views windows.
-          let foreign = !ours.contains(ObjectIdentifier(win)) && !(win is NSPanel) && win.isVisible
+          // A Chrome-style page is a NativeWidget child of our browser
+          // window. Closing it closes the hosted tab and can close the last
+          // shell window. Only standalone Chromium windows are disposable.
+          var ancestor: NSWindow? = win
+          var belongsToBrowser = false
+          while let current = ancestor {
+            if ours.contains(ObjectIdentifier(current)) { belongsToBrowser = true; break }
+            ancestor = current.parent
+          }
+          let foreign = !belongsToBrowser && !(win is NSPanel) && win.isVisible
             && win.className.contains("NativeWidget")
           if foreign {
             dismissed.append("window:" + win.className)

@@ -590,7 +590,11 @@ bool OEClient::OnBeforeDownload(CefRefPtr<CefBrowser> browser,
 void OEClient::OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefDownloadItem> download_item,
                                  CefRefPtr<CefDownloadItemCallback> callback) {
-  OEBrowserContext* context = view_.context ?: OEEngine.shared.defaultContext;
+  OEBrowserContext* context = download_context_;
+  if (!context) {
+    if (callback && download_item->IsInProgress()) callback->Cancel();
+    return;
+  }
   [context oe_handleDownloadUpdated:download_item webContent:view_ callback:callback];
 }
 
@@ -621,6 +625,14 @@ bool OEClient::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                               bool user_gesture,
                               bool is_redirect) {
   OEWebContent* page = view_;
+  // Also cover renderer navigation, redirects and popup creation. Shell-only
+  // loadURL filtering does not see these. Leave the current document intact:
+  // starting a replacement here (even deferred) could override a newer load.
+  // Refuse NTP even before an adopted popup has attached its page. No Open
+  // client supplies the full Chrome BrowserView's NTP controller.
+  if (frame->IsMain() && OEIsChromeNewTabURL(OEURL(request->GetURL()))) {
+    return true;
+  }
   if (!page || !frame->IsMain() || !user_gesture || is_redirect ||
       !OEIsPageBrowser(page, browser)) {
     return false;

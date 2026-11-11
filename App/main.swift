@@ -46,6 +46,12 @@ appDelegate.options = options
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
 #if OPEN_AUTOMATION
+// A real launch through layout migration, before any window/engine or quit
+// saves the model. A normal pre-engine quit must keep its normal save path.
+if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LAYOUT_ONLY"] == "1" {
+  FileHandle.standardError.write(Data("Open: automation layout-only complete\n".utf8))
+  exit(0)
+}
 if let receipt = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SCRIPTING_PREFLIGHT"] {
   AutomationScriptingPreflight.run(app: appDelegate, receipt: URL(fileURLWithPath: receipt))
 }

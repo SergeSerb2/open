@@ -88,6 +88,7 @@ def checks(factory, results, tmp, config, harness):
     opened_file = root / 'opened-file.json'
     launch_env = {'DYLD_INSERT_LIBRARIES': str(probe), 'OPEN_IDLE_DOWNLOADS': '1', 'OPEN_E2E_APP_BUNDLE': str(bundle), 'OPEN_DOWNLOADS_DEFAULT_DIRECTORY': str(root / 'DefaultDownloads')}
     app = factory(urls=(), extra_env=launch_env, extra_args=['-open.general.warnBeforeQuitting', 'YES'])
+    app.exclusive_bundle = True  # This suite alone owns the disposable clone.
     app.preferences_domain = domain
     def state(): return app.call('downloads-state')
     def item(key): return next((v for v in state()['items'] if v['id'] == key), {})
@@ -426,7 +427,11 @@ def checks(factory, results, tmp, config, harness):
         menu(other, 'Retry'); dismiss_library()
         retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['state'] == 'completed'), None))
         check('history_retry', retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
-              and Path(retried['path']).exists(), item=retried)
+              and Path(retried['path']).exists(), item=retried, items=state()['items'],
+              tabs=app.call('tabs'), sheets=state()['sheets'],
+              detachedPages=state()['detachedPages'], engineEvents=app.call('events'))
+        if not retried:
+            raise RuntimeError('historical Retry did not complete a new transfer')
         for new_tab in app.call('tabs'):
             if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
         library(); wait(lambda: bool(row(other))); menu(other, 'Move to Trash')
@@ -788,7 +793,11 @@ def checks(factory, results, tmp, config, harness):
             library()
             # Under load the row can appear before its live Cancel control: wait for
             # the actual button the user would press (the row's own identifiers).
-            wait(lambda: 'Cancel' in row(cancelled).get('buttons', []))
+            ready = wait(lambda: 'Cancel' in row(cancelled).get('buttons', []))
+            if not ready:
+                check('clear_cancel_button_' + label, False, item=item(cancelled), row=row(cancelled),
+                      running=state()['running'], sheets=state()['sheets'])
+                raise RuntimeError('clear fixture has no live Cancel button: ' + json.dumps(item(cancelled)))
             app.call('download-row', id=cancelled, action='Cancel')
             if not wait(lambda: all(item(k).get('state') == s for k, s in [(inside, 'completed'), (outside, 'completed'), (failed, 'failed'), (cancelled, 'cancelled')])):
                 raise RuntimeError('terminal download fixture did not finish')

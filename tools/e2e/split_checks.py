@@ -72,7 +72,8 @@ def split_checks(factory, results, tmp, h, functional_only=False):
             saved[name] = app.call('defaults', key=name)
             app.call('defaults', key=name, value=value)
         app.call('suggest-remote', enabled=False)
-        app.call('split', op='observe')
+        if not functional_only:
+            app.call('split', op='observe')
         app.call('window-frame', frame=[60, 60, 1360, 860])
         empty_menu = app.call('split', op='plus')
         row('empty_split_disabled', not next(r['enabled'] for r in empty_menu if r['title'] == 'New Split View'), menu=empty_menu)
