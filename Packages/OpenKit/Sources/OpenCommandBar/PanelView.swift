@@ -117,7 +117,6 @@ final class MaterialView: NSView {
         }
         tintLayer.startPoint = CGPoint(x: 0, y: 0.5)
         tintLayer.endPoint = CGPoint(x: 1, y: 0.5)
-        tintLayer.locations = [0, NSNumber(value: Double(CommandCard.tintStop)), 1]
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -130,6 +129,7 @@ final class MaterialView: NSView {
         bodyLayer.frame = bounds
         tintLayer.frame = bounds
         CATransaction.commit()
+        applyTint()
     }
 
     /// Embedded Little Open has its own window shadow and a fixed solid fill.
@@ -141,16 +141,44 @@ final class MaterialView: NSView {
         CATransaction.commit()
     }
 
+    /// Where the tint lies, in card points: `.overSidebar(edge)` (the sidebar's right edge in card x, New Tab card),
+    /// `.uniform` (inline editor), or `.none` (no sidebar behind the card).
+    enum TintExtent: Equatable { case none, uniform, overSidebar(CGFloat) }
+    var tintExtent = TintExtent.none { didSet { if tintExtent != oldValue { applyTint() } } }
+    private var theme: CommandBarTheme?
+
     /// The card: body plus the Space tint.
     func apply(_ theme: CommandBarTheme) {
+        self.theme = theme
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         bodyLayer.backgroundColor = theme.body.cgColor
-        let tint = theme.tint
-        // Premultiplied fade: the tint's own color at alpha 0, so the ramp never passes through gray.
-        tintLayer.colors = [tint.cgColor, tint.withAlpha(0).cgColor, tint.withAlpha(0).cgColor]
-        tintLayer.isHidden = false
         CATransaction.commit()
+        applyTint()
+    }
+
+    private func applyTint() {
+        guard let theme else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let tint = theme.tint, w = max(1, bounds.width)
+        switch tintExtent {
+        case .none:
+            tintLayer.isHidden = true
+        case .uniform:
+            let c = tint.withAlpha(tint.alpha * CommandCard.inlineTintShare).cgColor
+            tintLayer.colors = [c, c]; tintLayer.locations = [0, 1]; tintLayer.isHidden = false
+        case .overSidebar(let edge):
+            // Full tint up to the sidebar edge, then a premultiplied fade (the tint's own color at alpha 0) over 60 pt.
+            let fadeEnd = edge + CommandCard.tintFade
+            guard fadeEnd > 0 else { tintLayer.isHidden = true; return }
+            let start = edge > 0 ? tint : tint.withAlpha(tint.alpha * Double(fadeEnd / CommandCard.tintFade))
+            let solid = max(0, min(edge, w)) / w, end = min(fadeEnd, w) / w
+            tintLayer.colors = [start.cgColor, start.cgColor, tint.withAlpha(0).cgColor, tint.withAlpha(0).cgColor]
+            tintLayer.locations = [0, NSNumber(value: Double(solid)), NSNumber(value: Double(max(solid, end))), 1]
+            tintLayer.isHidden = false
+        }
     }
 }
 

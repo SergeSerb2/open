@@ -118,6 +118,9 @@ def main():
                     app.call('select', tab=lisbon); app.call('focus', tab=lisbon)
                     key = '%s-%s' % (theme, appearance)
                     for view in options.views.split(','):
+                        # Rest state: the synthetic pointer over the page. `site-controls open via urlField` leaves it
+                        # inside the sidebar (it hovers the field to press the real button).
+                        app.call('mouse', action='hover', x=800, y=500)
                         if view == 'newtab':
                             press('t', modifiers=['cmd'], route='window')
                             assert wait(lambda: bar().get('presented'), timeout=3, step=.05), bar()

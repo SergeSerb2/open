@@ -353,8 +353,12 @@ public enum CommandCard {
     public static let text = DesignColor(light: RGBA(hex: 0x1E1E1C), dark: RGBA(hex: 0xF4F3EE))
     public static let secondaryText = DesignColor(light: RGBA(hex: 0x1E1E1C, alpha: 0.56), dark: RGBA(hex: 0xF4F3EE, alpha: 0.56))
     public static let separator = DesignColor(light: .black(0.08), dark: .white(0.09))
-    /// The tint reaches clear at this fraction of the card width.
-    public static let tintStop: CGFloat = 0.30
+    /// The tint imitates a backdrop blur (an inference from the Arc 14c Site Control frame, LEAD 12:05): it covers the
+    /// part of the New Tab card over the sidebar and fades out over the next `tintFade` points; none over the page.
+    public static let tintFade: CGFloat = 60
+    /// The inline editor lies over the sidebar: a uniform tint. Arc 14c url-click body #F6F0E0 at both thirds (ΔE00 0);
+    /// this is the share of the full tint alpha that gives it over #F9F9F9. Dark: same share (not captured; inference).
+    public static let inlineTintShare = 0.93
     /// Shadow y 22, blur 70 (Gaussian σ 35), black 38 %, plus a 0.5 pt black 22 % hairline.
     public static let shadowOffsetY: CGFloat = 22, shadowRadius: CGFloat = 35, shadowOpacity: Float = 0.38
     public static let hairline = RGBA.black(0.22), hairlineWidth: CGFloat = 0.5

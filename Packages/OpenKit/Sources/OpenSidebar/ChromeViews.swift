@@ -202,21 +202,18 @@ final class URLFieldView: NSView {
 
     /// The copy and Site Control buttons show while a page is loaded and the pointer is over the
     /// field, or while the Site Control panel is open (Arc 14c rest/hover frames; plan D3 §2.4).
-    private var showsButtons: Bool { context.forcedHover == .urlField || pointerInside }
+    private var showsButtons: Bool {
+        URLFieldMetrics.controlsOnFieldHoverOnly ? context.forcedHover == .urlField || pointerInside
+            : context.forcedHover != nil || context.pointerInSidebar || pointerInside
+    }
 
     func fieldFill(hovered: Bool) -> DesignColor { Self.fill(context: context, hovered: hovered) }
 
-    /// Field fill: the sidebar foreground at 14 % (Open's default dark theme: white 8 %; default Light keeps
-    /// `SidebarRole.fieldFill`). Hover adds 5 % (guess: the old token step; not in the mock-up). The URL
+    /// Field fill: the existing measured token (LEAD 11:45; the theme pass sets this role later). The URL
     /// status button under the field shares it.
     static func fill(context: SidebarContext, hovered: Bool) -> DesignColor {
-        if context.isIncognito { return DesignColor(.white(hovered ? 0.20 : 0.15)) }
-        let style = context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
-        if style.isDefaultTheme {
-            return DesignColor(light: (hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill).light, dark: .white(hovered ? 0.13 : 0.08))
-        }
-        let a = hovered ? 0.19 : 0.14
-        return DesignColor(light: style.titleColor(.light).withAlpha(a), dark: style.titleColor(.dark).withAlpha(a))
+        if context.isIncognito { return DesignColor(.white(0.15)) }
+        return hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill
     }
 
     /// The pointer is over the field (or a render forces it). Arc darkens the field to
@@ -269,13 +266,13 @@ final class URLFieldView: NSView {
         let a = URLFieldMetrics.accessorySize
         siteControls.frame = CGRect(x: bounds.width + ox - URLFieldMetrics.siteControlsTrailing - a, y: URLFieldMetrics.accessoryY - oy, width: a, height: a)
         copyLink.frame = siteControls.frame.offsetBy(dx: -URLFieldMetrics.accessoryPitch, dy: 0)
-        copyLink.isHidden = !hasPage || !(showAccessories || siteControlState.isOpen)
+        copyLink.isHidden = !hasPage || !(showAccessories || (URLFieldMetrics.controlsOnFieldHoverOnly && siteControlState.isOpen))
         siteControls.isHidden = !hasPage || !siteControlsAvailable || !(showAccessories || siteControlState.isOpen)
         siteControlGlyph.frame = siteControls.bounds
         if showAccessories || siteControlState.isOpen {
-            right = copyLink.frame.minX - 2
+            right = (copyLink.isHidden ? siteControls.frame.minX : copyLink.frame.minX) - URLFieldMetrics.controlsTextGap
             if let strip = extensionStrip, strip.showsActions, let first = strip.geometry.frames.map(\.minX).min() {
-                right = first - ox - 2
+                right = first - ox - URLFieldMetrics.controlsTextGap
             }
         }
         label.frame = CGRect(x: textX, y: URLFieldMetrics.textY - oy, width: max(0, right - textX), height: 18)

@@ -88,7 +88,9 @@ class SiteControlRow: SiteControlButton {
         CATransaction.begin(); CATransaction.setDisableActions(true); defer { CATransaction.commit() }
         if drawsDisc {
             disc.frame = CGRect(x: m.padding,y: 0,width: m.rowIcon,height: m.rowIcon)
-            var color = (circleOn ? accentDisc.map { DesignColor($0) } ?? SiteControlColors.circleOn : SiteControlColors.circleOff).resolved(appearance).nsColor
+            // Light: an "on" circle in the Space's dark accent (D3 §2.5). Dark keeps Arc's measured disc.
+            let on = appearance == .light ? accentDisc.map { DesignColor($0) } ?? SiteControlColors.circleOn : SiteControlColors.circleOn
+            var color = (circleOn ? on : SiteControlColors.circleOff).resolved(appearance).nsColor
             if isHighlighted { color = SiteControlGlyphRenderer.adjust(color,levels: m.circlePressedLevels) }
             disc.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: disc.bounds.size,pointSize: m.rowGlyph,disc: color,sparkles: .none,scale: scale,phase: symbolPhase); disc.contentsScale = scale
             if let previousDisc {

@@ -13,7 +13,7 @@ import Foundation
 /// - Open's default theme (no stored theme, "Night") uses the lead's mock-up values `#6F66D9` / `#5148C4`:
 ///   its near-neutral dark sidebar has no hue for the rule to keep.
 /// The tints are fitted on the same capture (Arc08 input row 18 pt from the left edge: Light `#F5EFDE`
-/// over `#F9F9F9` → ΔE00 0.39; Dark `#292213` over `#30302E` → ΔE00 1.66).
+/// over `#F9F9F9`; Dark `#292213` over `#30302E`). The alphas are the full tint over the sidebar (LEAD 12:05).
 public struct SpaceAccent: Sendable, Hashable {
     /// Selection fill in Light appearance; selection text highlight base.
     public var accent: RGBA
@@ -30,8 +30,8 @@ public struct SpaceAccent: Sendable, Hashable {
     public static let darkLightness = 0.32
     public static let darkSaturationScale = 1.4
     /// Tint colour: the accent hue at a fixed lightness, saturation scaled from the accent's.
-    public static let lightTintLightness = 0.77, lightTintSaturationScale = 1.98, lightTintAlpha = 0.33
-    public static let darkTintLightness = 0.07, darkTintSaturationScale = 2.72, darkTintAlpha = 0.65
+    public static let lightTintLightness = 0.77, lightTintSaturationScale = 1.98, lightTintAlpha = 0.30
+    public static let darkTintLightness = 0.07, darkTintSaturationScale = 2.72, darkTintAlpha = 0.60
 
     public static let night = SpaceAccent(accent: RGBA(hex: 0x6F66D9), darkAccent: RGBA(hex: 0x5148C4))
 

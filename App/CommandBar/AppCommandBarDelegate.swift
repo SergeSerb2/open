@@ -103,6 +103,9 @@ final class AppCommandBarSession: CommandBarDelegate {
       presentation = .anchored(CGRect(x: field.minX, y: field.minY + CommandCard.inlineTopOffset,
                                       width: max(CommandCard.inlineMinimumWidth, field.width), height: 0))
     }
+    // The sidebar behind the card (anchored mode only; a hidden sidebar shows none).
+    bar.view.sidebarMaxX = factory.windowState.sidebarMode == .anchored && !windowController.sidebar.isHidden
+      ? windowController.sidebar.convert(windowController.sidebar.bounds, to: bar.view).maxX : nil
     bar.present(CommandBarRequest(mode: mode, profileID: profile.id, spaceID: factory.focusedSpace?.id,
       currentTabID: pinned?.id ?? (peek ? nil : factory.selectedTab?.id),
       currentTabURL: pinned?.pinnedURL ?? (peek ? factory.selectedContent?.url : factory.selectedTab?.url),

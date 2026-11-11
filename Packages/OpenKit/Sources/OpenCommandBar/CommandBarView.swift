@@ -26,6 +26,9 @@ public final class CommandBarView: NSView {
             needsLayout = true
         }
     }
+    /// The sidebar's right edge in overlay points while a sidebar lies behind the card; nil when it is hidden.
+    /// The New Tab card's tint covers the card over the sidebar (plan D3, LEAD 12:05).
+    public var sidebarMaxX: CGFloat? { didSet { if sidebarMaxX != oldValue { needsLayout = true } } }
     /// Little Open's page overlay keeps 20 pt margins (§9.3); all other callers use the existing layout.
     public var overlayPanelWidth: CGFloat? { didSet { needsLayout = true } }
     let container = PanelContainerView(frame: .zero)
@@ -100,6 +103,13 @@ public final class CommandBarView: NSView {
     public override func layout() {
         super.layout()
         let f = panelFrame
+        let extent: MaterialView.TintExtent
+        switch presentation {
+        case .embedded: extent = .none
+        case .anchored: extent = .uniform
+        case .overlay: extent = sidebarMaxX.map { .overSidebar($0 - f.minX) } ?? .none
+        }
+        panel.material.tintExtent = extent
         guard container.frame != f else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)

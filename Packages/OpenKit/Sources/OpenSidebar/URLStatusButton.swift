@@ -61,7 +61,7 @@ final class URLStatusButton: NSView {
     override func updateLayer() {
         let hovered = context.forcedHover == .urlStatus || pointerInside
         CATransaction.begin(); CATransaction.setAnimationDuration(Motion.hoverFade)
-        fill.backgroundColor = URLFieldView.fill(context: context, hovered: hovered).cgColor(contentAppearance)
+        fill.backgroundColor = (hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill).cgColor(contentAppearance)
         CATransaction.commit()
     }
 

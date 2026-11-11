@@ -13,6 +13,7 @@ public final class SiteControlView: NSView {
     public var onKey: ((NSEvent) -> Bool)?
     public var anchorFrame: CGRect = .zero
     let panelShadow = CALayer()
+    private let shadowCut = CAShapeLayer()
     public var isActive = false
     public var presentationLayers: [CALayer] { [panel.layer,panelShadow].compactMap { $0 } }
     public var panelFrame: CGRect { panel.convert(panel.bodyRect,to: self) }
@@ -55,6 +56,11 @@ public final class SiteControlView: NSView {
         panel.layer?.anchorPoint = unit; panel.layer?.position = position
         panelShadow.bounds = panel.bounds; panelShadow.anchorPoint = unit; panelShadow.position = position
         panelShadow.shadowPath = panel.shape
+        // The body is translucent: cut the panel out of its own shadow, so the shadow never darkens what shows through.
+        let cut = CGMutablePath(); let margin = SiteControlMetrics.panelShadowRadius * 4 + SiteControlMetrics.panelShadowOffsetY
+        cut.addRect(panel.bounds.insetBy(dx: -margin, dy: -margin)); cut.addPath(panel.shape)
+        shadowCut.frame = panel.bounds; shadowCut.path = cut; shadowCut.fillRule = .evenOdd
+        panelShadow.mask = shadowCut
         panelShadow.shadowOffset = CGSize(width: 0,height: SiteControlMetrics.panelShadowOffsetY)
         CATransaction.commit()
     }
@@ -199,12 +205,13 @@ public final class SiteControlPanelView: NSView {
         let dark = contentAppearance == .dark
         bodyFill.frame = bounds; bodyFill.backgroundColor = SiteControlColors.body.cgColor(contentAppearance)
         bodyFill.isHidden = offscreenMaterial != nil
-        let tint = accent.tint(dark: dark)
+        let tint = dark ? SiteControlColors.darkTint : accent.tint(dark: false)
         spaceTint.frame = bounds; spaceTint.colors = [tint.cgColor,tint.withAlpha(0).cgColor,tint.withAlpha(0).cgColor]
+        spaceTint.locations = [0,NSNumber(value: Double(dark ? SiteControlColors.darkTintStop : SiteControlMetrics.tintStop)),1]
         spaceTint.isHidden = offscreenMaterial != nil
         surfaceMask.frame = bounds; surfaceMask.path = path
-        // A 0.5 pt hairline: the stroke is centred on the edge and the mask keeps its inner half.
-        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = SiteControlColors.rim.cgColor(contentAppearance); rim.lineWidth = 1
+        // Light: a 0.5 pt hairline (the mask keeps the inner half of a 1 pt stroke). Dark: Arc's measured 1 px white 0.20 rim.
+        rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = SiteControlColors.rim.cgColor(contentAppearance); rim.lineWidth = dark ? 2/scale : 1
         for (i,b) in actions.enumerated() { b.frame = CGRect(x: m.padding+CGFloat(i)*(m.actionButton.width+m.actionGap),y: body.minY+m.padding,width: m.actionButton.width,height: m.actionButton.height) }
         let footerY = body.maxY-m.padding-m.footerHeight
         scroll.frame = CGRect(x: 0,y: body.minY+m.padding+m.actionButton.height,width: body.width,height: max(0,footerY-m.gapAfterSeparator-m.separatorHeight-(body.minY+m.padding+m.actionButton.height)))
@@ -212,8 +219,8 @@ public final class SiteControlPanelView: NSView {
         more.frame = CGRect(x: body.maxX-m.padding-m.moreButton,y: footerY,width: m.moreButton,height: m.moreButton)
         let line = CGMutablePath(), y = footerY-m.gapAfterSeparator-1/scale/2
         line.move(to: CGPoint(x: m.padding,y: y)); line.addLine(to: CGPoint(x: body.maxX-m.padding,y: y))
-        separator.compositingFilter = nil
-        separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = 1
+        separator.compositingFilter = dark ? "plusL" : nil
+        separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = dark ? 1/scale : 1
         CATransaction.commit()
     }
 }
