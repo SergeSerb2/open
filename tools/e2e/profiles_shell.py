@@ -121,15 +121,25 @@ def run(factory, results, tmp, api, defaults_before):
         state(action='create', name='Manager Work')
         source = app.call('spaces')[0]
         target = profile('Manager Work')
-        # Close every browser. The Library must not manufacture a new factory.
+        # The inline Library reuses one existing browser and its factory.
+        # Keep that owner; close every other browser, including private ones.
+        owner = next(w for w in app.call('incognito-state')['windows'] if not w['private'])
         for window in list(app.call('incognito-state')['windows']):
-            app.call('window-focus', id=window['id'], activate=True)
-            app.call('window-close')
-        assert wait(lambda: not app.call('incognito-state')['windows'], timeout=5)
-        manager = app.call('library-open')
+            if window['id'] != owner['id']:
+                app.call('window-focus', id=window['id'], activate=True)
+                app.call('window-close')
+        app.call('window-focus', id=owner['id'], activate=True)
+
+        def same_owner():
+            windows = app.call('incognito-state')['windows']
+            return len(windows) == 1 and windows[0]['id'] == owner['id'] and windows[0]['number'] == owner['number'] and not windows[0]['private']
+
+        assert wait(same_owner, timeout=5)
+        manager = app.call('library-open', section='spaces')
+        assert manager['window'] == owner['number'] and manager['contextWindow'] == owner['id'] and same_owner(), manager
 
         def request():
-            state(action='indicator-menu', library=True, item='Manager Work')
+            state(action='indicator-menu', library=True, space=source['id'], item='Manager Work')
             return wait(lambda: state() if state()['managerSheet'] else None, timeout=3)
 
         def assigned():
@@ -142,9 +152,9 @@ def run(factory, results, tmp, api, defaults_before):
         results['shell_manager_profile_alert'] = {
             'ok': bool(shown) and shown['managerSheetParent'] == manager['window']
                   and all(t in text for t in ('Change Profile?', warning, 'Change Profile', 'Cancel', "Don't show again"))
-                  and not app.call('incognito-state')['windows'] and assigned() == source['profile'],
+                  and same_owner() and assigned() == source['profile'],
             'text': text, 'parent': shown['managerSheetParent'] if shown else 0, 'library': manager['window'],
-            'profileUnchanged': assigned() == source['profile']}
+            'profileUnchanged': assigned() == source['profile'], 'owner': owner['id'], 'sameOwner': same_owner()}
         assert results['shell_manager_profile_alert']['ok'], 'Change Profile sheet missing from Library'
         if os.environ.get('OPEN_PROFILES_SHELL_FORCE_MANAGER_DIALOG_FAILURE') == '1':
             raise AssertionError('intentional early Manager sheet failure for cleanup proof')
@@ -173,10 +183,10 @@ def run(factory, results, tmp, api, defaults_before):
         suppressed = app.call('defaults', key=confirm_key, persistent=True) is False
         app.call('key', window=manager['window'], key='z', modifiers=['cmd'], route='app')
         assert wait(lambda: assigned() == source['profile'], timeout=5)
-        state(action='indicator-menu', library=True, item='Manager Work')
+        state(action='indicator-menu', library=True, space=source['id'], item='Manager Work')
         results['shell_manager_profile_suppressed'] = {
             'ok': suppressed and assigned() == target['id'] and state()['managerSheet'] == 0
-                  and not app.call('incognito-state')['windows']}
+                  and same_owner(), 'sameOwner': same_owner()}
         app.call('defaults', key=confirm_key, value=None)
         app.call('library-close')
 
@@ -587,9 +597,18 @@ def run(factory, results, tmp, api, defaults_before):
                                                       'indicators': assigned['indicators']}
         app.call('library-open')
         manager = app.call('space-manager-state')
-        labels = state()['managerIndicators']
-        results['shell_manager_indicators'] = {'ok': 'Profile: Default' in labels and 'Profile: Shell Assigned' in labels,
-                                               'labels': labels}
+        # LEAD16:35: cards omit Profile indicators by design. Read each
+        # realised Space's model association and exercise its native card menu.
+        cards = state()['managerProfiles']
+        spaces = {s['id']: s['profile'] for s in app.call('spaces')}
+        menus = {card['space']: state(action='indicator-menu', library=True, space=card['space'])['indicatorMenu'] for card in cards}
+        names = [card['name'] for card in cards]
+        results['shell_manager_indicators'] = {
+            'ok': len(cards) == len(spaces) and {c['space']: c['profile'] for c in cards} == spaces
+                  and all(c['owner'] == manager['contextWindow'] for c in cards)
+                  and 'Default' in names and 'Shell Assigned' in names
+                  and all(all(name in choices for name in ('Default', 'Shell Assigned', 'New Profile…')) for choices in menus.values()),
+            'profiles': cards, 'menus': menus, 'source': 'Space model and card More options → Set Profile'}
         for appearance in ('light', 'dark'):
             app.call('appearance', name=appearance)
             capture_native('manager-' + appearance, window=manager['window'])
