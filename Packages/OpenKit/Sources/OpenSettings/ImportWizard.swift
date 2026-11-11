@@ -171,18 +171,18 @@ public struct ImportWizard: View {
                 if model.step != .report { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
                 Spacer()
                 switch model.step {
-                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(!model.canContinue)
-                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(!model.canContinue)
+                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!model.canContinue)
+                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!model.canContinue)
                 case .consent:
                     if model.canImportPasswordsAndCookies {
                         Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }
-                        Button(PasswordsImportCopy.allowButton) { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
-                    } else { Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }
+                        Button(PasswordsImportCopy.allowButton) { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle())
+                    } else { Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()) }
                 case .progress: EmptyView()
-                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
+                case .report: if model.outcome?.errorText != nil { Button("Try again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle())
                 }
             }.disabled(model.extensions.isInstalling)
-        }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy)
+        }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy).settingsSheet()
         .task { if !model.readable { await model.refreshCounts() } }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {

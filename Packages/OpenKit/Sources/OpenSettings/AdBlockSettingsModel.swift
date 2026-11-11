@@ -65,6 +65,17 @@ import OpenAdBlock
         do { try store.closeProfile(id); knownProfiles.remove(id); revision &+= 1 }
         catch { if wasKnown && root.model.profile(id: id) != nil && !store.isRetired(id) { knownProfiles.insert(id) }; throw error }
     }
+    public var validHostDraft: Bool { validHost(hostDraft) }
+    private func validHost(_ value: String) -> Bool {
+        let host = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !host.isEmpty, !host.contains(where: \.isWhitespace), !host.contains(":"), !host.contains("/"), !host.contains("?"), !host.contains("#"), !host.contains("@") else { return false }
+        return (try? AdBlockSites.shared.registrableDomain(host)) != nil
+    }
+    public func listSourceStatus(_ list: BlockList) -> String {
+        let source = list.infoURL.host() ?? list.displayName
+        guard let receipt = store.listReceipt(list.id, profile: profileID), receipt.lastCheck > .distantPast else { return source + " · " + listStatus(list) }
+        return source + " · Checked " + receipt.lastCheck.formatted(date: .abbreviated, time: .omitted)
+    }
     public func setExcluded(_ host: String, excluded: Bool) {
         guard isReady else {errorText=unavailableText;return}
         // Validate host-only before the store normalizes it to a registrable domain.

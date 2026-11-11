@@ -1,325 +1,100 @@
-# Settings and Library
+# Settings
 
-`OpenSettings` supplies the Settings and Library windows. It has no engine imports. Settings edits the shared model, `UserDefaults`, `KeyBindingStore`, and `AdBlockStore`. Browser and system work crosses `SettingsActions` or `LibraryActions`. This implements steps 1–7 of [the plan](plans/settings-library.md). App presentation belongs to [app-shell integration](plans/app-shell.md).
+Settings uses Open’s original design. The standard resizable window opens at 960 × 660 pt with an 800 × 540 pt minimum. A 232 pt navigation column stays in place while the content scrolls. The window remembers its frame. Settings is created only on first open. After that first frame, Links, Ad Blocking and Shortcuts each get one deferred preparation slice; input, navigation or close cancels pending work. Other sections are created on first visit. The window keeps each section’s view graph. Switching sections hides the old page and lays out only the visible page. Hidden pages release their field editor and shortcut recorder.
 
-## App entry points
+## Navigation and search
 
-Construct these objects once on the main actor. Pass the app's existing `BrowserModel` and **the same `SnapshotStore` that owns the data-root lock**. A second snapshot writer for the same root is not supported.
+The sections are General, Appearance, Tabs & Archive, Search, Links, Downloads, Previews, Ad Blocking, Site Permissions, Passwords & Cards, Browsing Data, Profiles, Shortcuts, Extensions, and Advanced. Library is separate and is unchanged.
 
-```swift
-let settings = SettingsViewModel(
-    model: model, actions: settingsActions, defaults: .standard,
-    root: root, snapshot: snapshot, focusedProfileID: focusedProfileID)
-settings.attach(adBlockStore: adBlockStore)
-let settingsPresenter = SettingsPresenter(viewModel: settings)
-```
+Command-F focuses the global search. Labels, help, aliases, and every active shortcut command are indexed. `is:changed` limits results to changed settings. Up/Down selects a result; Return opens its section and pulses the target once. Escape clears search. Command-1 through Command-9 opens the first nine sections. Command-[ and Command-] move through section history. Typing while a navigation item has focus starts search.
 
-Attach the shared `AdBlockStore`. Settings opens the selected profile on refresh/selection, including newly created profiles, and tracks which opens have finished, and closes its state before profile deletion. The shared store owns update schedules and bundled defaults. Call `settings.adBlock?.refresh()` from its store-event adapter after external Site Control Center or list updates. List and allowed-site controls stay disabled until the selected Profile is open. Store faults use plain text; technical details remain in Copy Debug Info. List status reads cached typed receipts, with no file parsing during view drawing. The preview opens fixture profiles without a schedule. Refresh reconciles externally deleted profiles too. `settings.adBlock?.hasOtherBlocker` accepts the app's extension state.
+Each row has a stable `section/row` ID. In-app navigation uses `open://settings/<section>[/<row>]` through the Settings presenter. This scheme is not registered with macOS; there is no external Settings launch queue. Links are limited to 2 KiB before parsing. Unknown sections, rows, query strings, and fragments are refused before Settings is constructed. Existing Settings, Shortcuts, Air Traffic Control, Search Settings, New Profile and import commands keep their actions. The command bar registers the same metadata index as a suggestion provider; it does not construct Settings during launch.
 
-`SettingsPresenter.show(pane:)` reuses one standard titled window, 684×650 pt. Closing the window retains it. Showing or reactivating it refreshes external browser/store state. The App registers defaults before showing its first window. The root also registers them for isolated preview suites. The selected pane writes `open.settings.lastPane`. The native tab bar changes the window title. Account, AI, internal, referral, and sync panes are absent.
+## Profile scope and changes
 
-For Library, inject the app's existing archive/history stores and its single Downloads feed. Supply app-owned Captures through `FileCapturesProvider(root:)`, or a conforming provider that reads the same index. Pass the shared favicon cache when available.
+Search, Tabs & Archive, Downloads, Ad Blocking, Site Permissions, Passwords & Cards, and Browsing Data show a Profile pill. A pill in search results belongs to its per-Profile group. Profiles manages names, icons, Space counts, creation and deletion. It does not contain another settings pane.
 
-```swift
-let library = LibraryViewModel(
-    model: model, defaults: .standard, actions: libraryActions,
-    downloads: downloadsProvider, captures: capturesProvider,
-    archives: archiveStores, histories: historyStores,
-    snapshot: snapshot, faviconStore: faviconStore)
-let libraryPresenter = LibraryPresenter(viewModel: library)
-```
+A 4 pt dot marks a value that differs from its shipping default. Hover or keyboard focus reveals Reset. Archive changes apply to the selected Profile, then offer Apply to all Profiles. The shipping external-link destination is Little Open. Reset preserves that default.
 
-`LibraryPresenter.show(section:)` reuses one 960×640 pt window (minimum 720×480), with the section as its title and search/filters in its content toolbar. The native AppKit source list supports keyboard selection and extends under the transparent title bar. Its shared cell paints the system accent selection; this avoids AppKit’s GPU-only selection material in the never-ordered renderer. No separate preview view replaces the table. Showing or reactivating Library refreshes Archive/History and the capture index. Section, search, and selection survive closing; section also persists in `open.library.lastSection`. Search and selection remain separate for each section while the window is open. Refresh the capture provider when the capture feature writes its index. An observable Downloads provider can publish snapshots directly; Library keeps no second download list.
+## Ownership and persistence
 
-The retained Spaces manager reconciles column membership before Library presentation, including changes made while it was hidden. It keeps the same native view and builds page content lazily.
+The App supplies one SettingsViewModel with the existing BrowserModel, SnapshotStore, actions, and UserDefaults. Existing view models and stores own mutations. The view layer does not create a second persistence path. Profile updates use the shared SnapshotStore and its one-second save debounce. Operations that need durable state flush it before continuing.
 
-A corrupt or unreadable capture index does not prevent Library from opening. Archive, History, Downloads, and Spaces keep their shared stores and actions. Captures and Media show “Captures could not be loaded.” and “Open will try again next time you open the Library.” in the existing empty-state style. The retained provider retries on the next opening or activation; a successful read clears the error. A failed read clears stale capture rows and never rewrites the index.
+Links validates every draft, preserves order, and rolls the model back when its durable save fails. Test a Link expands inline; its deep link expands the URL, source-app and recent-Space controls automatically. A failed rule save leaves the captured draft open. Profile deletion captures IDs and names before confirmation, requires the exact token, then rechecks default/in-use guards and uses the App’s ProfileDataOwner barrier before removing data. A delayed confirmation never deletes the later selection.
 
-The Captures and Media grid has one native Tab stop. Arrow keys move the selection by item or grid row; Return opens the selected capture; Cmd+C copies its image; Delete uses the existing confirmation before deleting its file and index entry. Space has no capture action. Keyboard selection uses the same card background as pointer selection and scrolls into view. Each card's accessibility label and tooltip include its kind and byte size, without adding visible text.
+Ad-block lists keep ready, busy, and retired-Profile guards. Host-only validation uses the store’s registrable-domain rules. Failed updates keep prior lists. Global enabled state and per-Profile list/site choices retain their original action callbacks.
 
-Inject retained archive stores, including retired-profile stores from the app's profile catalog when applicable. Library keeps those stores across profile refreshes. Current profile changes add the corresponding stores through `ProfileDirectories` and refresh History choices. History has no delete action.
+KeyBindingStore keeps saved bindings separate from conflicting drafts. Invalid bare keys stay in recording mode and never write. Escape cancels, Delete clears, and Reset all requires confirmation. Import/export, priorities, extension conflicts and keyBindingsDidChange keep their existing semantics. Every unassigned row is blank at rest and offers Add shortcut on hover or focus. The command search, filter chips, category menu and scrolling list use native AppKit controls. The four filter chips share one row with the category menu. The list height ends on a full row.
 
-The Library view model owns Archive restore/delete/clear and capture index/file deletion. Its matching `LibraryActions` callbacks notify the app after those mutations; do not repeat the store mutation in the adapter. Other Library actions perform browser/system work. `openHistoryItem(url:)` must use `library.historyProfileID` to select the destination profile. `viewSpace(id:)` implements the restore toast's View button.
+Default-browser changes, folder pickers, file panels, and Keychain consent remain user actions. Automated verification never accepts a macOS system dialog. The import wizard retains its count-only probe, explicit consent, cancellation, partial-result and error paths. Import graph construction remains on the main actor; this change does not claim large-import performance.
 
-| Command | App adapter |
-|---|---|
-| `settings`, Cmd+, | `settingsPresenter.show()` |
-| `search-settings` | `.show(pane: .profiles)` for the focused Profile |
-| `keyboard-shortcuts` | `.show(pane: .shortcuts)` |
-| `air-traffic-control` | `.show(pane: .links)`; optional `settings.scrollTarget = "links-rules"` |
-| `new-profile` | Profiles with the existing Create Profile sheet; sidebar intent preselects its source Space |
-| `import-from-browser` | `.show(pane: .general)`, then `settings.showsImport = true` |
-| `set-default-browser` | `settings.general.setDefault()` |
-| `view-library`, Home, Cmd+Shift+L | `libraryPresenter.show()` |
-| `view-downloads`, Cmd+Shift+J | `.show(section: .downloads)` |
-| `view-archive` | `.show(section: .archive)` |
-| `view-history`, Cmd+Y | `.show(section: .history)` |
+## Phase 1 boundaries
 
-The app's command router must preserve command-bar text capture rules. Settings does not install a second global key monitor. Its shortcut recorder is the first responder only while recording.
+Site Permissions, Passwords & Cards, Browsing Data and Extensions are native section shells with clearly labelled actions to existing browser destinations. Native management details are phase 2. Appearance uses real website appearance, focused-window toolbar/full-URL and app-icon settings. Its approved static miniature remains behind one preview seam until the shared miniature kit lands. There are no invented sidebar-position or tab-number preferences.
 
-### Action ownership
+The App icon action changes the running app icon without changing the signed bundle. Alternate artwork caches and asynchronous restore keep the existing behavior described in [first-run verification](first-run/steps-ef-verification.md#alternate-icon-restore-split).
 
-- `openPreviewsSettings` is a notification/focus callback: General already presents the shared Previews sheet. The adapter must not present a second copy.
-- `keyBindingsDidChange` rebuilds menus and re-registers/unregisters the global hotkey. Load overrides from `State/keybindings.json`. The Links hotkey switch notifies the same owner.
-- The app reads General, Peek, numbering, and Advanced defaults at use, and observes changes where an immediate effect is required (Previews and Boosts). Defaults are registered once at startup.
-- `setTabSleepMode` maps `automatic`→`SleepMode.balanced`, `never`→`.off`, and the other two labels to the matching model cases. The global `open.advanced.tabSleepMode` is authoritative. At launch, on mode changes, and on Profile creation, the App reconciles `ProfileSettings.sleepMode` directly, without another Undo step, and schedules a save only when a value changes. Never blocks freeze, discard, 24-hour shell destruction, and loaded-page hidden-cache eviction. Other modes still sleep pinned tabs and Favorites. No engine or second sleep implementation lives in Settings.
-- `AdBlockStore` remains the configuration and download owner. Its engine events and Settings action callbacks must have one app adapter; do not send the same engine reload twice. The master switch is global. Lists and exclusions remain per profile.
-- `clearBrowsingData(profileID:kinds:range:)` includes the time range. The app clears the selected profile only, including its History store. The overload without a range means All time.
-- `deleteProfileData` wipes the engine data only after the UI has checked deletion guards. A failed wipe keeps the model profile. The model command removes it only after the action succeeds.
-- `runImport(plan:)` owns the durable import transaction and honors the selected kinds. On failure it must keep the previous snapshot. `canImportPasswordsAndCookies` defaults to false. In that build the Passwords step says the feature is unavailable and Continue Without Passwords grants no consent. Only an adapter with an actual engine writer may opt in; its consent button then sets `secretsConsented`. Never decrypt passwords or cookies into Settings files. Unchecked, Continue Without Passwords, and Cancel paths grant none.
-- `openURL(_:profileID:)` opens list information in an Open tab for the selected profile. Views do not send these links to the system default browser.
-- `openMoreSettings`, profile subpages, export dialogs, help, icon selection, clipboard, and file actions are app/system adapters. The preview logs them and uses synthetic files; it does not drive Finder, the user's browser, or the desktop.
+## Control migration
 
-## Persistence
+Every former pane action is retained. The table identifies its current row and guard.
 
-New profile fields decode with defaults and always encode at snapshot schema 1. A stored search-engine ID is preserved. Only a missing ID or a fresh profile defaults to Google. `SearchEngine` and `SuggestFormat` now live in `OpenModel`; `OpenSuggest` exports aliases to preserve source compatibility without a dependency cycle.
-
-`ProfilesSettingsModel` remains the profile mutation/validation owner. Auto-archive changes stay pending until This Profile Only or All Profiles is chosen. Cancel leaves the snapshot unchanged. Custom-engine removal resets a selected custom default to Google in the same save. The Profiles pane presents the notice on its first appearance with suggestions ON and the acknowledgement unset. Before a first remote query, call `settingsPresenter.prepareForRemoteSuggestions(profileID:)`. This is a pure gate. It changes neither the selected Settings profile nor any window. False means the request must wait (or suggestions are OFF). When the user opens the notice, call `settingsPresenter.presentSearchSuggestionNotice(profileID:)`; only this explicit presentation selects the Profile. Acknowledgement persists to shared defaults. `profiles.allowsRemoteSuggestions` supplies the gate for `SuggestContext`. `SearchEngines.resolve(id:profile:)` includes custom engines and is used by Profiles, the real suggestions consumer, and Little Open. Editing an engine preserves its endpoint, format, and additional keywords.
-
-Routing binds `LinksSettingsModel` directly. The pane lists rules; a sheet edits a local draft and commits only on Save Rule. Invalid edits stay in the sheet and block save. `commitLinks` and `saveLinkRule` return success, show a pane/sheet error on failure, and close the sheet only after a successful durable save. Links Test shows a plain one-line decision; the original trace stays under collapsed Details. An app picker stores a bundle ID without exposing an editable ID field. Space/profile assignment changes rebuild the routing model with current identities and retain drafts. Test uses the same evaluator and formatter as `openkit route`.
-
-Shortcut edits run `ConflictChecker` before every write. Unexpected conflicts retain the draft and leave the saved file and action log unchanged. Revert returns to the saved store; Reset All requires confirmation. Only customizable, non-reserved commands accept new keys. Recording rejects typing keys, Space, Tab and Return unless ⌘, ⌃ or ⌥ is held. It keeps recording and shows a single instruction, including when a previous draft has a conflict. Bare function and arrow keys remain valid. The parsed key-binding store is cached by modification stamp, size and file identity; unchanged redraws do not parse JSON.
-
-Library reads bounded 100-row pages from the profile archive stores and merges them newest first. It never loads the whole archive on open. Paging becomes available before favicon loading; a row-count task restarts the end sentinel after each page. The 225-row check covers the request during the first page’s favicon work and reaches the last row across two profiles. Delete and Clear use serial-queue transactions. Restore uses the model's Undo path. Restore reads without deleting, stages the model insertion, saves the snapshot, then removes the owning Archive row. A failed save removes the staged tab and publishes no Undo/action or Archive deletion. Delete groups IDs by their owning store; delete/clear report success or failure per profile, including partial completion. Captures use `State/captures.json` with Unix dates; deletion stages the file and atomically replaces the index, with rollback on a failed index write. Thumbnails load off the main actor. Decoded images are cached by capture UUID, Archive ItemID, and History URL row identity; redraws reuse the same NSImage. Missing Archive delete owners show “This archived tab is no longer available.”
-
-## Verification
-
-Build only in `Packages/OpenKit`:
-
-```sh
-nice -n 10 swift build -c release -j 6
-.build/release/settings-preview --help
-.build/release/settings-preview check
-.build/release/settings-preview render --out /tmp/open-settings-render --scale both
-.build/release/settings-preview dump-keys --root /tmp/open-settings-render/fixture
-```
-
-`check` uses a fresh synthetic root and an isolated defaults suite per flow. It reads the CFPreferences plist, snapshot JSON, keybindings JSON, SQLite stores, ad-block generation receipts, allowlist, and capture files/index back from disk. CFPreferences publication can lag `synchronize()`, so the receipt waits up to 30 seconds for the full domain to reach its plist. One concurrent render/check attempt exceeded the former 10-second budget; the disk assertion remains mandatory. `--only NAME` selects one flow. A failure stops the run and exits nonzero.
-
-The import fixture contains two Spaces, three tabs, one skipped easel, and two count-only login rows in `User Data/Default/Login Data`. No real data or Keychain API is used. Every ad-block flow, including `adblock-readiness` and profile lifecycle, starts its own loopback HTTP fixture through `OPEN_ADBLOCK_DEBUG_SOURCE_ROOT`. The real `AdBlockStore`, `URLSession` downloader, list validation, and generation publication run unchanged. Readiness also checks the downloaded fixture bytes and source receipts on disk. Request/resource timeouts remain 2/3 seconds with one attempt. `OPEN_SETTINGS_CORRUPT_LIST_FIXTURE=1 settings-preview check --only adblock-readiness` replaces the fixture with invalid filter text before opening the new Profile and must exit nonzero at the existing readiness assertion.
-
-| Check | Result |
-|---|---|
-| Step 1 shell build and 1x/2x renders | PASS |
-| Legacy schema-1 snapshot roundtrip; stored ID preserved, missing ID Google | PASS |
-| `commands-demo` | PASS — 115 checks (the plan's 66 count predates the merged Profiles work) |
-| General toggles and relaunch, default-browser failure | PASS |
-| Profile search/custom engines, archive scope/cancel, downloads, clear-data, delete guards | PASS |
-| Links rules/order/invalid drafts/deleted targets; real `openkit route` agreement; hotkey toggle | PASS |
-| Shortcuts save/effective keys, conflict no-write, Revert, Reset All | PASS |
-| Advanced toggle/sleep action, ad-block master/lists/allowlist/reset, icon action | PASS |
-| Import counts, repeat import, consent gate/cancel/counts only, failed source preserves snapshot | PASS |
-| Archive search/Space filter, restore/Undo/Redo, delete/clear confirmation and SQLite receipts | PASS |
-| Downloads progress, Retry/Reveal IDs, missing-file guard | PASS |
-| Captures thumbnail/Save As/delete file+index; profile History search/open | PASS |
-| Four Library empty states: native hosted AX labels and valid PNGs | PASS |
-| `settings-preview check` | PASS — 37 checks, 0 failed ([current receipt](settings/checks.txt)); the original 28 Settings/Library flows are retained |
-| Renders | 86 PNGs: all panes/sections at both scales, General/Profiles in both appearances, distinct long-pane details, every requested sheet, import Choose/Review/Passwords/Report and engine-ready Passwords copy, Library empty states, shortcut states, suggestion notice, engine editor, and invalid rule |
-| `dump-keys` | PASS — synthetic-root guard; sorted persisted values |
-
-`tools/verify-all.sh` now includes `settings-preview` checks, all renders, dimension validation, and `dump-keys`. The PR contains the final full-gate summary after merging `origin/main`.
-
-No unit tests, desktop automation, engine build/sync, real import, or Keychain access ran for these package checks. Real-app Cmd+,, browser effects, and engine download/capture operations remain separate app-shell acceptance gates.
-
-### S5b Previews delay removal (2026-10-26)
-
-Previews uses the fixed `HoverPreviewMetrics.armDelay` of 0.5 seconds. The
-480×320 sheet keeps the master, Folders, and Pinned tabs and Favorites
-switches, followed by Done. It has no Delay row or registered delay default;
-an older stored value stays untouched. Both check receipts were regenerated
-from the same actual 37-flow acceptance command. The two Previews gallery
-renders and their SHA-256 entries were refreshed from that run too.
-
-The real App flow, native 2× rest/hover snapshots, supplied-capture comparison,
-and forced-failure cleanup proof are recorded in
-[the S5b evidence](sidebar-completion/s5b/README.md).
-
-### Section 7 Library robustness (2026-11-06)
-
-The real-App `sidebar-completion` suite starts on a unique data root with a corrupt capture index. It checks Archive, History, Downloads, and Spaces; both capture error screens; an unreadable index; recovery on reopen; and the 16 MiB/50,000-row reader limits at and above each boundary. Synthetic PNGs then exercise Tab, arrows, Return, Cmd+C, Space, confirmed Delete, and browser shortcut ownership in both grids through `OEApplication.sendEvent`. Native accessibility text carries kind and size. Real-window pixel samples check that the existing selection background moves between cards.
-
-The App's normal open-capture action resolves the real capture file. Automation records the final OS handoff instead of launching the user's Preview app, as with Downloads. This proves the App action and file resolution; it does not claim to test Preview. Error and selection screenshots are private evidence under `.re/space-manager/`; no user data or reference assets enter the repository.
-
-## Visual evidence
-
-The layout follows [interaction-states §18](re/interaction-states.md#18-settings-window), captured Settings frames F0147–F0151 and A0495–A0507 in the session index. Those reference images were viewed only. No reference image, artwork, icon, font, sound, or binary asset was copied. All committed screenshots below use the code-built synthetic fixture. Colors and typography use `OpenDesign`, with system grouped-control defaults where there is no Settings token.
-
-Every 1x and 2x pane and sheet was inspected locally. The final inventory has 86 PNGs. Switch bounds measure about 36×17 pt with `.mini`. The renderer supplies key state to the SwiftUI button style. Native switches stay inactive in the never-ordered offscreen window; a right-hand switch thumb means ON. Additional viewports expose the rest of the long panes. The Opus design review remains a lead-owned gate before merge.
-
-| Pane | 1x | 2x |
+| Old location / control | G2 section and stable ID | Behaviour / guard |
 |---|---|---|
-| General | [PNG](settings/general@1x.png) | [PNG](settings/general@2x.png) |
-| Profiles | [PNG](settings/profiles@1x.png) | [PNG](settings/profiles@2x.png) |
-| Links | [PNG](settings/links@1x.png) | [PNG](settings/links@2x.png) |
-| Shortcuts | [PNG](settings/shortcuts@1x.png) | [PNG](settings/shortcuts@2x.png) |
-| Icon | [PNG](settings/app-icon@1x.png) | [PNG](settings/app-icon@2x.png) |
-| Advanced | [PNG](settings/advanced@1x.png) | [PNG](settings/advanced@2x.png) |
-| Archive | [PNG](settings/library-archive@1x.png) | [PNG](settings/library-archive@2x.png) |
-| Downloads | [PNG](settings/library-downloads@1x.png) | [PNG](settings/library-downloads@2x.png) |
-| Captures | [PNG](settings/library-captures@1x.png) | [PNG](settings/library-captures@2x.png) |
-| Media | [PNG](settings/library-media@1x.png) | [PNG](settings/library-media@2x.png) |
-| History | [PNG](settings/library-history@1x.png) | [PNG](settings/library-history@2x.png) |
+| General default browser | `general/default-browser` | Existing default-browser service; OS confirmation remains user-owned |
+| General automatic updates and help | `general/automatic-updates` | Existing preference and updater; Learn more in the row help |
+| General Check | Navigation footer | Existing updater check; status is shown only after a known updater result |
+| General quit warning | `general/warn-before-quitting` | Existing download-in-progress quit guard |
+| General import wizard | `general/import` | Same model, consent, progress, partial and error guards; retained multi-step sheet |
+| Advanced export | `general/export` | Same snapshot and Archive export action |
+| Advanced restore windows | `general/restore-windows` | Same persisted preference |
+| App Icon six choices | `appearance/app-icon` | Same icon model and app action |
+| Added website appearance and focused-window toolbar | `appearance/website-appearance`, `appearance/toolbar` | Real existing model state; static preview seam approved |
+| Advanced full URL | `appearance/full-url` | Disabled label/control and explanatory help while toolbar is off |
+| Profiles archive / apply scope | `tabs-archive/archive-after` | Same propose/apply methods; applies to this Profile, then inline Apply to all Profiles |
+| Links Little Open archive | `tabs-archive/little-open-archive` | Same selected Profile setting and Links commit action |
+| Advanced sleeping tabs | `tabs-archive/sleep` | Same global sleep policy action |
+| Shortcuts Favorites and ninth-tab options | `tabs-archive/include-favorites`, `tabs-archive/ninth-tab` | Original preference keys; shortcut search aliases retained |
+| Profiles engine, management, suggestions | `search/engine`, `search/engines`, `search/suggestions` | Same Profile settings; built-in engine protections and suggestion notice retained |
+| Profiles download location / ask each time | `downloads/location`, `downloads/ask` | Same Profile settings and folder picker action |
+| General Previews sheet master / folders / pages | `previews/enabled`, `previews/folders`, `previews/pages` | Inline; dependent rows disabled when master is off |
+| Links Little Open hotkey / Option-Command-click / external links | `links/little-open-hotkey`, `links/option-command-click`, `links/external-links` | Same Links model, defaults, commit and global-hotkey callback |
+| Links Shift-click Peek / other-site Peek | `links/peek-shift-click`, `links/peek-other-sites` | Same preferences |
+| Links default destination / route list | `links/destination`, `links/rules` | Same route validation, order, drag/drop, edit/delete, durability rollback and failed-save sheet retention |
+| Links Test URL / source app / recent Space / details | `links/test` | Same evaluator and validation; app picker remains available |
+| Profiles Privacy / Notifications | `site-permissions/privacy`, `site-permissions/notifications` | Native phase-1 shell, clearly labelled Open in Tab; original Profile target action |
+| Profiles Passwords / Credit Cards | `passwords-cards/passwords`, `passwords-cards/cards` | Native phase-1 shell, clearly labelled Open in Tab; original Profile target action |
+| Profiles Clear Browsing Data | `browsing-data/clear` | Retained destructive sheet; captured Profile identity, time range, kinds and in-flight guards |
+| Profiles create, icon, rename, Spaces, delete unused / selected | `profiles/manage`, `profiles/name`, `profiles/delete` | Create with Space assignment retained as multi-step sheet; inline rename; same icon action; same exact-name/delete-token and default/in-use guards |
+| Advanced ad-block master | `ad-blocking/enabled` | Same global store and app action |
+| Ad Block sheet list search / categories / checkboxes / status / info / Reset | `ad-blocking/lists` | Inline; same list IDs, ready/busy/retired-Profile guards and async actions |
+| Ad Block allowed-site add / remove | `ad-blocking/allowed-sites` | Same host validation and per-Profile store |
+| Ad Block debug | `advanced/adblock-debug` | Same selected-Profile clipboard action, under Diagnostics |
+| Shortcuts every command, recording, conflict, clear/reset, priority, import/export/revert, learning window | `shortcuts/<command-id>`, `shortcuts/priority`, `shortcuts/essential` | Same KeyBindingStore, conflict guard and keyBindingsDidChange; Reset All confirmation is an app-owned sheet |
+| Extensions destination | `extensions/manage` | Native phase-1 shell opens current extension manager |
+| Advanced sounds / haptics / window drag / quotes / PiP / theme / Boosts | `advanced/sound`, `advanced/haptics`, `advanced/window-dragging`, `advanced/shared-quotes`, `advanced/picture-in-picture`, `advanced/theme-data`, `advanced/boosts` | Same preferences |
+| Advanced more / translate / reveal / copy info | `advanced/more`, `advanced/translate`, `advanced/data-folder`, `advanced/copy-info` | Same app-owned actions |
 
-General and Profiles also have `-light@1x`, `-light@2x`, `-dark@1x`, and `-dark@2x` files. Details: [routing rules](settings/links-rules@1x.png), [link test](settings/links-test@1x.png), [custom shortcuts](settings/shortcuts-custom@1x.png), [ad blocking](settings/advanced-adblock@1x.png), [sleep and data](settings/advanced-sleep-data@1x.png), each with a matching `@2x` file. The import [Choose](settings/import-choose@1x.png) and [Passwords](settings/import-consent@1x.png) sheets also have 1x/2x renders. The count-only Passwords render grants no consent. The Report render uses the real importer on the synthetic fixture. No Keychain API is called. The harness counts consent-bearing import plans at its action adapter; this proves the wizard gate only, not interception of arbitrary Keychain calls. [SHA-256 receipts](settings/sha256.txt) bind the committed PNGs.
+## Visual system and accessibility
 
-## Plan adjustments
+SettingsTokens.Redesign owns spacing, fonts, colors and finite motion durations. Labels are 13 pt regular, help 11.5 pt, navigation 13 pt medium and section labels 11 pt semibold. Section labels start 4 pt inside the card edge. Cards have 12 pt corners, 14 pt row padding, and inset separators. Light and dark are designed separately; dark content is #15151c and cards are #1d1d27. Space color supplies the accessible accent. Sun colors mark actions that need attention.
 
-- The user requested one branch and one PR. The ordered steps are separate commits in that PR.
-- First-party dependencies add `OpenDesign`, `OpenAdBlock`, and `OpenImport` to the plan's older dependency list, so the views use the merged tokens, store, catalog, and count readers. No third-party dependency was added.
-- The merged ad-block contract has a global master in `adblock-settings.json`, and per-profile list/allowlist files in lowercase `Profiles/<UUID>/adblock`. There is no per-profile master and no second catalog. Both fixture profiles therefore show the shared master ON. The catalog's proprietary addition has no public source and stays unavailable, with its reason in help. Reset List Choices adds a small atomic reset API to the existing store/repository; failed list changes persist their error without replacing the active generation.
-- `LinksSettingsModel` accepts an injected defaults suite (defaulting to `.standard` for existing callers). Its true fallbacks are unchanged. This prevents preview construction from reading real app preferences before hydration.
-- The plan requires clearing Zoom In, but the registry had not marked it customizable. That single flag is enabled; its default keys and command ID do not change.
-- `SearchEngine`'s Codable value moved down to `OpenModel`, with aliases in `OpenSuggest`. This is required to persist custom engines without a model→suggest→model cycle.
-- Clear-data actions include a range overload. The action protocols also include the plan's missing reset-translate/help/URL/clipboard/Library and download/capture methods. These additions make those controls callable by the app.
-- Current archive folder deletions are individual tab records. Library labels their child count from the payload when present, otherwise one tab, rather than inventing a new archive payload schema.
-- Empty-state headlines use a small native text bridge. Never-ordered `NSHostingView` does not vend its SwiftUI AX nodes; the CLI instead reads the real native headline labels in the same hosted view tree.
-- Step 8 and native engine acceptance stay with app-shell integration, as requested. This PR changes no `App/` file and does not request a design subagent.
+A focus ring appears only on the keyboard-focused control. Disabled dependent rows use secondary labels and explain their dependency. Each row exposes its label, help and changed state. Reduce Motion removes the section rise and keeps only the finite fade. No repeating animation or timer runs at rest.
 
-### Additional review renders
+## Verification and frames
 
-All links have a matching 1x and 2x render. These use only the synthetic fixture.
+`tools/e2e/settings_redesign_g2.py` exercises the real App through its automation socket with a short private data root. It verifies navigation/search/deep links, store round trips, profile scope, shortcut recording and conflict guards, list/site actions, retained sheets, Reduce Motion and window bounds. Native inputs stay in Open’s process. Runs hold the machine’s on-screen lock and restore changed preferences in finally.
 
-| State | 1x | 2x |
+The settings-preview product retains functional store/action checks and renders the new section layout. Library renders and checks remain separate and unchanged. Native frames in docs/settings and the lead’s G-frames/g3 review set bind the display scale and ICC profile in their receipts. Performance reports distinguish content submission and display-link pacing from WindowServer scanout.
+
+The `native-*@2x.png` references are real-window captures from the M1 built-in Retina display (3024 × 1964, 120 Hz). They include all fifteen sections in light and dark, search results and empty results, retained sheets, hover states, and minimum-window frames. [frames.json](settings/frames.json) records their display key, executable hash, and capture sizes. The older unprefixed filenames are refreshed synthetic `settings-preview` renders, including compatibility views that no longer have their own navigation entry. Their `@1x` suffix describes rendering scale; it does not mean a native M5 capture. Library and first-run images are unchanged.
+
+| Reference | Light | Dark |
 |---|---|---|
-| Previews | [PNG](settings/sheet-previews@1x.png) | [PNG](settings/sheet-previews@2x.png) |
-| Search Engines | [PNG](settings/sheet-search-engines@1x.png) | [PNG](settings/sheet-search-engines@2x.png) |
-| Clear Browsing Data | [PNG](settings/sheet-clear-data@1x.png) | [PNG](settings/sheet-clear-data@2x.png) |
-| Ad Block Settings | [PNG](settings/sheet-adblock@1x.png) | [PNG](settings/sheet-adblock@2x.png) |
-| Link Routing | [PNG](settings/sheet-link-rule@1x.png) | [PNG](settings/sheet-link-rule@2x.png) |
-| Create Profile | [PNG](settings/sheet-profile-create@1x.png) | [PNG](settings/sheet-profile-create@2x.png) |
-| Rename Profile | [PNG](settings/sheet-profile-rename@1x.png) | [PNG](settings/sheet-profile-rename@2x.png) |
-| Auto-archive scope | [PNG](settings/sheet-archive-scope@1x.png) | [PNG](settings/sheet-archive-scope@2x.png) |
-| Import Review | [PNG](settings/import-review@1x.png) | [PNG](settings/import-review@2x.png) |
-| Import Report | [PNG](settings/import-report@1x.png) | [PNG](settings/import-report@2x.png) |
-| Shortcut recording | [PNG](settings/shortcuts-recording@1x.png) | [PNG](settings/shortcuts-recording@2x.png) |
-| Shortcut conflict | [PNG](settings/shortcuts-conflict@1x.png) | [PNG](settings/shortcuts-conflict@2x.png) |
-| Go-to-Tab controls | [PNG](settings/shortcuts-tab-controls@1x.png) | [PNG](settings/shortcuts-tab-controls@2x.png) |
-| Archive empty | [PNG](settings/library-archive-empty@1x.png) | [PNG](settings/library-archive-empty@2x.png) |
-| Downloads empty | [PNG](settings/library-downloads-empty@1x.png) | [PNG](settings/library-downloads-empty@2x.png) |
-| Captures empty | [PNG](settings/library-captures-empty@1x.png) | [PNG](settings/library-captures-empty@2x.png) |
-| History empty | [PNG](settings/library-history-empty@1x.png) | [PNG](settings/library-history-empty@2x.png) |
+| General | [Frame](settings/native-general-light@2x.png) | [Frame](settings/native-general-dark@2x.png) |
+| Appearance | [Frame](settings/native-appearance-light@2x.png) | [Frame](settings/native-appearance-dark@2x.png) |
+| Ad Blocking | [Frame](settings/native-ad-blocking-light@2x.png) | [Frame](settings/native-ad-blocking-dark@2x.png) |
+| Profiles | [Frame](settings/native-profiles-light@2x.png) | [Frame](settings/native-profiles-dark@2x.png) |
+| Shortcuts | [Frame](settings/native-shortcuts-light@2x.png) | [Frame](settings/native-shortcuts-dark@2x.png) |
+| Search results | [Frame](settings/native-search-results-light@2x.png) | [Frame](settings/native-search-results-dark@2x.png) |
 
-## Review round 1
-
-Source: lead-approved review decisions in this thread. Measurements use the existing private composite `a-settings.png`, frames A0499–A0507, at about 0.70 px per point (±1.5 pt). The image was viewed only. Color facts are from `assetutil` output in `.re/design/assetutil_Contents__Resources__ARC_PreferencesFeature.bundle__Contents__Resources__Assets.car.json`: `PreferencesButtonBackgroundColor` (light black 15%; dark RGB 0.878/0.875/0.878 at 7%) and `PreferencesLinkColor` (#458AFF). `SettingsTokens` owns Settings metrics, colors, and fonts. Light box colors use the native grouped-form convention (an Open choice).
-
-Guesses retained explicitly: placing Ad Blocking in General was a guess, so Open keeps it in Advanced. Favorites/ninth-tab controls appear when a Go-to-Tab command is selected (guess); round 2 makes the conflict picker available for every customizable command. Download location merges the folder and prompt choice based on strings `arc.folder`, `arc.promptForDownload`, and `arc.other` (guess). The lead approved the three Advanced boxes, removal of the inline General Previews switch, one-column App Icon list, and routing sheet.
-
-| Review item | Change | Proof |
-|---|---|---|
-| Design 1 | Compact centered custom tabs; neutral selection; 20 pt icons/11 pt labels; 28 pt title within an 89 pt band; transparent full-size title bar | All Settings PNGs; `SettingsTokens`, `SettingsWindow` |
-| Design 2 | Dedicated tokens; 64 pt side inset, 19 pt top gap, 10 pt group gap, 8 pt boxes; exact row heights and inset dividers; mini switches | General/Profiles light and dark; Advanced; token source |
-| Design 3 | Count-only and capability-gated engine copy; Passwords step only when requested; default/cancel actions and pluralization | Four import states; `import-counts` gate checks |
-| Design 4 | Fixed 340 pt list and 200 pt custom panel; 380×35 segments; keycap recording, context actions, conditional tab controls | Shortcuts plus recording/conflict/tab-control renders; shortcut checks |
-| Design 5 | Three header-less tile boxes; effective quote shortcut; compact search, ad-block and sleep rows; separate ad-block sheet and data menu | Advanced viewports and Ad Block Settings sheet |
-| Design 6 | Two compact General boxes; banner only when not default; Previews and Profile Settings buttons on their rows; one Import row | General light/dark and Previews sheet |
-| Design 7 | 205/340 columns, 11 pt gap; 27/31/31 pt list bands; download pop-up; 34 pt data rows, Credit Cards and blue arrows; unused button conditional | Profiles light/dark; create/rename/archive-scope/clear sheets |
-| Design 8 | Intro/box/divider/Peek layout; rule list and sheet; unified destinations; app picker; warning quotes the draft pattern | Links, result, and Link Routing sheet |
-| Design 9 | Native source-list table with keyboard selection; toolbar filters/search and section title; compact download rows; day-grouped History; simple capture cards; Archive hover actions | Five Library sections and four empty-state pairs |
-| Design 10 | One box, six 80 pt icon rows; original art with named palettes, radio selection and current label | App Icon pair |
-| Design 11 | Added every requested sheet/state and real Links result | Screenshot inventory and SHA-256 receipts |
-| Design 12 | Profiles help copy, underlined help link, From path label | Profiles and import Choose |
-| Code 1 | Stage restore, durable save, owner deletion; rollback insertion on save error | `archive-save-failure`, `library-archive` |
-| Code 2 | One profile-aware resolver at lookup sites | `profile-search` exercises real `SuggestEngine` with a custom default |
-| Code 3 | Open selected/new ad-block profiles, close deleted state; distinguish validation and store errors | `adblock-profile-lifecycle`, disk allowlist, and a [real store callback during external deletion](settings/callback-check.txt) |
-| Code 4 | First-ON appearance notice and app presentation API | `suggestion-notice`, persisted acknowledgement and reopened model |
-| Code 5 | Required injected shared SnapshotStore; no implicit writer | Initializer and caller compile |
-| Code 6 | Removed force-unwrapped draft binding; sheet owns a captured draft | Link Routing sheet source |
-| Code 7 | Delete only through owning stores; partial result per profile | `archive-owner-partial` uses a real SQLite failure trigger |
-| Code 8 | Gate-only claim and counted consent-bearing action plans; 1-hour scope check; unseeded command priority check | `import-counts`, `profile-archive-scope`, `shortcuts-save` |
-| Code 9 | Sidebar file read and JSON parse off main actor; model build remains on main actor | `ArcImporter.readSidebar`, wizard detached task, import check |
-| Code 10 | Preserve suggest URL, format and other keywords on edit | `profile-search` disk roundtrip and real consumer |
-
-## Review round 2
-
-The lead chose **Icon** as the tab/window title (the stored pane ID and commands remain unchanged), allows the source-browser name inside the import wizard, and chose a plain Links Test result with the trace under collapsed Details. Default pane/Library renders now all use Dark; General and Profiles also have explicit Light/Dark pairs. The renderer applies the same appearance to NSApp, the host and window so native controls agree with SwiftUI. It yields during layout so SwiftUI tasks and the scroll destination settle before capture. Library toolbar pop-ups also use regular controls.
-
-| Item | Change | Proof |
-|---|---|---|
-| Design 1 | 13 pt regular, 24 pt buttons with 12 pt side padding/radius 6; regular native pop-ups with actual fixed widths and standard arrows | General/Profiles and sheet PNGs; SettingsPopUp |
-| Design 2 | General box 2 rows 43/47; Profiles box 1 rows 44/44/36 | General/Profiles pairs |
-| Design 3 | Secondary headers with >=4.5:1 token contrast; Your Profiles semibold; 10 pt header inset | SettingsTokens and Profiles Light/Dark |
-| Design 4 | Blue #007AFF selected segment and white text; 148/211 pt segments (replaced in commandbar-completion Step 6 by the callout: label + accent button, same 359×35 frame) | Shortcuts pairs; `shortcuts-callout` check |
-| Design 5 | Priority picker for every selected customizable command; numbering only for Go to Tab | Recording/custom/tab-control states |
-| Design 6 | Rules intro/divider and match subtitles; Test a Link label; controls align at the trailing edge | Links rules/test and Link Routing sheet |
-| Design 7 | Plain import summary; ordered Choose categories; skipped item line; Done default at bottom right | Import Report pair |
-| Design 8 | Advanced/Shortcuts labels 13 pt; quote subtitle 11 pt and row 50 pt | Advanced and Shortcuts |
-| Design 9 | One status per recording/conflict state | Shortcut state pairs |
-| Design 10 | Both profile columns 420 pt; inset rounded selected row | Profiles pairs |
-| Design 11 | Icon row offsets 27/63/130 pt | Icon pair |
-| Design 12 | Aligned rule controls; contained built-in/custom engine list and one action row; hover-dependent Delay; named Profile and no destructive Return default; archive-scope question | Sheet pairs |
-| Design 13 | Distinct bottom-aligned detail targets, consistent default appearance, four added state pairs | PNG inventory and hashes |
-| Design 14 | Archive actions in header; fixed History separators; fixed empty icon/headline/message geometry; folder title first | Library populated/empty pairs |
-| Design 15 | Banner 13 pt; grey 11 pt info.circle | General pairs |
-| Design 16 | Shortcut label inset 25.5 pt; Use Automatic Appearance copy and matching search/sort | Shortcuts |
-| Code 1 | Central recording admission keeps invalid keys active and never writes | shortcuts-recording-admission, real keybindings file and action log |
-| Code 2 | Page state completes before favicon awaits; row-count sentinel task | archive-paging reaches all 225 real SQLite rows |
-| Code 3 | Pure profile-aware query gate; separate explicit notice presentation | suggestion-notice checks VM and presenter without opening a window |
-| Code 4 | Bool save result, visible error, durable save/rollback, sheet stays open on failure | links-save-failure (invalid sibling and simulated disk failure) |
-| Code 5 | Opened-profile readiness, disabled controls, plain fault text | adblock-readiness and lifecycle checks |
-| Code 6 | Passwords-not-imported copy only when secretsConsented is false | Import Report source and count-only flow |
-| Code 7 | File-change parsed-store cache and retained decoded images | settings-caches checks load count, real file replacement and image identity |
-| Code 8 | Unknown owners report the unavailable row | archive-paging final delete case |
-| Code 9 | File/JSON parsing and count readers stay off main; graph assembly cost is explicit below | ImportWizard, ArcImporter and model actor boundaries |
-
-Import graph assembly remains on the main actor. `ArcImporter.importAll(sidebar:)` walks the parsed item/Space/Profile graph and constructs actor-isolated OpenModel objects. Moving that work requires a separate Sendable intermediate model or a change to model isolation; this is not a cheap Settings-only move. The remaining walk is proportional to imported nodes and can pause the window for a very large sidebar. This PR claims off-main file/JSON parsing and count reads, not fully off-main model assembly or a large-import latency result.
-
-Additional states: [suggestion notice](settings/sheet-suggestion-notice@1x.png), [engine-ready Passwords copy](settings/import-passwords-ready@1x.png), [search-engine edit form](settings/sheet-search-engine-edit@1x.png), [invalid rule](settings/sheet-link-rule-invalid@1x.png), each with a matching @2x PNG. The engine-ready copy render stops before consent or import. It never requests a consent token or accesses Keychain.
-
-
-## Round-3 polish
-
-| Item | Change | Proof |
-|---|---|---|
-| Pop-up trailing edges | Sleep and Little Open archive intervals use SettingsPopUp, with the native control itself sized to 150/155 pt and ending at x 610 | advanced-sleep-data and links-rules at 1x/2x |
-| Empty rule hint | Empty or whitespace-only Host contains patterns show “Enter a site to match.” | sheet-link-rule-invalid at 1x/2x |
-| Engine edit labels | Name, Keyword, and URL stay visible beside their fields | sheet-search-engine-edit at 1x/2x |
-
-All affected PNGs were re-rendered and inspected at both scales. The release build and all 28 settings-preview checks pass. The PR contains the full verify-all summary for its head.
-
-## Shared first-run probe and review round 1
-
-First-run Steps A/B replace the wizard's independent count reads with OpenImport.ArcProbe. It builds no BrowserModel. Both flows share the importer's Archive filters and full profile metadata merge, including unused profiles and a distinct named Default. Readable per-profile History and saved-item counts survive another profile's error and show “(partial)”. Space mapping labels load on the utility worker during `refreshCounts`, before Review is enabled, and stay out of probe receipts.
-
-The unavailable Passwords checkbox is disabled and excluded from selection in both flows. Capability-OFF consent renders are copy references only; capability-ON renders stop before consent. `ImportOutcome.didImportAnything` handles canonical adapter keys once for both flows. Default buttons use the prominent Settings style; General's Make Open your default and the wizard's Next/Import/Done/consent buttons use it too. Inactive windows retain the gray fill.
-
-All 86 Settings/Library PNGs were re-rendered and inspected at both scales, including General light/dark and Choose/Review/Passwords/Report. [SHA-256 receipts](settings/sha256.txt) bind them. The renderer supplies explicit key state for these never-ordered windows. See [first-run.md](first-run.md) for the 32-flow receipt, filtered-count parity, cancellation cleanup, WAL checks and 128 permanent first-run state PNGs. Real window integration and graph-build performance remain Steps C–F.
-
-## First-run review round 2
-
-All seven remaining Settings default buttons now explicitly use prominent SettingsButtonStyle: Ad Block Done, Previews Done, Profile Create/Save, This Profile Only, suggestion notice, Save Engine, and Save Rule. The standalone sheet renderer uses the same base SettingsButtonStyle as the app. Settings import shows “Search engine” in Choose and Report and formats count strings with the shared singular/plural helper. The adapter’s `Search settings` key is unchanged. All 86 Settings/Library PNGs and their SHA-256 receipts were refreshed.
-
-## Section 7 live Settings
-
-Peek uses the positive registry keys `open.links.openPeekShiftClick` and
-`open.links.openPeekOtherSites` (both default true). Startup copies a stored
-legacy `open.peek.shiftClick` / `open.peek.otherSites` value only when its
-canonical key has no stored value. A stored canonical choice always wins.
-
-File ▸ New Profile and sidebar Set Profile ▸ New Profile open Profiles with
-the same create sheet. A supplied source Space starts selected. Cmd+, is
-consumed while the command bar's text field owns typing; Escape still closes
-the bar. Search Settings opens Profiles. Cmd+9 retains its last-tab default.
-
-The Icon pane applies Open's existing original artwork to the running App
-through `NSApp.applicationIconImage`. Alternate images render at 1024 pixels
-and are saved as versioned PNGs below the data root's `Cache/AppIcons` folder.
-Restore decodes and prepares the TIFF representation on a utility worker.
-The main-thread setter runs in one low-priority queue turn at least about one
-second after first paint (or after the existing no-paint deadline). No repeating
-timer remains. The default icon schedules no task, decode, or setter.
-`settings-icon` reports worker decode/preparation, main preparation, setter and
-total main cost separately. The acceptance target is main decode/preparation
-below 5 ms; AppKit/Dock setter cost is reported separately, per the Section 7
-lead's 2026-11-06 ruling. The signed bundle is never changed. A missing or bad
-cache leaves the bundle icon and asks the user to select the icon again.
-The final quiet Release receipt measured worker preparation at 8.556–9.096 ms,
-main preparation below 0.001 ms, and the accepted setter at 24.163–25.298 ms
-(load1 7.06–7.46). Default selection has zero restore work. See the
-[cost split](first-run/steps-ef-verification.md#alternate-icon-restore-split).
-
-Actions use the triggering pane's existing status/error line. Links renders
-model issues per rule and default destination; errors block Save, warnings
-do not. Invalid Test input shows “Enter a valid URL.” Successful import's
-Open Library completion hides Settings and opens Archive. Export Data keeps
-its existing metadata export contract.
+The lead approved the original Settings look at G1, G2 and G3. The static Appearance preview and phase-2 management destinations above are the approved phase-1 boundaries.
