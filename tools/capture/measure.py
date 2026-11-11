@@ -148,6 +148,14 @@ def edge_motion(originals, values, spec):
 def burst(directory, spec=None):
     receipt = json.loads((directory / 'timestamps.json').read_text())
     frames = receipt['frames']
+    context_file = directory/'capture-context.json'
+    context = json.loads(context_file.read_text()) if context_file.exists() else {}
+    trigger = context.get('event_qualification','trigger dispatch coverage not recorded')
+    if trigger.startswith('UNQUALIFIED:'):
+        result = {'status':'UNQUALIFIED','reason':trigger,'fit_guess':None,
+                  'effective_fps':receipt.get('effective_fps'),'frame_count':len(frames)}
+        (directory/'motion.measure.json').write_text(json.dumps(result,indent=2))
+        return result
     if not frames:
         result = {'status': 'not captured', 'reason': 'stream has no complete image frames', 'receipt': receipt}
         (directory/'motion.measure.json').write_text(json.dumps(result,indent=2))
@@ -197,6 +205,7 @@ def burst(directory, spec=None):
     if best and best[0] > .15:
         fit_status = 'GUESS: poor image-change fit; do not accept its duration or curve'
     result={'requested_fps':receipt['requested_fps'],'effective_fps':receipt['effective_fps'],'samples':values,
+            'trigger_qualification':trigger,
             'fit_status':fit_status, 'intermediate_samples':intermediate,
             'clock':clock,
             'fit_guess':None if not best else {'rms':best[0],'curve':best[1],'delay_seconds':best[2],'duration_seconds':best[3]},
@@ -220,6 +229,8 @@ def main():
     spec=json.loads(args.spec.read_text()) if args.spec else None
     result=burst(args.input,spec) if args.input.is_dir() else measure(args.input,spec)
     print(json.dumps({k:v for k,v in result.items() if k not in ('elements','gaps','samples')}))
+    if result.get('status') == 'UNQUALIFIED':
+        raise SystemExit(2)
 
 
 if __name__=='__main__': main()

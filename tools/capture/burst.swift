@@ -50,13 +50,13 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
       "uncertainty": (ended - started) / 2])
     lock.unlock()
   }
-  func receipt(_ start: Double, _ fps: Int, _ duration: Double, _ interrupted: Bool) -> [String: Any] {
+  func receipt(_ start: Double, _ unixStart: Double, _ fps: Int, _ duration: Double, _ interrupted: Bool) -> [String: Any] {
     lock.lock(); defer { lock.unlock() }
     let times = frames.compactMap { $0["presentation_seconds"] as? Double }
     let span = (times.last ?? 0) - (times.first ?? 0)
     return ["method": movie ? "ScreenCaptureKit own-window movie; decode required" : "ScreenCaptureKit own-window stream", "requested_fps": fps,
       "movie": movie ? "capture.mov" : "",
-      "duration": duration, "started_monotonic": start, "interrupted": interrupted,
+      "duration": duration, "started_monotonic": start, "started_unix": unixStart, "interrupted": interrupted,
       "effective_fps": span > 0 ? Double(times.count - 1) / span : 0,
       "frames": frames.map { row in var r = row; r["elapsed"] = (row["start"] as! Double) - start; return r },
       "errors": errors,
@@ -109,6 +109,7 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
     }
     try await stream.startCapture()
     let start = CACurrentMediaTime()
+    let unixStart = Date().timeIntervalSince1970
     try Data("ready".utf8).write(to: directory.appendingPathComponent("ready"))
     var interrupted = false
     while CACurrentMediaTime() - start < duration {
@@ -127,7 +128,7 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate, SCRecordingOutputD
     }
     withExtendedLifetime(recording) {}
     queue.sync {}
-    var receipt = sink.receipt(start, fps, duration, interrupted)
+    var receipt = sink.receipt(start, unixStart, fps, duration, interrupted)
     receipt["scope"] = applicationScope ? "owned application only" : "owned window only"
     receipt["captureBounds"] = [bounds.minX,bounds.minY,bounds.width,bounds.height]
     receipt["method"] = movie ? "ScreenCaptureKit movie; decode required" : "ScreenCaptureKit stream"

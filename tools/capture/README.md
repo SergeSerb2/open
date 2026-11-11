@@ -118,7 +118,7 @@ Window Server desktop elements. It records their IDs. Positive system windows
 still stop input. A Notification Center banner over the point permits two
 six-second waits, with a fresh AX target and ownership check after each wait.
 LEAD00:15 additionally excludes Window Server's cursor window only at layer
-2147483630 with positive dimensions at most64×64 points. Other positive-layer
+2147483630 with positive dimensions at most 64×64 points. Other positive-layer
 windows keep their existing blocking checks. Ignored IDs and bounds are logged.
 LEAD20:32 permits an owned drag image during our held gesture when it first
 appears within one second and its drawn content is at the pointer. The runner
@@ -169,6 +169,15 @@ on the captured display. Use it for creating, closing or promoting a window;
 an individual window stream ends when that window closes. Stills remain window
 only. `format` is `png` or `movie`. A recorder that stops early retains an
 interrupted receipt; a movie without finalized timestamps stays unqualified.
+Bursts accept `ax_depth` for their before/after snapshots. A pointer trigger
+reuses that before frame, then resolves its AX target and checks ownership
+again. It does not take another full snapshot before dispatch. New stream
+receipts map capture PTS to the same host's wall clock. `capture-context.json`
+records dispatch intervals and requires at least 100 ms of recorded coverage
+after them. An unavailable Open trigger remains an explicit no-action gap.
+An interrupted trigger remains unqualified. A late trigger stops the block; `measure.py` refuses its motion fit. This
+clock mapping proves capture coverage only. It does not measure input latency
+or prove that an animation is visible; inspect the decoded frames as well.
 Other captures use serial own-window snapshots;
 requested and actual cadence, per-capture start/end and uncertainty are saved.
 Do not treat this as a high-refresh smoothness or physical scanout measurement.

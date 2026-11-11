@@ -99,6 +99,8 @@ class Session:
         self.manual_on = False
         self.fixture_page = None
         self.fixture_points = {}
+        self.burst_before = None
+        self.burst_events = None
         self.download_requested_at = None
         self.permission_handoff = None
         self.logfile = (out / 'session.jsonl').open('a')
@@ -272,6 +274,7 @@ class Session:
     def call(self, cmd, **args):
         if not self.cleaning:
             self.guard(event=cmd in ('key', 'mouse', 'type', 'sidebar-click', 'sidebar-key', 'download-home'))
+        dispatched = time.time()
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(10)
             conn.connect(self.script['open']['socket'])
@@ -287,6 +290,8 @@ class Session:
         reply = json.loads(buf)
         if not reply.get('ok'):
             raise RuntimeError(str(reply.get('error')))
+        if self.burst_events is not None and cmd in ('key','mouse','navigate','peek-open','peek-expand','peek-close','little-open-action'):
+            self.burst_events.append({'operation':'socket/'+cmd,'start_unix':dispatched,'end_unix':time.time()})
         return reply['result']
 
     def launch(self, step):
@@ -381,7 +386,10 @@ class Session:
                 raise Stopped('no same-block accessibility-off fixture target')
             before = [n.get('frame') for n in walk(json.loads(saved['windows'])) if n.get('role') == 'AXWindow' and n.get('main')]
             after = [n.get('frame') for n in walk(json.loads(run(self.native,'window-info',self.pid))) if n.get('role') == 'AXWindow' and n.get('main')]
-            fields = [n for n in walk(self.tree()) if n.get('id') == 'contentPanelTextField' and n.get('value') == saved['url']]
+            # This native URL field is at depth two. A full sidebar traversal
+            # can outlast the movie before the remembered-point click fires.
+            current = json.loads(run(self.native,'ax-depth',self.pid,3))
+            fields = [n for n in walk(current) if n.get('id') == 'contentPanelTextField' and n.get('value') == saved['url']]
             if before != after or len(fields) != 1:
                 raise Stopped('fixture window or active URL changed after AX point resolution')
             return saved['target']
@@ -485,11 +493,13 @@ class Session:
                 elif (key not in ('escape', 'esc', 'left', 'right', 'up', 'down', 'return', 'tab') or modifiers) and (key,modifiers) not in (('l','cmd,shift'),('j','cmd,shift'),('y','cmd'),('s','cmd')):
                     raise Stopped('key is outside the approved Arc navigation shortcuts')
             else:
-                fields = [n for n in walk(self.tree()) if n.get('focused') and n.get('role') == 'AXTextField' and str(n.get('placeholder','')).startswith('Search ')]
                 if self.s2_ruling():
                     self.synthetic_field(str(args[1]))
-                elif not self.arc_library_visible(self.tree()) or len(fields) != 1 or not str(args[1]).startswith('Open-capture-'):
-                    raise Stopped('typing requires one focused Library search and a synthetic capture string')
+                else:
+                    tree = self.tree()
+                    fields = [n for n in walk(tree) if n.get('focused') and n.get('role') == 'AXTextField' and str(n.get('placeholder','')).startswith('Search ')]
+                    if not self.arc_library_visible(tree) or len(fields) != 1 or not str(args[1]).startswith('Open-capture-'):
+                        raise Stopped('typing requires one focused Library search and a synthetic capture string')
             self.guard(event=True)
         elif args[0] not in ('move', 'scroll', 'drag', 'dragto', 'down', 'up'):
             raise Stopped('unsupported system input')
@@ -501,16 +511,25 @@ class Session:
                 self.guard(event=True)
                 if self.s2_ruling():
                     self.synthetic_field()
+                dispatched = time.time()
                 run(SCRIPTS / 'uidrive', 'type', text[offset:offset+96])
+                if self.burst_events is not None:
+                    self.burst_events.append({'operation':'type','start_unix':dispatched,'end_unix':time.time()})
         else:
+            dispatched = time.time()
             run(SCRIPTS / 'uidrive', *args)
+            if self.burst_events is not None:
+                self.burst_events.append({'operation':args[0],'start_unix':dispatched,'end_unix':time.time()})
 
     def ax_action(self, predicate, action='AXPress', value=None):
         self.guard(event=True)
         command = [str(self.native), 'act', str(self.pid), json.dumps(predicate), action]
         if value is not None:
             command.append(str(value))
+        dispatched = time.time()
         result = subprocess.run(command, capture_output=True, text=True, timeout=9)
+        if self.burst_events is not None:
+            self.burst_events.append({'operation':action,'start_unix':dispatched,'end_unix':time.time()})
         reply = json.loads(result.stdout) if result.stdout.strip() else {'ok': False, 'exit': result.returncode}
         self.log('ax-action', action=action, reply=reply)
         if result.returncode or not reply.get('ok'):
@@ -604,10 +623,12 @@ class Session:
             raise Stopped('burst format must be png or movie')
         if step.get('scope','window') not in ('window','application'):
             raise Stopped('burst scope must be window or application')
-        self.shot(step['name'] + '-before')
+        before = self.shot(step['name'] + '-before', step.get('ax_depth'))
         directory = self.out / step['name']
         directory.mkdir(exist_ok=True)
-        (directory/'capture-context.json').write_text(json.dumps({'accessibilityOn':self.manual_on,'scope':step.get('scope','window')}))
+        (directory/'capture-context.json').write_text(json.dumps({
+            'accessibilityOn':self.manual_on,'scope':step.get('scope','window'),
+            'event_qualification':'UNQUALIFIED: recorder or trigger did not finish'}))
         fps = min(float(step.get('fps', 20)), 120)
         duration = min(float(step.get('duration', 1)), 5)
         stream_tool = self.burst_tool
@@ -623,6 +644,8 @@ class Session:
                     if process.poll() is not None or time.monotonic() > ready_deadline:
                         raise Stopped('window stream did not become ready; inspect stream.log')
                     time.sleep(.02)
+                self.burst_before, self.burst_events = before, []
+                self.log('burst-ready', name=step['name'], observed_unix=time.time())
                 time.sleep(float(step.get('trigger_after', .15)))
                 if step.get('trigger'):
                     self.step(step['trigger'])
@@ -630,14 +653,32 @@ class Session:
                 if result:
                     raise Stopped('window stream stopped; exit %d' % result)
                 self.pixel_result(pixel_log)
+                receipt = json.loads((directory/'timestamps.json').read_text())
+                frames = receipt.get('frames', [])
+                start = receipt.get('started_unix')
+                span = [start + f['presentation_seconds'] - receipt['started_monotonic'] for f in (frames[:1]+frames[-1:])] if start is not None and frames else []
+                captured = bool(span and self.burst_events) and all(span[0] <= e['start_unix'] <= e['end_unix'] <= span[-1]-.1 for e in self.burst_events)
+                context = {'accessibilityOn':self.manual_on,'scope':step.get('scope','window'),
+                           'event_intervals':self.burst_events,'recorded_unix_interval':span,
+                           'event_qualification':'dispatch interval captured; inspect visible result' if captured else 'UNQUALIFIED: no dispatch interval with100ms recorded afterward',
+                           'clock_qualification':'same-host wall-clock mapping of capture PTS; not an input-latency measurement'}
+                (directory/'capture-context.json').write_text(json.dumps(context,indent=2))
+                if step.get('trigger') and not captured:
+                    if self.backend == 'open' and not self.burst_events:
+                        gap = {'step':step['trigger'],'finding':'Open: no action; movie trigger unavailable'}
+                        self.gaps.append(gap)
+                        self.log('no-action',operation=step['trigger'],finding=gap['finding'])
+                    else:
+                        raise Stopped('movie did not contain the trigger dispatch interval and100ms afterward')
                 self.log('burst', method='ScreenCaptureKit', receipt=str(directory / 'timestamps.json'))
             finally:
+                self.burst_before, self.burst_events = None, None
                 if process.poll() is None:
                     # The recorder has its own five-second bound. Let the fixed
                     # launcher reap it even when the AX side stops early.
                     process.wait(timeout=10)
                 log.close()
-            self.shot(step['name'] + '-after')
+            self.shot(step['name'] + '-after', step.get('ax_depth'))
             return
         start = time.monotonic()
         frames = []
@@ -756,14 +797,15 @@ class Session:
             expected = step['url']
             if not self.s2_ruling() or not self.fixture_site or not expected.startswith(tuple(u+'/' for u in self.fixture_site.urls)):
                 raise Stopped('copy URL requires the Session2 synthetic fixture')
-            fields = [n for n in walk(self.tree()) if n.get('id') == 'contentPanelTextField' and n.get('value') == expected]
+            current = json.loads(run(self.native,'ax-depth',self.pid,3))
+            fields = [n for n in walk(current) if n.get('id') == 'contentPanelTextField' and n.get('value') == expected]
             if len(fields) != 1:
                 raise Stopped('copy URL requires the actual current synthetic URL field')
             saved = self.out/'clipboard-private.json'
             if saved.exists():
                 raise Stopped('previous clipboard preservation is still pending')
             run(self.native,'clipboard-save',saved)
-            self.ax_action({'role':'AXMenuItem','title':'Copy URL'})
+            self.ax_action({'role':'AXButton','identifier':'copyLinkButton','depth':2})
             deadline = time.monotonic()+2
             while True:
                 self.guard(event=True)
@@ -785,7 +827,10 @@ class Session:
             if not self.fixture_site or not step['url'].startswith(tuple(u+'/' for u in self.fixture_site.urls)):
                 raise Stopped('external link must use the owned synthetic fixture')
             self.guard(event=True)
+            dispatched = time.time()
             run('/usr/bin/open', '-a', '/Applications/Arc.app', step['url'])
+            if self.burst_events is not None:
+                self.burst_events.append({'operation':'external-fixture','start_unix':dispatched,'end_unix':time.time()})
         elif op == 'fixture_download':
             self.guard(event=True)
             if self.fixture_server is not None:
@@ -883,7 +928,9 @@ class Session:
                 raise Stopped('M1 pointer click needs the lead ruling, a named frame and an expected result')
             if step.get('button','left') not in ('left','right') or int(step.get('count',1)) not in (1,2):
                 raise Stopped('one verified left/right click or double-click is allowed')
-            before = self.shot(step['name'] + '-before', step.get('ax_depth'))
+            # A burst already captured its before frame before starting the
+            # recorder. A second AX/PNG pass can outlast a short movie.
+            before = self.burst_before or self.shot(step['name'] + '-before', step.get('ax_depth'))
             n = self.target(step['target'])
             x,y,w,h = n['frame']
             window_info = json.loads(run(self.native, 'window-info', self.pid))
