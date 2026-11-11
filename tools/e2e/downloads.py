@@ -97,6 +97,7 @@ def checks(factory, results, tmp, config, harness):
     def check(name, ok, **evidence):
         results[name] = dict(ok=bool(ok), **evidence)
         print('downloads %-26s %s' % (name, 'PASS' if ok else 'FAIL'), flush=True)
+    retry_result = None
     def menu(key, select=None):
         return app.call('download-menu', id=key, **({'select': select} if select else {}))
     def start(route, source_tab=None):
@@ -285,7 +286,7 @@ def checks(factory, results, tmp, config, harness):
 
 
     def history_flow():
-        nonlocal app, tab
+        nonlocal app, tab, retry_result
         home_space = next(v['id'] for v in app.call('spaces') if v['focused'])
         normal_window = next(v for v in app.call('incognito-state')['windows'] if not v['private'])
         library()
@@ -426,14 +427,29 @@ def checks(factory, results, tmp, config, harness):
         wait(lambda: bool(row(other)))
         menu(other, 'Retry'); dismiss_library()
         retried = wait(lambda: next((v for v in state()['items'] if v['id'] not in before_retry and v['state'] == 'completed'), None))
-        check('history_retry', retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
-              and Path(retried['path']).exists(), item=retried, items=state()['items'],
+        # Keep the same Retry predicate and raw failure. Publish it last so
+        # the known engine gap cannot prevent independent history/quit checks.
+        retry_result = dict(ok=bool(retried and retried['profile'] == profile2 and retried['source'] == before_second['source']
+              and Path(retried['path']).exists()), item=retried, items=state()['items'],
               tabs=app.call('tabs'), sheets=state()['sheets'],
-              detachedPages=state()['detachedPages'], engineEvents=app.call('events'))
-        if not retried:
-            raise RuntimeError('historical Retry did not complete a new transfer')
+              detachedPages=state()['detachedPages'], engineEvents=app.call('events'),
+              reason='' if retried else 'engine: download callbacks end when the originating tab closes (CEF download_manager_delegate_impl.cc:331-344, 483-492)')
+        # Preserve the raw assertion even if a later independent check fails.
+        # The normal checked assignment at the end still fails the suite.
+        dict.__setitem__(results, 'history_retry', retry_result)
         for new_tab in app.call('tabs'):
             if new_tab['id'] not in before_retry_tabs: app.call('close', tab=new_tab['id'])
+        survivor = retried
+        if survivor is None:
+            # A real completed transfer is the independent second-Profile
+            # survivor for clear/retirement checks. It is never counted as Retry.
+            app.call('space', space=next(s['id'] for s in app.call('spaces') if s['profile'] == profile2))
+            tab = E.new_tab(app, base + '/')
+            control = start('/fast?history=retention-control')
+            survivor = wait(lambda: item(control) if item(control).get('state') == 'completed' else None)
+            check('history_retention_control', survivor and survivor['profile'] == profile2
+                  and Path(survivor['path']).exists(), item=survivor)
+            if not survivor: raise RuntimeError('independent history retention transfer did not complete')
         library(); wait(lambda: bool(row(other))); menu(other, 'Move to Trash')
         check('history_trash', wait(lambda: not item(other)) and not Path(before_second['path']).exists())
 
@@ -442,15 +458,15 @@ def checks(factory, results, tmp, config, harness):
         response = app.call('settings-clear-data', profile=profile, kinds=8, range='Last hour')
         wait(lambda: all(not item(k) for k in (failed, cancelled)))
         check('history_clear_range', response['status'] == 'Done' and bool(item(old))
-              and bool(retried and item(retried['id'])), response=response)
-        restart({old, retried['id']})
+              and bool(survivor and item(survivor['id'])), response=response)
+        restart({old, survivor['id']})
         check('history_remove_clear_persist', not any(item(k) for k in (completed, failed, cancelled, other))
-              and bool(item(old)) and bool(retried and item(retried['id'])), items=state()['items'])
+              and bool(item(old)) and bool(survivor and item(survivor['id'])), items=state()['items'])
         response = app.call('settings-clear-data', profile=profile, kinds=8, range='All time')
-        restart({retried['id']})
+        restart({survivor['id']})
         check('history_clear_all_persist', response['status'] == 'Done'
               and not any(v['profile'] == profile for v in state()['items'])
-              and bool(retried and item(retried['id'])), items=state()['items'])
+              and bool(survivor and item(survivor['id'])), items=state()['items'])
 
         # The real typed Settings deletion closes the owner before removing its
         # directory. Opening Library and quitting again must not recreate it.
@@ -857,6 +873,10 @@ def checks(factory, results, tmp, config, harness):
             for name, flow in flows.items():
                 if name in selected:
                     flow()
+            if retry_result is not None:
+                check('history_retry', **retry_result)
+                if not retry_result['ok']:
+                    raise RuntimeError('historical Retry did not complete a new transfer')
     finally:
         if not app.closed:
             E._try(lambda: app.call('profiles-shell', action='cancel'))

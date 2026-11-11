@@ -85,6 +85,10 @@ class SuiteStopped(BaseException):
     """A failed row or watchdog cannot enter per-flow exception recovery."""
     fatal_app_death = True  # Do not query focus while unwinding a failed flow.
 
+    def __init__(self, message, failed_row=None):
+        super().__init__(message)
+        self.failed_row = failed_row
+
 
 def begin_row(name):
     global _ROW_NAME
@@ -244,7 +248,7 @@ class CheckedResults(dict):
                     print(key + ' FAIL (timing); continuing functional rows', flush=True)
                 else:
                     print(key + ' FAIL; stopping before the next row', flush=True)
-                    raise SuiteStopped('row failed: ' + key)
+                    raise SuiteStopped('row failed: ' + key, failed_row=key)
             begin_row('after ' + key)
 
 
@@ -12931,7 +12935,10 @@ def main():
             if loss:
                 interruption = {"reason": str(error), "focus": loss}
             else:
-                dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(error)})
+                detail = {"ok": False, "error": str(error)}
+                if isinstance(error, SuiteStopped) and error.failed_row:
+                    detail['failedRow'] = error.failed_row
+                dict.__setitem__(results.setdefault(opts.only, {}), "suite", detail)
                 traceback.print_exc()
         finally:
             if opts.stop_on_app_death:
