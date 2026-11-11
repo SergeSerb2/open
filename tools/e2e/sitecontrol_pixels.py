@@ -37,6 +37,14 @@ def background_response(app, tab, private, env, scale):
                 fallback='Separate follow-up PR: borderless child window with .behindWindow blending (plan §11.1).')
 
 
+# LEAD 12:20 (2026-11-11) approves ΔE00 ≤ 4 for exactly these rows, all others keep ΔE00 ≤ 2. Reason: "Arc's backdrop
+# kernel is wider than any public material; values at the panel's edges cannot be reproduced exactly".
+EDGE_LIMIT = 4
+EDGE_ELEMENTS = frozenset(['Arrow row %d' % i for i in range(10)] + ['Top rim', 'Share ring', 'New Boost ring', 'Capture ring',
+                                                                    'Bottom rim', 'More circle'])
+def color_limit(name): return EDGE_LIMIT if name in EDGE_ELEMENTS else 2
+
+
 def compare_live(path, state, scale, private, env, negative_path=None):
     captures = Path(env['ROOT'], '.re/runtime/sessions')
     frames = list(captures.glob('*09-site-controls-first/0010-*/win-73938.png'))
@@ -59,7 +67,7 @@ def compare_live(path, state, scale, private, env, negative_path=None):
             return [statistics.mean(p[i] for p in points) for i in range(3)]
         ac,oc=mean(arc,a,1),mean(ours,o,scale)
         de=delta(ac,oc)
-        probes.append(dict(element=name,arcRGB=ac,openRGB=oc,deltaE00=de,ok=de<=2))
+        probes.append(dict(element=name,arcRGB=ac,openRGB=oc,deltaE00=de,limit=color_limit(name),ok=de<=color_limit(name)))
     def add(name, a, o, text=False, arrow=False):
         def plane(px, rect, factor):
             x,y,w,h=rect
@@ -121,7 +129,7 @@ def compare_live(path, state, scale, private, env, negative_path=None):
         else:error=None
         de=delta(ac,oc) if ac and oc else None
         probes.append(dict(element=name,arcBox=ab,openBox=ob,positionError=error,deltaE00=de,
-                           ok=error is not None and error<=1 and (text or de is not None and de<=2)))
+                           limit=color_limit(name),ok=error is not None and error<=1 and (text or de is not None and de<=color_limit(name))))
     for row in range(10):
         add('Arrow row '+str(row),[183,81+row,36,1],[state['tip'][0]-18,state['tip'][1]+row,36,1],arrow=True)
     for i,name in enumerate(['Share','New Boost','Capture','Capture Full Page']):
@@ -145,7 +153,7 @@ def compare_live(path, state, scale, private, env, negative_path=None):
     fill('Top rim',[120,91,1,1],[bx+37,by,1,1])
     fill('Bottom rim',[120,387,1,1],[bx+37,by+bh-1,1,1])
     report=dict(ok=all(p['ok'] for p in probes),elements=probes,capture=reference,snapshot=path,
-                limits={'positionPoints':1,'deltaE00':2},
+                limits={'positionPoints':1,'deltaE00':2,'edgeDeltaE00':EDGE_LIMIT,'edgeElements':sorted(EDGE_ELEMENTS)},
                 excluded='Different site-setting title/glyph and HTTP Insecure pill; Developer Mode per Q14',
                 load=list(os.getloadavg()))
     if negative_path:
@@ -239,3 +247,32 @@ def light_and_ghost(app, origin, private, env, record):
            limit=1.05, rows={'behind': rows[behind], 'band': list(band)}, snapshots=[a_path, b_path],
            sameStateWithoutPanelContrast={k: round(v, 3) for k, v in neg_contrast.items()})
     app.call('site-controls', action='close')
+    # S11_light_neutral: Night (Open's default theme), Light, same page. The panel adds no yellow cast of its own: the
+    # right-third body equals the same point with the tint layer off (ΔE00 ≤ 2), and its b* is within ±2 of the page's.
+    app.call('theme-set', style=None); time.sleep(.6)
+    app.call('select', tab=tabs[0])
+    s = opened(); bx, by = s['body'][0], s['body'][1]
+    point = ((bx + 200) * scale, (by + 150) * scale)
+    _, _, with_tint = env['read_image'](snap('S11-neutral-tint.png'), srgb=True)
+    app.call('site-controls', action='material', appearance='light', material=10, overlay=[246 / 255, 246 / 255, 232 / 255, 0.4], tintAlpha=0)
+    time.sleep(.4)
+    _, _, without = env['read_image'](snap('S11-neutral-notint.png'), srgb=True)
+    app.call('site-controls', action='material', appearance='light', material=-1)
+    app.call('site-controls', action='close'); time.sleep(.3)
+    _, _, page = env['read_image'](snap('S11-neutral-closed.png'), srgb=True)
+    a_rgb, b_rgb, p_rgb = list(with_tint(*point)), list(without(*point)), list(page(*point))
+    de = delta(a_rgb, b_rgb); b_star = lab(a_rgb)[2]; page_b = lab(p_rgb)[2]
+    record('S11_light_neutral', de <= 2 and abs(b_star - page_b) <= 2, withTint=a_rgb, tintOff=b_rgb, deltaE00=round(de, 2),
+           bStar=round(b_star, 2), pageBStar=round(page_b, 2), page=p_rgb)
+
+
+def lab(rgb):
+    def lin(c):
+        c = c / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(v) for v in rgb[:3])
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+    f = lambda t: t ** (1 / 3) if t > 0.008856 else 7.787 * t + 16 / 116
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))

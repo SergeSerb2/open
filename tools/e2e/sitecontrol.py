@@ -71,7 +71,7 @@ def run(factory, results, tmp, env, functional_only=False):
             # retain the failed pixel predicate and every raw measurement.
             assert key in ('S11_material', 'S12_elements')
             measured = (len(value.get('probes', [])) == 4 if key == 'S11_material'
-                        else bool(value.get('elements')) and value.get('limits') == {'positionPoints': 1, 'deltaE00': 2})
+                        else bool(value.get('elements')) and {k: value.get('limits', {}).get(k) for k in ('positionPoints', 'deltaE00')} == {'positionPoints': 1, 'deltaE00': 2})
             deferred = value.get('ok') is False and measured and value.get('negativeRejected') is True
             if deferred:
                 value['reason'] = 'S12-V: recorded Site Control material and element colour fault (LEAD 02:35, 2026-11-11)'

@@ -47,11 +47,28 @@ public struct SiteControlMaterialSpec: Sendable, Hashable {
     public var overlay: RGBA
     /// Tint alpha over the sidebar part.
     public var tintAlpha: Double
-    public init(material: NSVisualEffectView.Material, overlay: RGBA, tintAlpha: Double) {
-        self.material = material; self.overlay = overlay; self.tintAlpha = tintAlpha
+    /// A long low tail past the sidebar edge (share of `tintAlpha` at the edge, falling to zero over `tailLength`): the wide
+    /// blur lets the sidebar colour bleed into the page part (LEAD 12:20).
+    public var tailShare: Double
+    public var tailLength: CGFloat
+    /// Top zone over the sidebar part: the URL-field plate colour (as the theme renders it over the sidebar), from the
+    /// panel's top down `topExtent` points, fading to clear. Arc's wider blur sees the field above the panel (LEAD 12:20).
+    public var topAlpha: Double
+    public var topExtent: CGFloat
+    /// Shares of the tint hue in the rim, the tile rings and the More circle (one constant each, LEAD 12:20).
+    public var rimTintShare: Double, ringTintShare: Double, moreTintShare: Double
+    public init(material: NSVisualEffectView.Material, overlay: RGBA, tintAlpha: Double, tailShare: Double = 0, tailLength: CGFloat = 120,
+                topAlpha: Double = 0, topExtent: CGFloat = 48, rimTintShare: Double = 0, ringTintShare: Double = 0, moreTintShare: Double = 0) {
+        self.material = material; self.overlay = overlay; self.tintAlpha = tintAlpha; self.tailShare = tailShare; self.tailLength = tailLength
+        self.topAlpha = topAlpha; self.topExtent = topExtent
+        self.rimTintShare = rimTintShare; self.ringTintShare = ringTintShare; self.moreTintShare = moreTintShare
     }
-    public static let dark = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(168.0 / 255, 170.0 / 255, 171.0 / 255, 0.5), tintAlpha: 0.55)
-    public static let light = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(241.0 / 255, 243.0 / 255, 217.0 / 255, 0.5), tintAlpha: 0.48)
+    public static let dark = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(168.0 / 255, 170.0 / 255, 171.0 / 255, 0.5), tintAlpha: 0.55,
+                                                     moreTintShare: 0.4)
+    /// Light overlay: near-neutral; its slight warmth only restores the page tone the material removes (Night on #F3F5EE:
+    /// b* 2.51 against the page's 3.25, LEAD 12:20 S11_light_neutral). The gold seen on the right comes from the tint's tail.
+    public static let light = SiteControlMaterialSpec(material: .headerView, overlay: RGBA(246.0 / 255, 246.0 / 255, 232.0 / 255, 0.4), tintAlpha: 0.56,
+                                                      tailShare: 0.3)
     public static func resolved(_ appearance: ContentAppearance) -> SiteControlMaterialSpec { appearance == .dark ? dark : light }
     /// The tint fades across the sidebar edge like a blur kernel: from `tintFade / 2` before the edge to `tintFade / 2` after it.
     public static let tintFade: CGFloat = 40
@@ -77,7 +94,9 @@ public enum SiteControlColors {            // macOS Dark measured (IS §20.15); 
     public static let fallbackTint = RGBA(hex: 0x49475A), fallbackBackdropWeight: [CGFloat] = [0.28, 0.28, 0.21]
     public static let fallbackBlurSigma: CGFloat = 5                                       // fit + validation (§3.2)
     // Light: D3 §2.5 (lead-approved light look). Dark: Arc 1.170 measured values, unchanged.
-    public static let rim = DesignColor(light: .black(0.20), dark: .white(0.20))
+    public static let rim = DesignColor(light: .black(0.10), dark: .white(0.20))
+    /// The Site Control panel's own edge: Light 0.5 pt black 20 % (D3), Dark Arc's white 0.20.
+    public static let panelRim = DesignColor(light: .black(0.20), dark: .white(0.20))
     public static let actionFillTop = DesignColor(light: RGBA(hex: 0xFAFAFA), dark: RGBA(hex: 0x272727))   // Light: Arc 14c tile
     public static let actionFillBottom = DesignColor(light: RGBA(hex: 0xFAFAFA), dark: RGBA(hex: 0x161616))
     public static let actionRing = DesignColor(light: .black(0.08), dark: .black(0.30))

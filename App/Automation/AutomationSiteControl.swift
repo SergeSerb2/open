@@ -111,10 +111,14 @@ extension AutomationController {
         guard let v = args[key] as? [Double], v.count == 4 else { return .clear }
         return RGBA(v[0], v[1], v[2], v[3])
       }
-      guard let raw = args["material"] as? Int, let m = NSVisualEffectView.Material(rawValue: raw) else { throw Failure(message: "material raw value") }
       let appearance: ContentAppearance = args["appearance"] as? String == "light" ? .light : .dark
+      if args["material"] as? Int == -1 { scc.view.panel.materialOverride[appearance] = nil; scc.view.panel.layoutSubtreeIfNeeded(); break }
+      guard let raw = args["material"] as? Int, let m = NSVisualEffectView.Material(rawValue: raw) else { throw Failure(message: "material raw value") }
+      func d(_ k: String) -> Double { args[k] as? Double ?? 0 }
       scc.view.panel.materialOverride[appearance] = SiteControlMaterialSpec(material: m, overlay: rgba("overlay"),
-        tintAlpha: args["tintAlpha"] as? Double ?? 0)
+        tintAlpha: d("tintAlpha"), tailShare: d("tailShare"), tailLength: CGFloat(args["tailLength"] as? Double ?? 120),
+        topAlpha: d("topAlpha"), topExtent: CGFloat(args["topExtent"] as? Double ?? 48),
+        rimTintShare: d("rimShare"), ringTintShare: d("ringShare"), moreTintShare: d("moreShare"))
       scc.view.panel.layoutSubtreeIfNeeded()
     case "tap":
       guard scc.isPresented, let id = args["id"] as? String, id.utf8.count <= 256,

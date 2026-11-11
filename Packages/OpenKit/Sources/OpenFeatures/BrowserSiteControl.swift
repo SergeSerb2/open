@@ -64,6 +64,7 @@ extension BrowserWindowController {
         let style = context.focusedSpace.map { context.style(for: $0) } ?? .defaultTheme(system: context.systemAppearance)
         view.panel.accent = SpaceAccent(style: style)
         view.panel.sidebarColor = SpaceAccent.sidebarTop(style: style)
+        view.panel.sidebarContent = style.resolvedAppearance(system: context.systemAppearance)
         view.sidebarMaxX = sidebar.isHidden ? nil : sidebar.convert(sidebar.bounds, to: root).maxX
     }
     public func refreshSiteControlButtons() {
