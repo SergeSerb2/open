@@ -51,6 +51,21 @@ enum URLStatusChecks {
         check(open.copy != nil && open.site != nil, "URL controls stay while the Site Control panel is open, pointer outside (\(open))")
         sidebar.siteControlState = .rest; settle()
         check(sidebar.urlFieldControls.copy == nil, "URL controls hide again after the panel closes with the pointer outside")
+        // Long host (plan D3 §2.4, LEAD 11:45): never a trailing ellipsis; the end stays visible, the leading 34 pt fade,
+        // and the text stops 8 pt before the first shown control. A short host: no fade, leading aligned.
+        let short = sidebar.urlFieldHost
+        check(!short.faded && !short.rightAligned, "Short host: no fade, leading aligned (\(short))")
+        if let tab = context.currentTab {
+            tab.url = URL(string: "http://long-synthetic-host-name-for-url-truncation.localhost/article")!
+            context.pointerInSidebar = true; settle()
+            let long = sidebar.urlFieldHost
+            check(long.faded && long.rightAligned && long.firstControlX.map { long.frame.maxX <= $0 - URLFieldMetrics.controlsTextGap + 0.5 } == true,
+                  "Long host: faded, right-aligned, 8 pt before the first control (\(long))")
+            context.pointerInSidebar = false; settle()
+            let rest = sidebar.urlFieldHost
+            // At rest the label is wider; the host fades only if it still does not fit, and fade and alignment go together.
+            check(rest.faded == rest.rightAligned && rest.frame.width > long.frame.width, "Long host at rest: wider label, fade only when it does not fit (\(rest))")
+        } else { check(false, "Long host: no current tab in the synthetic model") }
     }
 
     static func run() {

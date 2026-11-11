@@ -328,4 +328,9 @@ final class URLFieldView: NSView {
     override func accessibilityPerformPress() -> Bool { context.send(.openCommandBar(.urlField)); return true }
     override func menu(for event: NSEvent) -> NSMenu? { SidebarMenus(context: context).urlField() }
     var displayedText: String { label.text() }
+    /// Diagnostics: the host label's frame, whether a long host is faded and right-aligned, and the first shown control's x.
+    var hostState: (frame: CGRect, faded: Bool, rightAligned: Bool, firstControlX: CGFloat?) {
+        let first = [copyLink, siteControls].filter { !$0.isHidden }.map(\.frame.minX).min()
+        return (label.frame, label.layer?.mask != nil, label.alignment == .right, first)
+    }
 }

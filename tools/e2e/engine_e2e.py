@@ -8957,11 +8957,22 @@ def commandbar_checks(factory, results, tmp, config):
         edit = bar('l', 'window')
         field = app.call('window-state').get('sidebarFrame')
         frame = edit['panelFrame']
-        results['cmd_l_inline_anchor'] = {'ok': edit['presentation'] == 'anchored' and frame[0] == 9 and frame[1] == 45
-            and frame[2] == max(340, app.call('window-state')['sidebarWidth'] - 18), 'panelFrame': frame, 'sidebar': field}
+        # Anchored to the URL field [8, 46, W − 16, 36], 1 pt above it, never narrower than 340 (plan D3 §2.2; LEAD 12:12).
+        results['cmd_l_inline_anchor'] = {'ok': edit['presentation'] == 'anchored' and frame[0] == 8 and frame[1] == 45
+            and frame[2] == max(340, app.call('window-state')['sidebarWidth'] - 16), 'panelFrame': frame, 'sidebar': field}
         press('l', modifiers=['cmd'], route='window')
         closed_l = wait_until(lambda: not state()['presented'], timeout=3, step=.05)
         results['cmd_l_twice_closes'] = {'ok': bool(closed_l), 'bar': state()}
+        # A hidden sidebar keeps the centred card for Cmd+L (plan D3 §2.2, lead decision).
+        mode_before = app.call('window-state')['sidebarMode']
+        press('s', modifiers=['cmd'], route='window')
+        wait_until(lambda: app.call('window-state')['sidebarMode'] == 'hidden', timeout=3, step=.05)
+        hidden_bar = bar('l', 'window')
+        results['cmd_l_hidden_sidebar_centred'] = {'ok': hidden_bar['presentation'] == 'overlay' and hidden_bar['mode'] == 'editCurrentURL',
+            'bar': {k: hidden_bar[k] for k in ('presentation', 'panelFrame', 'mode')}, 'sidebarModeBefore': mode_before}
+        press('escape'); wait_until(lambda: not state()['presented'], timeout=3, step=.05)
+        press('s', modifiers=['cmd'], route='window')
+        wait_until(lambda: app.call('window-state')['sidebarMode'] == mode_before, timeout=3, step=.05)
         # Option+Return opens the page beside the current page in Split View (Arc 11-returns).
         tabs_before = len(app.call('tabs'))
         bar('l', 'window'); type_query(origin + '/beside'); press('return', modifiers=['option'])

@@ -753,6 +753,10 @@ extension SidebarView {
     @discardableResult public func pressSiteControls() -> Bool { urlField.siteControls.accessibilityPerformPress() }
     public func refreshExtensionsLayout() { urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded() }
     public var urlFieldVisible: Bool { !urlField.isHidden }
+    /// Diagnostics: the URL field's host label (field points), long-host fade, alignment, first shown control x.
+    public var urlFieldHost: (frame: CGRect, faded: Bool, rightAligned: Bool, firstControlX: CGFloat?) {
+        urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded(); return urlField.hostState
+    }
     /// Diagnostics: the shown URL-field controls (frame in sidebar points) and the accessibility labels the field exposes.
     public var urlFieldControls: (copy: CGRect?, site: CGRect?, accessibilityLabels: [String]) {
         urlField.needsLayout = true; urlField.layoutSubtreeIfNeeded()
