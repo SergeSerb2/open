@@ -31,10 +31,10 @@ M1_E2E = {'ntp', 'ntp-alloy', 'features', 'profiles', 'profiles-engine', 'passwo
 E2E_DEPENDENCIES = {'sidebar': ('profiles',)}
 OBSERVER_SUITES = {'sitecontrol', 'find', 'split', 'littleopen', 'downloads'}
 M5_E2E = {'applescript'}  # No external AppleScript/osascript over SSH on the M1.
-# Rented Macs (NS-MACS.md) qualify functional merge/observers stages that the M1
-# would otherwise run. Incognito's native captures are keyed to the M1 built-in
-# 2x display, so it stays M1-only; timing rows always need the quiet M1 lane.
-RENTED_REFUSED_E2E = {'incognito'}
+# Rented Macs (NS-MACS.md) qualify functional merge/observers stages only for
+# suites proven to run there (LEAD 16:50). Add a suite only with a passing rented
+# receipt. Display-keyed visual stages (incognito) and timing rows stay M1-only.
+RENTED_ALLOWED_E2E = {'owner-watch', 'shell'}
 RENTED_LANES = ('merge', 'observers')
 REFUSED = []  # Receipts found under --m1-receipts that were refused, with the reason.
 SAFE_M5 = set('ntp onboarding welcome import-robust firstrun shell extensions tabstrip window sidebar peek commandbar app-actions actions extensions-p3 extensions-ui sitecontrol extensions-e2 sidebar-completion toolbar numbering media relaunch page page-chrome sleep context-menus routing history applescript boosteditor boost-gallery space-editor incognito sitedata find split littleopen downloads measure'.split())
@@ -324,8 +324,8 @@ def use_m1_receipt(directory, row_name, identity, config, style, lane):
             if receipt.get('lane') not in RENTED_LANES:
                 refuse(path, row_name, 'rented receipts qualify only the merge and observers lanes')
                 continue
-            if row_name[4:] in RENTED_REFUSED_E2E:
-                refuse(path, row_name, 'display-keyed visual stage stays M1-only')
+            if row_name[4:] not in RENTED_ALLOWED_E2E:
+                refuse(path, row_name, 'suite is not on the rented allowlist (owner-watch, shell); add it only with rented proof')
                 continue
         elif host != 'M1':
             continue
@@ -709,7 +709,7 @@ def main():
     def required_elsewhere(name):
         return ((machine() == 'M5' and (name in M1_E2E or name not in SAFE_M5))
                 or (machine() == 'M1' and name in M5_E2E)
-                or (machine() == 'rented' and (name in M5_E2E or name in RENTED_REFUSED_E2E)))
+                or (machine() == 'rented' and name in M5_E2E))
     local_e2e = [n for n in e2e if not required_elsewhere(n)]
     heavy = Path.home() / 'Library/Caches/OpenRE/scripts/heavy.sh'
     command = [str(heavy), sys.executable, str(Path(__file__).resolve()), '--heavy-worker',
@@ -763,10 +763,6 @@ def main():
                 if machine() in ('M1', 'rented') and name in M5_E2E:
                     rows.append(dict(row=label+'/receipt',status='M5_REQUIRED',
                                      reason='M1 forbids external AppleScript over SSH',evidence=''))
-                    continue
-                if machine() == 'rented':
-                    rows.append(dict(row=label+'/receipt',status='M1_REQUIRED',
-                                     reason='display-keyed visual stage stays M1-only',evidence=''))
                     continue
                 imported = use_m1_receipt(options.m1_receipts, label, source, options.config,
                                           'alloy' if name == 'ntp-alloy' else 'chrome', options.lane)

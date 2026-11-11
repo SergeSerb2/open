@@ -60,11 +60,13 @@ macOS 27) records `machine: rented` and its `machineInfo`. Its merge-lane and
 observers-lane receipts can replace the M1's functional receipts: put them in the
 same `--m1-receipts` directory as the M1 timing receipts. The importer applies the
 same exact-head, clean-fingerprint, engine, config, style, lane and cleanup checks.
+It accepts rented stages only for suites on `RENTED_ALLOWED_E2E` in `gate.py`
+(today `owner-watch` and `shell`); add a suite only with a passing rented receipt.
 It refuses, with a reason in the summary's "Refused receipt" table: a rented
-timing-lane receipt, a rented incognito stage (its native captures are keyed to the
-M1 built-in 2x display), and a receipt without the rented host metadata. Timing
-rows inside a rented stage are kept as INFO only; the quiet M1 timing receipt is
-still required. A rented Mac refuses `--lane timing` and runs incognito never.
+timing-lane receipt, a suite that is not on the allowlist (display-keyed incognito
+stays M1-only), and a receipt without the rented host metadata. Timing rows inside
+a rented stage are kept as INFO only; the quiet M1 timing receipt is still
+required. A rented Mac refuses `--lane timing`.
 Limit (2026-11-11): over SSH the rented desktop refuses `NSRunningApplication`
 activation of the App child (`activate-own-app` returns `accepted:false`, also under
 `launchctl asuser`), so strict suites stop with "direct App child activation refused".
