@@ -21,9 +21,11 @@ import OpenAdBlock
     public var searchSelection = 0
     public var searchCPUMilliseconds = 0.0
     public var searchFocusRequest = 0
+    @ObservationIgnored var onNavigation: (() -> Void)?
     public var arrivalID: String?
     public var arrivalRevision = 0
     #if DEBUG || OPEN_AUTOMATION
+    @ObservationIgnored public var lastSectionPresentation: [String: Double] = [:]
     @ObservationIgnored public var onSectionDraw: ((SettingsSection, Double) -> Void)?
     #endif
     public var sectionBack: [SettingsSection] = []

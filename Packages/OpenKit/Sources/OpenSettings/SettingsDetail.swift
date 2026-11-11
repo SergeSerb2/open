@@ -5,50 +5,51 @@ import OpenModel
 import OpenCommands
 import QuartzCore
 
+/// Fixed section identity keeps the SwiftUI graph alive between visits.
 struct SettingsDetail: View {
     @Bindable var root: SettingsViewModel
+    let sectionID: SettingsSection
+    let page: SettingsPageState
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if root.searchQuery.isEmpty {
-                        header
-                        section
-                    } else { SettingsSearchResults(root: root) }
+                VStack(alignment: .leading, spacing: 0) {
+                    header.padding(.bottom, 0)
+                    section
                 }
-                #if DEBUG || OPEN_AUTOMATION
-                .background(SettingsSectionDrawMarker(root: root, section: root.selectedSection).allowsHitTesting(false))
-                #endif
-                .modifier(SettingsSectionArrival(section: root.selectedSection))
                 .frame(maxWidth: SettingsStyle.columnWidth, alignment: .leading)
                 .padding(.top, SettingsStyle.topInset).padding(.bottom, 28)
                 .id("settings-top")
                 .frame(maxWidth: .infinity, alignment: .top).padding(.horizontal, 24)
             }
-            .task(id: root.arrivalRevision) {
+            .task(id: page.revision) {
+                guard page.target != nil else { return }
                 await Task.yield()
-                proxy.scrollTo(root.scrollTarget ?? "settings-top", anchor: root.scrollTarget == nil ? .top : .center)
+                proxy.scrollTo(page.target, anchor: .center)
             }
-            .onChange(of: root.selectedSection) { _, _ in if root.scrollTarget == nil { proxy.scrollTo("settings-top", anchor: .top) } }
         }
+        .environment(\.settingsPage, page)
         .buttonStyle(OpenSettingsButtonStyle())
     }
     private var header: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(root.selectedSection.title).font(.system(size: 22, weight: .semibold)).tracking(-0.44)
-                Text(root.selectedSection.subtitle).font(.system(size: 12.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
+                Text(sectionID.title).font(.system(size: 22, weight: .semibold)).tracking(-0.44)
+                Text(sectionID.subtitle).font(.system(size: 12.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
             }
             Spacer(minLength: 8)
-            if root.selectedSection.isPerProfile { SettingsProfilePill(root: root) }
-            if root.selectedSection == .shortcuts { Button("Reset All…") { root.shortcuts.resetAll(confirmed: false) }.accessibilityLabel("Reset All Shortcuts") }
-        }.id("settings-header").padding(.bottom, 0)
+            if sectionID.isPerProfile { SettingsProfilePill(root: root, section: sectionID) }
+            if sectionID == .shortcuts {
+                Button("Reset all…") { root.shortcuts.resetAll(confirmed: false) }.accessibilityLabel("Reset All Shortcuts")
+                ShortcutsMoreMenu(model: root.shortcuts).frame(width: 72, height: 26)
+            }
+        }.id("settings-header")
     }
     @ViewBuilder private var section: some View {
-        switch root.selectedSection {
+        switch sectionID {
         case .general: GeneralPane(model: root.general)
         case .appearance: SettingsAppearance(root: root)
-        case .shortcuts: ShortcutsPane(model: root.shortcuts)
+        case .shortcuts: ShortcutsPane(model: root.shortcuts).padding(.top, 24)
         case .tabsArchive: SettingsArchiveControls(root: root)
         case .profiles: ProfilesPane(model: root.profiles)
         case .links: LinksPane(root: root)
@@ -59,17 +60,18 @@ struct SettingsDetail: View {
         case .adBlocking:
             if let ad = root.adBlock { SettingsAdBlockingSection(root: root, model: ad) }
             else { SettingsInlineMessage(text: "Ad blocking settings could not be opened.") }
-        case .sitePermissions, .passwordsCards, .browsingData, .extensions: SettingsDestinationSection(root: root)
+        case .sitePermissions, .passwordsCards, .browsingData, .extensions: SettingsDestinationSection(root: root, section: sectionID)
         }
     }
 }
 
 struct SettingsProfilePill: View {
     let root: SettingsViewModel
+    var section: SettingsSection? = nil
     @Environment(\.colorScheme) private var scheme
     var body: some View {
         OpenSettingsPop(title: "Profile", value: Binding(get: { root.selectedProfileID }, set: { root.profiles.select($0) }), options: root.model.profiles.map { ($0.name, $0.id) }, profile: true, accent: SettingsStyle.accessibleAccent(root.settingsAccentSource, dark: scheme == .dark))
-            .disabled(root.selectedSection == .adBlocking && root.adBlock?.busy == true)
+            .disabled(section == .adBlocking && root.adBlock?.busy == true)
     }
 }
 
@@ -121,11 +123,11 @@ struct SettingsSearchResults: View {
         ForEach(SettingsSection.allCases) { section in
             let entries = root.searchResults.filter { $0.section == section }
             if !entries.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(section.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
                         Spacer()
-                        if section.isPerProfile { SettingsProfilePill(root: root) }
+                        if section.isPerProfile { SettingsProfilePill(root: root, section: section) }
                     }.padding(.leading, 4)
                     OpenSettingsCard {
                         ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
@@ -178,39 +180,3 @@ struct SettingsSearchResults: View {
         }
     }
 }
-
-/// A finite arrival animation; no timer or repeating work remains at rest.
-private struct SettingsSectionArrival: ViewModifier {
-    let section: SettingsSection
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var opacity = 1.0
-    @State private var rise = 0.0
-    func body(content: Content) -> some View {
-        content.opacity(opacity).offset(y: rise).task(id: section) {
-            let reduced = Motion.reduceMotionOverride ?? reduceMotion
-            var transaction = Transaction(); transaction.disablesAnimations = true
-            withTransaction(transaction) { opacity = 0; rise = reduced ? 0 : 6 }
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: SettingsStyle.sectionDuration)) { opacity = 1; rise = 0 }
-        }
-    }
-}
-
-#if DEBUG || OPEN_AUTOMATION
-private struct SettingsSectionDrawMarker: NSViewRepresentable {
-    let root: SettingsViewModel
-    let section: SettingsSection
-    func makeNSView(context: Context) -> Marker { Marker() }
-    func updateNSView(_ view: Marker, context: Context) {
-        view.report = { root.onSectionDraw?(section, CACurrentMediaTime()) }
-        view.needsDisplay = true
-    }
-    @MainActor final class Marker: NSView {
-        var report: (() -> Void)?
-        override var isOpaque: Bool { false }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func draw(_ dirtyRect: NSRect) { report?() }
-    }
-}
-#endif

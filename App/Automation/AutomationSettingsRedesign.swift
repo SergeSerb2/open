@@ -71,7 +71,10 @@ extension AutomationController {
         return view.subviews.lazy.compactMap(find).first
       }
       guard let button = find(content), button.isEnabled, button.itemTitles.contains(title) else { throw Failure(message: "unknown enabled Settings choice") }
-      button.selectItem(withTitle: title); button.sendAction(button.action, to: button.target)
+      if button.pullsDown {
+        guard let item = button.item(withTitle: title), item.isEnabled, let action = item.action else { throw Failure(message: "disabled Settings menu item") }
+        NSApp.sendAction(action, to: item.target, from: item)
+      } else { button.selectItem(withTitle: title); button.sendAction(button.action, to: button.target) }
     case "filter":
       guard let filter = args["filter"] as? String, ["all", "changed", "unassigned", "conflicts"].contains(filter) else { throw Failure(message: "unknown shortcut filter") }
       root.shortcuts.filter = filter
@@ -124,13 +127,15 @@ extension AutomationController {
     if let sheet = window?.attachedSheet, let content = sheet.contentView { inspectedWindow = sheet; walk(content, depth: 0) }
     let shortcuts = root.shortcuts
     let file = shortcuts.fileURL
-    return ["window": window?.windowNumber ?? 0, "sheet": window?.attachedSheet?.windowNumber ?? 0,
+    return ["window": window?.windowNumber ?? 0, "visible": window?.isVisible ?? false, "sheet": window?.attachedSheet?.windowNumber ?? 0,
       "section": root.selectedSection.rawValue, "query": root.searchQuery,
       "results": root.searchResults.map { ["id": $0.id, "label": $0.label] },
       "selection": root.searchSelection, "arrival": root.arrivalID ?? "", "arrivalRevision": root.arrivalRevision,
       "focusedSetting": root.focusedSettingID ?? "",
       "searchCPUms": root.searchCPUMilliseconds, "indexCount": SettingsSearchIndex.entries.count,
       "openLayoutDisplayMs": adapter.settingsPresenter.lastOpenMilliseconds,
+      "openPhasesMs": adapter.settingsPresenter.lastOpenPhases,
+      "openActionLayoutDisplayMs": adapter.lastSettingsShowMs,
       "size": window.map { [$0.frame.width, $0.frame.height] } ?? [],
       "scale": window?.backingScaleFactor ?? 0,
       "display": settingsDisplayInfo(window?.screen),

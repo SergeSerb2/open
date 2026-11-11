@@ -19,11 +19,11 @@ struct OpenSettingsGroup<Content: View>: View {
     @ViewBuilder var content: Content
     init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.system(size: 11, weight: .semibold)).tracking(0.22)
                 .foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor)).padding(.leading, 4)
             OpenSettingsCard { content }
-        }
+        }.padding(.top, 24)
     }
 }
 
@@ -36,15 +36,20 @@ struct OpenSettingsRow<Accessory: View>: View {
     var last = false
     var reset: (() -> Void)?
     var helpAction: (() -> Void)? = nil
+    var checkbox: Binding<Bool>? = nil
     @ViewBuilder var accessory: Accessory
     @State private var hovered = false
     @State private var pulse = false
+    @Environment(\.settingsPage) private var page
     @FocusState private var focused: Bool
     @Environment(\.isEnabled) private var enabled
     @Environment(\.colorScheme) private var scheme
     private var accent: Color { Color(nsColor: SettingsStyle.accessibleAccent(root.settingsAccentSource, dark: scheme == .dark)) }
     private var rowContent: some View {
         HStack(spacing: 12) {
+            if let checkbox {
+                Toggle(title, isOn: checkbox).labelsHidden().toggleStyle(.checkbox).accessibilityLabel(title)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .regular)).foregroundStyle(Color(nsColor: enabled ? SettingsStyle.text.nsColor : SettingsStyle.secondary.nsColor)).fixedSize(horizontal: false, vertical: true)
                 if !help.isEmpty {
@@ -80,8 +85,8 @@ struct OpenSettingsRow<Accessory: View>: View {
         .accessibilityElement(children: .contain).accessibilityLabel(title)
         .accessibilityValue(changed ? "Changed from default" : "Default")
         .accessibilityHint(help).accessibilityIdentifier(id).id(id)
-        .task(id: root.arrivalRevision) {
-            guard root.arrivalID == id else { return }
+        .task(id: page?.revision ?? root.arrivalRevision) {
+            guard (page == nil ? root.arrivalID : page?.target) == id else { return }
             pulse = true
             withAnimation(.easeOut(duration: SettingsStyle.arrivalDuration)) { pulse = false }
         }
@@ -92,9 +97,9 @@ struct OpenSettingsButtonStyle: ButtonStyle {
     var attention = false
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 13, weight: attention ? .semibold : .medium))
+        configuration.label.font(.system(size: 13, weight: .medium))
             .foregroundStyle(Color(nsColor: attention ? SettingsStyle.sunText.nsColor : SettingsStyle.text.nsColor))
-            .padding(.horizontal, attention ? 14 : 11).frame(height: attention ? 30 : 26)
+            .padding(.horizontal, attention ? 14 : 11).frame(height: 26)
             .background {
                 RoundedRectangle(cornerRadius: attention ? 8 : 7).fill(attention
                     ? LinearGradient(colors: [Color(nsColor: SettingsStyle.sunStart.nsColor), Color(nsColor: SettingsStyle.sunEnd.nsColor)], startPoint: .top, endPoint: .bottom)

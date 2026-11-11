@@ -185,8 +185,8 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                                             characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13)!
                 try require(w.performKeyEquivalent(with: cmdW) && !w.isVisible, "Cmd+W did not close the EDU window")
             case "shortcuts-callout":
-                // The callout's button opens the window through the Settings action (CC-29, CC-30); the
-                // list is no longer filtered ("Start with the basics" is a label, not a filter).
+                // The learning link opens the window through the existing
+                // Settings action (CC-29, CC-30); the list includes every command.
                 vm.selectedPane = .shortcuts; vm.shortcuts.query = ""
                 try require(vm.shortcuts.commands.count == CommandRegistry.active.count, "Shortcuts list hides commands: \(vm.shortcuts.commands.count) of \(CommandRegistry.active.count)")
                 let before = env.actions.log.filter { $0 == "openEssentialShortcuts" }.count
@@ -201,7 +201,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                         if let view = node as? NSView { view.subviews.forEach(values) }
                     }
                     values(host)
-                    try require(texts.contains("Start with the basics") && texts.contains("Learn the Essential Shortcuts"), "callout text missing: \(texts.sorted().prefix(20))")
+                    try require(texts.contains("Learn the Essential Shortcuts"), "callout text missing: \(texts.sorted().prefix(20))")
                     try require(pressAccessibilityElement(host, label: "Learn the Essential Shortcuts"), "callout button not found")
                 }
                 try require(env.actions.log.filter { $0 == "openEssentialShortcuts" }.count == before + 1, "callout did not call openEssentialShortcuts")

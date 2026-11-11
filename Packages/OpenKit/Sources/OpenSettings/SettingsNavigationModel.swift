@@ -148,14 +148,15 @@ extension SettingsViewModel {
         searchQuery = ""; selectedSection = section
         scrollTarget = row.map { $0.contains("/") ? $0 : section.rawValue + "/" + $0 }
         arrivalID = scrollTarget; arrivalRevision &+= 1
+        onNavigation?()
     }
     public func goBack() {
         guard let section = sectionBack.popLast() else { return }
-        sectionForward.append(selectedSection); selectedSection = section; searchQuery = ""; scrollTarget = nil; arrivalID = nil
+        sectionForward.append(selectedSection); selectedSection = section; searchQuery = ""; scrollTarget = nil; arrivalID = nil; onNavigation?()
     }
     public func goForward() {
         guard let section = sectionForward.popLast() else { return }
-        sectionBack.append(selectedSection); selectedSection = section; searchQuery = ""; scrollTarget = nil; arrivalID = nil
+        sectionBack.append(selectedSection); selectedSection = section; searchQuery = ""; scrollTarget = nil; arrivalID = nil; onNavigation?()
     }
     @discardableResult public func openSettingsURL(_ url: URL) -> Bool {
         guard url.scheme == "open", url.host() == "settings", url.query == nil, url.fragment == nil else { return false }

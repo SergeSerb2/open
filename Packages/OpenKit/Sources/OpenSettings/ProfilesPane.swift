@@ -177,48 +177,109 @@ import OpenDesign
 
 public struct ProfilesPane: View {
     @Bindable var model: ProfilesViewModel
-    @State private var renaming = false
+    @Environment(\.colorScheme) private var scheme
     public init(model: ProfilesViewModel) { self.model = model }
     public var body: some View {
-        SettingsInlineMessage(text: "Profiles keep history, logins, cookies, and extensions separate. Use a Profile in one or more Spaces.")
-        OpenSettingsGroup("Your Profiles") {
-            ForEach(Array(model.dataModel.rows.enumerated()), id: \.element.id) { index, row in
-                HStack(spacing: 10) {
-                    ProfileIconButton(profile: row) { anchor in model.root.actions.chooseProfileIcon(profileID: row.id, anchor: anchor) }.frame(width: 24, height: 24)
-                    Button { model.select(row.id); renaming = false } label: {
-                        HStack {
-                            Text(row.name).font(.system(size: 13))
-                            Spacer()
-                            Text("\(row.spaceCount) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
-                            if row.id == model.root.selectedProfileID { Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)) }
-                        }.contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityLabel("Select Profile " + row.name)
-                }.padding(.horizontal, 14).frame(height: 48)
-                    .overlay(alignment: .bottom) { if index < model.dataModel.rows.count - 1 { Rectangle().fill(Color(nsColor: SettingsStyle.hairline.nsColor)).frame(height: 1).padding(.leading, 14) } }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Your Profiles").font(.system(size: 11, weight: .semibold)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
+                Spacer()
+                Button("New Profile…") { model.beginCreate() }
+            }.padding(.leading, 4)
+            OpenSettingsCard {
+                ForEach(Array(model.dataModel.rows.enumerated()), id: \.element.id) { index, row in
+                    SettingsProfileRow(model: model, row: row, last: index == model.dataModel.rows.count - 1)
+                }
             }
-        }.id("profiles/manage")
+        }.padding(.top, 24).id("profiles/manage")
         HStack {
-            Button("Create Profile…") { model.beginCreate() }
+            Button("Learn about Profiles") { model.root.actions.openHelp(topic: "profiles") }.buttonStyle(.plain).font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.accessibleAccent(model.root.settingsAccentSource, dark: scheme == .dark)))
             Spacer()
-            Button("Delete Unused Profiles…") { model.beginDelete(unused: true) }.disabled(model.unusedIDs.isEmpty)
-        }
-        if let profile = model.profile {
-            OpenSettingsGroup(profile.name) {
-                OpenSettingsRow(root: model.root, id: "profiles/name", title: "Profile name") {
-                    if renaming {
-                        TextField("Name", text: $model.nameDraft).accessibilityLabel("Profile name").textFieldStyle(.roundedBorder).frame(width: 160).onSubmit { model.rename(to: model.nameDraft); renaming = !model.errorText.isEmpty }
-                        Button("Save") { model.rename(to: model.nameDraft); renaming = !model.errorText.isEmpty }
-                        Button("Cancel") { renaming = false }
-                    } else { Button("Rename") { model.nameDraft = profile.name; renaming = true } }
+            Button("Delete unused Profiles…") { model.beginDelete(unused: true) }.disabled(model.unusedIDs.isEmpty)
+        }.padding(.top, 12)
+        SettingsInlineMessage(text: model.errorText).padding(.top, model.errorText.isEmpty ? 0 : 12)
+        .onAppear { model.refresh() }
+    }
+}
+
+private struct SettingsProfileRow: View {
+    let model: ProfilesViewModel
+    let row: ProfileRowData
+    let last: Bool
+    @State private var editing = false
+    @State private var draft = ""
+    @State private var pulse = false
+    @Environment(\.settingsPage) private var page
+    @FocusState private var nameFocused: Bool
+    private func beginRename() {
+        model.root.selectedProfileID = row.id
+        draft = row.name; editing = true; nameFocused = true
+    }
+    var body: some View {
+        HStack(spacing: 10) {
+            ProfileIconButton(profile: row) { anchor in model.root.actions.chooseProfileIcon(profileID: row.id, anchor: anchor) }
+                .frame(width: 28, height: 28).background(Color(nsColor: SettingsStyle.control.nsColor), in: Circle())
+            Group {
+                if editing {
+                    TextField("Profile name", text: $draft).textFieldStyle(.plain).font(.system(size: 13)).accessibilityLabel("Profile name").focused($nameFocused)
+                        .onSubmit {
+                            model.root.selectedProfileID = row.id; model.rename(to: draft)
+                            if model.errorText.isEmpty { editing = false; model.refresh() }
+                        }.onExitCommand { editing = false; model.errorText = "" }
+                } else {
+                    Button(row.name, action: beginRename).buttonStyle(.plain).font(.system(size: 13)).accessibilityLabel("Rename Profile " + row.name)
                 }
-                OpenSettingsRow(root: model.root, id: "profiles/delete", title: "Delete Profile", help: model.canDelete ? "Permanently remove this Profile’s data." : "The default Profile and Profiles with Spaces cannot be deleted.", last: true) {
-                    Button("Delete…") { model.beginDelete() }.disabled(!model.canDelete)
-                }
+            }.id(row.id == model.root.selectedProfileID ? "profiles/name" : "profiles/name-" + row.id.description)
+            Spacer(minLength: 8)
+            Text("\(row.spaceCount) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
+            ProfileActionsMenu(model: model, row: row, rename: beginRename).frame(width: 26, height: 26)
+                .id(row.id == model.root.selectedProfileID ? "profiles/delete" : "profiles/delete-" + row.id.description)
+        }.padding(.horizontal, 14).frame(height: 52)
+            .background(pulse ? Color(nsColor: SettingsStyle.sunStart.nsColor).opacity(0.24) : Color.clear)
+            .overlay(alignment: .bottom) { if !last { Rectangle().fill(Color(nsColor: SettingsStyle.hairline.nsColor)).frame(height: 1).padding(.leading, 14) } }
+            .task(id: page?.revision ?? model.root.arrivalRevision) {
+                guard row.id == model.root.selectedProfileID,
+                    ["profiles/name", "profiles/delete"].contains((page == nil ? model.root.arrivalID : page?.target) ?? "") else { return }
+                pulse = true
+                withAnimation(.easeOut(duration: SettingsStyle.arrivalDuration)) { pulse = false }
+            }
+    }
+}
+
+private struct ProfileActionsMenu: NSViewRepresentable {
+    let model: ProfilesViewModel
+    let row: ProfileRowData
+    let rename: () -> Void
+    func makeNSView(context: Context) -> ProfileActionsButton { ProfileActionsButton(model: model, row: row, rename: rename) }
+    func updateNSView(_ view: ProfileActionsButton, context: Context) { view.row = row; view.rename = rename; view.rebuild() }
+}
+@MainActor private final class ProfileActionsButton: NSPopUpButton {
+    let model: ProfilesViewModel
+    var row: ProfileRowData
+    var rename: () -> Void
+    init(model: ProfilesViewModel, row: ProfileRowData, rename: @escaping () -> Void) {
+        self.model = model; self.row = row; self.rename = rename
+        super.init(frame: .zero, pullsDown: true); isBordered = false; rebuild()
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    func rebuild() {
+        let menu = NSMenu(); menu.autoenablesItems = false
+        menu.addItem(withTitle: "⋯", action: nil, keyEquivalent: "")
+        for (title, selector) in [("Rename", #selector(renameProfile)), ("Change icon", #selector(changeIcon)), ("Delete…", #selector(deleteProfile))] {
+            let item = menu.addItem(withTitle: title, action: selector, keyEquivalent: ""); item.target = self
+            if title == "Delete…", let reason = model.root.model.deleteBlockReason(for: row.id) {
+                item.isEnabled = false; item.toolTip = reason.message
+                let help = menu.addItem(withTitle: reason.message, action: nil, keyEquivalent: ""); help.isEnabled = false
             }
         }
-        SettingsInlineMessage(text: model.errorText)
-        Button("Learn about Profiles") { model.root.actions.openHelp(topic: "profiles") }.buttonStyle(.plain).font(.system(size: 11.5))
-        .onAppear { model.refresh() }
+        self.menu = menu; font = .systemFont(ofSize: 13, weight: .medium)
+        setAccessibilityLabel("Actions for Profile " + row.name)
+    }
+    @objc private func renameProfile() { rename() }
+    @objc private func changeIcon() { model.root.actions.chooseProfileIcon(profileID: row.id, anchor: self) }
+    @objc private func deleteProfile() {
+        guard model.root.model.deleteBlockReason(for: row.id) == nil else { return }
+        model.root.selectedProfileID = row.id; model.beginDelete()
     }
 }
 private struct ProfileIconButton: NSViewRepresentable {
@@ -293,7 +354,7 @@ public struct ArchiveScopeSheet:View {
     @Bindable var model:ProfilesViewModel
     public init(model:ProfilesViewModel) { self.model=model }
     public var body:some View { VStack(spacing:14) {Text("Apply to all Profiles or only “\(model.archiveScopeProfileName)”?").font(.headline); Text(model.pendingArchive == .never ? "Open will never auto-archive your tabs." : "Open will now archive your tabs after \(model.pendingArchive?.settingsTitle ?? "").")
-        HStack { Button("Cancel") { model.cancelArchive() }.keyboardShortcut(.cancelAction);Button("All Profiles") { model.applyArchive(all:true) };Button("This Profile Only") { model.applyArchive(all:false) }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()) }
+        HStack { Button("Cancel") { model.cancelArchive() }.keyboardShortcut(.cancelAction);Button("All Profiles") { model.applyArchive(all:true) };Button("This Profile only") { model.applyArchive(all:false) }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()) }
     }.padding(24).frame(width:500,height:160) }
 }
 public struct SuggestNoticeSheet:View {
@@ -308,6 +369,6 @@ public struct ClearBrowsingDataSheet:View {
         ForEach([(ClearDataKinds.history,"Browsing history"),(.cookies,"Cookies and site data"),(.cache,"Cached files"),(.downloads,"Download history")],id:\.0.rawValue) { kind,title in Toggle(title,isOn:Binding(get:{model.clearKinds.contains(kind)},set:{if $0 {model.clearKinds.insert(kind)} else {model.clearKinds.remove(kind)}})) }
         Picker("Time range",selection:$model.clearRange) { ForEach(ClearDataRange.allCases,id:\.self) { Text($0.rawValue).tag($0) } }
         if model.clearing { ProgressView() };if !model.clearStatus.isEmpty {Text(model.clearStatus)};Spacer()
-        HStack { Button(model.clearStatus == "Done" ? "Done":"Cancel") { model.showsClear=false }.keyboardShortcut(.cancelAction).disabled(model.clearing);Spacer();Button("Clear Data",role:.destructive) { Task {await model.clear()} }.disabled(model.clearing || model.clearKinds.isEmpty) }
+        HStack { Button(model.clearStatus == "Done" ? "Done":"Cancel") { model.showsClear=false }.keyboardShortcut(.cancelAction).disabled(model.clearing);Spacer();Button("Clear data",role:.destructive) { Task {await model.clear()} }.disabled(model.clearing || model.clearKinds.isEmpty) }
     }.padding(24).frame(width:460,height:360).settingsSheet() }
 }

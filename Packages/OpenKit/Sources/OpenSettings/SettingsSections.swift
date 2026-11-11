@@ -61,10 +61,11 @@ struct SettingsPreviewsSection: View {
 
 struct SettingsDestinationSection: View {
     let root: SettingsViewModel
+    let section: SettingsSection
     var body: some View {
         SettingsInlineMessage(text: explanation)
-        OpenSettingsGroup(root.selectedSection == .extensions ? "Browser tools" : "This Profile") {
-            switch root.selectedSection {
+        OpenSettingsGroup(section == .extensions ? "Browser tools" : "This Profile") {
+            switch section {
             case .sitePermissions:
                 destination("site-permissions/privacy", title: "Privacy and Security", help: "Site access, cookies, and security options.", page: .privacy)
                 destination("site-permissions/notifications", title: "Notifications", help: "Choose which sites can send notifications.", page: .notifications, last: true)
@@ -72,67 +73,119 @@ struct SettingsDestinationSection: View {
                 destination("passwords-cards/passwords", title: "Passwords", help: "View and manage this Profile’s saved passwords.", page: .passwords)
                 destination("passwords-cards/cards", title: "Credit Cards", help: "Manage saved cards and payment methods.", page: .paymentMethods, last: true)
             case .browsingData:
-                OpenSettingsRow(root: root, id: "browsing-data/clear", title: "Clear Browsing Data", help: "Choose a time range and the data to remove.", last: true) { Button("Choose Data…") { root.profiles.showClear() } }
+                OpenSettingsRow(root: root, id: "browsing-data/clear", title: "Clear Browsing Data", help: "Choose a time range and the data to remove.", last: true) { Button("Choose data…") { root.profiles.showClear() } }
             case .extensions:
-                OpenSettingsRow(root: root, id: "extensions/manage", title: "Manage Extensions", help: "Enable, remove, and configure installed extensions.", last: true) { Button("Open Extensions") { root.actions.openURL(URL(string: "chrome://extensions")!, profileID: root.selectedProfileID) } }
+                OpenSettingsRow(root: root, id: "extensions/manage", title: "Manage Extensions", help: "Enable, remove, and configure installed extensions.", last: true) { Button("Open extensions") { root.actions.openURL(URL(string: "chrome://extensions")!, profileID: root.selectedProfileID) } }
             default: EmptyView()
             }
         }
     }
     private var explanation: String {
-        switch root.selectedSection {
+        switch section {
         case .browsingData: "Clearing data affects only the selected Profile. You choose what to remove before anything changes."
         case .extensions: "Extension management opens in a browser tab."
         default: "These controls open in a browser tab for the selected Profile."
         }
     }
     private func destination(_ id: String, title: String, help: String, page: ProfilePage, last: Bool = false) -> some View {
-        OpenSettingsRow(root: root, id: id, title: title, help: help, last: last) { Button("Open in Tab") { root.profiles.open(page) }.accessibilityLabel("Open " + title + " in Tab") }
+        OpenSettingsRow(root: root, id: id, title: title, help: help, last: last) { Button("Open in tab") { root.profiles.open(page) }.accessibilityLabel("Open " + title + " in Tab") }
     }
 }
 
 struct SettingsAdBlockingSection: View {
     let root: SettingsViewModel
     @Bindable var model: AdBlockSettingsModel
+    @State private var expanded: Set<String> = []
     @Environment(\.colorScheme) private var scheme
     init(root: SettingsViewModel, model: AdBlockSettingsModel) { self.root = root; self.model = model }
+    private var accent: Color { Color(nsColor: SettingsStyle.accessibleAccent(root.settingsAccentSource, dark: scheme == .dark)) }
+    private var changedLists: Bool { model.isReady && Set(model.enabledIDs) != Set(model.store.catalog.defaultIDs) }
     var body: some View {
         OpenSettingsGroup("Protection") {
             OpenSettingsRow(root: root, id: "ad-blocking/enabled", title: "Block ads, trackers, and popups", help: "The main switch applies to all Profiles.", changed: !model.enabled, last: true, reset: { model.setEnabled(true) }) {
-                Toggle("Block ads, trackers, and popups", isOn: Binding(get: { model.enabled }, set: { model.setEnabled($0) })).toggleStyle(OpenSettingsSwitchStyle(accent: Color(nsColor: SettingsStyle.accessibleAccent(root.settingsAccentSource, dark: scheme == .dark)), label: "Block ads, trackers, and popups"))
+                Toggle("Block ads, trackers, and popups", isOn: Binding(get: { model.enabled }, set: { model.setEnabled($0) })).toggleStyle(OpenSettingsSwitchStyle(accent: accent, label: "Block ads, trackers, and popups"))
             }
         }
-        if model.hasOtherBlocker { SettingsInlineMessage(text: "More than one ad blocker is on. Blocking may break sites.") }
-        if !model.isReady { SettingsInlineMessage(text: "Block lists are loading for this Profile. Choices will be available when they are ready.") }
         VStack(alignment: .leading, spacing: 8) {
-            HStack { Text("Block lists").font(.system(size: 11, weight: .semibold)); Spacer(); Button("Reset List Choices") { Task { await model.reset() } }.disabled(model.busy || !model.isReady) }
-            TextField("Search block lists", text: $model.query).textFieldStyle(.roundedBorder).accessibilityLabel("Search block lists")
-            ForEach(["generic", "cookies", "privacy", "regional"], id: \.self) { category in
-                let lists = model.lists.filter { $0.category.lowercased() == category && !$0.urls.isEmpty }
-                if !lists.isEmpty {
-                    DisclosureGroup(category.capitalized) {
-                        OpenSettingsCard {
-                            ForEach(Array(lists.enumerated()), id: \.element.id) { index, list in
-                                OpenSettingsRow(root: root, id: "ad-blocking/list-" + list.id, title: list.displayName, help: model.listStatus(list), changed: model.isReady && model.enabledIDs.contains(list.id) != list.defaultEnabled, last: index == lists.count - 1, reset: { Task { await model.setList(list.id, enabled: list.defaultEnabled) } }) {
-                                    Button { model.openInfo(list) } label: { Image(systemName: "info.circle") }.buttonStyle(.plain).accessibilityLabel("About " + list.displayName)
-                                    Toggle(list.displayName, isOn: Binding(get: { model.enabledIDs.contains(list.id) }, set: { on in Task { await model.setList(list.id, enabled: on) } })).toggleStyle(OpenSettingsSwitchStyle(accent: Color(nsColor: SettingsStyle.accent.nsColor), label: list.displayName)).disabled(model.busy || !model.isReady)
-                                }
-                            }
-                        }.padding(.top, 6)
-                    }.font(.system(size: 13)).padding(12).background(Color(nsColor: SettingsStyle.card.nsColor), in: RoundedRectangle(cornerRadius: 10))
+            HStack(spacing: 8) {
+                Text("Block lists").font(.system(size: 11, weight: .semibold))
+                if changedLists {
+                    Button("↺ Reset") { Task { await model.reset() } }.buttonStyle(.plain).font(.system(size: 11.5)).foregroundStyle(accent).accessibilityLabel("Reset lists").disabled(model.busy)
+                }
+                Spacer()
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                    TextField("Search block lists", text: $model.query).textFieldStyle(.plain).accessibilityLabel("Search block lists")
+                }.font(.system(size: 11.5)).padding(.horizontal, 8).frame(width: 200, height: 26)
+                    .background(Color(nsColor: SettingsStyle.control.nsColor), in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color(nsColor: SettingsStyle.controlLine.nsColor), lineWidth: 1))
+            }.foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor)).padding(.leading, 4)
+            OpenSettingsCard {
+                ForEach(["generic", "cookies", "privacy", "regional"], id: \.self) { category in
+                    categoryRows(category)
                 }
             }
-            if model.lists.isEmpty { SettingsInlineMessage(text: "No block lists match this search.") }
-        }.id("ad-blocking/lists")
+        }.padding(.top, 24).id("ad-blocking/lists")
         OpenSettingsGroup("Don’t block on these sites") {
-            ForEach(model.domains, id: \.self) { host in
-                OpenSettingsRow(root: root, id: "ad-blocking/site-" + host, title: host, changed: true, reset: { model.setExcluded(host, excluded: false) }) { Button("Remove") { model.setExcluded(host, excluded: false) }.disabled(model.busy || !model.isReady) }
+            HStack(spacing: 10) {
+                TextField("example.com", text: $model.hostDraft).textFieldStyle(.plain).accessibilityLabel("Allowed site")
+                    .padding(.horizontal, 8).frame(height: 26).background(Color(nsColor: SettingsStyle.control.nsColor), in: RoundedRectangle(cornerRadius: 7))
+                    .onSubmit { if model.validHostDraft { model.setExcluded(model.hostDraft, excluded: true) } }
+                Button("Add site") { model.setExcluded(model.hostDraft, excluded: true) }.disabled(!model.validHostDraft || model.busy || !model.isReady)
+            }.padding(.horizontal, 14).frame(height: 44)
+            if model.domains.isEmpty {
+                Text("No sites yet.").font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor)).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).frame(height: 36)
             }
-            HStack(spacing: 10) { TextField("example.com", text: $model.hostDraft).textFieldStyle(.plain).accessibilityLabel("Allowed site"); Button("Add Site") { model.setExcluded(model.hostDraft, excluded: true) }.disabled(model.hostDraft.isEmpty || model.busy || !model.isReady) }.padding(14)
+            ForEach(Array(model.domains.enumerated()), id: \.element) { index, host in
+                SettingsAllowedSiteRow(host: host, disabled: model.busy || !model.isReady, last: index == model.domains.count - 1) { model.setExcluded(host, excluded: false) }
+            }
         }.id("ad-blocking/allowed-sites")
-        SettingsInlineMessage(text: model.errorText)
-        if let error = model.lastError { SettingsInlineMessage(text: error) }
-        Button("Copy Debug Info") { model.copyDebug() }.id("ad-blocking/debug")
+        let notice = !model.errorText.isEmpty ? model.errorText : model.lastError ?? (!model.isReady ? "Block lists are loading for this Profile. Choices will be available when they are ready." : model.hasOtherBlocker ? "More than one ad blocker is on. Blocking may break sites." : "")
+        SettingsInlineMessage(text: notice).padding(.top, notice.isEmpty ? 0 : 12)
+        Button("Copy debug info") { model.copyDebug() }.id("ad-blocking/debug").padding(.top, 12)
+    }
+    @ViewBuilder private func categoryRows(_ category: String) -> some View {
+        let all = model.store.catalog.lists.filter { $0.category.lowercased() == category && !$0.urls.isEmpty }
+        let lists = model.lists.filter { $0.category.lowercased() == category && !$0.urls.isEmpty }
+        Button {
+            if expanded.contains(category) { expanded.remove(category) } else { expanded.insert(category) }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: expanded.contains(category) ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .medium)).frame(width: 10)
+                Text(category.capitalized).font(.system(size: 13))
+                Spacer()
+                Text("\(all.filter { model.enabledIDs.contains($0.id) }.count) of \(all.count) on").font(.system(size: 11.5)).monospacedDigit().foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor))
+            }.padding(.horizontal, 14).frame(height: 44).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityLabel(category.capitalized).accessibilityValue(expanded.contains(category) ? "Expanded" : "Collapsed")
+        if expanded.contains(category) || !model.query.isEmpty {
+            ForEach(lists, id: \.id) { list in
+                OpenSettingsRow(root: root, id: "ad-blocking/list-" + list.id, title: list.displayName, help: model.listSourceStatus(list),
+                    changed: model.isReady && model.enabledIDs.contains(list.id) != list.defaultEnabled,
+                    reset: { Task { await model.setList(list.id, enabled: list.defaultEnabled) } },
+                    checkbox: Binding(get: { model.enabledIDs.contains(list.id) }, set: { on in Task { await model.setList(list.id, enabled: on) } })) {
+                    Button { model.openInfo(list) } label: { Image(systemName: "info.circle") }.buttonStyle(.plain).accessibilityLabel("About " + list.displayName)
+                }.padding(.leading, 18).disabled(model.busy || !model.isReady)
+            }
+            if lists.isEmpty { Text("No block lists match this search.").font(.system(size: 11.5)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor)).padding(.leading, 32).padding(.bottom, 12) }
+        }
+        if category != "regional" { Rectangle().fill(Color(nsColor: SettingsStyle.hairline.nsColor)).frame(height: 1).padding(.leading, 14) }
+    }
+}
+
+private struct SettingsAllowedSiteRow: View {
+    let host: String
+    let disabled: Bool
+    let last: Bool
+    let remove: () -> Void
+    @State private var hovered = false
+    @FocusState private var focused: Bool
+    var body: some View {
+        HStack {
+            Text(host).font(.system(size: 13)); Spacer()
+            Button("–", action: remove).buttonStyle(.plain).font(.system(size: 16)).frame(width: 26, height: 26).opacity(hovered || focused ? 1 : 0).accessibilityLabel("Remove " + host).disabled(disabled).focused($focused)
+        }.padding(.horizontal, 14).frame(height: 44)
+            .background(SettingsHoverRegion(hovered: $hovered).allowsHitTesting(false))
+            .overlay(alignment: .top) { Rectangle().fill(Color(nsColor: SettingsStyle.hairline.nsColor)).frame(height: 1).padding(.leading, 14) }
     }
 }
 
@@ -151,10 +204,10 @@ struct SettingsAdvancedSection: View {
             row("boosts", "Enable Boosts on websites you visit", key: "enableBoosts", last: true)
         }
         OpenSettingsGroup("Tools") {
-            OpenSettingsRow(root: root, id: "advanced/translate", title: "Translated-site prompts", help: "Show translation prompts again for this Profile.") { Button("Reset Prompts") { root.advanced.resetTranslate() } }
-            OpenSettingsRow(root: root, id: "advanced/more", title: "More browser settings") { Button("Open in Tab") { root.actions.openMoreSettings() } }
+            OpenSettingsRow(root: root, id: "advanced/translate", title: "Translated-site prompts", help: "Show translation prompts again for this Profile.") { Button("Reset prompts") { root.advanced.resetTranslate() } }
+            OpenSettingsRow(root: root, id: "advanced/more", title: "More browser settings") { Button("Open in tab") { root.actions.openMoreSettings() } }
             OpenSettingsRow(root: root, id: "advanced/data-folder", title: "Open data folder") { Button("Show in Finder") { root.actions.revealOpenDataFolder() } }
-            OpenSettingsRow(root: root, id: "advanced/copy-info", title: "Open information", last: true) { Button("Copy Info") { root.actions.copyOpenInfoToPasteboard() } }
+            OpenSettingsRow(root: root, id: "advanced/copy-info", title: "Open information", last: true) { Button("Copy info") { root.actions.copyOpenInfoToPasteboard() } }
         }
         SettingsInlineMessage(text: root.advanced.statusText)
     }

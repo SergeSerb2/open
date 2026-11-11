@@ -335,6 +335,7 @@
           "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
       case "settings-profile": return try settingsProfile(a)
       case "settings-ui": return try settingsUI(a)
+      case "settings-lifetime": return ["modelCreated": app.settingsPresenter.hasSettingsModel]
       case "settings-perf": return try settingsPerformance(a)
       case "settings-profile-page": return try settingsProfilePage(a)
       case "settings-icon": return try settingsIcon(a)
@@ -410,7 +411,7 @@
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] {
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
-          app.settingsPresenter.settings.preferenceRevision &+= 1
+          app.settingsPresenter.refreshPreferencesIfLoaded()
           if key == "open.advanced.tabSleepMode" { app.tabSleep.reconcileSettingsPolicy() }
           app.scheduleMenuRebuild()
         }
@@ -2243,6 +2244,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         ".": (".", 47),
+        "[": ("[", 33), "]": ("]", 30),
         "enter": ("\u{3}", 76),
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),

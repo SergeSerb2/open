@@ -145,31 +145,22 @@ public struct ShortcutsPane: View {
                 ForEach([("All", "all"), ("Changed", "changed"), ("Unassigned", "unassigned"), ("Conflicts", "conflicts")], id: \.1) { title, filter in
                     Button { model.filter = filter } label: {
                         HStack(spacing: 5) { Text(title); Text(String(model.count(for: filter))).font(.system(size: 11)).foregroundStyle(Color(nsColor: SettingsStyle.secondary.nsColor)) }
-                            .font(.system(size: 12, weight: .medium)).padding(.horizontal, 10).frame(height: 26)
+                            .font(.system(size: 12, weight: .medium)).padding(.horizontal, 8).frame(height: 26)
                             .background((model.filter == filter ? accent.opacity(0.2) : Color(nsColor: SettingsStyle.control.nsColor)), in: Capsule())
                     }.buttonStyle(.plain).accessibilityLabel(title + " shortcuts").accessibilityAddTraits(model.filter == filter ? [.isSelected] : [])
                 }
+                Rectangle().fill(Color(nsColor: SettingsStyle.hairline.nsColor)).frame(width: 1, height: 18).padding(.horizontal, 3)
+                OpenSettingsPop(title: "Shortcut category", value: $model.category, options: [("Category", "all")] + model.categoryNames.map { ($0, $0) })
                 Spacer(minLength: 0)
             }
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) {
-                    categoryChip("All categories", value: "all")
-                    ForEach(model.categoryNames, id: \.self) { categoryChip($0, value: $0) }
-                }.fixedSize()
-                HStack(spacing: 6) {
-                    ForEach(Array(model.categoryNames.prefix(3)), id: \.self) { categoryChip($0, value: $0) }
-                    OpenSettingsPop(title: "Shortcut category", value: $model.category, options: [("All categories", "all")] + model.categoryNames.map { ($0, $0) })
-                }.fixedSize()
-                OpenSettingsPop(title: "Shortcut category", value: $model.category, options: [("All categories", "all")] + model.categoryNames.map { ($0, $0) })
-            }
             SettingsShortcutsList(model: model, commands: model.commands, revision: model.store, recording: model.recordingCommandID, findByKeys: model.findByKeys, selection: model.selectedCommandID)
-                .frame(height: 386).clipShape(RoundedRectangle(cornerRadius: 12))
+                .frame(height: listHeight).clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(nsColor: SettingsStyle.hairline.nsColor), lineWidth: 1))
-            if model.commands.isEmpty { SettingsInlineMessage(text: "No shortcuts found. Try another name or filter.") }
-            if !model.statusMessage.isEmpty { SettingsInlineMessage(text: model.statusMessage) }
+            let notice = model.commands.isEmpty ? "No shortcuts found. Try another name or filter." : model.statusMessage
+            if !notice.isEmpty { SettingsInlineMessage(text: notice) }
             if !model.unexpected.isEmpty { Button("Revert Unsaved Changes") { model.revert() } }
             if !model.extensionConflicts.isEmpty { ExtensionConflictNotice(conflicts: model.extensionConflicts, action: { model.openExtensionShortcuts() }) }
-            HStack { Button("Learn the Essential Shortcuts") { model.root.actions.openEssentialShortcuts() }.buttonStyle(.plain).font(.system(size: 11.5)).id("shortcuts/essential"); Spacer(); ShortcutsMoreMenu(model: model).frame(width: 22, height: 22) }
+            HStack { Button("Learn the Essential Shortcuts") { model.root.actions.openEssentialShortcuts() }.buttonStyle(.plain).font(.system(size: 11.5)).foregroundStyle(accent).id("shortcuts/essential"); Spacer() }
             OpenSettingsGroup("When shortcuts overlap") {
                 OpenSettingsRow(root: model.root, id: "shortcuts/priority", title: "When shortcuts conflict", changed: model.root.string("open.shortcuts.defaultPriority") != "browser", last: true, reset: { model.root.set("browser", for: "open.shortcuts.defaultPriority") }) {
                     OpenSettingsPop(title: "When shortcuts conflict", value: Binding(get: { model.root.string("open.shortcuts.defaultPriority") }, set: { model.root.set($0, for: "open.shortcuts.defaultPriority") }), options: [("Open wins", "browser"), ("Website wins", "site"), ("Website first, Open on double-press", "site-then-browser")])
@@ -183,16 +174,19 @@ public struct ShortcutsPane: View {
                 HStack {
                     Button("Cancel") { model.confirmsReset = false }.keyboardShortcut(.cancelAction)
                     Spacer()
-                    Button("Reset All Shortcuts", role: .destructive) { model.resetAll(confirmed: true); model.confirmsReset = false }.keyboardShortcut(.defaultAction)
+                    Button("Reset all shortcuts", role: .destructive) { model.resetAll(confirmed: true); model.confirmsReset = false }.keyboardShortcut(.defaultAction).accessibilityLabel("Reset All Shortcuts")
                 }
             }.padding(24).frame(width: 460).settingsSheet()
         }
     }
-    private func categoryChip(_ title: String, value: String) -> some View {
-        Button { model.category = value } label: {
-            Text(title).font(.system(size: 11.5, weight: .medium)).padding(.horizontal, 9).frame(height: 24)
-                .background(model.category == value ? accent.opacity(0.2) : Color(nsColor: SettingsStyle.control.nsColor), in: Capsule())
-        }.buttonStyle(.plain).accessibilityLabel("Category: " + title)
+    private var listHeight: CGFloat {
+        var height: CGFloat = 0
+        for command in model.commands {
+            let row: CGFloat = model.conflictText(for: command.id) != nil || command.scope == .global ? 60 : 44
+            if height + row > 352 { break }
+            height += row
+        }
+        return max(44, height)
     }
 
 }
@@ -279,13 +273,13 @@ private struct ExtensionConflictNotice: NSViewRepresentable {
     @objc private func openShortcuts() { action?() }
 }
 
-/// Preserve the pane's native menu titles and order; build on demand with the current model.
-private struct ShortcutsMoreMenu: NSViewRepresentable {
+/// Labelled native menu; all actions use the existing shortcut model.
+struct ShortcutsMoreMenu: NSViewRepresentable {
     let model: ShortcutsViewModel
     func makeNSView(context: Context) -> ShortcutsMoreMenuButton { ShortcutsMoreMenuButton(model: model) }
     func updateNSView(_ view: ShortcutsMoreMenuButton, context: Context) { view.model = model }
 }
-@MainActor private final class ShortcutsMoreMenuButton: NSPopUpButton {
+@MainActor final class ShortcutsMoreMenuButton: NSPopUpButton {
     var model: ShortcutsViewModel
     init(model: ShortcutsViewModel) {
         self.model = model
@@ -293,8 +287,9 @@ private struct ShortcutsMoreMenu: NSViewRepresentable {
         isBordered = false
         setAccessibilityLabel("More shortcut actions")
         let menu = NSMenu()
-        menu.addItem(withTitle: "", action: nil, keyEquivalent: "").image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: "More shortcut actions")
-        for (title, selector) in [("Revert Unsaved Changes", #selector(revert)), ("Import Shortcuts…", #selector(importKeys)), ("Export Shortcuts…", #selector(exportKeys)), ("Shortcut Help", #selector(help)), ("Extension Shortcuts", #selector(extensions))] {
+        menu.addItem(withTitle: "More", action: nil, keyEquivalent: "")
+        font = .systemFont(ofSize: 13, weight: .medium)
+        for (title, selector) in [("Import…", #selector(importKeys)), ("Export…", #selector(exportKeys)), ("Revert…", #selector(revert)), ("Shortcut help", #selector(help)), ("Extension shortcuts…", #selector(extensions))] {
             let item = menu.addItem(withTitle: title, action: selector, keyEquivalent: ""); item.target = self
         }
         self.menu = menu

@@ -35,14 +35,14 @@ public struct SearchEnginesSheet:View {
         HStack(spacing:8) {
             if editing {
                 Button("Cancel Edit"){editing=false}
-                Button("Save Engine"){if model.saveEngine(id:selectedID,name:name,keyword:keyword,template:template){editing=false}}.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!valid)
+                Button("Save engine"){if model.saveEngine(id:selectedID,name:name,keyword:keyword,template:template){editing=false}}.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()).disabled(!valid)
             } else {
                 Button("Add"){selectedID=nil;name="";keyword="";template="";editing=true}
                 Button("Edit"){if let engine=selectedCustom {name=engine.name;keyword=engine.keywords.first ?? "";template=engine.searchURLTemplate;editing=true}}.disabled(selectedCustom == nil)
                 Button("Remove"){if let selectedID {model.removeEngine(selectedID);self.selectedID=nil}}.disabled(selectedCustom == nil)
             }
             Spacer(minLength:0)
-            Button("Restore Built-ins"){model.restoreBuiltins();selectedID=nil;editing=false}
+            Button("Restore built-ins"){model.restoreBuiltins();selectedID=nil;editing=false}
             Button("Done"){model.root.showsSearchEngines=false}
         }
     }.padding(24).frame(width:520,height:editing ? 540:420).controlSize(.regular).settingsSheet()}

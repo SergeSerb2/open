@@ -8,12 +8,13 @@ import OpenDesign
 
 public struct LinksPane:View {
     let root:SettingsViewModel
-    @Bindable var links:LinksSettingsModel
+    private var links: LinksSettingsModel { root.links }
     @State private var editing:RuleDraft?
     @State private var tested = false
     @Environment(\.colorScheme) private var scheme
-    public init(root:SettingsViewModel) {self.root=root;links=root.links}
+    public init(root:SettingsViewModel) {self.root=root}
     public var body: some View {
+        @Bindable var links = root.links
         OpenSettingsGroup("Little Open") {
             linkToggle("little-open-hotkey", title: "Open Little Open in any app", help: "Press \(hotkey) from any app.", key: \.littleOpenHotkeyEnabled, defaultValue: true)
             linkToggle("option-command-click", title: "Open Little Open with Option-Command-click", key: \.optionCommandClickLittleOpen, defaultValue: true)
@@ -55,21 +56,14 @@ public struct LinksPane:View {
                     }
             }
             OpenSettingsRow(root: root, id: "links/rules", title: links.drafts.isEmpty ? "No routing rules yet" : "First matching rule wins", help: "Send a site to a Space or to Little Open.", last: true) {
-                Button("Add Rule…") { editing = RuleDraft(from: RoutingRule(match: .hostEquals(""), destination: .littleOpen(profile: nil))) }
+                Button("Add rule…") { editing = RuleDraft(from: RoutingRule(match: .hostEquals(""), destination: .littleOpen(profile: nil))) }
             }
         }
         .sheet(item: $editing) { draft in LinkRuleSheet(root: root, draft: draft, onDone: { editing = nil }) }
-        SettingsInlineMessage(text: root.linksError)
-        OpenSettingsGroup("Test a Link") {
-            HStack(spacing: 10) { TextField("URL or host", text: $links.testURLString).textFieldStyle(.plain).accessibilityLabel("URL or host"); Button("Test") { tested = true; links.runTest() } }.padding(14)
-            AppPicker(bundleID: $links.testSourceBundleID).padding(.horizontal, 14).padding(.bottom, 10)
-            OpenSettingsRow(root: root, id: "links/test", title: "Most Recent Space", last: true) {
-                OpenSettingsPop(title: "Most Recent Space", value: $links.testMostRecentSpaceID, options: [("Automatic", nil)] + links.spaces.map { ($0.title, Optional($0.id)) })
-            }
-        }
-        if tested && !links.testInputIsValid { SettingsInlineMessage(text: "Enter a valid URL.") }
+        LinkTestArea(root: root, tested: $tested).id("links/test")
+        let notice = !root.linksError.isEmpty ? root.linksError : tested && !links.testInputIsValid ? "Enter a valid URL." : root.linkTestSummary ?? ""
+        SettingsInlineMessage(text: notice)
         if let decision = links.testDecision {
-            if let summary = root.linkTestSummary { SettingsInlineMessage(text: summary) }
             DisclosureGroup("Details") { Text(RoutingDecisionFormatter.report(decision, spaces: root.routingSpaces)).font(.system(size: 11.5, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
         }
     }
@@ -82,6 +76,39 @@ public struct LinksPane:View {
     private var hotkey:String {CommandRegistry.byID["little-open-global"].flatMap{root.shortcutsStore.effectiveShortcuts(for:$0).first?.symbolDisplay} ?? "---"}
     private func toggle(_ key:ReferenceWritableKeyPath<LinksSettingsModel,Bool>)->Binding<Bool> {Binding(get:{links[keyPath:key]},set:{links[keyPath:key]=$0;root.commitLinks()})}
 
+}
+private struct LinkTestArea: View {
+    let root: SettingsViewModel
+    @Binding var tested: Bool
+    @Environment(\.settingsPage) private var page
+    @State private var pulse = false
+    @State private var expanded = false
+    var body: some View {
+        @Bindable var links = root.links
+        OpenSettingsGroup("Test a Link") {
+            Button { expanded.toggle() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .medium)).frame(width: 10)
+                    Text("Try a URL or host").font(.system(size: 13))
+                    Spacer()
+                }.padding(.horizontal, 14).frame(height: 44).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityLabel("Expand link test").accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            if expanded {
+                HStack(spacing: 10) { TextField("URL or host", text: $links.testURLString).textFieldStyle(.plain).accessibilityLabel("URL or host"); Button("Test") { tested = true; links.runTest() } }.padding(14)
+                AppPicker(bundleID: $links.testSourceBundleID).padding(.horizontal, 14).padding(.bottom, 10)
+                OpenSettingsRow(root: root, id: "links/test-space", title: "Most Recent Space", last: true) {
+                    OpenSettingsPop(title: "Most Recent Space", value: $links.testMostRecentSpaceID, options: [("Automatic", nil)] + links.spaces.map { ($0.title, Optional($0.id)) })
+                }
+            }
+        }
+        .background(pulse ? Color(nsColor: SettingsStyle.sunStart.nsColor).opacity(0.24) : Color.clear)
+        .task(id: page?.revision ?? root.arrivalRevision) {
+            guard (page == nil ? root.arrivalID : page?.target) == "links/test" else { return }
+            expanded = true
+            pulse = true
+            withAnimation(.easeOut(duration: SettingsStyle.arrivalDuration)) { pulse = false }
+        }
+    }
 }
 public struct LinkRuleSheet:View {
     let root:SettingsViewModel
@@ -96,7 +123,7 @@ public struct LinkRuleSheet:View {
         AppPicker(bundleID:$draft.sourceBundleID)
         LinkIssues(issues:root.links.issues(replacing:draft).filter{$0.ruleID == draft.id})
         SettingsError(text:root.linksError)
-        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save Rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).disabled(root.links.issues(replacing:draft).contains(where:\.isError))}
+        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).disabled(root.links.issues(replacing:draft).contains(where:\.isError))}
     }.padding(24).frame(width:520,height:380).settingsSheet()}
 }
 private struct LinkIssues: View {

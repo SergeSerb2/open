@@ -19,7 +19,7 @@ public struct SettingsContent: View {
                 focusRequest: viewModel.searchFocusRequest)
                 .frame(width: SettingsTokens.Redesign.navigationWidth)
             Rectangle().fill(Color(nsColor: SettingsTokens.Redesign.hairline.nsColor)).frame(width: 1)
-            SettingsDetail(root: viewModel)
+            SettingsDetailHost(root: viewModel, section: viewModel.selectedSection, searching: !viewModel.searchQuery.isEmpty)
         }
         .font(.system(size: 13)).foregroundStyle(Color(nsColor: SettingsTokens.Redesign.text.nsColor))
         .background(Color(nsColor: SettingsTokens.Redesign.background.nsColor)).ignoresSafeArea()
@@ -87,21 +87,48 @@ public struct SettingsContent: View {
     public let viewModel: SettingsViewModel
     public private(set) var window: NSWindow?
     public private(set) var lastOpenMilliseconds = 0.0
+    private var showing = false
+    #if DEBUG || OPEN_AUTOMATION
+    public private(set) var lastOpenPhases: [String: Double] = [:]
+    #endif
     public init(viewModel: SettingsViewModel) { self.viewModel = viewModel; super.init() }
     public func show(pane: PaneID? = nil) {
         let start = ProcessInfo.processInfo.systemUptime
+        showing = true
+        defer { showing = false }
         if let pane { viewModel.selectedPane = pane; viewModel.selectedSection = .legacy(pane); viewModel.searchQuery = "" }
         if window == nil { window = SettingsWindow.makeWindow(viewModel: viewModel); window?.delegate = self }
-        viewModel.refreshExternalState(); window?.makeKeyAndOrderFront(nil)
-        window?.contentView?.layoutSubtreeIfNeeded(); window?.displayIfNeeded()
+        #if DEBUG || OPEN_AUTOMATION
+        let created = ProcessInfo.processInfo.systemUptime
+        #endif
+        viewModel.refreshExternalState()
+        #if DEBUG || OPEN_AUTOMATION
+        let refreshed = ProcessInfo.processInfo.systemUptime
+        #endif
+        window?.makeKeyAndOrderFront(nil)
+        #if DEBUG || OPEN_AUTOMATION
+        let ordered = ProcessInfo.processInfo.systemUptime
+        #endif
+        window?.contentView?.layoutSubtreeIfNeeded()
+        #if DEBUG || OPEN_AUTOMATION
+        let laidOut = ProcessInfo.processInfo.systemUptime
+        #endif
+        window?.displayIfNeeded()
         lastOpenMilliseconds = (ProcessInfo.processInfo.systemUptime - start) * 1_000
+        #if DEBUG || OPEN_AUTOMATION
+        lastOpenPhases = ["windowMs": (created-start)*1000, "refreshMs": (refreshed-created)*1000, "orderMs": (ordered-refreshed)*1000, "layoutMs": (laidOut-ordered)*1000, "displayMs": lastOpenMilliseconds-(laidOut-start)*1000]
+        #endif
     }
     @discardableResult public func prepareForRemoteSuggestions(profileID: OpenModel.ProfileID) -> Bool { viewModel.profiles.prepareForRemoteSuggestions(profileID: profileID) }
     public func presentSearchSuggestionNotice(profileID: OpenModel.ProfileID) {
         viewModel.profiles.presentSuggestNotice(profileID: profileID)
         if viewModel.profiles.showsSuggestNotice { viewModel.navigate(to: .search, row: "suggestions"); show() }
     }
-    public func windowDidBecomeKey(_ notification: Notification) { viewModel.refreshExternalState() }
+    public func windowDidBecomeKey(_ notification: Notification) {
+        // show() already refreshes before ordering. Activation outside show()
+        // still refreshes external state, once.
+        if !showing { viewModel.refreshExternalState() }
+    }
 }
 
 struct SettingsGroup<Content: View>: View {

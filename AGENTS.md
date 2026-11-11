@@ -13,6 +13,7 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 - Platform: macOS 26+ only. Native Swift 6 + AppKit. SwiftUI only where it is cheap and does not hurt performance. Keep Arc's look, not Liquid Glass.
 - Scope (user decision, 2026-11-10): every Arc feature. This includes the sidebar, Spaces, pinned and today tabs, favorites, folders, auto-archive, the Library overlay (Downloads, Archive, History, Media, Spaces, Boosts), command bar, all Arc hotkeys, Split View, Peek, Little Open, Profiles, Air Traffic Control, Boosts, Zap, Site Control Center, ad blocking, Import from Arc, extensions, Easels, Notes, Live Folders, Calendar preview and Join Meeting, live-data hover previews, Library folder sources, import from Safari, Chrome, and Firefox, and Widevine (if licensing allows). Out of scope for good: Arc Max AI, Arc accounts, sync.
 - Safe Browsing: off (user decision, 2026-11-10).
+- Settings uses Open’s original navigation, cards, and controls (user decision, 2026-11-10). It is an explicit exception to the Arc-parity design rule; existing settings, actions, stores, and guards remain.
 - Onboarding and the Welcome page keep Open's own identity (the doorway-and-sun mark). They must reach Arc's level of visual quality, not copy Arc's look.
 
 ## Hard rules

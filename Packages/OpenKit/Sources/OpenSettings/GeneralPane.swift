@@ -22,8 +22,8 @@ public struct GeneralPane: View {
     @Environment(\.colorScheme) private var scheme
     public init(model: GeneralViewModel) { self.model = model }
     public var body: some View {
-        if !model.isDefault { defaultBrowser }
-        SettingsInlineMessage(text: model.errorText)
+        if !model.isDefault { defaultBrowser.padding(.top, 18) }
+        SettingsInlineMessage(text: model.errorText.isEmpty ? model.root.advanced.statusText : model.errorText)
         OpenSettingsGroup("Startup") {
             OpenPreferenceRow(root: model.root, id: "general/restore-windows", title: "Restore windows from the previous session", key: "open.advanced.restoreWindowsOnLaunch")
             OpenPreferenceRow(root: model.root, id: "general/warn-before-quitting", title: "Warn before quitting", key: "open.general.warnBeforeQuitting", help: "Ask before quitting with downloads in progress.", last: true)
@@ -42,7 +42,6 @@ public struct GeneralPane: View {
                 Button("Export…") { exportData() }
             }
         }
-        if !model.root.advanced.statusText.isEmpty { SettingsInlineMessage(text: model.root.advanced.statusText) }
 
     }
     private var defaultBrowser: some View {
@@ -52,7 +51,7 @@ public struct GeneralPane: View {
                 Text("Make Open your default browser").font(.system(size: 15, weight: .semibold)).tracking(-0.15)
                 Text("Links from Mail, Messages, and other apps will open here.").font(.system(size: 12)).foregroundStyle(Color(nsColor: SettingsStyle.white.nsColor).opacity(0.75)).fixedSize(horizontal: false, vertical: true)
             }.frame(maxWidth: .infinity, alignment: .leading)
-            Button("Set as Default") { model.setDefault() }.buttonStyle(OpenSettingsButtonStyle(attention: true)).fixedSize()
+            Button("Set as default") { model.setDefault() }.buttonStyle(OpenSettingsButtonStyle(attention: true)).fixedSize()
         }.padding(.horizontal, 18).frame(minHeight: 92)
             .foregroundStyle(Color(nsColor: SettingsStyle.white.nsColor))
             .background(RadialGradient(colors: SettingsStyle.hero.map { Color(nsColor: $0.nsColor) }, center: .bottomLeading, startRadius: 0, endRadius: 650), in: RoundedRectangle(cornerRadius: 14))

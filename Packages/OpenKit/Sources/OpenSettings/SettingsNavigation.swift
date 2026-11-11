@@ -102,7 +102,7 @@ struct SettingsNavigation: NSViewRepresentable {
         let accent = t.accessibleAccent(model.settingsAccentSource, dark: dark)
         let background = t.navigationBase.resolved(dark ? .dark : .light).nsColor
         (background.blended(withFraction: dark ? 0.06 : 0.08, of: accent) ?? background).setFill(); bounds.fill()
-        t.card.nsColor.setFill(); NSBezierPath(roundedRect: .init(x: 10, y: 44, width: bounds.width - 20, height: 30), xRadius: 8, yRadius: 8).fill()
+        t.control.nsColor.setFill(); NSBezierPath(roundedRect: .init(x: 10, y: 44, width: bounds.width - 20, height: 30), xRadius: 8, yRadius: 8).fill()
         let focused = (window?.firstResponder as? NSTextView)?.delegate === search
         (focused ? accent : t.controlLine.nsColor).setStroke()
         let ring = NSBezierPath(roundedRect: .init(x: 10.5, y: 44.5, width: bounds.width - 21, height: 29), xRadius: 8, yRadius: 8)

@@ -56,7 +56,7 @@ import Darwin
     if mode == "sections" {
       if let request = pending, let draw = request.draw, display.timestamp >= draw {
         samples.append(["section": request.section.rawValue, "warm": index > sequence.count,
-          "firstDrawMs": (draw - request.start) * 1000,
+          "firstDrawMs": (draw - request.start) * 1000, "phasesMs": root.lastSectionPresentation,
           "firstDisplayOpportunityMs": (display.timestamp - request.start) * 1000])
         pending = nil
       }
@@ -100,7 +100,7 @@ import Darwin
       "frameIntervalsMs": intervals, "sections": samples, "missingDraws": missed,
       "missedSamples": missedSamples,
       "scrollEventCPUms": scrollCPU, "scrollOffsets": scrollOffsets,
-      "scope": "Real native navigation action to first content draw submission and next display-link timestamp; display-link pacing during real NSScrollView wheel dispatch. Excludes WindowServer scanout confirmation."]
+      "scope": "Real native navigation action to first completed content layout/display submission (cached layers may be reused) and next display-link timestamp; display-link pacing during real NSScrollView wheel dispatch. Excludes WindowServer scanout confirmation."]
   }
 }
 #endif

@@ -10,7 +10,7 @@ struct SettingsAppearance: View {
     private var accent: Color { Color(nsColor: SettingsStyle.accessibleAccent(root.settingsAccentSource, dark: scheme == .dark)) }
     var body: some View {
         // One seam for the onboarding miniature kit, absent on this base.
-        SettingsAppearancePreview().frame(height: 214)
+        SettingsAppearancePreview().frame(height: 214).padding(.top, 18)
         OpenSettingsGroup("Window") {
             OpenSettingsRow(root: root, id: "appearance/website-appearance", title: "Website appearance", changed: root.string("open.web.colorScheme") != "automatic", reset: { setWebsiteAppearance("automatic") }) {
                 OpenSettingsSegments(title: "Website appearance", selection: Binding(get: { root.string("open.web.colorScheme") }, set: setWebsiteAppearance), options: [("Light", "light"), ("Dark", "dark"), ("Match System", "automatic")])

@@ -19,6 +19,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   unowned let app: AppDelegate
   init(app: AppDelegate) { self.app = app }
   @ObservationIgnored private var settingsStorage: SettingsViewModel?
+  #if OPEN_AUTOMATION
+  var hasSettingsModel: Bool { settingsStorage != nil }
+  private(set) var lastSettingsShowMs = 0.0
+  #endif
   var settings: SettingsViewModel {
     if let settingsStorage { return settingsStorage }
     let vm = SettingsViewModel(model: app.model, actions: self, defaults: .standard,
@@ -41,6 +45,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     return vm
   }
   func modelWasInstalled() { settingsStorage = nil }
+  func refreshPreferencesIfLoaded() { settingsStorage?.preferenceRevision &+= 1 }
   // Registry callbacks never instantiate Settings or open another Profile.
   func refreshAdBlockWarning() { settingsStorage?.adBlock?.refreshOtherBlocker() }
   // Async fresh-context store preparation may finish after Settings already
@@ -68,9 +73,15 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   @ObservationIgnored private(set) var library: LibraryViewModel?
   @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
   func show(pane: PaneID? = nil) {
+    #if OPEN_AUTOMATION
+    let started = ProcessInfo.processInfo.systemUptime
+    #endif
     attachBrowserStores(openingSettings: true)
     settings.appearanceWindowID = app.frontStandardWindowController?.windowID
     settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild()
+    #if OPEN_AUTOMATION
+    lastSettingsShowMs = (ProcessInfo.processInfo.systemUptime-started)*1000
+    #endif
   }
   func show(section: SettingsSection, row: String? = nil, profileID: ProfileID? = nil) {
     if let profileID, app.model.profile(id: profileID) != nil { settings.profiles.select(profileID) }

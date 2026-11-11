@@ -179,7 +179,7 @@ public struct ImportWizard: View {
                         Button(PasswordsImportCopy.allowButton) { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle())
                     } else { Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle()) }
                 case .progress: EmptyView()
-                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle())
+                case .report: if model.outcome?.errorText != nil { Button("Try again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(OpenSettingsButtonStyle())
                 }
             }.disabled(model.extensions.isInstalling)
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy).settingsSheet()
