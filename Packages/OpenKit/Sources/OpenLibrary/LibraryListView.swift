@@ -1,4 +1,5 @@
 import AppKit
+import OpenDesign
 
 @MainActor
 struct LibraryRowAction {
@@ -16,6 +17,7 @@ struct LibraryRowItem {
     var kind: String
     var day = ""
     var image: NSImage? = nil
+    var fileURL: URL? = nil
     var progress: Double? = nil
     var dragURL: URL? = nil
     var activate: () -> Void
@@ -257,7 +259,13 @@ private final class LibraryItemView: NSView {
         self.item = item; self.foreground = foreground; self.overlay = overlay; self.gallery = gallery
         title.stringValue = item.title; subtitle.stringValue = item.subtitle
         title.textColor = foreground; subtitle.textColor = foreground.withAlphaComponent(0.68)
-        icon.image = item.image; icon.contentTintColor = foreground.withAlphaComponent(0.68)
+        icon.image = item.image; icon.contentTintColor = nil
+        if let url = item.fileURL {
+            icon.image = FilePreviewCache.shared.image(for:url) { [weak self] in
+                guard let self, self.item?.fileURL == url else { return }
+                self.icon.image = FilePreviewCache.shared.image(for:url,onReady:{})
+            }
+        }
         buttons.forEach { $0.removeFromSuperview() }; buttons = []
         var actions = item.hoverActions
         if !item.actions.isEmpty { actions.append(.init(title:"More",glyph:.dots,run:{ [weak self] in self?.onMenu?() })) }
@@ -270,14 +278,18 @@ private final class LibraryItemView: NSView {
         identifier = .init(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")
         if gallery {
             buttons.forEach { $0.removeFromSuperview() }; buttons = []
-            for (suffix,name,label) in [("edit","Edit Boost","Edit…"),("delete","Delete","Delete…"),("enabled",item.subtitle.hasSuffix(" · on") ? "Turn Off" : "Turn On",item.subtitle.hasSuffix(" · on") ? "On" : "Off")] {
+            for (suffix,name,label) in [("edit","Edit Boost","Edit…"),("enabled",item.subtitle.hasSuffix(" · on") ? "Turn Off" : "Turn On",item.subtitle.hasSuffix(" · on") ? "On" : "Off")] {
                 guard let action = item.actions.first(where: { $0.title == name }) else { continue }
                 let button = LibraryControl(title:label); button.labelSize = 12
                 button.foreground = foreground; button.overlay = overlay; button.baseAlpha = 0.045; button.onPress = action.run
+                button.isChip = true; button.layer?.cornerRadius = 9
                 button.identifier = .init("boosts.\(item.id).\(suffix)"); button.setAccessibilityLabel(name)
                 if suffix == "enabled" { button.setAccessibilityRole(.checkBox); button.selected = item.subtitle.hasSuffix(" · on") }
                 buttons.append(button); addSubview(button)
             }
+            let more = LibraryControl(title:"",glyph:.dots); more.foreground = foreground; more.overlay = overlay
+            more.setAccessibilityLabel("More options"); more.identifier = .init("boosts.\(item.id).more")
+            more.onPress = { [weak self] in self?.onMenu?() }; buttons.append(more); addSubview(more)
         }
         setAccessibilityElement(!gallery); setAccessibilityRole(gallery ? .group : .row); setAccessibilityLabel(item.title+". "+item.subtitle)
         setAccessibilityCustomActions(item.hoverActions.map { action in NSAccessibilityCustomAction(name:action.title) { action.run(); return true } })
@@ -302,9 +314,9 @@ private final class LibraryItemView: NSView {
         if gallery {
             for button in buttons {
                 let id = button.identifier?.rawValue ?? ""
-                if id.hasSuffix(".enabled") { button.frame = CGRect(x:bounds.width-62,y:10,width:46,height:26) }
-                else if id.hasSuffix(".edit") { button.frame = CGRect(x:16,y:82,width:68,height:26) }
-                else { button.frame = CGRect(x:bounds.width-88,y:82,width:72,height:26) }
+                if id.hasSuffix(".enabled") { button.frame = CGRect(x:bounds.width-62,y:10,width:46,height:28) }
+                else if id.hasSuffix(".edit") { button.frame = CGRect(x:16,y:82,width:68,height:28) }
+                else { button.frame = CGRect(x:bounds.width-44,y:82,width:28,height:28) }
             }
         } else {
             for (index,button) in buttons.enumerated() { button.frame = CGRect(x:bounds.width-10-CGFloat(buttons.count-index)*34,y:top+2,width:30,height:30) }
@@ -318,7 +330,10 @@ private final class LibraryItemView: NSView {
         if let progress = item?.progress {
             let rect = CGRect(x:18,y:16,width:24,height:24)
             foreground.withAlphaComponent(0.25).setStroke(); let circle = NSBezierPath(ovalIn:rect.insetBy(dx:2,dy:2)); circle.lineWidth = 2; circle.stroke()
-            foreground.setStroke(); let arc = NSBezierPath(); arc.appendArc(withCenter:CGPoint(x:30,y:28),radius:10,startAngle:-90,endAngle:-90+CGFloat(progress)*360,clockwise:false); arc.lineWidth = 2; arc.stroke()
+            foreground.setStroke(); let arc = NSBezierPath(); arc.appendArc(withCenter:CGPoint(x:30,y:28),radius:10,startAngle:-90,endAngle:-90+CGFloat(progress)*360,clockwise:false); arc.lineWidth = 2; arc.lineCapStyle = .round; arc.stroke()
+            let arrow = NSBezierPath(); arrow.lineWidth = 1.7; arrow.lineCapStyle = .round; arrow.lineJoinStyle = .round
+            arrow.move(to:CGPoint(x:30,y:23)); arrow.line(to:CGPoint(x:30,y:33))
+            arrow.move(to:CGPoint(x:26,y:29)); arrow.line(to:CGPoint(x:30,y:33)); arrow.line(to:CGPoint(x:34,y:29)); arrow.stroke()
         }
     }
 }

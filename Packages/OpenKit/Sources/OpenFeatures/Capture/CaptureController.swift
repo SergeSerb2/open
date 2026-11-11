@@ -7,7 +7,7 @@ import OpenWeb
 @MainActor
 public protocol CaptureLibrary: AnyObject {
     /// Writes the PNG and appends its index row; returns the row id.
-    func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String) async throws -> UUID
+    func save(png: Data, kind: CaptureComposer.Kind, sourceHost: String, title: String) async throws -> UUID
     /// Removes the file and its row in one step.
     func delete(id: UUID) throws
     /// Library ▸ Captures.
@@ -206,7 +206,7 @@ public final class CaptureController {
                 let output = try await CaptureComposer.render(.init(kind: kind, png: png, selection: selection, viewSize: viewSize,
                                                                     portraitBackground: background, themeStyle: theme))
                 guard self.generation == token else { return }
-                let savedID = try await library?.save(png: output.png, kind: kind, sourceHost: host)
+                let savedID = try await library?.save(png: output.png, kind: kind, sourceHost: host, title: String(title.prefix(4096)))
                 guard self.generation == token else {
                     // The window or the flow ended while the file was written: keep the Library row.
                     return

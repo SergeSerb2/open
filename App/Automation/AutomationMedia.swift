@@ -190,7 +190,7 @@ extension AutomationController {
     case "library-section":
       // View Media (Window menu) opens the Library at its Media section.
       let presenter = app.settingsPresenter
-      return ["visible": presenter.libraryPresenter?.window?.isVisible == true,
+      return ["visible": presenter.libraryWindow?.isVisible == true,
               "section": presenter.library.map { "\($0.section)" } ?? NSNull()] as [String: Any]
     case "sleep-visibility":
       media.feedSleep()

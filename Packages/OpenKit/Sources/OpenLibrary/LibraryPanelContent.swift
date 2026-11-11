@@ -4,6 +4,7 @@ import OpenModel
 import OpenSettings
 import OpenSidebar
 import UniformTypeIdentifiers
+import OpenDesign
 
 @MainActor
 extension LibraryPanelView {
@@ -25,9 +26,20 @@ extension LibraryPanelView {
         guard let row = listView.entryIndex(id) else { return false }
         listView.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false); listView.table.scrollRowToVisible(row); listView.focus(); return true
     }
-    public func setBoostLayout(_ name:String) { boostsLayout.selectedSegment = name == "Gallery" ? 1 : 0; changeBoostLayout() }
+    public func setBoostLayout(_ name:String) { viewModel.boostsPresentation = name == "Gallery" ? .gallery : .list; renderRows() }
     public func setBoostProfile(_ name:String) -> Bool {
-        guard boostsProfile.itemTitles.contains(name) else { return false }; boostsProfile.selectItem(withTitle:name); changeBoostProfile(); return true
+        guard let profile = viewModel.model.profiles.first(where: { $0.name == name }) else { return false }
+        viewModel.historyProfileID = profile.id; refreshData(); renderRows(); return true
+    }
+    func showBoostProfiles() {
+        let menu = NSMenu(); menu.autoenablesItems = false
+        for profile in viewModel.model.profiles {
+            let item = NSMenuItem(title:profile.name,action:nil,keyEquivalent:"")
+            let target = LibraryProfileChoice { [weak self] in _ = self?.setBoostProfile(profile.name) }
+            item.target = target; item.action = #selector(LibraryProfileChoice.select); item.representedObject = target
+            item.state = profile.id == viewModel.historyProfileID ? .on : .off; menu.addItem(item)
+        }
+        menu.popUp(positioning:nil,at:CGPoint(x:0,y:boostsProfile.bounds.maxY),in:boostsProfile)
     }
     func beginContentUpdates() { observeContent(); refreshData() }
     func endContentUpdates() { reloadTask?.cancel(); reloadTask = nil; historyTask?.cancel(); historyTask = nil }
@@ -102,25 +114,14 @@ extension LibraryPanelView {
         filter.isHidden = !section.hasFilter || filterOpen
         filter.showsDot = hasActiveFilters
         filterEditor.isHidden = !filterOpen
-        boostsLayout.isHidden = section != .boosts; boostsProfile.isHidden = section != .boosts
+        boostList.isHidden = section != .boosts; boostGallery.isHidden = section != .boosts; boostsProfile.isHidden = section != .boosts
         let boostsOff = section == .boosts && !viewModel.defaults.bool(forKey:"open.advanced.enableBoosts")
         boostDisabledText.isHidden = !boostsOff; boostTurnOn.isHidden = !boostsOff
         listView.identifier = .init(section == .boosts ? (viewModel.boostsPresentation == .gallery ? "boosts.gallery" : "boosts.list") : "library.rows")
-        boostsLayout.selectedSegment = viewModel.boostsPresentation == .gallery ? 1 : 0
-        let profiles = viewModel.model.profiles
-        boostsProfile.removeAllItems()
-        for profile in profiles { boostsProfile.addItem(withTitle:profile.name); boostsProfile.lastItem?.representedObject = profile.id.description }
-        if let index = profiles.firstIndex(where: { $0.id == viewModel.historyProfileID }) { boostsProfile.selectItem(at:index) }
+        boostList.selected = viewModel.boostsPresentation == .list; boostGallery.selected = viewModel.boostsPresentation == .gallery
+        boostsProfile.title = viewModel.model.profile(id:viewModel.historyProfileID)?.name ?? "Profile"
         if filterOpen { configureFilter() }
         needsLayout = true
-    }
-    @objc func changeBoostLayout() { viewModel.boostsPresentation = boostsLayout.selectedSegment == 1 ? .gallery : .list; renderRows() }
-    @objc func changeBoostProfile() {
-        guard let raw = boostsProfile.selectedItem?.representedObject as? String, let id = UUID(uuidString:raw) else { return }
-        viewModel.historyProfileID = ProfileID(rawValue:id); refreshData(); renderRows()
-    }
-    func fileIcon(_ name:String) -> NSImage {
-        NSWorkspace.shared.icon(for:UTType(filenameExtension:URL(fileURLWithPath:name).pathExtension) ?? .data)
     }
     func symbol(_ name:String) -> NSImage? { NSImage(systemSymbolName:name,accessibilityDescription:nil) }
     func downloadRows() -> [LibraryRowItem] {
@@ -134,7 +135,7 @@ extension LibraryPanelView {
             case .cancelled: subtitle = "Cancelled"
             case .paused: subtitle = "Paused"
             case .inProgress:
-                let bytes = ByteCountFormatter(); bytes.countStyle = .file
+                let bytes = ByteCountFormatter(); bytes.countStyle = .file; bytes.allowsNonnumericFormatting = false
                 var received = bytes.string(fromByteCount:item.receivedBytes)
                 if let total = item.totalBytes {
                     let target = bytes.string(fromByteCount:total)
@@ -161,7 +162,7 @@ extension LibraryPanelView {
                     .init(title:"Move to Trash",enabled:available,run:{ actions.trashDownload(id:id) })]
             } else { menu = [.init(title:"Hide from Open",run:{ actions.removeDownload(id:id) })] }
             return LibraryRowItem(id:id,title:item.fileName,subtitle:subtitle,kind:"download",day:dayLabel(item.startedAt),
-                image:progress ? nil : fileIcon(item.fileName),progress:progress ? item.progress ?? 0 : nil,
+                fileURL:progress ? nil : URL(fileURLWithPath:item.filePath ?? item.fileName),progress:progress ? item.progress ?? 0 : nil,
                 dragURL:available && item.state == .completed ? item.filePath.map { URL(fileURLWithPath:$0) } : nil,
                 activate:{ if available && item.state == .completed { actions.openDownload(id:id) } },actions:menu)
         }
@@ -219,8 +220,8 @@ extension LibraryPanelView {
     func captureRows() -> [LibraryRowItem] {
         viewModel.captureItems.map { item in
             let id = item.id, actions = viewModel.actions
-            return LibraryRowItem(id:id.uuidString,title:item.fileName,subtitle:"Capture · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:dayLabel(item.createdAt),
-                image:viewModel.thumbnailImages[id] ?? fileIcon(item.fileName),dragURL:viewModel.captureURL(item),activate:{ actions.openCapture(id:id) },
+            return LibraryRowItem(id:id.uuidString,title:(item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!,subtitle:"Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:dayLabel(item.createdAt),
+                fileURL:viewModel.captureURL(item),dragURL:viewModel.captureURL(item),activate:{ actions.openCapture(id:id) },
                 actions:[.init(title:"Open",run:{ actions.openCapture(id:id) }),.init(title:"Copy",run:{ actions.copyCapture(id:id) }),
                     .init(title:"Show in Finder",run:{ actions.revealCapture(id:id) }),.init(title:"Save As…",run:{ [weak self] in self?.saveCapture(item) }),
                     .init(title:"-",run:{}),.init(title:"Delete",run:{ [weak self] in self?.confirm("Delete this capture?",message:"This permanently deletes the file.") { [weak self] in
@@ -329,4 +330,10 @@ extension LibraryPanelView {
         }
         configureFilter(); refreshData(); renderRows(); return true
     }
+}
+
+@MainActor private final class LibraryProfileChoice: NSObject {
+    let run: () -> Void
+    init(_ run: @escaping () -> Void) { self.run = run }
+    @objc func select() { run() }
 }

@@ -13,7 +13,7 @@ extension AutomationController {
       args.values.compactMap({ $0 as? String }).allSatisfy({ $0.utf8.count <= 1024 })
     else { throw Failure(message: "invalid Gallery UI request") }
     let settings = args["window"] as? String == "settings"
-    guard let owner = settings ? app.settingsPresenter.settingsPresenter.window : app.settingsPresenter.libraryPresenter?.window,
+    guard let owner = settings ? app.settingsPresenter.settingsPresenter.window : app.settingsPresenter.libraryWindow,
       owner.isVisible else { throw Failure(message: "requested window is not visible") }
     if action != "state" { try await activateForInput(owner) }
     // SwiftUI lazily materializes its AX tree for enhanced clients. Use the
@@ -54,6 +54,9 @@ extension AutomationController {
     }
     switch action {
     case "profile":
+      if !settings, let panel=app.settingsPresenter.activeLibrarySession?.panel, let name=args["name"] as? String {
+        guard panel.setBoostProfile(name) else { throw Failure(message:"unknown Profile") }; break
+      }
       guard !settings, let name = args["name"] as? String,
         let profile = app.model.profiles.first(where: { $0.name == name }) else { throw Failure(message: "Profile picker item not found") }
       if let popup = nodes.compactMap({ $0 as? NSPopUpButton }).first(where: { $0.itemTitles.contains(name) }),
@@ -100,6 +103,7 @@ extension AutomationController {
       else { throw Failure(message: "Library sidebar not found") }
       table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
     case "layout":
+      if !settings, let panel=app.settingsPresenter.activeLibrarySession?.panel, let name=args["name"] as? String { panel.setBoostLayout(name); break }
       guard let name = args["name"] as? String, ["List", "Gallery"].contains(name) else { throw Failure(message: "unknown layout") }
       if let control = nodes.compactMap({ $0 as? NSSegmentedControl }).first(where: { $0.segmentCount == 2 && $0.label(forSegment: 0) == "List" }) {
         control.selectedSegment = name == "List" ? 0 : 1

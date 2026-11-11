@@ -15,8 +15,7 @@ import time
 from engine_e2e import Open
 
 SECTIONS = ['media', 'downloads', 'spaces', 'boosts', 'archive', 'history']
-KEYS = ['libraryShowsEasels', 'libraryShowsHistory', 'OpenLibraryLegacyWindow',
-        'open.library.lastSection', 'open.sidebar.hideHintShown']
+KEYS = ['libraryShowsEasels', 'open.library.lastSection', 'open.sidebar.hideHintShown']
 
 
 def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
@@ -76,8 +75,7 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
                        urls=('about:blank',), extra_env=env)
             for name in KEYS:
                 saved[name] = app.call('defaults', key=name, persistent=True)
-            for name, value in [('libraryShowsEasels', False), ('libraryShowsHistory', True),
-                                ('OpenLibraryLegacyWindow', False), ('open.sidebar.hideHintShown', True)]:
+            for name, value in [('libraryShowsEasels', False), ('open.sidebar.hideHintShown', True)]:
                 app.call('defaults', key=name, value=value)
             check('lazy_at_launch', state()['created'] is False)
             owner = app.call('shell-windows')[0]
@@ -153,14 +151,9 @@ def run(output, frames=False, bundle=None, mockups=None, capture_sections=None):
             check('returns_to_hidden_sidebar', app.call('window-state')['sidebarMode'] == 'hidden')
             app.call('command', id='toggle-sidebar')
 
-            app.call('defaults', key='OpenLibraryLegacyWindow', value=True)
             app.call('command', id='view-downloads')
-            legacy = app.call('settings-state')
-            check('legacy_debug_route', legacy['library'] != owner['number'] and legacy['librarySection'] == 'downloads')
-            app.call('library-close')
-            app.call('defaults', key='OpenLibraryLegacyWindow', value=False)
-            app.call('window-focus', id=owner['id'], activate=True)
-
+            check('only_embedded_library',app.call('settings-state')['library']==owner['number'])
+            state(action='close')
             state(action='open', section='downloads')
             app.call('command', id='new-window')
             other = next(w for w in app.call('shell-windows') if w['id'] != owner['id'])

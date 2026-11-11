@@ -114,7 +114,7 @@ public final class SpaceManagerView: NSView {
         SidebarDiagnostics.spaceManagerLayouts += 1
         refreshVisibleColumns()
         scrollView.frame = bounds
-                strip.frame.size = CGSize(width: max(bounds.width, insetX * 2 + CGFloat(columns.count) * columnWidth + CGFloat(max(0, columns.count - 1)) * (pitch-columnWidth)), height: max(0, scrollView.contentSize.height))
+        strip.frame.size = CGSize(width: max(bounds.width, insetX * 2 + CGFloat(columns.count) * columnWidth + CGFloat(max(0, columns.count - 1)) * (pitch-columnWidth)), height: max(0, scrollView.contentSize.height))
         placeColumns(animated: false)
         buildVisibleColumns()
     }
@@ -128,7 +128,7 @@ public final class SpaceManagerView: NSView {
     }
 
     private func placeColumns(animated: Bool) {
-                for (i, id) in displayedOrder.enumerated() {
+        for (i, id) in displayedOrder.enumerated() {
             guard let column = columns[id], reorder?.id != id else { continue }
             let oldX = column.layer?.presentation()?.frame.minX ?? column.frame.minX
             let frame = CGRect(x: insetX + CGFloat(i) * pitch, y: insetY, width: columnWidth, height: max(0, strip.bounds.height - 2 * insetY))
@@ -201,7 +201,7 @@ public final class SpaceManagerView: NSView {
                 context.haptics.endDrag()
             }
             guard var state = reorder else { continue }
-                        let origin = state.origin + x - state.start
+            let origin = state.origin + x - state.start
             column.frame.origin.x = origin
             column.setLifted(true)
             let others = context.model.spaces.map(\.id).filter { $0 != state.id }
@@ -289,6 +289,7 @@ private final class SpaceManagerColumn: NSView {
         guard page == nil, bounds.height > 0 else { return }
         let context = manager.context
         let background = ThemeBackgroundView(frame: bounds)
+        background.updatesFieldsSynchronously = manager.libraryLayout
         background.wantsLayer = true; background.layer?.cornerRadius = 12; background.layer?.masksToBounds = true
         self.background = background
         content.addSubview(background, positioned: .below, relativeTo: controls)
@@ -304,7 +305,7 @@ private final class SpaceManagerColumn: NSView {
         let page = SpacePageView(context: context, space: space, menus: menus)
         page.displaysHeader = false
         self.page = page; content.addSubview(page)
-        updateTheme(); needsLayout = true
+        updateTheme(); setLifted(false); needsLayout = true
     }
     func setLifted(_ lifted: Bool) {
         if self.lifted != lifted {
@@ -325,8 +326,8 @@ private final class SpaceManagerColumn: NSView {
         transform = CATransform3DScale(transform, scale, scale, 1)
         layer.transform = CATransform3DTranslate(transform, -center.x, -center.y, 0)
         layer.shadowColor = NSColor.black.cgColor
-        layer.shadowOpacity = lifted ? 0.25 : 0
-        layer.shadowRadius = 8
+        layer.shadowOpacity = lifted ? 0.25 : manager.libraryLayout ? 0.10 : 0
+        layer.shadowRadius = manager.libraryLayout && !lifted ? 10 : 8
         layer.shadowOffset = CGSize(width: 0, height: 4)
         if layer.shadowPath?.boundingBoxOfPath != bounds {
             layer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 10, cornerHeight: 10, transform: nil)
@@ -335,6 +336,7 @@ private final class SpaceManagerColumn: NSView {
     private func updateTheme() {
         let context = manager.context
         background?.style = context.style(for: space)
+        if manager.libraryLayout { content.layer?.backgroundColor = context.style(for:space).miniPlayerFill(context.appearance(for:space)).nsColor.cgColor }
         let appearance = context.appearance(for: space)
         self.appearance = appearance.nsAppearance
         content.layer?.borderWidth = manager.libraryLayout ? 0.5 : appearance == .dark ? 1 : 0
@@ -344,6 +346,7 @@ private final class SpaceManagerColumn: NSView {
         super.layout()
         content.frame = bounds
         background?.frame = bounds
+        if manager.libraryLayout { layer?.shadowPath = CGPath(roundedRect:bounds,cornerWidth:12,cornerHeight:12,transform:nil); background?.prepareForSnapshot() }
         controls.frame = CGRect(x: 0, y: 0, width: bounds.width, height: manager.libraryLayout ? bounds.height : SpaceManagerMetrics.headerHeight)
         page?.frame = CGRect(x: 0, y: SpaceManagerMetrics.headerHeight, width: bounds.width, height: max(0, bounds.height - SpaceManagerMetrics.headerHeight - (manager.libraryLayout ? 44 : 0)))
     }

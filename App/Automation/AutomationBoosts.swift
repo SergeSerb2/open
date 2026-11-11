@@ -11,7 +11,7 @@ extension AutomationController {
     let boosts = app.stores.boosts
     if command == "boost-library" {
       guard let library = app.settingsPresenter.library, library.section == .boosts,
-            app.settingsPresenter.libraryPresenter?.window?.isVisible == true,
+            app.settingsPresenter.libraryWindow?.isVisible == true,
             let raw = args["boost"] as? String, UUID(uuidString: raw) != nil,
             let row = library.boostItems.first(where: { $0.id == raw }) else { throw Failure(message: "no visible Library Boost") }
       // The real LibraryActions caller boundary, after its confirmation UI.

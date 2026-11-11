@@ -28,7 +28,7 @@ extension AutomationController {
       vm.confirmsDelete=false;vm.confirmsUnused=false;vm.showsCreate=false;vm.showsSuggestNotice=false
       adapter.profileIconPicker?.close()
     case "press":
-      let owner = args["library"] as? Bool == true ? adapter.libraryPresenter?.window : adapter.settingsPresenter.window
+      let owner = args["library"] as? Bool == true ? adapter.libraryWindow : adapter.settingsPresenter.window
       guard let label=args["label"] as? String, let owner,
         let control=profileAX(owner.attachedSheet ?? owner,label:label) else { throw Failure(message:"Profile control not found") }
       let press=NSSelectorFromString("accessibilityPerformPress")
@@ -56,7 +56,7 @@ extension AutomationController {
       adapter.openURL(url,profileID:adapter.settings.selectedProfileID)
     case "indicator-menu":
       let views = args["library"] as? Bool == true
-        ? profileIndicatorViews(in:adapter.libraryPresenter?.window?.contentView,identifier:"spaceManagerSpaceHeaderIndicator")
+        ? profileIndicatorViews(in:adapter.libraryWindow?.contentView,identifier:"spaceManagerSpaceHeaderIndicator")
         : profileIndicatorViews()
       guard let view=views.first else {throw Failure(message:"no visible Profile indicator")}
       let selection = args["item"] as? String
@@ -90,7 +90,7 @@ extension AutomationController {
     }
     await Task.yield()
     let owner=adapter.settingsPresenter.window, sheet=owner?.attachedSheet
-    let managerSheet = adapter.libraryPresenter?.window?.attachedSheet
+    let managerSheet = adapter.libraryWindow?.attachedSheet
     let delete=sheet.flatMap {profileAX($0,label:"Delete")}
     let enabled:Bool?=delete.flatMap {object in
       if let element=object as? any NSAccessibilityProtocol { return element.isAccessibilityEnabled() }
@@ -123,7 +123,7 @@ extension AutomationController {
       "noticeShown":app.missingProfileNoticeCount,"noticeTitles":app.missingProfileNoticeTitles,
       "noticeVisible":app.missingProfileNotice?.window.isVisible ?? false,
       "iconPicker":adapter.profileIconPicker?.isClosed == false,"indicatorMenu":profileIndicatorMenuTitles,
-      "managerIndicators":profileIndicatorViews(in:adapter.libraryPresenter?.window?.contentView,identifier:"spaceManagerSpaceHeaderIndicator").map { $0.accessibilityLabel() ?? "" },
+      "managerIndicators":profileIndicatorViews(in:adapter.libraryWindow?.contentView,identifier:"spaceManagerSpaceHeaderIndicator").map { $0.accessibilityLabel() ?? "" },
       "indicators":profileIndicatorViews().map {view in
         ["label":view.accessibilityLabel() ?? "","id":view.accessibilityIdentifier() ?? "",
          "frame":[view.frame.minX,view.frame.minY,view.frame.width,view.frame.height]] as [String:Any]

@@ -157,7 +157,7 @@ import CryptoKit
         try await renderProfilesShell(output:output,scales:scales)
         for section in LibrarySection.allCases {
             library.section = section
-            for scale in scales { try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: scale, dark: true, to: output.appendingPathComponent("library-\(section.rawValue)@\(scale)x.png")) }
+            for scale in scales { try await render(LibraryPreview(viewModel: library), size: CGSize(width: 960, height: 640), scale: scale, dark: true, to: output.appendingPathComponent("library-\(section.rawValue)@\(scale)x.png")) }
         }
         for pane in [PaneID.general, .profiles] { settings.selectedPane = pane; for dark in [false,true] { for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 960, height: 660), scale: scale, dark: dark, to: output.appendingPathComponent("\(pane.rawValue)-\(dark ? "dark" : "light")@\(scale)x.png")) } } }
         settings.links.testURLString="example.com/x";settings.links.runTest()
@@ -226,7 +226,7 @@ import CryptoKit
         let empty=try PreviewEnvironment();defer {empty.close()};empty.downloadFeed.downloads=[]
         for section in [LibrarySection.archive,.downloads,.captures,.boosts,.history] {
             empty.library.section=section;await empty.library.reload()
-            for scale in scales {try await render(LibraryContent(viewModel:empty.library),size:CGSize(width:960,height:640),scale:scale,dark:true,to:output.appendingPathComponent("library-\(section.rawValue)-empty@\(scale)x.png"))}
+            for scale in scales {try await render(LibraryPreview(viewModel:empty.library),size:CGSize(width:960,height:640),scale:scale,dark:true,to:output.appendingPathComponent("library-\(section.rawValue)-empty@\(scale)x.png"))}
         }
         let wizardEnvironment = try PreviewEnvironment(); defer { wizardEnvironment.close() }
         let source = wizardEnvironment.root.appendingPathComponent("Example Import")

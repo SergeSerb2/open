@@ -22,7 +22,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     public var onClose: (() -> Void)?
     public var onWidthChange: ((CGFloat) -> Void)?
     public var isPresented = false {
-        didSet { if isPresented { refresh(); observeTheme(); beginContentUpdates() } else { endContentUpdates() } }
+        didSet { if isPresented { refresh(); observeTheme(); beginContentUpdates() } else { endContentUpdates() }; updatePointerMonitor() }
     }
     public var desiredWidth: CGFloat { section == .spaces ? max(417, (superview?.bounds.width ?? 1280)-56) : 417 }
     let rail = NSScrollView()
@@ -44,8 +44,11 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     var styleRefreshPending = false
     let listView = LibraryListView()
     let filterEditor = LibraryFilterEditor()
-    let boostsLayout = NSSegmentedControl(labels:["List","Gallery"],trackingMode:.selectOne,target:nil,action:nil)
-    let boostsProfile = NSPopUpButton()
+    let boostList = LibraryControl(title:"List")
+    let boostGallery = LibraryControl(title:"Gallery")
+    let boostsProfile = LibraryControl(title:"Profile")
+    var keyboardRailNavigation = false
+    private var pointerMonitor: Any?
     let boostDisabledText = NSTextField(labelWithString:"Boosts are off.")
     let boostTurnOn = LibraryControl(title:"Turn On")
     var manager: SpaceManagerView?
@@ -97,11 +100,15 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         addSubview(boostDisabledText); addSubview(boostTurnOn)
         statusLabel.font = .systemFont(ofSize:12); addSubview(statusLabel)
         listView.onEnd = { [weak self] in self?.loadNextPage() }
-        boostsLayout.target = self; boostsLayout.action = #selector(changeBoostLayout)
-        boostsLayout.setAccessibilityLabel("Boosts layout"); boostsLayout.identifier = .init("boosts.layout")
-        boostsProfile.target = self; boostsProfile.action = #selector(changeBoostProfile)
-        boostsProfile.setAccessibilityLabel("Boosts Profile")
-        addSubview(boostsLayout); addSubview(boostsProfile)
+        for button in [boostList,boostGallery,boostsProfile] {
+            button.isChip = true; button.baseAlpha = 0.045; button.labelSize = 12
+            button.layer?.cornerRadius = 9; addSubview(button)
+        }
+        boostList.identifier = .init("boosts.layout.list"); boostGallery.identifier = .init("boosts.layout.gallery")
+        boostsProfile.identifier = .init("boosts.profile"); boostsProfile.setAccessibilityLabel("Boosts Profile")
+        boostList.onPress = { [weak self] in self?.setBoostLayout("List") }
+        boostGallery.onPress = { [weak self] in self?.setBoostLayout("Gallery") }
+        boostsProfile.onPress = { [weak self] in self?.showBoostProfiles() }
         emptyTitle.font = .systemFont(ofSize:17,weight:.bold); emptyTitle.alignment = .center
         emptyBody.font = .systemFont(ofSize:14); emptyBody.alignment = .center
         emptyBody.maximumNumberOfLines = 4
@@ -118,7 +125,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
                 let tile = LibraryControl(title:candidate.title,glyph:LibraryGlyph(rawValue:candidate.rawValue),tile:true)
                 tile.identifier = NSUserInterfaceItemIdentifier("library-\(candidate.rawValue)")
                 tile.onPress = { [weak self] in self?.select(candidate) }
-                tile.onArrow = { [weak self] delta in self?.moveRail(delta) }
+                tile.onArrow = { [weak self] delta in self?.keyboardRailNavigation = true; self?.moveRail(delta) }
+                tile.onKeyboardFocus = { [weak self] in DispatchQueue.main.async { self?.updateRailFocus() } }
                 railDocument.addSubview(tile); tiles[candidate] = tile
             }
         }
@@ -142,6 +150,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         if isPresented { refreshData() }
         onWidthChange?(desiredWidth)
         needsLayout = true; layoutSubtreeIfNeeded()
+        if tiles.values.contains(where: { window?.firstResponder === $0 }) { focusRail() }
+        updateRailFocus()
         NSAccessibility.post(element:rail,notification:.selectedChildrenChanged)
     }
     func moveRail(_ delta: Int) {
@@ -184,7 +194,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         self.appearance = appearance.nsAppearance
         foreground = style.titleColor(appearance).nsColor
         overlay = appearance == .dark ? .white : foreground
-        for control in Array(tiles.values)+[back,filter,emptyButton] { control.foreground=foreground;control.overlay=overlay }
+        for control in Array(tiles.values)+[back,filter,emptyButton,boostList,boostGallery,boostsProfile] { control.foreground=foreground;control.overlay=overlay }
         boostDisabledText.textColor = foreground.withAlphaComponent(0.68); boostTurnOn.foreground = foreground; boostTurnOn.overlay = overlay
         statusLabel.textColor = foreground.withAlphaComponent(0.68)
         searchField.textColor = foreground
@@ -237,7 +247,8 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         boostDisabledText.frame = CGRect(x:124,y:99,width:190,height:20)
         boostTurnOn.frame = CGRect(x:327,y:94,width:78,height:30)
         filterEditor.frame = CGRect(x:112,y:0,width:305,height:filterEditor.contentHeight)
-        boostsLayout.frame = CGRect(x:120,y:54,width:140,height:28)
+        boostList.frame = CGRect(x:120,y:54,width:52,height:28)
+        boostGallery.frame = CGRect(x:178,y:54,width:72,height:28)
         boostsProfile.frame = CGRect(x:266,y:54,width:143,height:28)
         manager?.frame = CGRect(x:112,y:0,width:max(0,bounds.width-112),height:height)
         let centerX = section == .spaces ? content.bounds.width/2 : 152.5
@@ -263,6 +274,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     public func controlTextDidChange(_ notification: Notification) { setSearch(searchField.stringValue) }
     public func handleKey(_ event: NSEvent) -> Bool {
+        if [48,123,124,125,126].contains(event.keyCode) { keyboardRailNavigation = true; updateRailFocus() }
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command), event.keyCode == 3, section != .spaces {
             window?.makeFirstResponder(searchField); searchField.selectText(nil); return true
         }
@@ -275,7 +287,21 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         }
         return false
     }
-    public func focusRail() { if let tile=tiles[section] { window?.makeFirstResponder(tile) } }
+    public func focusRail() { if let tile=tiles[section] { window?.makeFirstResponder(tile) }; updateRailFocus() }
+    func updateRailFocus() {
+        for (candidate,tile) in tiles { tile.keyboardFocus = keyboardRailNavigation && candidate == section && window?.firstResponder === tile }
+    }
+    private func updatePointerMonitor() {
+        if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }
+        guard isPresented else { keyboardRailNavigation = false; updateRailFocus(); return }
+        pointerMonitor = NSEvent.addLocalMonitorForEvents(matching:[.leftMouseDown,.rightMouseDown,.otherMouseDown,.mouseMoved,.scrollWheel]) { [weak self] event in
+            MainActor.assumeIsolated {
+                if let self, event.window === self.window { self.keyboardRailNavigation = false; self.updateRailFocus() }
+            }
+            return event
+        }
+    }
+    isolated deinit { if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) } }
     /// Window-relative top-left coordinates, used by real socket capture clients.
     public func automationState() -> [String:Any] {
         layoutSubtreeIfNeeded()
@@ -289,7 +315,7 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
                 guard let tile=tiles[candidate] else { return nil }
                 let point = tile.convert(CGPoint(x:tile.bounds.midX,y:tile.bounds.midY),to:nil)
                 let hit = window?.contentView?.superview?.hitTest(point)
-                return ["id":candidate.rawValue,"frame":rect(tile),"selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile,
+                return ["id":candidate.rawValue,"frame":rect(tile),"selected":candidate == section,"hovered":tile.hovered,"focused":window?.firstResponder === tile,"focusRing":tile.keyboardFocus,
                     "hitClass":hit.map { String(describing:type(of:$0)) } ?? "", "canDragWindow":tile.mouseDownCanMoveWindow]
             },
             "header":["searchFrame":section == .spaces ? [] : rect(header),"filterFrame":section.hasFilter ? rect(filter) : [],"filterOpen":filterOpen,"chips":filterOpen ? filterEditor.state(in:self) : []] as [String:Any],

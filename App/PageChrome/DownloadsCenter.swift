@@ -91,6 +91,15 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   @ObservationIgnored private var fileRefreshGeneration = 0
   private(set) var downloadHistoryError = ""
   private(set) var downloads: [DownloadItemSnapshot] = []
+  @ObservationIgnored private var completionFiles: [DownloadBadgeFile] = []
+  @ObservationIgnored private var badgeExpiry: DispatchWorkItem?
+  private var badgeLifetime: TimeInterval {
+    #if OPEN_AUTOMATION
+    return badgeLifetimeForAutomation
+    #else
+    return 60
+    #endif
+  }
   private(set) var publishCount = 0
   private(set) var updateCount = 0
   private(set) var fallbackCount = 0
@@ -98,6 +107,8 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
   @ObservationIgnored private var quitApproved = false
   @ObservationIgnored private(set) var presentingQuitAlert = false
   #if OPEN_AUTOMATION
+  var badgeLifetimeForAutomation: TimeInterval = 60
+  var badgeExpiryScheduledForAutomation: Bool { badgeExpiry != nil }
   var recordFileActions = false
   var detachedPageCountForAutomation: Int { detachedPages.count }
   var fileOpenerForAutomation: URL?
@@ -263,7 +274,12 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       littleOpenTrays[source] = LittleOpenDownloadsTray(controller: controller, center: self)
     }
     if previous == nil { order.insert(key, at: 0) }
-    if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date(); refreshFiles() }
+    if state == .completed && previous?.snapshot.state != .completed { completedAt[profile.id] = Date()
+      if let path = snapshot.filePath {
+        completionFiles.insert(DownloadBadgeFile(id:key,name:snapshot.fileName,path:path,completedAt:Date()),at:0)
+        completionFiles = Array(completionFiles.prefix(3)); scheduleBadgeExpiry()
+      }
+      refreshFiles() }
     if state == .completed || state == .failed || state == .cancelled {
       if state != previous?.snapshot.state, !(previous?.hidden ?? false) { persist(snapshot, profile: profile) }
       suggestedNames[key] = nil
@@ -310,9 +326,24 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
       let received = known.reduce(0.0) { $0 + Double($1.snapshot.receivedBytes) }
       let completion = completedAt.filter { profileIDs.contains($0.key) }.map(\.value).max()
       let next = DownloadBadgeState(running: active.count, progress: total > 0 ? min(1, received / total) : 0,
-        indeterminate: active.contains { $0.snapshot.totalBytes == nil }, completedAt: completion)
+        indeterminate: active.contains { $0.snapshot.totalBytes == nil }, completedAt: completion, files:completionFiles.filter {
+          Date().timeIntervalSince($0.completedAt)<badgeLifetime && !removedHistory.contains($0.id)
+            && entries[$0.id].map { profileIDs.contains($0.snapshot.profileID) && !$0.hidden && $0.snapshot.fileExists != false } == true
+        })
       if controller.context.downloadBadge != next { controller.context.downloadBadge = next }
     }
+  }
+  func acknowledgeLibrary() {
+    completionFiles = []; badgeExpiry?.cancel(); badgeExpiry = nil; updateBadges()
+  }
+  private func scheduleBadgeExpiry() {
+    badgeExpiry?.cancel(); badgeExpiry = nil
+    guard let oldest=completionFiles.last else { return }
+    let work=DispatchWorkItem { [weak self] in
+      guard let self else { return }; self.completionFiles.removeAll { Date().timeIntervalSince($0.completedAt)>=self.badgeLifetime }
+      self.updateBadges(); self.scheduleBadgeExpiry()
+    }
+    badgeExpiry = work; DispatchQueue.main.asyncAfter(deadline:.now()+max(0,badgeLifetime-Date().timeIntervalSince(oldest.completedAt)),execute:work)
   }
   func opensDownloads(in context: SidebarContext) -> Bool {
     // A new window may have no callback yet. Reuse session snapshots on click.
@@ -563,6 +594,7 @@ final class DownloadsCenter: DownloadsProvider, ProfileDataOwner {
     order.removeAll { entries[$0] == nil }
     history = history.filter { $0.value.profileID != profileID }
     loadedHistory.remove(profileID); completedAt[profileID] = nil
+    completionFiles.removeAll { keys.contains($0.id) }; scheduleBadgeExpiry()
     if let store = historyStores.removeValue(forKey: profileID) { await store.retire() }
     schedulePublish()
   }

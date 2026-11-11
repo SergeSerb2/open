@@ -7,6 +7,8 @@ final class LibraryControl: NSButton {
     var isTile = false
     var glyphSize: CGFloat?
     var isChip = false
+    var keyboardFocus = false { didSet { needsDisplay = true } }
+    var onKeyboardFocus: (() -> Void)?
     var showsDot = false
     var selected = false { didSet { needsDisplay = true; setAccessibilityValue(selected ? 1 : 0) } }
     var foreground = NSColor.labelColor { didSet { needsDisplay = true } }
@@ -34,7 +36,7 @@ final class LibraryControl: NSButton {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     @objc private func press() { onPress?() }
     override func highlight(_ flag: Bool) { super.highlight(flag); needsDisplay = true }
-    override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
+    override func becomeFirstResponder() -> Bool { onKeyboardFocus?(); needsDisplay = true; return true }
     override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
     override func keyDown(with event: NSEvent) {
         if let onArrow, [123,124,125,126].contains(event.keyCode) { onArrow(event.keyCode == 123 || event.keyCode == 126 ? -1 : 1); return }
@@ -71,7 +73,7 @@ final class LibraryControl: NSButton {
             glyph?.draw(in: CGRect(x:x,y:(bounds.height-iconWidth)/2,width:iconWidth,height:iconWidth),color:color)
             if !title.isEmpty { (title as NSString).draw(at: CGPoint(x:x+(glyph == nil ? 0 : iconWidth+5),y:(bounds.height-textSize.height)/2),withAttributes:attrs) }
         }
-        if window?.firstResponder === self {
+        if keyboardFocus && window?.firstResponder === self {
             foreground.withAlphaComponent(0.60).setStroke()
             let focus=NSBezierPath(roundedRect:bounds.insetBy(dx:1,dy:1),xRadius:isTile ? 12 : 10,yRadius:isTile ? 12 : 10);focus.lineWidth=2;focus.stroke()
         }

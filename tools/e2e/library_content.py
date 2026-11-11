@@ -42,7 +42,7 @@ def run(output,bundle=None,frames=False,mockups=None):
     with tempfile.TemporaryDirectory(prefix='open-library-l2-') as data,server() as base,boost_fixture(data) as switches:
         try:
             app=Open('Debug','chrome',data,switches,str(output/'app.log'),urls=(base+'/',),extra_env={'OPEN_E2E_APP_BUNDLE':str(bundle)} if bundle else {})
-            for name,value in [('OpenLibraryLegacyWindow',False),('libraryShowsEasels',False),('open.sidebar.hideHintShown',True),('open.advanced.enableBoosts',True),('open.boosts.hasDismissedInterstitial',True),('open.boosts.hasDismissedJSNotice',True)]:
+            for name,value in [('libraryShowsEasels',False),('open.sidebar.hideHintShown',True),('open.advanced.enableBoosts',True),('open.boosts.hasDismissedInterstitial',True),('open.boosts.hasDismissedJSNotice',True)]:
                 saved[name]=app.call('defaults',key=name,persistent=True);app.call('defaults',key=name,value=value)
             owner=app.call('shell-windows')[0]['id'];tab=app.call('tabs')[0]['id'];app.call('wait',tab=tab)
             space=next(s for s in app.call('spaces') if s['focused']);profile=space['profile']
@@ -66,21 +66,42 @@ def run(output,bundle=None,frames=False,mockups=None):
             app.call('download-settings',profile=profile,directory=str(download_dir),ask=False)
             def downloads(): return app.call('downloads-state')['items']
             def item(id): return next((d for d in downloads() if d['id']==id),{})
-            def start(route):
+            def start(route,open_after=True):
                 state(action='close');app.call('select',tab=tab)
                 old={x['id'] for x in downloads()}
                 app.eval(tab,'(()=>{const a=document.createElement("a");a.id="download";a.href='+json.dumps(base+route)+';a.textContent="Download";document.body.replaceChildren(a)})()')
                 app.call('click',tab=tab,selector='#download')
                 value=wait(lambda:next((d for d in downloads() if d['id'] not in old),None));assert value
-                state(action='open',section='downloads');assert wait(lambda:row(value['id']))
+                if open_after:
+                    state(action='open',section='downloads');assert wait(lambda:row(value['id']))
                 return value['id']
             complete=start('/file');check('completed_download_row',wait(lambda:item(complete).get('state')=='completed') and wait(lambda:row(complete)['subtitle']=='Download'),row=row(complete))
             expected=['Open','Copy','Show in Finder','separator','Hide from Open','Move to Trash']
             check('completed_native_menu', [m['title'] for m in menu(complete)]==expected,items=menu(complete))
             state(action='hover-row',id=complete);check('hover_row',row(complete)['hovered']);capture('downloads-completed-hover')
-            menu(complete,'Copy');check('download_copy_file',app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt'))
+            menu(complete,'Copy');check('download_copy_file',wait(lambda:app.call('downloads-state')['copiedFileURL'].endswith('/sample.txt')))
             payload=state(action='row-drag',id=complete);check('download_drag_file', 'public.file-url' in payload['types'] and payload['url'].endswith('/sample.txt'),payload=payload)
             menu(complete,'Open');check('download_open_action',bool(app.call('downloads-state')['fileActions']))
+            # Complete several real engine transfers while the Library is closed.
+            for _ in range(3):
+                newest=start('/file',open_after=False);assert wait(lambda:item(newest).get('state')=='completed')
+            check('badge_three_files',wait(lambda:app.call('downloads-state')['badge'].get('stackCount')==3),badge=app.call('downloads-state')['badge'])
+            badge=app.call('downloads-state')['badge'];check('badge_size_and_name',badge['thumbnailSize']==39 and badge['tooltipTitle']==item(newest)['name'])
+            check('badge_file_drag','public.file-url' in badge['drag']['types'] and badge['drag']['url'].endswith(item(newest)['name'].replace(' ','%20')));capture('download-badge')
+            box=badge['frame'];time.sleep(.25)
+            app.call('mouse',action='click',queued=True,window=state()['window'],x=box[0]+box[2]/2,y=box[1]+box[3]/2)
+            check('badge_click_opens_downloads',wait(lambda:state()['open'] and state()['section']=='downloads'))
+            check('opening_library_clears_badge',wait(lambda:app.call('downloads-state')['badge']['stackCount']==0) and not app.call('downloads-state')['badgeExpiryScheduled'])
+            app.call('download-badge-lifetime',seconds=.6)
+            expiring=start('/file',open_after=False);assert wait(lambda:item(expiring).get('state')=='completed')
+            check('badge_expiry_scheduled',app.call('downloads-state')['badgeExpiryScheduled'])
+            check('badge_expiry_releases_task',wait(lambda:app.call('downloads-state')['badge']['stackCount']==0 and not app.call('downloads-state')['badgeExpiryScheduled']))
+            app.call('download-badge-lifetime',seconds=60);state(action='open',section='downloads')
+            check('pointer_selected_tile_no_ring',not any(t.get('focusRing') for t in state()['rail']))
+            state(action='focus-rail');key('right');check('keyboard_tile_ring',any(t.get('focusRing') and t['selected'] for t in state()['rail']))
+            target=next(t for t in state()['rail'] if t['id']=='downloads');x,y,w,h=target['frame']
+            app.call('mouse',action='click',queued=True,window=state()['window'],x=x+w/2,y=y+h/2)
+            check('pointer_clears_ring',wait(lambda:state()['section']=='downloads') and not any(t.get('focusRing') for t in state()['rail']))
             if os.environ.get('OPEN_LIBRARY_SKIP_MENU_PROBE')=='1':result['nativeMenuOmitted']=True
             else:
                 menu_count=state()['menuLifecycle']['opened'];state(action='show-row-menu',id=complete,escape=True)
@@ -92,7 +113,7 @@ def run(output,bundle=None,frames=False,mockups=None):
             state(action='chip',id='profile:'+profile);check('profile_chip_selected',state()['filterActive']);capture('downloads-profile-filter')
             key('escape');check('escape_closes_filter',not state()['header']['filterOpen'] and state()['open'])
             state(action='filter',open=True);state(action='chip',id='profile:'+profile);state(action='filter',open=False)
-            slow=start('/slow');check('running_menu',[m['title'] for m in menu(slow)]==['Pause','Cancel','Show in Finder']);capture('downloads-running')
+            slow=start('/slow');check('running_numeric_progress',not row(slow)['subtitle'].startswith('Zero'));check('running_menu',[m['title'] for m in menu(slow)]==['Pause','Cancel','Show in Finder']);capture('downloads-running')
             menu(slow,'Pause');check('pause_real_transfer',wait(lambda:item(slow).get('state')=='paused'));capture('downloads-paused')
             menu(slow,'Resume');check('resume_real_transfer',wait(lambda:item(slow).get('state')=='inProgress'))
             menu(slow,'Cancel');check('cancel_real_transfer',wait(lambda:item(slow).get('state')=='cancelled'));capture('downloads-cancelled')
@@ -149,7 +170,7 @@ def run(output,bundle=None,frames=False,mockups=None):
             check('capture_ready_page',wait(lambda:next(m['enabled'] for m in app.call('menu-state') if m['id']=='capture-page')))
             receipt=app.call('capture',mode='area',rect=[30,30,240,150]);check('capture_real_file',receipt['state']['phase'] in ['showing'],receipt=receipt)
             app.call('capture-action',action='cancel')
-            state(action='open',section='media');check('media_capture_rows',wait(lambda:bool(rows())),rows=rows())
+            state(action='open',section='media');check('media_capture_rows',wait(lambda:bool(rows())),rows=rows());check('capture_page_title',rows()[0]['title']=='Downloads fixture' and '127.0.0.1' in rows()[0]['subtitle'])
             app.call('library-captures-state',recordFileActions=True)
             capture_row=rows()[0];state(action='hover-row',id=capture_row['id']);check('capture_native_menu',[m['title'] for m in menu(capture_row['id'])]==['Open','Copy','Show in Finder','Save As…','separator','Delete']);capture('media-captures')
             payload=state(action='row-drag',id=capture_row['id']);check('capture_drag_file','public.file-url' in payload['types'],payload=payload)

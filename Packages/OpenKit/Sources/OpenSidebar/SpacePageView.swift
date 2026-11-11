@@ -189,7 +189,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         var r: [AnyObject] = [spacer]
         if !context.isIncognito, !space.isPinnedCollapsed { r += space.pinned.map(\.object) }
         if !context.isIncognito, !space.today.isEmpty { r.append(divider) }
-        r.append(newTab)
+        if context.manager?.libraryLayout != true { r.append(newTab) }
         r += space.today.map(\.object)
         return r
     }
@@ -872,7 +872,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             let pinnedCount = space.isPinnedCollapsed ? 0 : space.pinned.count
             let pinnedEnd = 1 + pinnedCount
             let newTabIndex = pinnedEnd + (space.today.isEmpty ? 0 : 1)
-            let todayStart = newTabIndex + 1
+            let todayStart = newTabIndex + (context.manager?.libraryLayout == true ? 0 : 1)
             if childIndex <= pinnedEnd { return (.spacePinned(space.id), max(0, childIndex - 1), childIndex < 1 ? (nil, 1) : nil) }
             if childIndex <= todayStart { return (.spaceToday(space.id), 0, childIndex == todayStart ? nil : (nil, todayStart)) }
             return (.spaceToday(space.id), childIndex - todayStart, nil)
