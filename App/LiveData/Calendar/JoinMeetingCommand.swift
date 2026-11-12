@@ -1,5 +1,6 @@
 import AppKit
 import OpenFeatures
+import OpenLiveData
 
 /// Tabs ▸ Join Meeting (⌘⌃J, `joinLiveMeeting:`) and the command-bar actions "Join next meeting" /
 /// "Join next video conference" (docs/re/live-data.md §5). Opens the next eligible event's call link

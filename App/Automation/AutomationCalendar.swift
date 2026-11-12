@@ -1,5 +1,6 @@
 #if OPEN_AUTOMATION
 import Foundation
+import OpenLiveData
 
 /// A calendar source with fixed events, for e2e runs on machines where nobody can answer the macOS Calendar
 /// prompt. The real flow (menu, ⌘⌃J, command bar, toasts, new tab) is unchanged; only the data comes from here.
