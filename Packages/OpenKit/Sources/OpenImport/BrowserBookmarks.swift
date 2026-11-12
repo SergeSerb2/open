@@ -1,4 +1,5 @@
 import Foundation
+import OpenModel
 
 /// Source-neutral bookmark tree read from another browser. Value type, Sendable.
 /// Folders keep their order; separators are dropped by each reader.
@@ -34,13 +35,32 @@ public struct ImportedBookmarksReport: Sendable, Equatable {
     public var accounted: Int { urls + folders + skippedSeparators + skippedUnsupportedURL + skippedEmptyFolders + skippedOther }
 }
 
-extension ImportedBookmark {
-    /// One builder for the "Imported from <Browser>" folder: `BrowserBookmarksImport.sourceModel`
-    /// (IMC). Firefox and Safari trees convert to its node type; source IDs become its GUIDs.
-    public var chromium: ChromiumBookmark {
-        switch self {
-        case .folder(let id, let title, let children): .folder(guid: id, title: title, children: children.map(\.chromium))
-        case .url(let id, let title, let url, let added): .url(guid: id, title: title, url: url, added: added)
+/// Arc parity (F3 report §5, lead ruling 1): bookmarks become pinned tabs in one pinned
+/// folder "Imported from <Browser>", with the source folder tree nested inside.
+/// IDs are deterministic from (browser key, source ID), so a re-import maps to the same items.
+public enum ImportedBookmarksFolder {
+    public static func title(browserName: String) -> String { "Imported from \(browserName)" }
+
+    public static func itemID(sourceKey: String, sourceID: String) -> ItemID {
+        ItemID(rawValue: ArcImporter.deterministicUUID(for: "\(sourceKey):\(sourceID)", namespace: "browser-bookmark"))
+    }
+
+    /// Builds the live folder. Empty roots are left out; a single non-empty root is kept as a subfolder
+    /// so that its name ("Bookmarks Toolbar") stays visible, as Arc keeps "Bookmarks bar" (guess — capture pending).
+    @MainActor
+    public static func make(browserName: String, sourceKey: String, roots: [ImportedBookmark], now: Date = Date()) -> Folder {
+        func node(_ bookmark: ImportedBookmark) -> SidebarNode? {
+            switch bookmark {
+            case .url(let id, let title, let url, let added):
+                return .tab(Tab(id: itemID(sourceKey: sourceKey, sourceID: id), url: url, title: title, pinnedURL: url,
+                                createdAt: added ?? now, lastActiveAt: added ?? now))
+            case .folder(let id, let title, let children):
+                let nodes = children.compactMap(node)
+                guard !nodes.isEmpty else { return nil }
+                return .folder(Folder(id: itemID(sourceKey: sourceKey, sourceID: id), title: title, isExpanded: false, children: nodes))
+            }
         }
+        return Folder(id: itemID(sourceKey: sourceKey, sourceID: "<root>"), title: title(browserName: browserName),
+                      isExpanded: false, children: roots.compactMap(node))
     }
 }

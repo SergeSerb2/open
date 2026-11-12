@@ -66,7 +66,7 @@ actor ImportHistoryWriter {
 /// The App's builder (`BrowserBookmarksImport.sourceModel`), so the CLI proves the same IDs and tree.
 @MainActor
 func importedBookmarksFolder(_ roots: [ImportedBookmark], browserName: String, sourceKey: String) -> Folder {
-    let model = BrowserBookmarksImport.sourceModel(roots: roots.map(\.chromium), browserName: browserName, sourceKey: sourceKey,
+    let model = BrowserBookmarksImport.sourceModel(roots: roots, browserName: browserName, sourceKey: sourceKey,
                                                    profileID: ProfileID(), settings: ProfileSettings(), spaceID: SpaceID())
     return model.spaces.first?.pinned.first?.folder ?? Folder(title: BrowserBookmarksImport.folderTitle(browserName: browserName))
 }

@@ -44,7 +44,7 @@ extension AppImportRunner {
       }.value
       if let failure = read.failure { result.failures["Bookmarks"] = failure }
       result.counts["Skipped bookmarks"] = read.skipped
-      let sourceModel = BrowserBookmarksImport.sourceModel(roots: read.roots.map(\.chromium), browserName: source.name, sourceKey: key,
+      let sourceModel = BrowserBookmarksImport.sourceModel(roots: read.roots, browserName: source.name, sourceKey: key,
                                                            profileID: target.id, settings: target.settings, spaceID: space.id)
       do {
         let merged = try undo.captureModel(app.model) {
