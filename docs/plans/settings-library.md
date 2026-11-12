@@ -150,7 +150,7 @@ except where a section says Save.
 | `open.boosts.codeEditorSize` | String | `"480x588"` | Boost code editor size |
 | `open.advanced.allowSitesThemeData` | Bool | `false` | Advanced (unknown; Open choice OFF = private by default) |
 | `open.advanced.enableSharedQuotes` | Bool | `true` | Advanced |
-| `open.advanced.playSoundEffects` | Bool | `false` | Advanced; Open-generated sounds (lead Q6: OFF, no general event caller) |
+| `open.advanced.playSoundEffects` | Bool | `true` | Advanced; Open-generated sounds. LEAD 11:40 (2026-11-12): on, as Arc (inverse key `playUserInterfaceSoundsDisabled`); GUESS until capture PB5-e |
 | `open.advanced.hapticOnTabReorder` | Bool | `true` | Advanced (guess ON, section 7.2) |
 | `open.advanced.tabSleepMode` | String (`automatic`/`conservative`/`aggressive`/`never`) | `automatic` | Advanced; sleep policy (section 5.5) |
 | `open.appIcon.selectedID` | String (`openDefault`/`openDark`/`openLight`/`openMono`/`openColor`/`openRetro`) | `openDefault` | App Icon; `NSApp.applicationIconImage` / alternate icon |
@@ -694,7 +694,7 @@ once to section 2.1 keys, read at use; no engine call unless noted):
 | A-5 | Enable Boosts on websites you visit | `open.advanced.enableBoosts` | ON (Boosts plan owns the editor; OFF hides all Boost effects at once) |
 | A-6 | Allow websites to get your theme data | `open.advanced.allowSitesThemeData` | OFF |
 | A-7 | Enable Shared Quotes when highlighting text | `open.advanced.enableSharedQuotes` | ON |
-| A-8 | Play Open sound effects | `open.advanced.playSoundEffects` | OFF (Open records its own sounds; never copy Arc files) |
+| A-8 | Play Open sound effects | `open.advanced.playSoundEffects` | ON (LEAD 11:40; Open records its own sounds; never copy Arc files) |
 | A-9 | Haptic feedback when reordering tabs | `open.advanced.hapticOnTabReorder` | ON |
 
 Buttons row: "More Settings…" (`actions.openMoreSettings()`; opens

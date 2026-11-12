@@ -870,6 +870,14 @@
       case "sidebar-duplicate":
         guard let id = (a["id"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }) else { throw Failure(message: "missing id") }
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .duplicate(nodeID: id)) == true
+      case "space-header":
+        // The focused Space's header: shown or hidden (single unnamed Space, "Show/Hide Space Header").
+        guard let space = w.focusedSpace else { throw Failure(message: "no space") }
+        if a["reload"] as? Bool == true { SpaceHeaderPreference.shared.reload() }
+        w.controller?.contentView.layoutSubtreeIfNeeded()
+        return ["visible": w.controller?.sidebar.spaceHeaderVisible ?? false, "hidesHeader": w.controller?.context.hidesHeader(for: space) ?? false,
+          "showPreference": SpaceHeaderPreference.shared.showOnSingleUnnamedSpace, "spaces": app.model.spaces.count,
+          "title": space.title ?? NSNull()] as [String: Any]
       case "sidebar-tree":
         guard let space = w.focusedSpace else { throw Failure(message: "no space") }
         return ["pinned": space.pinned.map(describeNode), "today": space.today.map(describeNode)]

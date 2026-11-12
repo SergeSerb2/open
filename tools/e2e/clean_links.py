@@ -75,24 +75,27 @@ def checks(app, results, origin, h):
         app.call('navigate', tab=ids[1], url=raw[1])
         app.call('wait', tab=ids[1])
         copy('folder_mixed_trackers', folder, 'Copy All Links', '\n'.join(clean), plural)
-        # The no-browser Manager has a separate fallback writer.
+        # The Space Manager copies through its own writer. Since #350 (dc57df81) the Library, and the
+        # Manager in it, is a panel inside a browser window, so there is no window-less Manager any
+        # more: the rows check the Manager's copies with the Library open over the window.
         space = next(space['id'] for space in app.call('spaces') if space['focused'])
-        app.call('window-close')
+        windows_before = len(app.call('shell-windows'))
         try:
             app.call('library-open')
             h.wait_until(lambda: app.call('space-manager-state').get('contextValid'), timeout=5)
+            library = app.call('library')
+            record('manager_in_browser_window', library.get('open') and library.get('section') == 'spaces'
+                   and len(app.call('shell-windows')) == windows_before, library={k: library.get(k) for k in ('open', 'section', 'window')},
+                   windows=len(app.call('shell-windows')), windowsBefore=windows_before)
             app.call('pasteboard', text='manager-copy-sentinel')
             app.call('space-manager-menu', space=space, node=ids[1], item='Copy Link')
-            record('manager_without_browser', app.call('shell-windows') == []
-                   and app.call('pasteboard') == clean[1], actual=app.call('pasteboard'))
-            # Folder Copy All Links has the same no-browser fallback (review R1 finding 1).
+            record('manager_copy_link', app.call('pasteboard') == clean[1], actual=app.call('pasteboard'))
+            # Folder Copy All Links has the same Manager writer (review R1 finding 1).
             app.call('pasteboard', text='manager-copy-sentinel')
             app.call('space-manager-menu', space=space, node=folder, item='Copy All Links')
-            record('manager_folder_without_browser', app.call('shell-windows') == []
-                   and app.call('pasteboard') == '\n'.join(clean), actual=app.call('pasteboard'))
+            record('manager_folder_copy_all_links', app.call('pasteboard') == '\n'.join(clean), actual=app.call('pasteboard'))
         finally:
             app.call('library-close')
-            app.call('window-reopen')
         app.call('sidebar-drop', nodes=ids, parent=dict(kind='today', id=space), index=0)
         app.call('select', tab=ids[1])
         app.call('wait', tab=ids[1])

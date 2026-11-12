@@ -89,7 +89,7 @@ public extension AutoArchiveInterval {
         "open.boosts.hasDismissedInterstitial": false, "open.boosts.hasDismissedJSNotice": false,
         "open.boosts.codeEditorSize": "480x588",
         "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,
-        "open.advanced.playSoundEffects": false, "open.advanced.hapticOnTabReorder": true,
+        "open.advanced.playSoundEffects": true, "open.advanced.hapticOnTabReorder": true,
         "open.advanced.tabSleepMode": "automatic", "open.appIcon.selectedID": "openDefault",
         "open.sidebar.hideHintShown": false, "open.sidebar.autoArchiveBannerDismissed": false,
         "open.sidebar.autoArchiveBannerEligible": true,

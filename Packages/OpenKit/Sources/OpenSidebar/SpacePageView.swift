@@ -13,7 +13,17 @@ import OpenModel
 final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate {
     unowned let context: SidebarContext
     let space: Space
-    var displaysHeader = true { didSet { header.isHidden = !displaysHeader; needsLayout = true } }
+    /// False for pages that never show a header (the Space Manager's mini pages).
+    var displaysHeader = true { didSet { updateHeaderVisibility() } }
+    /// Shows a hidden header while its title is being renamed.
+    var revealsHeaderForRename = false { didSet { updateHeaderVisibility() } }
+    /// The header is shown: not hidden for a single unnamed Space (`SidebarContext.hidesHeader`), or being renamed.
+    private(set) var headerVisible = true
+    func updateHeaderVisibility() {
+        let visible = displaysHeader && (revealsHeaderForRename || !context.hidesHeader(for: space))
+        guard visible != headerVisible || header.isHidden == visible else { return }
+        headerVisible = visible; header.isHidden = !visible; needsLayout = true
+    }
     let header: SpaceHeaderView
     let scroll = PageScrollView()
     let outline = SidebarOutlineView()
@@ -119,7 +129,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         SidebarDiagnostics.spacePageLayouts += 1
         let w = bounds.width
         header.frame = CGRect(x: 0, y: 0, width: w, height: SpaceListMetrics.headerHeight)
-        let headerHeight = displaysHeader ? SpaceListMetrics.headerHeight : 0
+        let headerHeight = headerVisible ? SpaceListMetrics.headerHeight : 0
         scroll.frame = CGRect(x: 0, y: headerHeight, width: w, height: max(0, bounds.height - headerHeight))
         if let column = outline.tableColumns.first, column.width != w { column.width = w }
     }
@@ -153,6 +163,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
             self.syncExpansion(animated: self.animatesChanges)
         })
+        // Space header visibility (single unnamed Space, "Show/Hide Space Header").
+        loops.append(ObservationLoop(read: { [weak self] in
+            guard let self else { return }
+            _ = self.context.model.spaces.count
+            _ = self.space.title
+            _ = SpaceHeaderPreference.shared.showOnSingleUnnamedSpace
+        }) { [weak self] in self?.updateHeaderVisibility() })
         // Theme and appearance.
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
@@ -1250,6 +1267,8 @@ final class SpaceHeaderView: NSView {
 
     func beginRename() {
         guard !context.isIncognito else { return }
+        page?.revealsHeaderForRename = true
+        superview?.layoutSubtreeIfNeeded()
         context.suppressPreviews(.rename, true)
         let field = RenameField(frame: title.frame.insetBy(dx: -2, dy: -1))
         field.stringValue = context.title(of: space)
@@ -1262,6 +1281,7 @@ final class SpaceHeaderView: NSView {
         field.onEnd = { [weak self, weak field] value in
             field?.removeFromSuperview()
             self?.title.isHidden = false
+            self?.page?.revealsHeaderForRename = false
             self?.context.suppressPreviews(.rename, false)
             if let value { self?.context.send(.renameSpace(id, title: value)) }
         }

@@ -1,5 +1,6 @@
 import AppKit
 import OpenModel
+import OpenSidebar
 import OpenStore
 import OpenBoosts
 
@@ -22,6 +23,9 @@ final class AppImportUndo {
   private var archives: [(ArchiveStore, [ArchivedTabRecord])] = []
   private var histories: [(HistoryStore, HistoryImportUndo)] = []
   private var boosts: [(ProfileID, BoostStore, [Boost])] = []
+  /// Profiles this import created (audit A7): after Undo their folders are journaled for the next launch.
+  private var createdProfiles: [(id: ProfileID, directory: String)] = []
+  func noteCreatedProfiles(_ profiles: [(id: ProfileID, directory: String)]) { createdProfiles += profiles }
   /// Settings written by the import: the values before (nil = absent) and after.
   private var defaults: [(previous: [String: Any?], applied: [String: Any])] = []
   /// Extra Arc data types (ArcImportProviders): their own undo and redo actions.
@@ -67,6 +71,7 @@ final class AppImportUndo {
       if undoing { for (key, value) in entry.previous { if let value { store.set(value, forKey: key) } else { store.removeObject(forKey: key) } } }
       else { for (key, value) in entry.applied { store.set(value, forKey: key) } }
     }
+    SpaceHeaderPreference.shared.reload()
   }
 
   func append(provider undo: (@MainActor @Sendable () async throws -> Void)?, redo: (@MainActor @Sendable () async throws -> Void)?) {
@@ -120,9 +125,15 @@ final class AppImportUndo {
           guard await store.removeImportedHistory(receipt) else { throw UndoFailure.store }
         }
         for (store, records) in archives.reversed() { try await store.delete(ids: records.map(\.id)) }
+        let orphans = createdProfiles.filter { created in
+          app.model.profile(id: created.id) == nil
+            && !app.model.profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(created.directory) == .orderedSame }
+        }.map(\.directory)
+        if !orphans.isEmpty { try ProfileTeardown.journalOrphans(orphans, directories: app.directories) }
         for provider in providers.reversed() { try await provider.undo() }
       } else {
         applyModel(undoing: false)
+        if !createdProfiles.isEmpty { try ProfileTeardown.unjournalOrphans(createdProfiles.map(\.directory), directories: app.directories) }
         applyDefaults(undoing: false)
         var replacedBoosts: [(ProfileID, BoostStore, [Boost])] = []
         for (profileID, store, values) in boosts {

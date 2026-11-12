@@ -159,9 +159,13 @@ public struct ArcBoostsReader: Sendable {
             report.fieldsDropped["textZoom.level", default: 0] += 1
             report.unknownFields += object.keys.filter { $0 != "level" }.count
         }
+        var wheel: BoostColorWheel?
         if let color = components["colorScheme"], !(color is NSNull) {
-            // These inputs describe Arc's palette remap, not Open's CSS filter
-            // wheel. Count every known leaf, without inventing color math.
+            // PB4 row 4: the knob inputs Open stores are Arc's stored knob fields
+            // (docs/plans/boost-color-remap.md §7.2: `primaryHueDegrees` = stored `hue`,
+            // `primarySaturation` = stored `intensity`; `invertLightness` the same name).
+            // Every other leaf (secondary offset, base appearance, advanced settings,
+            // theme-driven schemes) has no proven Open input: counted, not invented.
             let colorKeys: Set<String> = ["colorWheelDriven", "themeDriven", "_0", "primaryHueDegrees", "primarySaturation", "secondaryHueOffset", "invertLightness", "baseAppearance", "advancedSettings", "light", "dark", "preservedSaturation", "preservedLightness", "lightnessShift", "secondarySaturation", "primaryLightness", "secondaryLightness", "primaryColorModel", "secondaryColorModel"]
             func dropped(_ value: Any, path: String) {
                 if let object = value as? [String: Any], !object.isEmpty {
@@ -171,7 +175,25 @@ public struct ArcBoostsReader: Sendable {
                     }
                 } else { report.fieldsDropped[path, default: 0] += 1 }
             }
-            dropped(color, path: "colorScheme")
+            var rest = color
+            if var object = color as? [String: Any], var driven = object["colorWheelDriven"] as? [String: Any],
+               var scheme = driven["_0"] as? [String: Any] {
+                func number(_ key: String) -> Double? {
+                    guard let value = scheme[key] as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID(), value.doubleValue.isFinite else { return nil }
+                    return value.doubleValue
+                }
+                if let hue = number("primaryHueDegrees"), let saturation = number("primarySaturation") {
+                    let invert = (scheme["invertLightness"] as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() ? $0.boolValue : false } ?? false
+                    wheel = BoostColorWheel(hue: hue, intensity: saturation, invertLightness: invert).clamped()
+                    report.mappedFields += 1
+                    for key in ["primaryHueDegrees", "primarySaturation", "invertLightness"] { scheme[key] = nil }
+                    // Prune emptied containers so mapped leaves are not counted as dropped.
+                    driven["_0"] = scheme.isEmpty ? nil : scheme
+                    object["colorWheelDriven"] = driven.isEmpty ? nil : driven
+                    rest = object
+                }
+            }
+            if let object = rest as? [String: Any], object.isEmpty, wheel != nil {} else { dropped(rest, path: "colorScheme") }
         }
         report.mappedFields += 3 // ID, site match, enabled state
         if title != nil { report.mappedFields += 1 }
@@ -179,7 +201,7 @@ public struct ArcBoostsReader: Sendable {
         if fork != nil { report.mappedFields += 1 }
         return Boost(id: BoostID(rawValue: ArcImporter.deterministicUUID(for: document.id, namespace: "boost")),
             name: title ?? "", siteMatch: SiteMatch(domain: bare), isEnabled: isEnabled,
-            css: css, js: js, fontFamily: font, textTransform: transform, zaps: zaps,
+            css: css, js: js, colorWheel: wheel, fontFamily: font, textTransform: transform, zaps: zaps,
             createdAt: document.createdAt ?? modified, updatedAt: modified, forkedFromID: fork)
     }
 }
