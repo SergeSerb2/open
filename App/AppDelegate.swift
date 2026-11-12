@@ -1,6 +1,7 @@
 import OpenOnboarding
 import AppKit
 import OpenEngine
+import OpenDocuments
 import OpenModel
 import OpenStore
 import OpenFeatures
@@ -40,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var snapshotStore: SnapshotStore!
   private(set) var archiveSink: ProfileArchiveSink!
   private(set) var directories: ProfileDirectories!
+  /// Notes (`<data root>/Notes`). Nothing is read until a Note shows.
+  private(set) lazy var notes = NoteStore(root: directories.root)
   /// The engine layout step's outcome (and the data root lock).
   private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
@@ -457,6 +460,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       controller.context.calendarGlance = makeCalendarGlance(factory)
       controller.context.liveCalendar = liveCalendar.actions()
     }
+    // Native Note rows have no page or stored icon: draw the Note mark even before the Note shows.
+    controller.context.faviconProvider = { tab in NoteTab.matches(tab.url) ? NoteTab.faviconImage : nil }
     factory.attach(controller)
     windowControllers.append(controller)
     updater?.userDriver.attach(controller)
@@ -631,6 +636,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       FileHandle.standardError.write(Data("Open: saving the snapshot failed: \(error)\n".utf8))
     }
     archiveSink.flushAll()
+    notes.flush()
   }
 
   /// Used after import (including an E-5 save error) so the imported items are
@@ -781,6 +787,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     refreshScriptingEngine()
     for factory in Array(hostFactories.values) { factory.closeAll() }
     incognitoSessions.closeAll()
+    if directories != nil { notes.flush() }
     recordShutdownPhase("hostsClosed")
   }
 
