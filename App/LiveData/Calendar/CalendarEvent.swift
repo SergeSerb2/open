@@ -87,11 +87,16 @@ struct MeetingLink: Sendable, Hashable {
 
   private static let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
-  /// The first call link in free text, in reading order.
+  /// Free text scanned per field. Invitations put the call link near the top; long notes (pasted agendas)
+  /// are not scanned past this many UTF-16 units, so one event costs at most one bounded detector pass.
+  static let scanLimit = 16_384
+
+  /// The first call link in free text, in reading order (first `scanLimit` UTF-16 units only).
   static func detect(in text: String) -> MeetingLink? {
     guard !text.isEmpty, let detector else { return nil }
     var found: MeetingLink?
-    detector.enumerateMatches(in: text, range: NSRange(text.startIndex..., in: text)) { match, _, stop in
+    let range = NSRange(location: 0, length: min((text as NSString).length, scanLimit))
+    detector.enumerateMatches(in: text, range: range) { match, _, stop in
       if let url = match?.url, let link = classify(url) { found = link; stop.pointee = true }
     }
     return found

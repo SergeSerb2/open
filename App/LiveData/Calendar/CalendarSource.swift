@@ -39,6 +39,8 @@ final class EventKitCalendarSource: CalendarSource {
   var onChange: (() -> Void)?
 
   var now: Date { Date() }
+  /// Events copied per query (one day): the first ones by start time.
+  nonisolated static let maxEvents = 500
 
   var access: CalendarAccess {
     switch EKEventStore.authorizationStatus(for: .event) {
@@ -73,7 +75,9 @@ final class EventKitCalendarSource: CalendarSource {
     return await Task.detached(priority: .userInitiated) {
       let store = box.store
       let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-      return store.events(matching: predicate).map(Self.event(from:)).sorted { $0.start < $1.start }
+      // A day rarely has more than a few dozen events; cap what one query copies (shared calendars can be huge).
+      let found = store.events(matching: predicate).sorted { $0.startDate < $1.startDate }
+      return found.prefix(Self.maxEvents).map(Self.event(from:))
     }.value
   }
 
