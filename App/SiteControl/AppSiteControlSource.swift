@@ -5,6 +5,7 @@ import OpenEngine
 import OpenModel
 import OpenSiteControl
 import OpenWeb
+import SecurityInterface
 
 /// The Boost runtime owns matching, persistence and the editor. The SCC only
 /// reads its values and forwards actions. Nil is the supported interim state.
@@ -20,6 +21,10 @@ import OpenWeb
 @MainActor
 final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
   weak var factory: EngineWebContentHostFactory?
+  /// Content tiles toggled on this tab's origin (kind → allowed). A row set back to its
+  /// default leaves the engine's changed list; it stays until the tab leaves the origin,
+  /// so the tile under the pointer does not vanish.
+  private var toggledContent: [ItemID: (origin: String, allowed: [String: Bool])] = [:]
   weak var boostProvider: (any SiteControlBoostProvider)? {
     willSet { if let boostToken { boostProvider?.removeBoostObserver(boostToken) }; boostToken = nil }
     didSet { boostToken = boostProvider?.observeBoostChanges { [weak self] in self?.refresh() }; refresh() }
@@ -147,6 +152,15 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
           tiles.append(SiteSettingTile(id: "permission.\(row.id)", kind: .permission(row.permission), title: row.title,
             subtitle: state == .allow ? "Allowed" : "Blocked", state: state == .allow ? .on : .off, symbol: row.symbol))
         }
+        // E1 (SC-11/SC-12): the origin's changed content settings, in Arc's name-table order.
+        let changed = Dictionary(EngineWebProfile(engineContext).changedSiteSettings(origin: url).map { ($0.kind, $0.state) },
+                                 uniquingKeysWith: { first, _ in first })
+        let toggled = toggledContent[tabID].flatMap { $0.origin == Self.originKey(url) ? $0.allowed : nil } ?? [:]
+        for row in Self.contentRows {
+          guard let allowed = changed[row.kind].map({ $0 == .allow || $0 == .session }) ?? toggled[row.kind] else { continue }
+          tiles.append(SiteSettingTile(id: "content.\(row.kind)", kind: .content(row.kind), title: row.title,
+            subtitle: allowed ? "Allowed" : "Blocked", state: allowed ? .on : .off, symbol: row.symbol))
+        }
       }
     }
     // Matching is read-only. Private windows keep disabled matching rows;
@@ -157,7 +171,9 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     let boosts = context.isWebsite ? boostProvider?.matchingBoosts(url: url, profileID: boostProfileID) ?? [] : []
     return SiteControlSnapshot(context: context, tiles: tiles, boosts: boosts,
       boostsGloballyEnabled: boostProvider?.boostsGloballyEnabled ?? true,
-      capabilities: factory.extensions.host == nil ? [.clearCache, .securityState] : [.clearCache, .securityState, .extensionPinning],
+      capabilities: Set<SiteCapability>([.clearCache, .securityState])
+        .union(factory.extensions.host == nil ? [] : [.extensionPinning])
+        .union(context.url.scheme?.lowercased() == "https" ? [.certificateViewer] : []),
       commandsEnabled: ["new-boost": boostProvider != nil && !context.isIncognito, "share-page": true,
         "capture-page": context.isWebsite, "capture-full-page": context.isWebsite])
   }
@@ -185,7 +201,22 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
       store.set(origin: snapshot.context.url, kind: row.engine,
         state: store.state(origin: snapshot.context.url, kind: row.engine) == .allow ? .block : .allow)
       factory.app.tabSleep.permissionsChanged(context: context)
-    case .content: break // E1 binding remains a separate follow-up.
+    case .content(let kind):
+      guard Self.contentRows.contains(where: { $0.kind == kind }),
+            let context = factory.hosts[tabID]?.content.context else { return }
+      let profile = EngineWebProfile(context), origin = snapshot.context.url
+      let current = profile.changedSiteSettings(origin: origin).first { $0.kind == kind }?.state
+      let key = Self.originKey(origin)
+      var entry = toggledContent[tabID].flatMap { $0.origin == key ? $0 : nil } ?? (origin: key, allowed: [:])
+      if current == .allow || current == .session || (current == nil && entry.allowed[kind] == true) {
+        if profile.setSiteSetting(.block, kind: kind, origin: origin) { entry.allowed[kind] = false }
+      } else if profile.setSiteSetting(.allow, kind: kind, origin: origin) {
+        entry.allowed[kind] = true
+      } else {
+        // Guard kinds (USB, HID, …) refuse "allow": back to the default ("ask"); the row leaves.
+        profile.setSiteSetting(.ask, kind: kind, origin: origin); entry.allowed[kind] = nil
+      }
+      toggledContent[tabID] = entry
     }
   }
   func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) {
@@ -205,7 +236,16 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     guard factory?.selectedTab?.id == tabID else { return }; factory?.extensions.run(id, source: .menuEntry)
   }
   func setExtensionPinned(_ id: String, pinned: Bool) { factory?.extensions.host?.setPinned(pinned, extensionID: id) }
-  func showSecurityDetails(tabID: ItemID) {} // Certificate viewer is post-v1.
+  /// SC-16: the footer's security pill opens the page's certificate chain (ArcCore
+  /// `showCertificateDialog`). Open uses the system certificate sheet on the window.
+  func showSecurityDetails(tabID: ItemID) {
+    guard let factory, factory.selectedTab?.id == tabID, let snapshot = snapshot(for: tabID),
+          snapshot.capabilities.contains(.certificateViewer),
+          let chain = factory.hosts[tabID]?.content.certificateChain, !chain.isEmpty,
+          let window = factory.window, window.attachedSheet == nil else { return }
+    SFCertificatePanel.shared().beginSheet(for: window, modalDelegate: nil, didEnd: nil, contextInfo: nil,
+                                           certificates: chain, showGroup: true)
+  }
   func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID) {
     guard kinds == .cookies || kinds == .cache,
           let snapshot = snapshot(for: tabID), snapshot.context.isWebsite,
@@ -222,6 +262,30 @@ final class AppSiteControlSource: SiteControlDataSource, SiteControlActions {
     #endif
     factory?.app.settingsPresenter.show(section: .adBlocking, row: "lists", profileID: factory?.focusedProfile?.id)
   }
+
+  private static func originKey(_ url: URL) -> String {
+    "\(url.scheme ?? "")://\(url.host() ?? ""):\(url.port.map(String.init) ?? "")"
+  }
+  private struct ContentRow { let kind: String, title: String, symbol: String }
+  /// Chromium content-setting names shown as tiles when changed for the origin (SC-12 name table
+  /// `FUN_10055c864`, same order). Kinds that already have a permission tile are not repeated.
+  /// Title case follows the permission tiles (GUESS: Arc's keys are lowercase; capture C-LF-6).
+  private static let contentRows: [ContentRow] = [
+    .init(kind: "sensors", title: "Motion Sensors", symbol: "gyroscope"),
+    .init(kind: "javascript", title: "JavaScript", symbol: "curlybraces"),
+    .init(kind: "images", title: "Images", symbol: "photo.fill"),
+    .init(kind: "popups", title: "Pop-ups", symbol: "macwindow.badge.plus"),
+    .init(kind: "subresource-filter", title: "Intrusive Ads", symbol: "rectangle.slash.fill"),
+    .init(kind: "background-sync", title: "Background Sync", symbol: "arrow.triangle.2.circlepath"),
+    .init(kind: "sound", title: "Sound", symbol: "speaker.wave.2.fill"),
+    .init(kind: "usb-guard", title: "USB Devices", symbol: "cable.connector"),
+    .init(kind: "hid-guard", title: "HID Devices", symbol: "keyboard.fill"),
+    .init(kind: "serial-guard", title: "Serial Ports", symbol: "cable.connector.horizontal"),
+    .init(kind: "bluetooth-guard", title: "Bluetooth Devices", symbol: "antenna.radiowaves.left.and.right"),
+    .init(kind: "hand-tracking", title: "Hand Tracking", symbol: "hand.raised.fill"),
+    .init(kind: "keyboard-lock", title: "Keyboard Lock", symbol: "lock.fill"),
+    .init(kind: "pointer-lock", title: "Pointer Lock", symbol: "cursorarrow"),
+    .init(kind: "local-network-access", title: "Local Network", symbol: "network")]
 
   private struct PermissionRow {
     let permission: SitePermission, engine: OEPermissionKind, id: String, title: String, symbol: String
