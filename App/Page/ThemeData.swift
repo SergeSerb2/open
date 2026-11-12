@@ -9,26 +9,24 @@ import OpenModel
 /// `Arc/BrowserExtensionsMainMenuProvider.swift`): page CSS custom properties `--arc-palette-*`
 /// (12 roles) and `--arc-background-{gradient-color,gradient-overlay-color,simple-color}`.
 /// LEAD 10:00: expose Arc's names for site compatibility and the same values under `--open-*`.
-/// Capture C3-PB1-d (C-report-s6 §6) settles the list, format and values. Difference kept: Arc injects a
-/// user stylesheet the page cannot see as a node; Open sets them inline on <html> (per-tab Space values).
+/// Capture C3-PB1-d (C-report-s6 §6, §8 addendum) settles the list, format, values and on/off behaviour.
+/// Difference kept until the engine has an API for it: Arc sets them in a user-agent-level `:root` rule
+/// (DevTools "user agent stylesheet"); OpenEngine can only add a page-visible <style> element, so Open
+/// sets them inline on <html> (engine request in E-questions.md, PB1 → E3).
 @MainActor
 enum ThemeData {
   static let defaultsKey = "open.advanced.allowSitesThemeData"
   static var enabled: Bool { UserDefaults.standard.bool(forKey: defaultsKey) }
-  /// True once the setting was on in this process: only then can a page carry variables to remove.
-  static private(set) var active = false
   private static var lastEnabled: Bool?
 
-  /// The defaults observer's hook: flips re-apply (on) or remove (off) on every live page.
+  /// The defaults observer's hook. Capture PB1-d "setting off" (C-report-s6 §6): turning the switch
+  /// ON applies the values live to open pages; turning it OFF leaves open pages as they are, and a
+  /// page loaded while it is off gets none.
   static func settingMaybeChanged(app: AppDelegate) {
     let now = enabled
     guard now != lastEnabled else { return }
-    let first = lastEnabled == nil
     lastEnabled = now
-    if now { active = true; watchThemes(app: app) }
-    // Skip only a first observation of "off" when no page ever got variables (default ON makes
-    // the first observed change usually on → off, which must remove them).
-    if !(first && !now && !active) { refreshAll(app: app) }
+    if now { watchThemes(app: app); refreshAll(app: app) }
   }
 
   private static var watching = false
@@ -46,10 +44,10 @@ enum ThemeData {
       }
     }
   }
-  /// A page committed or finished loading.
+  /// A page committed or finished loading (nothing while the setting is off: a fresh document has none).
   static func pageChanged(_ host: EngineWebContentHost, factory: EngineWebContentHostFactory) {
-    guard enabled || active else { return }
-    if enabled { active = true; watchThemes(app: factory.app) }
+    guard enabled else { return }
+    watchThemes(app: factory.app)
     apply(variables(tabID: host.tabID, factory: factory), to: host.content)
   }
   /// Theme edits and window changes: the front window's shown tabs only.

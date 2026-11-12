@@ -55,9 +55,12 @@ def run(output, config='Release'):
                 app.call('defaults', key=KEY, value=None)
                 default_on = wait_until(lambda: (lambda p: p if p.get('--arc-palette-title') else None)(page()), timeout=5, step=.1)
                 check('on_by_default', bool(default_on) and app.call('theme-data-state', tab=tab)['enabled'], page=page())
-                app.call('defaults', key=KEY, value=False)
-                off = wait_until(lambda: page() == {}, timeout=5, step=.1)
-                check('off_page_sees_nothing', bool(off), page=page())
+                # Capture PB1-d "setting off": an open page keeps its values; a reload with the setting off has none.
+                before_off = page()
+                app.call('defaults', key=KEY, value=False); time.sleep(1.0)
+                kept_open = page() == before_off and bool(before_off)
+                app.call('navigate', tab=tab, url=origin + '/off'); app.call('wait', tab=tab); time.sleep(.5)
+                check('off_keeps_open_page_reload_has_none', kept_open and page() == {}, keptOpen=kept_open, afterReload=page())
                 app.call('defaults', key=KEY, value=True)
                 expected = wait_until(lambda: (lambda s: s['variables'] if s['enabled'] and s['variables'] else None)(app.call('theme-data-state', tab=tab)), timeout=5, step=.1) or {}
                 got = wait_until(lambda: (lambda p: p if p and p == expected else None)(page()), timeout=5, step=.1)
@@ -79,9 +82,6 @@ def run(output, config='Release'):
                 live = wait_until(lambda: (lambda p: p if p and p == themed else None)(page()), timeout=5, step=.1)
                 check('themed_space_palette_live', bool(themed) and len(themed) == 26 and bool(live)
                       and themed.get('--arc-background-simple-color') == themed.get('--arc-palette-foregroundPrimary'), expected=themed, page=page())
-                app.call('defaults', key=KEY, value=False)
-                gone = wait_until(lambda: page() == {}, timeout=5, step=.1)
-                check('off_removes_variables', bool(gone), page=page())
             finally:
                 app.call('defaults', key=KEY, value=saved)
                 app.call('theme-set', style=None)
