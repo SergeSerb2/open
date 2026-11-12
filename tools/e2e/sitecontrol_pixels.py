@@ -40,7 +40,8 @@ def background_response(app, tab, private, env, scale):
 # LEAD 12:20 (2026-11-11) approves ΔE00 ≤ 4 for exactly these rows, all others keep ΔE00 ≤ 2. Reason: "Arc's backdrop
 # kernel is wider than any public material; values at the panel's edges cannot be reproduced exactly".
 EDGE_LIMIT = 4
-EDGE_ELEMENTS = frozenset(['Arrow row %d' % i for i in range(1, 10)] + ['Share ring', 'New Boost ring', 'More circle'])
+# The More glyph sits inside the More circle and shares its edge limit (LEAD 17:55, at 1x and 2x).
+EDGE_ELEMENTS = frozenset(['Arrow row %d' % i for i in range(1, 10)] + ['Share ring', 'New Boost ring', 'More circle', 'More glyph'])
 # LEAD 12:40 closing rule: rows that still miss ΔE00 ≤ 4 after the last tuning session are INFO rows. They print the Arc
 # target, Open's value and ΔE00, and still fail above ΔE00 10 or a position change over 1 pt.
 INFO_ELEMENTS = frozenset(['Arrow row 0', 'Capture ring', 'Top rim', 'Bottom rim'])
