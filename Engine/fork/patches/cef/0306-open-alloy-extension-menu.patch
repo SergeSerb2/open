@@ -1,0 +1,36 @@
+diff --git a/cef/libcef/browser/menu_manager.cc b/cef/libcef/browser/menu_manager.cc
+index 47be8e7..1d7f6cb 100644
+--- a/cef/libcef/browser/menu_manager.cc
++++ b/cef/libcef/browser/menu_manager.cc
+@@ -19,6 +19,7 @@
+ #include "content/public/browser/render_frame_host.h"
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/render_widget_host_view.h"
++#include "open/browser/extensions/open_alloy_extension_menu.h"
+ #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
+ 
+ #if BUILDFLAG(IS_WIN)
+@@ -164,6 +165,10 @@ bool CefMenuManager::CreateContextMenu(const content::ContextMenuParams& params,
+   // Create the default menu model.
+   CreateDefaultModel();
+ 
++  // Open (patch 0306): extension chrome.contextMenus items for Alloy pages.
++  open_engine::AppendAlloyExtensionMenuItems(browser_->web_contents(), params_,
++                                             model_.get());
++
+   bool custom_menu = false;
+   DCHECK(!custom_menu_callback_);
+ 
+@@ -240,6 +245,12 @@ void CefMenuManager::CancelContextMenu() {
+ void CefMenuManager::ExecuteCommand(CefRefPtr<CefMenuModelImpl> source,
+                                     int command_id,
+                                     cef_event_flags_t event_flags) {
++  // Open (patch 0306): an extension's context menu item.
++  if (open_engine::ExecuteAlloyExtensionMenuCommand(browser_->web_contents(),
++                                                    command_id)) {
++    return;
++  }
++
+   // Give the client a chance to handle the command.
+   CefRefPtr<CefClient> client = browser_->GetClient();
+   if (client.get()) {

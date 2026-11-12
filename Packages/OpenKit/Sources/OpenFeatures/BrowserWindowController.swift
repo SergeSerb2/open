@@ -1319,6 +1319,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             refresh(); return true
         case .separateFromPinned(let id): return separateFromPinned(id)
         case .deleteSpace(let id): return confirmDeleteSpace(id)
+        case .dismissFavoritesEmptyState(let id):
+            guard let profile = model.profile(id: id) else { return false }
+            profile.favoritesEmptyStateDismissed = true; changed(); return true
         case .deleteFolder(let id): return confirmDeleteFolders([id])
         case .deleteLiveFolder(let id): return confirmDeleteLiveFolder(id)
         case .setLiveRepository(let id, let repository, let hidden):

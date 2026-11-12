@@ -14,7 +14,8 @@ def dock_tile_probe(app):
         binary.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(['nice', '-n', '10', 'xcrun', 'swiftc', '-O', '-swift-version', '6', '-parse-as-library',
                         str(source), '-o', str(binary)], check=True)
-    proc = subprocess.run([str(binary), app.bundle], capture_output=True, text=True, timeout=30)
+    # The App under test keeps its preferences in this run's private domain; the plug-in reads the same one.
+    proc = subprocess.run([str(binary), app.bundle, __import__('prefs_domain').domain()], capture_output=True, text=True, timeout=30)
     try:
         return json.loads(proc.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):

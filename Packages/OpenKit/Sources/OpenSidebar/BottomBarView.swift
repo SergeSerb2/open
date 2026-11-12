@@ -9,6 +9,14 @@ final class BottomBarView: NSView {
     unowned let context: SidebarContext
     let home = HomeDownloadButton()
     let plus = PlateButton(glyph: .bottomPlus)
+    let plusPopover = PlusPopover()
+    /// The "+" popover's rows are `SidebarMenus.plus()`; colours follow the focused Space.
+    func togglePlusPopover() {
+        if plusPopover.isShown { plusPopover.close(); return }
+        guard let sidebar = context.sidebar else { return }
+        let style = context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
+        plusPopover.show(menu: menus.plus(), colors: PlusPopoverColors(style: style, system: context.systemAppearance), from: plus, sidebar: sidebar)
+    }
     private let strip = NSView()
     private(set) var items: [SpaceID: SwitcherItemView] = [:]
     private var loop: ObservationLoop?
@@ -41,7 +49,15 @@ final class BottomBarView: NSView {
             home.isHidden = true; strip.isHidden = true
             plus.action = { [unowned context] in context.send(.newTab) }
             plus.setAccessibilityLabel("New Tab")
-        } else { plus.menuProvider = { [weak self] in self?.menus.plus() } }
+        } else {
+            // Arc's "+" opens a custom popover and turns into "×" while it shows (capture session 8 item 7).
+            plus.action = { [weak self] in self?.togglePlusPopover() }
+            plusPopover.onVisibilityChange = { [weak self] shown in self?.plus.glyphView.glyph = shown ? .rowClose : .bottomPlus }
+            plusPopover.closesOnly = { [weak self] event in
+                guard let self, event.window === self.window else { return false }
+                return self.plus.bounds.contains(self.plus.convert(event.locationInWindow, from: nil))
+            }
+        }
         plus.tooltip = { Tooltip(title: "New…", placement: .above, style: style()) }
         loop = ObservationLoop(read: { [weak self] in _ = self?.context.model.spaces.map(\.id); _ = self?.context.downloadBadge }) { [weak self] in self?.needsLayout = true }
     }

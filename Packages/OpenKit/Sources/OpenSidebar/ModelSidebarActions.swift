@@ -38,6 +38,8 @@ public struct ModelSidebarActions {
             return model.moveNodes(ids: ids, toSpace: space, markUnread: context.focusedSpace?.id != space) > 0
         case .archiveNodes(let ids):
             return model.archiveNodes(ids: ids) > 0
+        case .splitNodes(let ids):
+            return model.makeSplit(tabIDs: ids) != nil
         case .newFolderFromSelection(let ids):
             guard let first = ids.first, let parent = model.parent(of: first),
                   let index = siblings(in: parent).firstIndex(where: { $0.id == first }),

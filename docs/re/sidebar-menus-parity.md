@@ -45,3 +45,21 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 2. URL field menu: evidence complete in S3D (Share ▸ contents from C3 item 1).
 3. Bottom-bar "+" popover: item list from S3D; geometry from C3 item 7.
 4. Library Downloads titles and the other Library sections: after C3 items 9–14.
+
+## 4. Library file menus from Arc's code (2026-11-12, Arc 1.172.2 build 90755)
+
+Method: `xcrun llvm-objdump -d --no-show-raw-insn --arch=arm64 /Applications/Arc.app/Contents/MacOS/Arc`, filtered to
+`mov`/`movk` immediates and decoded as Swift small strings (titles of ≤ 15 bytes are immediates, not `__cstring`
+data; raw table in `.re/d2c/imm-strings.tsv`). A title longer than 8 bytes shows as two halves at neighbouring
+addresses. Order below is address order inside each builder; **menu order = code order is a guess**.
+
+| Builder (address range) | Titles in code order | Notes |
+|---|---|---|
+| Library › Media (`HomeButton/MediaReducer.swift`, 0x102804e74 … 0x102806608) | Open in Preview · AirDrop · "Copy " + ‹kind› · Show in Finder · Hide from Arc · Open Source URL · Copy Source URL · Delete | plus the long string "Send via iMessage" (comment "Menu item title to show a send via iMessage for capture."). Comments name which item belongs to which kind: "delete Capture from Arc", "hide a screenshot from Arc" |
+| Item preview (`HomeBadging/ItemPreviewPresenter.swift`, 0x10270f2e8 … 0x10270fd8c) | Open in Preview · AirDrop · Open Source URL · Copy Source URL · Show in Finder | |
+| Shared capture / download items (0x1026b9aa8 … 0x1026bb378) | Copy Image · AirDrop · Open Source URL · Copy Source URL · Delete; "Copy " + ‹ext› · AirDrop; Show in Finder · Hide from Arc · Move to Trash · "Open " + ‹ext›; Cancel Download | confirms the download titles "Open ‹ext›" / "Copy ‹ext›" and "Cancel Download" |
+
+Open builds: captures: Open in Preview · Send via iMessage · AirDrop · Copy Image · Show in Finder · Save As… (Open's own)
+· — · Delete; folder files: Open in Preview · Send via iMessage · AirDrop · Copy ‹Image|Video› · Show in Finder · — ·
+Hide from Open. Not built: Open Source URL / Copy Source URL (Open's capture index stores the source host only).
+Separators are a guess. No populated Media menu was captured (C3 session 8 item 12 skipped).

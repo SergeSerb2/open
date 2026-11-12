@@ -240,6 +240,7 @@ public final class PeekController {
     }
     @discardableResult public func openInSplitTop() -> Bool {
         guard let item = stack.last, let space = splitController.space, !isExpanding else { return false }
+        // GUESS: the alert beeps on refused Peek actions here are not captured (C9; features-advanced SE-2).
         guard splitController.canAddPane else { NSSound.beep(); return false }
         // Guess: PK split semantics, confirmed by lead decision Q4.
         return promote(item, into: space.id, split: true)

@@ -59,10 +59,13 @@ def initial_checks(process, output, ids):
         'boost_cli_malformed': counts.get('malformed') == 1,
         'boost_cli_unknown': counts.get('unknownFields') == 1,
         # PB4 row 4: hue, saturation and invert map (3 leaves per Boost); the rest stays counted.
-        'boost_cli_dropped': counts.get('droppedFields') == 14 and counts.get('mappedFields') == 23,
+        # PB4 row 4, zoom part (capture C11): textZoom.level is the percent, mapped too (1 leaf per Boost).
+        # The second Boost's level 2 is outside 50…200: dropped, not clamped.
+        'boost_cli_dropped': counts.get('droppedFields') == 13 and counts.get('mappedFields') == 24,
+        'boost_cli_text_zoom': enabled.get('textZoom') == 1.25 and disabled.get('textZoom') is None,
         'boost_cli_color': enabled.get('colorWheel', {}).get('hue') == 90 and enabled.get('colorWheel', {}).get('intensity') == .4
             and enabled.get('colorWheel', {}).get('invertLightness') is False and disabled.get('colorWheel', {}).get('hue') == 90
-            and enabled.get('textZoom') is None,
+            and enabled.get('colorWheel', {}).get('intensity') == .4,
         'boost_cli_tombstones': counts.get('deleted') == 1 and counts.get('unknownDocuments') == 1 and counts.get('otherCollections') == 1
             and not any(value in by_id for key, value in ids.items() if key in ('deleted', 'unknown', 'obsolete', 'wal-deleted')),
         'boost_cli_privacy': all(value not in process.stdout + process.stderr for value in

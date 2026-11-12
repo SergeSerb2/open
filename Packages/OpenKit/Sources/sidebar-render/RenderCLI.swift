@@ -29,6 +29,7 @@ enum RenderCLI {
         case "divider-check": try DividerChecks.run(rest)
         case "url-status": try URLStatusChecks.render(rest)
         case "theme-roles": try ThemeRoleChecks.run(rest)
+        case "plus-popover": try plusPopover(rest)
         default: throw CLIError(description: usage)
         }
     }
@@ -56,6 +57,7 @@ enum RenderCLI {
       sidebar-render compare-media --state row-audible|row-muted --arc FRAME.png --arc-ax AX.json --ours FILE.png --ours-frames FILE.json --out DIR
       sidebar-render check
       sidebar-render url-status --out DIR [--scale 1|2]
+      sidebar-render plus-popover --out FILE.png [--snapshot DIR] [--appearance light|dark] [--scale S]
       sidebar-render theme-roles --ref tools/verification/sidebar-theme-roles.json [--table]
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
       sidebar-render sm6-cost [--fail-child-after-host]
@@ -136,6 +138,16 @@ enum RenderCLI {
             context.autoArchiveBannerRequested = true
         }
         if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
+        if args.contains("--favorites-empty") {
+            // A3 look frames: no Favorites, the empty-state card on; --plain-theme uses the default theme.
+            context.favoritesProfile?.favorites = []; model.rebuildIndex()
+            context.showsFavoritesEmptyState = true
+            if args.contains("--plain-theme"), let s = context.focusedSpace { s.theme = SpaceTheme() }
+            // --favorites-preset N: one of SpaceStylePresets.all (3 = the red "Brand 4").
+            if let n = value(args, "--favorites-preset").flatMap(Int.init), SpaceStylePresets.all.indices.contains(n), let s = context.focusedSpace {
+                s.theme = SpaceTheme(style: SpaceStylePresets.all[n].style)
+            }
+        }
         // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
         if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }
         if let spec = value(args, "--insert-folder-tab"), let s = context.focusedSpace {
@@ -209,6 +221,7 @@ enum RenderCLI {
         options.revealCard = args.contains("--reveal")
         options.trafficLights = !args.contains("--no-lights")
         options.emptyPanel = !args.contains("--page")
+        options.favoritesDropTarget = args.contains("--favorites-drop")
         if args.contains("--live-folder"), let space = context.focusedSpace {
             // LF look frames: a synthetic Live Folder at the end of Pinned with synthetic PR rows.
             if args.contains("--plain-theme") { space.theme = SpaceTheme() }
@@ -268,6 +281,14 @@ enum RenderCLI {
         let delegate: any SidebarDelegate = context.media == nil ? RecordingDelegate() : MediaScene.delegate(context: context)
         let scene = RenderScene(context: context, options: options, delegate: delegate)
         scene.background.renderScale = scale
+        if let hover = value(args, "--more-popover") {
+            // Look frames (PB5 A6): the compact toolbar's "More options" card, with row `hover` drawn hovered.
+            // Both modes: with --plain-theme the Space follows --appearance (default theme).
+            if args.contains("--plain-theme") { context.focusedSpace?.theme = SpaceTheme() }
+            scene.layoutSubtreeIfNeeded()
+            scene.sidebar.toggleToolbarMorePopover()
+            if let index = Int(hover) { scene.sidebar.forceToolbarMoreHover(index) }
+        }
         var image: CGImage
         if let n = value(args, "--switch-to").flatMap(Int.init), model.spaces.indices.contains(n), let window = model.windows.first {
             // A transition frame: animate the switch and capture the presentation tree at `--at` seconds.
@@ -380,6 +401,24 @@ enum RenderCLI {
         frame.wantsLayer = true
         frame.layer?.backgroundColor = CGColor(gray: 0.5, alpha: 0.15)
         view.frame = CGRect(x: pad, y: pad, width: view.fittingSize.width, height: view.fittingSize.height)
+        frame.addSubview(view)
+        let scale = CGFloat(Double(value(args, "--scale") ?? "2") ?? 2)
+        let image = OffscreenRenderer().render(frame, scale: scale)
+        OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
+        print("wrote \(out) \(image.width)x\(image.height)")
+    }
+
+    /// The bottom-bar "+" popover alone (capture session 8 item 7), over a neutral backdrop.
+    static func plusPopover(_ args: [String]) throws {
+        guard let out = value(args, "--out") else { throw CLIError(description: usage) }
+        let model = try value(args, "--snapshot").map(loadModel) ?? Synthetic.model()
+        let context = try makeContext(args, model: model)
+        let sidebar = SidebarView(context: context)
+        guard let view = sidebar.makePlusPopoverView() else { throw CLIError(description: "no plus popover (incognito)") }
+        let frame = NSView(frame: view.frame.insetBy(dx: -8, dy: -8).offsetBy(dx: 8, dy: 8))
+        frame.wantsLayer = true
+        frame.layer?.backgroundColor = context.systemAppearance == .dark ? CGColor(gray: 0.16, alpha: 1) : CGColor(gray: 0.9, alpha: 1)
+        view.frame.origin = CGPoint(x: 8, y: 8)
         frame.addSubview(view)
         let scale = CGFloat(Double(value(args, "--scale") ?? "2") ?? 2)
         let image = OffscreenRenderer().render(frame, scale: scale)

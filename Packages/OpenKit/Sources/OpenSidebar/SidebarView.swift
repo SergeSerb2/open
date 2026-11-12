@@ -107,6 +107,7 @@ public final class SidebarView: NSView {
         }) { [weak self] in self?.syncTheme() })
         loops.append(ObservationLoop(read: { [weak self] in
             _ = self?.context.favoritesProfile?.favorites.count
+            _ = self?.context.favoritesEmptyStateVisible
             _ = self?.context.sidebarWidth
         }) { [weak self] in self?.needsLayout = true })
         loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.peekSourceNodeID }) { [weak self] in self?.syncPeekDim() })
@@ -149,9 +150,12 @@ public final class SidebarView: NSView {
         if let resigned = notification.object as? NSWindow, resigned === window { context.isOptionHeld = false }
     }
 
+    /// The Favorites empty-state card while it shows (A3; checks and automation).
+    public var favoritesEmptyCard: FavoritesEmptyStateView? { favorites.emptyCard }
+
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
-        context.isIncognito ? 0 : FavoritesMetrics.sectionHeight(count: context.favoritesProfile?.favorites.count ?? 0, sidebarWidth: bounds.width)
+        context.favoritesSectionHeight(width: bounds.width)
     }
 
     public override func layout() {
@@ -767,11 +771,47 @@ extension SidebarView {
             .filter { !$0.1.isHidden }.map(\.0)
     }
     /// The compact toolbar's "More options" menu, built as a click would build it.
-    public func toolbarMoreMenu() -> NSMenu { toolbar.makeMoreMenu() }
+    /// The "More options" rows as the popover shows them: title, shortcut, enabled.
+    public func toolbarMoreRows() -> [(title: String, shortcut: String, isEnabled: Bool)] {
+        toolbar.moreRows().map { ($0.title, $0.shortcut, $0.isEnabled) }
+    }
+    /// Opens or closes the popover through the button's own action; true when it is open afterwards.
+    @discardableResult public func toggleToolbarMorePopover() -> Bool { toolbar.toggleMorePopover(); return toolbar.morePopover != nil }
+    /// The open popover's frame in this view, its rows, and the button's glyph ("×" while open).
+    public var toolbarMoreState: (open: Bool, frame: CGRect, closeGlyph: Bool) {
+        let popover = toolbar.morePopover
+        return (popover != nil, popover.map { convert($0.bounds, from: $0) } ?? .zero, toolbar.more.glyphView.glyph == .rowClose)
+    }
+    /// Presses row `index` of the open popover (its real press path).
+    public func chooseToolbarMoreRow(_ index: Int) { toolbar.morePopover?.choose(index) }
+    /// Render scenes: draws row `index` hovered.
+    public func forceToolbarMoreHover(_ index: Int) {
+        guard let rows = toolbar.morePopover?.rowViews, rows.indices.contains(index) else { return }
+        rows[index].forcedHover = true
+    }
     /// The URL field's placeholder for the current sidebar width.
     public var urlFieldPlaceholder: String { layoutSubtreeIfNeeded(); return urlField.placeholder }
     /// The same provider used when the bottom-bar plus button opens its menu.
-    public func plusMenu() -> NSMenu? { bottomBar.plus.menuProvider?() }
+    public func plusMenu() -> NSMenu? { context.isIncognito ? nil : bottomBar.menus.plus() }
+    /// The "+" popover (capture session 8 item 7): open or close as a click on "+" does.
+    public func togglePlusPopover() { if !context.isIncognito { bottomBar.togglePlusPopover() } }
+    /// ↓ 125, ↑ 126, Return 36, Esc 53, as the popover's key monitor handles them.
+    @discardableResult public func plusPopoverKey(_ code: UInt16) -> Bool { bottomBar.plusPopover.key(code) }
+    /// Shown state, highlighted row, row titles and frames (popover coordinates), and the "+" glyph.
+    public var plusPopoverState: [String: Any] {
+        let view = bottomBar.plusPopover.view
+        return ["shown": bottomBar.plusPopover.isShown, "highlighted": view?.highlighted.map { view!.rows[$0].item.title } ?? "",
+                "rows": view?.rows.map { ["title": $0.item.title, "enabled": $0.item.isEnabled, "frame": [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height]] as [String: Any] } ?? [],
+                "size": view.map { [$0.frame.width, $0.frame.height] } ?? [], "closeGlyph": bottomBar.plus.glyphView.glyph == .rowClose]
+    }
+    /// The popover's content alone, for offscreen renders (`sidebar-render plus-popover`).
+    public func makePlusPopoverView() -> NSView? {
+        guard let menu = plusMenu() else { return nil }
+        let style = context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
+        let view = PlusPopoverView(menu: menu, colors: PlusPopoverColors(style: style, system: context.systemAppearance))
+        view.arrowX = view.bounds.maxX - 22
+        return view
+    }
     /// The URL field's right-click menu, built as a click would build it.
     public func urlFieldMenu() -> NSMenu { SidebarMenus(context: context).urlField() }
     /// The URL field shows (it hides while the window shows the content toolbar).
@@ -832,6 +872,14 @@ extension SidebarView {
 
     /// The text the URL field shows: the current page's host or the placeholder.
     public var displayedURLText: String { urlField.displayedText }
+    /// The Space header's hover "…" button: its frame in the header and its menu titles (it opens
+    /// the Space menu, capture session 8 item 8).
+    public var spaceHeaderMore: (frame: CGRect, hidden: Bool, menu: [String])? {
+        guard let header = pager.currentPage?.header else { return nil }
+        header.layoutSubtreeIfNeeded()
+        let titles = header.more.menuProvider?()?.items.filter { !$0.isAlternate }.map { $0.isSeparatorItem ? "—" : $0.title } ?? []
+        return (header.more.frame, header.more.isHidden, titles)
+    }
     /// Read actual private-window view visibility for real-App acceptance.
     public var incognitoChrome: [String: Bool] {
         ["favoritesHidden": favorites.isHidden, "libraryHidden": bottomBar.home.isHidden,

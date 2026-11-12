@@ -47,7 +47,7 @@ def document(identifier, fields, collection='boosts', variant=2):
 
 def boost(name, css='body{outline:3px solid rgb(1,2,3)}', **extra):
     components = dict(css=css, js="document.body.dataset.exampleBoost='1'", font={'family': 'Georgia'},
-                      textTransform='uppercase', zaps=['#example-promo'], textZoom={'level': 2},
+                      textTransform='uppercase', zaps=['#example-promo'], textZoom={'level': 125},
                       colorScheme={'colorWheelDriven': {'_0': dict(primaryHueDegrees=90, primarySaturation=.4,
                                                                   secondaryHueOffset=30, invertLightness=False,
                                                                   baseAppearance={'light': {}}, advancedSettings={})}})
@@ -179,6 +179,8 @@ def write(root, sidebar=True):
     for name in ('enabled', 'disabled', 'malformed', 'deleted', 'unknown', 'wal-deleted'):
         fields = boost(name, futureFixtureField='unknown') if name == 'enabled' else boost(name)
         if name == 'disabled':
+            # A level no Arc editor writes (the sizes are 90, 110, 125, 150): the importer drops it.
+            fields = boost(name, textZoom={'level': 2})
             fields['forkedFromBoostID'] = IDS['enabled']
             fields['data'] = json.dumps(dict(json.loads(fields['data']),
                 css='body{border-top:7px solid rgb(9,8,7)!important}'))

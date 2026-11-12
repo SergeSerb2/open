@@ -42,19 +42,24 @@ enum CompactToolbarChecks {
         }
         check(ok, "CT1 full toolbar at 228 and 219; compact Back, Forward, More options at [W − 90 / W − 62 / W − 34, 9, 28, 28] at 218, 207, 164 (\(rows.joined(separator: "; ")))")
         width(200)
-        let menu = sidebar.toolbarMoreMenu()
-        let titles = menu.items.map(\.title)
-        let keys = menu.items.map { $0.keyEquivalent }
+        let moreRows = sidebar.toolbarMoreRows()
         delegate.log = []
-        menu.performActionForItem(at: 1)
+        let opened = sidebar.toggleToolbarMorePopover()
+        let open = sidebar.toolbarMoreState
+        sidebar.chooseToolbarMoreRow(1)
+        let closed = sidebar.toolbarMoreState
         let hide = delegate.log.last.map { if case .toggleSidebar = $0 { true } else { false } } ?? false
         let space = model.spaces[0], tab = space.today.first?.tab ?? space.pinned.first!.tab!
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
         tab.live.isLoading = true
-        let stop = sidebar.toolbarMoreMenu().items.first
+        let stop = sidebar.toolbarMoreRows().first
         tab.live.isLoading = false
-        check(titles == ["Reload", "Toggle Sidebar"] && keys == ["r", "s"] && hide && stop?.title == "Stop Loading",
-              "CT2 More options menu, as Arc (capture s9): Reload ⌘R (Stop Loading while loading), Toggle Sidebar ⌘S sends .toggleSidebar")
+        check(moreRows.map { $0.title } == ["Reload", "Toggle Sidebar"] && moreRows.map { $0.shortcut } == ["⌘R", "⌘S"] && hide && stop?.title == "Stop Loading",
+              "CT2 More options rows, as Arc (capture s9): Reload ⌘R (Stop Loading while loading), Toggle Sidebar ⌘S sends .toggleSidebar")
+        check(opened && open.open && open.closeGlyph && open.frame.width == 200 && open.frame.height == 101
+              && abs(open.frame.midX - (200 - 34 + 14)) <= 0.5 && abs(open.frame.minY - (9 + 28 + 12)) <= 0.5
+              && !closed.open && !closed.closeGlyph,
+              "CT2c More options popover: 200 × 101 (95 card + 6 arrow) centred under the button, tip 12 pt below it, × while open; a row press closes it (\(open.frame))")
         let compactPlaceholder = sidebar.urlFieldPlaceholder
         width(228)
         let fullPlaceholder = sidebar.urlFieldPlaceholder

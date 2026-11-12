@@ -41,6 +41,9 @@ import time
 import traceback
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import prefs_domain  # this run's private preferences domain; never the user's
+
 # The -I shebang drops this folder from sys.path. Put it first so sibling
 # suites (engine_activation, downloads, extensions_p3, ...) import when the
 # script runs directly.
@@ -322,6 +325,8 @@ class Open:
         self.observation_steps = []
         self.activation_trace = []
         self.focus_tracker = None
+        # Every App this harness launches keeps its preferences in this run's private domain.
+        self.preferences_domain = prefs_domain.domain()
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
@@ -1015,7 +1020,12 @@ def feature_checks(app, style, results, tmp):
     app.call("policy", dialogs="accept", prompt="hello", permissions="grant", contextMenu="record",
              fullscreen="record")
 
+    # Touched-row runs: OPEN_E2E_FEATURES_ONLY=row[,row] runs only those rows of this function.
+    only_rows = set(filter(None, os.environ.get("OPEN_E2E_FEATURES_ONLY", "").split(",")))
+
     def run(name, fn):
+        if only_rows and name not in only_rows:
+            return
         begin_row(name)
         try:
             results[name] = fn()
@@ -1228,6 +1238,50 @@ def feature_checks(app, style, results, tmp):
             ' opus: MediaSource.isTypeSupported(\'audio/webm; codecs="opus"\'),'
             ' mp3: document.createElement("audio").canPlayType("audio/mpeg")})')}
 
+    def protocol_handler():
+        # navigator.registerProtocolHandler (PB1 mailto): the prompt carries the kind,
+        # scheme and template; a grant stores the handler in Chromium's registry; a
+        # navigation to the scheme goes to the handler; removal ends it. Deny stores nothing.
+        kind = 1 << 12
+        template = "https://example.com/?compose=%s"
+        w = new_tab(app, "https://example.com/")
+        try:
+            before = app.call("protocol-handlers", translate="mailto:someone@example.org")
+            app.call("events")
+            app.eval(w, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
+            wait_until(lambda: any(h["scheme"] == "mailto" and h["default"] for h in app.call("protocol-handlers")["handlers"]), timeout=5)
+            prompts = [e for e in app.call("events") if e["type"] == "permission"]
+            granted = app.call("protocol-handlers", translate="mailto:someone@example.org")
+            app.eval(w, 'location.href = "mailto:someone@example.org"')
+            routed = wait_until(lambda: (app.eval(w, "location.href") or "").startswith("https://example.com/?compose=mailto"), timeout=10)
+            landed = app.eval(w, "location.href")
+            app.call("policy", permissions="deny")
+            app.call("navigate", tab=w, url="https://example.com/")
+            app.call("wait", tab=w)
+            app.call("events")
+            app.eval(w, 'navigator.registerProtocolHandler("web+opentest", "https://example.com/?x=%s")')
+            time.sleep(1)
+            denied_prompts = [e for e in app.call("events") if e["type"] == "permission"]
+            denied = app.call("protocol-handlers", translate="web+opentest:1")
+            removed = app.call("protocol-handlers", removeScheme="mailto", removeURLTemplate=template,
+                               translate="mailto:someone@example.org")
+        finally:
+            app.call("policy", permissions="grant")
+            app.call("close", tab=w)
+        expected = "https://example.com/?compose=mailto%3Asomeone%40example.org"
+        return {"ok": before["translated"] is None and before["handlers"] == []
+                      and len(prompts) == 1 and prompts[0]["kinds"] == kind
+                      and prompts[0].get("protocolScheme") == "mailto" and prompts[0].get("protocolURLTemplate") == template
+                      and granted["translated"] == expected
+                      and granted["handlers"] == [{"scheme": "mailto", "urlTemplate": template, "default": True}]
+                      and bool(routed) and landed == expected
+                      and len(denied_prompts) == 1 and denied_prompts[0]["kinds"] == kind
+                      and denied_prompts[0].get("protocolScheme") == "web+opentest"
+                      and denied["translated"] is None and len(denied["handlers"]) == 1
+                      and removed["removed"] is True and removed["handlers"] == [] and removed["translated"] is None,
+                "before": before, "prompts": prompts, "granted": granted, "landed": landed,
+                "deniedPrompts": denied_prompts, "denied": denied, "removed": removed}
+
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
         cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
@@ -1296,14 +1350,15 @@ def feature_checks(app, style, results, tmp):
                      ("context_menu", context_menu), ("audio_state", audio), ("fullscreen", fullscreen),
                      ("picture_in_picture", pip), ("pdf_viewer", pdf), ("print_to_pdf", print_to_pdf),
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
-                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
+                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("protocol_handler", protocol_handler), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
     def sad_tab():
         return runpy.run_path(os.path.join(ROOT, "tools/e2e/sad_tab.py"))["run"](
             app, results, new_tab, wait_until, t, run)
     run("sad_tab", sad_tab)
-    runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
-        app, results, tmp, new_tab, wait_until)
+    if not only_rows:
+        runpy.run_path(os.path.join(ROOT, "tools/e2e/open_world.py"))["run"](
+            app, results, tmp, new_tab, wait_until)
 
 
 
@@ -5893,6 +5948,7 @@ def profiles_checks(factory, results, tmp, config):
 
     def run_binary(label, **env_extra):
         """One launch of the real app; returns its exit code and output."""
+        prefs_domain.domain()  # exported in os.environ: this launch uses the private preferences domain
         env = dict(os.environ, OPEN_USER_DATA=root, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(env_extra)
@@ -8202,7 +8258,7 @@ def littleopen_checks(factory, results, tmp):
     import plistlib
     import uuid
     crashes_before = _open_crash_reports()
-    domain = 'io.github.sergeserb2.open'
+    domain = prefs_domain.domain()
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
             'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
             'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection',
@@ -8783,7 +8839,7 @@ def routing_checks(factory, results, tmp):
     import copy
     import plistlib
     import uuid
-    domain = 'io.github.sergeserb2.open'
+    domain = prefs_domain.domain()
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled', 'open.links.littleOpenNUXSeen', 'open.settings.lastPane')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
@@ -10488,9 +10544,9 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     undo()
     require('E3_unpin_and_menu_duplicate_selection', unpinned and len(ids_after - ids_before) == 3 and shape(tree()['today']) == before_dup,
             newIDs=sorted(ids_after - ids_before), tree=tree())
-    select(abc); app.call('sidebar-menu', node=a, item='Pin Tabs')
+    select(abc); app.call('sidebar-menu', node=a, item='Pin Tabs', alternate=True)
     menu_pinned = all(app.tab(n)['section'] == 'pinned' for n in abc)
-    app.call('sidebar-menu', node=a, item='Unpin Tabs')
+    app.call('sidebar-menu', node=a, item='Unpin Tabs', alternate=True)
     before_context_dup = shape(tree()['today']); ids_before = {n['id'] for n in walk(tree()['today'])}
     app.call('sidebar-menu', node=a, item='Duplicate'); ids_after = {n['id'] for n in walk(tree()['today'])}; undo()
     require('A3_selection_context_pin_duplicate', menu_pinned and all(app.tab(n)['section'] == 'today' for n in abc)
@@ -10502,7 +10558,7 @@ def sidebar_completion_a3_checks(app, results, require, evidence, tmp, launch):
     # Copy plain/Markdown and both move variants use real selection menus.
     select(abc)
     app.call('sidebar-menu', node=a, item='Copy Links'); plain = app.call('pasteboard')
-    app.call('sidebar-menu', node=a, item='Copy links as Markdown'); markdown = app.call('pasteboard')
+    app.call('sidebar-menu', node=a, item='Copy links as Markdown', alternate=True); markdown = app.call('pasteboard')
     require('A3_selection_copy_links', plain.splitlines() == [app.tab(n)['url'] for n in abc]
             and markdown.splitlines() == ['[%s](%s)' % (app.tab(n)['title'], app.tab(n)['url']) for n in abc])
     dest = fresh('Move Destination'); app.call('space', space=space); select(abc)
@@ -11065,45 +11121,58 @@ def library_capture_checks(app, require, root, evidence):
             server.shutdown(); server.server_close()
         archive = open_section('archive')
         archive_rows = wait_until(lambda: any(r['id'] == archived for r in app.call('settings-state')['archive']), timeout=5) if archive else False
-        require('library_corrupt_index_isolation', archive and archive['loadFailed'] and archive_rows
+        # The capture index is read only when Captures or Media opens (c9a2e305, lazy provider). So the other
+        # sections must work beside a corrupt index and must not show its error; `loadFailed` is asserted
+        # where the index is read, in the captures/media rows below.
+        no_error = lambda s: not any(error_copy[0] in text for text in s['text'])
+        require('library_corrupt_index_isolation', archive and archive_rows and no_error(archive)
                 and archive['status'] == '' and app.call('settings-state')['sharedArchives'], state=state())
         for section in ('history', 'downloads', 'spaces'):
             current = open_section(section)
             if section == 'history':
                 working = wait_until(lambda: app.call('settings-state')['historyRows'] > 0, timeout=5)
-            elif section == 'downloads': working = current and any('No downloads' in t for t in current['text'])
+            elif section == 'downloads':
+                # Empty Downloads: "No downloads yet", or "No matches" while a search or Profile filter is active
+                # (LibraryPanelView.updateEmptyCopy). Either one is the working empty list, not the capture error.
+                working = current and not current['items'] and any(t in ('No downloads yet', 'No matches') for t in current['text'])
             else: working = app.call('space-manager-state')['hostedManagers'] == 1
-            require('library_corrupt_index_' + section, current and current['loadFailed'] and working and current['status'] == '', state=state())
-        for section in ('captures', 'media'):
-            current = open_section(section)
-            path = os.path.join(evidence, section + '-index-error.png')
-            app.call('snapshot', path=path, window=current['window'])
-            require('library_corrupt_index_' + section + '_error', current and current['loadFailed'] and not current['items']
-                    and any(error_copy[0] in text for text in current['text']), state=current, png=path)
+            require('library_corrupt_index_' + section, current and working and no_error(current) and current['status'] == '', state=state())
+        # The native Library has no Captures section: captures show in Media, and the index is read when Media
+        # opens (asynchronously, so wait for the load to settle). Its error title is "Could not load media".
+        media_error = 'Could not load media'
+        def media_when(predicate):
+            opened = open_section('media')
+            return wait_until(lambda: (lambda s: s if s.get('section') == 'media' and predicate(s) else None)(state()), timeout=10, step=.05) if opened else None
+        current = media_when(lambda s: s['loadFailed'])
+        path = os.path.join(evidence, 'media-index-error.png')
+        if current: app.call('snapshot', path=path, window=current['window'])
+        require('library_corrupt_index_media_error', current and current['loadFailed'] and not current['items']
+                and any(media_error in text for text in current['text']), state=current or state(), png=path)
         # A directory at the index path is a real unreadable-file case, including
         # when the suite runs as the file owner (chmod alone would be unreliable).
         app.call('library-close'); os.unlink(index); os.mkdir(index)
-        unreadable = open_section('captures')
+        unreadable = media_when(lambda s: s['loadFailed'])
         require('library_unreadable_index_error', unreadable and unreadable['loadFailed']
-                and any(error_copy[0] in text for text in unreadable['text']), state=unreadable)
+                and any(media_error in text for text in unreadable['text']), state=unreadable or state())
         os.rmdir(index)
         # Exercise the reader's limits through actual Library reopen, including
         # the valid boundary. Keep the large fixture out of the visible grid.
         for extra in (0, 1):
             app.call('library-close')
             with open(index, 'wb') as stream: stream.write(b'[]' + b' ' * (16 * 1024 * 1024 - 2 + extra))
-            boundary = open_section('archive')
-            require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary['loadFailed'] == bool(extra)
-                    and boundary['captureCount'] == 0, state=boundary)
+            boundary = media_when(lambda s: s['loadFailed'] == bool(extra)) or state()
+            require('library_index_byte_limit_' + ('over' if extra else 'at'), boundary.get('loadFailed') == bool(extra)
+                    and boundary.get('captureCount') == 0, state=boundary)
         large = [dict(id='71000000-0000-0000-0000-%012d' % i, fileName='Example.png', createdAt=1800000000,
                       kind='area', sourceHost='example.com') for i in range(50_001)]
         for count in (50_000, 50_001):
             app.call('library-close')
             with open(index, 'w') as stream: json.dump(large[:count], stream)
-            boundary = open_section('archive')
+            expected = count if count == 50_000 else 0
+            boundary = media_when(lambda s: s['loadFailed'] == (count > 50_000) and s['captureCount'] == expected) or state()
             require('library_index_row_limit_' + ('at' if count == 50_000 else 'over'),
-                    boundary['loadFailed'] == (count > 50_000) and boundary['captureCount'] == (count if count == 50_000 else 0),
-                    loadFailed=boundary['loadFailed'], captureCount=boundary['captureCount'])
+                    boundary.get('loadFailed') == (count > 50_000) and boundary.get('captureCount') == expected,
+                    loadFailed=boundary.get('loadFailed'), captureCount=boundary.get('captureCount'))
         del large
 
     os.makedirs(os.path.dirname(index), exist_ok=True)
@@ -12386,9 +12455,9 @@ def page_tools_checks(factory, results, tmp, style):
 
 
 def _restore_defaults(app, saved):
-    """Restores keys of the shared io.github.sergeserb2.open domain through the App, or
+    """Restores keys of this run's private preferences domain through the App, or
     with `defaults` when the App can no longer answer (a crash must not leave keys behind)."""
-    domain = getattr(app, "preferences_domain", "io.github.sergeserb2.open")
+    domain = prefs_domain.domain()
     for key, value in saved.items():
         restored = False
         if app is not None and not app.closed:
@@ -13027,9 +13096,9 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
-                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode"])
+                                       "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
     ap.add_argument("--sitecontrol-final-only", action="store_true", help="run private ad-block, live security and panel site-clear acceptance")
     ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
@@ -13101,7 +13170,8 @@ def main():
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
     import plistlib
-    exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    real_before = prefs_domain.real_snapshot()
+    exported = subprocess.run(['defaults', 'export', prefs_domain.domain(), '-'], capture_output=True)
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     startup_peek = {key: domain_before.get(key) for key in
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
@@ -13253,6 +13323,11 @@ def main():
             # Every first-run helper uses this factory, including F12 and the
             # multi-Profile importer. Exercise the real player at zero volume.
             launch_args += ["--intro-sound=silent"]
+        # The Favorites empty-state card (A3) adds 105 pt above the Space title on a fresh Profile. Suites
+        # written before it keep the old geometry; a suite that checks the card passes
+        # extra_args=["--favorites-empty-state=shown"].
+        if not any(a.startswith("--favorites-empty-state=") for a in (extra_args or [])):
+            launch_args += ["--favorites-empty-state=hidden"]
         app = Open(opts.config, opts.style, user_data, launch_args + list(extra_args or []), log, urls=urls, extra_env=extra_env, delivery_urls=delivery_urls, first_run=first_run if first_run is not None else opts.only in ("firstrun", "onboarding", "import-robust"))
         app.focus_tracker = tracker
         tracker.apps.append(app)
@@ -13372,6 +13447,10 @@ def main():
         elif opts.only == "import-browsers":
             results[opts.only] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, 'tools/e2e/import_browsers.py'))['run'](
+                factory, results[opts.only], tmp, sys.modules[__name__])
+        elif opts.only == "automation-stress":
+            results[opts.only] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, 'tools/e2e/automation_stress.py'))['run'](
                 factory, results[opts.only], tmp, sys.modules[__name__])
         elif opts.only == "import-other-browsers":
             results[opts.only] = CheckedResults(tracker)
@@ -13546,6 +13625,9 @@ def main():
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
+        elif opts.only == "favorites-empty":
+            results["favorites-empty"] = CheckedResults(tracker)
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "favorites_empty.py"))["run"](factory, results["favorites-empty"], tmp, globals())
         elif opts.only == "live-data":
             results["live-data"] = CheckedResults(tracker)
             runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
@@ -13598,7 +13680,7 @@ def main():
                         feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
-            if opts.only == "features" and not opts.features_passwords_engine_safety:
+            if opts.only == "features" and not opts.features_passwords_engine_safety and not os.environ.get("OPEN_E2E_FEATURES_ONLY"):
                 # Own launches: Chrome's startup-complete signal (BEST_EFFORT tasks).
                 runpy.run_path(os.path.join(ROOT, "tools/e2e/startup_complete.py"))["run"](
                     factory, results["features"], new_tab, wait_until, begin_row, opts.style)
@@ -13678,6 +13760,19 @@ def main():
     results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
+    # Test isolation proof: the user's real preferences domain is byte-for-byte what it was before the run.
+    # Key names only in the receipt, never values.
+    real_after = prefs_domain.real_snapshot()
+    def _real_keys(blob):
+        try: return plistlib.loads(blob) if blob else {}
+        except Exception: return {}
+    _before, _after = _real_keys(real_before), _real_keys(real_after)
+    # macOS's open/save panel service writes its own keys for the bundle ID; put those back, then compare again.
+    _restored = prefs_domain.restore_system_panel_keys(_before, _after)
+    if _restored: _after = _real_keys(prefs_domain.real_snapshot())
+    results["preferences"] = {"ok": _before == _after, "domain": prefs_domain.domain(), "restoredSystemPanelKeys": _restored,
+                              "changedRealKeys": sorted(k for k in set(_before) | set(_after) if _before.get(k) != _after.get(k))}
+    print("real_preferences_untouched " + ("PASS" if results["preferences"]["ok"] else "FAIL"), flush=True)
     name = (probe_result_name if opts.only == 'passwords-probe' else
             'results-passwords-m-%s.json' % opts.config.lower() if opts.passwords_m_only else
             "results-actions-p2.json" if opts.only == "actions" else
@@ -13687,20 +13782,20 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "developer-mode")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "notes-format", "notes-export", "notes-import", "notes-rowmenu", "notes-library", "notes-peek", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "favorites-empty", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers", "calendar", "easel", "import-other-browsers", "automation-stress", "developer-mode")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
         if any(v.get('status') in ('NOT_RUN', 'UNVERIFIED') for v in results[opts.only].values()):
             failures.append('probe-incomplete')
-    if failures or not results["cleanup"]["ok"]:
+    if failures or not results["cleanup"]["ok"] or not results["preferences"]["ok"]:
         sys.exit(1)
     if any(isinstance(v, dict) and v.get("status") == "INTERRUPTED" for v in results.get(opts.only, {}).values()):
         sys.exit(2)

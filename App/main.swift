@@ -9,6 +9,10 @@ import OpenSettings
 import OpenOnboarding
 #endif
 
+#if OPEN_AUTOMATION
+// e2e runs keep their preferences in a private domain. First statement: nothing may read a preference before it.
+AutomationPreferences.installIfRequested()
+#endif
 // A library injected for a test (DYLD_INSERT_LIBRARIES) is already loaded into this process by now.
 // Remove the variable so that no child inherits it: the helpers, apps that Open opens, and
 // /usr/bin/profiles, which Chromium runs for its device-management check. That tool is arm64e and

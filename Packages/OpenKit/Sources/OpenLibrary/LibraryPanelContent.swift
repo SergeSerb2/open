@@ -454,6 +454,22 @@ extension LibraryPanelView {
           }
         }
     }
+    /// "Send via iMessage" and "AirDrop" for a file, through the system share services.
+    static func shareActions(_ url: URL?) -> [LibraryRowAction] {
+        [("Send via iMessage", NSSharingService.Name.composeMessage), ("AirDrop", .sendViaAirDrop)].map { title, name in
+            LibraryRowAction(title: title, enabled: url != nil) {
+                guard let url, let service = NSSharingService(named: name) else { return }
+                service.perform(withItems: [url])
+            }
+        }
+    }
+    /// Arc's "Copy ‹kind›" (its code appends a kind to "Copy "; "Copy Image" is a full title in the shared menu).
+    static func copyTitle(_ url: URL) -> String {
+        let type = UTType(filenameExtension: url.pathExtension)
+        if type?.conforms(to: .image) == true { return "Copy Image" }
+        if type?.conforms(to: .movie) == true { return "Copy Video" }   // guess
+        return "Copy"
+    }
     func captureSources() -> [LibraryRowSource] {
         viewModel.captures.captures.map { item in
           LibraryRowSource(id:item.id.uuidString,date:item.createdAt,text:(item.title ?? "")+" "+item.fileName+" "+item.sourceHost,prepareText:{
@@ -463,7 +479,14 @@ extension LibraryPanelView {
             let id = item.id, actions = viewModel.actions
             return LibraryRowItem(id:id.uuidString,title:(item.title ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Capture of "+(item.sourceHost.isEmpty ? "page" : item.sourceHost) : item.title!,subtitle:prepared?.subtitle ?? "Capture · "+(item.sourceHost.isEmpty ? "page" : item.sourceHost)+" · "+item.createdAt.formatted(date:.abbreviated,time:.omitted),kind:"capture",day:"",
                 fileURL:viewModel.captureURL(item),dragURL:viewModel.captureURL(item),activate:{ actions.openCapture(id:id) },
-                actions:[.init(title:"Open",run:{ actions.openCapture(id:id) }),.init(title:"Copy",run:{ actions.copyCapture(id:id) }),
+                // Arc's Media menu, from the code that builds it (`HomeButton/MediaReducer.swift`, 1.172.2 at 0x102804e74…0x102806608,
+                // small-string immediates in code order: Open in Preview · AirDrop · Copy … · Show in Finder · Hide from Arc ·
+                // Open Source URL · Copy Source URL · Delete; plus the long string "Send via iMessage"). Order = code order (guess);
+                // separators are a guess; no populated Media capture exists (C3 item 12 skipped). "Save As…" is Open's own.
+                // Open Source URL / Copy Source URL need the capture's page URL, which the capture index does not store yet (follow-up).
+                actions:[.init(title:"Open in Preview",run:{ actions.openCapture(id:id) })]
+                    + Self.shareActions(viewModel.captureURL(item))
+                    + [.init(title:"Copy Image",run:{ actions.copyCapture(id:id) }),
                     .init(title:"Show in Finder",run:{ actions.revealCapture(id:id) }),.init(title:"Save As…",run:{ [weak self] in self?.saveCapture(item) }),
                     .init(title:"-",run:{}),.init(title:"Delete",run:{ [weak self] in self?.confirm("Delete this capture?",message:"This permanently deletes the file.") { [weak self] in
                         self?.viewModel.pendingCaptureDelete = id; self?.viewModel.deleteCaptureConfirmed(); self?.renderRows()
@@ -482,11 +505,13 @@ extension LibraryPanelView {
             let url = file.url
             let open: () -> Void = { NSWorkspace.shared.open(url) }
             return LibraryRowItem(id:"file:"+url.path,title:file.name,subtitle:subtitle,kind:"media",day:"",fileURL:url,dragURL:url,activate:open,
-                actions:[.init(title:"Open",run:open),
-                    .init(title:"Copy",run:{ NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([url as NSURL]) }),
+                // The same Arc builder as captures; a folder file hides ("Hide from Arc" → "Hide from Open"), it never deletes.
+                actions:[.init(title:"Open in Preview",run:open)]
+                    + Self.shareActions(url)
+                    + [.init(title:Self.copyTitle(url),run:{ NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([url as NSURL]) }),
                     .init(title:"Show in Finder",run:{ NSWorkspace.shared.activateFileViewerSelecting([url]) }),
                     .init(title:"-",run:{}),
-                    .init(title:"Hide from Library",run:{ [weak self] in folders.hide(file); self?.renderRows() })])
+                    .init(title:"Hide from Open",run:{ [weak self] in folders.hide(file); self?.renderRows() })])
           }
         }
     }
