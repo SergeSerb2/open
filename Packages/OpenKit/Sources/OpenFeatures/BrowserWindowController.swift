@@ -232,10 +232,23 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// The hint's one pending deadline (fade-out, then removal); a work item, not a timer.
     private var hintWork: DispatchWorkItem?
     /// Hover Previews of folders, pinned tabs, and Favorites (completion §3.6, A2).
-    public private(set) lazy var hoverPreview = HoverPreviewController(root: root, container: container, factory: factory, context: context) { [weak self] id in
-        guard let self, let space = self.context.focusedSpace else { return }
-        _ = self.sidebar(self.sidebar, didRequest: .select(nodeID: id, space: space.id))
-    }
+    public private(set) lazy var hoverPreview: HoverPreviewController = {
+        let preview = HoverPreviewController(root: root, container: container, factory: factory, context: context) { [weak self] id in
+            guard let self, let space = self.context.focusedSpace else { return }
+            _ = self.sidebar(self.sidebar, didRequest: .select(nodeID: id, space: space.id))
+        }
+        // A Peek shows over its selected source row; a Pinned source is selected first (a Favorite
+        // source is visible in its whole Profile). GUESS — capture pending (F2 capture items 9-10).
+        preview.openPeek = { [weak self] url, source in
+            guard let self else { return }
+            let favorite: Bool = if case .favorites? = self.model.parent(of: source) { true } else { false }
+            if !favorite, let space = self.context.focusedSpace {
+                _ = self.sidebar(self.sidebar, didRequest: .select(nodeID: source, space: space.id))
+            }
+            self.peekController.open(url: url, sourceTabID: source)
+        }
+        return preview
+    }()
     /// The delete confirmation sheet currently shown on this window (completion §3.3).
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.

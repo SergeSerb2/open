@@ -31,8 +31,8 @@ extension AppImportRunner {
     let reader = ChromiumProfileReader(directory: sourceProfile.directory)
     if plan.bookmarks || plan.searchSettings {
       progress("Importing your bookmarks…", nil, false)
-      let read = await Task.detached(priority: .utility) { () -> (roots: [ChromiumBookmark], skipped: Int, failure: String?, search: ChromiumSearchEngine?) in
-        var roots: [ChromiumBookmark] = [], skipped = 0, failure: String?
+      let read = await Task.detached(priority: .utility) { () -> (roots: [ImportedBookmark], skipped: Int, failure: String?, search: ChromiumSearchEngine?) in
+        var roots: [ImportedBookmark] = [], skipped = 0, failure: String?
         if plan.bookmarks {
           do { (roots, skipped) = try reader.bookmarks() }
           catch ChromiumProfileReader.ReadError.missing { failure = "Not found" }
