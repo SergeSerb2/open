@@ -121,7 +121,13 @@ gate. The plan ships the acknowledgment; it does not clear the patent risk.
 
 ## Public MPL source location (U-8)
 
-Public MPL source location: UNSET
+Public MPL source location: https://github.com/SergeSerb2/open-releases
+
+Decision (user-approved, 2026-11-12): the development repository stays private. The public repository
+`SergeSerb2/open-releases` holds the release downloads, the update feed (GitHub Pages, `gh-pages`) and, for
+each release, the exact MPL sources listed here (adblock with Open's changes, both PSL snapshots, the psl
+crate's list source). The release lane publishes them there before the first public release and checks
+anonymous access.
 
 The user must choose a public repository or mirror under release plan U-8.
 Publish the exact adblock sources and Open modifications, both Swift PSL
