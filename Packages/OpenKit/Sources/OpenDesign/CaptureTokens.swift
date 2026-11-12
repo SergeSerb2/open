@@ -51,13 +51,19 @@ public enum CaptureMetrics {
     public static let portraitImageHeightFraction: CGFloat = 96.0 / 127.0
     public static let portraitImageFraction: CGFloat = 0.86
     /// Corner radius, shadow blur and shadow y offset as fractions of the canvas width (GUESS).
-    public static let portraitCornerFraction: CGFloat = 0.022
     public static let portraitShadowAlpha: CGFloat = 0.22
     public static let portraitShadowBlurFraction: CGFloat = 0.03
     public static let portraitShadowOffsetFraction: CGFloat = 0.008
     /// Watermark tile: 32 pt in the 239 pt preview, 3.5 pt from the bottom-left corner.
     public static let portraitWatermarkFraction: CGFloat = 32.0 / 239.0
     public static let portraitWatermarkInsetFraction: CGFloat = 3.5 / 239.0
+    /// Tile: white ~15 %, ~8 pt corners on 32 pt (LEAD 13:40).
+    public static let portraitWatermarkTileAlpha: CGFloat = 0.15
+    public static let portraitWatermarkRadiusFraction: CGFloat = 8.0 / 32.0
+    /// Frosted frame around the page card: ~4 pt wide, white ~35 %, ~8 pt outer radius (LEAD 13:40).
+    public static let portraitFrameFraction: CGFloat = 4.0 / 239.0
+    public static let portraitFrameRadiusFraction: CGFloat = 8.0 / 239.0
+    public static let portraitFrameAlpha: CGFloat = 0.35
     // Popover (AX frames of capture `43-pb2-probe/p-1-portrait-ax`, points from its top-left).
     public static let portraitPopoverSize = CGSize(width: 286, height: 246)
     public static let portraitButtonFrame = CGRect(x: 22.6, y: 22.6, width: 240.8, height: 32.8)

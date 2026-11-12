@@ -152,9 +152,9 @@ extension AutomationController {
         state["preview"] = ["width": preview.width, "height": preview.height, "corner": Self.pixel(preview, 2, 2),
           "watermark": Self.pixel(preview, Int(Double(preview.width) * 0.08), preview.height - Int(Double(preview.width) * 0.08))]
         let anchor = page.convert(page.bounds, to: nil)
-        if let frame = capture.portraitPopover?.contentViewController?.view.window?.frame, let window = page.window {
+        if let frame = capture.portraitPopover?.cardFrameInScreen, let window = page.window {
           let pageInScreen = window.convertToScreen(anchor)
-          state["placement"] = ["popoverMaxX": Double(frame.maxX), "popoverMinX": Double(frame.minX), "pageMinX": Double(pageInScreen.minX),
+          state["placement"] = ["side": capture.portraitPopover?.chrome.side == .left ? "left" : "right", "popoverMaxX": Double(frame.maxX), "popoverMinX": Double(frame.minX), "pageMinX": Double(pageInScreen.minX),
             "popoverMidY": Double(frame.midY), "pageMidY": Double(pageInScreen.midY)]
         }
       }

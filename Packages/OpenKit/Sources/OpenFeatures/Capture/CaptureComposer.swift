@@ -171,22 +171,30 @@ public enum CaptureComposer {
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         let canvas = CGRect(origin: .zero, size: layout.canvas)
         drawBackground(in: context, canvas: canvas, page: image, style: style, wallpaper: wallpaper, space: space)
+        // The watermark's tint: the background under the tile, darkened about 30 % (LEAD 13:40).
+        let side = layout.canvas.width * CaptureMetrics.portraitWatermarkFraction, inset = layout.canvas.width * CaptureMetrics.portraitWatermarkInsetFraction
+        let tint = sample(context, x: Int(inset + side / 2), yUp: Int(inset + side / 2), height: canvasHeight).map { ($0.0 * 0.7, $0.1 * 0.7, $0.2 * 0.7) }
         // Core Graphics is bottom-up: flip the image rect's y.
         let rect = CGRect(x: layout.image.minX, y: layout.canvas.height - layout.image.maxY, width: size.width, height: size.height)
-        let radius = layout.canvas.width * CaptureMetrics.portraitCornerFraction
-        let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        // A frosted frame around the page (Arc: about 4 pt in the 239 pt preview, white ~35 %,
+        // outer radius ~8 pt) with a soft shadow.
+        let frameWidth = layout.canvas.width * CaptureMetrics.portraitFrameFraction
+        let outerRadius = layout.canvas.width * CaptureMetrics.portraitFrameRadiusFraction
+        let outer = rect.insetBy(dx: -frameWidth, dy: -frameWidth)
+        let outerPath = CGPath(roundedRect: outer, cornerWidth: outerRadius, cornerHeight: outerRadius, transform: nil)
+        let innerRadius = max(outerRadius - frameWidth, outerRadius * 0.4)
+        let path = CGPath(roundedRect: rect, cornerWidth: innerRadius, cornerHeight: innerRadius, transform: nil)
         context.saveGState()
         context.setShadow(offset: CGSize(width: 0, height: -layout.canvas.width * CaptureMetrics.portraitShadowOffsetFraction),
                           blur: layout.canvas.width * CaptureMetrics.portraitShadowBlurFraction,
                           color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: CaptureMetrics.portraitShadowAlpha))
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        context.addPath(outerPath); context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: CaptureMetrics.portraitFrameAlpha)); context.fillPath()
         context.addPath(path); context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)); context.fillPath()
+        context.endTransparencyLayer()
         context.restoreGState()
         context.saveGState(); context.addPath(path); context.clip(); context.draw(image, in: rect); context.restoreGState()
-        // A light frame around the page card (the capture's pale rim; GUESS width).
-        context.saveGState(); context.addPath(path)
-        context.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.35)); context.setLineWidth(max(1, layout.canvas.width * 0.006)); context.strokePath()
-        context.restoreGState()
-        if !style.hidesWatermark { drawWatermark(in: context, canvas: canvas) }
+        if !style.hidesWatermark { drawWatermark(in: context, canvas: canvas, tint: tint ?? (0.25, 0.25, 0.3)) }
         return context.makeImage()
     }
 
@@ -209,25 +217,34 @@ public enum CaptureComposer {
         context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: canvas.height), end: CGPoint(x: canvas.width, y: 0), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
     }
 
-    /// Open's watermark: our doorway-and-sun mark on a translucent rounded tile at the bottom left
-    /// (Arc's tile: 32 pt in a 239 pt preview, inset 3.5 pt; its mark is Arc's own and not used).
-    static func drawWatermark(in context: CGContext, canvas: CGRect) {
+    /// One pixel of an RGBA bitmap context (x from the left, y from the bottom), 0…1.
+    static func sample(_ context: CGContext, x: Int, yUp: Int, height: Int) -> (Double, Double, Double)? {
+        guard let data = context.data, x >= 0, x < context.width, yUp >= 0, yUp < height else { return nil }
+        let row = height - 1 - yUp, bytes = data.bindMemory(to: UInt8.self, capacity: context.bytesPerRow * height)
+        let i = row * context.bytesPerRow + x * 4
+        return (Double(bytes[i]) / 255, Double(bytes[i + 1]) / 255, Double(bytes[i + 2]) / 255)
+    }
+
+    /// Open's watermark: our doorway-and-sun mark, MONOCHROME in the background's darkened colour,
+    /// on a white ~15 % tile with ~8 pt corners at the bottom left (Arc's tile: 32 pt in a 239 pt
+    /// preview, inset 3.5 pt; Arc's mark itself is not used).
+    static func drawWatermark(in context: CGContext, canvas: CGRect, tint: (Double, Double, Double)) {
         let side = canvas.width * CaptureMetrics.portraitWatermarkFraction, inset = canvas.width * CaptureMetrics.portraitWatermarkInsetFraction
         let tile = CGRect(x: inset, y: inset, width: side, height: side)
+        let radius = side * CaptureMetrics.portraitWatermarkRadiusFraction
         context.saveGState()
-        context.addPath(CGPath(roundedRect: tile, cornerWidth: side * 0.25, cornerHeight: side * 0.25, transform: nil))
-        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.22)); context.fillPath()
-        // The doorway: 168 × 248 proportions, centred in the tile.
+        context.addPath(CGPath(roundedRect: tile, cornerWidth: radius, cornerHeight: radius, transform: nil))
+        context.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: CaptureMetrics.portraitWatermarkTileAlpha)); context.fillPath()
+        // The doorway (168 × 248 proportions) with the sun cut out of it, one colour.
         let h = side * 0.62, w = h * 168 / 248
         let door = CGRect(x: tile.midX - w / 2, y: tile.midY - h / 2, width: w, height: h)
-        let path = OpenMarkPath.doorway(in: door)
-        context.addPath(path); context.setFillColor(CGColor(srgbRed: 1, green: 0.773, blue: 0.431, alpha: 0.95)); context.fillPath()
-        context.addPath(path); context.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.95))
-        context.setLineWidth(max(1, w * 0.06)); context.strokePath()
-        // The sun: a pale disc at the upper right of the doorway.
         let r = w * 0.17
-        context.setFillColor(CGColor(srgbRed: 1, green: 0.945, blue: 0.839, alpha: 1))
-        context.fillEllipse(in: CGRect(x: door.maxX - w * 0.29 - r, y: door.maxY - h * 0.30 - r, width: r * 2, height: r * 2))
+        let mark = CGMutablePath()
+        mark.addPath(OpenMarkPath.doorway(in: door))
+        mark.addEllipse(in: CGRect(x: door.maxX - w * 0.29 - r, y: door.maxY - h * 0.30 - r, width: r * 2, height: r * 2))
+        context.addPath(mark)
+        context.setFillColor(CGColor(srgbRed: tint.0, green: tint.1, blue: tint.2, alpha: 1))
+        context.fillPath(using: .evenOdd)
         context.restoreGState()
     }
 

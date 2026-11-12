@@ -93,7 +93,7 @@ public final class CaptureController {
     /// launch. Nil (no access, a dynamic set, a folder) falls back to the website colour.
     public var wallpaperData: (@MainActor () async -> Data?)?
     /// Portrait Mode: the popover while it shows.
-    public private(set) var portraitPopover: NSPopover?
+    public private(set) var portraitPopover: PortraitPopoverPanel?
     public private(set) var portraitView: PortraitCaptureView?
     public private(set) var portraitPreviewCount = 0
     public private(set) var wallpaperReads = 0
@@ -536,13 +536,17 @@ public final class CaptureController {
             self.closePortrait()
             self.capture(.portrait, selection: nil)
         }
-        let controller = NSViewController(); controller.view = view
-        let popover = NSPopover()
-        popover.contentViewController = controller; popover.contentSize = CaptureMetrics.portraitPopoverSize
-        popover.behavior = .transient; popover.animates = !Motion.reducesMotion
+        let popover = PortraitPopoverPanel(content: view)
         let page = target.view
-        let anchor = CGRect(x: 0, y: page.bounds.midY - 1, width: 1, height: 2)
-        popover.show(relativeTo: anchor, of: page, preferredEdge: .minX)
+        // Anchor: the page's sidebar-side edge, vertically centred (capture: it points at the page).
+        if let window = page.window {
+            let edge = window.convertPoint(toScreen: page.convert(CGPoint(x: 0, y: page.bounds.midY), to: nil))
+            popover.show(anchor: edge, in: window)
+        }
+        popover.onClose = { [weak self, weak popover] in
+            guard let self, let popover, self.portraitPopover === popover else { return }
+            self.closePortrait()
+        }
         portraitPopover = popover; portraitView = view; portraitTarget = page
         let token = generation, content = target.content
         portraitWork = Task { @MainActor [weak self] in
@@ -556,7 +560,9 @@ public final class CaptureController {
 
     public func closePortrait() {
         portraitWork?.cancel(); portraitWork = nil
-        portraitPopover?.close(); portraitPopover = nil; portraitView = nil; portraitTarget = nil
+        let popover = portraitPopover; portraitPopover = nil
+        popover?.onClose = nil; popover?.close()
+        portraitView = nil; portraitTarget = nil
         portraitPage = nil
     }
 

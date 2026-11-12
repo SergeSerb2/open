@@ -81,8 +81,6 @@ public final class PortraitCaptureView: NSView {
     public func pick(_ source: PortraitStyle.Source) { var next = style; next.source = source; update(next) }
     @objc private func toggleWatermark() { var next = style; next.hidesWatermark.toggle(); update(next) }
     @objc private func capture() { onCapture?() }
-
-    public override func cancelOperation(_ sender: Any?) { window?.performClose(nil) }
 }
 
 /// The popover's full-width button. White fill, hairline edge (GUESS colours), 16 pt title.

@@ -139,13 +139,20 @@ enum CaptureChecks {
                                           wallpaper: source == .wallpaper ? pagePNG(size: CGSize(width: 400, height: 250), scale: 1, band: 25) : nil)
             image = CaptureComposer.decode(try CaptureComposer.compose(job).png)!
         case "portrait-popover":
+            // The real chrome (the App's panel draws the same view): card, arrow toward the page, shadow.
             let view = PortraitCaptureView(style: .standard)
             let page = CaptureComposer.decode(pagePNG(size: CGSize(width: 640, height: 480), scale: 1))!
             view.preview = CaptureComposer.portrait(page, style: .standard)
-            let root = NSView(frame: CGRect(x: 0, y: 0, width: view.frame.width + 48, height: view.frame.height + 48)); root.wantsLayer = true
-            root.layer?.backgroundColor = (NSApp.appearance?.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                ? NSColor(srgbRed: 0.17, green: 0.17, blue: 0.19, alpha: 1) : NSColor(srgbRed: 0.95, green: 0.95, blue: 0.97, alpha: 1)).cgColor
-            view.setFrameOrigin(CGPoint(x: 24, y: 24)); root.addSubview(view); root.layoutSubtreeIfNeeded()
+            let chrome = PortraitPopoverChrome(content: view)
+            let root = NSView(frame: CGRect(x: 0, y: 0, width: chrome.frame.width + 60, height: chrome.frame.height + 20)); root.wantsLayer = true
+            let dark = NSApp.appearance?.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            // Left: a sidebar-coloured field; right of the arrow: a white page.
+            let sidebar = NSView(frame: CGRect(x: 0, y: 0, width: chrome.frame.width - 24, height: root.frame.height)); sidebar.wantsLayer = true
+            sidebar.layer?.backgroundColor = (dark ? NSColor(srgbRed: 0.16, green: 0.15, blue: 0.2, alpha: 1) : NSColor(srgbRed: 0.88, green: 0.86, blue: 0.94, alpha: 1)).cgColor
+            let pageField = NSView(frame: CGRect(x: chrome.frame.width - 24, y: 0, width: 84, height: root.frame.height)); pageField.wantsLayer = true
+            pageField.layer?.backgroundColor = (dark ? NSColor(white: 0.12, alpha: 1) : NSColor(white: 0.97, alpha: 1)).cgColor
+            root.addSubview(sidebar); root.addSubview(pageField)
+            chrome.setFrameOrigin(CGPoint(x: 0, y: 10)); root.addSubview(chrome); root.layoutSubtreeIfNeeded()
             image = OffscreenRenderer().render(root, scale: scale)
         default: throw CLIError(description: "unknown capture scene \(scene)")
         }
