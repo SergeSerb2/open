@@ -93,6 +93,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// Native Note pages (`open://note/<uuid>`), one per shown Note tab.
   var noteHosts: [ItemID: NoteContentHost] = [:]
   var easelHosts: [ItemID: EaselContentHost] = [:]
+  /// Easel row sheets (save as web page, delete) and the last export path (automation).
+  var easelSavePanel: NSSavePanel?
+  var easelDeleteAlert: NSAlert?
+  var lastEaselExport: String?
   func queueWelcomeDestination(_ id: ItemID, url: URL) { queuedNavigations[id] = url }
   private var developerModeObserver: (any NSObjectProtocol)?
   /// The Capture overlay is up in this window: history swipes pause (§4.4.1).
@@ -791,7 +795,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
-           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .newEasel: return false
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .newEasel, .exportEasel, .deleteEasel: return false
       case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
@@ -819,6 +823,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .openCommandBar(let source): if source == .urlField { focusAddressBar(nil) } else { newTab(nil) }; return true
     case .newTab: newTab(nil); return true
     case .newEasel: return EaselTab.create(in: self) != nil
+    case .exportEasel(let id): return exportEasel(tabID: id)
+    case .deleteEasel(let id): return confirmDeleteEasel(tabID: id)
+    case .rename(let id, let title) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
+      return renameEasel(tabID: id, title: title)
     case .close(let id), .unloadTab(let id):
       guard model.tab(id: id) != nil else { return nil }; closeTab(id: id); return true
     case .unloadFolder(let id):
@@ -866,6 +874,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
         let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
       select(nodeID: tab.id); return true
+    case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
+      return copyEaselLink(tabID: id)
     case .copyLink(let id, let markdown):
       return copyLinks(ids: [id], markdown: markdown)
     case .copyLinks(let ids, let markdown): return copyLinks(ids: ids, markdown: markdown)
@@ -879,7 +889,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .share(let id): return shareSidebarTab(id)
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary:
-      app.settingsPresenter.showLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
+      app.settingsPresenter.toggleLibrary(section: controller.map { app.downloadsCenter.opensDownloads(in: $0.context) } == true ? .downloads : nil); return true
     // The content toolbar (commandbar-completion §4.6): the setting is Settings ▸ Advanced's
     // "Show full URL when Toolbar is enabled"; every window follows it (AppDelegate's defaults observer).
     case .setShowFullURL(let full): app.settingsPresenter.settings.set(full, for: AppCommand.showFullURLKey); app.applyToolbarSettings(); return true
@@ -1062,6 +1072,8 @@ extension EngineWebContentHostFactory {
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
+    // An Easel's own address (Copy Link) opens that Easel.
+    if let document = EaselTab.documentID(url) { showEasel(documentID: document); return }
     // Welcome is created by the hand-off or Help only; arbitrary internal routes
     // typed in the command bar never reach a page or a system URL handler.
     guard !WelcomeTab.isInternal(url) else { return }

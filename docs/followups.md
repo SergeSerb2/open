@@ -392,7 +392,7 @@ User-operated Arc captures are still needed for the editor layout and destinatio
 
 ## Section 12 Boost App runtime limits
 
-- PR #277 review F6: harden `AppBoostPickerMessage.validSelector` with a
+- **Closed (PB1):** PR #277 review F6 is done: `AppBoostPickerMessage.validSelector` now runs the quote/escape-aware scan described below (e2e `boost_zap` Z7 refuses six breakout shapes and accepts a quoted value with `{`, `;` and `/*`). Original note: harden `AppBoostPickerMessage.validSelector` with a
   quote/escape-aware scan that rejects CSS structure characters (`{`, `}`, `;`),
   comment starts (`/*`) and newlines outside quoted attribute strings. Preserve
   legitimate quoted values. Both current CSS consumers call `querySelector`

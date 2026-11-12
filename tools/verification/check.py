@@ -995,6 +995,11 @@ def main():
                 matches(r"^FP10 PASS$", bench)
             else:
                 print("FP10 separate performance gate: run heavy.sh tools/verification/folder-peek-bench.py; set SIDEBAR_FOLDER_PEEK_PERF=1 for this strict dispatcher gate")
+    elif name == "sidebar-theme-roles":
+        # Arc 1.172.2 role numbers (capture session 3); offscreen, no display key.
+        text = run(str(root / "Packages/OpenKit/.build/release/sidebar-render"), "theme-roles",
+                   "--ref", str(root / "tools/verification/sidebar-theme-roles.json"))
+        matches(r"sidebar-render theme-roles: [1-9]\d* passed, 0 failed", text)
     elif name == "sidebar-compare":
         args = [str(root / "tools/verification/sidebar-compare-states.sh")]
         if os.environ.get("SIDEBAR_CAPTURE_ROOT"):

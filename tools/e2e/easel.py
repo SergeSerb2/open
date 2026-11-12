@@ -65,7 +65,8 @@ def run(factory, results, tmp, api):
 
     # Per-tool colours are a user preference (Arc's rectangleColor & co.): start from the defaults.
     domain = 'io.github.sergeserb2.open'
-    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')]
+    color_keys = ['open.easel.color.' + k for k in ('rectangle', 'circle', 'arrow', 'freehand')] \
+        + ['open.easel.liveWebCardEduSeen', 'open.easel.useAlignmentGuides', 'libraryShowsEasels']
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     saved_prefs = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     for key in color_keys:
@@ -345,7 +346,7 @@ def run(factory, results, tmp, api):
             # E26: Capture → Easel. The card offers Add to Easel; its menu lists New Easel and
             # each Easel; a row adds the capture as a web card and selects that Easel.
             page = api.new_tab(app, origin + '/page.html')
-            r = app.call('capture', mode='area', rect=[40, 40, 200, 120])
+            r = app.call('capture', mode='area', rect=[0, 0, 400, 240])
             actions = r['state'].get('card', {}).get('actions', [])
             rows = app.call('easel', action='capture-menu')
             target_title = easel(tab=e2)['tabTitle']
@@ -370,8 +371,207 @@ def run(factory, results, tmp, api):
             fresh = easel()
             record('E27_capture_new_easel', len(app.call('tabs')) == count + 1 and fresh['tabTitle'] == 'Untitled Easel'
                    and [x['kind'] for x in objects(fresh)] == ['webCard'], state={k: v for k, v in fresh.items() if k != 'canvas'})
+
+            # ---- E3: live web cards ----
+            app.call('select', tab=e2)
+            api.wait_until(lambda: easel(tab=e2).get('shown') or None, timeout=5, step=.1)
+            card = next(x for x in objects(easel(tab=e2)) if x['kind'] == 'webCard')
+            f = card['frame']; mid = [f[0] + f[2] / 2, f[1] + f[3] / 2]
+            menu = easel(action='menu', at=mid, tab=e2)
+            easel(action='menu', at=mid, item='Show Live Website', tab=e2)
+            sheet = easel(action='sheet', tab=e2)
+            easel(action='sheet', press='Show Live Website', tab=e2)
+            s = api.wait_until(lambda: (lambda x: x if x['livePages'] == 1 else None)(easel(tab=e2)), timeout=8, step=.1)
+            live = next(x for x in objects(s) if x['id'] == card['id']) if s else {}
+            record('E29_live_card', 'Show Live Website' in menu and 'Open Page in New Tab' in menu and sheet.get('shown')
+                   and sheet['buttons'][:2] == ['Show Live Website', 'Cancel'] and live.get('live') and live.get('liveAttached'),
+                   menu=menu, sheet=sheet, card=live)
+            time.sleep(1.5)
+            snapshot('e29-live-card-light')
+            app.call('appearance', name='dark'); time.sleep(.5)
+            snapshot('e29-live-card-dark')
+            app.call('appearance', name='light')
+            # E30: at most three live pages per canvas.
+            for _ in range(3):
+                easel(action='menu', at=mid, item='Duplicate', tab=e2)
+            s = easel(tab=e2)
+            lives = [x for x in objects(s) if x['kind'] == 'webCard' and x.get('live')]
+            record('E30_live_pool_cap', len(lives) == 4 and s['livePages'] == 3 and canvas(s)['liveCount'] == 3
+                   and sum(1 for x in lives if x['liveAttached']) == 3, livePages=s['livePages'], made=s['livePagesMade'])
+            # E31: a hidden Easel releases every live page; showing it again brings them back.
+            app.call('select', tab=page)
+            hidden = easel(tab=e2)
+            app.call('select', tab=e2)
+            shown = api.wait_until(lambda: (lambda x: x if x['livePages'] == 3 else None)(easel(tab=e2)), timeout=8, step=.1)
+            record('E31_live_release_when_hidden', hidden['livePages'] == 0 and shown, hidden=hidden['livePages'])
+            # E32: back to the screenshot (no question the second time).
+            # Duplicates sit 20 pt down-right of each other: each card's top-left corner is its own.
+            for x in [x for x in objects(easel(tab=e2)) if x['kind'] == 'webCard' and x.get('live')]:
+                g = x['frame']; easel(action='menu', at=[g[0] + 6, g[1] + 6], item='Show Screenshot', tab=e2)
+            s = easel(tab=e2)
+            record('E32_show_screenshot', s['livePages'] == 0 and not any(x.get('live') for x in objects(s) if x['kind'] == 'webCard'),
+                   livePages=s['livePages'])
+            # E33: Open Page in New Tab opens the captured page in a web tab.
+            count = len(app.call('tabs'))
+            easel(action='menu', at=mid, item='Open Page in New Tab', tab=e2)
+            tabs = app.call('tabs')
+            record('E33_open_page', len(tabs) == count + 1 and tabs[0]['url'] == origin + '/page.html', first=tabs[0])
+
+            # ---- E4: row menu, rename, export, delete ----
+            rows = easel(action='row-menu', tab=e2)
+            record('E34_row_menu', rows == ['Copy Link', 'Save as Web Page…', '—', 'Change Icon…', 'Rename…', '—', 'Add Split View',
+                                            'Move to ▸', '—', 'Remove Easel from Sidebar', 'Delete Easel'], rows=rows)
+            app.call('sidebar-menu', node=e2, item='Copy Link')
+            copied = subprocess.run(['/usr/bin/pbpaste'], capture_output=True, text=True).stdout
+            record('E34b_copy_link', copied == easel(tab=e2)['url'], copied=copied)
+            s = easel(action='rename', text='Board two', tab=e2)
+            record('E35_rename_syncs_title', s['tabTitle'] == 'Board two' and canvas(s)['title'] == 'Board two'
+                   and canvas(s)['titleFieldText'] == 'Board two', state={k: v for k, v in s.items() if k != 'canvas'})
+            app.call('sidebar-menu', node=e2, item='Save as Web Page…')
+            panel = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', cancel=True)
+            out = Path(tmp) / 'export-one'
+            easel(action='export', path=str(out), tab=e2)
+            exported = json.loads((out / 'easel.json').read_text()) if (out / 'easel.json').exists() else {}
+            current = objects(easel(tab=e2))
+            used = sorted({x['file'] for x in current if x.get('file')})
+            files_ok = all((out / 'images' / f).exists() for f in used)
+            viewer = api.new_tab(app, (out / 'index.html').as_uri())
+            drawn = app.eval(viewer, "document.querySelectorAll('#page .o').length")
+            heading = app.eval(viewer, "document.getElementById('title').textContent")
+            record('E36_save_as_web_page', panel and panel['isSavePanel'] and panel['message'] == 'Save this Easel as a web page you can open anywhere.'
+                   and exported.get('title') == 'Board two' and len(exported.get('objects', [])) == len(current)
+                   and all(0 <= o['frame']['x'] <= 1 for o in exported.get('objects', [])) and files_ok
+                   and drawn == len(current) and heading == 'Board two', drawn=drawn, objects=len(current), used=used)
+            app.call('close', tab=viewer)
+            all_out = Path(tmp) / 'export-all'
+            result = app.call('easel', action='export-all', path=str(all_out))
+            easel_tabs = [t for t in app.call('tabs') if t['url'].startswith('open://easel/')]
+            index = (all_out / 'index.html').read_text() if (all_out / 'index.html').exists() else ''
+            # Export All covers every Easel document, also those whose row was archived (E04).
+            record('E37_export_all', result['count'] >= len(easel_tabs) and not result['failures']
+                   and 'Board%20two/index.html' in index and (all_out / 'Board two' / 'easel.json').exists(), result=result,
+                   tabs=len(easel_tabs))
+            folder = Path(app.call('easel', action='store', document=easel(tab=e2)['document'])['path']).parent
+            app.call('sidebar-menu', node=e2, item='Delete Easel')
+            alert = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', press='Delete')
+            gone = api.wait_until(lambda: all(t['id'] != e2 for t in app.call('tabs')) or None, timeout=5, step=.1)
+            record('E38_delete_easel', alert and 'Are you sure you want to delete this Easel?' in alert['texts']
+                   and 'Doing so will delete the Easel permanently.' in alert['texts'] and sorted(alert['buttons']) == ['Cancel', 'Delete']
+                   and gone and not folder.exists(), alert=alert, folderExists=folder.exists())
+
+            # ---- I1: Arc "Export All Easels" folder → Open Easels ----
+            export = Path(tmp) / 'Arc Easels - synthetic'
+            def easel_json(folder, doc):
+                (export / folder).mkdir(parents=True, exist_ok=True)
+                (export / folder / 'easel.json').write_text(json.dumps(doc))
+            (export / 'Board A' / 'images').mkdir(parents=True, exist_ok=True)
+            make_png(export / 'Board A' / 'images' / 'pic.png', 300, 200, (10, 160, 90))
+            easel_json('Board A', {'formatVersion': 1, 'id': 'arc-easel-a', 'title': 'Board A', 'palette': 'chill',
+                'exportedAt': '2026-11-01T10:00:00Z', 'objects': [
+                {'id': '11111111-0000-4000-8000-000000000001', 'frame': {'x': .1, 'y': .2, 'width': .3, 'height': .05}, 'zIndex': 1,
+                 'content': {'type': 'text', 'string': 'Hello from Arc', 'fontFamily': 'mono', 'paragraphStyle': 'h2'}},
+                {'id': '11111111-0000-4000-8000-000000000002', 'frame': {'x': .5, 'y': .2, 'width': .2, 'height': .1}, 'zIndex': 2,
+                 'content': {'type': 'shape', 'kind': 'rectangle', 'color': 'purple'}},
+                {'id': '11111111-0000-4000-8000-000000000003', 'frame': {'x': .1, 'y': .4, 'width': .3, 'height': .2}, 'zIndex': 3,
+                 'content': {'type': 'image', 'src': 'images/pic.png', 'size': {'width': 300, 'height': 200}}},
+                {'id': '11111111-0000-4000-8000-000000000004', 'frame': {'x': .5, 'y': .4, 'width': .3, 'height': .2}, 'zIndex': 4,
+                 'content': {'type': 'webCard', 'url': 'https://example.com/a', 'title': 'Example', 'image': 'images/pic.png'}},
+                {'id': '11111111-0000-4000-8000-000000000005', 'frame': {'x': .1, 'y': .7, 'width': .3, 'height': .07}, 'zIndex': 5,
+                 'content': {'type': 'link', 'source': 'https://example.org/', 'title': 'Org', 'description': 'An example'}},
+                {'id': '11111111-0000-4000-8000-000000000006', 'frame': {'x': .5, 'y': .7, 'width': .3, 'height': .2}, 'zIndex': 6,
+                 'content': {'type': 'browser', 'url': 'https://example.net/'}},
+                {'id': '11111111-0000-4000-8000-000000000007', 'frame': {'x': .1, 'y': .9, 'width': .3, 'height': .05}, 'zIndex': 7,
+                 'content': {'type': 'richText', 'text': 'Rich words', 'formats': []}},
+                {'id': '11111111-0000-4000-8000-000000000008', 'frame': {'x': .1, 'y': 1.0, 'width': .3, 'height': .05}, 'zIndex': 8,
+                 'content': {'type': 'hologram'}}]})
+            easel_json('Board B', {'formatVersion': 1, 'id': 'arc-easel-b', 'title': 'Board B', 'palette': 'vibrant', 'objects': []})
+            easel_json('From the future', {'formatVersion': 9, 'id': 'arc-easel-c', 'title': 'Future', 'objects': []})
+            easel_json('Escape', {'formatVersion': 1, 'id': 'arc-easel-d', 'title': 'Escape', 'objects': [
+                {'id': '11111111-0000-4000-8000-000000000009', 'frame': {'x': .1, 'y': .1, 'width': .1, 'height': .1}, 'zIndex': 1,
+                 'content': {'type': 'image', 'src': '../Board A/images/pic.png'}}]})
+            count = len(app.call('tabs'))
+            first_import = app.call('easel', action='import-arc-export', path=str(export))
+            tabs = app.call('tabs')
+            titles = [t['title'] for t in tabs[:4]]
+            record('I01_import_counts', first_import['imported'] == 3 and first_import['newRows'] == 3
+                   and len(first_import['skipped']) == 1 and 'From the future' in first_import['skipped'][0]
+                   and first_import['droppedObjects'] == 2 and len(tabs) == count + 3
+                   and {'Board A', 'Board B', 'Escape'} <= set(titles), result=first_import, titles=titles)
+            a_id = app.call('easel', action='document-id', arcID='arc-easel-a')
+            board_a = next(t for t in tabs if t['url'] == 'open://easel/' + a_id)
+            app.call('select', tab=board_a['id'])
+            s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=board_a['id'])), timeout=8, step=.1)
+            got = [(x['kind'], x.get('text') or x.get('url') or x.get('color') or x.get('file')) for x in objects(s)] if s else []
+            text = next((x for x in objects(s) if x['kind'] == 'text'), {}) if s else {}
+            record('I02_import_content', s and [k for k, _ in got] == ['text', 'rectangle', 'image', 'webCard', 'link', 'link', 'text']
+                   and close(text.get('frame', [0] * 4), [100, 200, 300, 50]) and text.get('fontFamily') == 'mono'
+                   and text.get('paragraphStyle') == 'h2' and canvas(s)['palette'] == 'chill' and canvas(s)['title'] == 'Board A'
+                   and len(s['imageFiles']) == 1, got=got)
+            again = app.call('easel', action='import-arc-export', path=str(export))
+            archive = Path(tmp) / 'arc-easels.zip'
+            subprocess.run(['/usr/bin/ditto', '-c', '-k', '--keepParent', str(export), str(archive)], check=True)
+            zipped = app.call('easel', action='import-arc-export', path=str(archive))
+            record('I03_reimport_and_zip', again['imported'] == 3 and again['newRows'] == 0 and zipped['imported'] == 3
+                   and zipped['newRows'] == 0 and len(app.call('tabs')) == count + 3, again=again, zipped=zipped)
+
+            # ---- Library › Easels ----
+            def library(**kw):
+                return app.call('library', **kw)
+            board_b = next(t for t in app.call('tabs') if t['url'] == 'open://easel/' + app.call('easel', action='document-id', arcID='arc-easel-b'))
+            app.call('close', tab=board_b['id'])   # archived row: the Easel stays in the Library
+            library(action='open', section='easels')
+            lib = api.wait_until(lambda: (lambda x: x if x.get('section') == 'easels' and x['easels']['items'] and x.get('rows') else None)(library()), timeout=8, step=.2)
+            rows = {r.get('title'): r for r in (lib or {}).get('rows', [])}
+            record('L01_library_easels_page', lib and 'easels' in [t['id'] for t in lib['rail']] and lib['easels']['cardVisible']
+                   and lib['easels']['cardTitle'] == 'Your Easels are yours to keep' and lib['easels']['exportTitle'] == 'Export All Easels →'
+                   and {'Board A', 'Board B'} <= set(rows) and lib['easels']['items'] == len(lib['rows']),
+                   easels=(lib or {}).get('easels'), titles=sorted(rows))
+            time.sleep(.6)   # thumbnails draw on the next turn
+            snapshot('l01-library-easels-light')
+            app.call('appearance', name='dark'); time.sleep(.6)
+            snapshot('l01-library-easels-dark')
+            app.call('appearance', name='light')
+            b_row = rows.get('Board B', {}).get('id', '')
+            menu = library(action='row-menu', id=b_row)['items'] if b_row else []
+            library(action='row-action', id=b_row, name='open')
+            opened = api.wait_until(lambda: (lambda x: x if x.get('shown') and x['tabTitle'] == 'Board B' else None)(easel()), timeout=8, step=.2)
+            record('L02_open_easel_without_row', [m['title'] for m in menu] == ['Delete'] and opened and not library()['open'],
+                   menu=menu, opened={k: v for k, v in (opened or {}).items() if k != 'canvas'})
+            library(action='open', section='easels')
+            api.wait_until(lambda: library().get('easels', {}).get('items') or None, timeout=8, step=.2)
+            library(action='easels-export')
+            sheet = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            archive_out = Path(tmp) / 'library-export.zip'
+            library(action='save-panel', path=str(archive_out))
+            exported = api.wait_until(lambda: archive_out.exists() and archive_out.stat().st_size > 0 or None, timeout=20, step=.2)
+            listing = subprocess.run(['/usr/bin/zipinfo', '-1', str(archive_out)], capture_output=True, text=True).stdout if exported else ''
+            record('L03_export_all_archive', sheet and sheet['isSavePanel']
+                   and sheet['message'] == 'Save an archive of all your Easels as web pages you can open anywhere.'
+                   and exported and '/Board A/index.html' in listing and '/index.html' in listing, sheet=sheet, entries=listing.count('\n'))
+            lib = library()
+            before = lib['easels']['items']
+            a_row = next(r['id'] for r in lib['rows'] if r.get('title') == 'Board A')
+            a_folder = Path(app.call('easel', action='store', document=a_row)['path']).parent
+            library(action='row-menu', id=a_row, select='Delete')
+            alert = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', press='Delete')
+            after = api.wait_until(lambda: (lambda x: x if x['easels']['items'] == before - 1 else None)(library()), timeout=8, step=.2)
+            record('L04_library_delete', alert and 'Are you sure you want to delete this Easel?' in alert['texts'] and after
+                   and not a_folder.exists() and all(t['url'] != 'open://easel/' + a_row for t in app.call('tabs')),
+                   before=before, after=(after or {}).get('easels'))
+            library(action='close')
         finally:
             server.shutdown()
+        # L05: a profile with no Easels shows the empty state (docs/re/easels.md copy).
+        app.quit(); app = None
+        app = factory(urls=('about:blank',), fresh=True)
+        app.call('library', action='open', section='easels')
+        empty = api.wait_until(lambda: (lambda x: x if x.get('section') == 'easels' and x.get('emptyVisible') else None)(app.call('library')), timeout=8, step=.2)
+        record('L05_library_empty', empty and empty['emptyState']['title'] == 'No Easels yet'
+               and empty['emptyState']['body'] == 'Click the + sign in the Sidebar to create a new Easel.' and empty['easels']['cardVisible'],
+               state=(empty or {}).get('emptyState'))
     finally:
         if app:
             app.quit()
@@ -379,4 +579,7 @@ def run(factory, results, tmp, api):
             if saved_prefs.get(key) is None:
                 subprocess.run(['defaults', 'delete', domain, key], capture_output=True)
             else:
-                subprocess.run(['defaults', 'write', domain, key, '-string', saved_prefs[key]], capture_output=True)
+                value = saved_prefs[key]
+                kind = '-bool' if isinstance(value, bool) else '-string'
+                subprocess.run(['defaults', 'write', domain, key, kind, str(value).lower() if isinstance(value, bool) else value],
+                               capture_output=True)

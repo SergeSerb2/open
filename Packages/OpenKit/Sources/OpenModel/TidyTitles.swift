@@ -17,7 +17,6 @@ public enum TidyMatch: Sendable {
 public enum TidyTitle: Sendable { case always(String), removing([String]) }
 
 /// Open-written title rules from sidebar-completion §3.7. No reference-app data is used.
-@MainActor
 public enum TidyTitles {
     public static let sites: [TidySite] = [
         TidySite(host: "mail.google.com", siteName: "Gmail", rules: [
@@ -44,7 +43,7 @@ public enum TidyTitles {
         TidySite(host: "amazon.com", siteName: "Amazon", rules: [TidyRule(match: .any, title: .removing([#"^Amazon\.com ?: ?"#]))])
     ]
 
-    private enum Match {
+    private enum Match: Sendable {
         case any, path(String), fragment(String), pathRegex(NSRegularExpression), fragmentRegex(NSRegularExpression)
         func accepts(path: String, fragment: String) -> Bool {
             switch self {
@@ -56,7 +55,7 @@ public enum TidyTitles {
             }
         }
     }
-    private struct CompiledRule {
+    private struct CompiledRule: Sendable {
         let match: Match
         let fixedTitle: String?
         let removals: [NSRegularExpression]
@@ -87,16 +86,28 @@ public enum TidyTitles {
     }
     private struct Key: Hashable { let title: String; let host: String; let path: String; let fragment: String }
     private static let compiled = Dictionary(uniqueKeysWithValues: sites.map { ($0.host, $0.rules.compactMap(CompiledRule.init)) })
-    private static var cache: [Key: String] = [:]
-    private static var order: [Key] = []
-    private static var next = 0
+    @MainActor private static var cache: [Key: String] = [:]
+    @MainActor private static var order: [Key] = []
+    @MainActor private static var next = 0
 
-    public static func tidy(title: String, url: URL) -> String {
+    @MainActor public static func tidy(title: String, url: URL) -> String {
+        let key = key(title:title,url:url)
+        if let value = cache[key] { return value }
+        let result = tidyUncached(title:title,url:url)
+        if order.count == 512 { cache[order[next]] = nil; order[next] = key; next = (next + 1) % 512 }
+        else { order.append(key) }
+        cache[key] = result
+        return result
+    }
+    private static func key(title:String,url:URL) -> Key {
         var host = (url.host ?? "").lowercased()
         if host.hasPrefix("www.") { host.removeFirst(4) }
-        guard let rules = compiled[host] else { return title }
-        let key = Key(title: title, host: host, path: url.path, fragment: url.fragment ?? "")
-        if let value = cache[key] { return value }
+        return Key(title:title,host:host,path:url.path,fragment:url.fragment ?? "")
+    }
+    /// Immutable rules for provider batches; does not touch the sidebar cache.
+    public static func tidyUncached(title:String,url:URL) -> String {
+        let key = key(title:title,url:url)
+        guard let rules = compiled[key.host] else { return title }
         var result = title
         if let rule = rules.first(where: { $0.match.accepts(path: key.path, fragment: key.fragment) }) {
             if let fixed = rule.fixedTitle { result = fixed }
@@ -108,9 +119,6 @@ public enum TidyTitles {
             }
         }
         if result.isEmpty { result = title }
-        if order.count == 512 { cache[order[next]] = nil; order[next] = key; next = (next + 1) % 512 }
-        else { order.append(key) }
-        cache[key] = result
         return result
     }
 }

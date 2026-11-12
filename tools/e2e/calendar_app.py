@@ -3,6 +3,8 @@
 Calendar data comes from the `calendar` fixture source (no macOS Calendar prompt on test machines). Every join
 link resolves to nothing (host-resolver rules), so no run touches a real meeting service.
 """
+import json
+import subprocess
 import time
 
 # Join links never reach the network: every host except localhost resolves to NOTFOUND.
@@ -123,9 +125,13 @@ def run(factory, results, tmp, harness):
         card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq=lambda: cal(action='join-result').get('seq', 0))
         # 6. Live Calendar (L5): a calendar Favorite counts down and reminds.
         live_checks(app, results, wait_until, new_tab, cal)
+
+        # 7. Meet route: the first external Meet link adds Arc's default rule and announces it once.
+        meet_route_checks(app, results, wait_until, cal)
     finally:
         try:
             app.call('defaults', key='open.general.previewsCalendar', value=None)
+            app.call('defaults', key='open.links.didSetDefaultMeetRoute', value=None)
         finally:
             app.quit()
 
@@ -265,3 +271,33 @@ def live_checks(app, results, wait_until, new_tab, cal):
     stopped = at(0)
     results['cal_live_stops_without_favorite'] = {'ok': stopped.get('active') is False and stopped.get('nextFireIn') is None
         and not stopped.get('tiles'), 'state': stopped}
+
+
+def meet_route_checks(app, results, wait_until, cal):
+    app.call('defaults', key='open.links.didSetDefaultMeetRoute', value=None)
+    def rules():
+        with open(app.call('save')) as stream: return json.load(stream).get('routingRules', [])
+    def meet_rules(): return [r for r in rules() if r.get('match') == {'hostEquals': {'_0': 'meet.google.com'}}]
+    def deliver(url): return subprocess.run(['/usr/bin/open', '-a', app.bundle, url], capture_output=True, text=True, timeout=15)
+    def landed(url): return wait_until(lambda: [t for t in app.call('tabs') if t['url'].startswith(url)], timeout=8, step=.05)
+    def meet_toasts(): return [t for t in app.call('toasts')['toasts'] if t['coalescingKey'] == 'meet-route' and not t['exiting']]
+    before = meet_rules()
+    first = 'https://meet.google.com/abc-defg-hij'
+    deliver(first)
+    tab = landed(first)
+    toast = wait_until(meet_toasts, timeout=3, step=.05) or []
+    added = meet_rules()
+    state = cal()
+    second = 'https://meet.google.com/xyz-abcd-efg'
+    deliver(second)
+    landed(second)
+    time.sleep(0.5)
+    again = cal()
+    results['cal_meet_route_first_link'] = {
+        'ok': not before and len(added) == 1 and added[0].get('destination') == {'mostRecentSpace': {}}
+            and bool(tab) and bool(toast) and toast[0]['title'] == 'Meet links now open in your current Space!'
+            and toast[0]['subtitle'] == 'Choose where they open' and state.get('meetRouteDone') is True
+            and state.get('meetRouteAnnounced') == 1,
+        'rules': added, 'toast': toast[:1], 'tab': tab[:1] if tab else tab, 'state': {k: state.get(k) for k in ('meetRouteDone', 'meetRouteAnnounced')}}
+    results['cal_meet_route_once'] = {'ok': again.get('meetRouteAnnounced') == 1 and len(meet_rules()) == 1,
+        'announced': again.get('meetRouteAnnounced'), 'rules': len(meet_rules())}

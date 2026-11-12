@@ -145,6 +145,24 @@ final class AppBoosts: BoostsProvider, ProfileDataOwner {
     guard !isRetired(profileID), app.model.profile(id: profileID) != nil else { return [] }
     return store(for: profileID).allBoosts().map { BoostItemSnapshot(id: $0.id.description, name: $0.name, domain: $0.siteMatch.domain, pathPrefix: $0.siteMatch.pathPrefix, isEnabled: $0.isEnabled) }
   }
+  var libraryBoostsVersion: Int { revision }
+  func libraryBoosts(profileID:ProfileID) async -> [BoostItemSnapshot] {
+    guard !isRetired(profileID), let profile = app.model.profile(id:profileID) else { return [] }
+    let store: BoostStore
+    if let state = profiles[profileID] { store = state.store }
+    else {
+      let candidate = BoostStore(root:app.directories.root,profileID:profileID,fileURL:app.directories.boostsFileURL(for:profile))
+      let values = await Task.detached(priority:.utility) { candidate.load() }.value
+      guard !Task.isCancelled,!isRetired(profileID),app.model.profile(id:profileID) != nil else { return [] }
+      // Another feature may have opened or edited this Profile while the disk
+      // read was suspended. Its store is authoritative in that case.
+      if profiles[profileID] == nil { profiles[profileID] = State(store:candidate,values:values) }
+      store = profiles[profileID]!.store
+    }
+    return await Task.detached(priority:.utility) {
+      store.allBoosts().map { BoostItemSnapshot(id:$0.id.description,name:$0.name,domain:$0.siteMatch.domain,pathPrefix:$0.siteMatch.pathPrefix,isEnabled:$0.isEnabled) }
+    }.value
+  }
   func factory(for id: ItemID) -> EngineWebContentHostFactory? {
     app.hostFactories.values.first { $0.hosts[id] != nil }
   }

@@ -96,7 +96,8 @@ extension AutomationController {
   }
 
   private func calendarState(_ service: CalendarService) async throws -> [String: Any] {
-    var out: [String: Any] = ["access": service.source.access.rawValue, "generation": service.generation]
+    var out: [String: Any] = ["access": service.source.access.rawValue, "generation": service.generation,
+      "meetRouteAnnounced": MeetRoute.announcedForAutomation, "meetRouteDone": UserDefaults.standard.bool(forKey: MeetRoute.doneKey)]
     if let fixture = service.source as? FixtureCalendarSource {
       out["source"] = "fixture"; out["requests"] = fixture.requests; out["queries"] = fixture.queries
     } else {

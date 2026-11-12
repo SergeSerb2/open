@@ -296,6 +296,16 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
     @objc func bringToFront(_ sender: Any?) { canvas.bringToFront() }
     @objc func sendToBack(_ sender: Any?) { canvas.sendToBack() }
     @objc func toggleAlignmentGuides(_ sender: Any?) { EaselSnapping.enabled.toggle() }
+    @objc func toggleLive(_ sender: Any?) {
+        guard canvas.selection.count == 1, let id = canvas.selection.first,
+              case .webCard(let card) = canvas.document.object(id)?.content else { return }
+        canvas.setLive(!card.isLive, for: id)
+    }
+    @objc func openPage(_ sender: Any?) {
+        guard canvas.selection.count == 1, let content = canvas.document.object(canvas.selection[0])?.content else { return }
+        let raw: String? = switch content { case .webCard(let w): w.url; case .link(let l): l.source; default: nil }
+        if let raw, let url = URL(string: raw) { canvas.onOpenURL?(url) }
+    }
     @objc func choosePalette(_ sender: NSMenuItem) {
         if let p = sender.representedObject as? String, let palette = EaselPalette(rawValue: p) { canvas.setPalette(palette) }
     }
@@ -337,10 +347,19 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
         }
         if let id = objectID(at: p) {
             if !canvas.selection.contains(id) { canvas.setSelection([id]) }
-            return Self.menu([item("Bring to Front", #selector(bringToFront(_:))), item("Send to Back", #selector(sendToBack(_:))),
+            var rows: [NSMenuItem] = [item("Bring to Front", #selector(bringToFront(_:))), item("Send to Back", #selector(sendToBack(_:))),
                               item("Delete", #selector(delete(_:))), .separator(),
                               item("Cut", #selector(cut(_:))), item("Copy", #selector(copy(_:))), item("Paste", #selector(paste(_:))),
-                              .separator(), item("Duplicate", #selector(duplicate(_:)))])
+                              .separator(), item("Duplicate", #selector(duplicate(_:)))]
+            // Web and link cards: own rows (titles GUESS — Arc's comment-only rows need capture).
+            switch canvas.document.object(id)?.content {
+            case .webCard(let card)?:
+                rows += [.separator(), item(card.isLive ? "Show Screenshot" : "Show Live Website", #selector(toggleLive(_:))),
+                         item("Open Page in New Tab", #selector(openPage(_:)))]
+            case .link?: rows += [.separator(), item("Open Page in New Tab", #selector(openPage(_:)))]
+            default: break
+            }
+            return Self.menu(rows)
         }
         canvas.setSelection([])
         let palettes = NSMenu(title: "Color Palette")

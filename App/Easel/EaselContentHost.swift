@@ -56,6 +56,9 @@ final class EaselContentHost: WebContentHost {
     canvas.storeImage = { [weak store] data in store?.addImage(data, document: id) }
     canvas.onPickImage = { [weak self] in self?.pickImage() }
     canvas.onLink = { [weak self] url, point in self?.addLink(url, at: point) }
+    canvas.liveViewProvider = { [weak self] objectID, url in self?.livePage(for: objectID, url: url) }
+    canvas.liveViewRelease = { [weak self] objectID in self?.releaseLivePage(objectID) }
+    canvas.onOpenURL = { [weak self] url in _ = self?.owner?.openNewTab(url: url, background: false) }
     canvas.onAddSplit = { [weak self] in
       guard let self, let owner = self.owner else { return }
       owner.controller?.splitController.addEmptyPane()
@@ -82,6 +85,35 @@ final class EaselContentHost: WebContentHost {
     }
   }
   private(set) var openPanel: NSOpenPanel?
+
+  // MARK: Live web cards (pooled engine pages, at most EaselCanvasView.maxLive)
+
+  private(set) var livePages: [UUID: any WebContentHost] = [:]
+  private(set) var livePagesMade = 0
+  /// A page for a live card: an engine page outside the sidebar model (like Peek's), in the
+  /// Easel's Profile. Nil while the engine or Profile is not ready (the card keeps its screenshot).
+  func livePage(for objectID: UUID, url: URL) -> NSView? {
+    if let page = livePages[objectID] { return page.view }
+    guard !closed, livePages.count < EaselCanvasView.maxLive, let owner,
+          let profile = owner.profile(for: tabID),
+          let page = owner.makeHost(tabID: ItemID(), profileID: profile.id, url: nil) else { return nil }
+    livePages[objectID] = page
+    livePagesMade += 1
+    page.view.removeFromSuperview()
+    page.view.isHidden = false
+    // Links inside a live card open in a new tab, not in the card.
+    page.shouldNavigate = { [weak owner] target, _ in
+      guard let owner else { return false }
+      _ = owner.openNewTab(url: target, background: false)
+      return false
+    }
+    page.load(url)
+    return page.view
+  }
+  func releaseLivePage(_ objectID: UUID) {
+    guard let page = livePages.removeValue(forKey: objectID) else { return }
+    page.close()
+  }
   private(set) var pendingLinks = 0
 
   /// A link card appears at once with the address; its title, summary and picture follow.
@@ -115,6 +147,7 @@ final class EaselContentHost: WebContentHost {
   func close() {
     guard !closed else { return }; closed = true
     canvas.commitPendingEdits()
+    for id in Array(livePages.keys) { releaseLivePage(id) }
     owner?.app.easels.flush(wait: false)
     canvas.removeFromSuperview()
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil

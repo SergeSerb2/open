@@ -137,9 +137,13 @@ public struct EaselWebCard: Codable, Equatable, Sendable {
     public var imageFile: String?
     public var faviconFile: String?
     public var capturedAt: Date?
-    public init(url: String, title: String? = nil, imageFile: String? = nil, faviconFile: String? = nil, capturedAt: Date? = nil) {
+    /// Shows the live page instead of the screenshot (Arc's `easel.useLiveWebCard:<id>`).
+    public var live: Bool?
+    public init(url: String, title: String? = nil, imageFile: String? = nil, faviconFile: String? = nil, capturedAt: Date? = nil, live: Bool? = nil) {
         self.url = url; self.title = title; self.imageFile = imageFile; self.faviconFile = faviconFile; self.capturedAt = capturedAt
+        self.live = live
     }
+    public var isLive: Bool { live == true }
 }
 
 public struct EaselLink: Codable, Equatable, Sendable {

@@ -56,6 +56,13 @@ final class AppBoostEditorHost: BoostEditorHost {
   }
   func stopPicker() { pickerStorage?.stop() }
   func publishPickerEvent(_ event: BoostPickerEvent, tabID: ItemID) {
+    // Pick Selector's buttons say "Copy selector for this/related" (Arc BO-20): a validated pick
+    // goes to the general pasteboard; the editor session also inserts it at the CSS caret.
+    if case let .selected(selector, _) = event,
+      boosts.factory(for: tabID)?.controller?.boostEditor?.session?.isSelecting == true {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(selector, forType: .string)
+    }
     for observer in Array(pickerObservers.values) { observer(tabID, event) }
   }
   func observePickerEvents(_ observer: @escaping @MainActor (ItemID, BoostPickerEvent) -> Void) -> SiteControlObservationToken {
