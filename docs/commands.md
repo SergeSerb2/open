@@ -30,7 +30,7 @@ Each command holds: a stable `id` (never rename a shipped id), `title`,
 the rest are alternate carriers, for example Go Back is Cmd+[ and Cmd+Left,
 Zoom In is Cmd++ and Cmd+=, Developer Tools is F12 and Cmd+Opt+I), `scope`,
 `isCustomizable`, `enabledKey`, and `aliases` (command-bar search phrases).
-Out-of-scope Arc commands (Easels, Notes, Arc Max/ChatGPT, Send to Dia,
+Out-of-scope Arc commands (Notes, Arc Max/ChatGPT, Send to Dia,
 account items) stay in the registry with `isReserved = true`. They get no menu
 item, and the conflict checker rejects any active command that takes their keys.
 
@@ -178,6 +178,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `new-incognito-window` | New Incognito Window | Cmd+Shift+N | window | File |
 | `new-little-open-window` | New Little Open Window | Cmd+Opt+N | window | File |
 | `blank-window` | Blank Window | Cmd+Ctrl+N | window | File |
+| `new-easel` | New Easel | Ctrl+Shift+E | window | File |
 | `close-window` | Close Window | Cmd+Shift+W | window | File |
 | `archive-tab` | Archive Tab | Cmd+W | window | File |
 | `restore-last-closed-tab` | Restore Last Closed Tab | Cmd+Shift+T | window | File |
@@ -357,7 +358,6 @@ Go to Tab 1–9 targets come from one model query, `BrowserModel.goToItemTargets
 Reserved (out-of-scope keys):
 - `reserved-new-note` New Note (reserved): Ctrl+Shift+N
 - `reserved-new-note-in-split` New Note in Split (reserved): Ctrl+Opt+N
-- `reserved-new-easel` New Easel (reserved): Ctrl+Shift+E
 - `reserved-new-chatgpt-message` New ChatGPT Message (reserved): Cmd+Opt+G
 - `reserved-send-to-dia` Send to Dia (reserved): —
 - `reserved-view-easels-notes` View Easels & Notes (reserved): —
