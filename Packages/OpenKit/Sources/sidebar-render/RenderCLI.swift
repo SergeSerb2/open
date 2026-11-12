@@ -28,6 +28,7 @@ enum RenderCLI {
         case "sm6-cost": try SM6CostGate.run(rest)
         case "divider-check": try DividerChecks.run(rest)
         case "url-status": try URLStatusChecks.render(rest)
+        case "theme-roles": try ThemeRoleChecks.run(rest)
         default: throw CLIError(description: usage)
         }
     }
@@ -55,6 +56,7 @@ enum RenderCLI {
       sidebar-render compare-media --state row-audible|row-muted --arc FRAME.png --arc-ax AX.json --ours FILE.png --ours-frames FILE.json --out DIR
       sidebar-render check
       sidebar-render url-status --out DIR [--scale 1|2]
+      sidebar-render theme-roles --ref tools/verification/sidebar-theme-roles.json [--table]
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
       sidebar-render sm6-cost [--fail-child-after-host]
     """
@@ -153,6 +155,14 @@ enum RenderCLI {
             func walk(_ nodes: [SidebarNode]) { for case .folder(let f) in nodes { f.applyExpansion(.collapsed); walk(f.children) } }
             for s in model.spaces { walk(s.pinned); walk(s.today) }
         }
+        if let spec = value(args, "--live-tile") {
+            // Look frames only (CAL L5): the first Favorite becomes a Google Calendar tile with this countdown text.
+            guard let tab = context.favoritesProfile?.favorites.first else { throw CLIError(description: "live-tile needs a Favorite") }
+            tab.url = URL(string: "https://calendar.google.com/calendar/u/0/r")!
+            let event = CalendarEvent(id: "e", title: "Design review", start: Date(), end: Date().addingTimeInterval(1800))
+            let link = MeetingLink(service: .meet, url: URL(string: "https://meet.google.com/abc-defg-hij")!)
+            context.liveCalendarTiles = [tab.id: LiveCalendar.TileState(event: event, link: link, phase: .before, subtitle: spec, remind: false)]
+        }
         if let sel = value(args, "--select") {
             guard let id = resolve(sel, context: context), let space = context.focusedSpace else { throw CLIError(description: "no row \(sel)") }
             window.selectedNodeBySpace[space.id] = id
@@ -209,6 +219,14 @@ enum RenderCLI {
                 context.recentPagesSource = { _, _ in empty ? [] : RecentsFixture.rows(site) }
                 options.previewRecents = (tab.id, site)
                 // Look frames in both modes: the Space follows --appearance (default theme).
+                if args.contains("--plain-theme") { space.theme = SpaceTheme() }
+            } else if parts.count == 2, parts[0] == "calendar", let state = CalendarFixture.State(rawValue: String(parts[1])) {
+                // Look frames only: the first Pinned tab becomes a Google Calendar tab with synthetic events.
+                guard let tab = space.pinned.compactMap(\.tab).first else { throw CLIError(description: "calendar preview needs a Pinned tab") }
+                tab.url = URL(string: "https://calendar.google.com/calendar/u/0/r")!
+                tab.customTitle = "Calendar"
+                context.calendarGlance = CalendarFixture.source(state)
+                options.previewCalendar = (tab.id, .google)
                 if args.contains("--plain-theme") { space.theme = SpaceTheme() }
             } else {
                 let folders = (space.pinned + space.today).compactMap(\.folder)
@@ -370,5 +388,34 @@ enum RecentsFixture {
         return titles.enumerated().map { i, title in
             (URL(string: base + "\(100 + i)")!, title, Date().addingTimeInterval(-minutes[i] * 60))
         }
+    }
+}
+
+
+/// Synthetic calendar day for look frames (no user data): "now" is 10:02 today.
+enum CalendarFixture {
+    enum State: String { case join, timeline, access, denied }
+
+    @MainActor static func source(_ state: State) -> CalendarGlanceSource {
+        let day = Calendar.current.startOfDay(for: Date())
+        func at(_ h: Double) -> Date { day.addingTimeInterval(h * 3600) }
+        let now = at(state == .timeline ? 10.5 + 2.0 / 60 : 10 + 2.0 / 60)
+        let blue = [0.27, 0.54, 1.0], green = [0.20, 0.70, 0.40], orange = [0.98, 0.58, 0.20]
+        let events = [
+            CalendarEvent(id: "standup", title: "Standup", start: at(9), end: at(9.25), calendarColor: blue, url: URL(string: "https://meet.google.com/abc-defg-hij")),
+            CalendarEvent(id: "review", title: "Design review", start: at(10 + 5.0 / 60), end: at(10.5 + 5.0 / 60), calendarColor: blue,
+                          notes: "Join Zoom Meeting https://acme.zoom.us/j/81234567890"),
+            CalendarEvent(id: "focus", title: "Focus time", start: at(10.25), end: at(12), calendarColor: green),
+            CalendarEvent(id: "lunch", title: "Lunch", start: at(12), end: at(13), calendarColor: orange),
+            CalendarEvent(id: "planning", title: "Sprint planning", start: at(14), end: at(15), calendarColor: blue,
+                          location: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0"),
+        ]
+        let access: CalendarAccess = switch state {
+        case .join, .timeline: .granted
+        case .access: .notDetermined
+        case .denied: .denied
+        }
+        return CalendarGlanceSource(access: { access }, events: { events }, now: { now },
+                                    requestAccess: { access }, join: { _ in })
     }
 }

@@ -23,6 +23,12 @@ public struct ImportPlan: Sendable {
     public var bookmarks = true
     /// I-6: the source browser's open tabs from its last session.
     public var openTabs = true
+    /// Firefox and Safari (IMF): saved passwords. The toggle on the Choose step is the user's choice;
+    /// Firefox has no Keychain prompt and Safari passwords come from a file the user picked.
+    public var passwords = false
+    public var safariFiles = SafariImportFiles()
+    /// Typed by the user for a Firefox Primary Password. Used once by the reader, cleared after the run, never stored.
+    public var primaryPassword = ""
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
     public var isArc: Bool { source == .arc }
@@ -67,12 +73,15 @@ public extension ImportOutcome {
 
 @MainActor public protocol ImportActions: AnyObject {
     var canImportPasswordsAndCookies: Bool { get }
+    /// Firefox and Safari passwords: the engine can write logins to this Profile.
+    var canImportBrowserPasswords: Bool { get }
     var hasUnfinishedSecretsImport: Bool { get }
     func runImport(plan: ImportPlan) async -> ImportOutcome
     func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult
 }
 public extension ImportActions {
     var canImportPasswordsAndCookies: Bool { false }
+    var canImportBrowserPasswords: Bool { false }
     var hasUnfinishedSecretsImport: Bool { false }
     func installImportedExtension(_ candidate: ImportExtensionCandidate) async -> ImportExtensionInstallResult { .failed("Extension installation is unavailable.") }
 }

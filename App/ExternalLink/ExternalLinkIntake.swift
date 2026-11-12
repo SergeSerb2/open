@@ -25,6 +25,10 @@ final class ExternalLinkIntake {
   private(set) var queuedCount = 0
   private(set) var drainedCount = 0
   var pendingCount: Int { pending.count }
+  /// Runs before each routing decision (Meet's default route, `MeetRoute`); may add a rule.
+  var willRoute: ((URL) -> Void)?
+  /// Runs after a link opened (the Meet route's one-time toast).
+  var didRoute: ((URL) -> Void)?
 
   init(executor: any LinkDestinationExecutor, snapshot: @escaping () -> RoutingSnapshot) {
     self.executor = executor; self.snapshot = snapshot
@@ -59,6 +63,8 @@ final class ExternalLinkIntake {
   private func route(_ request: RoutingRequest, afterBootstrap: Bool = false) {
     // Build inside the loop: executing one queued link changes window order
     // and the most recent Space used to resolve the next queued link.
+    willRoute?(request.url)
+    defer { didRoute?(request.url) }
     let decision = evaluator.evaluate(request, in: snapshot())
     decisionLog.record(decision)
     switch decision.resolved {

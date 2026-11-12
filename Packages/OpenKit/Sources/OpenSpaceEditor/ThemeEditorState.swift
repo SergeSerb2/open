@@ -64,17 +64,9 @@ public struct ThemeEditorState: Equatable, Sendable {
             }
         case .setAppearance(let mode):
             guard mode != appearance else { return }
-            if mode != .automatic {
-                let next = ThemeColorMath.forcedRange(mode)
-                if var value = style {
-                    let key = ThemeColorMath.hsl(ThemeColorMath.toP3(value.keyColor))
-                    let t = min(1, max(0, (key.l - range.lowerBound) / (range.upperBound - range.lowerBound)))
-                    value.keyColor = ThemeColorMath.toExtendedSRGB(ThemeColorMath.rgb(h: key.h, s: key.s,
-                        l: next.lowerBound + t * (next.upperBound - next.lowerBound)))
-                    style = value
-                }
-                range = next
-            }
+            // Arc 1.172.2: the sun and moon keep the key colour (the knob disc measures the
+            // same colour in Light and Dark, 6 of 6 pad cases, D2-report-t0). The mode picks
+            // the window scheme only (`SpaceThemeStyle.init(style:system:)`).
             if style != nil { style?.appearance = mode } else { emptyAppearance = mode }
         case .selectPreset(let index):
             guard SpaceStylePresets.all.indices.contains(index) else { return }

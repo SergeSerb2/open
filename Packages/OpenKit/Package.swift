@@ -5,6 +5,7 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenLibrary", targets: ["OpenLibrary"]),
         .library(name: "OpenOnboarding", targets: ["OpenOnboarding"]),
         .executable(name: "onboarding-render", targets: ["onboarding-render"]),
         .library(name: "OpenExtensionsUI", targets: ["OpenExtensionsUI"]),
@@ -43,6 +44,7 @@ let package = Package(
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenLibrary", dependencies: ["OpenSettings", "OpenSidebar", "OpenDesign", "OpenModel"]),
         .target(name: "OpenOnboarding", dependencies: ["OpenDesign"], resources: [.copy("Resources/Onboarding")], linkerSettings: [.linkedFramework("AVFoundation"), .linkedFramework("CoreAudio")]),
         .executableTarget(name: "onboarding-render", dependencies: ["OpenOnboarding"]),
         .target(name: "OpenExtensionsUI", dependencies: ["OpenModel", "OpenDesign", "OpenWeb"]),
@@ -51,7 +53,7 @@ let package = Package(
         .executableTarget(name: "sitecontrol-render", dependencies: ["OpenSiteControl", "OpenModel", "OpenDesign", "OpenBoosts", "OpenWeb", "OpenExtensionsUI"], resources: [.copy("Fixtures")]),
         .target(name: "OpenMedia", dependencies: ["OpenModel", "OpenWeb"], resources: [.copy("Resources/pip-site-rules.json")]),
         .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport", "OpenOnboarding"]),
-        .executableTarget(name: "settings-preview", dependencies: ["OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
+        .executableTarget(name: "settings-preview", dependencies: ["OpenLibrary", "OpenSidebar", "OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
         .target(name: "OpenModel"),
         .target(name: "OpenFeatures", dependencies: ["OpenLiveData", "OpenSiteControl", "OpenSpaceEditor", "OpenExtensionsUI", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands", "OpenCommandBar"], resources: [.copy("Resources/Sounds")]),
         .executableTarget(name: "features-render", dependencies: ["OpenCommandBar", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenFeatures", "OpenDesign", "OpenSleep", "OpenSidebar", "OpenSettings", "OpenCommands"], sources: ["Scene", "main.swift", "Checks.swift", "SadTabScene.swift", "SaveSheetScenes.swift", "LittleOpenChecks.swift", "LittleOpenScenes.swift", "ToolbarChecks.swift", "PiPScene.swift", "PiPChecks.swift", "FeatureCompare.swift", "OffscreenRenderer.swift", "Compare.swift", "RenderCLI.swift", "SoundChecks.swift", "CompletionChecks.swift", "TabSwitcherChecks.swift", "FaviconChecks.swift", "AutoArchiveChecks.swift", "CaptureChecks.swift", "ToastChecks.swift", "SwipeChecks.swift", "TranslateChecks.swift", "IdleChecks.swift"]),
