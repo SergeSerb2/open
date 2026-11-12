@@ -9,6 +9,10 @@ import OpenSettings
 import OpenOnboarding
 #endif
 
+#if OPEN_AUTOMATION
+// e2e runs keep their preferences in a private domain. First statement: nothing may read a preference before it.
+AutomationPreferences.installIfRequested()
+#endif
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
 LaunchTiming.shared.phase("entry")

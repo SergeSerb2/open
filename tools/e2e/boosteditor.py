@@ -584,7 +584,7 @@ def run(factory, results, tmp, env):
             elif saved:
                 # A relaunch failure must also restore the shared preference keys.
                 for key,value in saved.items():
-                    cmd=["/usr/bin/defaults", "delete" if value is None else "write", "io.github.sergeserb2.open",key]
+                    cmd=["/usr/bin/defaults", "delete" if value is None else "write", __import__('prefs_domain').domain(),key]
                     if value is not None:
                         cmd += ["-bool",str(value).lower()] if isinstance(value,bool) else ["-string",str(value)]
                     subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=value is not None)

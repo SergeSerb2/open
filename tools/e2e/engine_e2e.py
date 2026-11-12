@@ -41,6 +41,9 @@ import time
 import traceback
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import prefs_domain  # this run's private preferences domain; never the user's
+
 # The -I shebang drops this folder from sys.path. Put it first so sibling
 # suites (engine_activation, downloads, extensions_p3, ...) import when the
 # script runs directly.
@@ -322,6 +325,8 @@ class Open:
         self.observation_steps = []
         self.activation_trace = []
         self.focus_tracker = None
+        # Every App this harness launches keeps its preferences in this run's private domain.
+        self.preferences_domain = prefs_domain.domain()
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(extra_env or {})
@@ -5888,6 +5893,7 @@ def profiles_checks(factory, results, tmp, config):
 
     def run_binary(label, **env_extra):
         """One launch of the real app; returns its exit code and output."""
+        prefs_domain.domain()  # exported in os.environ: this launch uses the private preferences domain
         env = dict(os.environ, OPEN_USER_DATA=root, OPEN_E2E_OWNER_PID=str(os.getpid()),
                    OPEN_AUTOMATION_SKIP_MAC_NOTIFICATIONS="1")
         env.update(env_extra)
@@ -8116,7 +8122,7 @@ def littleopen_checks(factory, results, tmp):
     import plistlib
     import uuid
     crashes_before = _open_crash_reports()
-    domain = 'io.github.sergeserb2.open'
+    domain = prefs_domain.domain()
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled',
             'open.links.optionCommandClickLittleOpen', 'open.links.littleOpenNUXSeen',
             'open.links.littleOpenProfileSwitchConfirmed', 'open.sidebar.autoArchiveBannerDismissed', 'open.library.lastSection',
@@ -8697,7 +8703,7 @@ def routing_checks(factory, results, tmp):
     import copy
     import plistlib
     import uuid
-    domain = 'io.github.sergeserb2.open'
+    domain = prefs_domain.domain()
     keys = ('open.links.externalInLittleOpen', 'open.links.littleOpenHotkeyEnabled', 'open.links.littleOpenNUXSeen', 'open.settings.lastPane')
     exported = subprocess.run(['defaults', 'export', domain, '-'], capture_output=True)
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
@@ -12298,9 +12304,9 @@ def page_tools_checks(factory, results, tmp, style):
 
 
 def _restore_defaults(app, saved):
-    """Restores keys of the shared io.github.sergeserb2.open domain through the App, or
+    """Restores keys of this run's private preferences domain through the App, or
     with `defaults` when the App can no longer answer (a crash must not leave keys behind)."""
-    domain = getattr(app, "preferences_domain", "io.github.sergeserb2.open")
+    domain = prefs_domain.domain()
     for key, value in saved.items():
         restored = False
         if app is not None and not app.closed:
@@ -13006,7 +13012,8 @@ def main():
     # Preserve the pre-launch stored values, including absence, across every app
     # and every retry (the Peek suite also launches a second Find/Escape app).
     import plistlib
-    exported = subprocess.run(['defaults', 'export', 'io.github.sergeserb2.open', '-'], capture_output=True)
+    real_before = prefs_domain.real_snapshot()
+    exported = subprocess.run(['defaults', 'export', prefs_domain.domain(), '-'], capture_output=True)
     domain_before = plistlib.loads(exported.stdout) if exported.returncode == 0 else {}
     startup_peek = {key: domain_before.get(key) for key in
                     ('open.links.openPeekShiftClick', 'open.links.openPeekOtherSites')}
@@ -13583,6 +13590,16 @@ def main():
     results["cleanup"] = {"ok": all(instance.quit_report.get("ok") for instance in _OWNED_APPS),
                           "processes": [instance.quit_report for instance in _OWNED_APPS]}
     print("owned_process_cleanup    " + ("PASS" if results["cleanup"]["ok"] else "FAIL"), flush=True)
+    # Test isolation proof: the user's real preferences domain is byte-for-byte what it was before the run.
+    # Key names only in the receipt, never values.
+    real_after = prefs_domain.real_snapshot()
+    def _real_keys(blob):
+        try: return plistlib.loads(blob) if blob else {}
+        except Exception: return {}
+    _before, _after = _real_keys(real_before), _real_keys(real_after)
+    results["preferences"] = {"ok": _before == _after, "domain": prefs_domain.domain(),
+                              "changedRealKeys": sorted(k for k in set(_before) | set(_after) if _before.get(k) != _after.get(k))}
+    print("real_preferences_untouched " + ("PASS" if results["preferences"]["ok"] else "FAIL"), flush=True)
     name = (probe_result_name if opts.only == 'passwords-probe' else
             'results-passwords-m-%s.json' % opts.config.lower() if opts.passwords_m_only else
             "results-actions-p2.json" if opts.only == "actions" else
@@ -13605,7 +13622,7 @@ def main():
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
         if any(v.get('status') in ('NOT_RUN', 'UNVERIFIED') for v in results[opts.only].values()):
             failures.append('probe-incomplete')
-    if failures or not results["cleanup"]["ok"]:
+    if failures or not results["cleanup"]["ok"] or not results["preferences"]["ok"]:
         sys.exit(1)
     if any(isinstance(v, dict) and v.get("status") == "INTERRUPTED" for v in results.get(opts.only, {}).values()):
         sys.exit(2)

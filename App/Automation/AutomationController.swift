@@ -394,6 +394,7 @@
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
           "userData": OEEngine.shared.configuration.userDataDirectory.path,
+          "preferencesDomain": AutomationPreferences.domain,
           "root": app.directories.root.path,
           // Malloc zone names in registration order: with OpenEngine's early
           // delegating zone, PartitionAlloc replaced it in place, so the
@@ -562,7 +563,7 @@
       case "defaults":
         // Reads (and with `value`, writes) one Open preference in this app's own domain.
         guard let key = a["key"] as? String, key.hasPrefix("open.") || ["libraryShowsEasels", "libraryMediaFolderSources"].contains(key) else { throw Failure(message: "unknown defaults domain key") }
-        if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
+        if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: AutomationPreferences.domain)?[key] ?? NSNull() }
         if let value = a["value"] {
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
           app.settingsPresenter.refreshPreferencesIfLoaded()
@@ -570,7 +571,7 @@
           app.scheduleMenuRebuild()
         }
         if a["persistent"] as? Bool == true {
-          return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull()
+          return UserDefaults.standard.persistentDomain(forName: AutomationPreferences.domain)?[key] ?? NSNull()
         }
         return UserDefaults.standard.object(forKey: key) ?? NSNull()
       case "tab-switcher-state":
