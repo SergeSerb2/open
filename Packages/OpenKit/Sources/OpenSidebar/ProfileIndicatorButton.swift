@@ -47,6 +47,6 @@ private final class ProfileIndicatorGlyph:NSView {
         guard let image=NSImage(systemSymbolName:name,accessibilityDescription:nil) else { return }
         let ratio=min(bounds.width/image.size.width,bounds.height/image.size.height)
         let size=CGSize(width:image.size.width*ratio,height:image.size.height*ratio)
-        image.drawTinted(in:CGRect(x:(bounds.width-size.width)/2,y:(bounds.height-size.height)/2,width:size.width,height:size.height),color:SidebarRole.spaceTitle.resolved(context.appearance(for:space)).nsColor)
+        image.drawTinted(in:CGRect(x:(bounds.width-size.width)/2,y:(bounds.height-size.height)/2,width:size.width,height:size.height),color:context.roles(for: space).spaceTitle.nsColor)
     }
 }

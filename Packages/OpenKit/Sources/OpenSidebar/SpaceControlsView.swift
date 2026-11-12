@@ -27,18 +27,18 @@ public final class SpaceControlsView: NSView {
         wantsLayer = true
         grip.onGrab = { [weak self] event in self?.onGrab?(event) }
         grip.tooltip = { [unowned context, space] in Tooltip(title: "Drag to Reorder Space", style: context.style(for: space)) }
-        grip.tint = { [unowned context, space] in SidebarRole.spaceTitle.resolved(context.appearance(for: space)).nsColor }
+        grip.tint = { [unowned context, space] in context.roles(for: space).spaceTitle.nsColor }
         icon.context = context; icon.space = space; icon.emojiSize = 20
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         title.text = { [unowned context, space] in context.title(of: space) }
-        title.color = { [unowned context, space] in SidebarRole.spaceTitle.resolved(context.appearance(for: space)).nsColor }
+        title.color = { [unowned context, space] in context.roles(for: space).spaceTitle.nsColor }
         profile.font = .systemFont(ofSize: 11, weight: .medium)
         profile.inset = 6; profile.baseline = 13
         profile.text = { [unowned context, space] in context.model.profile(id: space.profileID)?.name ?? "" }
         profile.color = title.color
         profile.layer?.cornerRadius = 9
         more.context = context
-        more.glyphTint = { [unowned context, space] _ in SidebarRole.spaceTitle.resolved(context.appearance(for: space)).nsColor }
+        more.glyphTint = { [unowned context, space] _ in context.roles(for: space).spaceTitle.nsColor }
         more.tooltip = { [unowned context, space] in Tooltip(title: "More options", style: context.style(for: space)) }
         more.menuProvider = { [weak self] in self?.makeMenu() }
         profileIndicator.setAccessibilityIdentifier("spaceManagerSpaceHeaderIndicator")
@@ -47,7 +47,7 @@ public final class SpaceControlsView: NSView {
             return SidebarMenus(context:self.context,beginRename:{_ in}).profile(self.space)
         }
         edit.isBordered = false
-        edit.tint = { [unowned context,space] in context.style(for:space).titleColor(context.appearance(for:space)).nsColor.withAlphaComponent(0.55) }
+        edit.tint = { [unowned context,space] in context.roles(for: space).title.nsColor.withAlphaComponent(0.55) }
         libraryMore.tint = edit.tint
         libraryMore.target = self; libraryMore.action = #selector(moreSpace)
         libraryMore.setAccessibilityLabel("More options"); libraryMore.toolTip = "More options"
@@ -71,9 +71,9 @@ public final class SpaceControlsView: NSView {
         if libraryLayout {
             icon.frame = CGRect(x:13,y:12,width:26,height:26)
             title.frame = CGRect(x:44,y:12,width:max(0,bounds.width-86),height:26); title.baseline = 18
-            title.color = { [unowned context, space] in context.style(for:space).titleColor(context.appearance(for:space)).nsColor.withAlphaComponent(0.66) }
+            title.color = { [unowned context, space] in context.roles(for: space).title.nsColor.withAlphaComponent(0.66) }
             edit.frame = CGRect(x:bounds.width-39,y:9,width:30,height:30)
-            edit.contentTintColor = context.style(for:space).titleColor(context.appearance(for:space)).nsColor.withAlphaComponent(0.66)
+            edit.contentTintColor = context.roles(for: space).title.nsColor.withAlphaComponent(0.66)
             grip.frame = CGRect(x:9,y:bounds.height-39,width:30,height:30)
             libraryMore.frame = CGRect(x:bounds.width-39,y:bounds.height-39,width:30,height:30)
             profile.isHidden = true; profileIndicator.isHidden = true
@@ -106,7 +106,7 @@ public final class SpaceControlsView: NSView {
         let field = RenameField(frame:title.frame.insetBy(dx:-2,dy:-1))
         field.stringValue = context.title(of:space); field.font = title.font
         field.isBordered = false; field.drawsBackground = false; field.focusRingType = .none
-        field.textColor = context.style(for:space).titleColor(context.appearance(for:space)).nsColor
+        field.textColor = context.roles(for: space).title.nsColor
         let id = space.id
         field.onEnd = { [weak self,weak field] value in
             let owner = field?.window

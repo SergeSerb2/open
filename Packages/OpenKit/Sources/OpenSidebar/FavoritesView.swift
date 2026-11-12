@@ -314,7 +314,7 @@ final class FavoriteTileView: NSView {
             let space = context.focusedSpace
             return (space.map { context.selectedID(in: $0.id) == tab.id } ?? false, isHovered, space.map(context.style(for:)))
         }) { [weak self] in self?.needsDisplay = true }
-        let appearance = style?.resolvedAppearance(system: context.systemAppearance) ?? context.systemAppearance
+        let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
         CATransaction.begin()
         CATransaction.setDisableActions(!context.animatesChanges)
         CATransaction.setAnimationDuration(selected ? Motion.selectionFade : Motion.hoverFade)
