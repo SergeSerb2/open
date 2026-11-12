@@ -5,6 +5,7 @@ page area's top 40 pt; its nine buttons; the network list records the page's req
 protocol events; a navigation starts a new list; Close and Developer Mode off remove it.
 """
 import http.server
+import os
 import threading
 import time
 
@@ -65,6 +66,12 @@ def run(factory, results, tmp, h):
             return [e for e in next(iter(state().get('logs', {}).get('logs', {}).values()), []) if not e['url'].endswith('/favicon.ico')]
         assert h.wait_until(lambda: any(e['url'].endswith('/missing.json') and e['status'] == 404 for e in entries()), timeout=20, step=.1), entries()
         listed = entries(); shown = state()
+        frames = os.environ.get('OPEN_E2E_DEVMODE_FRAMES')
+        if frames:  # look frames for the lead, not asserted: the real browser window with the bar and the list
+            for mode in ('light', 'dark'):
+                app.call('appearance', name=mode); time.sleep(.8)
+                app.call('snapshot', path=os.path.join(frames, 'devmode-network-%s.png' % mode))
+            app.call('appearance', name='system')
         urls = sorted(e['url'].replace(base, '') for e in listed)
         row('network_list_records_requests', urls == ['/a', '/app.js', '/missing.json', '/pixel.png']
             and {e['url'].replace(base, ''): e['status'] for e in listed} == {'/a': 200, '/app.js': 200, '/missing.json': 404, '/pixel.png': 200}
