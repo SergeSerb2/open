@@ -5,7 +5,13 @@ import OpenWeb
 public enum AutoPiPPolicy {
     public enum LeaveEvent: Sendable {
         case selection, space, split, minimize, occlusion, appHide, appSwitch, close, splitFocus, peek
-        public var isLeave: Bool { switch self { case .selection, .space, .split: true; default: false } }
+        /// D-4 revised (PB1, 2026-11-12): a window that stops being visible (minimize, occlusion
+        /// while Open is inactive, app hide) is a leave. Arc evidence: remote flag
+        /// `autoPictureInPictureOnWindowOccluded`, action `presentPipForOccludedWindow`,
+        /// `WindowResignActiveOcclusionStateCancellable` (strings in Arc 1.170.0 main binary).
+        public var isLeave: Bool {
+            switch self { case .selection, .space, .split, .minimize, .occlusion, .appHide: true; default: false }
+        }
     }
     public enum Decision: Sendable, Equatable {
         case open, alreadyInPictureInPicture, notLeave, settingOff, noPlayingVideo, tooSmall, inaudible, disallowed, hostDisabled, snoozed, manualPiP, videoDisabled, chromiumAutoPiP

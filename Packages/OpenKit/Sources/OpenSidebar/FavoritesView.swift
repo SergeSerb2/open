@@ -1,5 +1,6 @@
 import AppKit
 import OpenDesign
+import OpenLiveData
 import OpenModel
 
 /// Favorites grid: an `NSCollectionView` with a fixed-metric layout
@@ -254,7 +255,15 @@ final class FavoriteTileItem: NSCollectionViewItem {
 @MainActor
 final class FavoriteTileView: NSView {
     weak var context: SidebarContext? { didSet { favicon.context = context } }
-    weak var tab: Tab? { didSet { favicon.tab = tab; needsDisplay = true } }
+    weak var tab: Tab? {
+        didSet {
+            favicon.tab = tab; needsDisplay = true
+            // A calendar Favorite starts Live Calendar (LD §4); the App checks access and never prompts.
+            if let tab, CalendarProvider.match(url: tab.url) != nil { context?.liveCalendar?.tileAppeared(tab.url) }
+        }
+    }
+    /// Live Calendar countdown ("in 5m", "Now", "3m ago"), shown under the icon.
+    private let liveSubtitle = LiveCalendarSubtitleView()
     weak var owner: FavoritesView?
     private let fill = CALayer()
     private let favicon = FaviconView()
@@ -269,6 +278,8 @@ final class FavoriteTileView: NSView {
         fill.cornerCurve = .continuous
         layer?.addSublayer(fill)
         addSubview(favicon)
+        liveSubtitle.isHidden = true
+        addSubview(liveSubtitle)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -289,7 +300,12 @@ final class FavoriteTileView: NSView {
         CATransaction.commit()
         let s = context?.favoriteIconFraction.map { min(bounds.width,bounds.height)*$0 } ?? FavoritesMetrics.iconFrameSize
         favicon.inkSize = context?.favoriteIconFraction == nil ? SpaceListMetrics.faviconInk:s
-        favicon.frame = backingAlignedRect(CGRect(x: (bounds.width - s) / 2, y: (bounds.height - s) / 2, width: s, height: s), options: .alignAllEdgesNearest)
+        // With a countdown the icon moves up and the plate sits under it. GUESS — capture pending (F2 item 7).
+        let iconY = liveSubtitle.isHidden ? (bounds.height - s) / 2 : bounds.height * 0.40 - s / 2
+        favicon.frame = backingAlignedRect(CGRect(x: (bounds.width - s) / 2, y: iconY, width: s, height: s), options: .alignAllEdgesNearest)
+        let plate = liveSubtitle.fittingSize
+        liveSubtitle.frame = backingAlignedRect(CGRect(x: (bounds.width - plate.width) / 2, y: bounds.height - plate.height - 4,
+                                                       width: plate.width, height: plate.height), options: .alignAllEdgesNearest)
     }
 
     override func updateLayer() {
@@ -310,6 +326,12 @@ final class FavoriteTileView: NSView {
             fill.shadowOpacity = 0
         }
         CATransaction.commit()
+        let live = tracked({ context.liveCalendarTiles[tab.id] }) { [weak self] in self?.needsDisplay = true }
+        if liveSubtitle.text != live?.subtitle || liveSubtitle.isHidden != (live == nil) || liveSubtitle.selected != selected {
+            liveSubtitle.text = live?.subtitle ?? ""; liveSubtitle.isHidden = live == nil
+            liveSubtitle.selected = selected; liveSubtitle.dark = appearance == .dark
+            needsLayout = true
+        }
         updateAccessory(hovered: hovered)
     }
 
@@ -376,5 +398,37 @@ final class FavoriteTileView: NSView {
     override func accessibilityPerformPress() -> Bool {
         guard let tab else { return false }
         return context?.send(.selectFavorite(tabID: tab.id)) ?? false
+    }
+}
+
+/// The Live Calendar countdown plate on a calendar Favorite tile. Colors are Arc's asset values
+/// (LD §4, `A:ARC_AppTray`): GCalSubtitleBackgroundSecondary / Selected and GCalSubtitleTextColor*.
+/// Size and font: GUESS — capture pending (F2 item 7).
+@MainActor
+final class LiveCalendarSubtitleView: NSView {
+    var text = "" { didSet { needsDisplay = true; setAccessibilityLabel(text) } }
+    var selected = false { didSet { needsDisplay = true } }
+    var dark = false { didSet { needsDisplay = true } }
+    private static let font = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .semibold)
+    override var isFlipped: Bool { true }
+    override var fittingSize: NSSize {
+        let w = (text as NSString).size(withAttributes: [.font: Self.font]).width
+        return NSSize(width: ceil(w) + 10, height: 13)
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        let fill: NSColor, ink: NSColor
+        if selected {
+            fill = NSColor(srgbRed: 0.963, green: 0.976, blue: 0.996, alpha: 0.90)
+            ink = NSColor(srgbRed: 0.13, green: 0.13, blue: 0.13, alpha: 1)
+        } else if dark {
+            fill = NSColor(white: 1, alpha: 0.07); ink = NSColor(srgbRed: 0.87, green: 0.89, blue: 0.92, alpha: 0.70)
+        } else {
+            fill = NSColor(white: 0, alpha: 0.07); ink = NSColor(srgbRed: 0.13, green: 0.13, blue: 0.13, alpha: 1)
+        }
+        fill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: ink]
+        let size = (text as NSString).size(withAttributes: attrs)
+        (text as NSString).draw(at: CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2), withAttributes: attrs)
     }
 }

@@ -204,11 +204,16 @@ extension AutomationController {
         state["settingsSource"] = wizard.plan.source.importKey
         state["settingsSelectedSource"] = wizard.selectedSourceID
         state["settingsSourcesLoaded"] = wizard.sourcesLoaded
+        state["settingsCanContinueFromSource"] = wizard.canContinueFromSource
+        state["settingsBrowserSecretsEnabled"] = wizard.canImportBrowserSecrets
+        state["settingsExtensions"] = (wizard.outcome?.extensions ?? []).map(\.extensionID)
+        state["settingsSecretsTitle"] = wizard.passwordsCopy.title
         state["settingsSources"] = wizard.sources.map { source -> [String: Any] in
           ["id": source.id, "name": source.name, "family": source.family.rawValue, "selectable": wizard.canSelect(source),
+           "visible": wizard.visibleSources.contains(source),
            "status": wizard.sourceStatus(source) ?? "", "profiles": source.profiles.map { ["id": $0.id, "name": $0.name] }]
         }
-        state["settingsBrowserLabels"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.browserReportCategories.map { ($0, wizard.countLabel($0)) })
+        state["settingsBrowserLabels"] = Dictionary(uniqueKeysWithValues: (ImportWizardViewModel.browserReportCategories + ["Passwords and cookies", "Passwords", "Cookies"]).map { ($0, wizard.countLabel($0)) })
         state["settingsReportSummary"] = wizard.step == .report ? wizard.reportSummary : ""
         state["undoTitle"] = app.undoManager.undoActionName
       }

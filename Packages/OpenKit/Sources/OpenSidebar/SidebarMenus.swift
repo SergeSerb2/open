@@ -1,4 +1,5 @@
 import AppKit
+import OpenLiveData
 import OpenModel
 
 /// A menu item that runs a closure.
@@ -172,7 +173,7 @@ struct SidebarMenus {
     /// Favorite tile. guess: not captured; built from the pinned-tab menu.
     func favorite(_ tab: Tab) -> NSMenu {
         let rename = ClosureMenuItem("Rename…") { [beginRename] in beginRename(tab.id) }
-        return menu([
+        return menu(liveCalendarItems(tab) + [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             share(tab),
             .separator(),
@@ -181,6 +182,35 @@ struct SidebarMenus {
             .separator(),
             item("Remove from Favorites", .removeFavorite(tabID: tab.id)),
         ])
+    }
+
+    /// Live Calendar items of a calendar Favorite (LD §4: "Show Meeting Link" with "Copy Link" and "Dismiss",
+    /// `G:FUN_101d28c10`; the reminder times of `LiveCalendarInterval`). Placement first, then a separator:
+    /// GUESS — capture pending (F2 item 7). Arc picks the reminder time in the reminder card; Open also lists it here.
+    func liveCalendarItems(_ tab: Tab) -> [NSMenuItem] {
+        guard let actions = context.liveCalendar, CalendarProvider.match(url: tab.url) != nil else { return [] }
+        var items: [NSMenuItem] = []
+        if let state = context.liveCalendarTiles[tab.id] {
+            let show = NSMenuItem(title: "Show Meeting Link", action: nil, keyEquivalent: "")
+            let link = NSMenuItem(title: state.link.url.absoluteString, action: nil, keyEquivalent: "")
+            link.isEnabled = false
+            show.submenu = menu([
+                link, .separator(),
+                ClosureMenuItem("Copy Link") { actions.copyLink(state) },
+                ClosureMenuItem("Dismiss") { actions.dismiss(state) },
+            ])
+            items.append(show)
+        }
+        let remind = NSMenuItem(title: "Meeting Reminder", action: nil, keyEquivalent: "")
+        let current = actions.interval()
+        remind.submenu = menu(LiveCalendar.ReminderInterval.allCases.map { interval in
+            let item = ClosureMenuItem(interval.title) { actions.setInterval(interval) }
+            item.state = interval == current ? .on : .off
+            return item
+        })
+        items.append(remind)
+        items.append(.separator())
+        return items
     }
 
     /// Split row. Not captured; the items and their order follow Arc's split-row
@@ -306,6 +336,12 @@ struct SidebarMenus {
             item("New Tab", .newTab),
             item("New Split View", enabled: canSplit, .newSplitView),
             space.map { item("New Folder", .newFolder(in: .spacePinned($0.id))) } ?? .separator(),
+            {
+                // Arc's plus popover row "New Easel ⌃⇧E" (interaction-states.md S2 01).
+                let row = item("New Easel", enabled: !context.isIncognito, .newEasel)
+                row.keyEquivalent = "e"; row.keyEquivalentModifierMask = [.control, .shift]
+                return row
+            }(),
             .separator(),
             item("New Space…", .newSpace),
         ])

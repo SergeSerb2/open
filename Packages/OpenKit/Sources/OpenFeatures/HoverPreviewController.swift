@@ -98,6 +98,19 @@ public final class HoverPreviewController {
             }
             view.onResize = { [weak self] in self?.layout() }
             content = view
+        case .calendar(let provider):
+            guard let source = context.calendarGlance else { return false }
+            let view = CalendarPreviewView(context: context, tab: tab, provider: provider, source: source)
+            view.onOpen = { [weak self] url in
+                self?.hide(animated: false)
+                self?.openPeek?(url, id)
+            }
+            view.onSelectTab = { [weak self] in
+                self?.hide(animated: false)
+                self?.select(id)
+            }
+            view.onResize = { [weak self] in self?.layout() }
+            content = view
         }
         let card = PreviewCardView(content: content, appearance: appearance, clicksSelect: false)
         card.onPointer = { [weak self] inside in self?.context.hoverPreviews.setPointerInsidePreview(inside) }

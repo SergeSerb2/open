@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import OpenEngine
 
 /// View ▸ Appearance ("Websites will use:" Automatic, Light, Dark): one app-wide
@@ -48,6 +48,8 @@ enum WebsiteAppearance {
     }
     UserDefaults.standard.set(value, forKey: defaultsKey)
     applyToLiveContexts()
+    // Arc: "Websites, Easels, and Notes will use:" — native Note pages follow too.
+    (NSApp.delegate as? AppDelegate)?.hostFactories.values.forEach { $0.refreshNoteAppearance() }
     return true
   }
 
