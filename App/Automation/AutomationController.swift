@@ -323,6 +323,7 @@
       case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
         return try await mouse(a, nil)
       case "welcome": return try welcome(a)
+      case "note": return try note(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
       case "engine-activation-state": return try engineActivationState(a)
@@ -1590,6 +1591,7 @@
                 "retained": app.hostFactories.values.reduce(0) { $0 + $1.contents.count },
                 "engineContents": OEEngine.shared.allWebContents.count]
       case "translate": return try await translateCommand(a)
+      case "calendar": return try await calendarCommand(a)
       case "sidebar-unload":
         return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadTab(try modelTab(a, w).id)) == true
       default:

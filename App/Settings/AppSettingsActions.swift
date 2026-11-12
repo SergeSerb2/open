@@ -187,6 +187,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if let spaceManager, spaceManager.context.windowID == id { spaceManager.prepareForPresentation(); return spaceManager }
     let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
     context.storedFavicons = app.stores.sidebarFavicons
+    context.faviconProvider = { tab in NoteTab.matches(tab.url) ? NoteTab.faviconImage : nil }
     context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
     let manager = SpaceManagerView(context: context)
     manager.onIntent = { [weak self, weak context] intent in

@@ -168,9 +168,10 @@ enum AppCommand {
   static let showFullURLKey = "open.advanced.showFullURLWithToolbar"
   static let featureIDs: Set<String> = ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space"]
   static func canonicalID(_ id: String) -> String {
-    ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
+    ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu",
+     "join-next-meeting": "join-meeting", "join-next-video-conference": "join-meeting"][id] ?? id
   }
-  static let implemented: Set<String> = ["new-boost", "edit-boost", "new-legacy-boost", "new-incognito-window", "peek-email", "exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "new-profile", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-passwords", "manage-extensions", "add-extension", "extension-shortcuts", "open-extensions-picker", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-space-icon", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait"]
+  static let implemented: Set<String> = ["new-boost", "edit-boost", "new-legacy-boost", "new-incognito-window", "peek-email", "exit-modal", "new-tab", "open-command-bar", "search-tabs", "search-actions", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "new-profile", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-toolbar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-media", "view-boosts", "manage-passwords", "manage-extensions", "add-extension", "extension-shortcuts", "open-extensions-picker", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space", "manage-spaces", "rename-space", "change-space-icon", "change-profile", "clear-archive", "capture-page", "capture-full-page", "capture-portrait", "new-note", "new-note-in-split"]
 }
 
 import OpenEngine
@@ -202,7 +203,7 @@ extension EngineWebContentHostFactory {
     let id = AppCommand.canonicalID(original)
     if SettingsSuggestionsProvider.url(for: id) != nil { return true }
     if id == "check-for-updates" { return true }
-    if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window"].contains(id) { return false }
+    if isIncognito, ["pin-unpin-tab", "pin-tab", "unpin-tab", "add-to-favorites", "remove-from-favorites", "restore-last-closed-tab", "new-space", "new-folder", "new-profile", "rename-space", "change-space-icon", "change-profile", "clear-archive", "edit-theme", "manage-spaces", "view-library", "view-archive", "view-history", "view-downloads", "view-boosts", "manage-passwords", "new-little-open-window", "new-note", "new-note-in-split"].contains(id) { return false }
     if id == "settings", app.settingsShortcutCaptured { return false }
     if ["find", "find-next", "find-previous", "find-and-replace", "use-selection-to-find", "jump-to-selection"].contains(id) { return selectedContent != nil }
     if ["new-boost", "edit-boost", "new-legacy-boost"].contains(id) {
@@ -215,8 +216,9 @@ extension EngineWebContentHostFactory {
       return !isIncognito && (UserDefaults.standard.object(forKey: BoostPreferences.globallyEnabledKey) as? Bool ?? true)
     }
     if id == "peek-email" { return controller != nil && peekEmailTab != nil }
-    // Post-v1: Join Meeting needs calendar live data (lead decision S2 on live-data sources).
-    if id == "join-meeting" { return false }
+    // Join Meeting reads the calendar only when it runs; validation stays free (no store, no TCC check).
+    // GUESS — capture pending (F2 capture 8): Arc's enabled state with no calendar or no meeting.
+    if id == "join-meeting" { return controller != nil && !isIncognito }
     if id == "exit-modal" {
       return window === NSApp.keyWindow && windowState.style == .standard && controller?.canExitModal == true
     }
@@ -314,8 +316,10 @@ extension EngineWebContentHostFactory {
       guard let tab = selectedTab else { return false }; app.stores.boosts.editCurrent(tabID: tab.id)
     case "change-space-icon": return focusedSpace.map { openSpaceIconPicker($0.id) } ?? false
     case "peek-email": return peekEmail()
+    case "join-meeting": return joinMeeting()
     case "exit-modal": return controller?.exitModal() == true
     case "new-tab": newTab(nil)
+    case "new-note", "new-note-in-split": return NoteTab.create(in: self, split: id == "new-note-in-split") != nil
     case "open-command-bar": focusAddressBar(nil)
     case "search-tabs": showCommandBar(.searchTabs)
     case "search-actions": showCommandBar(.searchActions)
