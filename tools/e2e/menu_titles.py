@@ -40,6 +40,15 @@ EXPECTED = {
              '---', 'Troubleshooting'],
     'Troubleshooting': ['Record Trace', 'Open Task Manager', '---', 'Reveal Open Data', 'Copy Open Info'],
 }
+# Open's deliberate extra items, left out of the comparison: AppKit's ⌥ alternate of performClose:
+# (Close All); Open's own onboarding entry (Open Basics, locked decision); the Little Open lane's
+# window items (listed as a gap in PB4-questions.md); and automation/debug-only items.
+OPEN_EXTRAS = {
+    'File': {'Close All'},
+    'Window': {'Show Little Open Windows', 'Close Little Open Windows'},
+    'Help': {'Open Basics'},
+    'Troubleshooting': {'Archive Expired Little Open Windows Now', 'Replay Intro'},
+}
 SYSTEM_WINDOW_ITEMS = {'Minimize All', 'Zoom All', 'Fill', 'Center', 'Move & Resize', 'Full Screen Tile',
                        'Arrange in Front', 'Remove Window from Set'}
 
@@ -51,6 +60,8 @@ def visible(items, name, window_titles=()):
             continue
         title = '---' if item.get('separator') else item.get('title', '')
         if name == 'Window' and (title in SYSTEM_WINDOW_ITEMS or title in window_titles):
+            continue
+        if title in OPEN_EXTRAS.get(name, ()):
             continue
         if not title:  # macOS's Help search field and other view items
             continue
