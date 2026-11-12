@@ -7,17 +7,17 @@
       "colorLimits": {
         "static-active": "1.59",
         "static-inactive": "1.17",
-        "row-hover": "1.59",
-        "selected-pinned": "1.73",
-        "selected-favorite": "1.59",
-        "toggle-hover": "1.59",
-        "home-hover": "1.59",
-        "newtab-hover": "1.59",
-        "newtab-open": "2.00",
-        "selected-today": "2.03",
-        "default-dark": "1.77",
+        "row-hover": "1.92",
+        "selected-pinned": "2.39",
+        "selected-favorite": "3.98",
+        "toggle-hover": "3.93",
+        "home-hover": "3.93",
+        "newtab-hover": "3.93",
+        "newtab-open": "2.49",
+        "selected-today": "2.36",
+        "default-dark": "7.22",
         "yellow": "1.95",
-        "blue-grain": "2.38"
+        "blue-grain": "2.40"
       },
       "reason": "Exact original M5 limits. No cap or reference changed.",
       "mode": {

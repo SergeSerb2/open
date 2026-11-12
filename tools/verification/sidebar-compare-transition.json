@@ -1,0 +1,649 @@
+{
+  "environments": {
+    "scale-1-icc-header-v1-f8e4893d0898030a891e0594ed435f2dd174c90d3ccad5d0d09f40db23b15d56-mode-2560x1440-pixels-2560x1440-mhz-240000": {
+      "reason": "D2 sidebar colour roles follow Arc 1.172.2 (capture session 3); LEAD 2026-11-12 02:10 drift ruling (a)",
+      "recordedCommit": "23fbb9baae879a8423a3723512b81f5fa7fe8f8c",
+      "oldColorLimits": {
+        "static-active": "1.59",
+        "static-inactive": "1.17",
+        "row-hover": "1.59",
+        "selected-pinned": "1.73",
+        "selected-favorite": "1.59",
+        "toggle-hover": "1.59",
+        "home-hover": "1.59",
+        "newtab-hover": "1.59",
+        "newtab-open": "2.00",
+        "selected-today": "2.03",
+        "default-dark": "1.77",
+        "yellow": "1.95",
+        "blue-grain": "2.38"
+      },
+      "elements": {
+        "static-active": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "URL field placeholder": [
+            [
+              "0.43",
+              "0.25"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6": [
+            [
+              "0.61",
+              "0.40"
+            ]
+          ],
+          "row 2 title": [
+            [
+              "0.22",
+              "0.43"
+            ]
+          ],
+          "row 3 title": [
+            [
+              "0.12",
+              "0.60"
+            ]
+          ],
+          "row 4 title": [
+            [
+              "0.09",
+              "0.69"
+            ]
+          ],
+          "row 5 title": [
+            [
+              "0.31",
+              "0.52"
+            ]
+          ],
+          "row 6 title": [
+            [
+              "0.09",
+              "0.67"
+            ]
+          ],
+          "row 7 title": [
+            [
+              "0.13",
+              "0.69"
+            ]
+          ],
+          "row 8 title": [
+            [
+              "0.11",
+              "0.73"
+            ]
+          ],
+          "row 9 title": [
+            [
+              "0.15",
+              "0.55"
+            ]
+          ],
+          "row 10 title": [
+            [
+              "0.09",
+              "0.73"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.32",
+              "0.57"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "static-inactive": {
+          "URL field magnifier": [
+            [
+              "0.92",
+              "0.71"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.05",
+              "0.53"
+            ],
+            {
+              "position": [
+                "0.0",
+                "1.0"
+              ],
+              "ink": [
+                [
+                  "20,665 11×10",
+                  "20,665 11×10"
+                ],
+                [
+                  "20,665 11×10",
+                  "20,664 11×11"
+                ]
+              ]
+            }
+          ]
+        },
+        "row-hover": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "URL field placeholder": [
+            [
+              "0.43",
+              "0.25"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6": [
+            [
+              "0.61",
+              "0.40"
+            ]
+          ],
+          "row 2 hover fill": [
+            [
+              "0.45",
+              "1.92"
+            ]
+          ],
+          "row 2 close button": [
+            [
+              "1.39",
+              "0.36"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.32",
+              "0.57"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "selected-pinned": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6": [
+            [
+              "0.61",
+              "0.40"
+            ]
+          ],
+          "row 1 selected fill": [
+            [
+              "1.05",
+              "2.39"
+            ]
+          ],
+          "row 1 close button": [
+            [
+              "1.23",
+              "0.69"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.32",
+              "0.57"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "selected-favorite": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6 selected": [
+            [
+              "1.15",
+              "3.98"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.32",
+              "0.57"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "toggle-hover": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6 selected": [
+            [
+              "1.02",
+              "3.93"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.32",
+              "0.57"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "home-hover": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6 selected": [
+            [
+              "1.02",
+              "3.93"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.32",
+              "0.57"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "newtab-hover": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6 selected": [
+            [
+              "1.02",
+              "3.93"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.33",
+              "1.12"
+            ]
+          ],
+          "New Tab label": [
+            [
+              "0.22",
+              "1.81"
+            ]
+          ],
+          "New Tab hover fill": [
+            [
+              "0.49",
+              "1.98"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "newtab-open": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6": [
+            [
+              "0.61",
+              "0.40"
+            ]
+          ],
+          "New Tab selected fill": [
+            [
+              "2.00",
+              "2.49"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "selected-today": {
+          "URL field fill": [
+            [
+              "0.37",
+              "0.16"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.45",
+              "0.16"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.44",
+              "0.24"
+            ]
+          ],
+          "favorite tile 6": [
+            [
+              "0.61",
+              "0.40"
+            ]
+          ],
+          "row 11 selected fill": [
+            [
+              "2.03",
+              "2.36"
+            ]
+          ],
+          "New Tab plus": [
+            [
+              "1.10",
+              "0.45"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.59",
+              "1.32"
+            ]
+          ]
+        },
+        "default-dark": {
+          "URL field fill": [
+            [
+              "0.50",
+              "0.82"
+            ]
+          ],
+          "URL field magnifier": [
+            [
+              "0.70",
+              "0.86"
+            ]
+          ],
+          "URL field placeholder": [
+            [
+              "0.27",
+              "0.51"
+            ]
+          ],
+          "favorite tile 1": [
+            [
+              "0.48",
+              "0.80"
+            ]
+          ],
+          "favorite tile 2": [
+            [
+              "0.61",
+              "0.88"
+            ]
+          ],
+          "favorite tile 3": [
+            [
+              "0.74",
+              "0.96"
+            ]
+          ],
+          "favorite tile 4": [
+            [
+              "0.55",
+              "0.84"
+            ]
+          ],
+          "favorite tile 5": [
+            [
+              "0.64",
+              "0.89"
+            ]
+          ],
+          "favorite tile 6": [
+            [
+              "0.72",
+              "0.93"
+            ]
+          ],
+          "Space title": [
+            [
+              "0.37",
+              "7.22"
+            ]
+          ],
+          "row 1 title": [
+            [
+              "0.41",
+              "0.16"
+            ]
+          ],
+          "row 2 title": [
+            [
+              "0.40",
+              "0.20"
+            ]
+          ],
+          "row 2 close button": [
+            [
+              "1.47",
+              "1.20"
+            ]
+          ],
+          "row 3 title": [
+            [
+              "0.36",
+              "0.19"
+            ]
+          ],
+          "row 4 title": [
+            [
+              "0.36",
+              "0.18"
+            ]
+          ],
+          "row 5 title": [
+            [
+              "0.38",
+              "0.16"
+            ]
+          ],
+          "row 6 title": [
+            [
+              "0.37",
+              "0.18"
+            ]
+          ],
+          "bottom: Home": [
+            [
+              "1.77",
+              "0.29"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "0.18",
+              "1.35"
+            ]
+          ]
+        },
+        "yellow": {
+          "New Tab plus": [
+            [
+              "1.92",
+              "0.58"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.95",
+              "1.64"
+            ]
+          ]
+        },
+        "blue-grain": {
+          "URL field magnifier": [
+            [
+              "2.17",
+              "2.40"
+            ]
+          ],
+          "bottom: plus": [
+            [
+              "1.69",
+              "1.47"
+            ]
+          ]
+        }
+      }
+    }
+  }
+}
