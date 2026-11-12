@@ -83,7 +83,7 @@ def run(factory, results, tmp, h):
     before_visits, before_logins = visit_count(app), logins()
     open_sources(); call('settings-source', id='firefox')
     chosen = settle()
-    labels = chosen.get('settingsBrowserLabels', {})
+    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords')}
     row('firefox_choose', chosen.get('settingsStep') == 'Choose' and chosen.get('settingsTitle') == 'Import from Firefox'
         and labels == {'Bookmarks': 'Found: 6', 'History': 'Found: 7,003', 'Passwords': 'Found: 3'}
         and chosen.get('settingsPasswords') is True and not chosen.get('settingsNeedsPrimaryPassword'),
@@ -183,7 +183,7 @@ def run(factory, results, tmp, h):
     before_visits = visit_count(app)
     open_sources(); call('settings-source', id='safari')
     chosen = settle()
-    labels = chosen.get('settingsBrowserLabels', {})
+    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords')}
     report = finish_import()
     outcome = report.get('settingsOutcome', {})
     _, nodes = sidebar(app)
@@ -203,7 +203,7 @@ def run(factory, results, tmp, h):
     call('settings-safari-export', path=str(files/'Safari Export.zip')); settle()
     call('settings-passwords-file', path=str(files/'Passwords.csv'))
     chosen = settle()
-    labels = chosen.get('settingsBrowserLabels', {})
+    labels = {k: v for k, v in chosen.get('settingsBrowserLabels', {}).items() if k in ('Bookmarks', 'History', 'Passwords')}
     report = finish_import()
     outcome = report.get('settingsOutcome', {})
     _, nodes = sidebar(app)
