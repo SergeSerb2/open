@@ -24,6 +24,12 @@ final class AppLibrarySession {
   init(model: LibraryViewModel, controller: BrowserWindowController) {
     self.model = model; self.controller = controller
     model.usesLegacySpaceManager = false
+    // Idle preparation must build the owner's first screen, not an All
+    // Profiles snapshot which the first outside entry immediately replaces.
+    if let owner = controller.context.focusedSpace?.profileID {
+      model.downloadProfileFilter = owner
+      if model.historyProfileID != owner { model.historyProfileID = owner }
+    }
   }
   func show(section: LibrarySection?) {
     guard let controller else { return }

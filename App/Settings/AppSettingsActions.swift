@@ -131,7 +131,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     session.model.registerStores(archives: archives, histories: histories)
     let target = section ?? session.model.section
     if target == .boosts, let boostsPresentation, session.model.boostsPresentation != boostsPresentation {
-      session.model.boostsPresentation = boostsPresentation
+      if let panel = session.panel { panel.setBoostLayout(boostsPresentation == .gallery ? "Gallery" : "List") }
+      else { session.model.boostsPresentation = boostsPresentation }
     }
     // Outside entry points use the browser owner. Internal panel navigation
     // never calls this method and keeps the user's filter selection.

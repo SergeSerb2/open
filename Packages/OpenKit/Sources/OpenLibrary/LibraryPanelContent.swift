@@ -103,7 +103,12 @@ extension LibraryPanelView {
         guard let row = listView.entryIndex(id) else { return false }
         listView.table.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false); listView.table.scrollRowToVisible(row); listView.focus(); return true
     }
-    public func setBoostLayout(_ name:String) { viewModel.boostsPresentation = name == "Gallery" ? .gallery : .list; renderRows() }
+    public func setBoostLayout(_ name:String) {
+        let next: BoostsPresentation = name == "Gallery" ? .gallery : .list
+        guard viewModel.boostsPresentation != next else { return }
+        viewModel.boostsPresentation = next
+        if contentActive { renderRows() } else { prebuiltReady = false }
+    }
     public func setBoostProfile(_ name:String) -> Bool {
         guard let profile = viewModel.model.profiles.first(where: { $0.name == name }) else { return false }
         viewModel.historyProfileID = profile.id; hosts[section]?.loaded = false; hosts[section]?.dirty = true; refreshData(); renderRows(); return true
