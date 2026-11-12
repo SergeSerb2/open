@@ -7740,7 +7740,7 @@ def capture_checks(factory, results, tmp):
         results['capture_c1_area'] = {'ok': len(new) == 1 and new[0]['kind'] == 'area' and new[0]['width'] == round(300 * scale)
             and new[0]['height'] == round(200 * scale) and new[0]['bytes'] > 0 and st['result']['saved'] == new[0]['id']
             and overlay.get('frame') == overlay.get('pageFrame') and overlay.get('firstResponder') is True
-            and overlay.get('hint') == 'Drag to capture. Press Esc to cancel.' and not overlay.get('hintHidden')
+            and overlay.get('hint') == 'Click or drag to capture a portion of this page' and not overlay.get('hintHidden')
             and steps[1]['hintHidden'] is True and steps[1]['selection'] == [100, 100, 150, 100]
             and card.get('actions') == ['copy', 'save', 'share', 'easel', 'library', 'retake', 'delete'] and card.get('savedLine') is True,
             'scale': scale, 'row': new, 'steps': steps, 'state': st}
@@ -7772,6 +7772,22 @@ def capture_checks(factory, results, tmp):
         results['capture_shortcut_hint'] = {'ok': (closed or {}).get('hintShows') == 1 and isinstance(hint_time, (int, float)) and hint_time > 0,
                                             'hintShows': (closed or {}).get('hintShows'), 'stored': hint_time}
 
+        # C8: hover element capture (Arc FA CA-4, capture s4 `e6-capture-ui`): the pointer rests on
+        # an element, the overlay outlines it, and a click without a drag captures exactly it.
+        close_card()
+        app.eval(tab, "(() => { const d = document.createElement('div'); d.id = 'c8';"
+                      " d.style.cssText = 'position:fixed;left:60px;top:260px;width:240px;height:120px;background:#3a7;z-index:9';"
+                      " document.body.appendChild(d); return 1; })()")
+        before = rows()
+        r = app.call('capture', mode='area', click=[180, 320])
+        after = rows()
+        hovered = next((s_ for s_ in r['steps'] if s_.get('after') == 'hover'), {})
+        new = [x for x in after if x['id'] not in {y['id'] for y in before}]
+        results['capture_c8_hover_element'] = {'ok': hovered.get('element') == [60, 260, 240, 120] and len(new) == 1
+            and new[0]['width'] == round(240 * scale) and new[0]['height'] == round(120 * scale) and new[0]['kind'] == 'area',
+            'hover': hovered, 'row': new}
+        app.eval(tab, "document.getElementById('c8').remove()")
+        close_card()
         # C4: Cmd+Shift+2 on the real key path shows the overlay; Esc during it: no row.
         count, cancelled = len(rows()), state()['cancelled']
         app.call('key', key='2', modifiers=['cmd', 'shift'])
