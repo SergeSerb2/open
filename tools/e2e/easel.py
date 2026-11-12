@@ -7,6 +7,7 @@ window and presses the real toolbar buttons. No global input, no real user data.
 import json
 import os
 import plistlib
+import runpy
 import subprocess
 import time
 from pathlib import Path
@@ -513,6 +514,51 @@ def run(factory, results, tmp, api):
                    and zipped['newRows'] == 0 and len(app.call('tabs')) == count + 3, again=again, zipped=zipped)
         finally:
             server.shutdown()
+        # ---- Import from Arc ▸ Easels (IMC's provider API): wizard → runner → Undo/Redo ----
+        app.quit(); app = None
+        arc = Path(tmp) / 'ArcSourceEasels'
+        ids = runpy.run_path(str(root / 'tools/e2e/firstrun.py'))['fixture'](arc)
+        sidebar_file = arc / 'StorableSidebar.json'
+        sidebar = json.loads(sidebar_file.read_text())
+        for item in sidebar['sidebar']['containers'][1]['items']:
+            if isinstance(item, dict) and item.get('id') == ids['easel']:
+                item['data'] = {'easel': {'easelID': 'arc-easel-a', 'title': 'Board A', 'shareStatus': 'creatorOnly'}}
+        sidebar_file.write_text(json.dumps(sidebar))
+        app = factory(urls=(), fresh=True, extra_args=['--host-resolver-rules=MAP * ~NOTFOUND'])
+        def fr():
+            return app.call('first-run', action='settings-inspect')
+        app.call('first-run', action='settings-import', directory=str(arc))
+        before_pick = next((p for p in app.call('first-run', action='settings-inspect').get('settingsProviders', []) if p['id'] == 'easels'), {})
+        app.call('first-run', action='settings-provider', id='easels', file=str(export))
+        chosen = next((p for p in app.call('first-run', action='settings-inspect').get('settingsProviders', []) if p['id'] == 'easels'), {})
+        app.call('first-run', action='settings-next'); app.call('first-run', action='settings-run')
+        finished = api.wait_until(lambda: (lambda x: x if x.get('settingsStep') == 'Report' and not x.get('settingsBusy') else None)(fr()), timeout=120, step=.1)
+        report = finished or fr()
+        app.call('first-run', action='settings-done')
+        a_url = 'open://easel/' + app.call('easel', action='document-id', arcID='arc-easel-a')
+        def easel_tabs():
+            return [t for t in app.call('tabs') if t['url'].startswith('open://easel/')]
+        imported_tabs = easel_tabs()
+        a_tab = next((t for t in imported_tabs if t['url'] == a_url), None)
+        a_objects = []
+        if a_tab:
+            app.call('select', tab=a_tab['id'])
+            shown = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=a_tab['id'])), timeout=8, step=.1)
+            a_objects = objects(shown) if shown else []
+        record('W01_wizard_easels', before_pick.get('count') == 1 and chosen.get('count') == 3 and chosen.get('selected') is True
+               and report.get('settingsOutcome', {}).get('Easels') == 3 and a_tab and a_tab['title'] == 'Board A'
+               and len(a_objects) == 7 and len(imported_tabs) == 3, beforePick=before_pick, chosen=chosen,
+               outcome=report.get('settingsOutcome'), tabs=[t['title'] for t in imported_tabs])
+        a_doc = Path(app.call('easel', action='store', document=a_url.rsplit('/', 1)[1])['path'])
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('sidebar-key', key='z', modifiers=['command'])
+        api.wait_until(lambda: not fr().get('importUndoInProgress', False), timeout=30, step=.05)
+        undone_tabs, undone_file = easel_tabs(), a_doc.exists()
+        app.call('sidebar-key', key='z', modifiers=['command', 'shift'])
+        api.wait_until(lambda: not fr().get('importUndoInProgress', False), timeout=30, step=.05)
+        redone_tabs, redone_file = easel_tabs(), a_doc.exists()
+        record('W02_wizard_undo_redo', undone_tabs == [] and not undone_file and len(redone_tabs) == 3 and redone_file,
+               undone=[t['title'] for t in undone_tabs], undoneFile=undone_file, redone=[t['title'] for t in redone_tabs])
     finally:
         if app:
             app.quit()

@@ -120,7 +120,7 @@ public final class EaselStore {
         if wait { queue.sync(execute: work) } else { queue.async(execute: work) }
     }
 
-    nonisolated static var encoder: JSONEncoder {
+    public nonisolated static var encoder: JSONEncoder {
         let e = JSONEncoder(); e.outputFormatting = [.sortedKeys]; e.dateEncodingStrategy = .iso8601; return e
     }
     nonisolated static var decoder: JSONDecoder {
