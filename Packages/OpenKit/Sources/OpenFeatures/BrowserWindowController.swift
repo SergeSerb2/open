@@ -47,7 +47,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         peekStorage = peek
         root.addSubview(peek.overlay.backdrop, positioned: .below, relativeTo: sidebar)
         root.addSubview(peek.overlay, positioned: .below, relativeTo: toastOverlay)
-        peek.onChange = { [weak self] in self?.changed() }
+        // F6: a shown Peek makes every Site Control button unavailable; refresh both kinds.
+        peek.onChange = { [weak self] in self?.changed(); self?.scheduleSiteControlButtonsRefresh() }
         peek.toasts = toasts
         peek.onPageChange = { [weak self] in self?.syncPeekSidebar() }
         if let space = context.focusedSpace {
@@ -432,6 +433,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             controller.onDismiss = { [weak self] _ in self?.refreshSiteControlButtons() }
             siteControlToken = siteControlSource.observeChanges { [weak self] _ in self?.scheduleSiteControlButtonsRefresh() }
             container.onSiteControls = { [weak self] id in self?.toggleSiteControls(anchor: .paneBar(id), tabID: id) }
+            container.siteControlsAvailable = { [weak self] id in self?.siteControlsAvailable(tabID: id) ?? false }
         }
         root.addSubview(toastOverlay)
         root.onLayout = { [weak self] in self?.layoutContent() }
