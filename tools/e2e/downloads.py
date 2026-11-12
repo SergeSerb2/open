@@ -206,12 +206,16 @@ def checks(factory, results, tmp, config, harness):
         check('resume', resumed and item(known)['state'] == 'inProgress', item=item(known))
         app.call('library-open', section='archive')
         app.call('download-home')
-        check('home_running_entry', app.call('settings-state')['librarySection'] == 'downloads')
+        # The Home button opens the in-window Library at Downloads (#350; the old row read the Settings Library).
+        check('home_running_entry', wait(lambda: bool(state()['rows']), 5), rows=len(state()['rows']))
         library()
         app.call('download-row', id=known, action='Cancel')
         check('cancel', wait(lambda: row(known).get('subtitle') == 'Cancelled'), row=row(known))
         dismiss_library()
 
+        # The indeterminate ring spins only without Reduce Motion (HomeDownloadButton); the rented Macs
+        # have it on, so pin it off (the state of the M5 and the M1; the App is this suite's own).
+        app.call('window-motion', reduced=False)
         unknown = start('/unknown'); library()
         unknown_state = wait(lambda: (lambda v: v if v['badge'].get('indeterminate') and v['badge'].get('animations', 0) > 0 and item(unknown).get('received', 0) > 0 else None)(state()))
         check('unknown_total', unknown_state and item(unknown)['total'] is None and UNKNOWN_SUBTITLE.match(row(unknown).get('subtitle', '')), badge=unknown_state and unknown_state['badge'], row=row(unknown))
@@ -219,7 +223,7 @@ def checks(factory, results, tmp, config, harness):
         check('menu_cancel', wait(lambda: row(unknown).get('subtitle') == 'Cancelled'))
         dismiss_library()
         failed = start('/fail'); library()
-        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed to Download', 30), item=item(failed), row=row(failed))
+        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed', 30), item=item(failed), row=row(failed))
         dismiss_library()
 
 
