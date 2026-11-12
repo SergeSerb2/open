@@ -53,8 +53,6 @@ final class EaselToolbarView: NSView {
     override func updateLayer() {
         let dark = EaselStyle.dark(effectiveAppearance)
         layer?.backgroundColor = EaselStyle.floating(dark: dark).cgColor
-        layer?.borderWidth = dark ? 1 : 0
-        layer?.borderColor = NSColor(white: 1, alpha: 0.08).cgColor
         divider.layer?.backgroundColor = EaselStyle.divider(dark: dark).cgColor
     }
     override func viewDidChangeEffectiveAppearance() {

@@ -53,17 +53,19 @@ enum EaselStyle {
     }
     /// `EaselSelectionColor`; capture `e2-rect-selected` outline #7FB8D6.
     static let selection = EaselPalette.srgb(0x6CBAD9)
-    /// Tool glyphs. Capture s4 toolbar: #272FFB in light. Dark: GUESS — capture pending.
-    static func toolIcon(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x8F95FF) : EaselPalette.srgb(0x2930FB) }
-    /// Selected tool plate: capture s4 #9095FB. Dark: GUESS — capture pending.
-    static func toolPlate(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x4A4FC8) : EaselPalette.srgb(0x9095FB) }
+    /// Tool glyphs. Capture s4 toolbar: #272FFB light (`e1-new-easel`), #ECEDFE dark (`e2-dark-select`).
+    static func toolIcon(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0xECEDFE) : EaselPalette.srgb(0x2930FB) }
+    /// Selected tool plate: #9095FB light, #3F45D2 dark (same frames).
+    static func toolPlate(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x3F45D2) : EaselPalette.srgb(0x9095FB) }
     static func toolHover(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.10) : NSColor(white: 0, alpha: 0.05) }
-    /// `FloatingElementBackground` #FFFFFF / #000000.
-    static func floating(dark: Bool) -> NSColor { dark ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 1, alpha: 1) }  // dark: GUESS — capture pending
-    /// Divider in the toolbar: capture #E4E4E6.
-    static func divider(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.14) : EaselPalette.srgb(0xE4E4E6) }
-    /// `EaselBackground` white 85 % / black 50 % over the window; capture page #FDFBFC.
-    static func canvas(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x1C1C1F) : EaselPalette.srgb(0xFDFCFD) }
+    /// Floating bar: #FFFFFF light; #050625 dark (`e2-dark-select`).
+    static func floating(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x050625) : NSColor(white: 1, alpha: 1) }
+    /// Divider in the toolbar: #E4E4E6 light, #1E1E3A dark.
+    static func divider(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x1E1E3A) : EaselPalette.srgb(0xE4E4E6) }
+    /// Page: #FDFBFC light (`e1-new-easel`), #16121B dark (`e2-dark-select`).
+    static func canvas(dark: Bool) -> NSColor { dark ? EaselPalette.srgb(0x16121B) : EaselPalette.srgb(0xFDFCFD) }
+    /// Alignment guide line: #EBEBEB light (`e4-move-guides`); dark GUESS — capture pending.
+    static func guide(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.16) : EaselPalette.srgb(0xEBEBEB) }
     /// `EaselTitleText` #101118 80 % / white 80 %.
     static func title(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.8) : EaselPalette.srgb(0x101118).withAlphaComponent(0.8) }
     static func text(dark: Bool) -> NSColor { dark ? NSColor(white: 1, alpha: 0.92) : EaselPalette.srgb(0x101118) }
