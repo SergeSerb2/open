@@ -60,7 +60,10 @@ public final class DownloadFlightView: NSView {
         iconLayer.add(visible, forKey: "downloads.flight.opacity")
         // One finite timer removes the overlay. A Core Animation completion block does not fire for a
         // window that is never composited (occluded, offscreen), which would leave the view behind.
-        DispatchQueue.main.asyncAfter(deadline: .now() + DownloadFlight.startDelay + duration + 0.05) { [weak self] in self?.finish() }
+        let timer = Timer(timeInterval: DownloadFlight.startDelay + duration + 0.05, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.finish() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func finish() {
