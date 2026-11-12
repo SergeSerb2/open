@@ -1203,7 +1203,7 @@ final class SpaceHeaderView: NSView {
         let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true; self?.needsLayout = true }
         CATransaction.begin()
         CATransaction.setDisableActions(!context.animatesChanges)
-        fill.backgroundColor = SidebarRole.rowHover.cgColor(contentAppearance)
+        fill.backgroundColor = context.style(for: space).rowHoverFill(contentAppearance).cgColor
         CATransaction.setAnimationDuration(Motion.hoverFade)
         fill.opacity = hovered ? 1 : 0
         CATransaction.commit()
