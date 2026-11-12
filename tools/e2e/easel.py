@@ -416,6 +416,46 @@ def run(factory, results, tmp, api):
             easel(action='menu', at=mid, item='Open Page in New Tab', tab=e2)
             tabs = app.call('tabs')
             record('E33_open_page', len(tabs) == count + 1 and tabs[0]['url'] == origin + '/page.html', first=tabs[0])
+
+            # ---- E4: row menu, rename, export, delete ----
+            rows = easel(action='row-menu', tab=e2)
+            record('E34_row_menu', rows == ['Save as Web Page…', '—', 'Change Icon…', 'Rename…', '—', 'Add Split View',
+                                            'Move to ▸', '—', 'Remove Easel from Sidebar', 'Delete Easel'], rows=rows)
+            s = easel(action='rename', text='Board two', tab=e2)
+            record('E35_rename_syncs_title', s['tabTitle'] == 'Board two' and canvas(s)['title'] == 'Board two'
+                   and canvas(s)['titleFieldText'] == 'Board two', state={k: v for k, v in s.items() if k != 'canvas'})
+            app.call('sidebar-menu', node=e2, item='Save as Web Page…')
+            panel = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', cancel=True)
+            out = Path(tmp) / 'export-one'
+            easel(action='export', path=str(out), tab=e2)
+            exported = json.loads((out / 'easel.json').read_text()) if (out / 'easel.json').exists() else {}
+            current = objects(easel(tab=e2))
+            used = sorted({x['file'] for x in current if x.get('file')})
+            files_ok = all((out / 'images' / f).exists() for f in used)
+            viewer = api.new_tab(app, (out / 'index.html').as_uri())
+            drawn = app.eval(viewer, "document.querySelectorAll('#page .o').length")
+            heading = app.eval(viewer, "document.getElementById('title').textContent")
+            record('E36_save_as_web_page', panel and panel['isSavePanel'] and panel['message'] == 'Save this Easel as a web page you can open anywhere.'
+                   and exported.get('title') == 'Board two' and len(exported.get('objects', [])) == len(current)
+                   and all(0 <= o['frame']['x'] <= 1 for o in exported.get('objects', [])) and files_ok
+                   and drawn == len(current) and heading == 'Board two', drawn=drawn, objects=len(current), used=used)
+            app.call('close', tab=viewer)
+            all_out = Path(tmp) / 'export-all'
+            result = app.call('easel', action='export-all', path=str(all_out))
+            easel_tabs = [t for t in app.call('tabs') if t['url'].startswith('open://easel/')]
+            index = (all_out / 'index.html').read_text() if (all_out / 'index.html').exists() else ''
+            record('E37_export_all', result['count'] == len(easel_tabs) and not result['failures']
+                   and 'Board%20two/index.html' in index and (all_out / 'Board two' / 'easel.json').exists(), result=result,
+                   tabs=len(easel_tabs))
+            folder = Path(app.call('easel', action='store', document=easel(tab=e2)['document'])['path']).parent
+            app.call('sidebar-menu', node=e2, item='Delete Easel')
+            alert = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(app.call('easel', action='window-sheet')), timeout=5, step=.1)
+            app.call('easel', action='window-sheet', press='Delete')
+            gone = api.wait_until(lambda: all(t['id'] != e2 for t in app.call('tabs')) or None, timeout=5, step=.1)
+            record('E38_delete_easel', alert and 'Are you sure you want to delete this Easel?' in alert['texts']
+                   and 'Doing so will delete the Easel permanently.' in alert['texts'] and sorted(alert['buttons']) == ['Cancel', 'Delete']
+                   and gone and not folder.exists(), alert=alert, folderExists=folder.exists())
         finally:
             server.shutdown()
     finally:
