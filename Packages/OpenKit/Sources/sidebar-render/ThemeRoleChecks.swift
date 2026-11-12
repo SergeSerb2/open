@@ -174,9 +174,10 @@ enum ThemeRoleChecks {
         let context = SidebarContext(model: model, windowID: window.id)
         context.systemAppearance = .light
         var options = RenderScene.Options(); options.size = CGSize(width: 900, height: 700)
-        let scene = RenderScene(context: context, options: options, delegate: RecordingDelegate())
+        let delegate = RecordingDelegate()
+        let scene = RenderScene(context: context, options: options, delegate: delegate)
         let host = OffscreenRenderer.host(scene, scale: 1)
-        defer { host.contentView = nil; host.close() }
+        defer { host.contentView = nil; host.close(); _ = delegate }
         func settle() { scene.needsLayout = true; OffscreenRenderer.settle(scene, runLoop: 0.02) }
         let space = model.spaces[0]
         window.focusedSpaceID = space.id; settle()
