@@ -29,7 +29,7 @@ final class AdBlockExtrasAdapter {
 
   init(app: AppDelegate) { self.app = app }
 
-  static let idPrefix = "open.adblock.extras."
+  nonisolated static let idPrefix = "open.adblock.extras."
 
   func contextCreated(_ context: OEBrowserContext, profileID: ProfileID) {
     guard context.originalContext == nil, !context.isEphemeral else { return }
