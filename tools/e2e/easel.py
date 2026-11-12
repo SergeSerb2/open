@@ -385,7 +385,9 @@ def run(factory, results, tmp, api):
             s = api.wait_until(lambda: (lambda x: x if x['livePages'] == 1 else None)(easel(tab=e2)), timeout=8, step=.1)
             live = next(x for x in objects(s) if x['id'] == card['id']) if s else {}
             record('E29_live_card', 'Show Live Website' in menu and 'Open Page in New Tab' in menu and sheet.get('shown')
-                   and sheet['buttons'][:2] == ['Show Live Website', 'Cancel'] and live.get('live') and live.get('liveAttached'),
+                   and sheet['buttons'][:2] == ['Show Live Website', 'Cancel'] and live.get('live') and live.get('liveAttached')
+                   and 'Replace this screenshot with the live website?' in sheet.get('texts', [])
+                   and any(t.startswith("See an up-to-date, interactive view of whatever you've captured. This does not work on all sites.") for t in sheet.get('texts', [])),
                    menu=menu, sheet=sheet, card=live)
             time.sleep(1.5)
             snapshot('e29-live-card-light')
