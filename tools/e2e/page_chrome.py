@@ -343,15 +343,25 @@ def run(factory, results, tmp, h):
             return check(hidden and state['visible'],state=state,other=other,appQueued=queued,hidden=hidden)
         gate('permission_background_select',permission_background)
 
-        for anchor in ['content-top-left','toolbar-url']:
+        for anchor in ['content-top-left','toolbar-site-control']:
             def fallback(anchor=anchor):
                 permission_page('hidden-' + anchor); app.call('command', id='toggle-sidebar')
-                if anchor == 'toolbar-url': app.call('command', id='toggle-toolbar')
+                if anchor == 'toolbar-site-control': app.call('command', id='toggle-toolbar')
                 perm(); state=visible(ps)
-                return check(state['anchor']['name']==anchor and state['anchor']['frame'][2]>0, state=state)
+                button = app.call('site-controls')['visibleAnchor']
+                if anchor == 'toolbar-site-control':
+                    # The installed SCC provider anchors to the actual toolbar
+                    # button, rather than the old whole-URL-field fallback.
+                    frame = button.get('frame', [])
+                    correct = (state['anchor']['name'] == 'site-control' and button.get('surface') == 'toolbar'
+                        and len(frame) == 4 and frame[2] > 0 and frame[3] > 0
+                        and all(abs(a-b) <= 1 for a,b in zip(state['anchor']['frame'],frame)))
+                else:
+                    correct = state['anchor']['name'] == anchor and state['anchor']['frame'][2] > 0 and not button
+                return check(correct, state=state, visibleSiteControl=button)
             gate('permission_anchor_' + anchor, fallback)
             h['_try'](lambda: app.call('command',id='toggle-sidebar'))
-            if anchor == 'toolbar-url': h['_try'](lambda: app.call('command', id='toggle-toolbar'))
+            if anchor == 'toolbar-site-control': h['_try'](lambda: app.call('command', id='toggle-toolbar'))
 
         def midi():
             page('http://midi.localhost:%d/midi' % port); perm('midi'); state=visible(ps)

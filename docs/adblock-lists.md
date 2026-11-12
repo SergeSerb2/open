@@ -238,8 +238,15 @@ in this contract. It binds the value-only `AdBlockEngineEvent` callback:
 - `reload` occurs once after a changed batch or list toggle, never for all-304.
 - `closed` lets the adapter release the engine before temporary files disappear.
 
-Profile operations cannot overlap. Scheduled updates start after 60 s and repeat
-at 24 h. Busy or failed scheduled updates retry after 1 min, 5 min, 30 min,
+Profile operations cannot overlap. Each list receipt records `lastCheck`, the
+time of its last successful check (a `304` counts). When a Profile opens, at
+launch or later, its first scheduled check is due at the oldest enabled list's
+`lastCheck` + 24 h, and never earlier than 60 s after the open. It is due
+60 s after the open when the Profile has no complete receipt for an enabled
+list (first install and bundled seeds), a saved error from a failed update or
+recovery, a check older than 24 h, or a `lastCheck` in the future. Lists checked
+within 24 h are not checked or reloaded at launch. Later checks repeat at 24 h.
+Busy or failed scheduled updates retry after 1 min, 5 min, 30 min,
 then 24 h. A successful attempt resets the ladder. `onScheduledUpdate` reports
 the outcome and the next nominal delay. Closing a Profile cancels its schedule; store destruction cancels remaining
 schedules. A failed update keeps old inputs and saves its error for Settings.
@@ -373,8 +380,9 @@ Diagnostic controls are opt-in environment variables on that same real CLI:
 - `OPEN_ADBLOCK_DEBUG_KILL_BEFORE_CURRENT=1`: SIGKILL after durable generation
   and state writes, before the current-pointer rename. The process cannot fall
   through while signal delivery is pending.
-- `OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE=0.002`: scale only timer sleeps; reports
-  retain their nominal seconds. `OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS=0.18`
+- `OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE=0.002`: scale timer sleeps and the 24 h
+  freshness interval (with 0.002, lists checked more than 172.8 s ago are
+  overdue); reports retain their nominal seconds. `OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS=0.18`
   holds the real manual operation's busy gate for the collision check.
 - `OPEN_ADBLOCK_DEBUG_SOURCE_ROOT=http://127.0.0.1:<port>`: direct source paths
   to a real loopback HTTP fixture server. Only explicit loopback HTTP roots

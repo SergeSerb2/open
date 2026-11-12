@@ -30,7 +30,7 @@ that suite's existing lock; they do not acquire it again. The lock serializes
 agents, while native-focus interruption tracking still covers user activity.
 
 Builds, `swift build`, and every `tools/verify-all.sh` invocation use the separate
-machine-wide heavy-job slot script (capacity is set by the lead):
+machine-wide FIFO build slot script (one slot per machine):
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
@@ -38,7 +38,10 @@ machine-wide heavy-job slot script (capacity is set by the lead):
 ```
 
 Do not hold the on-screen lock while waiting for a heavy-job slot. Keep the
-on-screen lock around one suite only; take the heavy slot around build steps.
+on-screen lock around one suite only. Scripts that compile helpers also take
+heavy.sh before the screen lock. The full gate keeps its build slot and takes
+the screen lock separately for each suite. Build and screen work may overlap;
+strict timing always takes heavy.sh before the screen lock.
 
 ## Updater core
 
@@ -469,6 +472,8 @@ loaded Debug numbers are upper bounds, not idle Release budget acceptance.
 | `type` | `tab`, `text` | Insert text in the focused page field |
 | `key` | `key`, `modifiers`, `route`, `window` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `window: "popup"` targets the action popup's panel instead. `text` sends plain characters to the first responder. |
 | `mouse` | `window`, `x`, `y`; `action=move`, `action=hover`, `action=down`, `action=drag`, `action=up`, or `action=click` with `clickCount` and `modifiers` (`option`, `command`, `shift`, `control`); or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. Down/drag/up and the from/to drag send real NSEvents through `OEApplication.sendEvent`; separate actions let a check inspect or snapshot a held drag. The resize handle uses AppKit mouse callbacks, so the socket stays responsive. A double-click uses `clickCount=2` (the suite also sends the first click). `click` runs the window's layout pass first (as real input follows a display cycle) and queues the mouse-up before sending the mouse-down, so controls that track the mouse (the window buttons) finish. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `move` and `click` also set the automation pointer at once (`BrowserWindowController.automationPointer`), and `hover` sets it after it has delivered enter, move, and exit (it rebuilds every tracking area first, and those rebuilds must still see the old point). A `move` delivers no enter or exit, so it clears `hover`'s record of entered owners and the next `hover` enters the owners under its point again; state that reads where the pointer is, not an event (the window buttons' hover after a full-screen exit, a restore, or a show), reads it instead of the hardware pointer. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point, title bar included (tracking areas follow the hardware pointer), and returns the owners it found. macOS's own window-button glyphs and tiling menu follow only the hardware pointer |
+| `mouse` (scroll) | `action=scroll`, `window`, `x`, `y`, `dx`, `dy`, `phase` (`none`, `began`, `changed`, `ended`, `cancelled`), `momentum` (0–3) | Automation-only own-window precise pixel wheel through `NSApp.sendEvent`. Coordinates use the same top-left window origin as other mouse actions; finite points must be inside the window and hit its content. Finite deltas are bounded to ±4096. CG finger phases 1/2/4/8 map to AppKit 1/4/8/16; CG momentum 1/2/3 maps to AppKit 1/4/8. Returns the event timestamp, target window/location, deltas and routed phases. No system input is posted. |
+| `mouse` (cadence) | `action=scroll-cadence-start`, `window`, `x`, `y`; then `action=scroll-cadence-stop` | Opt-in observations of the native clip under the point. Returns up to 4096 display-link timestamps and actual bounds-change timestamps/origins; auto-stops after ten seconds. Stop restores the clip's original bounds-notification flag. These are App callbacks and movement, not drawing or scanout. |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
 | `find-state` | — | Read-only lazy Find state: `created`, focused tab, and one row per used pane (`visible`, `query`, `countText`, `active`, `total`, `notFound`, native field focus/selection, placeholder, navigation/separator visibility, bar/pane/page-viewport frames and visible chrome/extension-strip frames in window coordinates with a bottom-left origin; native close-button frame and hit-test owner). Also request/result/layout counters, pending work, and presentation phases (layout, draw, layer flush, field focus). The commit time starts at the native key event timestamp; it measures the flushed layer, not physical display scanout. Reading state creates no Find controller. |
@@ -1584,7 +1589,7 @@ that `/login` → 302 `/welcome` → immediate JavaScript `/dashboard` navigatio
 keeps the real save sheet visible until answered. The final 0808 engine must pass virtual WebAuthn create/get and native Escape cancellation with its parent alive. A blocked row is never reported as PASS.
 
 Pass `--stop-on-app-death` to a regression suite to stop all remaining flows
-on the first failed row, unexpected App exit, new Open crash report, or lost
+on the first failed row, unexpected App exit, unexpected Open crash report, or lost
 foreground. Strict runs launch Open as a direct child and verify its OS parent
 PID. They do not retry. `--row-timeout` defaults to 120 seconds (maximum 120);
 `--suite-timeout` defaults to 600 seconds. A separate supervisor stops the
@@ -1595,6 +1600,10 @@ or replies. Historical F3 hang evidence remains in `.re/s15/f3/passwords-initial
 The old HTTPS-First failure is `Open-2026-11-06-203144.ips` (2026-11-06 20:31:44
 -0700): SIGABRT in `tabs::TabDialogManager::CreateTabScopedDialog` through
 `AskBeforeHttpDialogController::ShowDialog`; see the Step 0 crash receipt.
+The Actions popup `Page.crash` is predeclared on the M1. Its exact owned
+renderer/App parent, abort stack and crash time must match the private fault
+ledger; the report remains visible in the gate's `expectedCrashes` receipt.
+This does not exempt any App crash, other renderer fault, or system dialog.
 
 Other fixture suites can load `tools/e2e/passwords.py` with `runpy.run_path`.
 `show_autofill_dropdown(app, tab, wait_until, selector='#username', timeout=5)`
@@ -1675,3 +1684,13 @@ the bounded generic-alert receipts; `{button:"cancel"|"quit", request:true}`
 queues the real `quit-open` command, observes its native modal window, and presses
 that alert's own NSButton. This does not send desktop input. The `downloads` suite
 includes `OPEN_DOWNLOADS_CASE=generic-quit` for this focused real-App flow.
+
+The updater suite's R2 first proves normal generic, downloads and beforeunload
+prompts. It then pauses its owned prepared installer before pressing the native
+Install and Relaunch button. A normal `quit-open` request must exit without those
+prompts (#283). This request does not use harness `quit`. The suite kills the
+paused installer without resuming it and checks that the App binary is unchanged.
+`--review-only --force-failure` stops after the pause to check that failure cleanup
+also leaves no installer, App window, process or changed preference. The former
+quit-warning cancellation/retry row is no longer reachable. R2 does not claim an
+actual install, external installer quit-event delivery, or a user-cancelled retry.

@@ -458,9 +458,11 @@ def run(factory, results, tmp, h):
         row('large_fixture', stored['spaces'] == 7 and stored['archive'] == 2000 and stored['historyKeys'] == 100000,
             counts=stored, metrics=metrics)
         row('timing_history_100k', metrics.get('historyMilliseconds', float('inf')) <= 1400,
-            timing=True, targetMilliseconds=1400, planLimitMilliseconds=3000, metrics=metrics, startLoad=started_load)
+            timing=True, functionalOK="historyMilliseconds" in metrics, targetMilliseconds=1400, planLimitMilliseconds=3000, metrics=metrics, startLoad=started_load)
         row('timing_main_responsive', metrics.get('maxMainLagMilliseconds', float('inf')) < 50
-            and metrics.get('watchdogSamples', 0) > 0, timing=True, limitMilliseconds=50, metrics=metrics, startLoad=started_load)
+            and metrics.get('watchdogSamples', 0) > 0, timing=True, functionalOK=metrics.get("watchdogSamples", 0) > 0,
+            reason='maximum import main-thread lag must be below 50 ms with watchdog samples',
+            limitMilliseconds=50, metrics=metrics, startLoad=started_load)
         # Import work has a ten-second drain. Welcome has a separate finite
         # playlist: never count its intentional motion as idle or stop it here.
         time.sleep(10)
@@ -485,7 +487,7 @@ def run(factory, results, tmp, h):
         metrics_after = state().get('importMetrics', {})
         row('idle_after_import', playlist_settled and files_before == files_after and counters_before == counters_after
             and metrics_after.get('watchdogActive') == 0 and cpu < 1,
-            timing=True, appCPUPercent=cpu, countersBefore=counters_before, countersAfter=counters_after,
+            timing=True, functionalOK=playlist_settled and files_before == files_after and counters_before == counters_after and metrics_after.get("watchdogActive") == 0, appCPUPercent=cpu, countersBefore=counters_before, countersAfter=counters_after,
             changedStoreFiles=sum(files_before.get(k) != files_after.get(k) for k in files_before.keys() | files_after.keys()),
             metrics=metrics_after)
     finally:
