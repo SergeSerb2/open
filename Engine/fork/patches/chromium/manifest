@@ -2,6 +2,9 @@
 # One block per active series entry:
 # <file>.patch
 # paths: <space-separated pathspecs>
+# 0011-open-thinlto-link-jobs.patch
+paths: build/config/compiler/BUILD.gn
+
 # 0301-open-headless-browser-window.patch
 paths: chrome/browser/ui/browser_window/internal/browser_window_features.cc
 # 0302-open-hidden-browser-ui.patch

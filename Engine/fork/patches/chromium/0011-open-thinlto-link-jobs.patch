@@ -1,0 +1,17 @@
+diff --git a/build/config/compiler/BUILD.gn b/build/config/compiler/BUILD.gn
+index c106acfca9f331c7e04689d127c1bc42e061c7d1..4331b9504498b9b13e56979f0786a8ff333f64dc 100644
+--- a/build/config/compiler/BUILD.gn
++++ b/build/config/compiler/BUILD.gn
+@@ -835,7 +835,11 @@
+       # and let it use all cores.
+       # TODO(thakis): Check if '=0' (that is, number of cores, instead
+       # of "all" which means number of hardware threads) is faster.
+-      ldflags += [ "-Wl,--thinlto-jobs=all" ]
++      # Open: 6 threads. "all" (18 on the build Mac) overloaded and restarted
++      # the machine. ThinLTO output does not depend on the thread count
++      # (checked 2026-11-11: 2, 6 and 18 threads give identical binaries and
++      # dSYMs apart from the per-link random UUID).
++      ldflags += [ "-Wl,--thinlto-jobs=6" ]
+ 
+       if (is_chromeos) {
+         # ARM was originally set lower than x86 to keep the size
