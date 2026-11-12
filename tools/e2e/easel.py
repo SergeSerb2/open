@@ -250,6 +250,10 @@ def run(factory, results, tmp, api):
         app.call('select', tab=created['tab'])
         s = api.wait_until(lambda: (lambda x: x if x.get('shown') else None)(easel(tab=created['tab'])), timeout=8, step=.1)
         aside = sorted(p.name for p in path.parent.glob('document.refused-*.json'))
+        # E28: an Easel row whose canvas is not loaded (restored, not selected) shows the Easel mark.
+        unloaded = app.call('tab-state', tab=first)
+        record('E28_unloaded_row_icon', unloaded.get('rowFaviconSource') == 'provider' and not unloaded.get('selected'),
+               tab={k: unloaded.get(k) for k in ('rowFaviconSource', 'selected', 'title')})
         record('E20_corrupt_file_set_aside', s and s['recreated'] and objects(s) == [] and len(aside) == 1
                and (path.parent / aside[0]).read_text().startswith('{"formatVersion": 1'), aside=aside,
                state={k: v for k, v in (s or {}).items() if k != 'canvas'})
@@ -302,6 +306,10 @@ def run(factory, results, tmp, api):
                    and link[0]['file'] and link[0]['file'] in done['imageFiles'] and abs(link[0]['frame'][3] - 250) < .01,
                    link=link, first=first_link)
 
+            snapshot('e24-link-image-light')
+            app.call('appearance', name='dark'); time.sleep(.5)
+            snapshot('e24-link-image-dark')
+            app.call('appearance', name='light')
             # E25: alignment guides snap a moved shape to another's edge; the canvas menu turns them off.
             menu = easel(action='menu', at=[960, 150], tab=e2)
             easel(action='edit', op='selectAll', tab=e2); easel(action='key', key='delete', tab=e2)

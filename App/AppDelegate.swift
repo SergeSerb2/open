@@ -448,6 +448,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       controller.window?.alphaValue = 0
     }
     if session == nil { controller.context.storedFavicons = stores.sidebarFavicons }
+    // Easel rows draw their own mark even when their canvas is not loaded.
+    controller.context.faviconProvider = { tab in EaselTab.matches(tab.url) ? EaselIcon.image : nil }
     factory.attach(controller)
     windowControllers.append(controller)
     updater?.userDriver.attach(controller)
