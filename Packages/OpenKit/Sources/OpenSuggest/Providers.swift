@@ -231,7 +231,7 @@ public struct TabsProvider: SuggestProvider {
     }
 
     /// The per-keystroke scan. Quality is the best of title (×1), host (×1), and URL (×0.9), with
-    /// the multi-word fallback. Title and host quality decide top-hit eligibility, so they are kept apart:
+    /// the multi-word fallback (title words adjacent and in order, as `TextMatching.rowQuality`). Title and host quality decide top-hit eligibility, so they are kept apart:
     /// a URL-only match is capped at 90 and never reaches the exact-match level.
     static func scan(_ q: FoldedQuery, _ index: TabIndex, profile: Int?) -> [(entry: Int, quality: Double)] {
         var out: [(entry: Int, quality: Double)] = []
@@ -242,6 +242,8 @@ public struct TabsProvider: SuggestProvider {
         var tokenRanges: [(Int, Int)] = []
         var cursor = 0
         for t in q.tokens { tokenRanges.append((cursor, t.count)); cursor += t.count }
+        let fallback = multi && tokenRanges.count <= 64
+        let allTokens: UInt64 = fallback ? UInt64.max >> UInt64(64 - tokenRanges.count) : 0
 
         q.bytes.withUnsafeBufferPointer { whole in
         tokenBytes.withUnsafeBufferPointer { tokens in
@@ -259,18 +261,29 @@ public struct TabsProvider: SuggestProvider {
                 let o = i * 6
                 let title = field(o), host = field(o + 2), url = field(o + 4)
                 var best = TextMatching.quality(whole, in: title)
+                // Multi-word: title words count only at word starts (TextMatching.rowQuality, capture PB1-h).
+                if multi && best < MatchQuality.wordPrefix { best = 0 }
                 if best < MatchQuality.exact { best = max(best, TextMatching.quality(whole, in: host)) }
                 if best < MatchQuality.prefix { best = max(best, TextMatching.quality(whole, in: url) * 0.9) }
-                if multi && best < MatchQuality.allWordsPrefix {
-                    var allWordPrefix = true
-                    var allFound = true
-                    for (start, length) in tokenRanges {
-                        let t = UnsafeBufferPointer(rebasing: tokens[start..<(start + length)])
-                        let tq = max(TextMatching.quality(t, in: title), TextMatching.quality(t, in: host), TextMatching.quality(t, in: url))
-                        if tq == 0 { allFound = false; break }
-                        if tq < MatchQuality.wordPrefix { allWordPrefix = false }
+                if fallback && best < MatchQuality.allWordsPrefix {
+                    if TextMatching.startsAdjacentWords(tokens, tokenRanges, skip: 0, in: title) {
+                        best = MatchQuality.allWordsPrefix
+                    } else {
+                        // Host/URL keep the old rules; the other words must start adjacent title words.
+                        var urlTokens: UInt64 = 0
+                        var allWordPrefix = true
+                        for (k, (start, length)) in tokenRanges.enumerated() {
+                            let t = UnsafeBufferPointer(rebasing: tokens[start..<(start + length)])
+                            let u = max(TextMatching.quality(t, in: host), TextMatching.quality(t, in: url))
+                            if u == 0 { continue }
+                            urlTokens |= 1 &<< UInt64(k)
+                            if u < MatchQuality.wordPrefix { allWordPrefix = false }
+                        }
+                        if urlTokens != 0, urlTokens == allTokens
+                            || TextMatching.startsAdjacentWords(tokens, tokenRanges, skip: urlTokens, in: title) {
+                            best = max(best, allWordPrefix ? MatchQuality.allWordsPrefix : MatchQuality.allWordsSubstring)
+                        }
                     }
-                    if allFound { best = max(best, allWordPrefix ? MatchQuality.allWordsPrefix : MatchQuality.allWordsSubstring) }
                 }
                 if best > 0 { out.append((i, best)) }
             }
@@ -329,7 +342,7 @@ public struct ActionsProvider: SuggestProvider {
         let focus = BrowserAction(id: ActionRegistry.focusSpaceActionID, title: "", symbol: "rectangle.on.rectangle")
         for space in input.tabs.spaces
         where (input.profileOrdinal == nil || space.profileOrdinal == input.profileOrdinal) && space.id != input.context.spaceID {
-            let q = TextMatching.rowQuality(input.query, fields: [(space.foldedTitle, 1), (space.foldedFocusTitle, 1)])
+            let q = TextMatching.rowQuality(input.query, titles: [space.foldedTitle, space.foldedFocusTitle])
             guard q > 0 else { continue }
             var action = focus
             action.title = "Focus on \(space.title)"
@@ -390,7 +403,7 @@ public struct ActionsProvider: SuggestProvider {
         let focus = BrowserAction(id: ActionRegistry.focusSpaceActionID, title: "", symbol: "rectangle.on.rectangle")
         for space in input.tabs.spaces
         where (input.profileOrdinal == nil || space.profileOrdinal == input.profileOrdinal) && space.id != input.context.spaceID {
-            let q = TextMatching.rowQuality(input.query, fields: [(space.foldedTitle, 1), (space.foldedFocusTitle, 1)])
+            let q = TextMatching.rowQuality(input.query, titles: [space.foldedTitle, space.foldedFocusTitle])
             guard q > 0 else { continue }
             var action = focus
             action.title = "Focus on \(space.title)"
@@ -531,7 +544,7 @@ public struct HistoryProvider: SuggestProvider {
         var hostOrURL = 0.0
         if !query.isEmpty {
             let hostBytes = TextMatching.fold(host), urlBytes = TextMatching.fold(urlText)
-            quality = TextMatching.rowQuality(query, fields: [(TextMatching.fold(m.title), 1), (hostBytes, 1), (urlBytes, 0.9)])
+            quality = TextMatching.rowQuality(query, titles: [TextMatching.fold(m.title)], urls: [(hostBytes, 1), (urlBytes, 0.9)])
             hostOrURL = max(TextMatching.quality(query.bytes, in: hostBytes), TextMatching.quality(query.bytes, in: urlBytes))
             // FTS matched it (for example on a token our matcher reads differently); keep a floor.
             if quality == 0 { quality = 20 }

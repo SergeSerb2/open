@@ -462,15 +462,22 @@ Quality is 0-100. It is the best value over the row's fields.
 | Field equals the query | 100 (`exact`) |
 | Field starts with the query | 80 (`prefix`) |
 | Query occurs at a word start in the field | 60 (`wordPrefix`) |
-| Every query word starts a word somewhere in the row | 50 (`allWordsPrefix`) |
+| Every query word starts a word: title words adjacent and in order, host/URL words anywhere | 50 (`allWordsPrefix`) |
 | Action initials equal the query | 50 (`initials`, actions only) |
 | Query occurs inside a word, query has 3+ bytes | 40 (`substring`) |
-| Every query word occurs somewhere in the row | 30 (`allWordsSubstring`) |
+| As above, but a host/URL word matches only inside a word | 30 (`allWordsSubstring`) |
 | No match | 0 |
 
 Field factors: title 1.0, host 1.0, URL 0.9.
 A one-word query tries the whole field first, then the per-word rules.
 A multi-word query that fails as a whole tries the two `allWords` rules.
+Multi-word queries and titles (capture PB1-h): the query words must start adjacent title words, in order.
+In Arc, `new g` finds "New Google Doc" and `new d` does not, because `d` skips the word "Google".
+The first word may start at any word start (`google d` finds "New Google Doc"; guess, not captured).
+A mid-word title match does not count for a multi-word query.
+A query word that the host or URL matches is taken from there, with the old rules (`goo docs` still finds
+`docs.google.com` pages); the other query words must then start adjacent title words.
+A one-word query is scored as before.
 Substring matches under 3 bytes do not count.
 Short queries match only at word starts. This keeps `gi` from matching `digit`.
 
