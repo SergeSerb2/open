@@ -59,23 +59,37 @@ def run(factory, results, tmp, harness):
 
     try:
         app.call('window-frame', frame=[80, 60, 1280, 820])
+        # Arc enables Join Meeting only while its Live Calendar has an active event with a join link (menu
+        # validation FUN_100314424, branch joinLiveMeeting:). Open: only while a joinable meeting is in memory.
+        def enabled(): return menu_row('join-meeting').get('enabled')
+        def refused(via):
+            """The disabled item cannot run: the menu refuses, the hotkey is not taken; nothing is recorded."""
+            seq, n = cal(action='join-result').get('seq', 0), len(tabs())
+            app.call('window-focus', id=app.call('window-state')['id'], activate=True)
+            if via == 'menu':
+                try: app.call('menu-perform', id='join-meeting'); return False
+                except RuntimeError: pass
+            else:
+                app.call('key', key='j', modifiers=['control', 'cmd'], route='app')
+            time.sleep(0.5)
+            return cal(action='join-result').get('seq', 0) == seq and len(tabs()) == n
         row = menu_row('join-meeting')
         results['cal_menu_join_meeting'] = {
-            'ok': row.get('enabled') is True and row.get('title') == 'Join Meeting' and row.get('key') == 'j'
+            'ok': row.get('enabled') is False and row.get('title') == 'Join Meeting' and row.get('key') == 'j'
                 and row.get('modifierMask') == (1 << 18 | 1 << 20),  # Control | Command
             'row': {k: row.get(k) for k in ('title', 'enabled', 'key', 'modifierMask')}}
-        # 1. No permission yet: the first join asks once; a "no" shows the access toast, a second join does not ask again.
+        # A calendar Favorite: Live Calendar keeps today's events in memory (the real source of the enabled state).
+        fav0 = new_tab(app, 'https://calendar.google.com/calendar/u/0/r/day')
+        app.call('favorite', tab=fav0)
+        new_tab(app, 'about:blank')
+        # 1. No permission yet: nothing is in memory, the item stays disabled, and nothing asks macOS for access.
         cal(action='fixture', access='notDetermined', answer='denied', events=[{'title': 'Standup', 'start': 3, 'url': MEET}])
-        n_tabs = len(tabs())
-        first = join('menu')
-        second = join('hotkey')
+        time.sleep(0.5)
         state = cal()
-        toast = toasts()
-        results['cal_join_denied'] = {
-            'ok': first.get('outcome') == 'noAccess' and first.get('access') == 'denied' and second.get('outcome') == 'noAccess'
-                and state.get('requests') == 1 and state.get('queries') == 0 and len(tabs()) == n_tabs
-                and bool(toast) and toast[0]['title'] == 'Allow Calendar access to join meetings' and toast[0]['accessory'] == 'open privacy settings',
-            'first': first, 'second': second, 'requests': state.get('requests'), 'toast': toast[:1]}
+        results['cal_join_disabled_without_access'] = {
+            'ok': enabled() is False and refused('menu') and refused('hotkey') and state.get('requests') == 0
+                and state.get('queries') == 0 and not toasts(),
+            'enabled': enabled(), 'requests': state.get('requests'), 'queries': state.get('queries')}
 
         # 2. Eligibility: declined, canceled, all-day, ended and link-less events are skipped; the link in notes counts.
         events = [
@@ -88,13 +102,15 @@ def run(factory, results, tmp, harness):
             {'id': 'meet', 'title': 'Later call', 'start': 25, 'url': MEET},
         ]
         cal(action='fixture', access='granted', events=events)
+        became = wait_until(enabled, timeout=5, step=.05)
         state = cal()
         n_tabs = len(tabs())
         joined = join('hotkey')
         after = tabs()
         opened = next((t for t in after if t['id'] == joined.get('tab')), {})
         results['cal_join_next_eligible'] = {
-            'ok': state.get('next', {}).get('id') == 'zoom' and joined.get('outcome') == 'join' and joined.get('event') == 'zoom'
+            'ok': became is True and state.get('joinableInMemory') == 'zoom'
+                and state.get('next', {}).get('id') == 'zoom' and joined.get('outcome') == 'join' and joined.get('event') == 'zoom'
                 and joined.get('service') == 'zoom' and joined.get('url') == ZOOM and len(after) == n_tabs + 1
                 and opened.get('url', '').startswith('https://acme.zoom.us/j/81234567890')
                 and app.call('window-state').get('selected') == joined.get('tab') and state.get('requests') == 0,
@@ -105,34 +121,38 @@ def run(factory, results, tmp, harness):
             {'id': 'running', 'title': 'Running call', 'start': -4, 'end': 26, 'url': MEET},
             {'id': 'teams', 'title': 'Teams sync', 'start': 15, 'location': TEAMS},
         ])
+        wait_until(lambda: cal().get('joinableInMemory') == 'running', timeout=5, step=.05)
         joined = join(('join next meeting', 'join-next-meeting'))
         results['cal_commandbar_join_next_meeting'] = {
             'ok': joined.get('outcome') == 'join' and joined.get('event') == 'running' and joined.get('url') == MEET,
             'joined': joined}
         cal(action='fixture', access='granted', events=[{'id': 'teams', 'title': 'Teams sync', 'start': 15, 'location': TEAMS}])
+        wait_until(lambda: cal().get('joinableInMemory') == 'teams', timeout=5, step=.05)
         joined = join(('video call', 'join-next-video-conference'))
         results['cal_commandbar_join_video_conference'] = {
             'ok': joined.get('outcome') == 'join' and joined.get('event') == 'teams' and joined.get('service') == 'teams',
             'joined': joined}
 
-        # 4. No meeting with a call link: no feedback, as Arc (C3 capture, LEAD 02:15): no toast, no new tab.
+        # 4. No meeting with a call link: the item is disabled, as Arc; ⌃⌘J gives no feedback (C3 capture): no
+        #    toast, no new tab; the command bar hides both actions.
         cal(action='fixture', access='granted', events=[
             {'id': 'nolink', 'title': 'Lunch', 'start': 10, 'location': 'Cafe'},
             {'id': 'old', 'title': 'Old call', 'start': -30, 'end': 30, 'url': MEET},  # started > 10 min ago
         ])
-        n_tabs = len(tabs())
+        off = wait_until(lambda: enabled() is False, timeout=5, step=.05)
         shown_before = app.call('toasts')['shown']
-        joined = join('menu')
-        time.sleep(0.5)  # a toast would show at once; give it a moment
+        quiet = refused('menu') and refused('hotkey')
         shown_after = app.call('toasts')['shown']
+        hidden = join(('join next meeting', 'join-next-meeting'))
+        app.call('key', key='escape', route='app')
         results['cal_join_no_meeting'] = {
-            'ok': joined.get('outcome') == 'noMeeting' and len(tabs()) == n_tabs and shown_after == shown_before,
-            'joined': joined, 'toasts': [shown_before, shown_after]}
+            'ok': off is True and quiet and shown_after == shown_before and hidden.get('outcome') == 'row-missing',
+            'disabled': off, 'quiet': quiet, 'toasts': [shown_before, shown_after], 'commandBar': hidden}
 
         # 5. Calendar card (L4): a Pinned Google Calendar tab shows the native card on hover.
         card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq=lambda: cal(action='join-result').get('seq', 0))
         # 6. Live Calendar (L5): a calendar Favorite counts down and reminds.
-        live_checks(app, results, wait_until, new_tab, cal)
+        live_checks(app, results, wait_until, new_tab, cal, fav0)
 
         # 7. Meet route: the first external Meet link adds Arc's default rule and announces it once.
         meet_route_checks(app, results, wait_until, cal)
@@ -229,15 +249,13 @@ def card_checks(app, results, wait_until, new_tab, cal, tabs, join_seq):
     app.call('hover', leave=True, ms=300)
 
 
-def live_checks(app, results, wait_until, new_tab, cal):
+def live_checks(app, results, wait_until, new_tab, cal, fav):
     def live(): return cal(action='live')
     def tile(): return (live().get('tiles') or [{}])[0] if live().get('tiles') else {}
     def at(minutes): cal(action='clock', minutes=minutes); return live()
     def toasts(): return [t for t in app.call('toasts')['toasts'] if t['coalescingKey'] == 'live-calendar' and not t['exiting']]
     app.call('defaults', key='open.general.previewsCalendar', value=None)
     cal(action='fixture', access='granted', events=[{'id': 'm', 'title': 'Weekly sync', 'start': 10, 'end': 40, 'url': MEET}])
-    fav = new_tab(app, 'https://calendar.google.com/calendar/u/0/r/day')
-    app.call('favorite', tab=fav)
     state = wait_until(lambda: (lambda s: s if s.get('active') and s.get('tiles') else None)(live()), timeout=5, step=.05) or live()
     first = (state.get('tiles') or [{}])[0]
     results['cal_live_tile_countdown'] = {
@@ -249,7 +267,9 @@ def live_checks(app, results, wait_until, new_tab, cal):
     seen = {}
     for minutes in (9, 10, 13):
         s = at(minutes)
-        seen[minutes] = ((s.get('tiles') or [{}])[0].get('subtitle'), len(s.get('reminders', [])))
+        # Count only this event's reminders: the calendar Favorite from the Join Meeting rows keeps Live Calendar on
+        # during their fixtures, so the log can hold reminders for those events too.
+        seen[minutes] = ((s.get('tiles') or [{}])[0].get('subtitle'), sum(r.get('event') == 'm' for r in s.get('reminders', [])))
     toast = toasts()
     gone = at(21)
     results['cal_live_tile_times'] = {
