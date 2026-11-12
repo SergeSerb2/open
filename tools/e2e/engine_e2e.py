@@ -7640,6 +7640,9 @@ def page_checks(factory, results, tmp, style="alloy"):
     if os.environ.get("OPEN_E2E_PAGE_COPY_ONLY") == "1":
         page_commands_checks(factory, results, tmp)
         return
+    if os.environ.get("OPEN_E2E_PAGE_CAPTURE_ONLY") == "1":
+        capture_checks(factory, results, tmp)
+        return
     if os.environ.get("OPEN_E2E_PAGE_TRANSLATE_ONLY") == "1":
         page_translate_checks(factory, results, tmp)
         return
@@ -7787,6 +7790,82 @@ def page_engine_checks(factory, results, tmp):
         server.shutdown(); server.server_close()
 
 
+PORTRAIT_ASPECT, PORTRAIT_HEIGHT = 239 / 127, 96 / 127
+
+
+def portrait_canvas(width, height):
+    """CaptureComposer.portraitLayout: the canvas for a page image of this pixel size."""
+    h = round(height / PORTRAIT_HEIGHT); w = round(h * PORTRAIT_ASPECT)
+    if width > w * 0.86:
+        w = round(width / 0.86); h = round(w / PORTRAIT_ASPECT)
+    return [w, h]
+
+
+def solid_png(path, rgb, size=(64, 40)):
+    import struct, zlib
+    raw = b''.join(b'\x00' + bytes(rgb) * size[0] for _ in range(size[1]))
+    def chunk(kind, data): return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    with open(path, 'wb') as f:
+        f.write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size[0], size[1], 8, 2, 0, 0, 0))
+                + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
+
+
+def portrait_rows(app, results, tab, rows, tmp, wait_until):
+    """PB2 row 4: the popover, its controls, the wallpaper rule and the capture (real menu item, real
+    button, controls through their accessibility actions). Automation builds never read the real
+    wallpaper: without an injected image the pick falls back to the website colour."""
+    count = len(rows())
+    app.call('capture-portrait', wallpaper='')
+    app.call('capture', mode='portrait')
+    s = app.call('capture-portrait')
+    pop, pv, place = s.get('popover', {}), s.get('preview', {}), s.get('placement', {})
+    results['capture_c3_portrait_popover'] = {'ok': s.get('shown') and pop.get('size') == [286, 246]
+        and pop.get('buttonTitle') == 'Capture in Portrait Mode' and pop.get('labels') == ['Use Website Color', 'Use Desktop Wallpaper', 'Portrait Capture Watermark Toggle']
+        and pop.get('button', [0])[2] > 240 and pop.get('website', [0, 0, 0])[2] == 17 and pop.get('wallpaper', [0, 0, 0])[2] == 17
+        and abs(pv.get('width', 0) / max(1, pv.get('height', 1)) - PORTRAIT_ASPECT) < 0.02
+        # Anchored at the page's sidebar-side edge, vertically centred. AppKit puts it on the sidebar
+        # side when there is room (Arc's capture) and flips it onto the page when there is not.
+        and min(abs(place.get('popoverMaxX', 9e9) - place.get('pageMinX', 0)), abs(place.get('popoverMinX', 9e9) - place.get('pageMinX', 0))) < 40
+        and abs(place.get('popoverMidY', 0) - place.get('pageMidY', 9e9)) < 40
+        and len(rows()) == count and s.get('style', {}).get('source') == 'color', 'state': s}
+    a = app.call('capture-portrait', action='color', value=0.0)
+    b = app.call('capture-portrait', action='color', value=1.0)
+    results['capture_c3_portrait_color_slider'] = {'ok': a['style']['color'] == 0 and b['style']['color'] == 1
+        and a['preview']['corner'] != b['preview']['corner'] and b['popover']['knobX'] > a['popover']['knobX'] + 100,
+        'corners': [a['preview']['corner'], b['preview']['corner']]}
+    web = app.call('capture-portrait', action='website')
+    results['capture_c3_portrait_website_color'] = {'ok': web['style']['source'] == 'website' and web['popover']['selected'] == {'website': 1, 'wallpaper': 0}
+        and web['preview']['corner'] != b['preview']['corner'], 'state': web['style'], 'corner': web['preview']['corner']}
+    hidden = app.call('capture-portrait', action='watermark')
+    shown = app.call('capture-portrait', action='watermark')
+    results['capture_c3_portrait_watermark'] = {'ok': hidden['style']['hidesWatermark'] is True and shown['style']['hidesWatermark'] is False
+        and hidden['preview']['watermark'] != shown['preview']['watermark'], 'pixels': [hidden['preview']['watermark'], shown['preview']['watermark']]}
+    reads = shown['wallpaperReads']
+    fell = app.call('capture-portrait', action='wallpaper', settle=3000)
+    results['capture_c3_portrait_wallpaper_fallback'] = {'ok': fell['wallpaperReads'] == reads + 1 and fell['wallpaperFallbacks'] == shown['wallpaperFallbacks'] + 1
+        and fell['style']['source'] == 'website' and fell['shown'], 'state': fell['style'], 'reads': fell['wallpaperReads']}
+    image = os.path.join(tmp, 'portrait-wallpaper.png'); solid_png(image, (20, 160, 90))
+    app.call('capture-portrait', wallpaper=image)
+    wall = app.call('capture-portrait', action='wallpaper', settle=3000)
+    corner = wall.get('preview', {}).get('corner', [])
+    results['capture_c3_portrait_wallpaper'] = {'ok': wall['style']['source'] == 'wallpaper' and wall['wallpaperReads'] == fell['wallpaperReads'] + 1
+        and len(corner) == 3 and abs(corner[0] - 20) <= 6 and abs(corner[1] - 160) <= 6 and abs(corner[2] - 90) <= 6, 'corner': corner}
+    app.call('capture-portrait', action='color', value=0.5)
+    done = app.call('capture-portrait', action='capture')
+    row = rows()[-1] if len(rows()) > count else {}
+    stored = [app.call('defaults', key=k) for k in ('open.capture.portraitBackground', 'open.capture.portraitColorPercentage', 'open.capture.portraitHidesWatermark')]
+    results['capture_c3_portrait'] = {'ok': row.get('kind') == 'portrait' and abs(row['width'] / row['height'] - PORTRAIT_ASPECT) < 0.003
+        and done['capture'].get('result', {}).get('saved') == row.get('id') and not done['shown'] and stored == ['color', 0.5, False],
+        'row': row, 'stored': stored}
+    app.call('key', key='escape'); wait_until(lambda: not app.call('capture-state').get('card'), timeout=3, step=.05)
+    app.call('capture', mode='portrait')
+    opened = app.call('capture-portrait')
+    app.call('key', key='escape')
+    closed = wait_until(lambda: (lambda v: v if not v['shown'] else None)(app.call('capture-portrait', settle=0)), timeout=3, step=.05)
+    results['capture_c3_portrait_escape'] = {'ok': opened['shown'] and bool(closed) and len(rows()) == count + 1, 'rows': len(rows())}
+    app.call('capture-portrait', wallpaper='')
+
+
 def capture_checks(factory, results, tmp):
     """page-platform §8.3 C1–C7: the Capture tool in the real App (Step 13)."""
     server, origin = _static_server(os.path.join(ROOT, 'tools', 'e2e', 'fixtures', 'page-platform'))
@@ -7800,7 +7879,8 @@ def capture_checks(factory, results, tmp):
             app.call('key', key='escape')
             wait_until(lambda: not state().get('card'), timeout=3, step=.05)
     # The App writes these in the shared preferences domain: start from defaults, restore after.
-    capture_keys = ('open.capture.shortcutHintLastShown', 'open.capture.dragToCaptureEnabled', 'open.capture.portraitBackground')
+    capture_keys = ('open.capture.shortcutHintLastShown', 'open.capture.dragToCaptureEnabled', 'open.capture.portraitBackground',
+                    'open.capture.portraitColorPercentage', 'open.capture.portraitHidesWatermark')
     saved_keys = {}
     emulated = [False]
     try:
@@ -7886,11 +7966,8 @@ def capture_checks(factory, results, tmp):
         results['capture_c4_escape'] = {'ok': bool(shown) and shown.get('firstResponder') is True and not after_esc['overlayActive'] and after_esc['cancelled'] == cancelled + 1
             and len(rows()) == count, 'overlay': shown, 'state': after_esc}
 
-        # C3: portrait -> a 4:5 PNG.
-        r = app.call('capture', mode='portrait')
-        row = rows()[-1]
-        results['capture_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
-            and r['state']['result']['saved'] == row['id'], 'row': row}
+        # C3: Capture in Portrait Mode opens Arc's popover (capture 43-pb2-probe); its button captures.
+        portrait_rows(app, results, tab, rows, tmp, wait_until)
         close_card()
 
         # C2: full page of the 12,000 px page; bands at their offsets.
@@ -7976,11 +8053,12 @@ def capture_checks(factory, results, tmp):
             and bands == [k % 12 for k in range(16)], 'row': row, 'bands': bands, 'error': r['state'].get('error'), 'state': r['state']}
         close_card()
         app.call('navigate', tab=tab, url=origin + '/long.html'); app.call('wait', tab=tab)
-        app.call('capture', mode='portrait')
+        app.call('capture', mode='portrait'); app.call('capture-portrait', action='capture')
         row = rows()[-1]
         view = app.eval(tab, '[innerWidth, innerHeight]')
-        results['capture_2x_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] / row['height'] - 0.8) < 0.002
-            and abs(row['width'] - round(view[0] * 2 / 0.86)) <= 2, 'row': row, 'view': view}
+        expected = portrait_canvas(view[0] * 2, view[1] * 2)
+        results['capture_2x_c3_portrait'] = {'ok': row['kind'] == 'portrait' and abs(row['width'] - expected[0]) <= 2
+            and abs(row['height'] - expected[1]) <= 2, 'row': row, 'view': view, 'expected': expected}
         close_card()
         app.call('devtools', tab=tab, method='Emulation.clearDeviceMetricsOverride', params={})
         emulated[0] = False

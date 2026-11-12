@@ -377,9 +377,12 @@ def arc_preferences_checks(app, results, wait_until, tmp, harness):
         # Audit A2: Favorite tile switches and host lists.
         'twitterBadgeEnabled': False, 'whatsAppBadgeEnabled': True,
         'topAppsBadgingDisabledHosts': ['Mail.Google.com'], 'topAppsSubtitleDisabledHosts': ['calendar.google.com'],
+        # PB2 row 4: Capture in Portrait Mode.
+        'portraitCaptureBackground': 'desktopWallpaper', 'portraitCaptureColorPercentage': 0.3, 'portraitCaptureHidesWatermark': True,
     }
     FAVORITE_KEYS = ('open.favorites.twitterBadgeEnabled', 'open.favorites.whatsAppBadgeEnabled',
-                     'open.favorites.badgingDisabledHosts', 'open.favorites.subtitleDisabledHosts')
+                     'open.favorites.badgingDisabledHosts', 'open.favorites.subtitleDisabledHosts',
+                     'open.capture.portraitBackground', 'open.capture.portraitColorPercentage', 'open.capture.portraitHidesWatermark')
     for key in FAVORITE_KEYS: app.call('defaults', key=key, value=None)
     with open(prefs_dir / 'company.thebrowser.Browser.plist', 'wb') as f: plistlib.dump(prefs, f, fmt=plistlib.FMT_BINARY)
     def d(key): return app.call('defaults', key=key)
@@ -403,10 +406,12 @@ def arc_preferences_checks(app, results, wait_until, tmp, harness):
                 'open.links.didSetDefaultMeetRoute': True, reminder_key: 'fiveMinutes',
                 'open.favorites.twitterBadgeEnabled': False, 'open.favorites.whatsAppBadgeEnabled': True,
                 'open.favorites.badgingDisabledHosts': ['mail.google.com'],
-                'open.favorites.subtitleDisabledHosts': ['calendar.google.com']}
+                'open.favorites.subtitleDisabledHosts': ['calendar.google.com'],
+                'open.capture.portraitBackground': 'wallpaper', 'open.capture.portraitColorPercentage': 0.3,
+                'open.capture.portraitHidesWatermark': True}
     results['cal_arc_prefs_import'] = {
         'ok': bool(default_profile) and written == expected and report.get('lastOutcome', {}).get('Live Calendar reminders') == 1
-            and report.get('lastOutcome', {}).get('Arc settings') == 10 and not report.get('lastFailures', {}).get('Arc settings'),
+            and report.get('lastOutcome', {}).get('Arc settings') == 13 and not report.get('lastFailures', {}).get('Arc settings'),
         'written': written, 'mapped': mapped, 'outcome': report.get('lastOutcome'), 'failures': report.get('lastFailures')}
     try:
         app.call('first-run', action='settings-done')
