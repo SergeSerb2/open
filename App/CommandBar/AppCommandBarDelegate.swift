@@ -121,8 +121,9 @@ final class AppCommandBarSession: CommandBarDelegate {
       allowsRemoteSuggestions: !factory.isIncognito && profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID)
     // "Undo <name>" / "Redo <name>" (Arc "Action to undo/redo an action by name"): the App's model undo stack.
     let undo = factory.app.undoManager
-    request.undoActionName = undo.canUndo && !undo.undoActionName.isEmpty ? undo.undoActionName : nil
-    request.redoActionName = undo.canRedo && !undo.redoActionName.isEmpty ? undo.redoActionName : nil
+    // An unnamed step ("" — most model edits register no name) still offers plain "Undo"/"Redo".
+    request.undoActionName = undo.canUndo ? undo.undoActionName : nil
+    request.redoActionName = undo.canRedo ? undo.redoActionName : nil
     bar.present(request, presentation: presentation)
   }
   func contextDidChange() {

@@ -9452,7 +9452,9 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     results['commandbar_new_document'] = {'ok': bool(rows) and rows[0] == ('new-document-google-doc', 'New Google Doc') and bool(doc)
         and any('//' + h in (doc or {}).get('url', '') for h in hosts) and app.call('window-state')['selected'] == (doc or {}).get('id'),
         'rows': rows[:4], 'tab': doc}
-    # "Undo <name>": close a tab, then the bar offers the named Undo and running it restores the tab.
+    # "Undo <name>": archive a fresh Today tab, then the bar offers the named Undo and running it restores the tab.
+    fresh = new_tab(app, 'about:blank#pb1-undo')
+    app.call('select', tab=fresh); app.call('focus', tab=fresh)
     count = len(app.call('tabs'))
     app.call('menu-perform', id='archive-tab')
     wait_until(lambda: len(app.call('tabs')) == count - 1, timeout=5, step=.05)
@@ -9460,7 +9462,8 @@ def commandbar_pb1_checks(app, results, bar, press, type_query, state):
     undo_rows = [r for r in state().get('rows', []) if r.get('action') == 'undo-by-name']
     press('return')
     restored = wait_until(lambda: len(app.call('tabs')) == count, timeout=5, step=.05)
-    results['commandbar_undo_by_name'] = {'ok': len(undo_rows) == 1 and undo_rows[0]['title'].startswith('Undo ') and len(undo_rows[0]['title']) > 5
+    # Archive registers no undo name in Open's model, so the row reads plain "Undo"; named steps read "Undo <name>".
+    results['commandbar_undo_by_name'] = {'ok': len(undo_rows) == 1 and (undo_rows[0]['title'] == 'Undo' or undo_rows[0]['title'].startswith('Undo '))
         and bool(restored), 'row': undo_rows[0] if undo_rows else None, 'tabs': len(app.call('tabs')), 'expected': count}
 
 

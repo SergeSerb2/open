@@ -345,8 +345,8 @@ public struct ActionsProvider: SuggestProvider {
         var rows: [Suggestion] = []
         for (verb, id, name, symbol) in [("Undo", NewDocumentActions.undoByNameID, input.context.undoActionName, "arrow.uturn.backward"),
                                          ("Redo", NewDocumentActions.redoByNameID, input.context.redoActionName, "arrow.uturn.forward")] {
-            guard let name, !name.isEmpty else { continue }
-            let action = BrowserAction(id: id, title: "\(verb) \(name)", aliases: [verb], symbol: symbol)
+            guard let name else { continue }
+            let action = BrowserAction(id: id, title: name.isEmpty ? verb : "\(verb) \(name)", aliases: [verb], symbol: symbol)
             let q = ActionMatcher.quality(input.query, ActionMatcher.entry(for: action), minimumBytes: minimumBytes)
             guard q > 0 else { continue }
             rows.append(row(action, quality: q, input: input, space: nil))
