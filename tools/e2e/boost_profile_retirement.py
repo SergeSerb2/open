@@ -63,8 +63,15 @@ def run(factory, results, tmp, env):
             evidence['dirtyLibraryEdit'] = True
             app.call('profiles-shell', action='press', label='Delete')
             evidence['dirtyToDeleteCallMs'] = (time.monotonic() - dirty_at) * 1000
-            assert wait(lambda: not app.call('profiles-shell')['deleting'] and app.call('profiles-shell')['sheet'] == 0,
-                        timeout=30, step=.05)
+            finished = wait(lambda: not app.call('profiles-shell')['deleting'] and app.call('profiles-shell')['sheet'] == 0,
+                            timeout=30, step=.05)
+            if not finished:
+                shell = app.call('profiles-shell')
+                evidence['stuck'] = {k: shell.get(k) for k in ('deleting', 'sheet', 'sheetText', 'teardownStage', 'errorText', 'deleteNames')}
+                evidence['contexts'] = app.call('engine-contexts')
+                evidence['profileDirectory'] = profile['directory']
+            assert finished, 'Profile delete did not finish in 30 s'
+            evidence['teardownStage'] = app.call('profiles-shell').get('teardownStage')
             evidence['modelGone'] = not any(p['id'] == profile['id'] for p in app.call('profiles-shell')['profiles'])
             evidence['directoryGoneImmediately'] = not directory.exists()
             evidence['editorClosed'] = not editor().get('open', False)

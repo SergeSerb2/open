@@ -17,6 +17,10 @@ def run(factory, results, tmp, env):
         import boost_zap_review
         boost_zap_review.run(factory, results, tmp, env)
         return
+    if os.environ.get("OPEN_E2E_BOOST_RETIRE_ONLY") == "1":
+        import boost_profile_retirement
+        boost_profile_retirement.run(factory, results, tmp, env)
+        return
     if os.environ.get("OPEN_E2E_BOOST_ZAP_ONLY") == "1":
         import boost_zap
         boost_zap.run(factory, results, tmp, env)
