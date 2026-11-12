@@ -245,6 +245,26 @@ enum Checks {
         check(more.map { !$0.hidden && $0.frame == CGRect(x: sidebar.bounds.width - 39, y: 5, width: 26, height: 26) && $0.menu == sidebar.menuTitles(nodeID: nil) } ?? false,
               "Space header \"…\" on hover: \(more.map { "\($0.frame) hidden \($0.hidden)" } ?? "none"), menu = the Space menu")
         context.forcedHover = nil; OffscreenRenderer.settle(scene, runLoop: 0.01)
+        // Capture session 8 item 7: the "+" popover. Body 210 × 290 with a 6 pt margin and a 7 pt arrow; rows 194 × 40,
+        // groups 17 pt apart; opens on the last row; ↓ wraps to the first, ↑ returns; Esc closes; "+" shows "×" meanwhile.
+        sidebar.togglePlusPopover()
+        var plus = sidebar.plusPopoverState
+        let rows = plus["rows"] as? [[String: Any]] ?? []
+        let frames = rows.compactMap { $0["frame"] as? [CGFloat] }
+        check(plus["shown"] as? Bool == true && plus["closeGlyph"] as? Bool == true && plus["size"] as? [CGFloat] == [222, 309]
+              && rows.compactMap { $0["title"] as? String } == ["New Space", "New Folder", "New Easel", "New Boost", "New Split", "New Tab"]
+              && frames.allSatisfy { $0[0] == 14 && $0[2] == 194 && $0[3] == 40 } && frames.map { $0[1] } == [14, 54, 111, 151, 208, 248],
+              "plus popover: 6 rows in 3 groups at Arc's geometry (\(plus["size"] ?? "?"), row tops \(frames.map { $0[1] }))")
+        let opened = plus["highlighted"] as? String
+        sidebar.plusPopoverKey(125); let down = sidebar.plusPopoverState["highlighted"] as? String
+        sidebar.plusPopoverKey(125); let down2 = sidebar.plusPopoverState["highlighted"] as? String
+        sidebar.plusPopoverKey(126); sidebar.plusPopoverKey(126); let up = sidebar.plusPopoverState["highlighted"] as? String
+        check(opened == "New Tab" && down == "New Space" && down2 == "New Folder" && up == "New Tab", "plus popover keys: opens on New Tab, ↓ wraps to New Space, ↑ returns (\(opened ?? "") \(down ?? "") \(down2 ?? "") \(up ?? ""))")
+        sidebar.plusPopoverKey(53); plus = sidebar.plusPopoverState
+        check(plus["shown"] as? Bool == false && plus["closeGlyph"] as? Bool == false, "plus popover: Esc closes and the button shows \"+\" again")
+        delegate.log.removeAll(); sidebar.togglePlusPopover(); sidebar.plusPopoverKey(36)
+        OffscreenRenderer.settle(scene, runLoop: 0.02)
+        check(delegate.log.contains(.newTab) && sidebar.plusPopoverState["shown"] as? Bool == false, "plus popover: Return on New Tab sends .newTab and closes (\(delegate.log), shown \(sidebar.plusPopoverState["shown"] ?? "?"))")
 
         print("drag and drop targets")
         let pinnedCount = space.pinned.count

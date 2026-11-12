@@ -788,7 +788,26 @@ extension SidebarView {
     /// The URL field's placeholder for the current sidebar width.
     public var urlFieldPlaceholder: String { layoutSubtreeIfNeeded(); return urlField.placeholder }
     /// The same provider used when the bottom-bar plus button opens its menu.
-    public func plusMenu() -> NSMenu? { bottomBar.plus.menuProvider?() }
+    public func plusMenu() -> NSMenu? { context.isIncognito ? nil : bottomBar.menus.plus() }
+    /// The "+" popover (capture session 8 item 7): open or close as a click on "+" does.
+    public func togglePlusPopover() { if !context.isIncognito { bottomBar.togglePlusPopover() } }
+    /// ↓ 125, ↑ 126, Return 36, Esc 53, as the popover's key monitor handles them.
+    @discardableResult public func plusPopoverKey(_ code: UInt16) -> Bool { bottomBar.plusPopover.key(code) }
+    /// Shown state, highlighted row, row titles and frames (popover coordinates), and the "+" glyph.
+    public var plusPopoverState: [String: Any] {
+        let view = bottomBar.plusPopover.view
+        return ["shown": bottomBar.plusPopover.isShown, "highlighted": view?.highlighted.map { view!.rows[$0].item.title } ?? "",
+                "rows": view?.rows.map { ["title": $0.item.title, "enabled": $0.item.isEnabled, "frame": [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height]] as [String: Any] } ?? [],
+                "size": view.map { [$0.frame.width, $0.frame.height] } ?? [], "closeGlyph": bottomBar.plus.glyphView.glyph == .rowClose]
+    }
+    /// The popover's content alone, for offscreen renders (`sidebar-render plus-popover`).
+    public func makePlusPopoverView() -> NSView? {
+        guard let menu = plusMenu() else { return nil }
+        let style = context.focusedSpace.map(context.style(for:)) ?? .defaultTheme(system: context.systemAppearance)
+        let view = PlusPopoverView(menu: menu, colors: PlusPopoverColors(style: style, system: context.systemAppearance))
+        view.arrowX = view.bounds.maxX - 22
+        return view
+    }
     /// The URL field's right-click menu, built as a click would build it.
     public func urlFieldMenu() -> NSMenu { SidebarMenus(context: context).urlField() }
     /// The URL field shows (it hides while the window shows the content toolbar).
