@@ -121,9 +121,6 @@ extension SpaceThemeStyle {
         return base == .dark ? .light : .dark
     }
 
-    /// No stored colour: the default theme (fixed corners, follows macOS).
-    public var isDefaultTheme: Bool { lightPalette == nil && contentAppearance == nil }
-
     /// The active window's background at 3 × 3 points over the window.
     func fieldSamples() -> [RGBA] {
         let field = ThemeField.Evaluator(style: self, windowSize: CGSize(width: 1000, height: 1000), isActive: true)
