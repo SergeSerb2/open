@@ -66,6 +66,19 @@ public final class NoteStore {
 
     public var hasPendingWrites: Bool { !dirty.isEmpty }
 
+    /// Writes an imported Note now unless a file for it exists. Returns true when written.
+    @discardableResult
+    public func importIfAbsent(_ note: NoteDocument) -> Bool {
+        guard !FileManager.default.fileExists(atPath: fileURL(for: note.id).path), cache[note.id] == nil else { return false }
+        cache[note.id] = note; dirty.insert(note.id); flush()
+        return !dirty.contains(note.id)
+    }
+
+    /// Replaces a Note (an import that fills a placeholder). Written now.
+    public func replace(_ note: NoteDocument) {
+        cache[note.id] = note; dirty.insert(note.id); flush()
+    }
+
     // MARK: Images
 
     /// 20 MiB per image: refused above, before decoding.

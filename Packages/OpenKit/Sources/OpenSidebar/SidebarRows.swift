@@ -152,7 +152,7 @@ final class SidebarRowView: NSTableRowView {
             fill.opacity = 1
         } else if allowsHighlight && isCurrent {
             let style = page?.style
-            fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
+            fill.backgroundColor = (page?.roles.activePlate ?? style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
             SelectionShadow.apply(to: fill, appearance: appearance)
             fill.opacity = 1
         } else if allowsHighlight && multiselected {
@@ -161,7 +161,7 @@ final class SidebarRowView: NSTableRowView {
             fill.opacity = 1
         } else if allowsHighlight && (isHovered || isDropTarget) {
             fill.backgroundColor = isDropTarget ? SidebarColors.itemHoveredBackground.cgColor(appearance)
-                : (page?.style.rowHoverFill(appearance) ?? SidebarRole.rowHover.resolved(appearance)).cgColor
+                : (page?.roles.rowHover ?? SidebarRole.rowHover.resolved(appearance)).cgColor
             fill.shadowOpacity = 0
             fill.opacity = 1
         } else {
@@ -315,7 +315,7 @@ class SidebarCellView: NSView {
 
     func titleColor() -> NSColor {
         guard let page else { return .labelColor }
-        let color = page.style.titleColor(page.contentAppearanceForSpace).nsColor
+        let color = page.roles.title.nsColor
         return page.context.titleColorTransform?(color) ?? color
     }
 
@@ -696,6 +696,10 @@ final class FolderCellView: SidebarCellView {
     let title = TextLabel()
     private var unread: SidebarUnreadDot?
     private var unload: FolderUnloadButton?
+    /// Live Folder failure state (live-data §2.2 header states): warning glyph, Arc's text as
+    /// tooltip and accessibility label; a click opens sign-in or the pulls page. Placement and
+    /// form: GUESS — capture pending (F2 capture item 4; Arc shows the text in a folder header).
+    private(set) var liveState: LiveFolderStateButton?
     weak var folder: Folder? { didSet { bind() } }
 
     required init(frame: NSRect) {
@@ -758,7 +762,22 @@ final class FolderCellView: SidebarCellView {
             button.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - m.accessorySize, y: m.accessoryY, width: m.accessorySize, height: m.accessorySize)
             button.isHidden = !actionShown
         }
-        let right = actionShown ? bounds.width - m.accessoryTrailingInset - m.accessorySize : shown ? bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2 - 6 : bounds.width - m.titleTrailingInset
+        let message = tracked({ [weak self] in self?.folder?.live?.stateMessage }) { [weak self] in self?.needsLayout = true }
+        if message != nil || liveState != nil {
+            let button = liveState ?? LiveFolderStateButton()
+            if liveState == nil { addSubview(button); liveState = button }
+            button.isHidden = message == nil || actionShown
+            button.toolTip = message; button.setAccessibilityLabel(message)
+            button.ink = SidebarRole.rowAccessory.resolved(contentAppearance).nsColor
+            button.onPress = { [weak self] in
+                guard let self, let folder = self.folder else { return }
+                self.context?.send(.openLiveFolderState(folder.id))
+            }
+            let x = bounds.width - m.accessoryTrailingInset - m.accessorySize - (actionShown ? m.accessorySize + 4 : 0)
+            button.frame = CGRect(x: x, y: m.accessoryY, width: m.accessorySize, height: m.accessorySize)
+        }
+        let stateShown = message != nil && !actionShown
+        let right = actionShown ? bounds.width - m.accessoryTrailingInset - m.accessorySize : stateShown ? bounds.width - m.accessoryTrailingInset - m.accessorySize - 4 : shown ? bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2 - 6 : bounds.width - m.titleTrailingInset
         title.frame = CGRect(x: m.titleX + indent, y: 0, width: max(0, right - m.titleX - indent), height: m.rowHeight)
     }
 
@@ -769,6 +788,27 @@ final class FolderCellView: SidebarCellView {
             self?.context?.send(.rename(nodeID: id, title: value))
         }
     }
+}
+
+/// The Live Folder state glyph (SF Symbol `exclamationmark.triangle`, named in Arc's own
+/// header-state code: live-data §2.2).
+@MainActor
+final class LiveFolderStateButton: NSView {
+    var onPress: (@MainActor () -> Void)?
+    var ink: NSColor = .secondaryLabelColor { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityPerformPress() -> Bool { onPress?(); return true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let symbol = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium)) else { return }
+        let size = symbol.size
+        symbol.drawTinted(in: CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height), color: ink)
+    }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress?() } }
 }
 
 /// Q18 visual accessory. A non-AX element, matching the captured folder row.
@@ -846,6 +886,15 @@ final class FolderIconView: NSView {
             CustomIcon.folderPeek(in: bounds.insetBy(dx: 1, dy: 1), color: usesDefaultAccent ? SidebarRole.folderPeekDefaultAccent.light.nsColor : accent,
                                   dotsColor: SidebarRole.folderPeekDots.light.nsColor)
         } else { CustomIcon.folder(open: expansion == .expanded, in: ink, color: accent) }
+        // Live Folder (capture s5 b3: a folder glyph with a service badge). Our badge is Open's own
+        // pull-request glyph in the folder body, never GitHub's mark. Size and placement:
+        // GUESS — capture pending (only one 2x frame of Arc's glyph exists).
+        if folder.live != nil, icon == nil, folder.peekedChildID == nil {
+            lastDrawnGlyph = "folder.live"
+            let body = CGRect(x: ink.minX, y: ink.minY + ink.height * 0.30, width: ink.width, height: ink.height * 0.70)
+            let side = min(body.width, body.height) * 0.78
+            PullRequestGlyph.draw(in: CGRect(x: body.midX - side / 2, y: body.midY - side / 2, width: side, height: side), color: .white)
+        }
     }
 }
 
@@ -962,7 +1011,7 @@ final class NewTabCellView: SidebarCellView {
     override func rowStateChanged() {
         let current = rowView?.isCurrent ?? false
         plus.tint = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : SidebarRole.newTabGlyph.nsColor }
-        title.color = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : SidebarRole.secondaryText.nsColor }
+        title.color = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : (self?.page?.roles.newTabLabel.nsColor ?? SidebarRole.secondaryText.nsColor) }
     }
 
     override func layout() {
@@ -1010,7 +1059,7 @@ final class DividerCellView: SidebarCellView {
 
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
-        line.backgroundColor = SidebarRole.divider.cgColor(contentAppearance)
+        line.backgroundColor = page?.roles.separator.cgColor ?? SidebarRole.divider.cgColor(contentAppearance)
     }
 
     override func layout() {

@@ -63,6 +63,16 @@ extension AutomationController {
       guard let arc = args["arcID"] as? String else { throw Failure(message: "arcID needed") }
       return EaselImporter.documentID(forArcEaselID: arc).uuidString.lowercased()
     }
+    if action == "rows" {
+      // Every Easel row in every Space of the model (the window's `tabs` lists only its Space).
+      var rows: [[String: Any]] = []
+      for space in app.model.spaces {
+        for tab in factory.flattened(space.pinned + space.today) where EaselTab.matches(tab.url) {
+          rows.append(["tab": tab.id.description, "url": tab.url.absoluteString, "title": tab.title, "space": space.id.description])
+        }
+      }
+      return rows
+    }
     if action == "export-all" {
       guard let path = args["path"] as? String else { throw Failure(message: "path needed") }
       let (count, failures) = try app.exportAllEasels(to: URL(fileURLWithPath: path))

@@ -197,6 +197,24 @@ func runImportFirefox(args: [String]) async throws {
             if expected != nil { ok = false }
         }
     }
+    // I-6: open tabs from the last session.
+    do {
+        let session = try FirefoxSessionReader(profileDirectory: profile.directory).read()
+        let r = session.report
+        print("open tabs: windows=\(r.windows) tabs=\(r.sourceTabs) kept=\(r.kept) unsupported=\(r.skippedUnsupportedURL) empty=\(r.skippedEmpty) pinned=\(session.tabs.filter(\.isPinned).count)")
+        ok = ok && r.accounted == r.sourceTabs
+        if let expected, expected.openTabRows > 0 {
+            check("openTabWindows", r.windows, expected.openTabWindows); check("openTabRows", r.sourceTabs, expected.openTabRows)
+            check("openTabsKept", r.kept, expected.openTabsKept); check("openTabsUnsupported", r.skippedUnsupportedURL, expected.openTabsUnsupported)
+            check("openTabsEmpty", r.skippedEmpty, expected.openTabsEmpty)
+            let urls = session.tabs.map(\.url.absoluteString)
+            ok = ok && urls == expected.openTabURLs
+            print("  expect open tab URLs (current entry of each tab) \(urls == expected.openTabURLs ? "OK" : "MISMATCH")")
+        }
+    } catch FirefoxImportError.missingFile {
+        print("open tabs: no session file")
+        if let expected, expected.openTabRows > 0 { ok = false }
+    }
     let duration = ContinuousClock.now - started
     print(String(format: "elapsed=%.3fs", Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18))
     print(ok ? "RESULT PASS" : "RESULT FAIL")

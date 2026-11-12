@@ -30,6 +30,9 @@ public struct SyntheticFirefoxFixture: Sendable {
         public var primaryPassword: Bool
         /// Top-level folders of "Imported from Firefox", in order.
         public var rootTitles: [String]
+        /// I-6: the last session (default profile only).
+        public var openTabWindows = 0, openTabRows = 0, openTabsKept = 0, openTabsUnsupported = 0, openTabsEmpty = 0
+        public var openTabURLs: [String] = []
     }
 
     public static let primaryPassword = "synthetic-primary"
@@ -91,6 +94,7 @@ public struct SyntheticFirefoxFixture: Sendable {
         try writePlaces(dir.appendingPathComponent("places.sqlite"), visits: visits, seed: seed, expected: &e)
         try writeFormHistory(dir.appendingPathComponent("formhistory.sqlite"), seed: seed, expected: &e)
         try writeLogins(dir, seed: seed, primary: primary, expected: &e)
+        if primary == nil { try writeSession(dir, seed: seed, expected: &e) }
         return e
     }
 
@@ -178,6 +182,31 @@ public struct SyntheticFirefoxFixture: Sendable {
         }
         e.visitRows = Int(visitID)
         try db.exec("COMMIT;")
+    }
+
+    /// `sessionstore-backups/recovery.jsonlz4`: two windows; a pinned tab, a tab with back history, an
+    /// `about:` tab and a tab with no entries. A real LZ4 block (Apple's encoder) with repeated text.
+    private static func writeSession(_ dir: URL, seed: Int, expected e: inout Expected) throws {
+        func entry(_ url: String, _ title: String) -> [String: Any] { ["url": url, "title": title, "triggeringPrincipal_base64": String(repeating: "eyJ", count: 20)] }
+        let windows: [[String: Any]] = [
+            ["tabs": [
+                ["entries": [entry("https://pinned.session.example.test/s\(seed)", "Pinned")], "index": 1, "pinned": true, "lastAccessed": 1_735_689_600_000],
+                ["entries": [entry("https://back.session.example.test/1", "Back"), entry("https://current.session.example.test/2", "Current")], "index": 2, "lastAccessed": 1_735_776_000_000],
+                ["entries": [entry("about:newtab", "New Tab")], "index": 1],
+            ], "selected": 2],
+            ["tabs": [
+                ["entries": [entry("https://second.session.example.test/w2", "Second window")], "index": 1],
+                ["entries": [], "index": 0],
+                ["entries": [entry("https://third.session.example.test/w2", "Third")], "index": 1, "hidden": false],
+            ]],
+        ]
+        let json = try JSONSerialization.data(withJSONObject: ["version": ["sessionrestore", 1], "windows": windows, "selectedWindow": 1], options: [.sortedKeys])
+        guard let packed = FirefoxSessionReader.encodeMozLz4(json) else { throw CocoaError(.fileWriteUnknown) }
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("sessionstore-backups"), withIntermediateDirectories: true)
+        try packed.write(to: dir.appendingPathComponent("sessionstore-backups/recovery.jsonlz4"))
+        e.openTabWindows = 2; e.openTabRows = 6; e.openTabsKept = 4; e.openTabsUnsupported = 1; e.openTabsEmpty = 1
+        e.openTabURLs = ["https://pinned.session.example.test/s\(seed)", "https://current.session.example.test/2",
+                         "https://second.session.example.test/w2", "https://third.session.example.test/w2"]
     }
 
     private static func writeFormHistory(_ file: URL, seed: Int, expected e: inout Expected) throws {

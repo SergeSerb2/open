@@ -37,7 +37,7 @@ enum RenderCLI {
     usage:
       sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
-                            [--hidden] [--reveal] [--inactive] [--appearance light|dark]
+                            [--hidden] [--reveal] [--inactive] [--appearance light|dark] [--increase-contrast]
                             [--multi-select ROW,ROW…] [--option-held] [--unread ROW,…] [--hover-favicon ROW]
                             [--banner auto-archive] [--preview folder:N]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
@@ -127,6 +127,7 @@ enum RenderCLI {
         for s in model.spaces { window.selectedNodeBySpace[s.id] = nil }
         let context = SidebarContext(model: model, windowID: window.id)
         context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
+        context.increaseContrast = args.contains("--increase-contrast")
         context.isWindowActive = !args.contains("--inactive")
         context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
         context.isOptionHeld = args.contains("--option-held")
@@ -208,6 +209,16 @@ enum RenderCLI {
         options.revealCard = args.contains("--reveal")
         options.trafficLights = !args.contains("--no-lights")
         options.emptyPanel = !args.contains("--page")
+        if args.contains("--live-folder"), let space = context.focusedSpace {
+            // LF look frames: a synthetic Live Folder at the end of Pinned with synthetic PR rows.
+            if args.contains("--plain-theme") { space.theme = SpaceTheme() }
+            guard let folder = model.createLiveFolder(in: space.id, config: LiveFolderConfig()) else { throw CLIError(description: "no live folder") }
+            let base = "https://github.com/acme/app/pull/"
+            model.applyLiveRows(folderID: folder.id, add: [("Fix sidebar drag on resize", 142), ("Add Live Folders", 139), ("Draft: new header", 131)].map {
+                (URL(string: base + "\($0.1)")!, $0.0) }, remove: [], retitle: [:], unread: false)
+            if args.contains("--live-collapsed") { folder.applyExpansion(.collapsed) }
+            if args.contains("--live-intro") { options.liveIntroFolderID = folder.id }
+        }
         if let preview = value(args, "--preview"), let space = context.focusedSpace {
             let parts = preview.split(separator: ":")
             if parts.count == 2, parts[0] == "recents", let site = RecentsSite(rawValue: String(parts[1])) {

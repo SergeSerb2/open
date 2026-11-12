@@ -64,6 +64,9 @@ public final class SidebarContext {
     public var animatesChanges = true
     /// macOS appearance. Only Spaces without a stored theme follow it.
     public var systemAppearance: ContentAppearance = .light
+    /// macOS Increase Contrast (plan D2 §2.8, lead Q2 b). The window controller keeps it
+    /// current; `sidebar-render --increase-contrast` forces it offscreen.
+    public var increaseContrast = false
     /// True while the command bar is open for a new tab (Cmd+T). The "New Tab"
     /// row then shows the selected fill (F0040, F0063; not with Cmd+L).
     public var isNewTabCommandBarOpen: Bool = false
@@ -265,7 +268,14 @@ public final class SidebarContext {
     }
 
     public func appearance(for space: Space) -> ContentAppearance {
-        style(for: space).resolvedAppearance(system: systemAppearance)
+        if isIncognito { return style(for: space).resolvedAppearance(system: systemAppearance) }
+        return StyleCache.appearance(for: space.theme, system: systemAppearance, increaseContrast: increaseContrast)
+    }
+
+    /// Every sidebar colour of a Space (`SidebarRoles`), built once per theme change.
+    public func roles(for space: Space) -> SidebarRoles {
+        if isIncognito { return SpaceThemeStyle.incognito.roles(.dark) }
+        return StyleCache.roles(for: space.theme, system: systemAppearance, increaseContrast: increaseContrast)
     }
 
     /// Display title of a Space: untitled Spaces read "Space N" (1-based position).
@@ -487,6 +497,28 @@ enum StyleCache {
     private static var cache: [Key: SpaceThemeStyle] = [:]
     private static var order: [Key] = []
     private struct Key: Hashable { var theme: SpaceTheme; var system: ContentAppearance }
+
+    private struct RoleKey: Hashable { var theme: SpaceTheme; var system: ContentAppearance; var increaseContrast: Bool }
+    private static var roleCache: [RoleKey: (ContentAppearance, SidebarRoles)] = [:]
+
+    /// Content appearance and roles per (theme, macOS appearance, Increase Contrast): the
+    /// Increase Contrast variant samples the field once, so it is never computed per row.
+    private static func entry(_ theme: SpaceTheme, _ system: ContentAppearance, _ increaseContrast: Bool) -> (ContentAppearance, SidebarRoles) {
+        let key = RoleKey(theme: theme, system: system, increaseContrast: increaseContrast)
+        if let hit = roleCache[key] { return hit }
+        let s = style(for: theme, system: system)
+        let appearance = increaseContrast ? s.increasedContrastAppearance(system: system) : s.resolvedAppearance(system: system)
+        let value = (appearance, s.roles(appearance, increaseContrast: increaseContrast))
+        if roleCache.count >= 256 { roleCache.removeAll(keepingCapacity: true) }
+        roleCache[key] = value
+        return value
+    }
+    static func appearance(for theme: SpaceTheme, system: ContentAppearance, increaseContrast: Bool) -> ContentAppearance {
+        entry(theme, system, increaseContrast).0
+    }
+    static func roles(for theme: SpaceTheme, system: ContentAppearance, increaseContrast: Bool) -> SidebarRoles {
+        entry(theme, system, increaseContrast).1
+    }
 
     static func style(for theme: SpaceTheme, system: ContentAppearance) -> SpaceThemeStyle {
         let key = Key(theme: theme, system: system)

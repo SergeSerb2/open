@@ -1,7 +1,9 @@
 import Foundation
+import OpenEasel
 import OpenModel
 import OpenRouting
 import OpenBoosts
+import OpenDocuments
 
 public struct ImportReport: Sendable {
     public var totalItems: Int = 0
@@ -20,8 +22,17 @@ public struct ImportReport: Sendable {
     public var splits: Int = 0
     public var routingRules: Int = 0
     public var skippedEasels: Int = 0
+    /// Arc sidebar Easels with an `easelID`: Open Easel rows (content comes from Arc's export).
+    /// They are also counted in `importedTabNodes`.
+    public var importedEasels: Int = 0
     public var skippedNotes: Int = 0
     public var importedWelcome: Int = 0
+    /// Arc Notes (`arcDocument` rows) imported as Note tabs; with text from `StorableARCDocuments`
+    /// or as placeholders (their text is on Arc's servers: Help ▸ Export Arc Notes, then import the zip).
+    public var importedNotes: Int = 0
+    public var notesWithText: Int = 0
+    public var notePlaceholders: Int = 0
+    public var noteStoreUnreadable: Int = 0
     public var namedSpaceIcons: [String: Int] = [:]
     public var unknownNamedSpaceIcons: Int = 0
     public var untitledSpaces: Int = 0
@@ -68,6 +79,7 @@ public struct ImportReport: Sendable {
     public var extensionProfilesUnreadable: Int = 0
 
     public var accounted: Int {
+        // Easel rows are tab nodes too: `importedEasels` is a subset of `importedTabNodes`.
         importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedUnknown
     }
     /// Every sidebar item object: imported + skipped + structural containers.
@@ -93,6 +105,8 @@ public struct ArcImportResult {
     /// In-memory metadata only; no payload or extension storage is imported.
     public var extensionsByProfile: [ProfileID: [ArcExtensionRecord]] = [:]
     public var boostsByProfile: [ProfileID: [Boost]] = [:]
+    /// Note documents for the imported Note tabs; the App writes each one that does not exist yet.
+    public var notes: [NoteDocument] = []
 }
 
 public enum ImportError: Error, Equatable {
@@ -115,6 +129,8 @@ public struct ArcImporter {
 
     // Arc stores welcome items without a URL. Import as a regular tab to its public welcome page.
     static let welcomeURL = URL(string: "https://arc.net/welcome-to-arc")!
+    /// Body of a Note whose text Arc did not keep on this Mac. Arc names are allowed in import text.
+    public static let notePlaceholderText = "Arc kept this Note's text on its servers. In Arc, choose Help ▸ Export Arc Notes, then in Open use the action “Import Arc Notes Export…” in the command bar."
 
     private static let epoch2001: TimeInterval = 978307200
 
@@ -417,7 +433,7 @@ public struct ArcImporter {
                     switch kind {
                     case "tab", "welcomeToArc": break
                     case "easel": report.archiveSkippedEasels += 1; continue
-                    case "note": report.archiveSkippedNotes += 1; continue
+                    case "note", "arcDocument": report.archiveSkippedNotes += 1; continue
                     default: report.archiveSkippedUnknownKind += 1; continue
                     }
                     let reason: ArchiveReason
@@ -547,6 +563,10 @@ public struct ArcImporter {
         var nodeByArcID: [String: SidebarNode] = [:]
         var building: Set<String> = []
         var skipCounted: Set<String> = []
+        let arcNoteStore = ArcNotes.readStore(arcDirectory.appendingPathComponent("StorableARCDocuments", isDirectory: true))
+        report.noteStoreUnreadable = arcNoteStore.unreadable
+        var importedNotes: [NoteDocument] = []
+        var importedNoteIDs: Set<UUID> = []
         func countSkip(_ arcID: String, _ apply: () -> Void) {
             guard !skipCounted.contains(arcID) else { return }
             skipCounted.insert(arcID)
@@ -626,11 +646,51 @@ public struct ArcImporter {
             case "itemContainer":
                 return nil // structural, not a sidebar node
             case "easel":
-                countSkip(arcID) { report.skippedEasels += 1 }
-                return nil
-            case "note":
-                countSkip(arcID) { report.skippedNotes += 1 }
-                return nil
+                // An Arc Easel row becomes an Open Easel row: `open://easel/<stable id>`, the same id
+                // the Easel export import (`EaselImporter`) gives its content. Rows without an
+                // `easelID` cannot meet their content and stay skipped.
+                guard let ed = payload as? [String: Any],
+                      let easelID = ed["easelID"] as? String, !easelID.isEmpty, easelID.utf8.count <= 256 else {
+                    countSkip(arcID) { report.skippedEasels += 1 }; return nil
+                }
+                let documentID = EaselImporter.documentID(forArcEaselID: easelID).uuidString.lowercased()
+                let rawTitle = (ed["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let tab = Tab(id: Self.itemID(forArcID: arcID), url: URL(string: "open://easel/\(documentID)")!,
+                              title: rawTitle.isEmpty ? "Untitled Easel" : String(rawTitle.prefix(1_000)),
+                              createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
+                              lastActiveAt: Self.date(from2001: (ed["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
+                              isUnread: item["isUnread"] as? Bool ?? false)
+                let node = SidebarNode.tab(tab)
+                nodeByArcID[arcID] = node
+                report.importedEasels += 1
+                return node
+            case "arcDocument", "note":
+                // Arc's sidebar kind is `arcDocument` (easels-notes.md §4.3); `note` is the old guess, kept.
+                let nd = payload as? [String: Any] ?? [:]
+                guard let documentID = (nd["arcDocumentID"] as? String) ?? (nd["id"] as? String) ?? Optional(arcID) else { return nil }
+                let noteID = ArcNotes.noteID(forArcDocumentID: documentID)
+                var note: NoteDocument
+                if let stored = arcNoteStore.documents[documentID] {
+                    note = stored.note; note.id = noteID
+                    report.notesWithText += 1
+                } else {
+                    note = NoteDocument(id: noteID, title: (item["title"] as? String) ?? "",
+                                        text: Self.notePlaceholderText)
+                    note.importPlaceholder = true
+                    report.notePlaceholders += 1
+                }
+                let title = note.title.isEmpty ? ((item["title"] as? String) ?? "") : note.title
+                note.title = title
+                let tab = Tab(id: Self.itemID(forArcID: arcID), url: NoteLink.url(for: noteID),
+                              title: title.isEmpty ? "Untitled" : title,
+                              createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
+                              lastActiveAt: Self.date(from2001: (nd["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
+                              isUnread: item["isUnread"] as? Bool ?? false)
+                if !importedNoteIDs.contains(noteID) { importedNoteIDs.insert(noteID); importedNotes.append(note) }
+                report.importedNotes += 1
+                let node = SidebarNode.tab(tab)
+                nodeByArcID[arcID] = node
+                return node
             case "welcomeToArc":
                 guard Self.buildsSidebarNode(item),let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
                 let tab = Tab(id: Self.itemID(forArcID: arcID), url: Self.welcomeURL,
@@ -1034,7 +1094,8 @@ public struct ArcImporter {
             sourceDefaultProfileID: defaultProfileID,
             sourceProfileDirectories: sourceProfileDirectories,
             extensionsByProfile: extensionsByProfile,
-            boostsByProfile: parsed.boosts.boosts.isEmpty ? [:] : [defaultProfileID: parsed.boosts.boosts])
+            boostsByProfile: parsed.boosts.boosts.isEmpty ? [:] : [defaultProfileID: parsed.boosts.boosts],
+            notes: importedNotes)
     }
 
     public struct ArchiveReadResult: Sendable {

@@ -243,6 +243,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `manage-spaces` | Manage Spaces… | — | window | Spaces |
 | `rename-space` | Rename Space | — | window | Spaces |
 | `change-space-icon` | Change Space Icon… | — | window | — (code-only) |
+| `import-arc-notes` | Import Arc Notes Export… | — | window | — (code-only) |
 | `edit-theme` | Edit Theme… | — | window | Spaces |
 | `change-profile` | Change Profile | — | window | Spaces |
 | `pin-unpin-tab` | Pin/Unpin Tab | Cmd+D | window | Tabs |

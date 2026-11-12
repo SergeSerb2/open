@@ -24,4 +24,20 @@ public struct LiveFolderConfig: Codable, Hashable, Sendable {
         self.source = source; self.kinds = kinds; self.teamReviews = teamReviews
         self.hiddenRepositories = hiddenRepositories; self.hiddenItems = hiddenItems; self.lastFetch = lastFetch
     }
+
+    /// "owner/name" of a pull request URL (`/owner/name/pull/N`), or nil.
+    public static func repository(of url: URL) -> String? {
+        let parts = url.path.split(separator: "/")
+        guard parts.count >= 4, parts[2] == "pull" else { return nil }
+        return parts[0] + "/" + parts[1]
+    }
+    /// Arc's folder header text for a failed state (live-data §2.2, `S:112394–112396`).
+    public var stateMessage: String? {
+        switch lastFetch?.outcome {
+        case .signedOut?: return "Sign back in to GitHub."
+        case .needsSSO?: return "Login with SSO to unlock this folder"
+        case .failed?: return "We’re having trouble connecting to GitHub; click here to see your Pull Requests."
+        default: return nil
+        }
+    }
 }
