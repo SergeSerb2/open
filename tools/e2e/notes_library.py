@@ -19,7 +19,12 @@ def run(factory, results, tmp, h):
     frames = os.path.join(h.ROOT, '.re', 'nt-frames'); os.makedirs(frames, exist_ok=True)
     server, origin = h._fixture_server('NotesLibrary')
     app = factory(urls=(origin + '/page',), fresh=True)
+    # The Easels page is hidden when `libraryShowsEasels` is false. Other Library suites write that
+    # key in the App's real preferences domain, and it outlives a run (DMG d, M1): set what this
+    # suite needs and restore the stored value (also its absence) at the end.
+    shows_easels = app.call('defaults', key='libraryShowsEasels', persistent=True)
     try:
+        app.call('defaults', key='libraryShowsEasels', value=True)
         app.call('wait', tab=app.call('tabs')[0]['id'])
         app.call('note', action='create'); app.call('key', text='Alpha'); key('return'); app.call('key', text='first line of alpha')
         alpha = app.call('note')
@@ -57,5 +62,7 @@ def run(factory, results, tmp, h):
             alert=alert, after=(after or {}).get('notes'), fileExists=os.path.exists(alpha['file']))
         library(action='close')
     finally:
+        try: app.call('defaults', key='libraryShowsEasels', value=shows_easels)
+        except Exception: pass
         app.quit()
         server.shutdown()
