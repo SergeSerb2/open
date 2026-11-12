@@ -61,8 +61,9 @@ public struct CaptureItemSnapshot: Identifiable, Codable, Sendable {
     public var createdAt: Date
     public var kind: CaptureKind
     public var sourceHost: String
-    public init(id: UUID, fileName: String, createdAt: Date, kind: CaptureKind, sourceHost: String) {
-        self.id = id; self.fileName = fileName; self.createdAt = createdAt; self.kind = kind; self.sourceHost = sourceHost
+    public var title: String?
+    public init(id: UUID, fileName: String, createdAt: Date, kind: CaptureKind, sourceHost: String, title: String? = nil) {
+        self.id = id; self.fileName = fileName; self.createdAt = createdAt; self.kind = kind; self.sourceHost = sourceHost; self.title = title
     }
 }
 public extension AutoArchiveInterval {
@@ -77,7 +78,7 @@ public extension AutoArchiveInterval {
     public static let values: [String: Any] = [
         "open.settings.lastPane": "general", "open.general.automaticallyUpdate": true,
         "open.general.warnBeforeQuitting": true, "open.general.previewsEnabled": true,
-        "open.general.previewsFolders": true, "open.general.previewsPages": true, "open.general.previewsRecents": true,
+        "open.general.previewsFolders": true, "open.general.previewsPages": true, "open.general.previewsRecents": true, "open.general.previewsCalendar": true,
         "open.general.searchSuggestNoticeDismissed": false,
         "open.links.externalInLittleOpen": true, "open.links.littleOpenHotkeyEnabled": true,
         "open.links.optionCommandClickLittleOpen": true, "open.links.openPeekOtherSites": true,

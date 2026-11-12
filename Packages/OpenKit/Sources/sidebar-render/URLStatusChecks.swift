@@ -72,8 +72,12 @@ enum URLStatusChecks {
         let image = OffscreenRenderer().render(scene, scale: 1)
         let button = sidebar.urlStatusState.frame
         let field = sidebar.chromeGeometry.urlField
+        // The default theme is a gradient (capture session 3): compare each fill's step
+        // against the background 2 pt to its left, not raw pixels at two heights.
         let a = pixel(image, x: Int(button.minX + 4), y: Int(button.midY)), b = pixel(image, x: Int(field.minX + 4), y: Int(field.midY))
-        check(!a.isEmpty && zip(a, b).allSatisfy { abs($0 - $1) <= 2 }, "S-US1 fill equals the URL field fill (\(a) vs \(b))")
+        let aBG = pixel(image, x: Int(button.minX - 2), y: Int(button.midY)), bBG = pixel(image, x: Int(field.minX - 2), y: Int(field.midY))
+        let steps = (a.isEmpty || aBG.isEmpty || b.isEmpty || bBG.isEmpty) ? [] : (0..<3).map { (a[$0] - aBG[$0]) - (b[$0] - bBG[$0]) }
+        check(!steps.isEmpty && steps.allSatisfy { abs($0) <= 2 }, "S-US1 fill equals the URL field fill (\(a) on \(aBG) vs \(b) on \(bBG))")
 
         // Hidden rules: the content toolbar replaces the URL field.
         model.windows[0].showsToolbar = true; settle()

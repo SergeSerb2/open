@@ -168,6 +168,16 @@ extension EngineWebContentHostFactory {
   /// also resets the pinch scale (EP-5, inside `resetZoom`).
   @discardableResult
   func zoomPage(_ id: String) -> Bool {
+    // An Easel zooms its canvas: ⌘− steps to ≈ 74 %, 50 %, min ≈ 33 %; ⌘0 resets (docs/re/easels.md).
+    if let id0 = selectedTab?.id, let easel = easelHosts[id0] {
+      switch id {
+      case "zoom-in": easel.canvas.zoomIn()
+      case "zoom-out": easel.canvas.zoomOut()
+      default: easel.canvas.resetZoom()
+      }
+      controller?.toasts.show(ToastContent(title: "\(Int((easel.canvas.zoom * 100).rounded()))%", coalescingKey: "zoom"))
+      return true
+    }
     guard let page = selectedContent else { return false }
     switch id {
     case "zoom-in": page.zoomIn()

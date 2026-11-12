@@ -8,6 +8,7 @@
   import OpenSidebar
   import OpenCommands
   import OpenSettings
+  import OpenLibrary
   import OpenDesign
   import OpenExtensionsUI
   import OpenSpaceEditor
@@ -117,6 +118,7 @@
   @MainActor
   final class AutomationController {
     var settingsPerformanceProbe: SettingsPerformanceProbe?
+    var libraryPreparationHeartbeat: LibraryPreparationHeartbeat?
     struct Failure: Error { let message: String }
 
     var extensionRedrawMeasurement: ExtensionRedrawMeasurement?
@@ -151,7 +153,13 @@
     var profileProofContexts: [String: OEBrowserContext] = [:]
     var recordedOpenWorldCallbacks: [[String: Any]] = []
 
-    init(app: AppDelegate) { self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self }
+    init(app: AppDelegate) {
+      self.app = app; extensionAutomation.registerContexts(); Self.savePromptOwner = self
+      if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_LIBRARY_PREPARATION_TRACE"] == "1" {
+        libraryPreparationHeartbeat = LibraryPreparationHeartbeat()
+        libraryPreparationHeartbeat?.start()
+      }
+    }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -315,6 +323,7 @@
       case "mouse" where app.onboardingWindowController?.window?.isVisible == true:
         return try await mouse(a, nil)
       case "welcome": return try welcome(a)
+      case "easel": return try easel(a)
       case "note": return try note(a)
       case "import-extensions": return try await runImportExtensions(a)
       case "engine-close-activation": return try probeEngineCloseActivation()
@@ -433,7 +442,7 @@
           "settingsVisible": adapter.settingsPresenter.window?.isVisible ?? false,
           "scrollTarget": adapter.settings.scrollTarget ?? "",
           "generalError": adapter.settings.general.errorText, "advancedStatus": adapter.settings.advanced.statusText,
-          "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
+          "library": adapter.libraryWindow?.windowNumber ?? 0,
           "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
           "boostsPresentation": adapter.library?.boostsPresentation.rawValue ?? "",
           "boostsProfile": adapter.library?.historyProfileID.description ?? "",
@@ -502,7 +511,7 @@
       case "library-open":
         let section: LibrarySection?
         if let value = a["section"] {
-          guard let raw = value as? String, let parsed = LibrarySection(rawValue: raw) else { throw Failure(message: "unknown Library section") }
+          guard let raw = value as? String, let parsed = LibrarySection(rawValue: raw == "easels" ? "media" : raw) else { throw Failure(message: "unknown Library section") }
           section = parsed
         } else { section = nil }
         switch a["entry"] as? String ?? "command" {
@@ -518,12 +527,18 @@
           menu.performActionForItem(at: index)
         default: throw Failure(message: "unknown Library entry")
         }
+        if a["section"] as? String == "easels", let panel = app.settingsPresenter.activeLibrarySession?.panel {
+          guard panel.sections.contains(.easels) else { throw Failure(message: "Easels is hidden") }
+          panel.select(.easels)
+        }
         await Task.yield()
         return spaceManagerState()
+      case "library", "library-state", "library-ui": return try libraryPanelAction(a)
+      case "library-performance": return try await libraryPerformance(a)
       case "space-manager-state": return spaceManagerState()
       case "defaults":
         // Reads (and with `value`, writes) one Open preference in this app's own domain.
-        guard let key = a["key"] as? String, key.hasPrefix("open.") else { throw Failure(message: "defaults key must start with open.") }
+        guard let key = a["key"] as? String, key.hasPrefix("open.") || ["libraryShowsEasels", "libraryMediaFolderSources"].contains(key) else { throw Failure(message: "unknown defaults domain key") }
         if a["persistent"] as? Bool == true { return UserDefaults.standard.persistentDomain(forName: "io.github.sergeserb2.open")?[key] ?? NSNull() }
         if let value = a["value"] {
           UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key)
@@ -550,7 +565,7 @@
           "loaded": SoundEffects.shared.loadedSoundCount, "plays": SoundEffects.shared.playCount] as [String: Any]
       case "alert":
         // Presses a button of the alert sheet attached to a browser or the Library window.
-        let library = app.settingsPresenter.libraryPresenter?.window
+        let library = app.settingsPresenter.libraryWindow
         let candidates = (a["window"] as? String == "library" ? [library].compactMap { $0 } : app.windowControllers.compactMap(\.window) + [library].compactMap { $0 })
         guard let sheet = candidates.compactMap(\.attachedSheet).first else { throw Failure(message: "no attached alert sheet") }
         var buttons: [NSButton] = [], texts: [String] = []
@@ -599,7 +614,10 @@
           let frame = controller.sidebar.rowFrame(nodeID: ItemID(rawValue: uuid)) else { throw Failure(message: "no such sidebar row") }
         controller.contentView.layoutSubtreeIfNeeded()
         let inRoot = controller.contentView.convert(frame, from: controller.sidebar)
-        return ["frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
+        let style = controller.context.focusedSpace.map { controller.context.style(for:$0) }
+        let contentAppearance = style?.resolvedAppearance(system:controller.context.systemAppearance) ?? controller.context.systemAppearance
+        let ink = style?.titleColor(contentAppearance).nsColor.usingColorSpace(.sRGB)
+        return ["foreground":ink.map { [$0.redComponent,$0.greenComponent,$0.blueComponent,$0.alphaComponent] } ?? [], "frame": [inRoot.minX, inRoot.minY, inRoot.width, inRoot.height], "point": [inRoot.midX, inRoot.midY], "unreadBadge": controller.sidebar.unreadDotFrame(nodeID: ItemID(rawValue: uuid)) != nil, "current": controller.sidebar.isCurrentRow(nodeID: ItemID(rawValue: uuid))] as [String: Any]
       case "preview-state":
         return try previewState(a)
       case "page-selection", "swipe", "swipe-indicator":
@@ -681,11 +699,11 @@
         let parent: NodeParent = a["section"] as? String == "pinned" ? .spacePinned(space.id) : .spaceToday(space.id)
         return manager.onIntent?(.openURL(url, in: parent, index: 0)) == true
       case "library-close":
-        let target = app.settingsPresenter.libraryPresenter?.window
+        let target = app.settingsPresenter.libraryWindow
         var dialogs: [Int] = []
         if let sheet = target?.attachedSheet { dialogs.append(sheet.windowNumber); target?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
-        target?.performClose(nil)
-        return ["closed": target?.isVisible != true, "dialogs": dialogs] as [String: Any]
+        app.settingsPresenter.closeLibrary()
+        return ["closed": app.settingsPresenter.libraryWindow == nil, "dialogs": dialogs] as [String: Any]
       case "space-manager-lifecycle": return spaceManagerLifecycle()
       case "space-manager-row-controls": return try spaceManagerRowControls(a)
       case "space-manager-scroll":
@@ -831,6 +849,8 @@
         return try runPeekAppCommand(cmd, a)
       case "sad-tab-state", "sad-tab-action":
         return try runSadTabCommand(cmd, a)
+      case "handoff-state", "handoff-continue", "deep-link-state":
+        return try await runHandoffCommand(cmd, a)
       case "peek-open":
         let source = try modelTab(a, w)
         guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
@@ -2450,7 +2470,11 @@
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "delete": ("\u{7f}", 51), "forward-delete": (String(Character(UnicodeScalar(NSDeleteFunctionKey)!)), 117),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "g": ("g", 5), "s": ("s", 1), "a": ("a", 0),
-        "b": ("b", 11), "e": ("e", 14), "r": ("r", 15), "k": ("k", 40), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
+        "e": ("e", 14), "r": ("r", 15), "k": ("k", 40), "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "i": ("i", 34), "j": ("j", 38), "y": ("y", 16), "u": ("u", 32),
+        "b": ("b", 11), "h": ("h", 4), "m": ("m", 46), "p": ("p", 35), "q": ("q", 12),
+        // Every digit, so Ctrl+1…9 (Go to Space) and Cmd+1…9 (Go to Tab) reach the router.
+        "0": ("0", 29), "1": ("1", 18), "2": ("2", 19), "3": ("3", 20), "4": ("4", 21), "5": ("5", 23),
+        "6": ("6", 22), "7": ("7", 26), "8": ("8", 28), "9": ("9", 25), "=": ("=", 24), "-": ("-", 27), "}": ("}", 30), "{": ("{", 33),
         "control": ("", 59), "command": ("", 55),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
@@ -2525,13 +2549,13 @@
         try await page.snapshotPNG().write(to: url)
         return ["path": path, "method": "devtools"]
       }
-      if a["window"] as? String == "library", app.settingsPresenter.libraryPresenter?.window == nil { throw Failure(message: "no Library window") }
+      if a["window"] as? String == "library", app.settingsPresenter.libraryWindow == nil { throw Failure(message: "no Library window") }
       if a["window"] as? String == "editor" {
         guard let panel: NSWindow = w?.iconPicker?.panel ?? w?.controller?.spaceCreationController?.themeEditor?.panel ?? w?.controller?.themeEditor?.panel,
               panel.isVisible else { throw Failure(message: "no editor") }
         return ["path": path, "method": try await WindowSnapshot.capture(panel, to: url)]
       }
-      let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryPresenter?.window?.windowNumber : a["window"] as? Int
+      let number = a["window"] as? String == "library" ? app.settingsPresenter.libraryWindow?.windowNumber : a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? app.onboardingWindowController.flatMap { $0.window?.isVisible == true ? $0.window : nil } ?? app.firstRunWindowController?.window ?? w?.window
       else { throw Failure(message: "no window") }
       guard target.identifier?.rawValue != "onboarding-dim" else { throw Failure(message: "dim window snapshots are excluded") }
@@ -2586,7 +2610,7 @@
         }
       }
       let adapter = app.settingsPresenter
-      let target = adapter.libraryPresenter?.window
+      let target = adapter.libraryWindow
       target?.layoutIfNeeded(); target?.contentView?.layoutSubtreeIfNeeded()
       let managers = hostedSpaceManagers(in: target?.contentView)
       let manager = managers.first
@@ -2638,7 +2662,7 @@
         "columns": columns, "switchers": switchers, "windows": NSApp.windows.map(describe)] as [String: Any]
     }
     private func realSpaceManager() throws -> (SpaceManagerView, NSWindow) {
-      guard let target = app.settingsPresenter.libraryPresenter?.window, target.isVisible,
+      guard let target = app.settingsPresenter.libraryWindow, target.isVisible,
         let manager = hostedSpaceManagers(in: target.contentView).first
       else { throw Failure(message: "real SpaceManagerView is unavailable") }
       target.layoutIfNeeded(); manager.layoutSubtreeIfNeeded()
@@ -2703,7 +2727,7 @@
     private func spaceManagerLifecycle() -> [String: Any] {
       let adapter = app.settingsPresenter
       let manager = adapter.library?.spaceManagerView as? SpaceManagerView
-      let target = adapter.libraryPresenter?.window
+      let target = adapter.libraryWindow
       var sectionRows: [[String: Any]] = [], visited = 0
       func findSections(_ view: NSView, depth: Int) {
         guard depth <= 24, visited < 512 else { return }; visited += 1

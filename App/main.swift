@@ -102,6 +102,7 @@ if appDelegate.terminationRequested {
 LaunchTiming.shared.recordFirstFrame(confirmed: firstFrame.presented)
 if firstFrame.presented {
   LaunchTiming.shared.mark("sidebarDrawn")
+  appDelegate.scheduleLibraryPrebuildAfterFirstDraw()
   #if OPEN_AUTOMATION
   LaunchTiming.shared.recordSidebarImages()
   appDelegate.recordFirstFrameMenuProbe()

@@ -17,6 +17,23 @@ public struct BrowserSourceDescriptor: Sendable, Hashable, Identifiable {
     /// Opera keeps its single profile at the data root, not in `Default`.
     public let profileAtRoot: Bool
 
+    /// The Keychain item that holds this browser's "Safe Storage" secret ("<Product> Safe Storage" / "<Product>").
+    /// Evidence: ArcCore "%s Safe Storage" (CS), Open's `probeChromiumKeychainPair`. Brave, Edge, Vivaldi, Opera and
+    /// Canary names are a GUESS from common importer tools (F3 §4.1); only the user's Keychain can confirm them.
+    public var keychainItem: (service: String, account: String)? {
+        let product: String
+        switch id {
+        case "chrome", "chrome-canary": product = "Chrome"
+        case "brave": product = "Brave"
+        case "edge": product = "Microsoft Edge"
+        case "vivaldi": product = "Vivaldi"
+        case "opera", "opera-gx": product = "Opera"
+        case "chromium": product = "Chromium"
+        default: return nil
+        }
+        return (product + " Safe Storage", product)
+    }
+
     public init(id: String, name: String, bundleID: String, family: BrowserFamily, dataRoot: String, profileAtRoot: Bool = false) {
         self.id = id; self.name = name; self.bundleID = bundleID; self.family = family
         self.dataRoot = dataRoot; self.profileAtRoot = profileAtRoot
@@ -87,9 +104,17 @@ public struct BrowserSourceCatalog: Sendable {
         .init(id: "opera-gx", name: "Opera GX", bundleID: "com.operasoftware.OperaGX", family: .chromium, dataRoot: "Application Support/com.operasoftware.OperaGX", profileAtRoot: true),
         .init(id: "chrome-canary", name: "Chrome Canary", bundleID: "com.google.Chrome.canary", family: .chromium, dataRoot: "Application Support/Google/Chrome Canary"),
         .init(id: "chromium", name: "Chromium", bundleID: "org.chromium.Chromium", family: .chromium, dataRoot: "Application Support/Chromium"),
+        // Gecko family (lead ruling 3, 11 Nov): same formats as Firefox, catalog rows only.
+        .init(id: "zen", name: "Zen", bundleID: "app.zen-browser.zen", family: .firefox, dataRoot: "Application Support/zen"),
+        .init(id: "librewolf", name: "LibreWolf", bundleID: "io.gitlab.librewolf-community", family: .firefox, dataRoot: "Application Support/librewolf"),
+        .init(id: "floorp", name: "Floorp", bundleID: "one.ablaze.floorp", family: .firefox, dataRoot: "Application Support/Floorp"),
     ]
+    /// Other bundle IDs that write the same data root (Firefox Developer Edition and Nightly share `Firefox/`).
+    public static func runningBundleIDs(for descriptor: BrowserSourceDescriptor) -> [String] {
+        descriptor.id == "firefox" ? [descriptor.bundleID, "org.mozilla.firefoxdeveloperedition", "org.mozilla.nightly"] : [descriptor.bundleID]
+    }
     /// IMF extends this set when its readers land.
-    public static let supportedFamilies: Set<BrowserFamily> = [.arc, .chromium]
+    public static let supportedFamilies: Set<BrowserFamily> = [.arc, .chromium, .firefox, .safari]
 
     public let library: URL
     public init(library: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library")) {
@@ -104,13 +129,26 @@ public struct BrowserSourceCatalog: Sendable {
         let root = library.appendingPathComponent(descriptor.dataRoot, isDirectory: true)
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDirectory), isDirectory.boolValue else { return nil }
+        // Safari has one profile. Its folder is behind Full Disk Access; the wizard asks for it after Next (C-report-s5 §1).
+        if descriptor.family == .safari {
+            let denied = SafariAccess.check(safariDirectory: root) == .denied
+            return BrowserSource(descriptor: descriptor, dataRoot: root,
+                                 profiles: [BrowserSourceProfile(id: "Safari", name: "Safari", directory: root)], accessDenied: denied)
+        }
         guard (try? FileManager.default.contentsOfDirectory(atPath: root.path)) != nil else {
             return BrowserSource(descriptor: descriptor, dataRoot: root, profiles: [], accessDenied: true)
         }
         let profiles: [BrowserSourceProfile]
         switch descriptor.family {
         case .chromium: profiles = Self.chromiumProfiles(root: root, atRoot: descriptor.profileAtRoot)
-        case .arc, .firefox, .safari: profiles = []
+        case .firefox:
+            let browser = FirefoxFamilyBrowser(key: descriptor.id, displayName: descriptor.name, bundleIDs: [descriptor.bundleID], dataRoot: descriptor.dataRoot)
+            profiles = ((try? FirefoxProfileCatalog.profiles(root: root, browser: browser)) ?? []).prefix(100).compactMap { profile in
+                let id = profile.directory.lastPathComponent
+                guard Self.safeBasename(id), FileManager.default.fileExists(atPath: profile.directory.appendingPathComponent("places.sqlite").path) else { return nil }
+                return BrowserSourceProfile(id: id, name: profile.name, directory: profile.directory)
+            }
+        case .arc, .safari: profiles = []
         }
         return BrowserSource(descriptor: descriptor, dataRoot: root, profiles: profiles, accessDenied: false)
     }

@@ -11,13 +11,15 @@ extension AppImportRunner {
     var counts: [String: Int] = [:]
     var failures: [String: String] = [:]
     var errorText: String?
+    var extensions: [ImportExtensionCandidate] = []
+    var secretsReportLines: [String] = []
   }
 
   func importBrowser(source: BrowserSource, profile sourceProfile: BrowserSourceProfile, plan: ImportPlan, undo: AppImportUndo,
                      wizard: ImportWizardViewModel, progress: (String, Double?, Bool) -> Void) async -> BrowserImportResult {
     var result = BrowserImportResult()
     guard source.family == .chromium else {
-      result.errorText = "Open cannot import from \(source.name) yet."; return result
+      return await importOtherBrowser(source: source, profile: sourceProfile, plan: plan, undo: undo, wizard: wizard, progress: progress)
     }
     let key = plan.source.importKey
     // Destination: the focused Space of the front window, else the first Space.
@@ -71,6 +73,14 @@ extension AppImportRunner {
       }
     }
     app.importInProgress = false
+    // Extensions: a reinstall list from the source profile (Chrome Web Store IDs only), as Import from Arc does.
+    let extensionsRead = await Task.detached(priority: .utility) { try? ArcExtensionsReader(profileDirectory: sourceProfile.directory).read() }.value
+    var seen = Set<String>()
+    for record in extensionsRead?.records ?? [] where !record.isInternal {
+      let candidate = ImportExtensionCandidate(extensionID: record.extensionID, name: record.manifestName ?? record.extensionID,
+                                               profileID: target.id, profileName: target.name)
+      if seen.insert(candidate.id).inserted { result.extensions.append(candidate) }
+    }
     if plan.history, !undo.cancelled {
       progress("Importing your history…", 0, true)
       guard let store = app.stores.history(for: target.id) else {
@@ -109,7 +119,51 @@ extension AppImportRunner {
       if !write.2 { result.failures["History"] = write.3 ?? "Could not be read" }
       wizard.progress = 1
     }
+    if plan.secretsConsented && canImportPasswordsAndCookies && !undo.cancelled {
+      progress("Importing your passwords and cookies…", nil, true)
+      let secrets = await importBrowserSecrets(plan: plan, source: source, profile: sourceProfile, target: target)
+      result.counts.merge(secrets.counts) { _, new in new }
+      result.failures.merge(secrets.failures) { _, new in new }
+      result.secretsReportLines = secrets.secretsReportLines
+    }
     return finish(result)
+  }
+
+  /// I-2: passwords, cookies, addresses and cards from one Chromium profile. Same consent gate, sink,
+  /// ledger and reader as Import from Arc; the Keychain item is the source browser's own "Safe Storage" item,
+  /// so macOS asks once per browser. No probe of other browsers' items.
+  func importBrowserSecrets(plan: ImportPlan, source: BrowserSource, profile: BrowserSourceProfile, target: Profile) async -> ImportOutcome {
+    guard plan.secretsConsented, canImportPasswordsAndCookies, !app.terminationRequested, !Task.isCancelled,
+          !source.descriptor.profileAtRoot, let item = source.descriptor.keychainItem else { return ImportOutcome() }
+    do {
+      let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+      while !app.engineReady && !app.terminationRequested && ContinuousClock.now < deadline {
+        try await Task.sleep(for: .milliseconds(50))
+      }
+      guard app.engineReady, !app.terminationRequested else { throw ArcSecretsImportError.invalidSinkResult }
+      let sinks: [String: any OpenImport.SecretsImportSink] = [profile.id: try secretsSink(for: target)]
+      try Task.checkCancellation()
+      secretsConsentAdapterCalls += 1
+      let consent = SecretsImportConsent.grantedByUser(reason: "import-wizard")
+      secretsKeychainReadCalls += 1
+      var password = try fetchKeychainPassword(service: item.service, account: item.account, consent: consent)
+      defer { zeroSecretBytes(&password) }
+      var key = deriveChromiumKey(passwordBytes: password)
+      zeroSecretBytes(&password)
+      defer { zeroSecretBytes(&key) }
+      let importer = ArcSecretsImporter(arcUserData: source.dataRoot, ledger: SecretsImportLedger(dataRoot: app.directories.root),
+                                        onlyProfiles: [profile.id])
+      let report = try await runSecretsBatch(sinks: sinks) {
+        try await importer.run(key: key, consent: consent, sinks: sinks)
+      }
+      let total = report.total
+      return ImportOutcome(counts: ["Passwords": total.logins.added, "Cookies": total.cookies.added,
+        "Addresses": total.addresses.added, "Cards": total.cards.added], secretsReportLines: report.lines)
+    } catch is ChromiumCryptoError {
+      return ImportOutcome(failures: ["Passwords and cookies": "Keychain access was not granted. Passwords and cookies were not imported."])
+    } catch {
+      return ImportOutcome(failures: ["Passwords and cookies": "Passwords and cookies could not be imported. You can try again from Settings."])
+    }
   }
 
   private func finish(_ input: BrowserImportResult) -> BrowserImportResult {

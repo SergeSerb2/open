@@ -80,21 +80,40 @@ def run(factory, results, tmp, env):
     def browser():
         app.call('window-focus', id=normal, activate=True)
         app.call('space', space=space_a)
+    def prepared(profile_id, previous=None):
+        def ready():
+            native = app.call('library')
+            host = native.get('providers', {}).get('boosts', {})
+            return native['profiles']['history'] == profile_id and host.get('loaded') and not host.get('running') and (previous is None or host.get('generation', 0) > previous)
+        assert wait(ready, timeout=5), app.call('library')
     def gallery(expect_cards=True):
-        browser(); app.call('menu-perform', id='boost-gallery')
+        browser(); before = app.call('library')
+        previous = before.get('providers', {}).get('boosts', {}).get('generation', 0) if before.get('profiles', {}).get('history') != profile_a else None
+        app.call('menu-perform', id='boost-gallery')
         assert wait(lambda: state()['boostsPresentation'] == 'gallery', timeout=5)
-        surface = 'boosts.gallery' if expect_cards else 'boosts.layout'
-        assert wait(lambda: surface in ids(), timeout=5), ui()
+        prepared(profile_a, previous)
+        surfaces = {'boosts.gallery'} if expect_cards else {'boosts.layout.list', 'boosts.layout.gallery'}
+        assert wait(lambda: surfaces <= ids(), timeout=5), ui()
     def ids():
         return {c['id'] for c in ui()['controls'] if c['id']}
     def font(tab):
         return app.eval(tab, "getComputedStyle(document.querySelector('h1')).fontFamily")
     def profile(name):
         (Path(tmp) / 'gallery-before-profile.json').write_text(json.dumps(ui(), indent=2))
+        target = profile_a if name == name_a else profile_b
+        before = app.call('library')
+        previous = before.get('providers', {}).get('boosts', {}).get('generation', 0) if before['profiles']['history'] != target else None
         ui('profile', name=name)
-        assert wait(lambda: state()['boostsProfile'] == (profile_a if name == name_a else profile_b), timeout=5)
+        assert wait(lambda: state()['boostsProfile'] == target, timeout=5)
+        prepared(target, previous)
     def enabled():
         return next(m['enabled'] for m in app.call('menu-state') if m['id'] == 'boost-gallery')
+    def delete_card(boost):
+        # The native card exposes Delete through its More options menu.
+        assert 'boosts.' + boost + '.more' in ids(), ui()
+        menu = app.call('library-ui', action='row-menu', id=boost)
+        assert any(item['title'] == 'Delete' and item['enabled'] for item in menu['items']), menu
+        app.call('library-ui', action='row-menu', id=boost, select='Delete')
     def bar():
         return app.call('commandbar-state')
     def type_gallery():
@@ -148,21 +167,26 @@ def run(factory, results, tmp, env):
             def f1_key():
                 gallery(); profile(name_b)
                 assert ui()['key']
-                app.call('menu-perform', id='boost-gallery')
+                ui('section', section='downloads'); ui('section', section='boosts')
                 assert state()['boostsProfile'] == profile_b, state()
-                assert not any(id.endswith('.card') for id in ids())
-                return {'keptLibraryB': True}
+                app.call('menu-perform', id='boost-gallery')
+                assert state()['boostsProfile'] == profile_a, state()
+                assert wait(lambda: 'boosts.' + first + '.card' in ids(), timeout=5), ui()
+                assert wait(lambda: 'boosts.' + second + '.card' in ids(), timeout=5), ui()
+                return {'ownerProfile': profile_a, 'filterResetFromBToA': True, 'profileIsolation': True}
             row('F1_key_library', f1_key)
             def f1_browser():
                 gallery(); profile(name_b); browser(); app.call('menu-perform', id='boost-gallery')
                 assert state()['boostsProfile'] == profile_a, state()
-                assert 'boosts.' + first + '.card' in ids()
+                assert wait(lambda: 'boosts.' + first + '.card' in ids(), timeout=5), ui()
+                owner_a_native = app.call('library')
                 app.call('library-close'); browser(); app.call('space', space=space_b)
                 app.call('menu-perform', id='boost-gallery')
                 assert state()['boostsProfile'] == profile_b, state()
-                assert not any(id.endswith('.card') for id in ids())
+                prepared(profile_b)
+                assert wait(lambda: not any(id.endswith('.card') for id in ids()), timeout=5), ui()
                 browser()
-                return {'visibleLibraryBOverriddenByBrowserA': True, 'closedLibraryFromB': True}
+                return {'visibleLibraryBOverriddenByBrowserA': True, 'closedLibraryFromB': True, 'ownerANative': owner_a_native, 'ownerBNative': app.call('library')}
             row('F1_browser_profile', f1_browser)
             def f1_editor():
                 gallery(); profile(name_b); browser(); app.call('select', tab=tab_a)
@@ -177,12 +201,12 @@ def run(factory, results, tmp, env):
                 ui('layout', name='List'); assert wait(lambda: state()['boostsPresentation'] == 'list' and 'boosts.list' in ids(), timeout=5)
                 ui('layout', name='Gallery'); profile(name_b)
                 app.call('menu-perform', id='view-library')
-                assert state()['boostsPresentation'] == 'gallery' and state()['boostsProfile'] == profile_b, state()
+                assert state()['boostsPresentation'] == 'gallery' and state()['boostsProfile'] == profile_a, state()
                 ui('section', section='history'); app.call('menu-perform', id='view-library')
-                assert state()['boostsProfile'] == profile_b and state()['librarySection'] == 'history', state()
+                assert state()['boostsProfile'] == profile_a and state()['librarySection'] == 'history', state()
                 ui('section', section='boosts'); app.call('menu-perform', id='view-boosts')
                 assert state()['boostsPresentation'] == 'list'
-                return {'inWindowList': True, 'plainLibraryPreserved': True, 'historyPreserved': True}
+                return {'inWindowList': True, 'plainLibraryUsesOwner': True, 'historySectionPreserved': True}
             row('F2_layout', f2)
             def bg2():
                 gallery(); controls=ui()['controls']; labels=' '.join(c['label'] + ' ' + c['value'] for c in controls)
@@ -194,8 +218,10 @@ def run(factory, results, tmp, env):
                 assert wait(lambda: font(tab_a).startswith('Avenir'), timeout=5)
                 ui('search', text='Beta'); assert wait(lambda: 'boosts.' + first + '.card' not in ids(), timeout=5)
                 assert 'boosts.' + second + '.card' in ids()
-                ui('search', text=''); profile(name_b); assert not any(id.endswith('.card') for id in ids())
-                profile(name_a); assert all('boosts.' + id + '.card' in ids() for id in [first, second])
+                ui('search', text=''); profile(name_b)
+                assert wait(lambda: not any(id.endswith('.card') for id in ids()), timeout=5), app.call('library')
+                profile(name_a)
+                assert wait(lambda: all('boosts.' + id + '.card' in ids() for id in [first, second]), timeout=5), app.call('library')
                 app.call('snapshot', window=state()['library'], path=str(Path(tmp) / 'gallery-rest.png'))
                 env['shot'](app, 'boost-gallery-rest.png', window=state()['library'])
                 app.call('mouse', action='hover', window=state()['library'], x=300, y=150)
@@ -203,13 +229,22 @@ def run(factory, results, tmp, env):
                 gallery_number = state()['library']
                 def library_frame():
                     return next(w['frame'] for w in app.call('windows') if w['number'] == gallery_number)
+                def owner_zoomed():
+                    return app.call('window-state', id=normal)['zoomed']
+                # The embedded Library can start in a maximized browser. A
+                # maximized frame follows macOS's current visible screen bounds
+                # (including Dock changes), rather than an old fixed panel rect.
+                # Start unzoomed so the exact restore assertion tests that rect.
+                if owner_zoomed():
+                    app.call('menu-perform', id='zoom-window')
+                    assert wait(lambda: not owner_zoomed(), timeout=5)
                 original_frame = library_frame()
                 app.call('menu-perform', id='zoom-window')
-                assert wait(lambda: library_frame() != original_frame, timeout=5)
+                assert wait(lambda: owner_zoomed() and library_frame() != original_frame, timeout=5)
                 assert all('boosts.' + id + '.card' in ids() for id in [first, second])
                 env['shot'](app, 'boost-gallery-resized.png', window=state()['library'])
                 app.call('menu-perform', id='zoom-window')
-                assert wait(lambda: library_frame() == original_frame, timeout=5)
+                assert wait(lambda: not owner_zoomed() and library_frame() == original_frame, timeout=5), {'expectedFrame': original_frame, 'actualFrame': library_frame(), 'owner': app.call('window-state', id=normal)}
                 return {'liveToggleOffOn': True, 'otherSiteUnchanged': True, 'searchAndProfiles': True, 'nativeZoomResize': True}
             row('BG2_cards_toggle', bg2)
             def f4_toggle():
@@ -259,18 +294,18 @@ def run(factory, results, tmp, env):
                 return {'privateMenuAndBarRefused': True}
             row('BG_private', private)
             def delete():
-                gallery(); ui('press', id='boosts.' + second + '.delete')
+                gallery(); delete_card(second)
                 alert=wait(lambda: app.call('alert', window='library'), timeout=5)
                 assert 'Delete this Boost?' in alert['texts'], alert
                 if os.environ.get('OPEN_BG_FAIL_IN_SHEET') == '1': raise AssertionError('forced Gallery failure with Delete sheet open')
                 app.call('key', key='escape', route='app', window=next(w['number'] for w in app.call('windows') if w['sheet']))
                 assert len(items()) == 2
-                ui('press', id='boosts.' + second + '.delete'); app.call('alert', window='library', button='Delete')
+                delete_card(second); app.call('alert', window='library', button='Delete')
                 assert wait(lambda: all(b['id'] != second for b in items()), timeout=5)
                 assert wait(lambda: not font(tab_b).startswith('Avenir'), timeout=5)
-                ui('press', id='boosts.' + first + '.delete'); app.call('alert', window='library', button='Delete')
+                delete_card(first); app.call('alert', window='library', button='Delete')
                 assert wait(lambda: not items(), timeout=5)
-                assert 'Nothing Boosted Yet!' in ' '.join(c['label'] + c['value'] for c in ui()['controls'])
+                assert wait(lambda: 'No Boosts yet' in ' '.join(c['label'] + c['value'] for c in ui()['controls']), timeout=5), ui()
                 ui('layout', name='List'); assert state()['boostsPresentation'] == 'list'
                 return {'cancelInert': True, 'confirmedDeleteLive': True, 'empty': True, 'existingUndo': 'none'}
             row('BG3_delete_empty', delete)
@@ -279,18 +314,22 @@ def run(factory, results, tmp, env):
                 for layout in ['List', 'Gallery']:
                     # Delete may have emptied this Profile earlier in the full
                     # suite. Focus belongs to the section in either state.
+                    browser(); new_tab(app, 'https://alpha.example.test/boost.html')
                     gallery(expect_cards=False); ui('layout', name=layout); number=state()['library']
-                    # Cmd+L belongs to a browser window. Both existing List and
-                    # Gallery keep it inert in Library; do not invent a new policy.
+                    # The Library shares its browser owner and its key routes.
                     app.call('key', key='l', modifiers=['cmd'], route='app', window=number)
-                    assert not bar()['presented'] and ui()['key'], {'layout': layout, 'bar': bar()}
+                    assert wait(lambda: bar()['presented'], timeout=5) and bar()['mode'] == 'editCurrentURL', {'layout': layout, 'bar': bar()}
+                    app.call('key', key='escape', route='app')
+                    assert wait(lambda: not bar()['presented'], timeout=5) and app.call('library-state')['open']
                     app.call('key', key='t', modifiers=['cmd'], route='app', window=number)
                     assert wait(lambda: bar()['presented'], timeout=5), {'layout': layout, 'key': 't', 'bar': bar()}
                     app.call('key', key='escape', route='app')
                     assert wait(lambda: not bar()['presented'], timeout=5)
+                    count = len(app.call('tabs'))
                     app.call('key', key='w', modifiers=['cmd'], route='app', window=number)
-                    assert not any(w['number'] == number and w['visible'] for w in app.call('windows'))
-                    observations[layout] = {'cmdL': 'inert', 'cmdT': 'command bar', 'escape': 'dismissed', 'cmdW': 'closed'}
+                    assert wait(lambda: len(app.call('tabs')) == count - 1, timeout=5)
+                    assert any(w['number'] == number and w['visible'] for w in app.call('windows'))
+                    observations[layout] = {'cmdL': 'edit URL', 'cmdT': 'command bar', 'escape': 'dismissed', 'cmdW': 'closed owner tab'}
                 assert observations['List'] == observations['Gallery']
                 browser(); app.call('select', tab=tab_a)
                 app.call('key', key='l', modifiers=['cmd'], route='app')

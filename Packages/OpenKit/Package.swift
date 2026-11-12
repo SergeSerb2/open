@@ -5,6 +5,7 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenLibrary", targets: ["OpenLibrary"]),
         .library(name: "OpenOnboarding", targets: ["OpenOnboarding"]),
         .executable(name: "onboarding-render", targets: ["onboarding-render"]),
         .library(name: "OpenExtensionsUI", targets: ["OpenExtensionsUI"]),
@@ -38,9 +39,12 @@ let package = Package(
         .executable(name: "sidebar-render", targets: ["sidebar-render"]),
         .executable(name: "space-editor-render", targets: ["space-editor-render"]),
         .library(name: "OpenCommandBar", targets: ["OpenCommandBar"]),
+        .library(name: "OpenEasel", targets: ["OpenEasel"]),
+        .executable(name: "easel-render", targets: ["easel-render"]),
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenLibrary", dependencies: ["OpenSettings", "OpenSidebar", "OpenDesign", "OpenModel"]),
         .target(name: "OpenOnboarding", dependencies: ["OpenDesign"], resources: [.copy("Resources/Onboarding")], linkerSettings: [.linkedFramework("AVFoundation"), .linkedFramework("CoreAudio")]),
         .executableTarget(name: "onboarding-render", dependencies: ["OpenOnboarding"]),
         .target(name: "OpenExtensionsUI", dependencies: ["OpenModel", "OpenDesign", "OpenWeb"]),
@@ -49,7 +53,7 @@ let package = Package(
         .executableTarget(name: "sitecontrol-render", dependencies: ["OpenSiteControl", "OpenModel", "OpenDesign", "OpenBoosts", "OpenWeb", "OpenExtensionsUI"], resources: [.copy("Fixtures")]),
         .target(name: "OpenMedia", dependencies: ["OpenModel", "OpenWeb"], resources: [.copy("Resources/pip-site-rules.json")]),
         .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport", "OpenOnboarding"]),
-        .executableTarget(name: "settings-preview", dependencies: ["OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
+        .executableTarget(name: "settings-preview", dependencies: ["OpenLibrary", "OpenSidebar", "OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
         .target(name: "OpenModel"),
         .target(name: "OpenFeatures", dependencies: ["OpenLiveData", "OpenSiteControl", "OpenSpaceEditor", "OpenExtensionsUI", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands", "OpenCommandBar"], resources: [.copy("Resources/Sounds")]),
         .executableTarget(name: "features-render", dependencies: ["OpenCommandBar", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenFeatures", "OpenDesign", "OpenSleep", "OpenSidebar", "OpenSettings", "OpenCommands"], sources: ["Scene", "main.swift", "Checks.swift", "SadTabScene.swift", "SaveSheetScenes.swift", "LittleOpenChecks.swift", "LittleOpenScenes.swift", "ToolbarChecks.swift", "PiPScene.swift", "PiPChecks.swift", "FeatureCompare.swift", "OffscreenRenderer.swift", "Compare.swift", "RenderCLI.swift", "SoundChecks.swift", "CompletionChecks.swift", "TabSwitcherChecks.swift", "FaviconChecks.swift", "AutoArchiveChecks.swift", "CaptureChecks.swift", "ToastChecks.swift", "SwipeChecks.swift", "TranslateChecks.swift", "IdleChecks.swift"]),
@@ -74,6 +78,8 @@ let package = Package(
         .executableTarget(name: "sidebar-render", dependencies: ["OpenLiveData", "OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"], resources: [.copy("Resources/sm6-cost-baselines.json")]),
         .executableTarget(name: "space-editor-render", dependencies: ["OpenFeatures", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
+        .target(name: "OpenEasel"),
+        .executableTarget(name: "easel-render", dependencies: ["OpenEasel"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),
     ]
 )

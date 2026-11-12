@@ -263,7 +263,7 @@ public final class IconPickerView: NSView, NSSearchFieldDelegate, NSCollectionVi
     func stop() { hold?.cancel(); hold = nil }
     override func draw(_ dirtyRect: NSRect) {
         if selected || hovered {
-            (selected ? SidebarRole.rowSelected : SidebarRole.rowHover).nsColor.setFill()
+            (selected ? SidebarRole.rowSelected : SidebarColors.itemBackground).nsColor.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
         }
         if ring {

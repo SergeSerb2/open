@@ -72,6 +72,17 @@ extension AutomationController {
           if let on = args["bookmarks"] as? Bool { wizard.plan.bookmarks = on }
           if let on = args["history"] as? Bool { wizard.plan.history = on }
           if let on = args["search"] as? Bool { wizard.plan.searchSettings = on }
+          if let on = args["passwords"] as? Bool { wizard.plan.passwords = on }
+          if let value = args["primaryPassword"] as? String, value.utf8.count <= 256 { wizard.plan.primaryPassword = value }
+        case "settings-safari-export", "settings-passwords-file":
+          // Synthetic files only: the path must sit next to the synthetic browser library.
+          guard let base = ImportWizardViewModel.browserLibraryOverride?.deletingLastPathComponent().standardizedFileURL.path,
+                let path = args["path"] as? String, path.utf8.count <= 1024,
+                URL(fileURLWithPath: path).standardizedFileURL.path.hasPrefix(base + "/") else { throw Failure(message: "file must be in the synthetic import root") }
+          if action == "settings-safari-export" { await wizard.useSafariExport(URL(fileURLWithPath: path)) }
+          else { await wizard.usePasswordsFile(URL(fileURLWithPath: path)) }
+        case "settings-access-check":
+          await wizard.checkAccessAgain()
         case "settings-back":
           wizard.backToSource()
         case "settings-run":
@@ -205,12 +216,24 @@ extension AutomationController {
         state["settingsSelectedSource"] = wizard.selectedSourceID
         state["settingsSourcesLoaded"] = wizard.sourcesLoaded
         state["settingsCanContinueFromSource"] = wizard.canContinueFromSource
+        state["settingsBrowserSecretsEnabled"] = wizard.canImportBrowserSecrets
+        state["settingsExtensions"] = (wizard.outcome?.extensions ?? []).map(\.extensionID)
+        state["settingsSecretsTitle"] = wizard.passwordsCopy.title
         state["settingsSources"] = wizard.sources.map { source -> [String: Any] in
           ["id": source.id, "name": source.name, "family": source.family.rawValue, "selectable": wizard.canSelect(source),
            "visible": wizard.visibleSources.contains(source),
            "status": wizard.sourceStatus(source) ?? "", "profiles": source.profiles.map { ["id": $0.id, "name": $0.name] }]
         }
-        state["settingsBrowserLabels"] = Dictionary(uniqueKeysWithValues: ImportWizardViewModel.browserReportCategories.map { ($0, wizard.countLabel($0)) })
+        state["settingsBrowserLabels"] = Dictionary(uniqueKeysWithValues: Set(wizard.browserCategories + ["Passwords and cookies", "Passwords", "Cookies"]).map { ($0, wizard.countLabel($0)) })
+        state["settingsAccess"] = wizard.accessBlocker?.rawValue ?? ""
+        state["settingsWizardError"] = wizard.errorText
+        state["settingsAccessTitle"] = wizard.accessTitle
+        state["fullDiskAccessRequests"] = wizard.fullDiskAccessRequests
+        state["settingsCanContinue"] = wizard.canContinue
+        state["settingsPasswords"] = wizard.plan.passwords
+        state["settingsNeedsPrimaryPassword"] = wizard.needsPrimaryPassword
+        state["settingsSafariExport"] = wizard.plan.safariFiles.exportArchive?.lastPathComponent ?? ""
+        state["settingsReportCategories"] = wizard.displayedReportCategories
         state["settingsReportSummary"] = wizard.step == .report ? wizard.reportSummary : ""
         state["undoTitle"] = app.undoManager.undoActionName
       }

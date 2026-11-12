@@ -65,7 +65,7 @@ extension AppDelegate {
     }
     media.visibility.littleOpenCoordinator = coordinator
     observeLittleOpenArchivePolicies()
-    initialWindowInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]) { [weak self] event in
+    initialWindowInputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .mouseMoved, .leftMouseDragged, .rightMouseDragged, .flagsChanged]) { [weak self] event in
       MainActor.assumeIsolated { self?.noteLaunchWindowInput(event.window ?? NSApp.keyWindow) }
       return event
     }
@@ -98,6 +98,7 @@ extension AppDelegate {
   }
 
   func noteLaunchWindowInput(_ window: NSWindow?) {
+    noteLibraryInput()
     guard let id = autoCreatedLaunchWindowID,
       windowControllers.contains(where: { $0.windowID == id && $0.window === window }) else { return }
     autoCreatedLaunchWindowID = nil

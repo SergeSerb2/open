@@ -25,6 +25,10 @@ final class ExternalLinkIntake {
   private(set) var queuedCount = 0
   private(set) var drainedCount = 0
   var pendingCount: Int { pending.count }
+  /// Runs before each routing decision (Meet's default route, `MeetRoute`); may add a rule.
+  var willRoute: ((URL) -> Void)?
+  /// Runs after a link opened (the Meet route's one-time toast).
+  var didRoute: ((URL) -> Void)?
 
   init(executor: any LinkDestinationExecutor, snapshot: @escaping () -> RoutingSnapshot) {
     self.executor = executor; self.snapshot = snapshot
@@ -59,6 +63,8 @@ final class ExternalLinkIntake {
   private func route(_ request: RoutingRequest, afterBootstrap: Bool = false) {
     // Build inside the loop: executing one queued link changes window order
     // and the most recent Space used to resolve the next queued link.
+    willRoute?(request.url)
+    defer { didRoute?(request.url) }
     let decision = evaluator.evaluate(request, in: snapshot())
     decisionLog.record(decision)
     switch decision.resolved {
@@ -102,6 +108,7 @@ extension AppDelegate {
 
   private func finishExternalLinkRestoration() {
     linkIntake.markReady()
+    deepLinks.markReady()
   }
 
   func applicationWillFinishLaunching(_ notification: Notification) {
@@ -115,6 +122,7 @@ extension AppDelegate {
       let url = URL(string: text), url.scheme != nil else {
       Self.commandLog("Ignored malformed external URL event."); return
     }
+    if DeepLinkRouter.matches(url) { deepLinks.handle(url); return }
     linkIntake.handle(urls: [url], source: SourceAppResolver.source(from: event))
   }
 
@@ -123,6 +131,7 @@ extension AppDelegate {
     // too. Give local shortcut files the same bounded reader as openFile.
     for url in urls {
       if url.isFileURL, self.application(application, openFile: url.path) { continue }
+      if DeepLinkRouter.matches(url) { deepLinks.handle(url); continue }
       linkIntake.handle(urls: [url], source: .unknown)
     }
   }

@@ -45,3 +45,31 @@ import OpenStore
     func openHistoryItem(url: URL) { record("openHistoryItem"); if let space = model.spaces.first(where: { $0.profileID == selectedHistoryProfile?() }) ?? model.spaces.first { _ = model.newTab(in: space.id, url: url); try? snapshot.saveNow(model: model) } }
     func viewSpace(id: SpaceID) { record("viewSpace \(id)") }
 }
+
+import AppKit
+import SwiftUI
+import OpenLibrary
+import OpenSidebar
+import OpenSettings
+
+/// Preview the same native Library used by the app. The removed separate
+/// window/source-list implementation has no rendering path in this executable.
+struct LibraryPreview: NSViewRepresentable {
+    let viewModel: LibraryViewModel
+    func makeNSView(context: Context) -> LibraryPanelView {
+        let sidebar = SidebarContext(model:viewModel.model,windowID:viewModel.model.windows[0].id)
+        sidebar.systemAppearance = .dark
+        let panel = LibraryPanelView(viewModel:viewModel,context:sidebar)
+        panel.isPresented = true
+        return panel
+    }
+    func updateNSView(_ view: LibraryPanelView, context: Context) {
+        let section = LibraryPanelSection(viewModel.section)
+        // A representable update must not write the same observed section back.
+        // Doing so schedules another SwiftUI update while rendering the preview.
+        if view.section != section { view.select(section,animated:false) }
+    }
+    static func dismantleNSView(_ view: LibraryPanelView, coordinator: ()) {
+        view.isPresented = false
+    }
+}

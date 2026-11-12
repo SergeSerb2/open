@@ -1,5 +1,12 @@
 # Settings and Library — implementation plan for Open
 
+Library update (2026-11-11): the Library portions of this historical plan are
+superseded by [Library](../library.md). Library now uses a native AppKit panel
+inside each browser window, with six sections and History always enabled.
+Settings retains its own window and design. Easels and filesystem sources are
+in scope under the current project rules; their Library entry points remain
+default-off until implemented.
+
 Status: plan (2026-10-25). Implementer: a coding agent with no other
 context. Follow this file literally. Where this file says "Open choice",
 the choice is final for v1. Do not re-derive it. Where this file cites
