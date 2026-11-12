@@ -1179,7 +1179,10 @@
         let children = (window?.childWindows ?? []).filter { $0.isVisible }.map { NSStringFromRect($0.frame) }
         return ["hasDevTools": page.hasDevTools, "dockScreenFrame": dockScreen.map { NSStringFromRect($0) } ?? "",
           "childWindows": children,
-          "appWindows": NSApp.windows.filter { $0.isVisible && $0.parent == nil }.count] as [String: Any]
+          "appWindows": NSApp.windows.filter { $0.isVisible && $0.parent == nil }.count,
+          "topLevel": NSApp.windows.filter { $0.isVisible && $0.parent == nil }.map {
+            ["class": $0.className, "title": $0.title, "frame": NSStringFromRect($0.frame),
+             "borderless": $0.styleMask.rawValue == 0] as [String: Any] }] as [String: Any]
       case "troubleshooting-state":
         let t = TroubleshootingActions.shared
         return ["tracing": OEEngine.shared.isTracing, "recording": t.isRecording,

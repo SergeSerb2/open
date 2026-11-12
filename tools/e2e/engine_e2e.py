@@ -1302,6 +1302,10 @@ def feature_checks(app, style, results, tmp):
             app.call("navigate", tab=w, url="https://example.com/")
             app.call("wait", tab=w)
             navigated = app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
+            # example.com's own <style> elements: the baseline is a second tab without the sheet.
+            plain = new_tab(app, "https://example.com/")
+            baseline = app.eval(plain, probe.replace('document.querySelector("iframe")', 'null'))
+            app.call("close", tab=plain)
             app.call("user-style-sheet", tab=w, key="theme", css=":root{--open-test:9px}")
             updated = wait_until(lambda: (lambda r: r if r["v"] == "9px" else None)(app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))), timeout=5) \
                 or app.eval(w, probe.replace('document.querySelector("iframe")', 'null'))
@@ -1312,9 +1316,11 @@ def feature_checks(app, style, results, tmp):
             app.call("close", tab=w)
         return {"ok": before["v"] == "" and live["v"] == "7px" and live["margin"] == "7px"
                       and live["sheets"] == before["sheets"] and live["styles"] == before["styles"] and live["frame"] in ("", None)
-                      and navigated["v"] == "7px" and navigated["styles"] == 0 and navigated["sheets"] == 0
+                      and navigated["v"] == "7px" and baseline["v"] == ""
+                      and navigated["styles"] == baseline["styles"] and navigated["sheets"] == baseline["sheets"]
                       and updated["v"] == "9px" and removed["v"] == "",
-                "before": before, "live": live, "navigated": navigated, "updated": updated, "removed": removed}
+                "before": before, "live": live, "navigated": navigated, "baseline": baseline,
+                "updated": updated, "removed": removed}
 
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).

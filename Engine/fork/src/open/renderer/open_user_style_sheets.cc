@@ -31,9 +31,21 @@ blink::WebString SheetKey(const std::string& key) {
   return blink::WebString::FromUtf8("open-user-style-sheet:" + key);
 }
 
+// StyleEngine::RemoveInjectedSheet removes only the last sheet with the key.
+// A document can receive the same key more than once (the commit hook and a
+// live update can race at document creation), so clear every copy. A few
+// passes are enough: each insert below starts from none.
+void RemoveAll(blink::WebDocument document, const std::string& key) {
+  const blink::WebString sheet_key = SheetKey(key);
+  for (int i = 0; i < 4; ++i) {
+    document.RemoveInsertedStyleSheet(sheet_key, blink::WebCssOrigin::kUser);
+  }
+}
+
 void Insert(blink::WebDocument document,
             const std::string& key,
             const std::string& css) {
+  RemoveAll(document, key);
   const blink::WebString sheet_key = SheetKey(key);
   document.InsertStyleSheet(blink::WebString::FromUtf8(css), &sheet_key,
                             blink::WebCssOrigin::kUser);
@@ -87,9 +99,8 @@ bool CefSetOpenUserStyleSheet(CefRefPtr<CefBrowser> browser,
     return true;
   }
   blink::WebDocument document = frame->GetDocument();
-  if (had) {
-    document.RemoveInsertedStyleSheet(open_engine::SheetKey(sheet),
-                                      blink::WebCssOrigin::kUser);
+  if (had || source.empty()) {
+    open_engine::RemoveAll(document, sheet);
   }
   if (!source.empty()) {
     open_engine::Insert(document, sheet, source);
