@@ -1130,3 +1130,56 @@ The required **after-wheel idle preparation** check FAILS. Largest slice **8.676
 The assertion stopped before scroller. No final M5 gate/imports or PR ran. Every open App and the scroll App quit normally: reply=true, forced=false, zero owned windows/processes. Ticket released, launcher exited1, no surviving local owned launcher/SSH. Original result copied after release unchanged at`.re/l3/l3-slice-replacement-cf17375a/result.json`, SHA256 `015a69185da6ed9ba33ea7dc630ddb9a994c842253f204d2fe73becc19e9edcc`. Source/artifact chain`.re/l3/slice-replacement-transport-2235.json`; concise derived evidence`.re/l3/library-qualification-stop-cf17375a.json`.
 
 STOP under LEAD15:30 at a new valid measured Library failure. No further diagnosis, source repair, measurement, gate or PR is queued. A ruling is needed for M5/rented diagnosis of the after-wheel preparation failure and qualification of that failed row plus the missing scroller. Keep the three passing opens and all failed records; no repeat or qualification scope is assumed.
+
+### LEAD00:15 repair — slices pass; required M1 busy interval fails
+
+The lead retained the passing opens and wheel callbacks above. The scoped
+repair separates detached row setup, layout and each dirty layer, uses a 3 ms
+clock budget, and blocks preparation during native wheel contact and momentum.
+Detached work no longer forces a whole-window transaction flush. The native
+run-loop heartbeat still includes deferred commit work.
+
+The original M5 fixture showed a 3.532000 ms slice: 0.902542 ms of body work
+and 2.622708 ms in the explicit global flush. At product head `f4eda4ca`,
+the same real 10,000-row, ten-Profile flow has wheel/scroller/wheel slice
+maxima 1.001542/0.564667/0.494333 ms. Corresponding full busy maxima are
+3.108750/2.630458/2.586667 ms. No slice runs during active gestures.
+A separate real-App socket check holds contact and momentum for one second
+each: both have zero preparation slices; 37 slices resume after momentum ends.
+Release automation build and normal cleanup pass. These are M5 proofs.
+
+The sole authorised M1 continuation acquired its exclusive ticket after
+496 seconds. It verified all 3,079 source files and the exact Release artifact
+inside the slot. The measured preflight loads were 1.450195/1.380859, ten
+seconds apart. The flow waited at least 150 seconds after launch, collected
+600 wheel callbacks as prerequisites, then 216 settling frames. The accepted
+open and wheel callback budgets were carried, not requalified.
+
+| After-wheel preparation measurement | Value | Result |
+|---|---:|---|
+| Captured slices | 154 | Nonempty coverage |
+| Largest measured slice | 2.279542 ms | Below 3 ms target and existing 8 ms assertion |
+| Slices during contact or momentum | 0 | PASS |
+| Largest full busy interval matching a slice | 11.162417 ms | FAIL, limit 8.3 ms |
+
+The required row remains a valid **FAIL**. At settling callback 659, the busy
+interval spans launch age 165528.525833–165539.688250 ms. Its one recorded
+Library slice configures Downloads row 669 at
+165536.755417–165537.202375 ms. The slice clock is 0.446708 ms; clipped endpoint
+overlap is 0.446958 ms. The remaining 10.715458 ms is unclassified by these
+phase marks. It may include deferred Library or compositor work. The trace
+does not prove an outside-Library cause. The existing full-busy assertion is
+unchanged and is not waived by the shorter slice.
+
+Scroller is NOT_RUN. Final touched rented suites, gate and PR have not started.
+The App quits normally (reply true, forced false), with zero owned windows or
+processes. The ticket released and launcher exited 1. Earlier failed sets and
+the carried passing opens/wheel callbacks remain intact.
+
+Original `.re/l3/l3-scroll-continuation-f4eda4ca/result.json`, SHA256
+`d2f1e642a2003e49f850f4c8c3bf79399565a38f611281d727f5b23d1ea1dfa0`.
+Derived analysis: `.re/l3/continuation-stop-0015.json`. Executable SHA256
+`4508a34b68ac521ce6353f91dc5497a0937dda01164bca6351b2d9153b688f2d`.
+STOP at the LEAD00:15 M1 failure boundary. No additional measurement, repair,
+gate or PR is queued. Further scope is needed to diagnose the unclassified
+interval and qualify preparation plus the missing scroller.

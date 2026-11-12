@@ -79,11 +79,15 @@ only if the provider takes more than 120 ms.
 
 The viewport uses fixed frame geometry, cached attributed text and icons,
 layer plates, and a bounded pool of native cells. Idle preparation constructs
-spare and missing overscan cells away from the attached layer tree. It checks
-elapsed time and a conservative next-body estimate before raster work, with a
-6 ms body budget to reserve time below the 8.3 ms slice ceiling for submission.
-Text layers can finish on separate turns; only completed cells join the pool
-or overscan hierarchy. A settled section prepares one screen above and below.
+spare and missing overscan cells away from the attached layer tree. A 3 ms clock
+budget protects the slowest supported Mac. Row setup, layout and each dirty
+layer run in separate turns, with a clock check before the next body. Detached
+work does not force a whole-window transaction flush; the native run loop
+commits it, and the benchmark heartbeat includes that commit cost. Only completed
+cells join the pool or overscan hierarchy. Native wheel contact and momentum
+block preparation, including stationary gesture tails. Work resumes after both
+phases end and input has been idle for 500 ms. A settled section prepares one
+screen above and below.
 Scrolling reuses those attached cells. A fast scroll also prefetches the predicted
 next viewport. The scroll benchmark records nested clip/dequeue/configure/layout,
 tracking, display and flush phases. Its run-loop heartbeat and 2 ms background
