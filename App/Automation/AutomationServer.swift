@@ -56,6 +56,8 @@
         throw POSIXError(.init(rawValue: errno) ?? .EIO)
       }
       chmod(path, 0o600)
+      // Non-blocking, so one read event can accept every waiting client.
+      _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
       listenFD = fd
       let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
       source.setEventHandler { [weak self] in self?.acceptClient() }
@@ -74,8 +76,17 @@
     }
 
     private func acceptClient() {
-      let client = accept(listenFD, nil, nil)
-      guard client >= 0 else { return }
+      // Drain the backlog: at most 256 clients per event, so reads and replies still get their turn.
+      for _ in 0..<256 {
+        let client = accept(listenFD, nil, nil)
+        guard client >= 0 else { return }
+        // An accepted socket can inherit O_NONBLOCK from the listener; this server's I/O is blocking.
+        _ = fcntl(client, F_SETFL, fcntl(client, F_GETFL) & ~O_NONBLOCK)
+        adopt(client)
+      }
+    }
+
+    private func adopt(_ client: Int32) {
       var on: Int32 = 1
       setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
       // A client that stops reading must not block the serial queue for ever.

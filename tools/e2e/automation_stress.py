@@ -14,10 +14,18 @@ import time
 
 
 def connect(path):
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(10)
-    s.connect(path)
-    return s
+    # A burst beyond the listen backlog may be refused for a moment; a real client retries.
+    deadline = time.time() + 5
+    while True:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(10)
+        try:
+            s.connect(path)
+            return s
+        except ConnectionRefusedError:
+            s.close()
+            if time.time() > deadline: raise
+            time.sleep(.01)
 
 
 def read_lines(s, count):
