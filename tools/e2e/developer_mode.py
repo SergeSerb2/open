@@ -171,10 +171,13 @@ def run(factory, results, tmp, h):
         # keeps back / forward / reload ▾ and only its URL field goes away. Another site gets the normal toolbar.
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         app.call('command', id='toggle-toolbar')
-        h.wait_until(lambda: state().get('sidebarToolbar', {}).get('urlFieldShown') is False, timeout=10, step=.05)
+        h.wait_until(lambda: (lambda t: t.get('urlFieldShown') is False and t.get('navigationShown') is True)(state().get('sidebarToolbar', {})),
+                     timeout=10, step=.05)
         dev_tb = state()
         app.call('select', tab=other)
-        h.wait_until(lambda: state().get('toolbar') is True, timeout=10, step=.05)
+        # The sidebar toolbar lays out on its next pass, after the content toolbar appears: wait for both.
+        h.wait_until(lambda: (lambda s: s.get('toolbar') is True and s.get('sidebarToolbar', {}).get('navigationShown') is False)(state()),
+                     timeout=10, step=.05)
         plain_tb = state()
         app.call('select', tab=tab)
         h.wait_until(lambda: state().get('shown') is True, timeout=10, step=.05)
