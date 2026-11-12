@@ -1648,12 +1648,13 @@
         // Chromium's web protocol handler registry of the focused Profile.
         let context = try focusedBrowser(w, create: false).context
         var result: [String: Any] = [:]
-        if let raw = a["translate"] as? String, raw.utf8.count <= 4096, let target = URL(string: raw) {
-          result["translated"] = context.protocolHandlerURL(for: target)?.absoluteString ?? NSNull()
-        }
+        // Remove first, so `translated` describes the state after the removal.
         if let scheme = a["removeScheme"] as? String, let template = a["removeURLTemplate"] as? String {
           result["removed"] = context.protocolHandlers.first { $0.scheme == scheme && $0.urlTemplate == template }
             .map { context.removeProtocolHandler($0) } ?? false
+        }
+        if let raw = a["translate"] as? String, raw.utf8.count <= 4096, let target = URL(string: raw) {
+          result["translated"] = context.protocolHandlerURL(for: target)?.absoluteString ?? NSNull()
         }
         result["handlers"] = context.protocolHandlers.map {
           ["scheme": $0.scheme, "urlTemplate": $0.urlTemplate, "default": $0.isDefault] as [String: Any]

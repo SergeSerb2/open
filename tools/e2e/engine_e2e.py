@@ -1244,7 +1244,7 @@ def feature_checks(app, style, results, tmp):
             before = app.call("protocol-handlers", translate="mailto:someone@example.org")
             app.call("events")
             app.eval(w, 'navigator.registerProtocolHandler("mailto", %s)' % json.dumps(template))
-            wait_until(lambda: any(h["scheme"] == "mailto" for h in app.call("protocol-handlers")["handlers"]), timeout=5)
+            wait_until(lambda: any(h["scheme"] == "mailto" and h["default"] for h in app.call("protocol-handlers")["handlers"]), timeout=5)
             prompts = [e for e in app.call("events") if e["type"] == "permission"]
             granted = app.call("protocol-handlers", translate="mailto:someone@example.org")
             app.eval(w, 'location.href = "mailto:someone@example.org"')
