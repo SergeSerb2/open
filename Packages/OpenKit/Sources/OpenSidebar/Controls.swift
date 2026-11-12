@@ -303,6 +303,8 @@ class PlateButton: NSView {
     var accessibleTitle: (@MainActor () -> String)?
     var action: (@MainActor () -> Void)?
     var menuProvider: (@MainActor () -> NSMenu?)?
+    /// Right click only; the left click keeps `action`.
+    var contextMenuProvider: (@MainActor () -> NSMenu?)?
     var tooltip: (@MainActor () -> Tooltip?)?
     var isEnabled: @MainActor () -> Bool = { true } { didSet { needsDisplay = true } }
     var glyphTint: @MainActor (_ enabled: Bool) -> NSColor = { enabled in
@@ -406,7 +408,7 @@ class PlateButton: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        if let menu = menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) } else { super.rightMouseDown(with: event) }
+        if let menu = contextMenuProvider?() ?? menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) } else { super.rightMouseDown(with: event) }
     }
 
     override func accessibilityRole() -> NSAccessibility.Role? { .button }

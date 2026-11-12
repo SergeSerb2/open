@@ -22,6 +22,9 @@ public final class SidebarContext {
     public var media: MediaSourceStore?
     /// Session download progress supplied by the App; no sidebar polling.
     public var downloadBadge: DownloadBadgeState?
+    /// Library media sources for the Library button's "Show media from:" menu (PB1): id, title, on.
+    /// Empty hides the menu (render fixtures, windows without a Library).
+    public var libraryMediaSources: [SidebarMediaSourceItem] = []
     public var displayedTabIDs: Set<ItemID> = []
     /// Render-only forced states, analogous to forcedHover.
     public var forcedMediaHover: SidebarMediaHover?
@@ -512,4 +515,10 @@ extension Tab {
 
 public enum SidebarMediaHover: Equatable, Sendable {
     case expanded, title(ItemID)
+}
+
+/// One row of the Library button's "Show media from:" menu.
+public struct SidebarMediaSourceItem: Equatable, Sendable {
+    public var id: String, title: String, enabled: Bool
+    public init(id: String, title: String, enabled: Bool) { self.id = id; self.title = title; self.enabled = enabled }
 }

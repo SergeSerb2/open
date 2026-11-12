@@ -75,6 +75,8 @@ import OpenStore
     public private(set) var libraryBoostRows: [BoostItemSnapshot] = []
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
+    /// Folder sources for Media (PB1). Nil in render fixtures that have no folders.
+    public var mediaFolders: LibraryMediaFoldersProvider?
     public private(set) var archives: [ProfileID: ArchiveStore]
     public private(set) var histories: [ProfileID: HistoryStore]
     public let faviconStore: FaviconStore?
@@ -139,6 +141,7 @@ import OpenStore
         case .downloads: await downloads.refreshDownloads()
         case .media,.captures:
             await (captures as? FileCapturesProvider)?.refresh()
+            await mediaFolders?.refresh()
             let rows = captures.captures,directory = captures.directory
             let locations = await Task.detached(priority:.utility) {
                 Dictionary(uniqueKeysWithValues:rows.compactMap { item -> (UUID,URL)? in

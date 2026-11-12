@@ -76,6 +76,30 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   @ObservationIgnored lazy var settingsPresenter = SettingsPresenter(viewModel: settings)
   @ObservationIgnored lazy var captures = FileCapturesProvider(root: app.directories.root, loadImmediately: false)
+  /// Library folder sources (PB1). Nothing reads the folders before "Choose Folders…".
+  @ObservationIgnored lazy var mediaFolders: LibraryMediaFoldersProvider = {
+    var folders = LibraryMediaFolders.user()
+    #if OPEN_AUTOMATION
+    // Fixture folders only: automation never reads the user's folders or meets a consent prompt.
+    if let root = ProcessInfo.processInfo.environment["OPEN_LIBRARY_MEDIA_FIXTURE"], root.hasPrefix("/") {
+      folders = .fixture(root: URL(fileURLWithPath: root, isDirectory: true))
+    }
+    #endif
+    let provider = LibraryMediaFoldersProvider(stateURL: app.directories.root.appendingPathComponent("State/library-media.json"), folders: folders)
+    provider.onChange = { [weak self] in self?.syncLibraryMediaSources(refresh: true) }
+    return provider
+  }()
+  /// The Library button's "Show media from:" menu state, for every window; refreshes open Media lists.
+  func syncLibraryMediaSources(refresh: Bool = false) {
+    let items = LibraryMediaSource.menuOrder.map { SidebarMediaSourceItem(id: $0.rawValue, title: $0.title, enabled: mediaFolders.isEnabled($0)) }
+    for controller in app.windowControllers where controller.context.libraryMediaSources != items { controller.context.libraryMediaSources = items }
+    guard refresh else { return }
+    for session in librarySessions.values { Task { @MainActor in await session.model.refreshExternalState(for: .media) } }
+  }
+  func toggleLibraryMediaSource(_ id: String) -> Bool {
+    guard let source = LibraryMediaSource(rawValue: id) else { return false }
+    mediaFolders.setEnabled(source, !mediaFolders.isEnabled(source)); return true
+  }
   @ObservationIgnored var librarySessions: [WindowID: AppLibrarySession] = [:]
   #if OPEN_AUTOMATION
   @ObservationIgnored weak var lastClosedLibraryPanel: LibraryPanelView?
@@ -156,6 +180,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       archives:archives,histories:histories,snapshot:app.snapshotStore,faviconStore:app.stores.favicons,settingsActions:self,
       historyResolver:{ [weak app] in app?.stores.history(for:$0) })
     model.boostsProvider = app.stores.boosts
+    model.mediaFolders = mediaFolders
     controller.onLibraryIdleRefresh = { [weak app] in app?.scheduleLibraryPrebuild() }
     let session = AppLibrarySession(model:model,controller:controller); librarySessions[controller.windowID] = session
     return session

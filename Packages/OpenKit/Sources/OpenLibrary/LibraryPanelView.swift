@@ -156,6 +156,12 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
         emptyBody.font = .systemFont(ofSize:14); emptyBody.alignment = .center
         emptyBody.maximumNumberOfLines = 4
         emptyButton.baseAlpha = 0.09; emptyButton.labelSize = 13
+        // "Choose Folders…": turn on folder sources; reading them next asks macOS for access.
+        emptyButton.onPress = { [weak self] in
+            guard let self, self.section == .media, let folders = self.viewModel.mediaFolders else { return }
+            folders.markOnboarded()
+            Task { @MainActor [weak self] in await self?.viewModel.refreshExternalState(for:.media); self?.refresh() }
+        }
         refresh()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -290,16 +296,15 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     func updateEmptyCopy() {
         let noMatches = !viewModel.query.isEmpty || hasActiveFilters
-        let folderSources = section == .media && viewModel.defaults.bool(forKey:"libraryMediaFolderSources")
+        let folderSources = section == .media && viewModel.mediaFolders.map { !$0.onboarded } == true
         let copy = folderSources ? (title:"Show your media here",body:"Screenshots, images and videos from this Mac, ready to drag into any page.",button:Optional("Choose Folders…")) : section.emptyCopy
         emptyGlyph.glyph = LibraryGlyph(rawValue:section.rawValue) ?? .media
         emptyTitle.stringValue = noMatches ? "No matches" : copy.title
         emptyBody.stringValue = noMatches ? "Try another word." : copy.body
         emptyButton.title = copy.button ?? ""; emptyButton.isHidden = noMatches || copy.button == nil
-        // Folder sources are intentionally unavailable until their feature exists.
-        emptyButton.isEnabled = false
-        emptyButton.toolTip = section == .media ? "Coming with folder sources" : nil
-        if section == .media { emptyButton.setAccessibilityHelp("Coming with folder sources") }
+        emptyButton.isEnabled = folderSources
+        emptyButton.toolTip = nil
+        if section == .media { emptyButton.setAccessibilityHelp(folderSources ? "Shows images and videos from your Documents, Desktop, Downloads and screenshots" : nil) }
     }
     func refreshTheme() {
         let style = context.focusedSpace.map { context.style(for:$0) } ?? .defaultTheme(system:context.systemAppearance)
@@ -454,4 +459,9 @@ public final class LibraryPanelView: NSView, NSTextFieldDelegate {
     }
     public func hoverTile(_ section: LibraryPanelSection, hovered: Bool) { tiles[section]?.hovered=hovered }
     public func pressBack() { back.performClick(nil) }
+    /// The empty state's button ("Choose Folders…" on Media), through its real press handler.
+    public func pressEmptyButton() -> Bool {
+        guard !emptyButton.isHidden, emptyButton.isEnabled else { return false }
+        emptyButton.performClick(nil); return true
+    }
 }
