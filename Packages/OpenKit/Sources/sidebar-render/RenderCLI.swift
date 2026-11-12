@@ -208,6 +208,16 @@ enum RenderCLI {
         options.revealCard = args.contains("--reveal")
         options.trafficLights = !args.contains("--no-lights")
         options.emptyPanel = !args.contains("--page")
+        if args.contains("--live-folder"), let space = context.focusedSpace {
+            // LF look frames: a synthetic Live Folder at the end of Pinned with synthetic PR rows.
+            if args.contains("--plain-theme") { space.theme = SpaceTheme() }
+            guard let folder = model.createLiveFolder(in: space.id, config: LiveFolderConfig()) else { throw CLIError(description: "no live folder") }
+            let base = "https://github.com/acme/app/pull/"
+            model.applyLiveRows(folderID: folder.id, add: [("Fix sidebar drag on resize", 142), ("Add Live Folders", 139), ("Draft: new header", 131)].map {
+                (URL(string: base + "\($0.1)")!, $0.0) }, remove: [], retitle: [:], unread: false)
+            if args.contains("--live-collapsed") { folder.applyExpansion(.collapsed) }
+            if args.contains("--live-intro") { options.liveIntroFolderID = folder.id }
+        }
         if let preview = value(args, "--preview"), let space = context.focusedSpace {
             let parts = preview.split(separator: ":")
             if parts.count == 2, parts[0] == "recents", let site = RecentsSite(rawValue: String(parts[1])) {

@@ -653,6 +653,20 @@ extension SidebarView {
         return (cell, cell.clearTitle, cell.clearTooltipTitle)
     }
 
+    /// A Live Folder row's state glyph: its tooltip and frame (sidebar coordinates) when shown.
+    public func liveFolderStateGlyph(nodeID: ItemID) -> (tooltip: String, frame: CGRect)? {
+        guard let cell = cell(nodeID: nodeID) as? FolderCellView else { return nil }
+        cell.layoutSubtreeIfNeeded()
+        guard let button = cell.liveState, !button.isHidden, let tip = button.toolTip else { return nil }
+        return (tip, convert(button.frame, from: cell))
+    }
+    /// Presses the Live Folder state glyph through its own action.
+    @discardableResult
+    public func pressLiveFolderStateGlyph(nodeID: ItemID) -> Bool {
+        guard let button = (cell(nodeID: nodeID) as? FolderCellView)?.liveState, !button.isHidden else { return false }
+        return button.accessibilityPerformPress()
+    }
+
     public func unreadDotFrame(nodeID: ItemID) -> CGRect? {
         guard let cell = cell(nodeID: nodeID), let dot = cell.layer?.sublayers?.first(where: { $0.name == "sidebar-unread-dot" }), dot.opacity > 0 else { return nil }
         return convert(dot.frame, from: cell)

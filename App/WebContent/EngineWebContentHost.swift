@@ -133,6 +133,11 @@ final class EngineWebContentHost: NSObject, WebContentHost, WebContentProviding,
     if changes.contains(.URL), let url = page.url {
       if !page.isLoading { owner.app.stores.boosts.pageCommitted(self, url: url) }
       historyRecorder.addressChanged(url, isLoading: page.isLoading, ephemeral: page.context.isEphemeral, title: page.title)
+      // Live Folder triggers (PR created / reviewed): a static origin test first, so ordinary
+      // navigations never create the Live Folder service.
+      if !owner.isIncognito, LiveFolderService.isOnOrigin(url) {
+        owner.app.liveFolders.addressChanged(tabID: tabID, url: url, space: owner.space(for: tabID))
+      }
     }
     if changes.contains(.loading), !page.isLoading { historyRecorder.loadingChanged(false); historyRecorder.titleChanged(page.title) }
     if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title); historyRecorder.titleChanged(page.title) }

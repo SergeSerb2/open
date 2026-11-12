@@ -262,6 +262,30 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         return preview
     }()
+    /// Live Folder intro card (capture s5 b3) beside the new folder row; one at a time.
+    public private(set) var liveFolderIntro: LiveFolderIntroView?
+    private var liveFolderIntroMonitor: Any?
+    public func showLiveFolderIntro(folderID: ItemID) {
+        dismissLiveFolderIntro()
+        sidebar.layoutSubtreeIfNeeded()
+        guard let row = sidebar.rowFrame(nodeID: folderID) else { return }
+        let appearance = context.focusedSpace.map(context.appearance(for:)) ?? context.systemAppearance
+        let view = LiveFolderIntroView(appearance: appearance)
+        let rowInRoot = root.convert(row, from: sidebar)
+        let size = view.fittingSize
+        view.frame = CGRect(x: context.sidebarWidth + HoverPreviewMetrics.folderSidebarGap, y: rowInRoot.midY - size.height / 2, width: size.width, height: size.height)
+        root.addSubview(view, positioned: .below, relativeTo: toastOverlay)
+        liveFolderIntro = view
+        // Any click or key dismisses it (capture s5: Esc closes it); the event still goes on.
+        liveFolderIntroMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+            MainActor.assumeIsolated { if event.window === self?.window { self?.dismissLiveFolderIntro() } }
+            return event
+        }
+    }
+    public func dismissLiveFolderIntro() {
+        if let liveFolderIntroMonitor { NSEvent.removeMonitor(liveFolderIntroMonitor); self.liveFolderIntroMonitor = nil }
+        liveFolderIntro?.removeFromSuperview(); liveFolderIntro = nil
+    }
     /// The delete confirmation sheet currently shown on this window (completion §3.3).
     public private(set) var pendingConfirmation: NSAlert?
     /// Title of the newest toast shown, for checks.
@@ -1282,6 +1306,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .separateFromPinned(let id): return separateFromPinned(id)
         case .deleteSpace(let id): return confirmDeleteSpace(id)
         case .deleteFolder(let id): return confirmDeleteFolders([id])
+        case .deleteLiveFolder(let id): return confirmDeleteLiveFolder(id)
+        case .setLiveRepository(let id, let repository, let hidden):
+            model.setLiveRepository(folderID: id, repository: repository, hidden: hidden); changed(); return true
         case .deleteFolders(let ids): return confirmDeleteFolders(ids)
         case .clearToday(let space), .clearTodayKeeping(let space, _):
             let before = model.space(id: space)?.today.count ?? 0
@@ -1511,6 +1538,25 @@ extension BrowserWindowController {
             guard archived > 0 else { return }
             self.refresh(); restoreKeyboardFocus(); self.changed()
             self.showModelUndoToast(SidebarConfirmations.folderToast(count: folders))
+        }
+        if !shown { pendingConfirmation = nil }
+        return shown
+    }
+
+    /// Live Folder delete: the alert, then the folder and its rows go (no Archive), and automatic
+    /// creation turns off until the user turns it on from the Space menu (live-data §2.1, W2).
+    public static let liveFolderAutoCreateKey = "open.liveFolders.githubAutoCreate"
+    func confirmDeleteLiveFolder(_ id: ItemID) -> Bool {
+        guard let window, pendingConfirmation == nil, model.node(id: id)?.folder?.live != nil else { return false }
+        let alert = SidebarConfirmations.deleteLiveFolderAlert()
+        pendingConfirmation = alert
+        let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
+            guard let self else { return }
+            self.pendingConfirmation = nil
+            guard confirmed else { return }
+            self.keepingSelection { self.model.removeLiveFolder(id: id) }
+            self.defaults.set(false, forKey: Self.liveFolderAutoCreateKey)
+            self.refresh(); self.changed()
         }
         if !shown { pendingConfirmation = nil }
         return shown
