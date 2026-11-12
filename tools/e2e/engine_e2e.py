@@ -12708,8 +12708,13 @@ def main():
         ap.error('M1 policy forbids external AppleScript/osascript over SSH; run this suite on the M5')
     if opts.lane == "observers" and opts.only not in ("sitecontrol", "find", "split", "littleopen", "downloads"):
         ap.error("selected suite has no observer lane")
-    if opts.lane == "observers" and not subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).startswith("Apple M1"):
-        ap.error("observer lane requires the M1")
+    if opts.lane == "observers":
+        # The M1, or a rented Namespace Mac (virtual Apple M5, macOS 27; NS-MACS.md).
+        chip = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)
+        rented = (chip.startswith("Apple M5") and subprocess.run(["sysctl", "-n", "kern.hv_vmm_present"],
+                  capture_output=True, text=True).stdout.strip() == "1")
+        if not (chip.startswith("Apple M1") or rented):
+            ap.error("observer lane requires the M1 or a rented Mac")
     display_reader = runpy.run_path(os.path.join(ROOT, 'tools/verification/portable-baselines.py'))['display_environment']
     display_before = display_reader() if opts.expected_display_key else None
     if display_before and display_before['key'] != opts.expected_display_key:
