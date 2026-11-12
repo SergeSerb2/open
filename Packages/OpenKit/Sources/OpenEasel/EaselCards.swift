@@ -68,6 +68,19 @@ enum EaselCards {
         border(dark: dark).setStroke(); shape.lineWidth = 1; shape.stroke()
     }
 
+    /// A live card: the rounded frame and a header strip with the page's host (drag handle).
+    static func drawLiveHeader(_ card: EaselWebCard, bounds: CGRect, header: CGFloat, dark: Bool) {
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: corner, yRadius: corner)
+        EaselStyle.floating(dark: dark).setFill(); shape.fill()
+        let para = NSMutableParagraphStyle(); para.lineBreakMode = .byTruncatingTail
+        let label = card.title.map { "\($0) — \(host(card.url))" } ?? host(card.url)
+        NSAttributedString(string: label, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium),
+                                                       .foregroundColor: EaselStyle.text(dark: dark).withAlphaComponent(0.7), .paragraphStyle: para])
+            .draw(with: CGRect(x: bounds.minX + 10, y: bounds.minY + (header - 14) / 2, width: bounds.width - 20, height: 16),
+                  options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        border(dark: dark).setStroke(); shape.lineWidth = 1; shape.stroke()
+    }
+
     static func drawLink(_ link: EaselLink, image: CGImage?, bounds: CGRect, dark: Bool) {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: corner, yRadius: corner)
         EaselStyle.floating(dark: dark).setFill(); shape.fill()
