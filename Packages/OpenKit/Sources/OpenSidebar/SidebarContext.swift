@@ -132,6 +132,21 @@ public final class SidebarContext {
     /// Live Calendar (LD §4): the countdown state of each calendar Favorite tile, set by the App's
     /// coordinator. Observed: a change redraws only the tiles that read it.
     public var liveCalendarTiles: [ItemID: LiveCalendar.TileState] = [:]
+    /// Favorite tile badge and subtitle switches (audit A2), read from `previewPreferences`.
+    /// Observed: a change redraws only the tiles that read it. Every window reloads them when
+    /// one window changes a switch (`FavoriteTileSettings.didChange`).
+    public private(set) var favoriteTileSettings = FavoriteTileSettings()
+    /// Unread badges and their menu item; false in render scenes and incognito windows (GUESS).
+    @ObservationIgnored public var favoriteBadgesEnabled = false
+    @ObservationIgnored private var favoriteSettingsObserver: (any NSObjectProtocol)?
+    public func updateFavoriteTileSettings(_ change: (inout FavoriteTileSettings) -> Void) {
+        var next = favoriteTileSettings
+        change(&next)
+        guard next != favoriteTileSettings else { return }
+        favoriteTileSettings = next
+        next.save(to: previewPreferences)
+        NotificationCenter.default.post(name: FavoriteTileSettings.didChange, object: previewPreferences)
+    }
     /// Live Calendar actions for the tile menu and the reminder; nil keeps tiles plain.
     @ObservationIgnored public var liveCalendar: LiveCalendarActions?
     public func glanceKind(for tab: Tab) -> GlanceKind? {
@@ -161,6 +176,15 @@ public final class SidebarContext {
         self.windowID = windowID
         self.incognitoTitle = incognitoTitle
         self.previewPreferences = previewPreferences
+        favoriteTileSettings = FavoriteTileSettings(defaults: previewPreferences)
+        favoriteSettingsObserver = NotificationCenter.default.addObserver(forName: FavoriteTileSettings.didChange,
+            object: previewPreferences, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let loaded = FavoriteTileSettings(defaults: self.previewPreferences)
+                if loaded != self.favoriteTileSettings { self.favoriteTileSettings = loaded }
+            }
+        }
         selection.onChange = { [weak self] in
             guard let outline = self?.sidebar?.focusedOutline else { return }
             NSAccessibility.post(element: outline, notification: .selectedRowsChanged)
