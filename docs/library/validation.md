@@ -1004,3 +1004,61 @@ Gallery's native zoom diagnosis retained the exact failing frames: before1280x69
 
 
 Global Turn On diagnosis: the actual rendered LibraryControl reports AXUnknown inside the process; the old label/AX-role search selected a proxy whose press returned false. On rented Mac2, the actual native control at its queried frame changed the real preference false→true and the real page Times→Avenir. Normal cleanup left zero owned processes/windows. The automation now prefers actual rendered NSButtons for a label, retaining exact uniqueness, enabled checks and the same target/action press. Hosted Settings controls retain their existing AX path. Query state includes native button title/frame for this proof. No product source or timing-measured path changed.
+## LEAD 22:10 — owner preparation and native Gallery layout repair
+
+The scoped M1 qualification after the History watcher and outside-entry fixes
+has a valid required failure. Its three open samples are 15.114458, 16.055958
+and 16.368917 ms. Median 16.055958 ms fails the unchanged 16 ms limit; maximum
+16.368917 ms passes 24 ms. The original sample, refused load preflight and
+missing-only continuation remain intact. Wheel/scroller did not run after the
+median assertion. These samples are failed evidence, not acceptance.
+
+The last accepted open receipt before those fixes is
+`.re/l3/l3-explicit-flush-ready-r1/result.json`, source `754cb5b5`.
+LEAD 14:20 accepted its median/max 8.817833/14.315667 ms at 16/24 ms.
+The existing phase marks show the following medians:
+
+| Phase | Earlier accepted set ms | Failed set ms |
+|---|---:|---:|
+| Ready-open | 8.817833 | 16.055958 |
+| Action dispatch | 4.782500 | 7.936125 |
+| Native layout | 0.417458 | 0.924708 |
+| Native display | 0.300667 | 0.493750 |
+| Native compositor flush | 3.355875 | 6.275083 |
+
+Every timed open has zero provider/configure/table-update/reload delta. These
+marks alone do not attribute the full difference to a provider reload.
+The derived comparison is `.re/l3/open-phase-comparison-2210.json`.
+
+The real-App NS2 socket diagnostic proves extra work after the first open:
+idle preparation selects All Profiles, the outside Downloads entry selects
+the owner, and the same provider snapshot configures 23 rows again. Session
+creation now selects its browser owner's Downloads and History filters before
+observations or idle preparation. The existing outside reset remains guarded
+by Profile equality, and real Profile changes still rebind the History store.
+
+Before/after diagnostics are under
+`.re/l3/rented-2140/ns2/d1-diagnostic-2210-open/` and
+`d1-diagnostic-2210-fixed-open/`. After the repair, configured rows stay 23 and
+table updates stay 5 before open, immediately after it and after settling.
+Downloads provider generation stays 1. An equal-owner re-entry has zero
+non-phase counter deltas and unchanged provider generations. These rented
+diagnostics prove lifecycle behavior; their timing does not qualify M1 budgets.
+
+A separate real-App diagnostic also proves a product bug in Gallery entry:
+with List already open, the Gallery menu changes the model to Gallery while
+the native panel remains `boosts.list`. The entry now applies a changed layout
+through the existing panel method. A hidden changed layout invalidates its
+prepared presentation; equal layout is a no-op. The diagnostic turns green,
+and the complete Gallery suite passes all 14 functional rows, including delete,
+empty state, live effects, Profile isolation, owner routing and actual app keys.
+
+Complete native Library content passes 96/96; overlay passes 40/40 on NS2 at
+`95e5bb24`. Content cleanup retains the known forced native drag-source teardown,
+with zero surviving owned processes/windows. Overlay and Gallery quit normally.
+Foreign drag destination behavior remains unverified. Original receipts are
+copied after release and hash-compared; no source metadata is rewritten.
+
+LEAD 22:10 authorises one new quiet M1 ticket, at most 15 minutes, for three open
+samples plus wheel/scroller after functional verification. It replaces the
+failed open set and keeps that set in the record. Qualification is pending.

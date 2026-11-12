@@ -12,6 +12,10 @@ already open. If that Profile is already selected, entry does not reload the
 provider. Navigation within Library, including section changes and filters,
 keeps the user's chosen filter. A History Profile change cancels the old store
 subscription and stale provider, then subscribes to the new Profile's store.
+New sessions select their browser owner's Downloads and History filters before
+idle preparation. An outside entry therefore keeps that prepared first screen
+when the owner has not changed. A Boost List/Gallery entry also updates the
+native panel layout; selecting the current layout does no work.
 
 The rail is 112pt wide. Ordinary sections end at x417; Spaces leaves 56pt of the
 page visible. The selected tile has a fill. A focus ring appears during keyboard
