@@ -1,0 +1,5 @@
+<!doctype html><meta charset="utf-8"><title>Open performance DOM fixture</title>
+<style>body{font:16px system-ui;margin:40px;background:#f2f1eb}.row{padding:3px;border-bottom:1px solid #aaa}</style>
+<h1>20,000 fixed nodes</h1><div id="nodes"></div>
+<script>const fragment=document.createDocumentFragment();for(let i=0;i<20000;i++){const el=document.createElement('div');el.className='row';el.textContent='Synthetic row '+i;fragment.append(el);}document.querySelector('#nodes').append(fragment);</script>
+<script src="reporter.js"></script>
