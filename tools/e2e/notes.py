@@ -124,7 +124,7 @@ def run(factory, results, tmp, h):
         # Look frames (light + dark) for the lead's review; View ▸ Appearance drives the Note.
         frames = os.path.join(h.ROOT, '.re', 'nt-frames')
         os.makedirs(frames, exist_ok=True)
-        domain = 'io.github.sergeserb2.open'
+        domain = __import__('prefs_domain').domain()
         stored_scheme = subprocess.run(['defaults', 'read', domain, 'open.web.colorScheme'], capture_output=True, text=True)
         try:
             looks = {}

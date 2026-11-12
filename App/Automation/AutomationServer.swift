@@ -4,14 +4,29 @@
   /// Debug-only end-to-end test channel: a Unix-domain socket that accepts one
   /// JSON object per line and answers with one JSON object per line.
   /// Protocol and commands: docs/automation.md.
+  ///
+  /// File descriptor lifetime: one `Connection` owns each client fd. Reads, writes and the close all
+  /// run on `queue` (serial). A reply that arrives after its client went away is dropped: it is matched
+  /// to the connection object, never to the fd number, because the kernel reuses numbers at once (a late
+  /// write once hit a guarded system fd and killed the App with EXC_GUARD, 2026-11-12).
   final class AutomationServer: @unchecked Sendable {
+    /// Confined to `queue`. A reply task carries the reference across the main actor and hands it
+    /// back to `queue`; it never reads or writes the fields elsewhere.
+    private final class Connection: @unchecked Sendable {
+      let fd: Int32
+      let source: any DispatchSourceRead
+      var buffer = Data()
+      var isOpen = true
+      init(fd: Int32, source: any DispatchSourceRead) { self.fd = fd; self.source = source }
+    }
     let socketURL: URL
     private let controller: AutomationController
     private let queue = DispatchQueue(label: "app.open.automation")
     private var listenFD: Int32 = -1
     private var acceptSource: (any DispatchSourceRead)?
-    private var clients: [Int32: any DispatchSourceRead] = [:]
-    private var buffers: [Int32: Data] = [:]
+    private var connections: [ObjectIdentifier: Connection] = [:]
+    /// A request line over this size closes its connection (the largest real request is a few KiB).
+    private static let maxRequestBytes = 16 << 20
 
     init(socketURL: URL, controller: AutomationController) {
       self.socketURL = socketURL
@@ -35,73 +50,106 @@
       let bound = withUnsafePointer(to: &addr) {
         $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) }
       }
-      guard bound == 0, listen(fd, 8) == 0 else {
-        close(fd)
+      // A burst of clients (parallel suite helpers) must not get ECONNREFUSED: the old backlog of 8 did that.
+      guard bound == 0, listen(fd, 128) == 0 else {
+        Darwin.close(fd)
         throw POSIXError(.init(rawValue: errno) ?? .EIO)
       }
       chmod(path, 0o600)
+      // Non-blocking, so one read event can accept every waiting client.
+      _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
       listenFD = fd
       let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
       source.setEventHandler { [weak self] in self?.acceptClient() }
+      source.setCancelHandler { Darwin.close(fd) }
       source.resume()
       acceptSource = source
     }
 
     func stop() {
       queue.sync {
-        acceptSource?.cancel()
-        clients.values.forEach { $0.cancel() }
-        if listenFD >= 0 { close(listenFD) }
+        // The listen fd closes in the accept source's cancel handler, on this queue, after the last event.
+        acceptSource?.cancel(); acceptSource = nil
+        for connection in Array(connections.values) { close(connection) }
         unlink(socketURL.path)
       }
     }
 
     private func acceptClient() {
-      let client = accept(listenFD, nil, nil)
-      guard client >= 0 else { return }
+      // Drain the backlog: at most 256 clients per event, so reads and replies still get their turn.
+      for _ in 0..<256 {
+        let client = accept(listenFD, nil, nil)
+        guard client >= 0 else { return }
+        // An accepted socket can inherit O_NONBLOCK from the listener; this server's I/O is blocking.
+        _ = fcntl(client, F_SETFL, fcntl(client, F_GETFL) & ~O_NONBLOCK)
+        adopt(client)
+      }
+    }
+
+    private func adopt(_ client: Int32) {
       var on: Int32 = 1
       setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+      // A client that stops reading must not block the serial queue for ever.
+      var timeout = timeval(tv_sec: 10, tv_usec: 0)
+      setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
       let source = DispatchSource.makeReadSource(fileDescriptor: client, queue: queue)
-      source.setEventHandler { [weak self] in self?.readClient(client) }
-      source.setCancelHandler { close(client) }
-      clients[client] = source
-      buffers[client] = Data()
+      let connection = Connection(fd: client, source: source)
+      source.setEventHandler { [weak self, weak connection] in
+        guard let self, let connection else { return }
+        self.read(connection)
+      }
+      // The only close of this fd. It runs on `queue` after the source's last event, so no read or
+      // write of this connection can run after it (writes check `isOpen`, which is false by then).
+      source.setCancelHandler { Darwin.close(client) }
+      connections[ObjectIdentifier(connection)] = connection
       source.resume()
     }
 
-    private func readClient(_ fd: Int32) {
-      var chunk = [UInt8](repeating: 0, count: 65536)
-      let n = read(fd, &chunk, chunk.count)
-      if n <= 0 {
-        clients.removeValue(forKey: fd)?.cancel()
-        buffers.removeValue(forKey: fd)
-        return
-      }
-      buffers[fd, default: Data()].append(contentsOf: chunk[0..<n])
-      while let buffer = buffers[fd], let newline = buffer.firstIndex(of: 0x0A) {
-        let line = buffer[buffer.startIndex..<newline]
-        buffers[fd] = Data(buffer[(newline + 1)...])
-        guard !line.isEmpty else { continue }
-        let request = Data(line)
-        let controller = self.controller
-        Task { @MainActor in
-          let response = await controller.handle(request)
-          self.queue.async { self.write(response, to: fd) }
-        }
-      }
+    /// On `queue`. Idempotent. After this call nothing writes to the connection's fd.
+    private func close(_ connection: Connection) {
+      guard connection.isOpen else { return }
+      connection.isOpen = false
+      connections.removeValue(forKey: ObjectIdentifier(connection))
+      connection.source.cancel()
     }
 
-    private func write(_ data: Data, to fd: Int32) {
-      var out = data
-      out.append(0x0A)
-      out.withUnsafeBytes { raw in
-        var offset = 0
-        while offset < raw.count {
-          let w = Darwin.write(fd, raw.baseAddress! + offset, raw.count - offset)
-          if w <= 0 { break }
-          offset += w
+    private func read(_ connection: Connection) {
+      guard connection.isOpen else { return }
+      var chunk = [UInt8](repeating: 0, count: 65536)
+      let n = Darwin.read(connection.fd, &chunk, chunk.count)
+      if n < 0, errno == EINTR || errno == EAGAIN { return }
+      if n <= 0 { close(connection); return }
+      connection.buffer.append(contentsOf: chunk[0..<n])
+      while let newline = connection.buffer.firstIndex(of: 0x0A) {
+        let line = Data(connection.buffer[connection.buffer.startIndex..<newline])
+        connection.buffer = Data(connection.buffer[(newline + 1)...])
+        guard !line.isEmpty else { continue }
+        let controller = self.controller
+        Task { @MainActor in
+          let response = await controller.handle(line)
+          // The connection object keeps its identity; the fd number alone would not.
+          self.queue.async { self.write(response, to: connection) }
         }
       }
+      if connection.buffer.count > Self.maxRequestBytes { close(connection) }
+    }
+
+    /// On `queue`. Drops the reply when the client has gone; closes the connection on a write error.
+    private func write(_ data: Data, to connection: Connection) {
+      guard connection.isOpen else { return }
+      var out = data
+      out.append(0x0A)
+      let complete = out.withUnsafeBytes { raw -> Bool in
+        var offset = 0
+        while offset < raw.count {
+          let w = Darwin.write(connection.fd, raw.baseAddress! + offset, raw.count - offset)
+          if w < 0, errno == EINTR { continue }
+          if w <= 0 { return false }
+          offset += w
+        }
+        return true
+      }
+      if !complete { close(connection) }
     }
   }
 #endif

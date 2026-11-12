@@ -16,6 +16,11 @@ import tempfile
 import urllib.parse
 
 
+# Running Library rows. Known total: "1.2/33.6 MB" or "512 KB/33.6 MB", then " · 12s" with a speed.
+# Unknown total: the received byte count alone.
+LIVE_SUBTITLE = re.compile(r'^[\d.,]+( [A-Za-z]+)?/[\d.,]+ [A-Za-z]+( · \d+s)?$')
+UNKNOWN_SUBTITLE = re.compile(r'^[\d.,]+ [A-Za-z]+$')
+
 QUIT_EVENT_SOURCE = r"""
 #import <Carbon/Carbon.h>
 #include <stdlib.h>
@@ -183,8 +188,11 @@ def checks(factory, results, tmp, config, harness):
         known = start('/slow')
         live = wait(lambda: (lambda v: v if v.get('received', 0) > 0 and v.get('total', 0) else None)(item(known)))
         library()
-        running = wait(lambda: (lambda v: v if '/s · from 127.0.0.1' in v.get('subtitle', '') else None)(row(known)))
-        check('live_subtitle', live and running and '/' in running['subtitle'].split(' · ')[0], item=live, row=running)
+        # The in-window Library's running row (OpenLibrary `downloadSubtitle`, #350): "<received>/<total> <unit>",
+        # then " · <seconds>s" once the engine reports a speed. The old Settings Library text
+        # ("<speed>/s · from <host>") no longer exists, so this row failed on every Mac that ran it.
+        running = wait(lambda: (lambda v: v if LIVE_SUBTITLE.match(v.get('subtitle', '')) else None)(row(known)))
+        check('live_subtitle', live and running, item=live, row=running or row(known))
         badge = state()['badge']
         check('home_progress', badge.get('running', 0) > 0 and 0 < badge.get('progress', 0) < 1 and badge.get('trackOpacity') == 1 and badge.get('ringOpacity') == 1 and badge.get('ringBounds') == [3, 3, 26, 26] and badge.get('lineWidth') == 2, badge=badge)
         titles = [v['title'] for v in menu(known)]
@@ -196,22 +204,29 @@ def checks(factory, results, tmp, config, harness):
         app.call('download-row', id=known, action='Resume')
         resumed = wait(lambda: item(known).get('received', 0) > after_pause)
         check('resume', resumed and item(known)['state'] == 'inProgress', item=item(known))
-        app.call('library-open', section='archive')
+        # With a running download the Library button opens the in-window Library at Downloads, also
+        # when it last showed Archive (Arc: library-overlay.md, "Clicking the sidebar Downloads badge").
+        # The button toggles the in-window Library (#350), so it starts closed here. The old row
+        # pressed it with the Settings Library open and read that window's section.
+        app.call('library-open', section='archive'); dismiss_library()
         app.call('download-home')
-        check('home_running_entry', app.call('settings-state')['librarySection'] == 'downloads')
+        check('home_running_entry', wait(lambda: bool(row(known)), 5), rows=len(state()['rows']))
         library()
         app.call('download-row', id=known, action='Cancel')
         check('cancel', wait(lambda: row(known).get('subtitle') == 'Cancelled'), row=row(known))
         dismiss_library()
 
+        # The indeterminate ring spins only without Reduce Motion (HomeDownloadButton); the rented Macs
+        # have it on, so pin it off (the state of the M5 and the M1; the App is this suite's own).
+        app.call('window-motion', reduced=False)
         unknown = start('/unknown'); library()
         unknown_state = wait(lambda: (lambda v: v if v['badge'].get('indeterminate') and v['badge'].get('animations', 0) > 0 and item(unknown).get('received', 0) > 0 else None)(state()))
-        check('unknown_total', unknown_state and item(unknown)['total'] is None and '/s · from ' in row(unknown).get('subtitle', ''), badge=unknown_state and unknown_state['badge'], row=row(unknown))
+        check('unknown_total', unknown_state and item(unknown)['total'] is None and UNKNOWN_SUBTITLE.match(row(unknown).get('subtitle', '')), badge=unknown_state and unknown_state['badge'], row=row(unknown))
         menu(unknown, 'Cancel Download')
         check('menu_cancel', wait(lambda: row(unknown).get('subtitle') == 'Cancelled'))
         dismiss_library()
         failed = start('/fail'); library()
-        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed to Download', 30), item=item(failed), row=row(failed))
+        check('failed_subtitle', wait(lambda: row(failed).get('subtitle') == 'Failed', 30), item=item(failed), row=row(failed))
         dismiss_library()
         # PB1-b wiring: the download started above got a flight record when it was created: played to the
         # Library button, or skipped for a known reason (the Library covers the sidebar at that point of the

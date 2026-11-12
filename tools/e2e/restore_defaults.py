@@ -3,7 +3,8 @@ import ctypes
 import plistlib
 
 
-def write_collection(key, value, domain='io.github.sergeserb2.open'):
+def write_collection(key, value, domain=None):
+    domain = domain or __import__('prefs_domain').domain()
     # A supported 1000-host preference can exceed exec's argument limit as XML.
     # Use the same per-key preferences API as UserDefaults, with in-process data.
     cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
