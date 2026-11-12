@@ -108,6 +108,7 @@ public struct SettingsSearchEntry: Identifiable, Sendable {
             .init(.previews, "enabled", "Show Open Previews", key: "open.general.previewsEnabled"),
             .init(.previews, "folders", "Folders", help: "Preview folders on hover.", key: "open.general.previewsFolders"),
             .init(.previews, "pages", "Pinned tabs and Favorites", help: "Preview pages on hover.", key: "open.general.previewsPages"),
+            .init(.previews, "recents", "Recent pages on Linear, Notion, Figma, and Confluence", help: "Preview recent pages of these sites on hover.", key: "open.general.previewsRecents"),
             .init(.links, "little-open-hotkey", "Open Little Open in any app", key: "open.links.littleOpenHotkeyEnabled"),
             .init(.links, "option-command-click", "Open Little Open with Option-Command-click", key: "open.links.optionCommandClickLittleOpen"),
             .init(.links, "external-links", "Links from other apps open in Little Open", key: "open.links.externalInLittleOpen"),
