@@ -894,3 +894,52 @@ Keys raw receipt SHA-256:
 `b1d21a9cc84e2af668f6f77c7e2c48157aa1a2fb79b4a25d4d2b0d34d9dacb3a`.
 
 Final merge verification and exception tables are reported with the PR.
+
+## LEAD 16:35 / 17:10 / 17:30 — native automation and preview checks
+
+The approved Space card has no Profile indicator. Profiles automation now
+opens the real card's More options → Set Profile menu and reads the Space's
+Profile from the model/browser owner. It retains Profile changes, sheet
+ownership, confirm/Cancel/Return/Undo, durable storage and isolation assertions.
+The complete Release Profiles suite passed **74/74** on M5 source `b6b528e9`.
+All 23 owned Apps quit normally, with zero survivors. Receipt SHA-256:
+`f2aca09c4c0483ef3496c1db1f431d0e0e2ff5b4a62b00ea9b2dd1e4bc49052c`.
+
+Space card shows no Profile indicator by design; follow-up after capture
+session 3 Part F (how Arc shows a Space's Profile).
+
+The first final M5 gate on `5a35b0ad` stopped at the old Settings preview
+Archive favicon assertion after 24 passing checks. That check read the
+removed Library window's eager favicon dictionary. Native rows use
+`loadRowIcon`. The repaired Archive check passed on rented Mac 2, including
+search, Space filtering, valid icons for both rows, restore, persisted model,
+Undo/Redo, delete confirmation/delete and clear. That complete suite then
+stopped at the old Boost preview lifecycle/label assumptions after 27 checks.
+Both failures and safe cleanup receipts remain retained.
+
+Before adapting the remaining previews, the same Library module was exercised
+in the real App on rented Mac 1 through its automation socket. The content
+flow passed 74 checks across Downloads, Archive, History and Media before its
+Boost editor fixture setup stopped. This is not a complete content-suite pass.
+A separate fresh flow created a Boost through the real editor, saved it,
+opened Library Boosts, and found its native row by the created ID. Both flows
+cleaned up with zero survivors. Their receipt SHA-256 values are respectively
+`35abb8b22e1f8f8fa433f97b7a8e0eb8bdb35a621be7bf85cba51e7a4d734f47`
+and `a91e5a5988efdc39c5bc408defa0c2d8f9a0fb9e2a992e01b16bcc6e2fadaf56`.
+
+The preview repair activates/dismantles the native panel, joins provider and
+row preparation before capture/AX reads, and supplies real Space cards.
+Archive/History icons must be valid and retain object identity on a second
+native lazy-cache read. Boost checks require both exact visible row labels,
+including domain/name/on-off state; native Turn On/defaults persistence and
+replacement by the empty state remain asserted. No functional assertion was
+removed. Only automation and preview sources changed; the product Library
+module and timing paths are unchanged.
+
+The complete Settings preview suite passed **47/47 checks**, its renders,
+defaults and snapshot assertions on rented Mac 2 at clean source `768f8ad5`.
+The native screen guard reports safe cleanup, no new crashes, no system
+windows and no leaked group. The ticket released before receipt copying.
+Raw receipt: `.re/l3/preview-native-1730/ns2/d1-preview-1730-r3-out/gate/gate.json`;
+SHA-256 `228abaffec82b040f28c3486627435a27d1f973bc6c8e1c29dae7b8624ed6da8`.
+This touched-suite result is separate from the required final full M5 gate.
