@@ -226,6 +226,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var observationArmed = false
     private var refreshPending = false
     private var systemAppearanceObservation: NSKeyValueObservation?
+    private var increaseContrastObserver: NSObjectProtocol?
     private let snapshotStore: SnapshotStore?
     /// Toasts over the web panel (page-platform §4.1, D-1): one center per window.
     public let toastOverlay = ToastOverlayView()
@@ -278,6 +279,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.appearance = incognitoTitle == nil ? NSApp.effectiveAppearance : NSAppearance(named: .darkAqua)
         context = SidebarContext(model: model, windowID: windowID, incognitoTitle: incognitoTitle)
         context.systemAppearance = context.isIncognito ? .dark : ContentAppearance(NSApp.effectiveAppearance)
+        context.increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         WindowSpeedTrace.mark("sidebarInitBegin")
         sidebar = SidebarView(context: context); container = WebContentContainer(factory: factory)
         WindowSpeedTrace.mark("sidebarAndContainerCreated")
@@ -314,6 +316,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 let system: ContentAppearance = self.context.isIncognito ? .dark : ContentAppearance(appearance)
                 if self.context.systemAppearance != system { self.context.systemAppearance = system }
                 self.refresh()
+            }
+        }
+        // macOS Increase Contrast (plan D2 §2.8): the sidebar roles follow it live.
+        increaseContrastObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let value = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+                if self.context.increaseContrast != value { self.context.increaseContrast = value; self.refresh() }
             }
         }
         root.addSubview(background)
@@ -1349,6 +1360,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         siteControl?.dismiss(reason: .sourceUnavailable, animated: false)
         // Tear down this controller's appearance observation once at window close.
         systemAppearanceObservation = nil
+        if let increaseContrastObserver { NSWorkspace.shared.notificationCenter.removeObserver(increaseContrastObserver) }
+        increaseContrastObserver = nil
         boostEditor?.close(returnFocus: false)
         pendingSpaceCreationOptions = nil
         cancelSidebarResize()

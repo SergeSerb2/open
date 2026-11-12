@@ -102,7 +102,7 @@ public final class SidebarView: NSView {
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
             _ = self.context.focusedSpace?.theme
-            _ = self.context.systemAppearance
+            _ = self.context.systemAppearance; _ = self.context.increaseContrast
             _ = self.context.isWindowActive
         }) { [weak self] in self?.syncTheme() })
         loops.append(ObservationLoop(read: { [weak self] in

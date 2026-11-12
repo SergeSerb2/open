@@ -37,7 +37,7 @@ enum RenderCLI {
     usage:
       sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
-                            [--hidden] [--reveal] [--inactive] [--appearance light|dark]
+                            [--hidden] [--reveal] [--inactive] [--appearance light|dark] [--increase-contrast]
                             [--multi-select ROW,ROW…] [--option-held] [--unread ROW,…] [--hover-favicon ROW]
                             [--banner auto-archive] [--preview folder:N]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
@@ -127,6 +127,7 @@ enum RenderCLI {
         for s in model.spaces { window.selectedNodeBySpace[s.id] = nil }
         let context = SidebarContext(model: model, windowID: window.id)
         context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
+        context.increaseContrast = args.contains("--increase-contrast")
         context.isWindowActive = !args.contains("--inactive")
         context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
         context.isOptionHeld = args.contains("--option-held")

@@ -152,7 +152,7 @@ final class SidebarRowView: NSTableRowView {
             fill.opacity = 1
         } else if allowsHighlight && isCurrent {
             let style = page?.style
-            fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
+            fill.backgroundColor = (page?.roles.activePlate ?? style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
             SelectionShadow.apply(to: fill, appearance: appearance)
             fill.opacity = 1
         } else if allowsHighlight && multiselected {
@@ -161,7 +161,7 @@ final class SidebarRowView: NSTableRowView {
             fill.opacity = 1
         } else if allowsHighlight && (isHovered || isDropTarget) {
             fill.backgroundColor = isDropTarget ? SidebarColors.itemHoveredBackground.cgColor(appearance)
-                : (page?.style.rowHoverFill(appearance) ?? SidebarRole.rowHover.resolved(appearance)).cgColor
+                : (page?.roles.rowHover ?? SidebarRole.rowHover.resolved(appearance)).cgColor
             fill.shadowOpacity = 0
             fill.opacity = 1
         } else {
@@ -315,7 +315,7 @@ class SidebarCellView: NSView {
 
     func titleColor() -> NSColor {
         guard let page else { return .labelColor }
-        let color = page.style.titleColor(page.contentAppearanceForSpace).nsColor
+        let color = page.roles.title.nsColor
         return page.context.titleColorTransform?(color) ?? color
     }
 
@@ -962,7 +962,7 @@ final class NewTabCellView: SidebarCellView {
     override func rowStateChanged() {
         let current = rowView?.isCurrent ?? false
         plus.tint = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : SidebarRole.newTabGlyph.nsColor }
-        title.color = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : SidebarRole.secondaryText.nsColor }
+        title.color = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : (self?.page?.roles.newTabLabel.nsColor ?? SidebarRole.secondaryText.nsColor) }
     }
 
     override func layout() {
@@ -1010,7 +1010,7 @@ final class DividerCellView: SidebarCellView {
 
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
-        line.backgroundColor = SidebarRole.divider.cgColor(contentAppearance)
+        line.backgroundColor = page?.roles.separator.cgColor ?? SidebarRole.divider.cgColor(contentAppearance)
     }
 
     override func layout() {
