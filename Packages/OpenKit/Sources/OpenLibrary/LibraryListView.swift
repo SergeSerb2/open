@@ -15,6 +15,8 @@ struct LibraryRowItem {
     var title: String
     var subtitle: String
     var kind: String
+    /// The row's hover tooltip (Archive: the tab title, capture session 8 item 11).
+    var toolTip: String? = nil
     var day = ""
     var image: NSImage? = nil
     var loadImage: ((@escaping @MainActor (NSImage?) -> Void) -> Void)? = nil
@@ -398,7 +400,7 @@ final class LibraryListView: NSView, NSMenuDelegate {
             guard let item = item(at: row) else { return nil }
             let frame = root.convert(table.rect(ofRow: row),from: table)
             return ["id":item.id,"frame":[frame.minX,frame.minY,frame.width,frame.height],"title":item.title,"subtitle":item.subtitle,
-              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title)]
+              "kind":item.kind,"hovered":hoveredID == item.id,"selected":table.selectedRow == row,"actions":item.hoverActions.map(\.title),"toolTip":item.toolTip ?? ""]
         }
     }
 }
@@ -462,6 +464,7 @@ private final class LibraryItemView: NSView {
         // The table's reuse identifier stays "row". Item identity belongs to AX,
         // not the viewport reuse pool.
         setAccessibilityIdentifier(item.kind == "boost" ? "boosts.\(item.id).card" : "library.\(item.id)")
+        if toolTip != item.toolTip { toolTip = item.toolTip }
         let buttonCount = gallery ? 3 : actions.count
         while buttons.count > buttonCount { buttons.removeLast().removeFromSuperview() }
         while buttons.count < buttonCount { let button = LibraryControl(title:""); buttons.append(button); addSubview(button) }

@@ -33,7 +33,7 @@ Evidence keys: **S3D** = capture session 3 Part D (Arc 1.172.2, `s9/15-menus` AX
 | Downloads, completed item, More button (S1L) | Open ‹…› · Copy ‹…› · Show in Finder · — · Hide from Arc · Move to Trash | Open · Copy · Show in Finder · — · Hide from Open · Move to Trash | Arc's first two titles carry the file (S1L reads "Open txt", "Copy txt"); exact form not established (C3 item 9) |
 | Downloads, in progress / failed | not captured | Pause/Resume · Cancel · Show in Finder / Retry · Hide from Open | C3 item 10 |
 | Downloads, right click on a row | not captured (S1L used the More button only) | the same menu as More | C3 item 9 |
-| Archived Tabs (S1L) | row hover: Trash, Undo glyphs; context menu not captured | hover Delete / Restore; no context menu | C3 item 11 |
+| Archived Tabs (S1L; session 8 item 11, `v10/29`, `v12/29a`) | right-click opens no menu; hover shows a tooltip with the tab title; rows show the title and the URL without its scheme; the Trash and Undo glyphs of S1L did not show in session 8 (condition not established) | the same; hover Delete / Restore kept | glyph condition unknown |
 | Media | not captured (Media stayed at its first-use card) | Open · Copy · Show in Finder · Save As… · — · Delete (captures); Open · Copy · Show in Finder · — · Hide from Library (folder files) | C3 item 12 |
 | Easels (S4) | card menu: a single "Delete" | a single "Delete" | none |
 | Spaces | rows select a tab; card and row menus not captured | none | C3 item 13 |
