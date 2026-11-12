@@ -111,6 +111,8 @@ def run(factory, results, tmp, h):
         assert h.wait_until(lambda: state().get('networkPressed'), timeout=10, step=.05)
         app.call('command', id='toggle-developer-mode')
         assert h.wait_until(lambda: not state().get('shown'), timeout=10, step=.05), state()
+        # The sidebar row redraws on its next layout pass, after the bar is gone: wait for it, then assert.
+        h.wait_until(lambda: {r['url']: r for r in state().get('rows', [])}.get(base + '/b', {}).get('outline') is False, timeout=10, step=.05)
         gone = state()
         unmarked = {r['url']: r for r in gone.get('rows', [])}.get(base + '/b', {})
         row('sidebar_unmarks_after_off', unmarked.get('subtitle') == '' and unmarked.get('titleBaseline') == 25 and unmarked.get('outline') is False,
