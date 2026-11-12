@@ -34,6 +34,33 @@ public final class EaselStore {
         return doc
     }
 
+    // MARK: Index (Library)
+
+    public struct IndexEntry: Sendable {
+        public var id: UUID; public var title: String; public var modifiedAt: Date; public var objectCount: Int
+        public init(id: UUID, title: String, modifiedAt: Date, objectCount: Int) {
+            self.id = id; self.title = title; self.modifiedAt = modifiedAt; self.objectCount = objectCount
+        }
+    }
+    /// Every readable Easel document under `directory`, newest first. File work only: call
+    /// it off the main thread. Refused files (limits, damage) are left out.
+    public nonisolated static func readIndex(directory: URL) -> [IndexEntry] {
+        let fm = FileManager.default
+        let folders = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
+        var out: [IndexEntry] = []
+        for folder in folders.prefix(10_000) {
+            guard let id = UUID(uuidString: folder.lastPathComponent) else { continue }
+            let file = folder.appendingPathComponent("document.json")
+            guard let size = (try? fm.attributesOfItem(atPath: file.path))?[.size] as? Int, size <= EaselDocument.maxFileBytes,
+                  let data = try? Data(contentsOf: file), let doc = try? decoder.decode(EaselDocument.self, from: data),
+                  doc.id == id, doc.isValid else { continue }
+            out.append(IndexEntry(id: id, title: doc.displayTitle, modifiedAt: doc.modifiedAt, objectCount: doc.objects.count))
+        }
+        return out.sorted { $0.modifiedAt > $1.modifiedAt }
+    }
+    /// Documents saved but not yet written count too (an Easel edited seconds ago).
+    public var pendingDocuments: [EaselDocument] { Array(pending.values) }
+
     // MARK: Images
 
     /// Limits for an added picture: 50 MiB of encoded bytes and 16,384 px per side (a decoded

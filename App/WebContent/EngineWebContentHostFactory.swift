@@ -874,6 +874,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       guard let context = controller?.context, ModelSidebarActions(context: context).perform(.openURL(url, in: parent, index: index)),
         let tab = model.index.values.compactMap(\.tab).first(where: { !before.contains($0.id) }) else { return false }
       select(nodeID: tab.id); return true
+    case .copyLink(let id, _) where model.tab(id: id).map({ EaselTab.matches($0.url) }) == true:
+      return copyEaselLink(tabID: id)
     case .copyLink(let id, let markdown):
       return copyLinks(ids: [id], markdown: markdown)
     case .copyLinks(let ids, let markdown): return copyLinks(ids: ids, markdown: markdown)
@@ -1070,6 +1072,8 @@ extension EngineWebContentHostFactory {
     return candidate === window || candidate === iconPicker?.panel || candidate === iconPicker?.toneWindow || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate } || pageChrome.owns(candidate)
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
+    // An Easel's own address (Copy Link) opens that Easel.
+    if let document = EaselTab.documentID(url) { showEasel(documentID: document); return }
     // Welcome is created by the hand-off or Help only; arbitrary internal routes
     // typed in the command bar never reach a page or a system URL handler.
     guard !WelcomeTab.isInternal(url) else { return }
