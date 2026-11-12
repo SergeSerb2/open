@@ -13,6 +13,7 @@ from pathlib import Path
 import runpy
 import shutil
 import subprocess
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -229,3 +230,52 @@ def run(factory, results, tmp, h):
         and outcome.get('Passwords') == 3 and outcome.get('Password duplicates') == 3 and logins() - before_logins == 3,
         refused=refused[:60], labels=labels, safariFolders=(roots_before, roots_after), failures=report.get('settingsFailures'),
         outcome={k: outcome.get(k) for k in ('Bookmarks', 'History', 'Passwords', 'Password duplicates')}, logins=logins() - before_logins)
+
+    # I-5 data sources in IMC's onboarding (first run, no Arc data): Safari without Full Disk Access is not
+    # offered; a running Firefox stops the import; Favorites come from Firefox frecency + visit counts.
+    app.quit()
+    first = base/'first-run'
+    first_library, no_arc = first/'Library', first/'NoArc'
+    shutil.copytree(library/'Application Support/Firefox', first_library/'Application Support/Firefox')
+    (first_library/'Safari').mkdir(parents=True); no_arc.mkdir()
+    shutil.copy(files/'Library/Safari/Bookmarks.plist', first_library/'Safari/Bookmarks.plist')
+    os.chmod(first_library/'Safari', 0)
+    try:
+        app = factory(urls=(), fresh=True, first_run=True, extra_args=['--browser-import-library=' + str(first_library),
+                      '--arc-dir=' + str(no_arc), '--host-resolver-rules=MAP * ~NOTFOUND', '--intro-sound=silent'])
+        if app.call('onboarding').get('active'):
+            app.call('onboarding', action='skip-intro'); app.call('onboarding', action='get-started')
+        assert h.wait_until(lambda: app.call('onboarding').get('screen') == 'name', timeout=20, step=.1), app.call('onboarding')
+        app.call('onboarding', action='next')
+        assert h.wait_until(lambda: app.call('first-run').get('browserSource') == 'firefox'
+                            and app.call('first-run').get('step') == 'importChoices', timeout=30, step=.1), app.call('first-run')
+        offered = app.call('first-run')
+        row('onboarding_sources', offered.get('browserSources') == ['firefox'], sources=offered.get('browserSources'))
+        lock_file = first_library/'Application Support/Firefox/Profiles/syn0001.default-release/.parentlock'
+        holder = subprocess.Popen(['/usr/bin/python3', '-c', 'import fcntl,sys,os;f=os.open(sys.argv[1],os.O_RDWR);fcntl.lockf(f,fcntl.LOCK_EX);print("locked",flush=True);sys.stdin.read()',
+                                   str(lock_file)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        try:
+            assert holder.stdout.readline().strip() == 'locked'
+            app.call('first-run', action='select', history=True)
+            app.call('onboarding', action='next')
+            time.sleep(1)
+            blocked = app.call('first-run')
+        finally:
+            holder.stdin.close(); holder.wait(timeout=10)
+        row('onboarding_firefox_running', blocked.get('step') == 'importChoices' and blocked.get('error') == 'Quit Firefox to continue importing.',
+            step=blocked.get('step'), error=blocked.get('error'))
+        app.call('onboarding', action='next')
+        assert h.wait_until(lambda: app.call('first-run').get('step') in ('report', 'failed'), timeout=180, step=.1), app.call('first-run')
+        done = app.call('first-run')
+        outcome = done.get('outcome', {})
+        row('onboarding_firefox_import', done.get('step') == 'report' and outcome.get('Bookmarks') == 6 and outcome.get('Open tabs') == 4
+            and outcome.get('History') == 5600, step=done.get('step'), outcome={k: outcome.get(k) for k in ('Bookmarks', 'Open tabs', 'History')})
+        app.call('onboarding', action='next')
+        assert h.wait_until(lambda: app.call('onboarding').get('screen') == 'favorites', timeout=20, step=.1), app.call('onboarding')
+        hosts = done.get('suggestedHosts', [])
+        favorites = app.call('onboarding').get('favorites')
+        # Sites: 6 = GitHub, 11 = Wikipedia (OnboardingStepsController.sites). YouTube has 3 visits but ranks below 8 hosts.
+        row('onboarding_firefox_suggestions', hosts[:2] == ['github.com', 'en.wikipedia.org'] and len(hosts) == 8 and favorites == [6, 11],
+            hosts=hosts, favorites=favorites)
+    finally:
+        os.chmod(first_library/'Safari', 0o755)
