@@ -234,7 +234,7 @@ final class PageContextMenuBuilder {
     if owner.translate.preferences.isEnabled {
       let location = request.location
       menu.insertItem(openItem("translate-selection", TranslateSelectionController.menuTitle) { [weak owner, weak page] in
-        owner?.translate.selection.translate(text, at: location, in: page?.view)
+        owner?.translate.selection.translate(text, at: location, in: page)
       }, at: index + 1)
     }
   }
