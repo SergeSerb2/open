@@ -332,8 +332,9 @@ def run(factory, results, tmp, env):
                 live=lambda v: v.startswith("127.0.0.1") and v.endswith("My Boost · on")
                 wait_until(lambda: any(live(v) for v in shown_text()),timeout=5,step=.1)
                 text=shown_text()
-                # The native Library's empty Boosts state is "No Boosts yet" (LibrarySection.swift).
-                negative=not any("No Boosts yet" in v for v in text)
+                # Negative from the same real flow: the row must not read as turned off. (The window text also
+                # holds other sections' hidden empty-state labels, so an empty-state text proves nothing here.)
+                negative=not any(v.endswith("My Boost · off") for v in text)
                 return dict(positive=any(live(v) for v in text),negative=negative,text=text)
             row("B13_library_live",b13)
             def b14():
