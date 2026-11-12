@@ -193,7 +193,7 @@ public final class FolderPreviewTable: NSTableView {
 }
 
 @MainActor
-private final class FolderPreviewRow: NSTableRowView {
+final class FolderPreviewRow: NSTableRowView {
     private var hovered = false
     private var tracking: NSTrackingArea?
     override var isSelected: Bool { didSet { needsDisplay = true } }
@@ -212,7 +212,7 @@ private final class FolderPreviewRow: NSTableRowView {
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
 }
 @MainActor
-private final class FolderPreviewCell: NSTableCellView {
+final class FolderPreviewCell: NSTableCellView {
     let favicon = FaviconView(), title = TextLabel(), subtitle = TextLabel()
     init() {
         super.init(frame: .zero); wantsLayer = true; addSubview(favicon); addSubview(title); addSubview(subtitle)

@@ -12613,7 +12613,7 @@ def main():
     ap.add_argument("--focus-attempts", type=int, choices=(1, 3), default=3, help="foreground attempts; use 1 to stop immediately for shared-screen holds")
     ap.add_argument("--engine-fingerprint-only", action="store_true", help="verify built engine artifacts and exit without launching Open")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split",
+    ap.add_argument("--only", choices=["ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split",
                                        "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome",
                                        "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "passwords-probe", "sitedata", "secrets-import", "import-browsers"])
     ap.add_argument("--page-site-data-only", action="store_true", help="run only View menu site clear rows in the page suite")
@@ -13087,6 +13087,10 @@ def main():
         elif opts.only == "peek":
             results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
+        elif opts.only == "live-data":
+            results["live-data"] = CheckedResults(tracker)
+            import runpy
+            runpy.run_path(os.path.join(ROOT, "tools", "e2e", "live_data.py"))["run"](factory, results["live-data"], tmp, globals())
         elif opts.only in ("profiles", "profiles-engine"):
             results[opts.only] = CheckedResults(tracker)
             if opts.only == "profiles":
@@ -13220,14 +13224,14 @@ def main():
     os.makedirs(receipt_dir, exist_ok=True)
     with open(os.path.join(receipt_dir, name), "x" if opts.output_dir else "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers"):
+    for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED", "INFO"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(receipt_dir, name))
-    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers")
+    failures = [k for group in ("ntp", "onboarding", "welcome", "notes", "import-robust", "firstrun", "find", "shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "live-data", "split", "commandbar", "app-actions", "actions", "extensions-p3", "extensions-ui", "sitecontrol", "extensions-e2", "profiles", "profiles-engine", "sidebar-completion", "toolbar", "numbering", "media", "relaunch", "page", "page-chrome", "sleep", "context-menus", "routing", "littleopen", "history", "applescript", "downloads", "boosteditor", "boost-gallery", "space-editor", "incognito", "passwords", "sitedata", "secrets-import", "import-browsers")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if opts.only == 'passwords-probe':
         failures += [k for k, v in results[opts.only].items() if v.get('ok') is False]
