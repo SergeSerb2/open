@@ -176,6 +176,18 @@ def run_heavy(args):
     write_json(log/'screen-guard-build.json', dict(result='PASS' if rc == 0 else 'FAIL', exit=rc))
     if rc:
         return rc
+    # The shipping App (no automation socket, Release) catches imports and symbols that only
+    # the automation build provides (lost twice on 2026-11-12: #371, #387). Its own output root
+    # never touches build/Release/Open.app, which e2e rows and reused launches use.
+    start = time.monotonic()
+    with (log / 'shipping-build.log').open('w') as output:
+        rc = subprocess.call([str(ROOT / 'tools/build.sh'), 'Release'], cwd=ROOT,
+                             env=dict(os.environ, OPEN_AUTOMATION='0', OPEN_BUILD_ROOT=str(ROOT / 'build/shipping')),
+                             stdout=output, stderr=subprocess.STDOUT)
+    write_json(log / 'shipping-build.json', dict(name='shipping-build', result='PASS' if rc == 0 else 'FAIL',
+                                               seconds=round(time.monotonic() - start, 3), exit=rc))
+    if rc:
+        return rc
     if args.app_config:
         start = time.monotonic()
         with (log / 'app-build.log').open('w') as output:
@@ -751,7 +763,12 @@ def main():
     rows.append(dict(row='build/screen-guard', status='PASS' if guard_ok else 'FAIL',
                      reason='' if guard_ok else 'CoreGraphics preflight helper build failed',
                      evidence=str(directory/'screen-guard-build.log')))
-    if not cli or cli[0]['result'] != 'PASS' or not guard_ok:
+    shipping_ok = ((directory/'shipping-build.json').is_file()
+                   and read_json(directory/'shipping-build.json')['result']=='PASS')
+    rows.append(dict(row='build/shipping-app', status='PASS' if shipping_ok else 'FAIL',
+                     reason='' if shipping_ok else 'OPEN_AUTOMATION=0 tools/build.sh Release failed',
+                     evidence=str(directory/'shipping-build.log')))
+    if not cli or cli[0]['result'] != 'PASS' or not guard_ok or not shipping_ok:
         rows.append(dict(row='build/worker',status='FAIL',reason='heavy build worker failed',evidence=str(directory/'heavy.log')))
     else:
         if (directory/'app-build.json').is_file():
