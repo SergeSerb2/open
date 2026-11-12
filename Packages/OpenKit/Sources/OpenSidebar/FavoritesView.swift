@@ -264,6 +264,8 @@ final class FavoriteTileView: NSView {
     }
     /// Live Calendar countdown ("in 5m", "Now", "3m ago"), shown under the icon.
     private let liveSubtitle = LiveCalendarSubtitleView()
+    /// Unread count from the page title (audit A2).
+    private let badge = FavoriteBadgeView()
     weak var owner: FavoritesView?
     private let fill = CALayer()
     private let favicon = FaviconView()
@@ -280,6 +282,8 @@ final class FavoriteTileView: NSView {
         addSubview(favicon)
         liveSubtitle.isHidden = true
         addSubview(liveSubtitle)
+        badge.isHidden = true
+        addSubview(badge)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -306,6 +310,10 @@ final class FavoriteTileView: NSView {
         let plate = liveSubtitle.fittingSize
         liveSubtitle.frame = backingAlignedRect(CGRect(x: (bounds.width - plate.width) / 2, y: bounds.height - plate.height - 4,
                                                        width: plate.width, height: plate.height), options: .alignAllEdgesNearest)
+        // Top-right corner, inset 3 pt. GUESS — capture pending (PB2-questions "EZ 13:20").
+        let b = badge.fittingSize
+        badge.frame = backingAlignedRect(CGRect(x: bounds.width - b.width - 3, y: 3, width: b.width, height: b.height),
+                                         options: .alignAllEdgesNearest)
     }
 
     override func updateLayer() {
@@ -326,7 +334,16 @@ final class FavoriteTileView: NSView {
             fill.shadowOpacity = 0
         }
         CATransaction.commit()
-        let live = tracked({ context.liveCalendarTiles[tab.id] }) { [weak self] in self?.needsDisplay = true }
+        let (calendar, settings, title, url) = tracked({ (context.liveCalendarTiles[tab.id], context.favoriteTileSettings, tab.title, tab.url) }) { [weak self] in self?.needsDisplay = true }
+        let live = settings.showsSubtitle(url: url) ? calendar : nil
+        let count = context.favoriteBadgesEnabled && settings.showsBadge(url: url) ? FavoriteBadgeCount.parse(title) : nil
+        let label = count.map(FavoriteBadgeCount.label)
+        let badgeHidden = label == nil || hovered
+        if badge.text != (label ?? "") || badge.isHidden != badgeHidden || badge.dark != (appearance == .dark) {
+            badge.text = label ?? ""; badge.isHidden = badgeHidden; badge.dark = appearance == .dark
+            badge.app = FavoriteApp.match(url: url)
+            needsLayout = true
+        }
         if liveSubtitle.text != live?.subtitle || liveSubtitle.isHidden != (live == nil) || liveSubtitle.selected != selected {
             liveSubtitle.text = live?.subtitle ?? ""; liveSubtitle.isHidden = live == nil
             liveSubtitle.selected = selected; liveSubtitle.dark = appearance == .dark
@@ -401,6 +418,37 @@ final class FavoriteTileView: NSView {
     }
 }
 
+/// The unread-count badge on a Favorite tile (audit A2). Fill: Arc's ARC_AppTray badge colors
+/// (`FavoriteApp.badgeFill`). Shape, size, font and position: GUESS — capture pending.
+@MainActor
+final class FavoriteBadgeView: NSView {
+    var text = "" { didSet { needsDisplay = true; setAccessibilityLabel(text.isEmpty ? nil : "\(text) unread") } }
+    var dark = false { didSet { needsDisplay = true } }
+    var app: FavoriteApp? { didSet { needsDisplay = true } }
+    private static let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .bold)
+    static let height: CGFloat = 14
+    override var isFlipped: Bool { true }
+    override func isAccessibilityElement() -> Bool { !text.isEmpty }
+    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+    override func accessibilityValue() -> Any? { text }
+    override func accessibilityIdentifier() -> String { "favoriteUnreadBadge" }
+    override var fittingSize: NSSize {
+        let w = (text as NSString).size(withAttributes: [.font: Self.font]).width
+        return NSSize(width: max(Self.height, ceil(w) + 8), height: Self.height)
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        let c = (app ?? .gmail).badgeFill(dark: dark)
+        NSColor(srgbRed: c.red, green: c.green, blue: c.blue, alpha: 1).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
+        // Twitter's dark badge is white: dark ink on it.
+        let ink: NSColor = app == .twitter && dark ? NSColor(white: 0.13, alpha: 1) : .white
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: ink]
+        let size = (text as NSString).size(withAttributes: attrs)
+        (text as NSString).draw(at: CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2), withAttributes: attrs)
+    }
+}
+
 /// The Live Calendar countdown plate on a calendar Favorite tile. Colors are Arc's asset values
 /// (LD §4, `A:ARC_AppTray`): GCalSubtitleBackgroundSecondary / Selected and GCalSubtitleTextColor*.
 /// Size and font: GUESS — capture pending (F2 item 7).
@@ -411,6 +459,7 @@ final class LiveCalendarSubtitleView: NSView {
     var dark = false { didSet { needsDisplay = true } }
     private static let font = NSFont.monospacedDigitSystemFont(ofSize: 9.5, weight: .semibold)
     override var isFlipped: Bool { true }
+    override func accessibilityIdentifier() -> String { "favoriteMeetingSubtitle" }
     override var fittingSize: NSSize {
         let w = (text as NSString).size(withAttributes: [.font: Self.font]).width
         return NSSize(width: ceil(w) + 10, height: 13)

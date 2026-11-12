@@ -68,6 +68,14 @@ def panel_ready(path):
     return False
 
 
+# Rows whose result depends on the Mac, not on the product: the row passes where an
+# OS asset is installed and is BLOCKED where it is not. A pass on one Mac must not
+# mark the exception STALE, because the entry is still needed on the others.
+# page/X1_apple_backend: the French → English macOS translation asset (on the M1;
+# not on the M5 or the rented Macs, 2026-11-12).
+ENVIRONMENT_ROWS = {'page/X1_apple_backend'}
+
+
 def evaluate(entries, rows, ready=False):
     """Return original row states, their policy verdicts, and a printed inventory."""
     by_id = {entry['row']: entry for entry in entries}
@@ -99,13 +107,15 @@ def evaluate(entries, rows, ready=False):
         if entry:
             if ready and entry['expires'] == 'M5 panel ready':
                 verdict = 'EXPIRED'
+            elif state == 'PASS' and row['row'] in ENVIRONMENT_ROWS:
+                verdict = 'PASS'
             elif state == 'PASS':
                 verdict = 'STALE'
             elif state == entry['status'] and row.get('reason') == entry['reason']:
                 verdict = 'EXCEPTION'
             else:
                 verdict = 'MISMATCH'
-            inventory.append(dict(entry, verdict=verdict))
+            inventory.append(dict(entry, verdict='NOT_NEEDED_ON_THIS_MAC' if verdict == 'PASS' else verdict))
         row['policy'] = verdict
         failed = failed or verdict not in ('PASS', 'SKIP', 'EXCEPTION', 'INFO')
     for entry in entries:
