@@ -17,7 +17,9 @@ final class FixtureCalendarSource: CalendarSource {
     self.events = events; self.state = access; self.answer = answer
   }
 
-  var now: Date { Date() }
+  /// Debug clock: the fixture's "now" is the real clock plus this offset (Live Calendar T−10/T−1/T0/T+3 checks).
+  var clockOffset: TimeInterval = 0
+  var now: Date { Date().addingTimeInterval(clockOffset) }
   var access: CalendarAccess { state }
 
   func requestAccess() async -> CalendarAccess {
@@ -57,8 +59,30 @@ extension AutomationController {
           isDeclined: r["declined"] as? Bool ?? false, isCanceled: r["canceled"] as? Bool ?? false,
           url: (r["url"] as? String).flatMap(URL.init(string:)), location: r["location"] as? String, notes: r["notes"] as? String)
       }
-      service.replaceSource(FixtureCalendarSource(events: events, access: try access("access", .granted), answer: try access("answer", .granted)))
+      let fixture = FixtureCalendarSource(events: events, access: try access("access", .granted), answer: try access("answer", .granted))
+      fixture.clockOffset = 60 * ((a["clock"] as? Double) ?? 0)
+      service.replaceSource(fixture)
+      app.liveCalendar.tileAppeared()  // starts only with access and a calendar Favorite
       return try await calendarState(service)
+    case "clock":
+      // Moves the fixture clock to `minutes` from the real clock and wakes Live Calendar at once.
+      guard let fixture = service.source as? FixtureCalendarSource else { throw Failure(message: "clock needs a fixture source") }
+      fixture.clockOffset = 60 * ((a["minutes"] as? Double) ?? 0)
+      app.liveCalendar.update()
+      return try await calendarState(service)
+    case "live":
+      let live = app.liveCalendar
+      if a["wait"] as? Bool != false {
+        // Wait for a pending fetch to land (the tiles follow at once).
+        let deadline = Date().addingTimeInterval(3)
+        while live.fetching, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+      }
+      return ["active": live.isActive, "fetches": live.fetches, "interval": live.interval().rawValue,
+        "nextFireIn": live.nextFire.map { $0.timeIntervalSince(service.now) } ?? NSNull(),
+        "dismissed": live.dismissed.sorted(), "reminders": live.reminders,
+        "tiles": app.windowControllers.flatMap { c in c.context.liveCalendarTiles.map { id, s in
+          ["window": c.windowID.description, "tab": id.description, "event": s.event.id, "subtitle": s.subtitle, "phase": s.phase.rawValue,
+           "remind": s.remind, "link": s.link.url.absoluteString] as [String: Any] } }] as [String: Any]
     case "eventkit":
       // Reports the real store's state without asking (no prompt, no store).
       return ["access": EventKitCalendarSource().access.rawValue]

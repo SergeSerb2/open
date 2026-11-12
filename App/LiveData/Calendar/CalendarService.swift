@@ -8,16 +8,18 @@ final class CalendarService {
   private(set) var source: any CalendarSource
   /// Bumped when the source reports a change; consumers drop cached events.
   private(set) var generation = 0
+  /// Called after `generation` changes (store change or source swap).
+  var onChange: (() -> Void)?
 
   init() {
     let eventKit = EventKitCalendarSource()
     source = eventKit
-    eventKit.onChange = { [weak self] in self?.generation += 1 }
+    eventKit.onChange = { [weak self] in self?.generation += 1; self?.onChange?() }
   }
 
   #if OPEN_AUTOMATION
   /// E2E only: replaces the system store with a fixture source (no TCC prompt on test machines).
-  func replaceSource(_ replacement: any CalendarSource) { source = replacement; generation += 1 }
+  func replaceSource(_ replacement: any CalendarSource) { source = replacement; generation += 1; onChange?() }
   #endif
 
   var now: Date { source.now }
