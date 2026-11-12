@@ -23,7 +23,9 @@ final class LiveFetchHost {
   /// Loads `url` in `profileID`, waits until it stops loading, then evaluates `script`
   /// (an async function body allowed: promises are awaited) in the Open world.
   func fetch(profileID: ProfileID, url: URL, script: String) async throws -> Any {
-    guard !running else { throw Failure.busy }
+    // One page at a time: later fetches wait their turn (bounded by the same timeout).
+    let queued = Date().addingTimeInterval(Self.timeout)
+    while running { guard Date() < queued else { throw Failure.busy }; try await Task.sleep(for: .milliseconds(50)) }
     guard let factory = app.hostFactories.values.first(where: { !$0.isIncognito }),
           let context = factory.context(for: profileID) else { throw Failure.noProfile }
     running = true

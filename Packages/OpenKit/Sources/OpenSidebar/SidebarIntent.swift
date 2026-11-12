@@ -120,6 +120,8 @@ public enum SidebarIntent: Equatable, Sendable {
     case setSpaceProfile(space: SpaceID, profile: ProfileID)
     case newProfile(space: SpaceID)
     case shareSpace(SpaceID)
+    /// Space menu ▸ Live Folders ▸ GitHub (live-data §2.2): create or remove the Space's Live Folder.
+    case toggleLiveFolder(SpaceID)
     case exportSpaceIntoFolder(space: SpaceID, destination: SpaceID)
     case deleteSpace(SpaceID)
     case moveSpace(SpaceID, toIndex: Int)

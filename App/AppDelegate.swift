@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   lazy var captureLibrary = CaptureLibraryWriter(app: self, root: directories.root)
   /// Live Folder / glance fetches (LF L2): made on first use only.
   lazy var liveFetch = LiveFetchHost(app: self)
+  lazy var liveFolders = LiveFolderService(app: self)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false

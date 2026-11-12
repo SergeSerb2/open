@@ -660,7 +660,7 @@
           if depth == parts.count - 1 {
             if cmd == "sidebar-menu-state" {
               let item = level.items[index]
-              return ["title": item.title, "enabled": item.isEnabled, "key": item.keyEquivalent]
+              return ["title": item.title, "enabled": item.isEnabled, "key": item.keyEquivalent, "checked": item.state == .on]
             }
             level.performActionForItem(at: index)
           }

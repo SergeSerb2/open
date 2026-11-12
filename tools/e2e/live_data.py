@@ -38,6 +38,81 @@ def png_pixels(path):
     return width, height, bpp, rows
 
 
+def github_fixture():
+    """A loopback stand-in for github.com/pulls (synthetic rows only). `state` drives it:
+    {'signed_in': bool, 'prs': {kind_marker: [(owner/repo, number, title, status)]}}."""
+    import http.server, threading, html, urllib.parse
+    state = {'signed_in': True, 'prs': {}, 'requests': []}
+    markers = {'author:@me': 'created', 'review-requested:@me': 'review', 'review:approved': 'approved', 'review:changes_requested': 'changes'}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            parsed = urllib.parse.urlparse(self.path)
+            state['requests'].append(parsed.path)
+            if parsed.path == '/pulls' and not state['signed_in']:
+                self.send_response(302); self.send_header('Location', '/login?return_to=%2Fpulls'); self.send_header('Content-Length', '0'); self.end_headers(); return
+            if parsed.path == '/login':
+                body = '<!doctype html><title>Sign in</title><form action="/session" method="post"><input name="login"></form>'
+            elif parsed.path == '/pulls':
+                query = urllib.parse.parse_qs(parsed.query).get('q', [''])[0]
+                kind = next((v for k, v in markers.items() if k in query), '')
+                rows = state['prs'].get(kind, [])
+                items = ''.join('<li data-pr-row data-pr-state="%s" data-pr-author="octo"><a class="Link--primary" href="/%s/pull/%d">%s</a>'
+                                '<relative-time datetime="2026-11-1%dT10:00:00Z"></relative-time></li>' % (st, repo, n, html.escape(t), n % 10)
+                                for repo, n, t, st in rows)
+                body = '<!doctype html><title>Pull requests</title><ul>%s</ul>%s' % (items, '' if rows else '<div class="blankslate">No results</div>')
+            else:
+                body = '<!doctype html><title>Fixture</title>'
+            data = body.encode()
+            self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.send_header('Content-Length', str(len(data)))
+            self.end_headers(); self.wfile.write(data)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, server.server_address[1], state
+
+
+def live_folder_checks(app, results, wait_until):
+    server, port, gh = github_fixture()
+    try:
+        app.call('live-folder-origin', url='http://github.localhost:%d' % port)
+        gh['prs'] = {'created': [('acme/app', 12, 'Fix sidebar drag', 'open'), ('acme/web', 7, 'Draft: new header', 'draft')],
+                     'review': [('acme/app', 15, 'Add Live Folders', 'open'), ('acme/app', 12, 'Fix sidebar drag', 'open')],
+                     'approved': [], 'changes': [('acme/api', 3, 'Merged already', 'merged')]}
+        menu = app.call('sidebar-menu-state', item='Live Folders/GitHub')
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        state = app.call('live-folder-state', wait=True)
+        titles = [r['title'] for r in state.get('rows', [])]
+        results['live_folder_created_from_space_menu'] = {'ok': menu.get('checked') is False and state.get('exists') and state.get('title') == 'Pull Requests'
+            and state.get('pinnedIndex') == 0 and state.get('outcome') == 'success'
+            and sorted(titles) == sorted(['Fix sidebar drag', 'Draft: new header', 'Add Live Folders'])
+            and all(r['live'] for r in state['rows']) and not any(r['unread'] for r in state['rows'])
+            and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is True, 'menu': menu, 'state': state}
+        results['live_folder_fetch_pages_closed'] = {'ok': state.get('fetchPagesCreated') == state.get('fetchPagesClosed') and state.get('fetchPagesCreated', 0) >= 4,
+            'state': {k: state.get(k) for k in ('fetchPagesCreated', 'fetchPagesClosed')}}
+        # A PR ends, a new one comes: refetch removes and adds, new rows are unread.
+        gh['prs']['created'] = [('acme/app', 12, 'Fix sidebar drag (v2)', 'open')]
+        gh['prs']['review'] = [('acme/app', 21, 'New review request', 'open')]
+        refreshed = app.call('live-folder-refresh')
+        state = app.call('live-folder-state')
+        rows = {r['title']: r for r in state.get('rows', [])}
+        results['live_folder_refresh_diff'] = {'ok': refreshed.get('outcome') == 'success' and set(rows) == {'Fix sidebar drag (v2)', 'New review request'}
+            and rows['New review request']['unread'] and not rows['Fix sidebar drag (v2)']['unread'], 'state': state}
+        throttled = app.call('live-folder-refresh', manual=False)
+        results['live_folder_throttle_10s'] = {'ok': throttled.get('outcome') is None and throttled.get('throttled', 0) >= 1, 'refresh': throttled}
+        gh['signed_in'] = False
+        out = app.call('live-folder-refresh')
+        state = app.call('live-folder-state')
+        results['live_folder_signed_out_state'] = {'ok': out.get('outcome') == 'signedOut' and state.get('outcome') == 'signedOut' and len(state.get('rows', [])) == 2,
+            'refresh': out, 'state': state}
+        gh['signed_in'] = True
+        app.call('sidebar-menu', item='Live Folders/GitHub')
+        gone = app.call('live-folder-state')
+        results['live_folder_toggle_off_removes'] = {'ok': gone.get('exists') is False and app.call('sidebar-menu-state', item='Live Folders/GitHub').get('checked') is False, 'state': gone}
+    finally:
+        server.shutdown()
+
+
 def run(factory, results, tmp, harness):
     new_tab, wait_until = harness['new_tab'], harness['wait_until']
     server, port = harness['_sleep_server']()
@@ -141,6 +216,7 @@ def run(factory, results, tmp, harness):
         app.call('defaults', key='open.general.previewsPages', value=None)
         app.call('hover', leave=True, ms=400)
         results['live_recents_hides_on_leave'] = {'ok': app.call('glance-state').get('shown') is False}
+        live_folder_checks(app, results, wait_until)
     finally:
         try:
             app.call('glance-alias', aliases={})

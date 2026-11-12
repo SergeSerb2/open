@@ -9,7 +9,7 @@ import OpenSidebar
 /// open paths. `glance-alias` lets a fixture host count as a Recents site so e2e runs without
 /// the real sites or any account; `history-record` seeds the Profile's real history store.
 extension AutomationController {
-  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record", "live-fetch"]
+  static let liveDataCommands: Set<String> = ["glance-state", "glance-open", "glance-alias", "glance-match", "history-record", "live-fetch", "live-folder-state", "live-folder-refresh", "live-folder-origin"]
 
   func runLiveDataCommand(_ cmd: String, _ a: [String: Any]) async throws -> Any {
     switch cmd {
@@ -47,6 +47,33 @@ extension AutomationController {
       } catch {
         return ["error": String(describing: error), "created": app.liveFetch.created, "closed": app.liveFetch.closed] as [String: Any]
       }
+    case "live-folder-origin":
+      guard let raw = a["url"] as? String, let url = URL(string: raw) else { throw Failure(message: "live-folder-origin needs url") }
+      app.liveFolders.origin = url
+      return ["origin": url.absoluteString]
+    case "live-folder-refresh":
+      let space = try liveSpace(a)
+      guard let folder = app.model.liveFolder(in: space.id) else { throw Failure(message: "no Live Folder") }
+      let outcome = await app.liveFolders.refresh(folderID: folder.id, manual: a["manual"] as? Bool ?? true)
+      return ["outcome": outcome?.rawValue ?? NSNull(), "throttled": app.liveFolders.throttledCount]
+    case "live-folder-state":
+      let space = try liveSpace(a)
+      if a["wait"] as? Bool == true {
+        let deadline = Date().addingTimeInterval(30)
+        while app.model.liveFolder(in: space.id)?.live?.lastFetch == nil, app.model.liveFolder(in: space.id) != nil, Date() < deadline {
+          try await Task.sleep(for: .milliseconds(50))
+        }
+      }
+      guard let folder = app.model.liveFolder(in: space.id), let live = folder.live else { return ["exists": false] }
+      let rows: [[String: Any]] = folder.children.compactMap { node in
+        guard case .tab(let tab) = node else { return nil }
+        return ["id": tab.id.description, "url": tab.url.absoluteString, "title": tab.title, "live": tab.liveItemURL?.absoluteString ?? "",
+                "unread": tab.isUnread]
+      }
+      let index = space.pinned.firstIndex { $0.id == folder.id } ?? -1
+      return ["exists": true, "id": folder.id.description, "title": folder.title, "pinnedIndex": index, "rows": rows,
+        "outcome": live.lastFetch?.outcome.rawValue ?? NSNull(), "refreshes": app.liveFolders.refreshCount,
+        "fetchPagesCreated": app.liveFetch.created, "fetchPagesClosed": app.liveFetch.closed] as [String: Any]
     case "glance-state":
       let controller = try glanceController(a)
       guard case .glance(let id)? = controller.hoverPreview.request?.kind,
@@ -70,6 +97,12 @@ extension AutomationController {
       return ["opened": true]
     default: throw Failure(message: "unknown live-data command")
     }
+  }
+
+  private func liveSpace(_ a: [String: Any]) throws -> Space {
+    if let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }) { return space }
+    guard let space = app.frontWindowController?.context.focusedSpace else { throw Failure(message: "no Space") }
+    return space
   }
 
   private func glanceController(_ a: [String: Any]) throws -> BrowserWindowController {

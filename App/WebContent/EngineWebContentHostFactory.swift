@@ -759,7 +759,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
            .moveNodesToSpace, .moveNodesToNewSpace, .moveToSpace, .moveToNewSpace,
            .addFavorite, .moveFavorite, .removeFavorite, .changeSpaceIcon, .renameSpace,
            .editSpaceTheme, .setSpaceProfile, .newProfile, .shareSpace,
-           .exportSpaceIntoFolder, .deleteSpace, .moveSpace: return false
+           .exportSpaceIntoFolder, .deleteSpace, .moveSpace, .toggleLiveFolder: return false
       case .archiveNodes(let ids): return model.archiveNodes(ids: ids) > 0
       case .close(let id) where model.tab(id: id) == nil:
         guard model.node(id: id) != nil else { return false }
@@ -865,6 +865,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .changeSpaceIcon(let id): return openSpaceIconPicker(id)
     case .changeIcon(let id): return openNodeIconPicker(id)
     case .newProfile(let space): app.settingsPresenter.showNewProfile(sourceSpace: space); return true
+    case .toggleLiveFolder(let id):
+      return app.liveFolders.toggle(spaceID: id)
     case .shareSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

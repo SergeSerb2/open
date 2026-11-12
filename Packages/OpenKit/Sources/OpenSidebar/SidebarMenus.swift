@@ -276,6 +276,7 @@ struct SidebarMenus {
             profile,
             .separator(),
             item("New Folder", .newFolder(in: .spacePinned(space.id))),
+            liveFolders(space),
             .separator(),
             item("Share Space…", enabled: false, .shareSpace(space.id)),
             export,
@@ -284,6 +285,16 @@ struct SidebarMenus {
             .separator(),
             item("Delete Space", enabled: context.model.spaces.count > 1, .deleteSpace(space.id)),
         ])
+    }
+
+    /// "Live Folders ▸ GitHub" (live-data §2.2: G:FUN_102ed863c / FUN_102edaf50); GitHub is a
+    /// checkmark toggle. Incognito windows have no Live Folders.
+    private func liveFolders(_ space: Space) -> NSMenuItem {
+        let github = item("GitHub", enabled: context.incognitoTitle == nil, .toggleLiveFolder(space.id))
+        github.state = context.model.liveFolder(in: space.id) == nil ? .off : .on
+        let parent = NSMenuItem(title: "Live Folders", action: nil, keyEquivalent: "")
+        parent.submenu = menu([github])
+        return parent
     }
 
     /// Bottom-bar plus button. guess: not captured.
