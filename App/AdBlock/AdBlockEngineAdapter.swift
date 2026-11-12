@@ -102,8 +102,13 @@ final class AdBlockEngineAdapter {
     #endif
     guard !started, !app.shutdownPrepared else { return }
     started = true
-    _ = app.stores.adBlock // Binds events before any Profile opens.
-    for profile in app.model.profiles { openAfterPaint(profile) }
+    // A store that already exists is bound; open its Profiles now. Otherwise
+    // prepare it on a worker: bind(_:) opens every Profile once it is installed.
+    if app.stores.existingAdBlock != nil {
+      for profile in app.model.profiles { openAfterPaint(profile) }
+    } else {
+      app.stores.prepareAdBlockInBackground()
+    }
   }
 
   private func openAfterPaint(_ profile: Profile) {
@@ -206,6 +211,10 @@ final class AdBlockEngineAdapter {
 
   private func apply(_ event: AdBlockEngineEvent) {
     guard app.engineReady, !app.shutdownPrepared else { return }
+    #if OPEN_AUTOMATION
+    let region = StartupMainThreadTrace.begin("adBlock.apply")
+    defer { StartupMainThreadTrace.end(region) }
+    #endif
     switch event {
     case let .configure(profile, directory, enabled, excluded):
       guard let model = app.model.profile(id: profile) else { return }
