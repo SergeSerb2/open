@@ -125,4 +125,5 @@ enum EaselGlyphs {
 public enum EaselIcon {
     /// The Easel row icon in the sidebar (own drawing, blue like the toolbar glyphs).
     public static let faviconPNG: Data? = EaselGlyphs.faviconPNG(color: EaselPalette.srgb(0x2930FB))
+    @MainActor public static let image: NSImage? = faviconPNG.flatMap { NSImage(data: $0) }
 }

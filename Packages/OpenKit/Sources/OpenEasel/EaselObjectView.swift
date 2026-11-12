@@ -7,6 +7,8 @@ final class EaselObjectView: NSView {
     var object: EaselObject { didSet { if oldValue.content != object.content { needsDisplay = true } } }
     var palette: EaselPalette = .vibrant { didSet { if oldValue != palette { needsDisplay = true } } }
     var scale: CGFloat = 1 { didSet { if oldValue != scale { needsDisplay = true } } }
+    /// Resolves an image file name to its URL (the Easel's `images/` folder).
+    var imageURL: ((String) -> URL?)?
     /// Hidden text while the inline editor shows it.
     var editing = false { didSet { if oldValue != editing { needsDisplay = true } } }
 
@@ -27,6 +29,9 @@ final class EaselObjectView: NSView {
         switch object.content {
         case .text(let t): return t.string.isEmpty ? "Text" : t.string
         case .shape(let kind, let color, _, _): return "\(kind.rawValue.capitalized), \(color.rawValue)"
+        case .image(let i): return i.altText ?? "Image"
+        case .webCard(let w): return w.title ?? w.url
+        case .link(let l): return l.title ?? l.source
         }
     }
 
@@ -37,7 +42,18 @@ final class EaselObjectView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let dark = EaselStyle.dark(effectiveAppearance)
+        func image(_ file: String?) -> CGImage? {
+            guard let file, let url = imageURL?(file) else { return nil }
+            return EaselImageCache.shared.image(at: url, longSide: max(bounds.width, bounds.height) * (window?.backingScaleFactor ?? 2))
+        }
         switch object.content {
+        case .image(let i):
+            let clip = NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6)  // corner GUESS — capture pending
+            NSGraphicsContext.saveGraphicsState(); clip.addClip()
+            EaselCards.drawImage(image(i.file), in: bounds, fill: true, dark: dark)
+            NSGraphicsContext.restoreGraphicsState()
+        case .webCard(let w): EaselCards.drawWebCard(w, image: image(w.imageFile), bounds: bounds, dark: dark)
+        case .link(let l): EaselCards.drawLink(l, image: image(l.imageFile), bounds: bounds, dark: dark)
         case .text(let text):
             guard !editing else { return }
             Self.attributed(text, scale: scale, dark: dark, fitting: bounds.size)?.draw(in: bounds.insetBy(dx: EaselTextMetrics.inset * scale, dy: 0))

@@ -51,9 +51,52 @@ final class EaselContentHost: WebContentHost {
         owner.scheduleSave()
       }
     }
+    let id = documentID
+    canvas.imageURL = { [weak store] file in store?.imageURL(document: id, file: file) }
+    canvas.storeImage = { [weak store] data in store?.addImage(data, document: id) }
+    canvas.onPickImage = { [weak self] in self?.pickImage() }
+    canvas.onLink = { [weak self] url, point in self?.addLink(url, at: point) }
     canvas.onAddSplit = { [weak self] in
       guard let self, let owner = self.owner else { return }
       owner.controller?.splitController.addEmptyPane()
+    }
+  }
+
+  /// The Image tool: an open panel sheet for pictures (several allowed).
+  func pickImage() {
+    guard let window = canvas.window, window.attachedSheet == nil else { return }
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.png, .jpeg, .gif, .webP, .heic, .tiff]
+    panel.allowsMultipleSelection = true
+    panel.canChooseDirectories = false
+    panel.message = "Choose pictures to add to this Easel."
+    openPanel = panel
+    panel.beginSheetModal(for: window) { [weak self] response in
+      guard let self else { return }
+      self.openPanel = nil
+      guard response == .OK else { return }
+      let pb = NSPasteboard(name: NSPasteboard.Name("open.easel.pick.\(UUID().uuidString)"))
+      pb.clearContents(); pb.writeObjects(panel.urls as [NSURL])
+      self.canvas.ingest(pb, at: self.canvas.visibleCenter, name: "Add Image")
+      pb.releaseGlobally()
+    }
+  }
+  private(set) var openPanel: NSOpenPanel?
+  private(set) var pendingLinks = 0
+
+  /// A link card appears at once with the address; its title, summary and picture follow.
+  func addLink(_ url: URL, at point: CGPoint) {
+    let id = canvas.insertLink(EaselLink(source: url.absoluteString), centeredAt: point)
+    pendingLinks += 1
+    let documentID = self.documentID
+    Task { [weak self] in
+      let (meta, picture) = await EaselLinkFetcher.fetch(url)
+      guard let self, !self.closed else { return }
+      self.pendingLinks -= 1
+      let image = picture.flatMap { self.owner?.app.easels.addImage($0, document: documentID) }
+      self.canvas.updateLink(id) { link in
+        link.title = meta.title; link.summary = meta.summary; link.imageFile = image?.file
+      }
     }
   }
 

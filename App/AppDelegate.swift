@@ -462,8 +462,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         return rows
       }
     }
-    // Native Note rows have no page or stored icon: draw the Note mark even before the Note shows.
-    controller.context.faviconProvider = { tab in NoteTab.matches(tab.url) ? NoteTab.faviconImage : nil }
+    // Native Note and Easel rows have no page or stored icon: draw their marks even before they show.
+    controller.context.faviconProvider = { tab in
+      NoteTab.matches(tab.url) ? NoteTab.faviconImage : EaselTab.matches(tab.url) ? EaselIcon.image : nil
+    }
     factory.attach(controller)
     windowControllers.append(controller)
     updater?.userDriver.attach(controller)

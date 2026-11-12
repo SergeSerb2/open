@@ -9,6 +9,14 @@ public final class EaselCanvasView: NSView {
     public var onChange: ((EaselDocument) -> Void)?
     /// The add button: a Split beside the Easel (capture s4 `w-add-button`).
     public var onAddSplit: (() -> Void)?
+    /// The Image tool: the host shows an open panel and calls `insertImage`.
+    public var onPickImage: (() -> Void)?
+    /// A pasted or dropped web address: the host stores the page metadata and calls back.
+    public var onLink: ((URL, CGPoint) -> Void)?
+    /// Image file name → URL in this Easel's `images/` folder.
+    public var imageURL: ((String) -> URL?)? { didSet { objectViews.values.forEach { $0.imageURL = imageURL } } }
+    /// Stores picture bytes (validated) and returns the object content, or nil.
+    public var storeImage: ((Data) -> EaselImage?)?
     /// The canvas keeps its own undo stack, so ⌘Z on the canvas never undoes sidebar edits.
     public let canvasUndoManager = UndoManager()
     public override var undoManager: UndoManager? { canvasUndoManager }
@@ -49,6 +57,7 @@ public final class EaselCanvasView: NSView {
         canvasUndoManager.groupsByEvent = false
         scrollView.documentView = docView
         docView.canvas = self
+        docView.registerDrops()
         addSubview(scrollView)
         docView.addSubview(titleField)
         docView.addSubview(selectionView)
@@ -138,6 +147,7 @@ public final class EaselCanvasView: NSView {
                 let v = EaselObjectView(object: object); objectViews[object.id] = v; return v
             }()
             view.object = object
+            view.imageURL = imageURL
             view.palette = document.palette
             view.scale = scale
             view.frame = viewRect(object.frame)
@@ -188,8 +198,8 @@ public final class EaselCanvasView: NSView {
 
     public func select(tool: EaselTool) {
         endTextEditing(commit: true)
-        // Images arrive with milestone E2.
-        if tool == .image { NSSound.beep(); return }
+        // The Image tool opens a file panel and returns to the pointer (no drawing mode).
+        if tool == .image { endTextEditing(commit: true); onPickImage?(); return }
         self.tool = tool
         toolbar.selectedTool = tool
         if tool != .pointer { setSelection([]) }
@@ -326,22 +336,111 @@ public final class EaselCanvasView: NSView {
     }
     public func cutSelection() { copySelection(); deleteSelection() }
     public func paste() {
-        let pb = NSPasteboard.general
+        let clip = scrollView.contentView.bounds
+        _ = ingest(NSPasteboard.general, at: docPoint(CGPoint(x: clip.midX, y: clip.midY)), name: "Paste")
+    }
+
+    /// Paste and drop: Easel objects, image files, image data, a web address (link card), or
+    /// text, in that order. `center` is in document points. Returns false when nothing fit.
+    @discardableResult
+    public func ingest(_ pb: NSPasteboard, at center: CGPoint, name: String) -> Bool {
         if let data = pb.data(forType: Self.pasteboardType), data.count <= EaselDocument.maxFileBytes,
            let objects = try? JSONDecoder().decode([EaselObject].self, from: data), EaselDocument.isValid(objects),
-           document.objects.count + objects.count <= EaselDocument.maxObjects {
+           document.objects.count + objects.count <= EaselDocument.maxObjects,
+           objects.allSatisfy({ $0.content.imageFiles.isEmpty || $0.content.imageFiles.allSatisfy { imageURL?($0).map { FileManager.default.fileExists(atPath: $0.path) } ?? false } }) {
             var z = document.maxZ
             let copies = objects.map { o -> EaselObject in
                 z += 1; return EaselObject(frame: Self.clamped(o.frame.offsetBy(dx: 20, dy: 20)), zIndex: z, content: o.content)
             }
-            mutate("Paste") { $0.objects.append(contentsOf: copies) }
+            mutate(name) { $0.objects.append(contentsOf: copies) }
             setSelection(copies.map(\.id))
-        } else if let string = pb.string(forType: .string), !string.isEmpty, string.utf16.count <= EaselDocument.maxTextLength {
-            let center = docPoint(CGPoint(x: scrollView.contentView.bounds.midX, y: scrollView.contentView.bounds.midY))
-            let id = insert(EaselObject(frame: CGRect(x: center.x - 150, y: center.y - 15, width: 300, height: 30), zIndex: 0,
-                                        content: .text(EaselText(string: string))), name: "Paste")
-            setSelection([id])
+            return true
         }
+        let files = (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        var images: [EaselImage] = []
+        for file in files.prefix(20) {
+            guard let size = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? Int,
+                  size <= EaselStore.maxImageBytes, let data = try? Data(contentsOf: file), let image = storeImage?(data) else { continue }
+            images.append(image)
+        }
+        if images.isEmpty, let type = pb.availableType(from: [.png, .tiff]), let data = pb.data(forType: type),
+           data.count <= EaselStore.maxImageBytes, let image = storeImage?(data) {
+            images.append(image)
+        }
+        if !images.isEmpty {
+            var ids: [UUID] = []
+            var at = center
+            for image in images { ids.append(insertImage(image, centeredAt: at, name: name)); at.x += 24; at.y += 24 }
+            setSelection(ids)
+            return true
+        }
+        if let url = Self.webURL(in: pb) { onLink?(url, center); return onLink != nil }
+        if let string = pb.string(forType: .string), !string.isEmpty, string.utf16.count <= EaselDocument.maxTextLength {
+            let id = insert(EaselObject(frame: CGRect(x: center.x - 150, y: center.y - 15, width: 300, height: 30), zIndex: 0,
+                                        content: .text(EaselText(string: string))), name: name)
+            setSelection([id])
+            return true
+        }
+        return false
+    }
+
+    /// One http(s) address on the pasteboard (a URL item, or text that is only an address).
+    static func webURL(in pb: NSPasteboard) -> URL? {
+        let candidates = ((pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL]) ?? [])
+            + [pb.string(forType: .string).flatMap { URL(string: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }].compactMap { $0 }
+        return candidates.first { ["http", "https"].contains($0.scheme?.lowercased() ?? "") && $0.host() != nil
+            && $0.absoluteString.utf16.count <= EaselDocument.maxURLLength }
+    }
+
+    /// Pictures land at most 400 document points wide (GUESS — capture pending), keeping
+    /// their aspect ratio.
+    @discardableResult
+    public func insertImage(_ image: EaselImage, centeredAt c: CGPoint? = nil, name: String = "Add Image") -> UUID {
+        let center = c ?? visibleCenter
+        let w = min(400, CGFloat(image.width)), h = w * CGFloat(image.height) / CGFloat(image.width)
+        let id = insert(EaselObject(frame: CGRect(x: center.x - w / 2, y: max(0, center.y - h / 2), width: w, height: h),
+                                    zIndex: 0, content: .image(image)), name: name)
+        return id
+    }
+
+    /// Link cards: 320 × 250 with a picture, 320 × 72 without (GUESS — capture pending).
+    @discardableResult
+    public func insertLink(_ link: EaselLink, centeredAt c: CGPoint? = nil) -> UUID {
+        let center = c ?? visibleCenter
+        let h: CGFloat = link.imageFile == nil ? (link.summary == nil ? 52 : 72) : 250
+        let id = insert(EaselObject(frame: CGRect(x: center.x - 160, y: max(0, center.y - h / 2), width: 320, height: h),
+                                    zIndex: 0, content: .link(link)), name: "Add Link")
+        setSelection([id])
+        return id
+    }
+
+    /// Web cards (captures) keep the capture's aspect ratio, at most 500 points wide.
+    @discardableResult
+    public func insertWebCard(_ card: EaselWebCard, pixelSize: CGSize, centeredAt c: CGPoint? = nil) -> UUID {
+        let center = c ?? visibleCenter
+        let w = min(500, max(40, pixelSize.width / 2)), h = w * max(1, pixelSize.height) / max(1, pixelSize.width)
+        let id = insert(EaselObject(frame: CGRect(x: center.x - w / 2, y: max(0, center.y - h / 2), width: w, height: h),
+                                    zIndex: 0, content: .webCard(card)), name: "Add Capture")
+        setSelection([id])
+        return id
+    }
+
+    /// Fills in a link card's metadata when it arrives. Not an undo step: undoing "Add Link"
+    /// still removes the card.
+    public func updateLink(_ id: UUID, _ change: (inout EaselLink) -> Void) {
+        guard let i = document.index(of: id), case .link(var link) = document.objects[i].content else { return }
+        change(&link)
+        var next = document
+        next.objects[i].content = .link(link)
+        let height: CGFloat = link.imageFile == nil ? (link.summary == nil ? 52 : 72) : 250
+        next.objects[i].frame.size.height = height
+        apply(next)
+        updateSelectionChrome()
+    }
+
+    public var visibleCenter: CGPoint {
+        let clip = scrollView.contentView.bounds
+        return docPoint(CGPoint(x: clip.midX, y: clip.midY))
     }
 
     // MARK: Text editing
@@ -452,6 +551,10 @@ public final class EaselCanvasView: NSView {
                 item["color"] = c.rawValue
                 if let arrow { item["arrow"] = [arrow.start.x, arrow.start.y, arrow.end.x, arrow.end.y] }
                 if let points { item["pointCount"] = points.count }
+            case .image(let i): item["file"] = i.file; item["pixelSize"] = [i.width, i.height]
+            case .webCard(let w): item["url"] = w.url; item["title"] = w.title as Any? ?? NSNull(); item["file"] = w.imageFile as Any? ?? NSNull()
+            case .link(let l): item["url"] = l.source; item["title"] = l.title as Any? ?? NSNull()
+                item["summary"] = l.summary as Any? ?? NSNull(); item["file"] = l.imageFile as Any? ?? NSNull()
             }
             return item
         }

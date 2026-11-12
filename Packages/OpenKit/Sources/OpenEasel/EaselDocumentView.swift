@@ -16,6 +16,16 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+
+    // MARK: Drop (image files, pictures, web addresses, text)
+
+    func registerDrops() { registerForDraggedTypes([.fileURL, .URL, .png, .tiff, .string, EaselCanvasView.pasteboardType]) }
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { .copy }
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { .copy }
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let p = canvas.docPoint(convert(sender.draggingLocation, from: nil))
+        return canvas.ingest(sender.draggingPasteboard, at: p, name: "Drop")
+    }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var undoManager: UndoManager? { canvas.canvasUndoManager }
     override func accessibilityRole() -> NSAccessibility.Role? { .layoutArea }
@@ -103,7 +113,8 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
         CATransaction.begin(); CATransaction.setDisableActions(true); defer { CATransaction.commit() }
         switch drag {
         case .move(let ids, let start, let frames, _):
-            let d = CGVector(dx: (p.x - start.x) / s, dy: (p.y - start.y) / s)
+            let (d, guides) = snappedMove(ids: ids, frames: frames, raw: CGVector(dx: (p.x - start.x) / s, dy: (p.y - start.y) / s))
+            canvas.selectionView.guides = guides
             for id in ids {
                 guard let f = frames[id], let view = canvas.objectViews[id] else { continue }
                 view.frame = canvas.viewRect(EaselCanvasView.clamped(f.offsetBy(dx: d.dx, dy: d.dy)))
@@ -132,9 +143,9 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
         drag = .none
         switch finished {
         case .move(let ids, let start, let frames, let moved):
+            canvas.selectionView.guides = []
             guard moved else { return }
-            let d = CGVector(dx: (p.x - start.x) / s, dy: (p.y - start.y) / s)
-            _ = frames
+            let (d, _) = snappedMove(ids: ids, frames: frames, raw: CGVector(dx: (p.x - start.x) / s, dy: (p.y - start.y) / s))
             canvas.moveSelectionFrames(ids: ids, original: frames, by: d)
         case .resize(let id, let corner, let start, let frame):
             let r = Self.resized(frame, corner: corner, by: CGVector(dx: (p.x - start.x) / s, dy: (p.y - start.y) / s),
@@ -153,6 +164,16 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
             canvas.addText(at: canvas.docPoint(start))
         case .none: break
         }
+    }
+
+    /// The raw drag delta plus the alignment-guide snap, in document points.
+    private func snappedMove(ids: [UUID], frames: [UUID: CGRect], raw: CGVector) -> (CGVector, [EaselGuide]) {
+        let moving = ids.compactMap { frames[$0] }.map { EaselCanvasView.clamped($0.offsetBy(dx: raw.dx, dy: raw.dy)) }
+        guard let first = moving.first else { return (raw, []) }
+        let union = moving.dropFirst().reduce(first) { $0.union($1) }
+        let others = canvas.document.objects.filter { !ids.contains($0.id) }.map(\.frame)
+        let (snap, guides) = EaselSnapping.snap(moving: union, others: others, scale: canvas.scale, toView: canvas.viewRect)
+        return (CGVector(dx: raw.dx + snap.dx, dy: raw.dy + snap.dy), guides)
     }
 
     private func showDraft(kind: EaselShapeKind, start: CGPoint, current: CGPoint, points: [CGPoint], square: Bool) {
@@ -274,6 +295,7 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
     @objc func duplicate(_ sender: Any?) { canvas.duplicateSelection() }
     @objc func bringToFront(_ sender: Any?) { canvas.bringToFront() }
     @objc func sendToBack(_ sender: Any?) { canvas.sendToBack() }
+    @objc func toggleAlignmentGuides(_ sender: Any?) { EaselSnapping.enabled.toggle() }
     @objc func choosePalette(_ sender: NSMenuItem) {
         if let p = sender.representedObject as? String, let palette = EaselPalette(rawValue: p) { canvas.setPalette(palette) }
     }
@@ -290,8 +312,11 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
              #selector(bringToFront(_:)), #selector(sendToBack(_:)): return !canvas.selection.isEmpty
         case #selector(paste(_:)):
             let pb = NSPasteboard.general
-            return pb.availableType(from: [EaselCanvasView.pasteboardType, .string]) != nil
+            return pb.availableType(from: [EaselCanvasView.pasteboardType, .fileURL, .URL, .png, .tiff, .string]) != nil
         case #selector(selectAll(_:)): return !canvas.document.objects.isEmpty
+        case #selector(toggleAlignmentGuides(_:)):
+            item.state = EaselSnapping.enabled ? .on : .off
+            return true
         case #selector(choosePalette(_:)):
             item.state = (item.representedObject as? String) == canvas.document.palette.rawValue ? .on : .off
             return true
@@ -301,7 +326,7 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
 
     /// Object menu: Bring to Front · Send to Back · Delete · — · Cut · Copy · Paste · — ·
     /// Duplicate. Canvas menu: Paste · — · Color Palette ▸ (C-measurements-s4 `e3-*-menu-ax`).
-    /// "Use Alignment Guides" joins the canvas menu with the guides (milestone E2).
+    /// · — · Use Alignment Guides ✓.
     override func menu(for event: NSEvent) -> NSMenu? {
         let p = convert(event.locationInWindow, from: nil)
         if canvas.isEditingText { canvas.endTextEditing(commit: true) }
@@ -324,7 +349,9 @@ final class EaselDocumentView: NSView, NSMenuItemValidation {
             palettes.addItem(i)
         }
         let paletteItem = NSMenuItem(title: "Color Palette", action: nil, keyEquivalent: ""); paletteItem.submenu = palettes
-        return Self.menu([item("Paste", #selector(paste(_:))), .separator(), paletteItem])
+        let guides = item("Use Alignment Guides", #selector(toggleAlignmentGuides(_:)))
+        guides.state = EaselSnapping.enabled ? .on : .off
+        return Self.menu([item("Paste", #selector(paste(_:))), .separator(), paletteItem, .separator(), guides])
     }
     static func menu(_ items: [NSMenuItem]) -> NSMenu {
         let m = NSMenu(); items.forEach(m.addItem); return m
@@ -372,12 +399,27 @@ extension EaselCanvasView {
 @MainActor
 final class EaselSelectionView: NSView {
     var rects: [CGRect] = [] { didSet { if oldValue != rects { needsDisplay = true } } }
+    var guides: [EaselGuide] = [] { didSet { if oldValue != guides { needsDisplay = true } } }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     static func corners(_ r: CGRect) -> [CGPoint] {
         [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX, y: r.minY), CGPoint(x: r.maxX, y: r.maxY), CGPoint(x: r.minX, y: r.maxY)]
     }
     override func draw(_ dirtyRect: NSRect) {
+        let dark = EaselStyle.dark(effectiveAppearance)
+        for g in guides {
+            let line = NSBezierPath(); line.lineWidth = 1.5
+            line.move(to: g.from); line.line(to: g.to)
+            EaselStyle.guide(dark: dark).setStroke(); line.stroke()
+            let ticks = NSBezierPath(); ticks.lineWidth = 1.5
+            for t in g.ticks {
+                if g.vertical { ticks.move(to: CGPoint(x: t.x - 4, y: t.y)); ticks.line(to: CGPoint(x: t.x + 4, y: t.y)) }
+                else { ticks.move(to: CGPoint(x: t.x, y: t.y - 4)); ticks.line(to: CGPoint(x: t.x, y: t.y + 4)) }
+            }
+            EaselStyle.selection.setStroke(); ticks.stroke()
+        }
+        // While a guide shows, Arc hides the outline of the moving object (`e4-move-guides`).
+        guard guides.isEmpty else { return }
         for r in rects {
             let outline = NSBezierPath(rect: r); outline.lineWidth = 2
             EaselStyle.selection.setStroke(); outline.stroke()
