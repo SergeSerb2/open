@@ -10977,7 +10977,11 @@ def library_capture_checks(app, require, root, evidence):
             server.shutdown(); server.server_close()
         archive = open_section('archive')
         archive_rows = wait_until(lambda: any(r['id'] == archived for r in app.call('settings-state')['archive']), timeout=5) if archive else False
-        require('library_corrupt_index_isolation', archive and archive['loadFailed'] and archive_rows
+        # The capture index is read only when Captures or Media opens (c9a2e305, lazy provider). So the other
+        # sections must work beside a corrupt index and must not show its error; `loadFailed` is asserted
+        # where the index is read, in the captures/media rows below.
+        no_error = lambda s: not any(error_copy[0] in text for text in s['text'])
+        require('library_corrupt_index_isolation', archive and archive_rows and no_error(archive)
                 and archive['status'] == '' and app.call('settings-state')['sharedArchives'], state=state())
         for section in ('history', 'downloads', 'spaces'):
             current = open_section(section)
@@ -10985,7 +10989,7 @@ def library_capture_checks(app, require, root, evidence):
                 working = wait_until(lambda: app.call('settings-state')['historyRows'] > 0, timeout=5)
             elif section == 'downloads': working = current and any('No downloads' in t for t in current['text'])
             else: working = app.call('space-manager-state')['hostedManagers'] == 1
-            require('library_corrupt_index_' + section, current and current['loadFailed'] and working and current['status'] == '', state=state())
+            require('library_corrupt_index_' + section, current and working and no_error(current) and current['status'] == '', state=state())
         for section in ('captures', 'media'):
             current = open_section(section)
             path = os.path.join(evidence, section + '-index-error.png')
